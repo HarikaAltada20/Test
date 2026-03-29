@@ -120,11 +120,13 @@ async function enrichContestWithCalculatedBudgets(
     if (isTwitterTextImage) {
       const { data: twitterTweets, error: twitterError } = await supabase
         .from("twitter_campaign_tweets")
-        .select("id, creator_id, tweet_created_at, moderation_status, filter_status")
+        .select(
+          "id, creator_id, tweet_created_at, moderation_status, is_eligible, deleted_at",
+        )
         .eq("contest_id", contest.id)
         .eq("is_eligible", true)
-        .in("moderation_status", ["verified", "paid"])
-        .neq("filter_status", "filtered_out");
+        .is("deleted_at", null)
+        .in("moderation_status", ["verified", "paid"]);
 
       if (!twitterError && twitterTweets) {
         leaderboardSubmissions = twitterTweets
@@ -134,10 +136,13 @@ async function enrichContestWithCalculatedBudgets(
             creator_id: tweet.creator_id,
             created_at: tweet.tweet_created_at || new Date().toISOString(),
             status: tweet.moderation_status,
-            filter_status: tweet.filter_status,
+            is_eligible: tweet.is_eligible === true,
+            deleted_at: tweet.deleted_at ?? null,
             paid: tweet.moderation_status === "paid",
             earnings: null,
             bonus_paid: false,
+            is_twitter_tweet: true as const,
+            platform: "twitter" as const,
           }));
       }
     } else {
@@ -198,12 +203,14 @@ async function enrichContestWithCalculatedBudgets(
             points,
             moderation_status,
             manual_points_adjustment,
-            filter_status
-          `
+            is_eligible,
+            deleted_at
+          `,
       )
       .eq("contest_id", contest.id)
-      .in("moderation_status", ["verified", "paid"])
-      .neq("filter_status", "filtered_out");
+      .eq("is_eligible", true)
+      .is("deleted_at", null)
+      .in("moderation_status", ["verified", "paid"]);
 
     const submissions =
       (twitterTweets?.map((tweet) => ({
@@ -212,7 +219,9 @@ async function enrichContestWithCalculatedBudgets(
         created_at: tweet.tweet_created_at,
         platform: "twitter",
         status: tweet.moderation_status,
-        filter_status: tweet.filter_status,
+        is_eligible: tweet.is_eligible === true,
+        deleted_at: tweet.deleted_at ?? null,
+        is_twitter_tweet: true as const,
         paid: tweet.moderation_status === "paid",
         earnings: null,
         bonus_paid: false,

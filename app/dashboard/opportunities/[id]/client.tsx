@@ -47,6 +47,7 @@ import {
   ThumbsUp,
   MessageCircle,
   BarChart3,
+  Zap,
 } from "lucide-react";
 import { Separator } from "@/components/ui/separator";
 import {
@@ -8736,6 +8737,7 @@ export function ContestClientPage({
                   total_retweets: 0,
                   /** Count of quote *submissions*. */
                   total_quote_reposts: 0,
+                  total_engagement: 0,
                   total_impressions: 0,
                   total_points: 0,
                 };
@@ -8812,6 +8814,12 @@ export function ContestClientPage({
                     metrics.total_points = leaderboardPointsTotal;
                   }
                 }
+
+                metrics.total_engagement =
+                  metrics.total_likes +
+                  metrics.total_replies +
+                  metrics.total_retweets +
+                  metrics.total_quote_reposts;
 
                 return metrics;
               };
@@ -8975,7 +8983,7 @@ export function ContestClientPage({
                     {!loadingAnalyticsTweets &&
                       contest?.platform?.toLowerCase() === "twitter" &&
                       (twitterMetrics || calculatedMetrics) && (
-                        <div className="space-y-8">
+                        <div className="space-y-6">
                           {/* For Raid Campaigns: Show Target Tweet, Target Metrics, and Current Achieved */}
                           {(() => {
                             const isRaid =
@@ -9949,7 +9957,7 @@ export function ContestClientPage({
                             >
                               Campaign Metrics
                             </h3>
-                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+                            <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-4 mb-6">
                               {/* Helper function for metric cards */}
                               {(() => {
                                 const renderMetricCard = (
@@ -9958,39 +9966,41 @@ export function ContestClientPage({
                                   value: string | number,
                                   iconBgClass: string,
                                   barGradientClass: string,
+                                  hint?: string,
                                 ) => (
                                   <div
                                     className={cn(
-                                      "group rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 overflow-hidden relative",
+                                      "group rounded-xl shadow-md hover:shadow-lg transition-all duration-300 overflow-hidden relative min-w-0",
                                       isDark
                                         ? "bg-[#180438] border border-white/20 backdrop-blur-2xl"
                                         : "bg-gradient-to-br from-white to-blue-50 border border-blue-100",
                                     )}
+                                    title={hint}
                                   >
-                                    <div className="p-6 relative z-10">
-                                      <div className="flex items-center justify-between mb-4">
+                                    <div className="p-3 sm:p-4 relative z-10">
+                                      <div className="flex items-start gap-3 mb-2">
                                         <div
                                           className={cn(
-                                            "w-12 h-12 flex items-center justify-center rounded-xl shadow-lg backdrop-blur-sm",
+                                            "w-10 h-10 shrink-0 flex items-center justify-center rounded-lg shadow-md backdrop-blur-sm",
                                             iconBgClass,
                                           )}
                                         >
                                           {icon}
                                         </div>
-                                        <div className="text-right">
+                                        <div className="min-w-0">
                                           <p
                                             className={cn(
-                                              "text-sm font-medium uppercase tracking-wide",
+                                              "text-[11px] sm:text-xs font-medium uppercase tracking-wide leading-tight line-clamp-2",
                                               isDark
                                                 ? "text-white/90 drop-shadow-sm"
-                                                : "text-gray-500",
+                                              : "text-gray-500",
                                             )}
                                           >
                                             {label}
                                           </p>
                                           <p
                                             className={cn(
-                                              "text-2xl font-bold mt-1",
+                                              "text-lg sm:text-xl font-bold mt-0.5 tabular-nums",
                                               isDark
                                                 ? "text-white drop-shadow-lg bg-gradient-to-r from-white to-blue-200 bg-clip-text text-transparent"
                                                 : "text-gray-900",
@@ -10015,7 +10025,7 @@ export function ContestClientPage({
                                 return (
                                   <>
                                     {renderMetricCard(
-                                      <FileText className="h-6 w-6 text-white" />,
+                                      <FileText className="h-5 w-5 text-white" />,
                                       "Total Tweets",
                                       metricsForDisplay?.total_tweets || 0,
                                       isDark
@@ -10026,7 +10036,19 @@ export function ContestClientPage({
                                         : "bg-gradient-to-r from-blue-200 to-blue-300",
                                     )}
                                     {renderMetricCard(
-                                      <ThumbsUp className="h-6 w-6 text-white" />,
+                                      <Zap className="h-5 w-5 text-white" />,
+                                      "Total engagement",
+                                      metricsForDisplay?.total_engagement ?? 0,
+                                      isDark
+                                        ? "bg-white/20 border border-white/30 backdrop-blur-2xl shadow-lg shadow-white/20"
+                                        : "bg-gradient-to-br from-violet-500 to-violet-600 text-white",
+                                      isDark
+                                        ? "bg-gradient-to-r from-violet-400 via-fuchsia-400 to-pink-400 shadow-lg shadow-violet-400/70 animate-pulse"
+                                        : "bg-gradient-to-r from-violet-200 to-fuchsia-200",
+                                      "Sum of likes plus reply, retweet, and quote submission counts.",
+                                    )}
+                                    {renderMetricCard(
+                                      <ThumbsUp className="h-5 w-5 text-white" />,
                                       "Total Likes",
                                       metricsForDisplay?.total_likes || 0,
                                       isDark
@@ -10037,7 +10059,7 @@ export function ContestClientPage({
                                         : "bg-gradient-to-r from-pink-200 to-pink-300",
                                     )}
                                     {renderMetricCard(
-                                      <MessageCircle className="h-6 w-6 text-white" />,
+                                      <MessageCircle className="h-5 w-5 text-white" />,
                                       "Reply posts",
                                       metricsForDisplay?.total_replies || 0,
                                       isDark
@@ -10048,7 +10070,7 @@ export function ContestClientPage({
                                         : "bg-gradient-to-r from-orange-200 to-orange-300",
                                     )}
                                     {renderMetricCard(
-                                      <Share2 className="h-6 w-6 text-white" />,
+                                      <Share2 className="h-5 w-5 text-white" />,
                                       "Retweet posts",
                                       metricsForDisplay?.total_retweets || 0,
                                       isDark
@@ -10059,7 +10081,7 @@ export function ContestClientPage({
                                         : "bg-gradient-to-r from-cyan-200 to-cyan-300",
                                     )}
                                     {renderMetricCard(
-                                      <RefreshCw className="h-6 w-6 text-white" />,
+                                      <RefreshCw className="h-5 w-5 text-white" />,
                                       "Quote posts",
                                       metricsForDisplay?.total_quote_reposts ||
                                         0,
@@ -10071,7 +10093,7 @@ export function ContestClientPage({
                                         : "bg-gradient-to-r from-indigo-200 to-indigo-300",
                                     )}
                                     {renderMetricCard(
-                                      <Eye className="h-6 w-6 text-white" />,
+                                      <Eye className="h-5 w-5 text-white" />,
                                       "Total Impressions",
                                       metricsForDisplay?.total_impressions || 0,
                                       isDark
@@ -10082,7 +10104,7 @@ export function ContestClientPage({
                                         : "bg-gradient-to-r from-green-200 to-green-300",
                                     )}
                                     {renderMetricCard(
-                                      <TrendingUp className="h-6 w-6 text-white" />,
+                                      <TrendingUp className="h-5 w-5 text-white" />,
                                       "Total Points",
                                       metricsForDisplay?.total_points || 0,
                                       isDark
@@ -10093,7 +10115,7 @@ export function ContestClientPage({
                                         : "bg-gradient-to-r from-yellow-200 to-yellow-300",
                                     )}
                                     {renderMetricCard(
-                                      <Users className="h-6 w-6 text-white" />,
+                                      <Users className="h-5 w-5 text-white" />,
                                       "Submissions",
                                       filteredAnalyticsSubmissions.length,
                                       isDark

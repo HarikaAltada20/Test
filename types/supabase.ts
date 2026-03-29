@@ -568,6 +568,59 @@ export interface Database {
           error_message?: string | null;
         };
       };
+      twitter_metrics_refresh_runs: {
+        Row: {
+          id: string;
+          contest_id: string;
+          status: "pending" | "running" | "completed" | "failed" | "cancelled";
+          is_raid: boolean;
+          creator_scope_id: string | null;
+          total_batches: number;
+          current_batch_index: number;
+          total_participants: number;
+          processed_participants: number;
+          tweets_upserted: number;
+          started_at: string;
+          finished_at: string | null;
+          last_batch_completed_at: string | null;
+          error_message: string | null;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          contest_id: string;
+          status?: "pending" | "running" | "completed" | "failed" | "cancelled";
+          is_raid?: boolean;
+          creator_scope_id?: string | null;
+          total_batches?: number;
+          current_batch_index?: number;
+          total_participants?: number;
+          processed_participants?: number;
+          tweets_upserted?: number;
+          started_at?: string;
+          finished_at?: string | null;
+          last_batch_completed_at?: string | null;
+          error_message?: string | null;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          contest_id?: string;
+          status?: "pending" | "running" | "completed" | "failed" | "cancelled";
+          is_raid?: boolean;
+          creator_scope_id?: string | null;
+          total_batches?: number;
+          current_batch_index?: number;
+          total_participants?: number;
+          processed_participants?: number;
+          tweets_upserted?: number;
+          started_at?: string;
+          finished_at?: string | null;
+          last_batch_completed_at?: string | null;
+          error_message?: string | null;
+          updated_at?: string;
+        };
+      };
       money_transactions: {
         Row: {
           id: string;

@@ -82,7 +82,7 @@ interface Submission {
   manual_points_adjustment?: number;
   manual_points_reason?: string | null;
   tweet_id?: string;
-  filter_status?: string | null;
+  deleted_at?: string | null;
   insights_status?: "ok" | "temporary_failure" | "permanent_failure" | null;
 }
 
@@ -1627,12 +1627,10 @@ export function CreatorSubmissionsModal({
                     const manualPointsAdjustment =
                       submission.manual_points_adjustment || 0;
                     const totalPoints = basePoints + manualPointsAdjustment;
-                    const filterStatus =
-                      submission.filter_status ||
-                      submission.other_stats?.filter_status ||
-                      null;
                     const isDeletedTweet =
-                      isTwitterTweet && filterStatus === "deleted";
+                      isTwitterTweet &&
+                      !!(submission as any).deleted_at &&
+                      (submission as any).deleted_at !== "";
 
                     // Get pre-calculated expected reward (with cap applied in submission time order)
                     const expectedReward =

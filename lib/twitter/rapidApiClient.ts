@@ -200,13 +200,24 @@ export async function rapidApiRequest<T = any>(
       }
       
       // Don't retry on subscription errors - fail immediately
+      // 403 "not subscribed" is usually tied to the specific RapidAPI key/account.
+      // Rotate through all configured keys before failing (same idea as 429).
       if (isSubscriptionError(error)) {
-        console.error(
-          `[rapidApiClient] RapidAPI key #${keyIndex} subscription error - API key not subscribed to Twitter API. Not retrying.`
+        attempts++;
+        if (attempts >= RAPIDAPI_KEYS.length) {
+          console.error(
+            `[rapidApiClient] All ${RAPIDAPI_KEYS.length} RapidAPI key(s) returned subscription/auth 403 for this API. Subscribe at https://rapidapi.com or add a subscribed key.`
+          );
+          throw error;
+        }
+        console.warn(
+          `[rapidApiClient] RapidAPI key #${keyIndex} subscription/auth error; trying next key`
         );
-        throw error;
+        keyIndex = (keyIndex + 1) % RAPIDAPI_KEYS.length;
+        rotationIndex = keyIndex;
+        continue;
       }
-      
+
       // Retry on rate limits and network timeouts (try next key).
       if (isRateLimitError(error)) {
         console.warn(

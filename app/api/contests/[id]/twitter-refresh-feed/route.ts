@@ -13,6 +13,10 @@ import {
   type MetricsRefreshJob,
 } from "@/lib/queue/metrics-refresh-queue";
 import { isQStashEnabled, triggerProcessMetricsQueue } from "@/lib/qstash";
+import {
+  ensureTwitterMetricsRunForEnqueue,
+  failTwitterMetricsRun,
+} from "@/lib/twitter-metrics-refresh-runs";
 
 export const dynamic = "force-dynamic";
 
@@ -153,6 +157,10 @@ export async function POST(
 
     // Creator-only: queue background refresh (so the browser doesn't hang)
     if (creatorOnly && isMetricsQueueEnabled()) {
+      const supabaseAdminCreator = createAdminSupabaseClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.SUPABASE_SERVICE_ROLE_KEY!
+      );
       const platform = (contest?.platform ?? "").toString().toLowerCase();
       const isTwitterPlatform = platform === "twitter" || platform === "x";
       const campaignType =
@@ -168,37 +176,22 @@ export async function POST(
         typeof campaignType === "string" &&
         campaignType.toLowerCase().trim() === "raid";
 
-      const job: MetricsRefreshJob = isRaidCampaign
-        ? {
-            contestId,
-            isRaid: true,
-            batchIndex: 0,
-            totalBatches: 1,
-            creatorId: user.id,
-          }
-        : {
-            contestId,
-            isRaid: false,
-            batchIndex: 0,
-            totalBatches: 1,
-            creatorId: user.id,
-          };
-
-      const enqueueResult = await enqueueMetricsRefreshJob(job);
-      if (enqueueResult.error) {
-        console.error(
-          `[twitter-refresh-feed] Creator queue enqueue failed for ${contestId}:`,
-          enqueueResult.error
-        );
+      const runEnsure = await ensureTwitterMetricsRunForEnqueue(
+        supabaseAdminCreator,
+        {
+          contestId,
+          isRaid: isRaidCampaign,
+          totalBatches: 1,
+          totalParticipants: 1,
+          creatorScopeId: user.id,
+        }
+      );
+      if (!runEnsure.ok) {
         return NextResponse.json(
-          { error: "Failed to start creator feed refresh" },
+          { error: runEnsure.error },
           { status: 500 }
         );
       }
-
-      console.log(
-        `[twitter-refresh-feed] Enqueued creator-only job for contest ${contestId} (isRaid=${isRaidCampaign})`
-      );
 
       const host = request.headers.get("host");
       const protocol = request.headers.get("x-forwarded-proto") || "http";
@@ -228,6 +221,69 @@ export async function POST(
           )
         );
 
+      if (runEnsure.alreadyActive) {
+        if (isQStashEnabled()) {
+          triggerProcessMetricsQueue(baseUrl)
+            .then((res) => {
+              if (res?.error) doFetch();
+            })
+            .catch(() => doFetch());
+        } else {
+          doFetch();
+        }
+        return NextResponse.json({
+          success: true,
+          queued: true,
+          message: "Refresh already in progress.",
+          contestId,
+          contestTitle: contest.title,
+          runId: runEnsure.runId,
+          nextRefreshAvailable: new Date(
+            now.getTime() + METRICS_REFRESH_COOLDOWN_MS_OPPORTUNITIES
+          ).toISOString(),
+          lastMetricsUpdated: contest.last_metrics_updated || null,
+        });
+      }
+
+      const job: MetricsRefreshJob = isRaidCampaign
+        ? {
+            contestId,
+            isRaid: true,
+            batchIndex: 0,
+            totalBatches: 1,
+            creatorId: user.id,
+            runId: runEnsure.runId,
+          }
+        : {
+            contestId,
+            isRaid: false,
+            batchIndex: 0,
+            totalBatches: 1,
+            creatorId: user.id,
+            runId: runEnsure.runId,
+          };
+
+      const enqueueResult = await enqueueMetricsRefreshJob(job);
+      if (enqueueResult.error) {
+        console.error(
+          `[twitter-refresh-feed] Creator queue enqueue failed for ${contestId}:`,
+          enqueueResult.error
+        );
+        await failTwitterMetricsRun(
+          supabaseAdminCreator,
+          runEnsure.runId,
+          enqueueResult.error
+        );
+        return NextResponse.json(
+          { error: "Failed to start creator feed refresh" },
+          { status: 500 }
+        );
+      }
+
+      console.log(
+        `[twitter-refresh-feed] Enqueued creator-only job for contest ${contestId} (isRaid=${isRaidCampaign})`
+      );
+
       if (isQStashEnabled()) {
         triggerProcessMetricsQueue(baseUrl)
           .then((res) => {
@@ -252,6 +308,7 @@ export async function POST(
           "Creator feed refresh started in background. Page will reload when done.",
         contestId,
         contestTitle: contest.title,
+        runId: runEnsure.runId,
         nextRefreshAvailable: new Date(
           now.getTime() + METRICS_REFRESH_COOLDOWN_MS_OPPORTUNITIES
         ).toISOString(),
@@ -291,18 +348,86 @@ export async function POST(
         1,
         Math.ceil(participantCount / BATCH_SIZE)
       );
+
+      const runEnsureFull = await ensureTwitterMetricsRunForEnqueue(
+        supabaseAdmin,
+        {
+          contestId,
+          isRaid: isRaidCampaign,
+          totalBatches,
+          totalParticipants: participantCount,
+          creatorScopeId: null,
+        }
+      );
+      if (!runEnsureFull.ok) {
+        return NextResponse.json(
+          { error: runEnsureFull.error },
+          { status: 500 }
+        );
+      }
+
+      const host = request.headers.get("host");
+      const protocol = request.headers.get("x-forwarded-proto") || "http";
+      const baseUrlHeader = host ? `${protocol}://${host}` : "";
+
+      const doFetchFull = () => {
+        if (!baseUrlHeader) return;
+        fetch(`${baseUrlHeader}/api/cron/process-metrics-queue`, {
+          method: "POST",
+          headers: process.env.CRON_SECRET
+            ? { Authorization: `Bearer ${process.env.CRON_SECRET}` }
+            : {},
+        }).catch((e) =>
+          console.warn(
+            "[twitter-refresh-feed] Trigger process-metrics-queue failed:",
+            e
+          )
+        );
+      };
+
+      if (runEnsureFull.alreadyActive) {
+        if (baseUrlHeader) {
+          if (isQStashEnabled()) {
+            triggerProcessMetricsQueue(baseUrlHeader)
+              .then((res) => {
+                if (res?.error) doFetchFull();
+              })
+              .catch(() => doFetchFull());
+          } else {
+            doFetchFull();
+          }
+        }
+        return NextResponse.json({
+          success: true,
+          queued: true,
+          message: "Refresh already in progress.",
+          contestId,
+          contestTitle: contest.title,
+          runId: runEnsureFull.runId,
+          nextRefreshAvailable: new Date(
+            now.getTime() +
+              (isAdmin
+                ? METRICS_REFRESH_COOLDOWN_MS_ADMIN
+                : METRICS_REFRESH_COOLDOWN_MS_BRAND)
+          ).toISOString(),
+          lastMetricsUpdated: contest.last_metrics_updated || null,
+        });
+      }
+
       let job:
         | {
             contestId: string;
             isRaid: true;
             batchIndex?: number;
             totalBatches?: number;
+            runId?: string;
           }
         | {
             contestId: string;
             isRaid: false;
             batchIndex: number;
             totalBatches: number;
+            runId?: string;
           };
       if (isRaidCampaign) {
         job = {
@@ -310,9 +435,16 @@ export async function POST(
           isRaid: true,
           batchIndex: 0,
           totalBatches,
+          runId: runEnsureFull.runId,
         };
       } else {
-        job = { contestId, isRaid: false, batchIndex: 0, totalBatches };
+        job = {
+          contestId,
+          isRaid: false,
+          batchIndex: 0,
+          totalBatches,
+          runId: runEnsureFull.runId,
+        };
       }
 
       const enqueueResult = await enqueueMetricsRefreshJob(job);
@@ -321,32 +453,22 @@ export async function POST(
           `[twitter-refresh-feed] Enqueue failed for ${contestId}:`,
           enqueueResult.error
         );
+        await failTwitterMetricsRun(
+          supabaseAdmin,
+          runEnsureFull.runId,
+          enqueueResult.error
+        );
         // Fall through to sync refresh below
       } else {
         console.log(
           `[twitter-refresh-feed] Enqueued job for contest ${contestId} (full refresh)`
         );
-        const host = request.headers.get("host");
-        const protocol = request.headers.get("x-forwarded-proto") || "http";
-        const baseUrl = host ? `${protocol}://${host}` : "";
-        if (baseUrl) {
-          const doFetch = () =>
-            fetch(`${baseUrl}/api/cron/process-metrics-queue`, {
-              method: "POST",
-              headers: process.env.CRON_SECRET
-                ? { Authorization: `Bearer ${process.env.CRON_SECRET}` }
-                : {},
-            }).catch((e) =>
-              console.warn(
-                "[twitter-refresh-feed] Trigger process-metrics-queue failed:",
-                e
-              )
-            );
+        if (baseUrlHeader) {
           if (isQStashEnabled()) {
-            triggerProcessMetricsQueue(baseUrl)
+            triggerProcessMetricsQueue(baseUrlHeader)
               .then((res) => {
                 if (res?.error) {
-                  doFetch();
+                  doFetchFull();
                 } else if (res?.messageId) {
                   console.log(
                     "[twitter-refresh-feed] QStash trigger sent messageId=",
@@ -354,9 +476,9 @@ export async function POST(
                   );
                 }
               })
-              .catch(() => doFetch());
+              .catch(() => doFetchFull());
           } else {
-            doFetch();
+            doFetchFull();
           }
         }
         return NextResponse.json({
@@ -366,6 +488,7 @@ export async function POST(
             "Feed refresh started in background. Page will reload when done.",
           contestId,
           contestTitle: contest.title,
+          runId: runEnsureFull.runId,
           nextRefreshAvailable: new Date(
             now.getTime() +
               (isAdmin

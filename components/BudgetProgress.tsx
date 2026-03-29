@@ -86,11 +86,17 @@ export function BudgetProgress({
       { cpmTotal: number; bonusTotal: number }
     >();
 
-    // Filter to verified or paid submissions, but exclude filtered_out ones
+    const twitterExcluded = (s: any) =>
+      s.is_twitter_tweet === true || s.platform === "twitter"
+        ? s.is_eligible === false ||
+          (s.deleted_at != null && s.deleted_at !== "")
+        : false;
+
     const relevantSubmissions = submissions.filter((s) => {
       const status = (s as any).status?.toLowerCase();
-      const filterStatus = (s as any).filter_status?.toLowerCase();
-      return (status === "verified" || status === "paid") && filterStatus !== "filtered_out";
+      return (
+        (status === "verified" || status === "paid") && !twitterExcluded(s)
+      );
     });
 
     // Sort by created_at to respect "first submitted, first paid" logic
