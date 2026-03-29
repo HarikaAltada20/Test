@@ -144,19 +144,20 @@ export default function SettingsPage({
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [userType, setUserType] = useState<"creator" | "advertiser" | null>(
-    null
+    null,
   );
   const [username, setUsername] = useState<string | null>(null);
   const [pageLoading, setPageLoading] = useState(true);
   const [hasPassword, setHasPassword] = useState(true); // Track if user has a password
   const supabase = createClient();
   const [youtubeAccount, setYoutubeAccount] = useState<SocialAccount | null>(
-    null
+    null,
   );
   const [instagramAccount, setInstagramAccount] =
     useState<SocialAccount | null>(null);
-  const [tiktokAccount, setTiktokAccount] =
-    useState<SocialAccount | null>(null);
+  const [tiktokAccount, setTiktokAccount] = useState<SocialAccount | null>(
+    null,
+  );
   const [twitterAccount, setTwitterAccount] = useState<any | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isLoadingYouTube, setIsLoadingYouTube] = useState(false);
@@ -186,7 +187,8 @@ export default function SettingsPage({
   const [isBillingModalOpen, setIsBillingModalOpen] = useState(false);
   const [billingData, setBillingData] = useState<any>(null);
   const [billingLoading, setBillingLoading] = useState(false);
-  const [profileCompletionLoading, setProfileCompletionLoading] = useState(false);
+  const [profileCompletionLoading, setProfileCompletionLoading] =
+    useState(false);
   const [navigatingProfile, setNavigatingProfile] = useState(false);
   const [navigatingTerms, setNavigatingTerms] = useState(false);
   const [navigatingPrivacy, setNavigatingPrivacy] = useState(false);
@@ -307,13 +309,34 @@ export default function SettingsPage({
       newUrl.searchParams.delete("error");
       newUrl.searchParams.delete("message");
       router.replace(newUrl.pathname);
+    } else if (
+      error === "tiktok_not_allowed_india" ||
+      error === "tiktok_not_allowed_region"
+    ) {
+      toast({
+        title: "TikTok Not Allowed",
+        description:
+          "TikTok is not allowed in your country. Please use a VPN to connect and participate in TikTok campaigns.",
+        variant: "destructive",
+        duration: 10000,
+      });
+
+      const newUrl = new URL(window.location.href);
+      newUrl.searchParams.delete("error");
+      router.replace(newUrl.pathname);
     }
 
     // Handle success parameters
     // Pattern A: success=true&platform=youtube|instagram|tiktok
     if (success === "true" && platform) {
-      const platformName = platform === "youtube" ? "YouTube" : 
-                           platform === "instagram" ? "Instagram" : "TikTok";
+      const platformName =
+        platform === "youtube"
+          ? "YouTube"
+          : platform === "instagram"
+            ? "Instagram"
+            : platform === "twitter"
+              ? "Twitter (X)"
+              : "TikTok";
 
       toast({
         title: `${platformName} Connected Successfully`,
@@ -329,10 +352,17 @@ export default function SettingsPage({
     }
 
     // Pattern B: success=youtube_connected | instagram_connected | tiktok_connected
-    if (success === "youtube_connected" || success === "instagram_connected" || success === "tiktok_connected") {
+    if (
+      success === "youtube_connected" ||
+      success === "instagram_connected" ||
+      success === "tiktok_connected"
+    ) {
       const platformName =
-        success === "youtube_connected" ? "YouTube" : 
-        success === "instagram_connected" ? "Instagram" : "TikTok";
+        success === "youtube_connected"
+          ? "YouTube"
+          : success === "instagram_connected"
+            ? "Instagram"
+            : "TikTok";
 
       toast({
         title: `${platformName} Connected Successfully`,
@@ -358,17 +388,17 @@ export default function SettingsPage({
   const refreshInstagramToken = async (
     currentToken: string,
     userId: string,
-    currentProfile: CreatorProfile
+    currentProfile: CreatorProfile,
   ) => {
     try {
       const refreshRes = await fetch(
-        `https://graph.instagram.com/refresh_access_token?grant_type=ig_refresh_token&access_token=${currentToken}`
+        `https://graph.instagram.com/refresh_access_token?grant_type=ig_refresh_token&access_token=${currentToken}`,
       );
       const newData = await refreshRes.json();
 
       if (!refreshRes.ok || newData.error) {
         throw new Error(
-          newData.error?.message || "Failed to refresh Instagram token"
+          newData.error?.message || "Failed to refresh Instagram token",
         );
       }
 
@@ -393,10 +423,10 @@ export default function SettingsPage({
       setProfile((prev) =>
         prev
           ? {
-            ...prev,
-            instagram_account: updatedInstagramAccount as SocialAccount,
-          }
-          : null
+              ...prev,
+              instagram_account: updatedInstagramAccount as SocialAccount,
+            }
+          : null,
       );
       console.log("Instagram token refreshed successfully");
       // Optionally show a success message to the user, though this can be silent
@@ -446,7 +476,7 @@ export default function SettingsPage({
           const { data, error } = await supabase
             .from("creator_profiles")
             .select(
-              "youtube_account, instagram_account, tiktok_account, phone_number, date_of_birth, gender, country, state, city, address, languages, categories, subcategories, interests, has_claimed_profile_reward"
+              "youtube_account, instagram_account, tiktok_account, phone_number, date_of_birth, gender, country, state, city, address, languages, categories, subcategories, interests, has_claimed_profile_reward",
             )
             .eq("id", user!.id)
             .single();
@@ -461,14 +491,14 @@ export default function SettingsPage({
             data.instagram_account?.token_expiry
           ) {
             const shouldRefresh = dayjs().isAfter(
-              dayjs(data.instagram_account.token_expiry).subtract(7, "days")
+              dayjs(data.instagram_account.token_expiry).subtract(7, "days"),
             ); // Refresh 7 days before expiry
             if (shouldRefresh) {
               console.log("Attempting to refresh Instagram token");
               await refreshInstagramToken(
                 data.instagram_account.access_token,
                 user!.id,
-                data
+                data,
               );
             }
           }
@@ -715,7 +745,7 @@ export default function SettingsPage({
 
   const handleNotificationChange = async (
     type: "email" | "push",
-    value: boolean
+    value: boolean,
   ) => {
     try {
       if (type === "email") {
@@ -757,7 +787,10 @@ export default function SettingsPage({
   const handleInstagramConnect = () => {
     const instagramClientId = process.env.NEXT_PUBLIC_INSTAGRAM_CLIENT_ID;
     // Strip trailing slash so redirect_uri matches App Dashboard; avoid double slashes
-    const appBaseUrl = (process.env.NEXT_PUBLIC_APP_URL || "").replace(/\/$/, "");
+    const appBaseUrl = (process.env.NEXT_PUBLIC_APP_URL || "").replace(
+      /\/$/,
+      "",
+    );
 
     if (!instagramClientId) {
       toast({
@@ -790,7 +823,7 @@ export default function SettingsPage({
 
       // Business login: www.instagram.com/oauth/authorize per official docs; force_reauth=true
       const authUrl = `https://www.instagram.com/oauth/authorize?client_id=${instagramClientId}&redirect_uri=${encodeURIComponent(
-        instagramRedirectUri
+        instagramRedirectUri,
       )}&response_type=code&scope=${encodeURIComponent(scopes)}&force_reauth=true`;
 
       // Set a timeout to reset loading state if redirect doesn't happen
@@ -842,7 +875,7 @@ export default function SettingsPage({
 
       setInstagramAccount(null);
       setProfile((prev) =>
-        prev ? { ...prev, instagram_account: null } : null
+        prev ? { ...prev, instagram_account: null } : null,
       );
       toast({
         title: "Success",
@@ -861,20 +894,36 @@ export default function SettingsPage({
   };
 
   const handleTiktokConnect = () => {
-    setIsLoadingTiktok(true);
-    try {
-      // Set a timeout to reset loading state if redirect doesn't happen
-      const timeoutId = setTimeout(() => {
-        setIsLoadingTiktok(false);
-        toast({
-          title: "Error",
-          description: "Connection timed out. Please try again.",
-          variant: "destructive",
-        });
-      }, API_TIMEOUT_LONG);
+    if (typeof window === "undefined") {
+      toast({
+        title: "Error",
+        description:
+          "Window object not available. Please refresh the page and try again.",
+        variant: "destructive",
+      });
+      setIsLoadingTiktok(false);
+      return;
+    }
 
-      window.location.href = "/api/tiktok/auth";
+    setIsLoadingTiktok(true);
+
+    try {
+      const userTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+
+      // Only send timezone, don't send country to avoid regional blocking
+      const queryParams = new URLSearchParams({
+        tz: userTimeZone,
+      });
+
+      const redirectUrl = `/api/auth/tiktok/authorize?${queryParams.toString()}`;
+
+      console.log("[TikTok Connect] Redirecting to:", redirectUrl);
+      console.log("[TikTok Connect] Query params:", queryParams.toString());
+
+      // Force redirect to ensure OAuth flow starts
+      window.location.assign(redirectUrl);
     } catch (err: any) {
+      console.error("[TikTok Connect] Error:", err);
       setIsLoadingTiktok(false);
       toast({
         title: "Error",
@@ -888,17 +937,7 @@ export default function SettingsPage({
     if (!user) return;
     setIsLoadingTiktokDisconnect(true);
     try {
-      // Set a timeout to prevent infinite loading
-      const timeoutId = setTimeout(() => {
-        setIsLoadingTiktokDisconnect(false);
-        toast({
-          title: "Error",
-          description: "Disconnection timed out. Please try again.",
-          variant: "destructive",
-        });
-      }, API_TIMEOUT_SHORT);
-
-      const { error: updateError } = await supabase
+      const { error } = await supabase
         .from("creator_profiles")
         .update({
           tiktok_account: null,
@@ -906,14 +945,11 @@ export default function SettingsPage({
         })
         .eq("id", user.id);
 
-      clearTimeout(timeoutId);
-
-      if (updateError) throw updateError;
+      if (error) throw error;
 
       setTiktokAccount(null);
-      setProfile((prev) =>
-        prev ? { ...prev, tiktok_account: null } : null
-      );
+      setTiktokConnected(false);
+
       toast({
         title: "Success",
         description: "TikTok account disconnected successfully.",
@@ -922,7 +958,7 @@ export default function SettingsPage({
     } catch (err: any) {
       toast({
         title: "Error",
-        description: err.message || "Failed to disconnect TikTok account.",
+        description: err?.message || "Failed to disconnect TikTok account.",
         variant: "destructive",
       });
     } finally {
@@ -955,7 +991,7 @@ export default function SettingsPage({
       if (!response.ok) {
         const result = await response.json().catch(() => null);
         throw new Error(
-          result?.error || "Failed to disconnect Twitter account."
+          result?.error || "Failed to disconnect Twitter account.",
         );
       }
 
@@ -1220,7 +1256,7 @@ export default function SettingsPage({
         `/api/subscriptions/billing-details?t=${Date.now()}`,
         {
           cache: "no-store",
-        }
+        },
       );
       const result = await response.json();
 
@@ -1315,7 +1351,7 @@ export default function SettingsPage({
             "px-3 py-1 rounded-full text-sm font-medium",
             isDark
               ? "bg-yellow-900/30 text-yellow-300 border border-yellow-600"
-              : "bg-yellow-100 text-yellow-800 border border-yellow-300"
+              : "bg-yellow-100 text-yellow-800 border border-yellow-300",
           )}
         >
           Canceling
@@ -1329,7 +1365,7 @@ export default function SettingsPage({
             "px-3 py-1 rounded-full text-sm font-medium",
             isDark
               ? "bg-green-900/30 text-green-300 border border-green-600"
-              : "bg-green-100 text-green-800 border border-green-300"
+              : "bg-green-100 text-green-800 border border-green-300",
           )}
         >
           Active
@@ -1342,7 +1378,7 @@ export default function SettingsPage({
           "px-3 py-1 rounded-full text-sm font-medium",
           isDark
             ? "bg-gray-900/30 text-gray-300 border border-gray-600"
-            : "bg-gray-100 text-gray-800 border border-gray-300"
+            : "bg-gray-100 text-gray-800 border border-gray-300",
         )}
       >
         {status.charAt(0).toUpperCase() + status.slice(1)}
@@ -1508,7 +1544,7 @@ export default function SettingsPage({
         <h1
           className={cn(
             "text-4xl font-bold",
-            isDark ? "text-white" : "text-gray-900"
+            isDark ? "text-white" : "text-gray-900",
           )}
         >
           Settings
@@ -1532,7 +1568,7 @@ export default function SettingsPage({
             "border",
             isDark
               ? "border-[#FF5353] bg-red-900/20"
-              : "bg-red-50 border-red-500"
+              : "bg-red-50 border-red-500",
           )}
         >
           <AlertDescription
@@ -1558,7 +1594,7 @@ export default function SettingsPage({
                       "border",
                       isDark
                         ? "text-[#FF5353] border-[#FF5353]"
-                        : "text-red-700 border-red-300"
+                        : "text-red-700 border-red-300",
                     )}
                   >
                     Dismiss
@@ -1577,14 +1613,14 @@ export default function SettingsPage({
                             onClick={() =>
                               window.open(
                                 "https://www.youtube.com/channel_switcher",
-                                "_blank"
+                                "_blank",
                               )
                             }
                             className={cn(
                               "border",
                               isDark
                                 ? "text-[#FF5353] border-[#FF5353]"
-                                : "text-red-700 border-red-300"
+                                : "text-red-700 border-red-300",
                             )}
                           >
                             Create YouTube Channel
@@ -1595,14 +1631,14 @@ export default function SettingsPage({
                             onClick={() =>
                               window.open(
                                 "https://support.google.com/youtube/answer/1646861?hl=en",
-                                "_blank"
+                                "_blank",
                               )
                             }
                             className={cn(
                               "border",
                               isDark
                                 ? "text-[#FF5353] border-[#FF5353]"
-                                : "text-red-700 border-red-300"
+                                : "text-red-700 border-red-300",
                             )}
                           >
                             Learn How
@@ -1611,7 +1647,7 @@ export default function SettingsPage({
                         <p
                           className={cn(
                             "text-xs",
-                            isDark ? "text-[#FF5353]" : "text-red-600"
+                            isDark ? "text-[#FF5353]" : "text-red-600",
                           )}
                         >
                           💡 Tip: You can also create a channel by uploading
@@ -1621,7 +1657,7 @@ export default function SettingsPage({
                         <div
                           className={cn(
                             "text-xs",
-                            isDark ? "text-[#FF5353]" : "text-red-600"
+                            isDark ? "text-[#FF5353]" : "text-red-600",
                           )}
                         >
                           <p className="mb-1">Additional Resources:</p>
@@ -1655,13 +1691,13 @@ export default function SettingsPage({
           <div
             className={cn(
               "rounded-t-2xl border-b px-6 py-4 shadow-md",
-              isDark ? "bg-[#180438]" : "bg-white"
+              isDark ? "bg-[#180438]" : "bg-white",
             )}
           >
             <CardTitle
               className={cn(
                 "text-2xl",
-                isDark ? "text-white" : "text-[#7F39EC]"
+                isDark ? "text-white" : "text-[#7F39EC]",
               )}
             >
               Manage Your Account
@@ -1670,7 +1706,7 @@ export default function SettingsPage({
           <div
             className={cn(
               "rounded-b-2xl pb-4 shadow-md",
-              isDark ? "bg-[#180438]" : "bg-white"
+              isDark ? "bg-[#180438]" : "bg-white",
             )}
           >
             <CardHeader>
@@ -1765,7 +1801,7 @@ export default function SettingsPage({
                           (
                           {(instagramAccount?.account_type || "N/A").replace(
                             "_",
-                            " "
+                            " ",
                           )}
                           )
                           {instagramAccount?.needs_reconnect ? (
@@ -1941,7 +1977,8 @@ export default function SettingsPage({
                       </div>
                     ) : (
                       <p className="text-sm text-muted-foreground">
-                        Connect your TikTok account to participate in TikTok campaigns
+                        Connect your TikTok account to participate in TikTok
+                        campaigns
                       </p>
                     )}
                   </div>
@@ -1974,7 +2011,10 @@ export default function SettingsPage({
                     )}
                   </>
                 ) : (
-                  <Button onClick={handleTiktokConnect} disabled={isLoadingTiktok}>
+                  <Button
+                    onClick={handleTiktokConnect}
+                    disabled={isLoadingTiktok}
+                  >
                     {isLoadingTiktok && (
                       <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
                     )}
@@ -2008,22 +2048,31 @@ export default function SettingsPage({
                 >
                   <Bell className="h-4 w-4" />
                   <AlertDescription className="text-sm leading-relaxed">
-                    To participate in TikTok campaigns, you need to connect
-                    your TikTok account. This allows us to:
-                    <ul className="list-disc list-inside mt-2 space-y-1 text-sm">
-                      <li>Verify your TikTok profile and metrics</li>
-                      <li>Track campaign performance and engagement</li>
-                      <li>Automatically verify your submissions</li>
-                    </ul>
-                    <a
-                      href="/tiktok-connection-faq"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="mt-2 inline-block font-semibold underline hover:text-primary"
-                    >
-                      Learn more about TikTok connection{" "}
-                      <ExternalLink className="inline h-3 w-3 ml-0.5" />
-                    </a>
+                    To participate in TikTok campaigns, you need to connect your
+                    TikTok account. This allows Game of Creators to securely
+                    fetch your video metrics according to campaign rules.
+                    <br />
+                    <br />
+                    <span className="font-semibold text-[#FF5353] dark:text-[#FF8080]">
+                      Important⚠️:{" "}
+                    </span>
+                    TikTok may be unavailable in certain countries. Please use a
+                    VPN to connect and participate in TikTok campaigns.
+                  </AlertDescription>
+                </Alert>
+              )}
+              {/* Region Warning for India */}
+              {creatorProfileData?.country?.toLowerCase() === "india" && (
+                <Alert
+                  variant="destructive"
+                  className="mt-4 border-red-500 bg-red-50 dark:bg-red-950/20"
+                >
+                  <AlertTriangle className="h-4 w-4 text-red-600 dark:text-red-400" />
+                  <AlertDescription className="text-sm text-red-800 dark:text-red-300">
+                    <strong>TikTok is currently restricted in India.</strong>{" "}
+                    Please use a VPN to connect your account and verify your
+                    video submissions. Otherwise, your TikTok account linking
+                    may fail or your videos may not be accessible.
                   </AlertDescription>
                 </Alert>
               )}
@@ -2031,10 +2080,11 @@ export default function SettingsPage({
               {/* Twitter Connection */}
               <div className="flex items-center justify-between p-4 border rounded-lg">
                 <div className="flex items-center space-x-3">
-                  <FaXTwitter className={cn(
-                    "text-2xl",
-                    isDark ? "text-white" : "text-black"
-                  )}
+                  <FaXTwitter
+                    className={cn(
+                      "text-2xl",
+                      isDark ? "text-white" : "text-black",
+                    )}
                   />
                   <div>
                     <h3 className="font-medium">Twitter (X)</h3>
@@ -2109,9 +2159,9 @@ export default function SettingsPage({
                   <Bell className="h-4 w-4" />
                   <AlertDescription className="text-sm leading-relaxed">
                     To participate in Twitter (X) campaigns, you will need to
-                    connect your X account. This will allow
-                    Game Of Creators to view basic public profile and post
-                    information for eligibility and performance insights.
+                    connect your X account. This will allow Game Of Creators to
+                    view basic public profile and post information for
+                    eligibility and performance insights.
                     <br />
                     <br />
                     <strong className="font-semibold">Important Steps:</strong>
@@ -2197,7 +2247,7 @@ export default function SettingsPage({
         <div
           className={cn(
             "rounded-xl shadow-lg overflow-hidden w-full p-6 md:p-0 md:pr-4 md:pt-5",
-            isDark ? "bg-[#180438]" : "bg-white border border-purple-100"
+            isDark ? "bg-[#180438]" : "bg-white border border-purple-100",
           )}
         >
           <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between">
@@ -2217,7 +2267,7 @@ export default function SettingsPage({
                   <h3
                     className={cn(
                       "font-semibold text-base sm:text-lg mb-1",
-                      isDark ? "text-white" : "text-gray-900"
+                      isDark ? "text-white" : "text-gray-900",
                     )}
                   >
                     Survey Completed
@@ -2225,7 +2275,7 @@ export default function SettingsPage({
                   <p
                     className={cn(
                       "text-xs sm:text-[12.5px] leading-relaxed",
-                      isDark ? "text-gray-300" : "text-gray-600"
+                      isDark ? "text-gray-300" : "text-gray-600",
                     )}
                   >
                     Thank you for completing our survey! Your feedback is
@@ -2258,7 +2308,7 @@ export default function SettingsPage({
                     "rounded-xl transition-all duration-200",
                     isDark
                       ? "bg-[#180438] hover:border-purple-500"
-                      : "bg-white border border-gray-300 hover:border-purple-300"
+                      : "bg-white border border-gray-300 hover:border-purple-300",
                   )}
                 >
                   <div
@@ -2271,23 +2321,23 @@ export default function SettingsPage({
                         ? "rounded-b-none"
                         : "rounded-b-xl",
                       (item.id === "profile" && navigatingProfile) ||
-                      (item.id === "terms" && navigatingTerms) ||
-                      (item.id === "privacy" && navigatingPrivacy)
+                        (item.id === "terms" && navigatingTerms) ||
+                        (item.id === "privacy" && navigatingPrivacy)
                         ? "opacity-70"
-                        : ""
+                        : "",
                     )}
                   >
                     <div className="flex items-center gap-4 flex-1">
                       <div
                         className={cn(
                           "p-2 rounded-lg",
-                          isDark ? "bg-purple-900/30" : "bg-purple-100"
+                          isDark ? "bg-purple-900/30" : "bg-purple-100",
                         )}
                       >
                         <Icon
                           className={cn(
                             "h-5 w-5",
-                            isDark ? "text-purple-400" : "text-purple-600"
+                            isDark ? "text-purple-400" : "text-purple-600",
                           )}
                         />
                       </div>
@@ -2295,7 +2345,7 @@ export default function SettingsPage({
                         <span
                           className={cn(
                             "font-medium",
-                            isDark ? "text-white" : "text-gray-900"
+                            isDark ? "text-white" : "text-gray-900",
                           )}
                         >
                           {item.title}
@@ -2321,7 +2371,7 @@ export default function SettingsPage({
                       <ChevronRight
                         className={cn(
                           "h-5 w-5",
-                          isDark ? "text-gray-400" : "text-gray-500"
+                          isDark ? "text-gray-400" : "text-gray-500",
                         )}
                       />
                     )}
@@ -2335,7 +2385,7 @@ export default function SettingsPage({
                           "relative p-4 border lg:max-w-[1200px] rounded-lg lg:mx-4 mb-4",
                           isDark
                             ? "bg-purple-900/30 border-purple-500"
-                            : "bg-purple-50 border-purple-300"
+                            : "bg-purple-50 border-purple-300",
                         )}
                       >
                         {/* <button
@@ -2359,7 +2409,7 @@ export default function SettingsPage({
                               <span
                                 className={cn(
                                   "text-sm font-medium whitespace-nowrap",
-                                  isDark ? "text-gray-300" : "text-gray-700"
+                                  isDark ? "text-gray-300" : "text-gray-700",
                                 )}
                               >
                                 Profile Completion
@@ -2370,7 +2420,7 @@ export default function SettingsPage({
                                     "relative h-2 w-32 overflow-hidden rounded-full",
                                     isDark
                                       ? "bg-purple-900/50"
-                                      : "bg-purple-100"
+                                      : "bg-purple-100",
                                   )}
                                 >
                                   <div
@@ -2378,7 +2428,7 @@ export default function SettingsPage({
                                       "h-full rounded-full transition-all duration-300",
                                       isDark
                                         ? "bg-gradient-to-r from-purple-600 to-purple-500"
-                                        : "bg-gradient-to-r from-purple-500 to-purple-400"
+                                        : "bg-gradient-to-r from-purple-500 to-purple-400",
                                     )}
                                     style={{
                                       width: `${getProfileCompletionPercentage()}%`,
@@ -2390,7 +2440,7 @@ export default function SettingsPage({
                                     "text-sm font-bold whitespace-nowrap",
                                     isDark
                                       ? "text-purple-400"
-                                      : "text-purple-600"
+                                      : "text-purple-600",
                                   )}
                                 >
                                   {getProfileCompletionPercentage()}%
@@ -2401,7 +2451,7 @@ export default function SettingsPage({
                           <p
                             className={cn(
                               "text-sm mb-3",
-                              isDark ? "text-gray-300" : "text-gray-600"
+                              isDark ? "text-gray-300" : "text-gray-600",
                             )}
                           >
                             Complete your profile now and claim your $0.50
@@ -2411,19 +2461,18 @@ export default function SettingsPage({
                             <Button
                               className={cn(
                                 "w-full sm:w-auto bg-purple-500 hover:bg-purple-600 text-white font-bold py-2.5 px-6 rounded-full flex items-center justify-center gap-2 transition-colors",
-                                isDark && "bg-purple-600 hover:bg-purple-700"
+                                isDark && "bg-purple-600 hover:bg-purple-700",
                               )}
                               onClick={() => {
                                 setProfileCompletionLoading(true);
-                              setTimeout(() => {
-                                window.location.href = '/dashboard/profile';
-                              }, 100);
+                                setTimeout(() => {
+                                  window.location.href = "/dashboard/profile";
+                                }, 100);
                               }}
                               disabled={profileCompletionLoading}
                             >
-                             
                               COMPLETE PROFILE
-                               {profileCompletionLoading ? (
+                              {profileCompletionLoading ? (
                                 <ButtonLoadingSpinner />
                               ) : (
                                 <ArrowRight className="h-4 w-4" />
@@ -2443,7 +2492,7 @@ export default function SettingsPage({
                           "relative p-4 border lg:max-w-[1200px] rounded-lg lg:mx-4 mb-4",
                           isDark
                             ? "bg-green-900/30 border-green-500"
-                            : "bg-green-50 border-green-300"
+                            : "bg-green-50 border-green-300",
                         )}
                       >
                         <div className="pr-6">
@@ -2451,7 +2500,7 @@ export default function SettingsPage({
                             <CheckCircle2
                               className={cn(
                                 "h-5 w-5 flex-shrink-0 mt-0.5",
-                                isDark ? "text-green-400" : "text-green-600"
+                                isDark ? "text-green-400" : "text-green-600",
                               )}
                             />
                             <div className="flex-1">
@@ -2459,7 +2508,9 @@ export default function SettingsPage({
                                 <span
                                   className={cn(
                                     "text-sm font-semibold",
-                                    isDark ? "text-green-300" : "text-green-700"
+                                    isDark
+                                      ? "text-green-300"
+                                      : "text-green-700",
                                   )}
                                 >
                                   Profile Completed & Bonus Claimed!
@@ -2468,7 +2519,7 @@ export default function SettingsPage({
                               <p
                                 className={cn(
                                   "text-sm",
-                                  isDark ? "text-gray-300" : "text-gray-600"
+                                  isDark ? "text-gray-300" : "text-gray-600",
                                 )}
                               >
                                 Congratulations! Your profile has been completed
@@ -2493,27 +2544,27 @@ export default function SettingsPage({
                       "flex items-center justify-between w-full px-4 py-4 rounded-xl transition-all duration-200",
                       isDark
                         ? "bg-[#180438] hover:border-purple-500"
-                        : "bg-white border border-gray-300 hover:border-purple-300"
+                        : "bg-white border border-gray-300 hover:border-purple-300",
                     )}
                   >
                     <div className="flex items-center gap-4">
                       <div
                         className={cn(
                           "p-2 rounded-lg",
-                          isDark ? "bg-purple-900/30" : "bg-purple-100"
+                          isDark ? "bg-purple-900/30" : "bg-purple-100",
                         )}
                       >
                         <Icon
                           className={cn(
                             "h-5 w-5",
-                            isDark ? "text-purple-400" : "text-purple-600"
+                            isDark ? "text-purple-400" : "text-purple-600",
                           )}
                         />
                       </div>
                       <span
                         className={cn(
                           "font-medium",
-                          isDark ? "text-white" : "text-gray-900"
+                          isDark ? "text-white" : "text-gray-900",
                         )}
                       >
                         {item.title}
@@ -2523,7 +2574,7 @@ export default function SettingsPage({
                       className={cn(
                         "h-5 w-5 transition-transform",
                         isExpanded ? "rotate-90" : "",
-                        isDark ? "text-gray-400" : "text-gray-500"
+                        isDark ? "text-gray-400" : "text-gray-500",
                       )}
                     />
                   </button>
@@ -2547,27 +2598,27 @@ export default function SettingsPage({
                       "flex items-center justify-between w-full px-4 py-4 rounded-xl transition-all duration-200",
                       isDark
                         ? "bg-[#180438] hover:border-purple-500"
-                        : "bg-white border border-gray-300 hover:border-purple-300"
+                        : "bg-white border border-gray-300 hover:border-purple-300",
                     )}
                   >
                     <div className="flex items-center gap-4">
                       <div
                         className={cn(
                           "p-2 rounded-lg",
-                          isDark ? "bg-purple-900/30" : "bg-purple-100"
+                          isDark ? "bg-purple-900/30" : "bg-purple-100",
                         )}
                       >
                         <Icon
                           className={cn(
                             "h-5 w-5",
-                            isDark ? "text-purple-400" : "text-purple-600"
+                            isDark ? "text-purple-400" : "text-purple-600",
                           )}
                         />
                       </div>
                       <span
                         className={cn(
                           "font-medium",
-                          isDark ? "text-white" : "text-gray-900"
+                          isDark ? "text-white" : "text-gray-900",
                         )}
                       >
                         {item.title}
@@ -2576,7 +2627,7 @@ export default function SettingsPage({
                     <ChevronRight
                       className={cn(
                         "h-5 w-5",
-                        isDark ? "text-gray-400" : "text-gray-500"
+                        isDark ? "text-gray-400" : "text-gray-500",
                       )}
                     />
                   </button>
@@ -2591,25 +2642,25 @@ export default function SettingsPage({
       <div
         className={cn(
           "rounded-xl shadow-lg overflow-hidden",
-          isDark ? "bg-[#180438]" : "bg-white border border-gray-300"
+          isDark ? "bg-[#180438]" : "bg-white border border-gray-300",
         )}
       >
         <div
           className={cn(
             "rounded-t-xl px-6 py-4 border-b",
-            isDark ? "bg-[#180438] border-gray-700" : "bg-white border-gray-200"
+            isDark
+              ? "bg-[#180438] border-gray-700"
+              : "bg-white border-gray-200",
           )}
         >
           <CardTitle
-            className={cn(
-              "text-2xl",
-              isDark ? "text-white" : "text-[#7F39EC]"
-            )}
+            className={cn("text-2xl", isDark ? "text-white" : "text-[#7F39EC]")}
           >
             Follow Us & Join Communities
           </CardTitle>
           <CardDescription className="mt-2">
-            Stay connected with us on social media and join our creator communities for updates, support, and exclusive opportunities.
+            Stay connected with us on social media and join our creator
+            communities for updates, support, and exclusive opportunities.
           </CardDescription>
         </div>
         <CardContent className="p-6">
@@ -2619,7 +2670,7 @@ export default function SettingsPage({
               <h3
                 className={cn(
                   "text-lg font-semibold mb-4",
-                  isDark ? "text-white" : "text-gray-900"
+                  isDark ? "text-white" : "text-gray-900",
                 )}
               >
                 Social Media
@@ -2633,18 +2684,19 @@ export default function SettingsPage({
                     "flex items-center gap-3 p-4 rounded-lg border transition-all hover:shadow-md",
                     isDark
                       ? "bg-[#1a0a2e] border-gray-700 hover:border-blue-500 hover:bg-[#1a0a2e]/80"
-                      : "bg-white border-gray-300 hover:border-blue-400 hover:bg-blue-50"
+                      : "bg-white border-gray-300 hover:border-blue-400 hover:bg-blue-50",
                   )}
                 >
-                  <FaXTwitter className={cn(
-                    "h-5 w-5",
-                    isDark ? "text-white" : "text-black"
-                  )}
+                  <FaXTwitter
+                    className={cn(
+                      "h-5 w-5",
+                      isDark ? "text-white" : "text-black",
+                    )}
                   />
                   <span
                     className={cn(
                       "font-medium",
-                      isDark ? "text-white" : "text-gray-900"
+                      isDark ? "text-white" : "text-gray-900",
                     )}
                   >
                     Twitter (X)
@@ -2659,14 +2711,14 @@ export default function SettingsPage({
                     "flex items-center gap-3 p-4 rounded-lg border transition-all hover:shadow-md",
                     isDark
                       ? "bg-[#1a0a2e] border-gray-700 hover:border-pink-500 hover:bg-[#1a0a2e]/80"
-                      : "bg-white border-gray-300 hover:border-pink-400 hover:bg-pink-50"
+                      : "bg-white border-gray-300 hover:border-pink-400 hover:bg-pink-50",
                   )}
                 >
                   <SiInstagram className="h-5 w-5 text-pink-600" />
                   <span
                     className={cn(
                       "font-medium",
-                      isDark ? "text-white" : "text-gray-900"
+                      isDark ? "text-white" : "text-gray-900",
                     )}
                   >
                     Instagram
@@ -2681,14 +2733,14 @@ export default function SettingsPage({
                     "flex items-center gap-3 p-4 rounded-lg border transition-all hover:shadow-md",
                     isDark
                       ? "bg-[#1a0a2e] border-gray-700 hover:border-red-500 hover:bg-[#1a0a2e]/80"
-                      : "bg-white border-gray-300 hover:border-red-400 hover:bg-red-50"
+                      : "bg-white border-gray-300 hover:border-red-400 hover:bg-red-50",
                   )}
                 >
                   <SiYoutube className="h-5 w-5 text-red-600" />
                   <span
                     className={cn(
                       "font-medium",
-                      isDark ? "text-white" : "text-gray-900"
+                      isDark ? "text-white" : "text-gray-900",
                     )}
                   >
                     YouTube
@@ -2703,14 +2755,14 @@ export default function SettingsPage({
                     "flex items-center gap-3 p-4 rounded-lg border transition-all hover:shadow-md",
                     isDark
                       ? "bg-[#1a0a2e] border-gray-700 hover:border-blue-500 hover:bg-[#1a0a2e]/80"
-                      : "bg-white border-gray-300 hover:border-blue-400 hover:bg-blue-50"
+                      : "bg-white border-gray-300 hover:border-blue-400 hover:bg-blue-50",
                   )}
                 >
                   <FaLinkedin className="h-5 w-5 text-blue-600" />
                   <span
                     className={cn(
                       "font-medium",
-                      isDark ? "text-white" : "text-gray-900"
+                      isDark ? "text-white" : "text-gray-900",
                     )}
                   >
                     LinkedIn
@@ -2725,7 +2777,7 @@ export default function SettingsPage({
               <h3
                 className={cn(
                   "text-lg font-semibold mb-4",
-                  isDark ? "text-white" : "text-gray-900"
+                  isDark ? "text-white" : "text-gray-900",
                 )}
               >
                 Join Our Communities
@@ -2739,7 +2791,7 @@ export default function SettingsPage({
                     "flex items-center gap-3 p-4 rounded-lg border transition-all hover:shadow-md",
                     isDark
                       ? "bg-[#5865F2]/10 border-[#5865F2]/30 hover:border-[#5865F2] hover:bg-[#5865F2]/20"
-                      : "bg-purple-50 border-purple-200 hover:border-[#5865F2] hover:bg-purple-100"
+                      : "bg-purple-50 border-purple-200 hover:border-[#5865F2] hover:bg-purple-100",
                   )}
                 >
                   <FaDiscord className="h-6 w-6 text-[#5865F2]" />
@@ -2747,7 +2799,7 @@ export default function SettingsPage({
                     <span
                       className={cn(
                         "font-semibold block",
-                        isDark ? "text-white" : "text-gray-900"
+                        isDark ? "text-white" : "text-gray-900",
                       )}
                     >
                       Discord Community
@@ -2755,7 +2807,7 @@ export default function SettingsPage({
                     <span
                       className={cn(
                         "text-sm",
-                        isDark ? "text-gray-400" : "text-gray-600"
+                        isDark ? "text-gray-400" : "text-gray-600",
                       )}
                     >
                       Get updates, support, and bonus codes
@@ -2771,7 +2823,7 @@ export default function SettingsPage({
                     "flex items-center gap-3 p-4 rounded-lg border transition-all hover:shadow-md",
                     isDark
                       ? "bg-[#25D366]/10 border-[#25D366]/30 hover:border-[#25D366] hover:bg-[#25D366]/20"
-                      : "bg-green-50 border-green-200 hover:border-[#25D366] hover:bg-green-100"
+                      : "bg-green-50 border-green-200 hover:border-[#25D366] hover:bg-green-100",
                   )}
                 >
                   <FaWhatsapp className="h-6 w-6 text-[#25D366]" />
@@ -2779,7 +2831,7 @@ export default function SettingsPage({
                     <span
                       className={cn(
                         "font-semibold block",
-                        isDark ? "text-white" : "text-gray-900"
+                        isDark ? "text-white" : "text-gray-900",
                       )}
                     >
                       WhatsApp Community
@@ -2787,7 +2839,7 @@ export default function SettingsPage({
                     <span
                       className={cn(
                         "text-sm",
-                        isDark ? "text-gray-400" : "text-gray-600"
+                        isDark ? "text-gray-400" : "text-gray-600",
                       )}
                     >
                       Connect with creators and get support
@@ -2857,7 +2909,7 @@ export default function SettingsPage({
                     className={cn(
                       isDark
                         ? "bg-[#06021d] border border-gray-600 text-white"
-                        : "bg-white text-gray-900"
+                        : "bg-white text-gray-900",
                     )}
                   />
                 </div>
@@ -2867,8 +2919,7 @@ export default function SettingsPage({
                     type="button"
                     className="w-full bg-[#6C43D0] text-white"
                     disabled={
-                      !twitterUsername.trim() ||
-                      twitterFetchState === "loading"
+                      !twitterUsername.trim() || twitterFetchState === "loading"
                     }
                     onClick={async () => {
                       if (!twitterUsername.trim()) return;
@@ -2886,18 +2937,14 @@ export default function SettingsPage({
                             body: JSON.stringify({
                               screenname: twitterUsername.trim(),
                             }),
-                          }
+                          },
                         );
 
                         const data = await response.json();
 
-                        if (
-                          !response.ok ||
-                          !data ||
-                          data.status !== "active"
-                        ) {
+                        if (!response.ok || !data || data.status !== "active") {
                           throw new Error(
-                            data?.error || "Unable to fetch active X profile."
+                            data?.error || "Unable to fetch active X profile.",
                           );
                         }
 
@@ -2938,7 +2985,7 @@ export default function SettingsPage({
                 <p
                   className={cn(
                     "text-xs text-green-600",
-                    isDark && "text-green-400"
+                    isDark && "text-green-400",
                   )}
                 >
                   Profile fetched successfully.
@@ -2949,7 +2996,7 @@ export default function SettingsPage({
                       "flex items-start gap-3 rounded-lg border p-3",
                       isDark
                         ? "border-gray-700 bg-[#06021d]"
-                        : "border-gray-200 bg-white"
+                        : "border-gray-200 bg-white",
                     )}
                   >
                     {twitterProfile.avatar && (
@@ -2984,9 +3031,7 @@ export default function SettingsPage({
                         </span>
                         <span className="text-[11px] text-gray-500">
                           Tweets:{" "}
-                          <strong>
-                            {twitterProfile.statuses_count || 0}
-                          </strong>
+                          <strong>{twitterProfile.statuses_count || 0}</strong>
                         </span>
                       </div>
                     </div>
@@ -3015,7 +3060,7 @@ export default function SettingsPage({
                                   body: JSON.stringify({
                                     screenname: twitterUsername.trim(),
                                   }),
-                                }
+                                },
                               );
 
                               const data = await response.json();
@@ -3027,7 +3072,7 @@ export default function SettingsPage({
                               ) {
                                 throw new Error(
                                   data?.error ||
-                                  "Unable to fetch active X profile."
+                                    "Unable to fetch active X profile.",
                                 );
                               }
 
@@ -3039,7 +3084,10 @@ export default function SettingsPage({
                                   "We have fetched your public X profile details.",
                               });
                             } catch (error: any) {
-                              console.error("Error refreshing X profile", error);
+                              console.error(
+                                "Error refreshing X profile",
+                                error,
+                              );
                               setTwitterFetchState("error");
                               toast({
                                 title: "Error",
@@ -3075,7 +3123,7 @@ export default function SettingsPage({
                                 body: JSON.stringify({
                                   twitterProfile,
                                 }),
-                              }
+                              },
                             );
 
                             const result = await response.json();
@@ -3083,7 +3131,7 @@ export default function SettingsPage({
                             if (!response.ok || !result?.success) {
                               throw new Error(
                                 result?.error ||
-                                "Failed to save Twitter profile. Please try again."
+                                  "Failed to save Twitter profile. Please try again.",
                               );
                             }
 
@@ -3102,22 +3150,22 @@ export default function SettingsPage({
                                   headers: {
                                     "Content-Type": "application/json",
                                   },
-                                }
+                                },
                               );
 
                               if (checkResponse.ok) {
                                 const checkResult = await checkResponse.json();
                                 setTwitterAccount(
-                                  checkResult.twitterAccount || null
+                                  checkResult.twitterAccount || null,
                                 );
                                 setTwitterConnected(
-                                  !!checkResult.twitterAccount
+                                  !!checkResult.twitterAccount,
                                 );
                               }
                             } catch (e) {
                               console.error(
                                 "Failed to refresh Twitter account after save",
-                                e
+                                e,
                               );
                             }
 
@@ -3141,8 +3189,7 @@ export default function SettingsPage({
                     {!isUsernameInBio(twitterProfile.desc) && (
                       <p className="text-[11px] text-red-600 text-right dark:text-red-400">
                         You have not added your Game Of Creators username in
-                        your X bio yet. Until then, you cannot connect
-                        Twitter.
+                        your X bio yet. Until then, you cannot connect Twitter.
                       </p>
                     )}
                   </div>
@@ -3154,7 +3201,7 @@ export default function SettingsPage({
                 <p
                   className={cn(
                     "text-xs",
-                    isDark ? "text-red-400" : "text-red-600"
+                    isDark ? "text-red-400" : "text-red-600",
                   )}
                 >
                   Something went wrong while fetching your profile. If this
@@ -3180,14 +3227,14 @@ export default function SettingsPage({
                           body: JSON.stringify({
                             screenname: twitterUsername.trim(),
                           }),
-                        }
+                        },
                       );
 
                       const data = await response.json();
 
                       if (!response.ok || !data || data.status !== "active") {
                         throw new Error(
-                          data?.error || "Unable to fetch active X profile."
+                          data?.error || "Unable to fetch active X profile.",
                         );
                       }
 
@@ -3239,8 +3286,8 @@ export default function SettingsPage({
           {hasPassword && (
             <Alert className="mb-4 bg-[#D9C0FF26] border-[#7F39EC]">
               <AlertDescription>
-                <strong>Multiple Sign-in Methods:</strong> You can sign in
-                with both Google and email/password.
+                <strong>Multiple Sign-in Methods:</strong> You can sign in with
+                both Google and email/password.
               </AlertDescription>
             </Alert>
           )}
@@ -3277,15 +3324,13 @@ export default function SettingsPage({
                       "pr-10",
                       isDark
                         ? "bg-[#06021d] border border-gray-600 text-white"
-                        : "bg-white text-gray-900"
+                        : "bg-white text-gray-900",
                     )}
                     required
                   />
                   <button
                     type="button"
-                    onClick={() =>
-                      setShowCurrentPassword(!showCurrentPassword)
-                    }
+                    onClick={() => setShowCurrentPassword(!showCurrentPassword)}
                     className="absolute right-3 top-1/2 transform -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors"
                   >
                     {showCurrentPassword ? (
@@ -3317,7 +3362,7 @@ export default function SettingsPage({
                     "pr-10",
                     isDark
                       ? "bg-[#06021d] border border-gray-600 text-white"
-                      : "bg-white text-gray-900"
+                      : "bg-white text-gray-900",
                   )}
                   required
                 />
@@ -3360,7 +3405,7 @@ export default function SettingsPage({
                     "pr-10",
                     isDark
                       ? "bg-[#06021d] border border-gray-600 text-white"
-                      : "bg-white text-gray-900"
+                      : "bg-white text-gray-900",
                   )}
                   required
                 />
@@ -3385,7 +3430,7 @@ export default function SettingsPage({
                 onClick={() => setIsPasswordModalOpen(false)}
                 className={cn(
                   "flex-1 bg-white border border-red-500 text-red-500",
-                  isDark ? "bg-[#06021d]" : "bg-white"
+                  isDark ? "bg-[#06021d]" : "bg-white",
                 )}
               >
                 Cancel
@@ -3435,9 +3480,7 @@ export default function SettingsPage({
                   <div className="space-y-4">
                     <div className="space-y-2">
                       <Label
-                        className={cn(
-                          isDark ? "text-white" : "text-gray-900"
-                        )}
+                        className={cn(isDark ? "text-white" : "text-gray-900")}
                       >
                         General Link
                       </Label>
@@ -3448,7 +3491,7 @@ export default function SettingsPage({
                           className={cn(
                             isDark
                               ? "bg-[#06021d] border border-gray-600 text-white"
-                              : "bg-white text-gray-900"
+                              : "bg-white text-gray-900",
                           )}
                           onFocus={(e) =>
                             (e.target as HTMLInputElement).select()
@@ -3470,9 +3513,7 @@ export default function SettingsPage({
                     </div>
                     <div className="space-y-2">
                       <Label
-                        className={cn(
-                          isDark ? "text-white" : "text-gray-900"
-                        )}
+                        className={cn(isDark ? "text-white" : "text-gray-900")}
                       >
                         Creators Link
                       </Label>
@@ -3483,7 +3524,7 @@ export default function SettingsPage({
                           className={cn(
                             isDark
                               ? "bg-[#06021d] border border-gray-600 text-white"
-                              : "bg-white text-gray-900"
+                              : "bg-white text-gray-900",
                           )}
                         />
                         <Button
@@ -3499,9 +3540,7 @@ export default function SettingsPage({
                     </div>
                     <div className="space-y-2">
                       <Label
-                        className={cn(
-                          isDark ? "text-white" : "text-gray-900"
-                        )}
+                        className={cn(isDark ? "text-white" : "text-gray-900")}
                       >
                         Brands Link
                       </Label>
@@ -3512,7 +3551,7 @@ export default function SettingsPage({
                           className={cn(
                             isDark
                               ? "bg-[#06021d] border border-gray-600 text-white"
-                              : "bg-white text-gray-900"
+                              : "bg-white text-gray-900",
                           )}
                         />
                         <Button
@@ -3533,8 +3572,8 @@ export default function SettingsPage({
           ) : (
             <Alert className="bg-yellow-50 border-yellow-200">
               <AlertDescription className="text-yellow-800">
-                <strong>Note:</strong> You need to set up a username to
-                generate referral links. Please set up your username first.
+                <strong>Note:</strong> You need to set up a username to generate
+                referral links. Please set up your username first.
               </AlertDescription>
             </Alert>
           )}
@@ -3594,13 +3633,13 @@ export default function SettingsPage({
                         "border rounded-xl p-5 flex flex-col md:flex-row md:items-center justify-between gap-4",
                         isDark
                           ? "border-gray-700 bg-[#06021d]"
-                          : "border-gray-400 bg-white"
+                          : "border-gray-400 bg-white",
                       )}
                     >
                       <div className="flex items-center gap-4">
                         <div
                           className={`p-4 rounded-xl bg-gradient-to-r ${getPlanColor(
-                            plan?.name || "EXPLORER"
+                            plan?.name || "EXPLORER",
                           )} text-white shadow-lg`}
                         >
                           {getPlanIcon(plan?.name || "EXPLORER")}
@@ -3609,7 +3648,7 @@ export default function SettingsPage({
                           <h3
                             className={cn(
                               "text-xl font-bold",
-                              isDark ? "text-white" : "text-black"
+                              isDark ? "text-white" : "text-black",
                             )}
                           >
                             {plan?.displayName || plan?.name || "N/A"}
@@ -3617,7 +3656,7 @@ export default function SettingsPage({
                           <p
                             className={cn(
                               "text-lg font-medium",
-                              isDark ? "text-purple-400" : "text-purple-600"
+                              isDark ? "text-purple-400" : "text-purple-600",
                             )}
                           >
                             {formatCurrencyFromCents(plan?.price || 0)}
@@ -3629,7 +3668,7 @@ export default function SettingsPage({
                       <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
                         {getStatusBadge(
                           billingData.billingDetails.status,
-                          billingData.billingDetails.cancelAtPeriodEnd
+                          billingData.billingDetails.cancelAtPeriodEnd,
                         )}
                         {/* View Invoice Button - Show if user has a subscription and invoice URL exists */}
                         {billingData.billingDetails.latestInvoiceUrl &&
@@ -3638,7 +3677,7 @@ export default function SettingsPage({
                               onClick={() => {
                                 window.open(
                                   billingData.billingDetails.latestInvoiceUrl,
-                                  "_blank"
+                                  "_blank",
                                 );
                               }}
                               variant="outline"
@@ -3646,7 +3685,7 @@ export default function SettingsPage({
                                 "px-4 py-2",
                                 isDark
                                   ? "border-purple-500 text-purple-400 hover:bg-purple-900/30"
-                                  : "border-purple-500 text-purple-600 hover:bg-purple-50"
+                                  : "border-purple-500 text-purple-600 hover:bg-purple-50",
                               )}
                             >
                               <FileText className="h-4 w-4" />
@@ -3658,7 +3697,7 @@ export default function SettingsPage({
                           <Button
                             onClick={() => {
                               router.push(
-                                "/dashboard/billing?tab=subscription"
+                                "/dashboard/billing?tab=subscription",
                               );
                               setIsBillingModalOpen(false);
                             }}
@@ -3676,13 +3715,13 @@ export default function SettingsPage({
                         <CalendarDays
                           className={cn(
                             "h-5 w-5",
-                            isDark ? "text-white" : "text-gray-900"
+                            isDark ? "text-white" : "text-gray-900",
                           )}
                         />
                         <span
                           className={cn(
                             "font-semibold text-lg",
-                            isDark ? "text-white" : "text-black"
+                            isDark ? "text-white" : "text-black",
                           )}
                         >
                           Billing Period
@@ -3695,14 +3734,14 @@ export default function SettingsPage({
                             "rounded-2xl p-4 shadow-sm border",
                             isDark
                               ? "bg-[#C9A7FF26] border-[#C9A7FF] text-white"
-                              : "bg-[#D9C0FF26] border-[#7F39EC] text-black"
+                              : "bg-[#D9C0FF26] border-[#7F39EC] text-black",
                           )}
                         >
                           <p className="text-sm mb-1">Current Period</p>
                           <p className="font-semibold">
                             {formatDateRange(
                               billingData.billingDetails.currentPeriodStart,
-                              billingData.billingDetails.currentPeriodEnd
+                              billingData.billingDetails.currentPeriodEnd,
                             )}
                           </p>
                         </div>
@@ -3711,13 +3750,13 @@ export default function SettingsPage({
                             "rounded-2xl p-4 shadow-sm border",
                             isDark
                               ? "bg-[#C9A7FF26] border-[#C9A7FF] text-white"
-                              : "bg-[#D9C0FF26] border-[#7F39EC] text-black"
+                              : "bg-[#D9C0FF26] border-[#7F39EC] text-black",
                           )}
                         >
                           <p className="text-sm mb-1">Next Billing Date</p>
                           <p className="font-semibold">
                             {formatDate(
-                              billingData.billingDetails.nextBillingDate
+                              billingData.billingDetails.nextBillingDate,
                             )}
                           </p>
                         </div>
@@ -3726,7 +3765,7 @@ export default function SettingsPage({
                             "rounded-2xl p-4 shadow-sm border",
                             isDark
                               ? "bg-[#C9A7FF26] border-[#C9A7FF] text-white"
-                              : "bg-[#D9C0FF26] border-[#7F39EC] text-black"
+                              : "bg-[#D9C0FF26] border-[#7F39EC] text-black",
                           )}
                         >
                           <p className="text-sm mb-1">
@@ -3746,27 +3785,27 @@ export default function SettingsPage({
                             "border",
                             isDark
                               ? "border-red-600/40 bg-red-900/30 text-red-100"
-                              : "border-red-200 bg-red-50 text-red-900"
+                              : "border-red-200 bg-red-50 text-red-900",
                           )}
                         >
                           <AlertTriangle
                             className={cn(
                               "h-4 w-4",
-                              isDark ? "text-red-300" : "text-red-600"
+                              isDark ? "text-red-300" : "text-red-600",
                             )}
                           />
                           <AlertDescription
                             className={cn(
-                              isDark ? "text-red-100" : "text-red-900"
+                              isDark ? "text-red-100" : "text-red-900",
                             )}
                           >
                             <strong>Subscription Ending:</strong> Your
                             subscription will be canceled on{" "}
                             {formatDate(
-                              billingData.billingDetails.nextBillingDate
+                              billingData.billingDetails.nextBillingDate,
                             )}
-                            . You'll lose access to premium features after
-                            this date.
+                            . You'll lose access to premium features after this
+                            date.
                           </AlertDescription>
                         </Alert>
                       )}
@@ -3776,7 +3815,7 @@ export default function SettingsPage({
                         <h4
                           className={cn(
                             "font-semibold text-lg",
-                            isDark ? "text-white" : "text-gray-900"
+                            isDark ? "text-white" : "text-gray-900",
                           )}
                         >
                           Plan Features
@@ -3786,14 +3825,14 @@ export default function SettingsPage({
                             "rounded-xl p-4 border",
                             isDark
                               ? "bg-[#180438] border-gray-700"
-                              : "border-gray-300"
+                              : "border-gray-300",
                           )}
                         >
                           <ul className="grid grid-cols-2 gap-3 text-md">
                             <li
                               className={cn(
                                 "flex items-center gap-2",
-                                isDark ? "text-gray-300" : "text-gray-800"
+                                isDark ? "text-gray-300" : "text-gray-800",
                               )}
                             >
                               <span className="text-green-600">✓</span>
@@ -3803,7 +3842,7 @@ export default function SettingsPage({
                             <li
                               className={cn(
                                 "flex items-center gap-2",
-                                isDark ? "text-gray-300" : "text-gray-800"
+                                isDark ? "text-gray-300" : "text-gray-800",
                               )}
                             >
                               <span className="text-green-600">✓</span>
@@ -3813,7 +3852,7 @@ export default function SettingsPage({
                             <li
                               className={cn(
                                 "flex items-center gap-2",
-                                isDark ? "text-gray-300" : "text-gray-800"
+                                isDark ? "text-gray-300" : "text-gray-800",
                               )}
                             >
                               <span className="text-green-600">✓</span>
@@ -3824,7 +3863,7 @@ export default function SettingsPage({
                             <li
                               className={cn(
                                 "flex items-center gap-2",
-                                isDark ? "text-gray-300" : "text-gray-800"
+                                isDark ? "text-gray-300" : "text-gray-800",
                               )}
                             >
                               <span className="text-green-600">✓</span>
@@ -3833,7 +3872,7 @@ export default function SettingsPage({
                             <li
                               className={cn(
                                 "flex items-center gap-2",
-                                isDark ? "text-gray-300" : "text-gray-800"
+                                isDark ? "text-gray-300" : "text-gray-800",
                               )}
                             >
                               <span className="text-green-600">✓</span>
@@ -3898,27 +3937,27 @@ export default function SettingsPage({
       <div
         className={cn(
           "flex items-center justify-between w-full px-4 py-4 rounded-xl transition-all duration-200",
-          isDark ? "bg-[#180438]" : "bg-white border border-gray-300"
+          isDark ? "bg-[#180438]" : "bg-white border border-gray-300",
         )}
       >
         <div className="flex items-center gap-4">
           <div
             className={cn(
               "p-2 rounded-lg",
-              isDark ? "bg-red-900/30" : "bg-red-100"
+              isDark ? "bg-red-900/30" : "bg-red-100",
             )}
           >
             <LogOut
               className={cn(
                 "h-5 w-5",
-                isDark ? "text-red-400" : "text-red-600"
+                isDark ? "text-red-400" : "text-red-600",
               )}
             />
           </div>
           <span
             className={cn(
               "font-medium",
-              isDark ? "text-white" : "text-gray-900"
+              isDark ? "text-white" : "text-gray-900",
             )}
           >
             Log out
