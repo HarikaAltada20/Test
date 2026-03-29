@@ -20,7 +20,6 @@ export async function GET(
   }
 
   try {
-    // 1. First fetch contest details to determine contest type
     const { data: contestData, error: contestError } = await supabase
       .from('contests')
       .select('id, contest_type')
@@ -36,7 +35,6 @@ export async function GET(
       throw new Error('Contest not found');
     }
 
-    // 2. Fetch the user's submissions for the contest (multiple submissions support)
     const { data: mySubmissions, error: submissionError } = await supabase
       .from('submissions')
       .select(`
@@ -63,41 +61,55 @@ export async function GET(
     }
 
     if (!mySubmissions || mySubmissions.length === 0) {
-      // User has not submitted to this contest
       return NextResponse.json({ mySubmission: null, submissions: [], rank: null });
     }
 
-    // For backward compatibility, use the first (most recent) submission as the main submission
     const mySubmission = mySubmissions[0];
+    const submissionIds = mySubmissions.map((s) => s.id);
 
-    // 3. Calculate the user's rank based on contest type
-    // Public rank should exclude rejected submissions for all contest types
-    let rankQuery = supabase
-      .from('submissions')
-      .select('id', { count: 'exact', head: true })
-      .eq('contest_id', contestId);
+    /** One DB round-trip: all submission ranks for this user + creator-wise stats (see migration). */
+    const { data: snapshot, error: snapshotError } = await supabase.rpc(
+      'contest_my_leaderboard_snapshot',
+      {
+        p_contest_id: contestId,
+        p_creator_id: user.id,
+        p_submission_ids: submissionIds,
+      },
+    );
 
-    // Exclude rejected submissions for both leaderboard and CPM
-    rankQuery = rankQuery.neq('status', 'rejected');
-
-    // Only calculate rank if views data is available
-    let rank = 1; // Default rank
-    if (mySubmission.views !== null && mySubmission.views !== undefined) {
-      const { count: higherRankedCount, error: rankError } = await rankQuery
-        .or(`views.gt.${mySubmission.views},and(views.eq.${mySubmission.views},created_at.lt.${mySubmission.created_at})`);
-
-      if (rankError) {
-        console.error(`Error calculating rank for user ${user.id} in contest ${contestId}:`, rankError);
-        // Don't throw error, just use default rank
-        console.warn(`Using default rank due to calculation error`);
-      } else {
-        rank = (higherRankedCount ?? 0) + 1;
-      }
+    if (snapshotError) {
+      console.error('[my-submission] contest_my_leaderboard_snapshot:', snapshotError);
+      throw new Error(
+        `Leaderboard snapshot failed: ${snapshotError.message}. Ensure migration 20260329_contest_leaderboard_snapshot_functions.sql is applied.`,
+      );
     }
 
-    // Rank is already calculated above
+    const snap = snapshot as {
+      submission_ranks?: Record<string, number | null>;
+      creator_wise?: {
+        total_views?: number;
+        total_earnings?: number;
+        creator_rank?: number;
+      } | null;
+    } | null;
 
-    // 4. Fetch user's general profile info from 'users' table
+    const ranksMap = snap?.submission_ranks ?? {};
+    const leaderboardRanks = mySubmissions.map((s) => {
+      if (s.status === 'rejected') return null;
+      const raw = ranksMap[s.id];
+      return typeof raw === 'number' ? raw : null;
+    });
+
+    const rank = leaderboardRanks[0] ?? null;
+
+    const cw = snap?.creator_wise;
+    const creator_wise_total_views =
+      cw != null && typeof cw.total_views === 'number' ? cw.total_views : null;
+    const creator_wise_total_earnings =
+      cw != null && typeof cw.total_earnings === 'number' ? cw.total_earnings : null;
+    const creator_wise_rank =
+      cw != null && typeof cw.creator_rank === 'number' ? cw.creator_rank : null;
+
     const { data: userProfile, error: userProfileError } = await supabase
       .from('users')
       .select('id, username, profile_picture_url, full_name')
@@ -108,7 +120,6 @@ export async function GET(
         console.warn(`Warning: Could not fetch user profile for ${user.id}: ${userProfileError.message}`);
     }
     
-    // 5. Fetch user's creator profile info for PFP
     const { data: creatorProfile, error: creatorProfileError } = await supabase
       .from('creator_profiles')
       .select('id, youtube_account, instagram_account')
@@ -119,7 +130,7 @@ export async function GET(
         console.warn(`Warning: Could not fetch creator profile for ${user.id}: ${creatorProfileError.message}`);
     }
 
-    let creator_pfp_url = null;
+    let creator_pfp_url: string | null = null;
     if (creatorProfile && mySubmission.platform) {
       if (mySubmission.platform === 'youtube' && creatorProfile.youtube_account) {
         creator_pfp_url = creatorProfile.youtube_account.channel_thumbnail || null;
@@ -130,27 +141,30 @@ export async function GET(
     
     const combinedSubmissionData = {
       ...mySubmission,
+      leaderboard_rank: leaderboardRanks[0] ?? null,
       user_platform_username: userProfile?.username || 'N/A',
       user_full_name: userProfile?.full_name || 'Anonymous User',
       creator_pfp_url: creator_pfp_url,
       user_platform_pfp_url: userProfile?.profile_picture_url || null,
     };
 
-    // Combine all submissions with user data
-    const combinedSubmissions = mySubmissions.map(submission => ({
+    const combinedSubmissions = mySubmissions.map((submission, i) => ({
       ...submission,
+      leaderboard_rank: leaderboardRanks[i] ?? null,
       user_platform_username: userProfile?.username || 'N/A',
       user_full_name: userProfile?.full_name || 'Anonymous User',
       creator_pfp_url: creator_pfp_url,
       user_platform_pfp_url: userProfile?.profile_picture_url || null,
-      // Add content_url for backward compatibility
       content_url: submission.content_link,
     }));
 
     return NextResponse.json({ 
       mySubmission: combinedSubmissionData, 
       submissions: combinedSubmissions,
-      rank 
+      rank,
+      creator_wise_total_views,
+      creator_wise_total_earnings,
+      creator_wise_rank,
     });
 
   } catch (error: any) {

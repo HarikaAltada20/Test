@@ -796,7 +796,7 @@ export default function LeaderboardClient({
               sortBy !== "total_coins" &&
               sortBy !== "affiliate_earnings" &&
               sortBy !== "verified_views" && (
-                <div className="flex items-center gap-1 sm:gap-1.5 sm:gap-2 flex-shrink-0">
+                <div className="flex items-center gap-1 sm:gap-2 flex-shrink-0">
                   <div
                     className={cn(
                       "inline-flex items-center gap-0.5 sm:gap-1 rounded-lg sm:rounded-xl p-0.5 sm:p-1 overflow-x-auto whitespace-nowrap shadow-inner",
@@ -935,7 +935,7 @@ export default function LeaderboardClient({
                         sortBy === "submissions_won" ||
                         sortBy === "referrals" ||
                         sortBy === "affiliate_earnings") && (
-                        <div className="mt-1.5 sm:mt-2 flex flex-wrap items-center justify-end gap-1 sm:gap-1.5 sm:gap-2.5">
+                        <div className="mt-1.5 sm:mt-2 flex flex-wrap items-center justify-end gap-1 sm:gap-2.5">
                           {sortBy === "winnings" && (
                             <>
                               <Skeleton className="h-6 sm:h-7 w-16 sm:w-20 rounded-md" />
@@ -1117,7 +1117,7 @@ export default function LeaderboardClient({
                           {metricValue}
                         </div>
                         {sortBy === "winnings" && (
-                          <div className="mt-1.5 sm:mt-2 flex flex-wrap items-center justify-end gap-1 sm:gap-1.5 sm:gap-2.5">
+                          <div className="mt-1.5 sm:mt-2 flex flex-wrap items-center justify-end gap-1 sm:gap-2.5">
                             <div
                               className={cn(
                                 "flex items-center gap-0.5 sm:gap-1.5 px-1.5 sm:px-2.5 py-0.5 sm:py-1.5 rounded-md sm:rounded-lg transition-colors",
@@ -1207,7 +1207,7 @@ export default function LeaderboardClient({
                           </div>
                         )}
                         {sortBy === "contests_won" && (
-                          <div className="mt-1.5 sm:mt-2 flex flex-wrap items-center justify-end gap-1 sm:gap-1.5 sm:gap-2.5">
+                          <div className="mt-1.5 sm:mt-2 flex flex-wrap items-center justify-end gap-1 sm:gap-2.5">
                             <div
                               className={cn(
                                 "flex items-center gap-0.5 sm:gap-1.5 px-1.5 sm:px-2.5 py-0.5 sm:py-1.5 rounded-md sm:rounded-lg transition-colors",
@@ -1242,7 +1242,7 @@ export default function LeaderboardClient({
                           </div>
                         )}
                         {sortBy === "submissions_won" && (
-                          <div className="mt-1.5 sm:mt-2 flex flex-wrap items-center justify-end gap-1 sm:gap-1.5 sm:gap-2.5">
+                          <div className="mt-1.5 sm:mt-2 flex flex-wrap items-center justify-end gap-1 sm:gap-2.5">
                             <div
                               className={cn(
                                 "flex items-center gap-0.5 sm:gap-1.5 px-1.5 sm:px-2.5 py-0.5 sm:py-1.5 rounded-md sm:rounded-lg transition-colors",
@@ -1340,7 +1340,7 @@ export default function LeaderboardClient({
                           </div>
                         )}
                         {sortBy === "referrals" && (
-                          <div className="mt-1.5 sm:mt-2 flex flex-wrap items-center justify-end gap-1 sm:gap-1.5 sm:gap-2.5">
+                          <div className="mt-1.5 sm:mt-2 flex flex-wrap items-center justify-end gap-1 sm:gap-2.5">
                             <div
                               className={cn(
                                 "flex items-center gap-0.5 sm:gap-1.5 px-1.5 sm:px-2.5 py-0.5 sm:py-1.5 rounded-md sm:rounded-lg transition-colors",
@@ -1430,7 +1430,7 @@ export default function LeaderboardClient({
                           </div>
                         )}
                         {sortBy === "affiliate_earnings" && (
-                          <div className="mt-1.5 sm:mt-2 flex flex-wrap items-center justify-end gap-1 sm:gap-1.5 sm:gap-2.5">
+                          <div className="mt-1.5 sm:mt-2 flex flex-wrap items-center justify-end gap-1 sm:gap-2.5">
                             <div
                               className={cn(
                                 "flex items-center gap-0.5 sm:gap-1.5 px-1.5 sm:px-2.5 py-0.5 sm:py-1.5 rounded-md sm:rounded-lg transition-colors",
