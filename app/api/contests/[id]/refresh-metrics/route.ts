@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/utils/supabase/server";
+import { revalidateLeaderboardCache } from "@/lib/leaderboard-cache";
 import { createClient as createAdminSupabaseClient } from "@supabase/supabase-js";
 import {
   METRICS_REFRESH_COOLDOWN_MS_OPPORTUNITIES,
@@ -341,6 +342,8 @@ export async function POST(
         doFetch();
       }
 
+      // Leaderboard cache is revalidated when twitter-refresh-tweets / fetch-raid-engagements
+      // finish (including after queued batches), not when the job is only enqueued.
       return NextResponse.json({
         success: true,
         queued: true,
@@ -434,6 +437,7 @@ export async function POST(
       `[refresh-metrics] contestId=${contestId} sync refresh completed in ${syncElapsedMs}ms`
     );
 
+    revalidateLeaderboardCache(contestId);
     return NextResponse.json({
       success: true,
       message: `${cronName} refreshed successfully`,

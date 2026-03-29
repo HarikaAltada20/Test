@@ -14,6 +14,7 @@ import {
 } from "@/lib/queue/metrics-refresh-queue";
 import { rerankTwitterContestLeaderboard } from "@/lib/twitter/rerank-twitter-leaderboard";
 import { getTweetLeafPublicMetrics } from "@/lib/twitter/tweet-public-metrics";
+import { revalidateLeaderboardCache } from "@/lib/leaderboard-cache";
 
 export const dynamic = "force-dynamic";
 
@@ -2244,6 +2245,7 @@ export async function POST(
     console.log(
       `[twitter-refresh-tweets] contestId=${contestId} refresh completed in ${elapsedMs}ms participants=${activeParticipants.length} tweetsFetched=${totalFetched} fromQueue=${fromQueue}`
     );
+    revalidateLeaderboardCache(contestId);
     return NextResponse.json({
       success: true,
       contestId,

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/utils/supabase/server";
 import { createAdminClient } from "@/utils/supabase/admin";
+import { revalidateLeaderboardCache } from "@/lib/leaderboard-cache";
 
 export const dynamic = "force-dynamic";
 
@@ -220,6 +221,8 @@ export async function POST(request: NextRequest) {
         { status: 500 }
       );
     }
+
+    revalidateLeaderboardCache(contestId);
 
     return NextResponse.json({ success: true }, { status: 200 });
   } catch (error: any) {
