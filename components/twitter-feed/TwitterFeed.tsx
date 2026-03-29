@@ -42,6 +42,10 @@ export interface TwitterFeedProps {
    * Feed filtering uses the Creators sidebar like the brand view; this prop does not hide it.
    */
   creatorOnlyUserId?: string | null;
+  /**
+   * Brand/admin contest views use toolbar **Refresh Metrics** (same full-contest sync). Set false to hide duplicate "Refresh Feed" here.
+   */
+  showRefreshButton?: boolean;
 }
 
 export interface TwitterTweet {
@@ -90,6 +94,7 @@ export function TwitterFeed({
   disableRefreshWhenContestEnded = false,
   allowRefreshMyTweetsWhenEnded = false,
   creatorOnlyUserId = null,
+  showRefreshButton = true,
 }: TwitterFeedProps) {
   const { toast } = useToast();
   const [tweets, setTweets] = useState<TwitterTweet[]>([]);
@@ -473,7 +478,7 @@ export function TwitterFeed({
             isDark ? "bg-[#170337] border-gray-600" : "bg-white border-gray-200"
           )}
         >
-          <div className="flex items-center gap-3 min-w-0">
+          <div className="min-w-0 flex-1">
             <h1
               className={cn(
                 "text-lg sm:text-xl md:text-2xl font-bold truncate",
@@ -482,88 +487,100 @@ export function TwitterFeed({
             >
               Twitter Feed
             </h1>
+            {!showRefreshButton && (
+              <p
+                className={cn(
+                  "text-xs font-normal mt-1.5 max-w-xl",
+                  isDark ? "text-gray-400" : "text-gray-600"
+                )}
+              >
+                To pull the latest posts from X for <strong>all creators</strong>,
+                use <strong>Refresh Metrics</strong> in the submissions toolbar
+                (same sync; this tab only previews DB data).
+              </p>
+            )}
           </div>
-          <div className="flex items-center gap-2 flex-shrink-0">
-            {(() => {
-              const cooldownInfo = creatorOnlyMode
-                ? { canRefresh: creatorCanRefresh, remainingMs: creatorRemainingMs }
-                : cooldownType === "admin"
-                ? getMetricsRefreshCooldownInfoAdmin(currentLastMetricsUpdated)
-                : cooldownType === "brand"
-                ? getMetricsRefreshCooldownInfoBrand(currentLastMetricsUpdated)
-                : getMetricsRefreshCooldownInfoOpportunities(currentLastMetricsUpdated);
+          {showRefreshButton && (
+            <div className="flex items-center gap-2 flex-shrink-0">
+              {(() => {
+                const cooldownInfo = creatorOnlyMode
+                  ? { canRefresh: creatorCanRefresh, remainingMs: creatorRemainingMs }
+                  : cooldownType === "admin"
+                  ? getMetricsRefreshCooldownInfoAdmin(currentLastMetricsUpdated)
+                  : cooldownType === "brand"
+                  ? getMetricsRefreshCooldownInfoBrand(currentLastMetricsUpdated)
+                  : getMetricsRefreshCooldownInfoOpportunities(currentLastMetricsUpdated);
 
-              const waitLabel = formatRemainingTime(cooldownInfo.remainingMs);
-              const disableByContestEnded =
-                contestEnded && !allowRefreshMyTweetsWhenEnded;
-              const isDisabled =
-                metricsLocked ||
-                disableByContestEnded ||
-                isRefreshingFeed ||
-                !cooldownInfo.canRefresh;
-              const disabledReason = metricsLocked
-                ? "Metrics are locked after contest review begins"
-                : disableByContestEnded
-                ? "Contest has ended"
-                : !cooldownInfo.canRefresh
-                ? `Please wait ${waitLabel}`
-                : isRefreshingFeed
-                ? "Refreshing..."
-                : "";
-              const defaultLabel = creatorOnlyMode
-                ? "Refresh my tweets"
-                : allowRefreshMyTweetsWhenEnded
-                ? "Refresh my tweets"
-                : "Refresh Feed";
-              // Keep the button text stable (Refresh Feed / Refresh my tweets),
-              // even when locked; only the disabled state & tooltip explain why
-              const label = disableByContestEnded
-                ? "Contest Ended"
-                : isRefreshingFeed
-                ? "Refreshing..."
-                : !cooldownInfo.canRefresh
-                ? `Wait ${waitLabel}`
-                : defaultLabel;
+                const waitLabel = formatRemainingTime(cooldownInfo.remainingMs);
+                const disableByContestEnded =
+                  contestEnded && !allowRefreshMyTweetsWhenEnded;
+                const isDisabled =
+                  metricsLocked ||
+                  disableByContestEnded ||
+                  isRefreshingFeed ||
+                  !cooldownInfo.canRefresh;
+                const disabledReason = metricsLocked
+                  ? "Metrics are locked after contest review begins"
+                  : disableByContestEnded
+                  ? "Contest has ended"
+                  : !cooldownInfo.canRefresh
+                  ? `Please wait ${waitLabel}`
+                  : isRefreshingFeed
+                  ? "Refreshing..."
+                  : "";
+                const defaultLabel = creatorOnlyMode
+                  ? "Refresh my tweets"
+                  : allowRefreshMyTweetsWhenEnded
+                  ? "Refresh my tweets"
+                  : "Refresh Feed";
+                const label = disableByContestEnded
+                  ? "Contest Ended"
+                  : isRefreshingFeed
+                  ? "Refreshing..."
+                  : !cooldownInfo.canRefresh
+                  ? `Wait ${waitLabel}`
+                  : defaultLabel;
 
-              return (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={handleRefreshFeed}
-                  disabled={isDisabled}
-                  className={cn(
-                    "flex items-center gap-2",
-                    isDisabled
-                      ? "opacity-60 cursor-not-allowed"
-                      : isDark
-                      ? "text-white hover:bg-gray-700"
-                      : "text-gray-700 hover:bg-gray-100"
-                  )}
-                  title={
-                    disabledReason ||
-                    (creatorOnlyMode
-                      ? "Fetch & update only your tweets and metrics (2h cooldown)"
-                      : allowRefreshMyTweetsWhenEnded
-                      ? "Refresh your tweets and metrics (2h cooldown)"
-                      : "Refresh Twitter feed")
-                  }
-                >
-                  {isRefreshingFeed ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <RefreshCw className="h-4 w-4" />
-                  )}
-                  <span>{label}</span>
-                </Button>
-              );
-            })()}
-          </div>
+                return (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={handleRefreshFeed}
+                    disabled={isDisabled}
+                    className={cn(
+                      "flex items-center gap-2",
+                      isDisabled
+                        ? "opacity-60 cursor-not-allowed"
+                        : isDark
+                        ? "text-white hover:bg-gray-700"
+                        : "text-gray-700 hover:bg-gray-100"
+                    )}
+                    title={
+                      disabledReason ||
+                      (creatorOnlyMode
+                        ? "Fetch & update only your tweets and metrics (2h cooldown)"
+                        : allowRefreshMyTweetsWhenEnded
+                        ? "Refresh your tweets and metrics (2h cooldown)"
+                        : "Refresh Twitter feed")
+                    }
+                  >
+                    {isRefreshingFeed ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <RefreshCw className="h-4 w-4" />
+                    )}
+                    <span>{label}</span>
+                  </Button>
+                );
+              })()}
+            </div>
+          )}
         </div>
       )}
 
       <div className="flex flex-col gap-4 min-[500px]:flex-row min-[500px]:gap-6 min-w-0">
-        {/* Main Feed */}
-        <div className="flex-1 min-w-0 space-y-4">
+        {/* Main Feed — below creators on mobile; left column on ≥500px */}
+        <div className="order-2 min-[500px]:order-1 flex-1 min-w-0 space-y-4">
           {isLoading && tweets.length === 0 ? (
             <div className="flex items-center justify-center py-12">
               <Loader2 className="h-8 w-8 animate-spin text-purple-500" />
@@ -784,11 +801,11 @@ export function TwitterFeed({
           )}
         </div>
 
-        {/* Creator Sidebar — same UX on brand and creator (opportunities); creatorOnlyUserId is refresh/cooldown only */}
+        {/* Creators — first on mobile + compact horizontal strip; right sidebar ≥500px */}
         {creators.length > 0 && (
           <div
             className={cn(
-              "w-full min-[500px]:w-64 flex-shrink-0 border rounded-lg p-3 sm:p-4 min-w-0",
+              "order-1 min-[500px]:order-2 w-full min-[500px]:w-64 flex-shrink-0 border rounded-lg p-3 sm:p-4 min-w-0",
               isDark
                 ? "bg-[#170337] border-gray-700"
                 : "bg-white border-gray-200"
@@ -796,14 +813,102 @@ export function TwitterFeed({
           >
             <h3
               className={cn(
-                "font-semibold mb-3 sm:mb-4 text-sm sm:text-base",
+                "font-semibold text-sm sm:text-base mb-2 min-[500px]:mb-4",
                 isDark ? "text-white" : "text-gray-900"
               )}
             >
-              Creators
+              <span className="hidden min-[500px]:inline">Creators</span>
+              <span
+                className={cn(
+                  "min-[500px]:hidden block text-[11px] font-semibold uppercase tracking-wide",
+                  isDark ? "text-gray-400" : "text-gray-500"
+                )}
+              >
+                Filter by creator
+              </span>
             </h3>
-            <div className="space-y-2">
+
+            <div
+              className={cn(
+                "flex min-[500px]:hidden flex-row flex-nowrap gap-2 overflow-x-auto pb-1 -mx-1 px-1 snap-x snap-mandatory",
+                "[scrollbar-width:thin]"
+              )}
+              style={{ WebkitOverflowScrolling: "touch" }}
+            >
               <button
+                type="button"
+                onClick={() => setSelectedCreatorId(null)}
+                className={cn(
+                  "snap-start shrink-0 flex items-center gap-2 pl-1 pr-3 py-2 rounded-full border transition-colors",
+                  selectedCreatorId === null
+                    ? isDark
+                      ? "bg-purple-900/50 border-purple-500/50 text-white"
+                      : "bg-purple-100 border-purple-200 text-purple-900"
+                    : isDark
+                      ? "border-gray-600 text-gray-300 hover:bg-gray-800/80"
+                      : "border-gray-200 text-gray-700 hover:bg-gray-50"
+                )}
+              >
+                <span
+                  className={cn(
+                    "flex h-9 w-9 items-center justify-center rounded-full text-xs font-semibold",
+                    selectedCreatorId === null
+                      ? "bg-purple-600 text-white"
+                      : isDark
+                        ? "bg-gray-700 text-gray-200"
+                        : "bg-gray-200 text-gray-700"
+                  )}
+                >
+                  All
+                </span>
+                <span className="text-left text-sm font-medium whitespace-nowrap">
+                  All creators
+                </span>
+              </button>
+              {creators.map((creator) => (
+                <button
+                  type="button"
+                  key={creator.id}
+                  onClick={() => setSelectedCreatorId(creator.id)}
+                  className={cn(
+                    "snap-start shrink-0 flex items-center gap-2 pl-1 pr-3 py-2 rounded-full border transition-colors max-w-[220px]",
+                    selectedCreatorId === creator.id
+                      ? isDark
+                        ? "bg-purple-900/50 border-purple-500/50 text-white"
+                        : "bg-purple-100 border-purple-200 text-purple-900"
+                      : isDark
+                        ? "border-gray-600 text-gray-300 hover:bg-gray-800/80"
+                        : "border-gray-200 text-gray-700 hover:bg-gray-50"
+                  )}
+                >
+                  <Avatar className="h-9 w-9 shrink-0">
+                    <AvatarImage src={creator.profile_picture_url || ""} />
+                    <AvatarFallback className="text-xs">
+                      {(creator.username || creator.full_name || "U")
+                        .charAt(0)
+                        .toUpperCase()}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div className="min-w-0 text-left">
+                    <p className="text-sm font-medium truncate">
+                      {creator.full_name || creator.username || "Unknown"}
+                    </p>
+                    <p
+                      className={cn(
+                        "text-[11px] truncate tabular-nums",
+                        isDark ? "text-gray-400" : "text-gray-500"
+                      )}
+                    >
+                      {creator.tweetCount} tweets
+                    </p>
+                  </div>
+                </button>
+              ))}
+            </div>
+
+            <div className="hidden min-[500px]:block space-y-2">
+              <button
+                type="button"
                 onClick={() => setSelectedCreatorId(null)}
                 className={cn(
                   "w-full text-left p-2 rounded-lg transition-colors",
@@ -812,14 +917,15 @@ export function TwitterFeed({
                       ? "bg-purple-900/50 text-white"
                       : "bg-purple-100 text-purple-900"
                     : isDark
-                    ? "hover:bg-gray-800 text-gray-300"
-                    : "hover:bg-gray-100 text-gray-700"
+                      ? "hover:bg-gray-800 text-gray-300"
+                      : "hover:bg-gray-100 text-gray-700"
                 )}
               >
                 All Creators
               </button>
               {creators.map((creator) => (
                 <button
+                  type="button"
                   key={creator.id}
                   onClick={() => setSelectedCreatorId(creator.id)}
                   className={cn(
@@ -829,8 +935,8 @@ export function TwitterFeed({
                         ? "bg-purple-900/50 text-white"
                         : "bg-purple-100 text-purple-900"
                       : isDark
-                      ? "hover:bg-gray-800 text-gray-300"
-                      : "hover:bg-gray-100 text-gray-700"
+                        ? "hover:bg-gray-800 text-gray-300"
+                        : "hover:bg-gray-100 text-gray-700"
                   )}
                 >
                   <Avatar className="h-8 w-8">

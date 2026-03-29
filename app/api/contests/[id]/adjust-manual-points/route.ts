@@ -219,6 +219,7 @@ async function recalculateTwitterLeaderboard(
     .eq("contest_id", contestId)
     .eq("creator_id", creatorId)
     .eq("is_eligible", true)
+    .is("deleted_at", null)
     .in("moderation_status", ["pending", "verified"]); // Only count pending/verified
 
   // Calculate total points (base from tweets + tweet manual + leaderboard manual)

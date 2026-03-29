@@ -6,6 +6,8 @@ import {
   logTransactionAsAdmin,
   REVERSAL_TRANSACTION_REMARK,
 } from "@/lib/payment-utils";
+import { syncTwitterLeaderboardFromTweets } from "@/lib/twitter/sync-twitter-leaderboard-from-tweets";
+import { revalidateLeaderboardCache } from "@/lib/leaderboard-cache";
 
 /**
  * POST /api/contests/[id]/moderate-submission
@@ -335,25 +337,18 @@ export async function POST(
       );
     }
 
-    // Recalculate leaderboard for this creator after moderation
+    // DB-only leaderboard recompute (no Twitter/RapidAPI; preserve refresh cooldown metadata)
     if (currentTweet?.creator_id) {
-      // Trigger leaderboard recalculation by calling the refresh endpoint on the current host
-      const requestUrl = new URL(request.url);
-      const origin = process.env.NEXT_PUBLIC_APP_URL || requestUrl.origin;
       try {
-        await fetch(
-          `${origin}/api/contests/${contestId}/twitter-refresh-tweets`,
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-          }
-        );
+        await syncTwitterLeaderboardFromTweets(contestId, supabaseAdmin, {
+          preserveRefreshMetadata: true,
+        });
+        revalidateLeaderboardCache(contestId);
       } catch (refreshError) {
         console.error(
-          "[moderate-submission] Error refreshing leaderboard:",
+          "[moderate-submission] Error syncing leaderboard:",
           refreshError
         );
-        // Don't fail the request if leaderboard refresh fails
       }
     }
 

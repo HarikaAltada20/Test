@@ -4,6 +4,55 @@ import ContestDetailClient from "../../../contests/[id]/contest-detail-client";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { verifyAdminAccess } from "@/utils/admin-auth";
 
+async function fetchTwitterTweetsAllPages(
+  supabase: any,
+  contestId: string,
+  selectBody: string,
+  chunkSize: number,
+  maxRows: number,
+): Promise<{ data: any[] | null; error: any }> {
+  const first = await supabase
+    .from("twitter_campaign_tweets")
+    .select(selectBody, { count: "exact" })
+    .eq("contest_id", contestId)
+    .or(
+      "is_eligible.eq.true,deleted_at.not.is.null,excluded_by_submission_cap.eq.false",
+    )
+    .order("tweet_created_at", { ascending: false })
+    .range(0, chunkSize - 1);
+
+  if (first.error) {
+    return { data: null, error: first.error };
+  }
+
+  const rows = [...(first.data || [])];
+  const total = typeof first.count === "number" ? first.count : rows.length;
+  let offset = rows.length;
+
+  while (offset < total && offset < maxRows) {
+    const end = Math.min(offset + chunkSize - 1, maxRows - 1);
+    const next = await supabase
+      .from("twitter_campaign_tweets")
+      .select(selectBody)
+      .eq("contest_id", contestId)
+      .or(
+        "is_eligible.eq.true,deleted_at.not.is.null,excluded_by_submission_cap.eq.false",
+      )
+      .order("tweet_created_at", { ascending: false })
+      .range(offset, end);
+
+    if (next.error) {
+      return { data: rows, error: next.error };
+    }
+    const chunk = next.data || [];
+    if (chunk.length === 0) break;
+    rows.push(...chunk);
+    offset += chunk.length;
+  }
+
+  return { data: rows, error: null };
+}
+
 export default async function AdminContestDetailPage({
   params,
 }: {
@@ -122,22 +171,15 @@ export default async function AdminContestDetailPage({
     }
 
     // For Twitter campaigns, fetch tweets from twitter_campaign_tweets table
-    // OPTIMIZATION: Only fetch first page (50 tweets) on initial load instead of all tweets
-    // This improves page load time from 2-5 seconds to <500ms for contests with 10,000+ tweets
     let twitterTweetsData: any[] = [];
-    const INITIAL_TWEET_LIMIT = 50; // Only load first 50 tweets initially - rest loaded via pagination
+    const TWITTER_PAGE_CHUNK = 500;
+    const TWITTER_PAGE_MAX = 10_000;
+
     if (isTwitterCampaign) {
-      // First, try to fetch with all columns (including moderation if migration ran)
-      // If it fails due to missing columns, fall back to basic columns
       let tweetsData: any = null;
       let tweetsError: any = null;
 
-      // Try with all columns first - OPTIMIZED: Only fetch first page
-      // Include all tweets (including rejected) so admins can see and change their status
-      const queryWithAll = supabase
-        .from("twitter_campaign_tweets")
-        .select(
-          `
+      const selectFull = `
         id,
         tweet_id,
         tweet_url,
@@ -156,31 +198,13 @@ export default async function AdminContestDetailPage({
         moderation_status,
         manual_points_adjustment,
         manual_points_reason,
-        filter_status,
+        deleted_at,
+        excluded_by_submission_cap,
         first_fetched_at,
         last_updated_at
-      `,
-          { count: "exact" }
-        )
-        .eq("contest_id", contestId)
-        .neq("filter_status", "filtered_out")
-        // Don't filter by is_eligible - include all tweets so rejected ones are visible for status changes
-        .order("tweet_created_at", { ascending: false })
-        .range(0, INITIAL_TWEET_LIMIT - 1); // Only fetch first page
+      `;
 
-      const resultWithAll = await queryWithAll;
-      tweetsData = resultWithAll.data;
-      tweetsError = resultWithAll.error;
-
-      // If error is about missing columns, try without moderation columns
-      if (tweetsError && tweetsError.code === "42703") {
-        console.log(
-          `[Admin page.tsx] Some columns don't exist, fetching without them`
-        );
-        const queryBasic = supabase
-          .from("twitter_campaign_tweets")
-          .select(
-            `
+      const selectBasic = `
           id,
           tweet_id,
           tweet_url,
@@ -196,21 +220,35 @@ export default async function AdminContestDetailPage({
           impressions,
           points,
           is_eligible,
-          filter_status,
+          deleted_at,
+          excluded_by_submission_cap,
           first_fetched_at,
           last_updated_at
-        `,
-            { count: "exact" }
-          )
-          .eq("contest_id", contestId)
-          .neq("filter_status", "filtered_out")
-          // Don't filter by is_eligible - include all tweets so rejected ones are visible for status changes
-          .order("tweet_created_at", { ascending: false })
-          .range(0, INITIAL_TWEET_LIMIT - 1); // Only fetch first page
+        `;
 
-        const resultBasic = await queryBasic;
-        tweetsData = resultBasic.data;
-        tweetsError = resultBasic.error;
+      let result = await fetchTwitterTweetsAllPages(
+        supabase,
+        contestId,
+        selectFull,
+        TWITTER_PAGE_CHUNK,
+        TWITTER_PAGE_MAX,
+      );
+      tweetsData = result.data;
+      tweetsError = result.error;
+
+      if (tweetsError && tweetsError.code === "42703") {
+        console.log(
+          `[Admin page.tsx] Some columns don't exist, fetching without them`,
+        );
+        result = await fetchTwitterTweetsAllPages(
+          supabase,
+          contestId,
+          selectBasic,
+          TWITTER_PAGE_CHUNK,
+          TWITTER_PAGE_MAX,
+        );
+        tweetsData = result.data;
+        tweetsError = result.error;
       }
 
       if (tweetsError) {
@@ -551,7 +589,10 @@ export default async function AdminContestDetailPage({
           moderation_status: moderationStatus, // Default to "pending" if column doesn't exist
           manual_points_adjustment: manualAdjustment,
           manual_points_reason: tweet.manual_points_reason,
-          filter_status: (tweet as any).filter_status || null, // Track eligibility deletion status
+          is_eligible: (tweet as any).is_eligible === true,
+          deleted_at: (tweet as any).deleted_at ?? null,
+          excluded_by_submission_cap:
+            (tweet as any).excluded_by_submission_cap ?? false,
           // Add nested creator object for compatibility
           creator: {
             id: actualCreatorProfileId,

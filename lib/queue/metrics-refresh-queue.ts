@@ -21,6 +21,8 @@ export type MetricsRefreshJob =
   | {
       contestId: string;
       creatorId?: string;
+      /** DB row in twitter_metrics_refresh_runs (when queue run tracking is enabled). */
+      runId?: string;
       isRaid: true;
       batchIndex?: number;
       totalBatches?: number;
@@ -28,6 +30,7 @@ export type MetricsRefreshJob =
   | {
       contestId: string;
       creatorId?: string;
+      runId?: string;
       isRaid: false;
       batchIndex: number;
       totalBatches: number;

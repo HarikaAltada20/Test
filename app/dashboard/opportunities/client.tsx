@@ -634,9 +634,12 @@ export default function OpportunitiesPage({
               if (isTwitterTextImage) {
                 const { data: twitterTweets } = await supabase
                   .from("twitter_campaign_tweets")
-                  .select("id, creator_id, tweet_created_at, moderation_status")
+                  .select(
+                    "id, creator_id, tweet_created_at, moderation_status, is_eligible, deleted_at",
+                  )
                   .eq("contest_id", contest.id)
                   .eq("is_eligible", true)
+                  .is("deleted_at", null)
                   .in("moderation_status", ["verified", "paid"]);
 
                 leaderboardSubmissions = (twitterTweets || [])
@@ -647,6 +650,9 @@ export default function OpportunitiesPage({
                     created_at:
                       tweet.tweet_created_at || new Date().toISOString(),
                     status: tweet.moderation_status,
+                    is_eligible: tweet.is_eligible === true,
+                    deleted_at: tweet.deleted_at ?? null,
+                    is_twitter_tweet: true as const,
                     paid: tweet.moderation_status === "paid",
                     earnings: null,
                     bonus_paid: false,
@@ -688,9 +694,11 @@ export default function OpportunitiesPage({
               const { data: twitterTweets } = await supabase
                 .from("twitter_campaign_tweets")
                 .select(
-                  "id, creator_id, tweet_created_at, points, moderation_status, manual_points_adjustment",
+                  "id, creator_id, tweet_created_at, points, moderation_status, manual_points_adjustment, is_eligible, deleted_at",
                 )
                 .eq("contest_id", contest.id)
+                .eq("is_eligible", true)
+                .is("deleted_at", null)
                 .in("moderation_status", ["verified", "paid"]);
 
               const submissions =
@@ -700,6 +708,9 @@ export default function OpportunitiesPage({
                   created_at: tweet.tweet_created_at,
                   platform: "twitter",
                   status: tweet.moderation_status,
+                  is_eligible: tweet.is_eligible === true,
+                  deleted_at: tweet.deleted_at ?? null,
+                  is_twitter_tweet: true as const,
                   paid: tweet.moderation_status === "paid",
                   earnings: null,
                   bonus_paid: false,
