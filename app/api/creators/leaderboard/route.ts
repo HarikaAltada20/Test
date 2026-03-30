@@ -54,11 +54,10 @@ export async function GET(request: NextRequest) {
     let creators = cache.get<any[]>(usersCacheKey);
 
     if (!creators) {
-      // Fetch all active users (creators and advertisers); include creator_profiles when present
-      let usersQuery = supabase
-        .from("users")
-        .select(
-          `
+      // Fetch all active users (creators and advertisers); include creator_profiles when present.
+      // Paginate: Supabase/PostgREST defaults to max 1000 rows per request without range().
+      const USERS_PAGE = 1000;
+      const usersSelect = `
         id,
         username,
         full_name,
@@ -81,12 +80,30 @@ export async function GET(request: NextRequest) {
           total_submissions_made,
           total_submissions_won
         )
-      `,
-        )
-        .in("user_type", ["creator", "advertiser"]) // include both creators and advertisers
-        .eq("is_active", true);
+      `;
 
-      const { data: fetchedCreators, error: creatorsError } = await usersQuery;
+      let fetchedCreators: any[] = [];
+      let rangeFrom = 0;
+      let creatorsError: { message: string } | null = null;
+
+      while (true) {
+        const { data: chunk, error } = await supabase
+          .from("users")
+          .select(usersSelect)
+          .in("user_type", ["creator", "advertiser"]) // include both creators and advertisers
+          .eq("is_active", true)
+          .order("id", { ascending: true })
+          .range(rangeFrom, rangeFrom + USERS_PAGE - 1);
+
+        if (error) {
+          creatorsError = error;
+          break;
+        }
+        if (!chunk?.length) break;
+        fetchedCreators = fetchedCreators.concat(chunk);
+        if (chunk.length < USERS_PAGE) break;
+        rangeFrom += USERS_PAGE;
+      }
 
       if (creatorsError) {
         console.error("Error fetching creators:", creatorsError);
@@ -96,7 +113,7 @@ export async function GET(request: NextRequest) {
         );
       }
 
-      if (!fetchedCreators || fetchedCreators.length === 0) {
+      if (fetchedCreators.length === 0) {
         return NextResponse.json({ leaders: [] });
       }
 

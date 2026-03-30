@@ -47,6 +47,7 @@ import {
   ThumbsUp,
   MessageCircle,
   BarChart3,
+  Zap,
 } from "lucide-react";
 import { Separator } from "@/components/ui/separator";
 import {
@@ -240,6 +241,13 @@ export function ContestClientPage({
   const [joinCampaignLoading, setJoinCampaignLoading] = useState(false);
   const [hasJoinedTwitterCampaign, setHasJoinedTwitterCampaign] =
     useState(false);
+  const [twitterConnectStatus, setTwitterConnectStatus] = useState<
+    "loading" | "connected" | "disconnected"
+  >("loading");
+  const [twitterJoinError, setTwitterJoinError] = useState<{
+    kind: "not_connected" | "bio" | "generic";
+    message: string;
+  } | null>(null);
   const [showAllSubmissionsModal, setShowAllSubmissionsModal] = useState(false);
   const [modalViewMode, setModalViewMode] = useState<"simple" | "detailed">(
     "simple",
@@ -310,8 +318,18 @@ export function ContestClientPage({
 
   // State for logged-in user's submission and rank
   const [myLeaderboardEntry, setMyLeaderboardEntry] = useState<
-    (LeaderboardEntry & { rank: number }) | null
+    (LeaderboardEntry & { rank?: number }) | null
   >(null);
+  /** All of the current user's submissions for this contest from /my-submission (not paginated like `leaderboard`) */
+  const [mySubmissionsListFromApi, setMySubmissionsListFromApi] = useState<
+    LeaderboardEntry[]
+  >([]);
+  /** Matches GET /leaderboard?groupBy=creator (non-rejected totals + creator rank) */
+  const [myCreatorWiseStats, setMyCreatorWiseStats] = useState<{
+    total_views: number;
+    total_earnings: number;
+    rank: number | null;
+  } | null>(null);
   const [loadingMySubmission, setLoadingMySubmission] = useState(false);
   const [contestType, setContestType] = useState<string | null>(null); // Track contest type for verification badges
 
@@ -332,6 +350,11 @@ export function ContestClientPage({
       setLeaderboardDisplayMode("creator");
     }
   }, [contest?.platform]);
+
+  useEffect(() => {
+    setMySubmissionsListFromApi([]);
+    setMyCreatorWiseStats(null);
+  }, [contestId]);
 
   // Refresh metrics state for opportunities
   const [isRefreshingMetrics, setIsRefreshingMetrics] = useState(false);
@@ -430,15 +453,22 @@ export function ContestClientPage({
     return url.replace(/\[creator\]/gi, username);
   };
 
-  // Memoized user submissions for performance with large datasets
+  // Memoized user submissions for performance with large datasets.
+  // Prefer the full list from /my-submission — `leaderboard` is paginated and excludes rejected rows,
+  // so filtering it alone misses submissions on other pages or not shown on the public leaderboard.
   const userSubmissions = useMemo(() => {
-    if (!user?.id || !leaderboard.length) return [];
+    if (!user?.id) return [];
 
-    // Filter leaderboard entries for current user and sort by views (highest first)
+    if (mySubmissionsListFromApi.length > 0) {
+      return [...mySubmissionsListFromApi].sort((a, b) => b.views - a.views);
+    }
+
+    if (!leaderboard.length) return [];
+
     return leaderboard
       .filter((entry) => entry.creator_id === user.id)
       .sort((a, b) => b.views - a.views);
-  }, [user?.id, leaderboard]);
+  }, [user?.id, leaderboard, mySubmissionsListFromApi]);
 
   // Memoized best submission (highest views)
   const bestSubmission = useMemo(() => {
@@ -1030,12 +1060,71 @@ export function ContestClientPage({
           "Failed to fetch user submission data:",
           data.error || "Unknown error",
         );
-        if (isMounted) setMyLeaderboardEntry(null);
+        if (isMounted) {
+          setMyLeaderboardEntry(null);
+          setMySubmissionsListFromApi([]);
+          setMyCreatorWiseStats(null);
+        }
         return;
       }
       if (isMounted) {
-        if (data.mySubmission && data.rank) {
-          setMyLeaderboardEntry({ ...data.mySubmission, rank: data.rank });
+        const subs = Array.isArray(data.submissions) ? data.submissions : [];
+        setMySubmissionsListFromApi(
+          subs.map(
+            (s: any): LeaderboardEntry => ({
+              id: s.id,
+              creator_id: s.creator_id,
+              video_title: s.video_title ?? "",
+              video_thumbnail_url: s.video_thumbnail_url ?? null,
+              views: s.views ?? 0,
+              earnings: s.earnings ?? 0,
+              status: s.status ?? "",
+              created_at: s.created_at,
+              content_link: s.content_link ?? "",
+              platform: s.platform ?? "",
+              user_platform_username: s.user_platform_username ?? "N/A",
+              user_full_name: s.user_full_name ?? "",
+              creator_pfp_url: s.creator_pfp_url ?? null,
+              user_platform_pfp_url: s.user_platform_pfp_url ?? null,
+              rank:
+                typeof s.leaderboard_rank === "number"
+                  ? s.leaderboard_rank
+                  : undefined,
+            }),
+          ),
+        );
+
+        setMyCreatorWiseStats(
+          data.creator_wise_total_views != null ||
+            data.creator_wise_rank != null ||
+            data.creator_wise_total_earnings != null
+            ? {
+                total_views: data.creator_wise_total_views ?? 0,
+                total_earnings: data.creator_wise_total_earnings ?? 0,
+                rank:
+                  data.creator_wise_rank === undefined
+                    ? null
+                    : data.creator_wise_rank,
+              }
+            : null,
+        );
+
+        if (data.mySubmission) {
+          const ms = data.mySubmission as typeof data.mySubmission & {
+            leaderboard_rank?: number | null;
+          };
+          const submissionRank =
+            typeof ms.leaderboard_rank === "number"
+              ? ms.leaderboard_rank
+              : data.rank != null
+                ? data.rank
+                : undefined;
+          setMyLeaderboardEntry({
+            ...data.mySubmission,
+            ...(submissionRank !== undefined && submissionRank !== null
+              ? { rank: submissionRank }
+              : {}),
+          });
         } else {
           setMyLeaderboardEntry(null);
         }
@@ -1048,6 +1137,8 @@ export function ContestClientPage({
       console.error("Error fetching user's submission data:", err);
       if (isMounted) {
         setMyLeaderboardEntry(null);
+        setMySubmissionsListFromApi([]);
+        setMyCreatorWiseStats(null);
         // Mark as fetched even on error to prevent infinite retries
         const platform = contest?.platform || "unknown";
         const contestKey = `${contestId}-${platform}`;
@@ -1720,38 +1811,74 @@ export function ContestClientPage({
     contest?.platform === "twitter" &&
     (contest as any)?.contest_format === "text_image";
 
-  // Check if user has already joined this Twitter campaign
+  // Twitter text/image: join status + X connection (parallel) for upfront gating
   useEffect(() => {
-    const checkJoinStatus = async () => {
+    const loadTwitterCampaignState = async () => {
       if (!contestId || !isTwitterTextImageContest || !user) return;
 
+      setTwitterConnectStatus("loading");
       try {
-        const res = await fetch(
-          `/api/twitter-apis/join-status?contestId=${encodeURIComponent(
-            contestId,
-          )}`,
-        );
+        const [joinRes, profileRes] = await Promise.all([
+          fetch(
+            `/api/twitter-apis/join-status?contestId=${encodeURIComponent(
+              contestId,
+            )}`,
+          ),
+          fetch("/api/twitter-apis/get-profile"),
+        ]);
 
-        if (!res.ok) return;
-        const data = await res.json().catch(() => null);
-        if (data && typeof data.joined === "boolean") {
-          setHasJoinedTwitterCampaign(data.joined);
+        if (joinRes.ok) {
+          const joinData = await joinRes.json().catch(() => null);
+          if (joinData && typeof joinData.joined === "boolean") {
+            setHasJoinedTwitterCampaign(joinData.joined);
+          }
         }
-      } catch (e) {
-        // Silently ignore join-status errors; button will still allow join
+
+        if (profileRes.ok) {
+          const profileData = await profileRes.json().catch(() => null);
+          if (profileData && typeof profileData.connected === "boolean") {
+            setTwitterConnectStatus(
+              profileData.connected ? "connected" : "disconnected",
+            );
+          } else {
+            setTwitterConnectStatus("disconnected");
+          }
+        } else {
+          setTwitterConnectStatus("disconnected");
+        }
+      } catch {
+        setTwitterConnectStatus("disconnected");
       }
     };
 
-    checkJoinStatus();
+    loadTwitterCampaignState();
   }, [contestId, isTwitterTextImageContest, user]);
 
   const handleSubmitContent = () => {
     router.push(`/dashboard/opportunities/${contestId}/submit`);
   };
 
+  const mapTwitterJoinApiError = (payload: {
+    error?: string;
+    code?: string;
+  }) => {
+    const message =
+      payload.error ||
+      "Failed to join this Twitter (X) campaign. Please try again.";
+    switch (payload.code) {
+      case "TWITTER_NOT_CONNECTED":
+        return { kind: "not_connected" as const, message };
+      case "BIO_USERNAME_MISSING":
+        return { kind: "bio" as const, message };
+      default:
+        return { kind: "generic" as const, message };
+    }
+  };
+
   const handleJoinTwitterCampaign = async () => {
     if (!contest?.id) return;
 
+    setTwitterJoinError(null);
     setJoinCampaignLoading(true);
     try {
       const res = await fetch("/api/twitter-apis/join-campaign", {
@@ -1760,12 +1887,20 @@ export function ContestClientPage({
         body: JSON.stringify({ contestId: contest.id }),
       });
 
-      const data = await res.json().catch(() => ({}));
+      const data = (await res.json().catch(() => ({}))) as {
+        error?: string;
+        code?: string;
+      };
       if (!res.ok) {
-        throw new Error(
-          data.error ||
-            "Failed to join Twitter (X) campaign. Please try again.",
-        );
+        const mapped = mapTwitterJoinApiError(data);
+        setTwitterJoinError(mapped);
+        if (mapped.kind === "generic") {
+          toast({
+            title: "Could not join campaign",
+            description: mapped.message,
+          });
+        }
+        return;
       }
 
       toast({
@@ -1773,15 +1908,15 @@ export function ContestClientPage({
         description: "You have successfully joined this Twitter (X) campaign.",
       });
 
-      // Reflect joined state in UI
       setHasJoinedTwitterCampaign(true);
     } catch (err: any) {
+      const message =
+        err?.message ||
+        "Something went wrong. Please try again in a few moments.";
+      setTwitterJoinError({ kind: "generic", message });
       toast({
-        title: "Cannot join campaign",
-        description:
-          err?.message ||
-          "Please check your Twitter connection and X bio, then try again.",
-        variant: "destructive",
+        title: "Could not join campaign",
+        description: message,
       });
     } finally {
       setJoinCampaignLoading(false);
@@ -2222,6 +2357,50 @@ export function ContestClientPage({
                     </p>
                   </div>
 
+                  {user &&
+                    contest.status?.toLowerCase() === "active" &&
+                    isTwitterTextImageContest &&
+                    !hasJoinedTwitterCampaign &&
+                    twitterConnectStatus === "disconnected" && (
+                      <Alert
+                        variant="default"
+                        className="mb-4 max-w-lg mx-auto text-center border border-[#7F39EC] bg-[#D9C0FF26]"
+                      >
+                        <AlertDescription
+                          className={cn(
+                            "text-sm",
+                            isDark ? "text-gray-200" : "text-gray-700",
+                          )}
+                        >
+                          Connect your X (Twitter) account in Settings before
+                          you can join this campaign.
+                        </AlertDescription>
+                        <Link href="/dashboard/settings">
+                          <Button
+                            variant="link"
+                            className="mt-1 text-[#7F39EC]"
+                          >
+                            Connect X in Settings
+                          </Button>
+                        </Link>
+                      </Alert>
+                    )}
+
+                  {user &&
+                    contest.status?.toLowerCase() === "active" &&
+                    isTwitterTextImageContest &&
+                    !hasJoinedTwitterCampaign &&
+                    twitterConnectStatus === "loading" && (
+                      <p
+                        className={cn(
+                          "text-sm mb-3 text-center",
+                          isDark ? "text-slate-400" : "text-slate-600",
+                        )}
+                      >
+                        Checking your X connection…
+                      </p>
+                    )}
+
                   <Button
                     size="lg"
                     onClick={
@@ -2232,7 +2411,12 @@ export function ContestClientPage({
                     disabled={
                       contest.status?.toLowerCase() !== "active" ||
                       joinCampaignLoading ||
-                      (isTwitterTextImageContest && hasJoinedTwitterCampaign)
+                      (isTwitterTextImageContest && hasJoinedTwitterCampaign) ||
+                      (!!user &&
+                        isTwitterTextImageContest &&
+                        !hasJoinedTwitterCampaign &&
+                        (twitterConnectStatus === "disconnected" ||
+                          twitterConnectStatus === "loading"))
                     }
                     className={`relative overflow-hidden text-lg font-bold py-4  px-8 h-auto rounded-2xl shadow-xl transition-all duration-500 ease-out transform ${
                       contest.status?.toLowerCase() === "active"
@@ -2267,7 +2451,10 @@ export function ContestClientPage({
                                   ? "Joined"
                                   : joinCampaignLoading
                                     ? "Joining..."
-                                    : "Join Twitter Campaign"
+                                    : user &&
+                                        twitterConnectStatus === "loading"
+                                      ? "Checking…"
+                                      : "Join Twitter Campaign"
                                 : "Submit Your Entry!"}
                             </span>
                           </div>
@@ -2278,6 +2465,67 @@ export function ContestClientPage({
                       )}
                     </span>
                   </Button>
+
+                  {user &&
+                    twitterJoinError &&
+                    contest.status?.toLowerCase() === "active" &&
+                    isTwitterTextImageContest &&
+                    !hasJoinedTwitterCampaign && (
+                      <Alert
+                        variant={
+                          twitterJoinError.kind === "generic"
+                            ? "destructive"
+                            : "default"
+                        }
+                        className={cn(
+                          "mt-4 max-w-lg mx-auto text-center",
+                          twitterJoinError.kind !== "generic" &&
+                            "border border-[#7F39EC] bg-[#D9C0FF26]",
+                        )}
+                      >
+                        <AlertDescription
+                          className={cn(
+                            "text-sm",
+                            twitterJoinError.kind === "generic"
+                              ? ""
+                              : isDark
+                                ? "text-gray-200"
+                                : "text-gray-700",
+                          )}
+                        >
+                          {twitterJoinError.message}
+                        </AlertDescription>
+                        {(twitterJoinError.kind === "not_connected" ||
+                          twitterJoinError.kind === "bio") && (
+                          <Link href="/dashboard/settings">
+                            <Button
+                              variant="link"
+                              className="mt-1 text-[#7F39EC]"
+                            >
+                              {twitterJoinError.kind === "bio"
+                                ? "Open Settings to update X bio"
+                                : "Connect X in Settings"}
+                            </Button>
+                          </Link>
+                        )}
+                      </Alert>
+                    )}
+
+                  {user &&
+                    contest.status?.toLowerCase() === "active" &&
+                    isTwitterTextImageContest &&
+                    !hasJoinedTwitterCampaign &&
+                    twitterConnectStatus === "disconnected" && (
+                      <p
+                        className={cn(
+                          "text-xs mt-2 text-center max-w-md mx-auto",
+                          isDark ? "text-slate-400" : "text-slate-600",
+                        )}
+                      >
+                        After you connect X in Settings, come back here and tap
+                        Join.
+                      </p>
+                    )}
 
                   {/* Preserve existing pulse indicator for non-joined Twitter contests */}
                   {contest.status?.toLowerCase() === "active" &&
@@ -5842,6 +6090,51 @@ export function ContestClientPage({
                       const bestSubmission = getBestSubmission();
                       const displayEntry = bestSubmission || myLeaderboardEntry;
 
+                      const isCreatorWiseMyCard =
+                        leaderboardDisplayMode === "creator" &&
+                        contest?.platform?.toLowerCase() !== "twitter" &&
+                        contest?.platform?.toLowerCase() !== "x";
+
+                      const eligibleSubs = getUserSubmissions().filter(
+                        (s) => s.status !== "rejected",
+                      );
+                      const clientEligibleViewsSum = eligibleSubs.reduce(
+                        (a, s) => a + (s.views || 0),
+                        0,
+                      );
+                      const clientEligibleEarningsSum = eligibleSubs.reduce(
+                        (a, s) => a + (s.earnings || 0),
+                        0,
+                      );
+
+                      const myCreatorGroupOnPage =
+                        groupedLeaderboardByCreator?.find(
+                          (g) => g.creator_id === user?.id,
+                        );
+
+                      const combinedViewsForCard = isCreatorWiseMyCard
+                        ? (myCreatorWiseStats?.total_views ??
+                          myCreatorGroupOnPage?.total_views ??
+                          clientEligibleViewsSum)
+                        : null;
+
+                      const combinedRankForCard = isCreatorWiseMyCard
+                        ? (myCreatorGroupOnPage?.best_rank ??
+                          myCreatorWiseStats?.rank ??
+                          null)
+                        : null;
+
+                      const combinedEarningsForCard = isCreatorWiseMyCard
+                        ? (myCreatorWiseStats?.total_earnings ??
+                          (myCreatorGroupOnPage as { total_earnings?: number })
+                            ?.total_earnings ??
+                          clientEligibleEarningsSum)
+                        : null;
+
+                      const prizeRankForZone = isCreatorWiseMyCard
+                        ? (combinedRankForCard ?? myLeaderboardEntry?.rank)
+                        : myLeaderboardEntry?.rank;
+
                       return (
                         displayEntry && (
                           <Card
@@ -5865,11 +6158,21 @@ export function ContestClientPage({
                                 >
                                   <div className="text-lg sm:text-xl font-extrabold leading-none">
                                     #
-                                    {bestSubmission
-                                      ? rankLookupMap.get(bestSubmission.id)
-                                      : myLeaderboardEntry?.rank || "?"}
+                                    {isCreatorWiseMyCard
+                                      ? combinedRankForCard ?? "?"
+                                      : bestSubmission
+                                        ? (typeof bestSubmission.rank === "number"
+                                            ? bestSubmission.rank
+                                            : bestSubmission.status ===
+                                                "rejected"
+                                              ? "—"
+                                              : rankLookupMap.get(
+                                                    bestSubmission.id,
+                                                  ) ?? "?")
+                                        : myLeaderboardEntry?.rank ?? "?"}
                                   </div>
-                                  {bestSubmission &&
+                                  {!isCreatorWiseMyCard &&
+                                    bestSubmission &&
                                     myLeaderboardEntry &&
                                     bestSubmission.id !==
                                       myLeaderboardEntry.id && (
@@ -5935,12 +6238,19 @@ export function ContestClientPage({
                                           : displayEntry.user_platform_username) +
                                           " "}
                                         (You)
-                                        {bestSubmission &&
+                                        {!isCreatorWiseMyCard &&
+                                          bestSubmission &&
                                           myLeaderboardEntry &&
                                           bestSubmission.id !==
                                             myLeaderboardEntry.id && (
                                             <span className="text-xs text-primary/70 ml-2">
                                               • Best Performance
+                                            </span>
+                                          )}
+                                        {isCreatorWiseMyCard &&
+                                          eligibleSubs.length > 1 && (
+                                            <span className="text-xs text-slate-500 dark:text-slate-400 ml-2">
+                                              • Combined eligible submissions
                                             </span>
                                           )}
                                       </p>
@@ -6180,30 +6490,22 @@ export function ContestClientPage({
                                       </>
                                     ) : (
                                       <>
-                                        {displayEntry.views
-                                          ? displayEntry.views.toLocaleString()
-                                          : "0"}{" "}
-                                        views
+                                        {isCreatorWiseMyCard ? (
+                                          <>
+                                            {(combinedViewsForCard ?? 0).toLocaleString()}{" "}
+                                            views
+                                          </>
+                                        ) : (
+                                          <>
+                                            {displayEntry.views
+                                              ? displayEntry.views.toLocaleString()
+                                              : "0"}{" "}
+                                            views
+                                          </>
+                                        )}
                                       </>
                                     )}
                                   </p>
-                                  {displayEntry.content_link && (
-                                    <Button
-                                      variant="ghost"
-                                      size="icon"
-                                      className="h-7 w-7 sm:h-8 sm:w-8 text-primary/80 hover:text-primary dark:text-primary-foreground/80 dark:hover:text-primary-foreground"
-                                      asChild
-                                    >
-                                      <Link
-                                        href={displayEntry.content_link}
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        title="View Your Content"
-                                      >
-                                        <PlayCircle className="h-4 w-4 sm:h-5 sm:w-5" />
-                                      </Link>
-                                    </Button>
-                                  )}
                                 </div>
                                 {(() => {
                                   // Don't show winning zone for rejected entries
@@ -6216,7 +6518,10 @@ export function ContestClientPage({
                                   }
 
                                   let prizeDisplay = null;
-                                  if (displayEntry.earnings > 0) {
+                                  const earningsBase = isCreatorWiseMyCard
+                                    ? (combinedEarningsForCard ?? 0)
+                                    : displayEntry.earnings;
+                                  if (earningsBase > 0) {
                                     // Twitter: show Paid when payouts_processed or paid; others use verified/paid only
                                     const isTwitter =
                                       contest?.platform === "twitter" ||
@@ -6250,7 +6555,7 @@ export function ContestClientPage({
 
                                       if (flatFeeBonus > 0) {
                                         const totalEarnings =
-                                          displayEntry.earnings + flatFeeBonus;
+                                          earningsBase + flatFeeBonus;
                                         prizeDisplay = (
                                           <div className="space-y-1">
                                             <div className="font-semibold text-green-600 dark:text-green-400 text-base">
@@ -6261,7 +6566,7 @@ export function ContestClientPage({
                                               <div className="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0" />
                                               <span className="whitespace-nowrap">
                                                 {formatMoney(
-                                                  displayEntry.earnings,
+                                                  earningsBase,
                                                 )}{" "}
                                                 {contestType === "cpm"
                                                   ? "CPM"
@@ -6281,7 +6586,7 @@ export function ContestClientPage({
                                         prizeDisplay = (
                                           <div className="font-semibold text-green-600 dark:text-green-400 text-base">
                                             {earningsLabel}:{" "}
-                                            {formatMoney(displayEntry.earnings)}
+                                            {formatMoney(earningsBase)}
                                           </div>
                                         );
                                       }
@@ -6298,7 +6603,7 @@ export function ContestClientPage({
                                               ?.flat_fee_bonus || 0;
 
                                       const totalEarnings =
-                                        displayEntry.earnings + flatFeeBonus;
+                                        earningsBase + flatFeeBonus;
                                       prizeDisplay = (
                                         <div className="font-semibold text-green-600 dark:text-green-400 text-base">
                                           {earningsLabel}:{" "}
@@ -6312,7 +6617,7 @@ export function ContestClientPage({
                                       contest.contest_based_details
                                         ?.leaderboard_contest?.prizes,
                                     ) &&
-                                    myLeaderboardEntry?.rank
+                                    prizeRankForZone != null
                                   ) {
                                     const prizeInfo = (
                                       contest.contest_based_details
@@ -6320,7 +6625,7 @@ export function ContestClientPage({
                                         .prizes as PrizeInfo[]
                                     ).find(
                                       (p) =>
-                                        p.position === myLeaderboardEntry?.rank,
+                                        p.position === prizeRankForZone,
                                     );
                                     if (prizeInfo) {
                                       const prizeText =
@@ -6536,11 +6841,16 @@ export function ContestClientPage({
                                             <>
                                               {currentSubmissions.map(
                                                 (submission, index) => {
-                                                  // Get actual rank from leaderboard using O(1) lookup
                                                   const actualRank =
-                                                    rankLookupMap.get(
-                                                      submission.id,
-                                                    ) || "?";
+                                                    typeof submission.rank ===
+                                                    "number"
+                                                      ? submission.rank
+                                                      : submission.status ===
+                                                          "rejected"
+                                                        ? null
+                                                        : rankLookupMap.get(
+                                                            submission.id,
+                                                          ) ?? null;
 
                                                   // Earnings display based on modal view mode
                                                   let prizeDisplay = null;
@@ -6676,7 +6986,10 @@ export function ContestClientPage({
                                                     >
                                                       <CardContent className="p-3 sm:p-4 flex items-center space-x-3 sm:space-x-4">
                                                         <div className="text-lg sm:text-xl font-bold text-primary w-10 sm:w-12 text-center flex-shrink-0">
-                                                          #{actualRank}
+                                                          #
+                                                          {actualRank != null
+                                                            ? actualRank
+                                                            : "—"}
                                                         </div>
                                                         <Avatar className="h-10 w-10 sm:h-12 sm:w-12 border-2 border-primary/30 flex-shrink-0">
                                                           <AvatarImage
@@ -6721,8 +7034,8 @@ export function ContestClientPage({
                                                                     .app_username ||
                                                                   submission.user_platform_username
                                                                 : submission.user_platform_username}{" "}
-                                                              {actualRank ===
-                                                                myLeaderboardEntry?.rank &&
+                                                              {submission.id ===
+                                                                myLeaderboardEntry?.id &&
                                                                 "(You)"}
                                                             </p>
                                                             {renderVerificationBadges(
@@ -6758,25 +7071,6 @@ export function ContestClientPage({
                                                             {prizeDisplay}
                                                           </div>
                                                         </div>
-                                                        {submission.content_link && (
-                                                          <Button
-                                                            variant="ghost"
-                                                            size="sm"
-                                                            asChild
-                                                            className="h-8 w-8 p-0"
-                                                          >
-                                                            <Link
-                                                              href={
-                                                                submission.content_link
-                                                              }
-                                                              target="_blank"
-                                                              rel="noopener noreferrer"
-                                                              title="View Content"
-                                                            >
-                                                              <PlayCircle className="h-4 w-4" />
-                                                            </Link>
-                                                          </Button>
-                                                        )}
                                                       </CardContent>
                                                     </Card>
                                                   );
@@ -7381,32 +7675,6 @@ export function ContestClientPage({
                                                   : "0"}{" "}
                                                 views
                                               </p>
-                                              {video.content_link &&
-                                                (contest?.status?.toLowerCase() ===
-                                                  "ended" ||
-                                                  contest?.status?.toLowerCase() ===
-                                                    "completed") && (
-                                                  <Button
-                                                    variant="ghost"
-                                                    size="icon"
-                                                    className={cn(
-                                                      "h-7 w-7 sm:h-8 sm:w-8",
-                                                      isDark
-                                                        ? "text-gray-300"
-                                                        : "text-slate-500",
-                                                    )}
-                                                    asChild
-                                                  >
-                                                    <Link
-                                                      href={video.content_link}
-                                                      target="_blank"
-                                                      rel="noopener noreferrer"
-                                                      title="View Content"
-                                                    >
-                                                      <PlayCircle className="h-4 w-4" />
-                                                    </Link>
-                                                  </Button>
-                                                )}
                                             </div>
                                             {prizeDisplay && (
                                               <div className="text-xs sm:text-sm">
@@ -8371,32 +8639,6 @@ export function ContestClientPage({
                                         </>
                                       )}
                                     </p>
-                                    {entry.content_link &&
-                                      (contest?.status?.toLowerCase() ===
-                                        "ended" ||
-                                        contest?.status?.toLowerCase() ===
-                                          "completed") && (
-                                        <Button
-                                          variant="ghost"
-                                          size="icon"
-                                          className={cn(
-                                            "h-7 w-7 sm:h-8 sm:w-8",
-                                            isDark
-                                              ? "text-gray-300"
-                                              : "text-slate-500",
-                                          )}
-                                          asChild
-                                        >
-                                          <Link
-                                            href={entry.content_link}
-                                            target="_blank"
-                                            rel="noopener noreferrer"
-                                            title="View Content"
-                                          >
-                                            <PlayCircle className="h-4 w-4 sm:h-5 sm:w-5" />
-                                          </Link>
-                                        </Button>
-                                      )}
                                   </div>
                                   {prizeDisplay && (
                                     <div className="text-xs sm:text-sm">
@@ -8518,6 +8760,7 @@ export function ContestClientPage({
                   total_retweets: 0,
                   /** Count of quote *submissions*. */
                   total_quote_reposts: 0,
+                  total_engagement: 0,
                   total_impressions: 0,
                   total_points: 0,
                 };
@@ -8595,6 +8838,12 @@ export function ContestClientPage({
                     metrics.total_points = leaderboardPointsTotal;
                   }
                 }
+
+                metrics.total_engagement =
+                  metrics.total_likes +
+                  metrics.total_replies +
+                  metrics.total_retweets +
+                  metrics.total_quote_reposts;
 
                 return metrics;
               };
@@ -8758,7 +9007,7 @@ export function ContestClientPage({
                     {!loadingAnalyticsTweets &&
                       contest?.platform?.toLowerCase() === "twitter" &&
                       (twitterMetrics || calculatedMetrics) && (
-                        <div className="space-y-8">
+                        <div className="space-y-6">
                           {/* For Raid Campaigns: Show Target Tweet, Target Metrics, and Current Achieved */}
                           {(() => {
                             const isRaid =
@@ -9732,7 +9981,7 @@ export function ContestClientPage({
                             >
                               Campaign Metrics
                             </h3>
-                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+                            <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-4 mb-6">
                               {/* Helper function for metric cards */}
                               {(() => {
                                 const renderMetricCard = (
@@ -9741,39 +9990,41 @@ export function ContestClientPage({
                                   value: string | number,
                                   iconBgClass: string,
                                   barGradientClass: string,
+                                  hint?: string,
                                 ) => (
                                   <div
                                     className={cn(
-                                      "group rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 overflow-hidden relative",
+                                      "group rounded-xl shadow-md hover:shadow-lg transition-all duration-300 overflow-hidden relative min-w-0",
                                       isDark
                                         ? "bg-[#180438] border border-white/20 backdrop-blur-2xl"
                                         : "bg-gradient-to-br from-white to-blue-50 border border-blue-100",
                                     )}
+                                    title={hint}
                                   >
-                                    <div className="p-6 relative z-10">
-                                      <div className="flex items-center justify-between mb-4">
+                                    <div className="p-3 sm:p-4 relative z-10">
+                                      <div className="flex items-start gap-3 mb-2">
                                         <div
                                           className={cn(
-                                            "w-12 h-12 flex items-center justify-center rounded-xl shadow-lg backdrop-blur-sm",
+                                            "w-10 h-10 shrink-0 flex items-center justify-center rounded-lg shadow-md backdrop-blur-sm",
                                             iconBgClass,
                                           )}
                                         >
                                           {icon}
                                         </div>
-                                        <div className="text-right">
+                                        <div className="min-w-0">
                                           <p
                                             className={cn(
-                                              "text-sm font-medium uppercase tracking-wide",
+                                              "text-[11px] sm:text-xs font-medium uppercase tracking-wide leading-tight line-clamp-2",
                                               isDark
                                                 ? "text-white/90 drop-shadow-sm"
-                                                : "text-gray-500",
+                                              : "text-gray-500",
                                             )}
                                           >
                                             {label}
                                           </p>
                                           <p
                                             className={cn(
-                                              "text-2xl font-bold mt-1",
+                                              "text-lg sm:text-xl font-bold mt-0.5 tabular-nums",
                                               isDark
                                                 ? "text-white drop-shadow-lg bg-gradient-to-r from-white to-blue-200 bg-clip-text text-transparent"
                                                 : "text-gray-900",
@@ -9798,7 +10049,7 @@ export function ContestClientPage({
                                 return (
                                   <>
                                     {renderMetricCard(
-                                      <FileText className="h-6 w-6 text-white" />,
+                                      <FileText className="h-5 w-5 text-white" />,
                                       "Total Tweets",
                                       metricsForDisplay?.total_tweets || 0,
                                       isDark
@@ -9809,7 +10060,19 @@ export function ContestClientPage({
                                         : "bg-gradient-to-r from-blue-200 to-blue-300",
                                     )}
                                     {renderMetricCard(
-                                      <ThumbsUp className="h-6 w-6 text-white" />,
+                                      <Zap className="h-5 w-5 text-white" />,
+                                      "Total engagement",
+                                      metricsForDisplay?.total_engagement ?? 0,
+                                      isDark
+                                        ? "bg-white/20 border border-white/30 backdrop-blur-2xl shadow-lg shadow-white/20"
+                                        : "bg-gradient-to-br from-violet-500 to-violet-600 text-white",
+                                      isDark
+                                        ? "bg-gradient-to-r from-violet-400 via-fuchsia-400 to-pink-400 shadow-lg shadow-violet-400/70 animate-pulse"
+                                        : "bg-gradient-to-r from-violet-200 to-fuchsia-200",
+                                      "Sum of likes plus reply, retweet, and quote submission counts.",
+                                    )}
+                                    {renderMetricCard(
+                                      <ThumbsUp className="h-5 w-5 text-white" />,
                                       "Total Likes",
                                       metricsForDisplay?.total_likes || 0,
                                       isDark
@@ -9820,7 +10083,7 @@ export function ContestClientPage({
                                         : "bg-gradient-to-r from-pink-200 to-pink-300",
                                     )}
                                     {renderMetricCard(
-                                      <MessageCircle className="h-6 w-6 text-white" />,
+                                      <MessageCircle className="h-5 w-5 text-white" />,
                                       "Reply posts",
                                       metricsForDisplay?.total_replies || 0,
                                       isDark
@@ -9831,7 +10094,7 @@ export function ContestClientPage({
                                         : "bg-gradient-to-r from-orange-200 to-orange-300",
                                     )}
                                     {renderMetricCard(
-                                      <Share2 className="h-6 w-6 text-white" />,
+                                      <Share2 className="h-5 w-5 text-white" />,
                                       "Retweet posts",
                                       metricsForDisplay?.total_retweets || 0,
                                       isDark
@@ -9842,7 +10105,7 @@ export function ContestClientPage({
                                         : "bg-gradient-to-r from-cyan-200 to-cyan-300",
                                     )}
                                     {renderMetricCard(
-                                      <RefreshCw className="h-6 w-6 text-white" />,
+                                      <RefreshCw className="h-5 w-5 text-white" />,
                                       "Quote posts",
                                       metricsForDisplay?.total_quote_reposts ||
                                         0,
@@ -9854,7 +10117,7 @@ export function ContestClientPage({
                                         : "bg-gradient-to-r from-indigo-200 to-indigo-300",
                                     )}
                                     {renderMetricCard(
-                                      <Eye className="h-6 w-6 text-white" />,
+                                      <Eye className="h-5 w-5 text-white" />,
                                       "Total Impressions",
                                       metricsForDisplay?.total_impressions || 0,
                                       isDark
@@ -9865,7 +10128,7 @@ export function ContestClientPage({
                                         : "bg-gradient-to-r from-green-200 to-green-300",
                                     )}
                                     {renderMetricCard(
-                                      <TrendingUp className="h-6 w-6 text-white" />,
+                                      <TrendingUp className="h-5 w-5 text-white" />,
                                       "Total Points",
                                       metricsForDisplay?.total_points || 0,
                                       isDark
@@ -9876,7 +10139,7 @@ export function ContestClientPage({
                                         : "bg-gradient-to-r from-yellow-200 to-yellow-300",
                                     )}
                                     {renderMetricCard(
-                                      <Users className="h-6 w-6 text-white" />,
+                                      <Users className="h-5 w-5 text-white" />,
                                       "Submissions",
                                       filteredAnalyticsSubmissions.length,
                                       isDark

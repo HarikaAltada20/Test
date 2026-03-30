@@ -171,6 +171,10 @@ export interface Database {
           bio: string | null;
           youtube_account: Json | null;
           instagram_account: Json | null;
+          twitter_account: Json | null;
+          instagram_archive: Json | null;
+          youtube_archive: Json | null;
+          twitter_archive: Json | null;
           total_contests_participated: number;
           total_contests_won: number;
           total_money_won: number;
@@ -187,6 +191,10 @@ export interface Database {
           bio?: string | null;
           youtube_account?: Json | null;
           instagram_account?: Json | null;
+          twitter_account?: Json | null;
+          instagram_archive?: Json | null;
+          youtube_archive?: Json | null;
+          twitter_archive?: Json | null;
           total_contests_participated?: number;
           total_contests_won?: number;
           total_money_won?: number;
@@ -203,6 +211,10 @@ export interface Database {
           bio?: string | null;
           youtube_account?: Json | null;
           instagram_account?: Json | null;
+          twitter_account?: Json | null;
+          instagram_archive?: Json | null;
+          youtube_archive?: Json | null;
+          twitter_archive?: Json | null;
           total_contests_participated?: number;
           total_contests_won?: number;
           total_money_won?: number;
@@ -554,6 +566,59 @@ export interface Database {
           last_batch_completed_at?: string | null;
           updated_at?: string;
           error_message?: string | null;
+        };
+      };
+      twitter_metrics_refresh_runs: {
+        Row: {
+          id: string;
+          contest_id: string;
+          status: "pending" | "running" | "completed" | "failed" | "cancelled";
+          is_raid: boolean;
+          creator_scope_id: string | null;
+          total_batches: number;
+          current_batch_index: number;
+          total_participants: number;
+          processed_participants: number;
+          tweets_upserted: number;
+          started_at: string;
+          finished_at: string | null;
+          last_batch_completed_at: string | null;
+          error_message: string | null;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          contest_id: string;
+          status?: "pending" | "running" | "completed" | "failed" | "cancelled";
+          is_raid?: boolean;
+          creator_scope_id?: string | null;
+          total_batches?: number;
+          current_batch_index?: number;
+          total_participants?: number;
+          processed_participants?: number;
+          tweets_upserted?: number;
+          started_at?: string;
+          finished_at?: string | null;
+          last_batch_completed_at?: string | null;
+          error_message?: string | null;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          contest_id?: string;
+          status?: "pending" | "running" | "completed" | "failed" | "cancelled";
+          is_raid?: boolean;
+          creator_scope_id?: string | null;
+          total_batches?: number;
+          current_batch_index?: number;
+          total_participants?: number;
+          processed_participants?: number;
+          tweets_upserted?: number;
+          started_at?: string;
+          finished_at?: string | null;
+          last_batch_completed_at?: string | null;
+          error_message?: string | null;
+          updated_at?: string;
         };
       };
       money_transactions: {

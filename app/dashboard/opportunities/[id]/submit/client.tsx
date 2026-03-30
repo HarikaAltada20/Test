@@ -45,6 +45,18 @@ import { useToast } from "@/hooks/use-toast";
 import { PageLoadingSpinner } from "@/components/loading/LoadingSpinner";
 import { cn } from "@/lib/utils";
 
+/** Bust server leaderboard cache so rankings update immediately after a new submission */
+async function bustLeaderboardCache(contestId: string) {
+  try {
+    await fetch(`/api/leaderboard/${contestId}/revalidate`, {
+      method: "POST",
+      credentials: "include",
+    });
+  } catch (e) {
+    console.warn("[submit] leaderboard cache revalidate:", e);
+  }
+}
+
 // --- Submission Window Constants ---
 // CONFIGURATION: Change these values to modify the submission time window
 //
@@ -2055,6 +2067,7 @@ export default function SubmitContentPage({
     if (submissionError) {
       throw submissionError;
     }
+    await bustLeaderboardCache(contestId);
   };
 
   /**
@@ -2142,6 +2155,7 @@ export default function SubmitContentPage({
     if (submissionError) {
       throw submissionError;
     }
+    await bustLeaderboardCache(contestId);
   };
 
   /**
@@ -2198,7 +2212,9 @@ export default function SubmitContentPage({
       }
     });
 
-    return await Promise.all(submissionPromises);
+    const batch = await Promise.all(submissionPromises);
+    await bustLeaderboardCache(contestId);
+    return batch;
   };
 
   /**
@@ -2288,7 +2304,9 @@ export default function SubmitContentPage({
       }
     });
 
-    return await Promise.all(submissionPromises);
+    const batch = await Promise.all(submissionPromises);
+    await bustLeaderboardCache(contestId);
+    return batch;
   };
 
   /**

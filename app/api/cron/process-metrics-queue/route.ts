@@ -13,6 +13,12 @@ import {
   type MetricsRefreshJob,
 } from "@/lib/queue/metrics-refresh-queue";
 import {
+  advanceTwitterMetricsRunAfterBatch,
+  completeTwitterMetricsRun,
+  failTwitterMetricsRun,
+  isTwitterMetricsRunCancelled,
+} from "@/lib/twitter-metrics-refresh-runs";
+import {
   authorizeProcessMetricsQueue,
   isQStashEnabled,
   triggerProcessMetricsQueue,
@@ -62,6 +68,10 @@ async function handleRequest(_request: Request): Promise<NextResponse> {
   const jobStartMs = Date.now();
   const baseUrl = getBaseUrl();
   const { contestId } = job;
+  const runId =
+    typeof (job as { runId?: string }).runId === "string"
+      ? (job as { runId: string }).runId
+      : undefined;
   const creatorId =
     typeof (job as any)?.creatorId === "string"
       ? (job as any).creatorId
@@ -102,6 +112,17 @@ async function handleRequest(_request: Request): Promise<NextResponse> {
     }`
   );
 
+  if (
+    runId &&
+    (await isTwitterMetricsRunCancelled(supabaseAdmin, runId))
+  ) {
+    return NextResponse.json({
+      processed: 1,
+      contestId,
+      skipped: "twitter_run_cancelled",
+    });
+  }
+
   // Raid campaign → fetch-raid-engagements only (batched by participant when job has batchIndex/totalBatches).
   if (job.isRaid && isRaidCampaign) {
     const raidUrl = `${baseUrl}/api/contests/${contestId}/fetch-raid-engagements`;
@@ -141,6 +162,15 @@ async function handleRequest(_request: Request): Promise<NextResponse> {
           raidRes.status,
           raidData
         );
+        if (runId) {
+          const msg =
+            typeof raidData?.error === "string"
+              ? raidData.error
+              : `Raid fetch failed (${raidRes.status}): ${JSON.stringify(
+                  raidData
+                ).slice(0, 1500)}`;
+          await failTwitterMetricsRun(supabaseAdmin, runId, msg);
+        }
         return NextResponse.json(
           { processed: 1, error: "Raid fetch failed", details: raidData },
           { status: 500 }
@@ -153,6 +183,28 @@ async function handleRequest(_request: Request): Promise<NextResponse> {
         typeof raidTotalBatches === "number" &&
         raidBatchIndex + 1 < raidTotalBatches;
 
+      if (runId && typeof raidBatchIndex === "number") {
+        const { data: runRow } = await supabaseAdmin
+          .from("twitter_metrics_refresh_runs")
+          .select("total_participants")
+          .eq("id", runId)
+          .maybeSingle();
+        const totalP =
+          typeof runRow?.total_participants === "number"
+            ? runRow.total_participants
+            : 0;
+        const tweetsDelta =
+          typeof raidData.engagementsFound === "number"
+            ? raidData.engagementsFound
+            : 0;
+        await advanceTwitterMetricsRunAfterBatch(supabaseAdmin, {
+          runId,
+          batchIndex: raidBatchIndex,
+          totalParticipants: totalP,
+          tweetsDelta,
+        });
+      }
+
       if (raidHasMore) {
         const nextRaidJob: MetricsRefreshJob = {
           contestId,
@@ -160,6 +212,7 @@ async function handleRequest(_request: Request): Promise<NextResponse> {
           batchIndex: raidBatchIndex! + 1,
           totalBatches: raidTotalBatches!,
           ...(creatorId ? { creatorId } : {}),
+          ...(runId ? { runId } : {}),
         };
         await enqueueMetricsRefreshJob(nextRaidJob);
         const baseUrlForTrigger = getBaseUrl();
@@ -194,6 +247,13 @@ async function handleRequest(_request: Request): Promise<NextResponse> {
 
     } catch (err) {
       console.error("[process-metrics-queue] Raid fetch error:", err);
+      if (runId) {
+        await failTwitterMetricsRun(
+          supabaseAdmin,
+          runId,
+          err instanceof Error ? err.message : "Raid fetch failed"
+        );
+      }
       return NextResponse.json(
         {
           processed: 1,
@@ -201,6 +261,10 @@ async function handleRequest(_request: Request): Promise<NextResponse> {
         },
         { status: 500 }
       );
+    }
+
+    if (!raidHasMore && runId) {
+      await completeTwitterMetricsRun(supabaseAdmin, runId);
     }
 
     const raidElapsedMs = Date.now() - jobStartMs;
@@ -276,10 +340,41 @@ async function handleRequest(_request: Request): Promise<NextResponse> {
         refreshRes.status,
         refreshData
       );
+      if (runId) {
+        const msg =
+          typeof refreshData?.error === "string"
+            ? refreshData.error
+            : `Refresh batch failed (${refreshRes.status}): ${JSON.stringify(
+                refreshData
+              ).slice(0, 1500)}`;
+        await failTwitterMetricsRun(supabaseAdmin, runId, msg);
+      }
       return NextResponse.json(
         { processed: 1, error: "Refresh batch failed", details: refreshData },
         { status: 500 }
       );
+    }
+
+    if (runId) {
+      const { data: runRow } = await supabaseAdmin
+        .from("twitter_metrics_refresh_runs")
+        .select("total_participants")
+        .eq("id", runId)
+        .maybeSingle();
+      const totalP =
+        typeof runRow?.total_participants === "number"
+          ? runRow.total_participants
+          : 0;
+      const tweetsDelta =
+        typeof refreshData.tweetsFetched === "number"
+          ? refreshData.tweetsFetched
+          : 0;
+      await advanceTwitterMetricsRunAfterBatch(supabaseAdmin, {
+        runId,
+        batchIndex,
+        totalParticipants: totalP,
+        tweetsDelta,
+      });
     }
 
     const hasMore =
@@ -293,6 +388,7 @@ async function handleRequest(_request: Request): Promise<NextResponse> {
         batchIndex: batchIndex + 1,
         totalBatches,
         ...(creatorId ? { creatorId } : {}),
+        ...(runId ? { runId } : {}),
       };
       await enqueueMetricsRefreshJob(nextJob);
       // Trigger next run: QStash (event-driven) or direct POST when QStash not configured / loopback
@@ -324,6 +420,10 @@ async function handleRequest(_request: Request): Promise<NextResponse> {
       }
     }
 
+    if (!hasMore && runId) {
+      await completeTwitterMetricsRun(supabaseAdmin, runId);
+    }
+
     const batchElapsedMs = Date.now() - jobStartMs;
     console.log(
       `[process-metrics-queue] contestId=${contestId} batch ${
@@ -343,6 +443,13 @@ async function handleRequest(_request: Request): Promise<NextResponse> {
       `[process-metrics-queue] Refresh error after ${errElapsedMs}ms:`,
       err
     );
+    if (runId) {
+      await failTwitterMetricsRun(
+        supabaseAdmin,
+        runId,
+        err instanceof Error ? err.message : "Refresh failed"
+      );
+    }
     return NextResponse.json(
       {
         processed: 1,

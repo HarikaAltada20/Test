@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/utils/supabase/server";
 import { createAdminClient } from "@/utils/supabase/admin";
+import { revalidateLeaderboardCache } from "@/lib/leaderboard-cache";
 
 export const dynamic = "force-dynamic";
 
@@ -101,7 +102,10 @@ export async function POST(request: NextRequest) {
       // If not already a participant and limit is reached, reject
       if (!isAlreadyParticipant && currentParticipantCount >= maxParticipants) {
         return NextResponse.json(
-          { error: `This campaign has reached the maximum participant limit of ${maxParticipants}. Please try another campaign.` },
+          {
+            error: `This campaign has reached the maximum participant limit of ${maxParticipants}. Please try another campaign.`,
+            code: "PARTICIPANT_LIMIT_REACHED",
+          },
           { status: 400 }
         );
       }
@@ -125,7 +129,11 @@ export async function POST(request: NextRequest) {
     if (!profile) {
       console.error("No creator profile found for user:", user.id);
       return NextResponse.json(
-        { error: "Creator profile not found. Please complete your profile setup." },
+        {
+          error:
+            "Creator profile not found. Please complete your profile setup.",
+          code: "CREATOR_PROFILE_MISSING",
+        },
         { status: 400 }
       );
     }
@@ -137,6 +145,7 @@ export async function POST(request: NextRequest) {
         {
           error:
             "Please connect your Twitter (X) account in Settings before joining this campaign.",
+          code: "TWITTER_NOT_CONNECTED",
         },
         { status: 400 }
       );
@@ -164,7 +173,11 @@ export async function POST(request: NextRequest) {
 
     if (!twitterUsername) {
       return NextResponse.json(
-        { error: "Twitter username is missing from your connected account." },
+        {
+          error:
+            "Twitter username is missing from your connected account.",
+          code: "TWITTER_USERNAME_MISSING",
+        },
         { status: 400 }
       );
     }
@@ -177,6 +190,7 @@ export async function POST(request: NextRequest) {
         {
           error:
             "Please add your Game Of Creators username to your X bio before joining this campaign.",
+          code: "BIO_USERNAME_MISSING",
         },
         { status: 400 }
       );
@@ -207,6 +221,8 @@ export async function POST(request: NextRequest) {
         { status: 500 }
       );
     }
+
+    revalidateLeaderboardCache(contestId);
 
     return NextResponse.json({ success: true }, { status: 200 });
   } catch (error: any) {

@@ -15,6 +15,7 @@ import {
   recoverProcessingJobsToQueue,
 } from "@/lib/queue/instagram-insights-queue";
 import { updateCpmContestBudgets } from "@/lib/instagram-insights";
+import { revalidateLeaderboardCache } from "@/lib/leaderboard-cache";
 import {
   authorizeProcessInstagramInsightsQueue,
   isQStashEnabled,
@@ -185,6 +186,8 @@ async function handleRequest(baseUrl: string): Promise<NextResponse> {
       .from("contests")
       .update({ last_metrics_updated: now })
       .eq("id", job.contestId);
+
+    revalidateLeaderboardCache(job.contestId);
   }
 
   return NextResponse.json({

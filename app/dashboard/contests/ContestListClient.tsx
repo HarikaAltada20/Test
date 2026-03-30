@@ -9,16 +9,11 @@ import React, {
   useRef,
 } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import {
-  EnhancedTabs as Tabs,
-  EnhancedTabsContent as TabsContent,
-  EnhancedTabsList as TabsList,
-  EnhancedTabsTrigger as TabsTrigger,
-} from "@/components/ui/enhanced-tabs";
+import { EnhancedTabs } from "@/components/ui/enhancedTabs";
 import {
   Select,
   SelectContent,
@@ -56,6 +51,11 @@ import {
 } from "lucide-react";
 import { DeleteContestButton } from "@/components/delete-contest-button";
 import { formatLocalDateTime, cn } from "@/lib/utils";
+import {
+  KNOWN_POST_CONTEST_STATUSES,
+  getEndedOpportunityBadgeClassName,
+  getEndedOpportunityPhaseLabel,
+} from "@/lib/contest-ended-phase-display";
 import { formatCurrencyFromCents as formatMoney } from "@/lib/currency-utils";
 import {
   calculateLeaderboardBudgetSpent,
@@ -194,8 +194,120 @@ const moderationStatusConfig = {
 const contestStatusConfig = {
   upcoming: { label: "Upcoming", color: "bg-purple-500", icon: Calendar },
   active: { label: "Active", color: "bg-green-600", icon: PlayCircle },
-  ended: { label: "completed", color: "bg-gray-600", icon: StopCircle },
+  ended: { label: "Ended", color: "bg-gray-600", icon: StopCircle },
 };
+
+const BRAND_CONTEST_TAB_IDS = [
+  "all",
+  "draft",
+  "pending_approval",
+  "ready",
+  "upcoming",
+  "live",
+  "ended",
+  "rejected",
+] as const;
+
+type BrandContestTabId = (typeof BRAND_CONTEST_TAB_IDS)[number];
+
+const BRAND_POST_PHASE_IDS = [
+  "all",
+  "post_pending_review",
+  "post_in_review",
+  "post_payment_pending",
+  "post_paid",
+] as const;
+
+type BrandPostPhaseId = (typeof BRAND_POST_PHASE_IDS)[number];
+
+const POST_PHASE_SUB_TABS = new Set<string>([
+  "post_pending_review",
+  "post_in_review",
+  "post_payment_pending",
+  "post_paid",
+]);
+
+const LEGACY_BRAND_CONTEST_TAB_MAP: Record<string, BrandContestTabId> = {
+  active: "live",
+  pending_verification: "ended",
+  done: "ended",
+};
+
+function normalizeBrandContestTabId(tab: string): BrandContestTabId {
+  if (POST_PHASE_SUB_TABS.has(tab)) {
+    return "ended";
+  }
+  const mapped = LEGACY_BRAND_CONTEST_TAB_MAP[tab] ?? tab;
+  return (BRAND_CONTEST_TAB_IDS as readonly string[]).includes(mapped)
+    ? (mapped as BrandContestTabId)
+    : "all";
+}
+
+function contestMatchesPostPhase(
+  c: Contest,
+  phase: Exclude<BrandPostPhaseId, "all">,
+): boolean {
+  if (c.moderation_status !== "published" || c.status !== "ended") {
+    return false;
+  }
+  const s = c.post_contest_status ?? "";
+  switch (phase) {
+    case "post_pending_review":
+      return (
+        !s ||
+        !KNOWN_POST_CONTEST_STATUSES.has(s) ||
+        s === "pending_review"
+      );
+    case "post_in_review":
+      return s === "in_review";
+    case "post_payment_pending":
+      return s === "verification_complete";
+    case "post_paid":
+      return s === "payouts_processed";
+    default:
+      return false;
+  }
+}
+
+function brandTabFilterPhrase(tab: BrandContestTabId): string {
+  const phrases: Record<BrandContestTabId, string> = {
+    all: "this view",
+    draft: "Draft",
+    pending_approval: "Pending approval",
+    ready: "Ready to publish",
+    live: "Live",
+    upcoming: "Upcoming",
+    ended: "Ended",
+    rejected: "Rejected",
+  };
+  return phrases[tab];
+}
+
+function brandPostPhasePhrase(phase: BrandPostPhaseId): string {
+  if (phase === "all") {
+    return "All payout phases";
+  }
+  const phrases: Record<Exclude<BrandPostPhaseId, "all">, string> = {
+    post_pending_review: "Pending review",
+    post_in_review: "In review",
+    post_payment_pending: "Payment pending",
+    post_paid: "Completed paid",
+  };
+  return phrases[phase];
+}
+
+function brandListFilterPhrase(
+  tab: BrandContestTabId,
+  postPhase: BrandPostPhaseId,
+): string {
+  if (
+    (tab === "all" || tab === "ended") &&
+    postPhase !== "all"
+  ) {
+    return `${brandTabFilterPhrase(tab)} · ${brandPostPhasePhrase(postPhase)}`;
+  }
+  return brandTabFilterPhrase(tab);
+}
 
 const getBudgetTrackerValues = (
   totalBudget: number,
@@ -218,6 +330,25 @@ export function ContestListClient({
   onViewModeChange,
 }: ContestListClientProps) {
   const router = useRouter();
+  const pathname = usePathname();
+  const [navigatingContestId, setNavigatingContestId] = useState<string | null>(
+    null,
+  );
+
+  useEffect(() => {
+    setNavigatingContestId(null);
+  }, [pathname]);
+
+  const goToContestDetail = useCallback(
+    (contestId: string) => {
+      setNavigatingContestId(contestId);
+      const href = isAdminView
+        ? `/dashboard/admin/contests/${contestId}`
+        : `/dashboard/contests/${contestId}`;
+      router.push(href);
+    },
+    [isAdminView, router],
+  );
   const { toast } = useToast();
   const [sortOption, setSortOption] =
     useState<SortOptionType>("created_at_desc");
@@ -239,14 +370,30 @@ export function ContestListClient({
     return "light";
   });
 
-  // Use external tab if provided, otherwise use internal state
-  const selectedTab =
+  const rawSelectedTab =
     externalSelectedTab !== undefined
       ? externalSelectedTab
       : internalSelectedTab;
+  const selectedTab = normalizeBrandContestTabId(rawSelectedTab);
   const setSelectedTab = onTabChange || setInternalSelectedTab;
+  const showPostContestPipeline =
+    selectedTab === "all" || selectedTab === "ended";
+  const [postContestPhaseFilter, setPostContestPhaseFilter] =
+    useState<BrandPostPhaseId>("all");
+
+  useEffect(() => {
+    if (POST_PHASE_SUB_TABS.has(rawSelectedTab)) {
+      setPostContestPhaseFilter(rawSelectedTab as BrandPostPhaseId);
+    }
+  }, [rawSelectedTab]);
+
+  useEffect(() => {
+    if (selectedTab !== "all" && selectedTab !== "ended") {
+      setPostContestPhaseFilter("all");
+    }
+  }, [selectedTab]);
+
   const [platformFilter, setPlatformFilter] = useState<string>("all");
-  const [contestStatusFilter, setContestStatusFilter] = useState<string>("all"); // New contest status filter
   const [contestTypeFilter, setContestTypeFilter] = useState<string>("all"); // New contest type filter
   // New: contest format filter (all / text-image / video)
   const [contestFormatFilter, setContestFormatFilter] = useState<
@@ -264,11 +411,17 @@ export function ContestListClient({
   const [internalViewMode, setInternalViewMode] = useState<"grid" | "list">(
     "grid",
   );
+  /** List layout only at lg+ (1024px), same as creator Opportunities */
+  const [layoutAllowsListView, setLayoutAllowsListView] = useState(false);
+  const brandContestsResultsRef = useRef<HTMLDivElement>(null);
 
   // Use external viewMode if provided, otherwise use internal state
   const viewMode =
     externalViewMode !== undefined ? externalViewMode : internalViewMode;
   const setViewMode = onViewModeChange || setInternalViewMode;
+  const displayViewMode: "grid" | "list" = layoutAllowsListView
+    ? viewMode
+    : "grid";
 
   const [contests, setContests] = useState<Contest[]>(initialContests);
   const isMountedRef = useRef(true);
@@ -278,12 +431,11 @@ export function ContestListClient({
     [key: string]: {
       edit?: boolean;
       editDates?: boolean;
-      view?: boolean;
     };
   }>({});
 
   // Helper functions for loading states
-  const setButtonLoading = (contestId: string, action: 'edit' | 'editDates' | 'view', isLoading: boolean) => {
+  const setButtonLoading = (contestId: string, action: 'edit' | 'editDates', isLoading: boolean) => {
     setLoadingButtons(prev => ({
       ...prev,
       [contestId]: {
@@ -425,43 +577,53 @@ export function ContestListClient({
     [],
   );
 
-  // Group contests by moderation status and contest lifecycle
+  // Group contests by moderation status, lifecycle, and post-contest phase
   const contestsByStatus = useMemo(() => {
-    // First filter contests by format
     const filteredContests = getContestsByFormat(contests, contestFormatFilter);
 
-    const groups = {
+    const endedPublished = (c: Contest) =>
+      c.moderation_status === "published" && c.status === "ended";
+
+    const groups: Record<BrandContestTabId, Contest[]> = {
       all: filteredContests,
       draft: filteredContests.filter((c) => c.moderation_status === "draft"),
       pending_approval: filteredContests.filter(
         (c) => c.moderation_status === "pending_approval",
       ),
       ready: filteredContests.filter((c) => c.moderation_status === "approved"),
-      active: filteredContests.filter(
+      live: filteredContests.filter(
         (c) =>
-          c.moderation_status === "published" &&
-          (c.status === "active" || c.status === "upcoming"),
+          c.moderation_status === "published" && c.status === "active",
       ),
-      pending_verification: filteredContests.filter(
+      upcoming: filteredContests.filter(
         (c) =>
-          c.moderation_status === "published" &&
-          c.status === "ended" &&
-          c.post_contest_status !== "verification_complete" &&
-          c.post_contest_status !== "payouts_processed",
+          c.moderation_status === "published" && c.status === "upcoming",
       ),
-      done: filteredContests.filter(
-        (c) =>
-          c.moderation_status === "published" &&
-          c.status === "ended" &&
-          (c.post_contest_status === "verification_complete" ||
-            c.post_contest_status === "payouts_processed"),
-      ),
+      ended: filteredContests.filter(endedPublished),
       rejected: filteredContests.filter(
         (c) => c.moderation_status === "rejected",
       ),
     };
     return groups;
   }, [contests, contestFormatFilter, getContestsByFormat]);
+
+  const postPhaseCounts = useMemo(() => {
+    const ended = contestsByStatus.ended;
+    return {
+      post_pending_review: ended.filter((c) =>
+        contestMatchesPostPhase(c, "post_pending_review"),
+      ).length,
+      post_in_review: ended.filter((c) =>
+        contestMatchesPostPhase(c, "post_in_review"),
+      ).length,
+      post_payment_pending: ended.filter((c) =>
+        contestMatchesPostPhase(c, "post_payment_pending"),
+      ).length,
+      post_paid: ended.filter((c) =>
+        contestMatchesPostPhase(c, "post_paid"),
+      ).length,
+    };
+  }, [contestsByStatus.ended]);
 
   const availablePlatforms = useMemo(() => {
     // Get contests for the current tab
@@ -574,25 +736,126 @@ export function ContestListClient({
   }, [mode]);
   const isDark = mode === "dark";
 
-  // Responsive view mode: switch to grid view on smaller screens if in list view
-  useEffect(() => {
-    const checkScreenSize = () => {
-      // Use 650px as the breakpoint (matches min-[650px] used for view toggle buttons)
-      if (window.innerWidth < 650 && viewMode === "list") {
-        setViewMode("grid");
-      }
+  const brandPipelineTabs = useMemo(() => {
+    const countBadge = (n: number) => (
+      <Badge
+        variant="secondary"
+        className={cn(
+          "ml-1.5 shrink-0 rounded-full px-2 py-0.5 text-xs font-semibold tabular-nums",
+          isDark
+            ? "border-0 bg-white/20 text-white"
+            : "border-0 bg-white text-gray-800 shadow-sm",
+        )}
+      >
+        {n}
+      </Badge>
+    );
+    const row = (text: string, n: number) => (
+      <span className="flex items-center justify-center gap-0.5">
+        <span>{text}</span>
+        {countBadge(n)}
+      </span>
+    );
+    return [
+      { id: "all", label: row("All", contestsByStatus.all.length) },
+      { id: "draft", label: row("Draft", contestsByStatus.draft.length) },
+      {
+        id: "pending_approval",
+        label: row("Pending approval", contestsByStatus.pending_approval.length),
+      },
+      { id: "ready", label: row("Ready", contestsByStatus.ready.length) },
+      {
+        id: "upcoming",
+        label: row("Upcoming", contestsByStatus.upcoming.length),
+      },
+      { id: "live", label: row("Live", contestsByStatus.live.length) },
+      { id: "ended", label: row("Ended", contestsByStatus.ended.length) },
+      { id: "rejected", label: row("Rejected", contestsByStatus.rejected.length) },
+    ];
+  }, [contestsByStatus, isDark]);
+
+  const brandPostContestTabs = useMemo(() => {
+    const countBadge = (n: number) => (
+      <Badge
+        variant="secondary"
+        className={cn(
+          "ml-1.5 shrink-0 rounded-full px-2 py-0.5 text-xs font-semibold tabular-nums",
+          isDark
+            ? "border-0 bg-white/20 text-white"
+            : "border-0 bg-white text-gray-800 shadow-sm",
+        )}
+      >
+        {n}
+      </Badge>
+    );
+    const row = (
+      text: string,
+      n: number,
+      title?: string,
+    ) => (
+      <span
+        className="flex items-center justify-center gap-0.5 max-w-[min(100%,14rem)]"
+        title={title}
+      >
+        <span className="leading-tight text-center">{text}</span>
+        {countBadge(n)}
+      </span>
+    );
+    const endedTotal = contestsByStatus.ended.length;
+    return [
+      {
+        id: "all",
+        label: row(
+          "All phases",
+          endedTotal,
+          "All ended contests — any payout step",
+        ),
+      },
+      {
+        id: "post_pending_review",
+        label: row(
+          "Pending review",
+          postPhaseCounts.post_pending_review,
+          "Ended contests awaiting initial review",
+        ),
+      },
+      {
+        id: "post_in_review",
+        label: row(
+          "In review",
+          postPhaseCounts.post_in_review,
+          "Verification in progress",
+        ),
+      },
+      {
+        id: "post_payment_pending",
+        label: row(
+          "Payment pending",
+          postPhaseCounts.post_payment_pending,
+          "Verification complete — payment pending",
+        ),
+      },
+      {
+        id: "post_paid",
+        label: row(
+          "Completed paid",
+          postPhaseCounts.post_paid,
+          "Payout completed",
+        ),
+      },
+    ];
+  }, [contestsByStatus.ended.length, isDark, postPhaseCounts]);
+
+  useLayoutEffect(() => {
+    const mq = window.matchMedia("(min-width: 1024px)");
+    const apply = () => {
+      setLayoutAllowsListView(mq.matches);
+      if (!mq.matches) setViewMode("grid");
     };
-
-    // Check on mount
-    checkScreenSize();
-
-    // Check on resize
-    window.addEventListener("resize", checkScreenSize);
-
-    return () => {
-      window.removeEventListener("resize", checkScreenSize);
-    };
-  }, [viewMode, setViewMode]);
+    apply();
+    mq.addEventListener("change", apply);
+    return () => mq.removeEventListener("change", apply);
+  }, [setViewMode]);
 
   // useEffect for filtering and sorting - copied from opportunities
   useEffect(() => {
@@ -600,35 +863,21 @@ export function ContestListClient({
       contestsByStatus[selectedTab as keyof typeof contestsByStatus] || [];
     let contestsToDisplay = [...baseContests];
 
+    if (
+      showPostContestPipeline &&
+      postContestPhaseFilter !== "all"
+    ) {
+      contestsToDisplay = contestsToDisplay.filter((c) =>
+        contestMatchesPostPhase(c, postContestPhaseFilter),
+      );
+    }
+
     // Search Filter - filter by title (case-insensitive)
     if (searchQuery.trim() !== "") {
       const searchTerm = searchQuery.trim().toLowerCase();
       contestsToDisplay = contestsToDisplay.filter((contest) => {
         const title = contest.title?.toLowerCase() || "";
         return title.includes(searchTerm);
-      });
-    }
-
-    // Apply contest status filter (Live, Upcoming, Ended, All)
-    if (contestStatusFilter !== "all") {
-      contestsToDisplay = contestsToDisplay.filter((contest) => {
-        if (contestStatusFilter === "live") {
-          return (
-            contest.moderation_status === "published" &&
-            contest.status === "active"
-          );
-        } else if (contestStatusFilter === "upcoming") {
-          return (
-            contest.moderation_status === "published" &&
-            contest.status === "upcoming"
-          );
-        } else if (contestStatusFilter === "ended") {
-          return (
-            contest.moderation_status === "published" &&
-            contest.status === "ended"
-          );
-        }
-        return true;
       });
     }
 
@@ -745,7 +994,8 @@ export function ContestListClient({
   }, [
     contestsByStatus,
     selectedTab,
-    contestStatusFilter,
+    showPostContestPipeline,
+    postContestPhaseFilter,
     platformFilter,
     contestTypeFilter,
     contestFormatFilter,
@@ -787,58 +1037,6 @@ export function ContestListClient({
     );
   };
 
-  const getContestStatusDisplay = (
-    status: string | null,
-    postContestStatus: string | null = null,
-  ) => {
-    if (!status)
-      return {
-        text: "Unknown",
-        className: "bg-slate-400 border-slate-400 text-white",
-      };
-    if (status === "active")
-      return {
-        text: "Live",
-        className: "bg-green-500 border-green-500 text-white",
-      };
-    if (status === "upcoming")
-      return {
-        text: "Upcoming",
-        className: "bg-blue-500 border-blue-500 text-white",
-      };
-    if (status === "ended") {
-      // Show post-contest status for ended contests with better UX messaging
-      if (postContestStatus === "pending_review")
-        return {
-          text: "Pending Review",
-          className: "bg-yellow-500 border-yellow-500 text-white",
-        };
-      if (postContestStatus === "in_review")
-        return {
-          text: "In Review",
-          className: "bg-orange-500 border-orange-500 text-white",
-        };
-      if (postContestStatus === "verification_complete")
-        return {
-          text: "Verified - Payment Processing",
-          className: "bg-purple-500 border-purple-500 text-white",
-        };
-      if (postContestStatus === "payouts_processed")
-        return {
-          text: "Verified - Payment Released",
-          className: "bg-green-600 border-green-600 text-white",
-        };
-      return {
-        text: "completed",
-        className: "bg-gray-500 border-gray-500 text-white",
-      };
-    }
-    return {
-      text: status.charAt(0).toUpperCase() + status.slice(1),
-      className: "bg-slate-400 border-slate-400 text-white",
-    };
-  };
-
   const renderContestCard = (contest: Contest) => {
     const isPublished = contest.moderation_status === "published";
 
@@ -853,12 +1051,7 @@ export function ContestListClient({
               ? "bg-[#06021D] border-slate-700"
               : "bg-white border-slate-200",
           )}
-          onClick={() => {
-            const href = isAdminView
-              ? `/dashboard/admin/contests/${contest.id}`
-              : `/dashboard/contests/${contest.id}`;
-            router.push(href);
-          }}
+          onClick={() => goToContestDetail(contest.id)}
         >
           <div className="aspect-[16/10] bg-slate-100 dark:bg-slate-800 flex items-center justify-center overflow-hidden relative">
             {contest.thumbnail_url ? (
@@ -873,35 +1066,25 @@ export function ContestListClient({
             <div className="absolute top-2 right-2">
               <Badge
                 className={cn(
-                  "capitalize text-sm px-3 py-1 font-medium border",
-                  contest.status === "active" && "bg-[#7F39EC] text-white",
-                  contest.status === "upcoming" && "bg-[#7F39EC] text-white",
-                  contest.status === "ended" && "bg-[#7F39EC] text-white",
+                  "text-sm px-3 py-1 font-medium border",
+                  contest.status === "active" &&
+                    "capitalize bg-[#7F39EC] text-white border-[#7F39EC]",
+                  contest.status === "upcoming" &&
+                    "capitalize bg-[#7F39EC] text-white border-[#7F39EC]",
+                  contest.status === "ended" &&
+                    `normal-case ${getEndedOpportunityBadgeClassName(isDark, contest.post_contest_status)}`,
                   !["active", "upcoming", "ended"].includes(
                     contest.status || "",
-                  ) && "bg-[#7F39EC] text-white",
+                  ) && "capitalize bg-[#7F39EC] text-white border-[#7F39EC]",
                 )}
               >
-                {(() => {
-                  if (contest.status === "active") {
-                    return "Live";
-                  }
-                  if (contest.status === "upcoming") {
-                    return "Upcoming";
-                  }
-                  if (contest.status === "ended") {
-                    // Show "paid" for contests with completed verification
-                    if (
-                      contest.post_contest_status === "verification_complete" ||
-                      contest.post_contest_status === "payouts_processed"
-                    ) {
-                      return "paid";
-                    }
-                    // Show "completed" for ended contests
-                    return "completed";
-                  }
-                  return contest.status || "Unknown";
-                })()}
+                {contest.status === "active"
+                  ? "Live"
+                  : contest.status === "upcoming"
+                    ? "Upcoming"
+                    : contest.status === "ended"
+                      ? getEndedOpportunityPhaseLabel(contest.post_contest_status)
+                      : contest.status || "Unknown"}
               </Badge>
             </div>
           </div>
@@ -1352,17 +1535,13 @@ export function ContestListClient({
               )}
               onClick={(e) => {
                 e.stopPropagation();
-                setButtonLoading(contest.id, 'view', true);
-                const href = isAdminView
-                  ? `/dashboard/admin/contests/${contest.id}`
-                  : `/dashboard/contests/${contest.id}`;
-                router.push(href);
+                goToContestDetail(contest.id);
               }}
-              disabled={loadingButtons[contest.id]?.view}
+              disabled={navigatingContestId === contest.id}
               // size="sm"
               // variant="outline"
             >
-              {loadingButtons[contest.id]?.view ? (
+              {navigatingContestId === contest.id ? (
                 <ButtonLoadingSpinner />
               ) : (
                 <Eye className="h-4 w-4 mr-1" />
@@ -1387,10 +1566,7 @@ export function ContestListClient({
           if ((e.target as HTMLElement).closest("button")) {
             return;
           }
-          const href = isAdminView
-            ? `/dashboard/admin/contests/${contest.id}`
-            : `/dashboard/contests/${contest.id}`;
-          router.push(href);
+          goToContestDetail(contest.id);
         }}
       >
         <div className="flex flex-col flex-grow">
@@ -1616,20 +1792,16 @@ export function ContestListClient({
                   className="flex w-full items-center justify-center gap-2 bg-[#D9C0FF61] px-3 py-3 text-[#7F39EC] rounded-full"
                   onClick={(e) => {
                     e.stopPropagation();
-                    setButtonLoading(contest.id, 'view', true);
-                    const href = isAdminView
-                      ? `/dashboard/admin/contests/${contest.id}`
-                      : `/dashboard/contests/${contest.id}`;
-                    router.push(href);
+                    goToContestDetail(contest.id);
                   }}
-                  disabled={loadingButtons[contest.id]?.view}
+                  disabled={navigatingContestId === contest.id}
                 >
-                  {loadingButtons[contest.id]?.view ? (
+                  {navigatingContestId === contest.id ? (
                     <ButtonLoadingSpinner />
                   ) : (
                     <Eye className="h-4 w-4" />
                   )}
-                  <span>{loadingButtons[contest.id]?.view ? 'Loading...' : 'View Details'}</span>
+                  <span>View Details</span>
                 </button>
               )}
 
@@ -1661,12 +1833,7 @@ export function ContestListClient({
               ? "bg-[#06021D] border-slate-700"
               : "bg-white border-slate-200",
           )}
-          onClick={() => {
-            const href = isAdminView
-              ? `/dashboard/admin/contests/${contest.id}`
-              : `/dashboard/contests/${contest.id}`;
-            router.push(href);
-          }}
+          onClick={() => goToContestDetail(contest.id)}
         >
           {/* Status Badge - Top Right Corner */}
           {(contest.status === "active" ||
@@ -1675,10 +1842,13 @@ export function ContestListClient({
             <div className="absolute top-3 right-3 z-10">
               <Badge
                 className={cn(
-                  "capitalize text-sm px-3 py-1 font-medium border",
-                  contest.status === "active" && "bg-[#7F39EC] text-white",
-                  contest.status === "upcoming" && "bg-[#7F39EC] text-white",
-                  contest.status === "ended" && "bg-[#7F39EC] text-white",
+                  "text-sm px-3 py-1 font-medium border",
+                  contest.status === "active" &&
+                    "capitalize bg-[#7F39EC] text-white border-[#7F39EC]",
+                  contest.status === "upcoming" &&
+                    "capitalize bg-[#7F39EC] text-white border-[#7F39EC]",
+                  contest.status === "ended" &&
+                    `normal-case ${getEndedOpportunityBadgeClassName(isDark, contest.post_contest_status)}`,
                 )}
               >
                 {contest.status === "active"
@@ -1686,18 +1856,7 @@ export function ContestListClient({
                   : contest.status === "upcoming"
                     ? "Upcoming"
                     : contest.status === "ended"
-                      ? (() => {
-                          // Show "paid" for contests with completed verification
-                          if (
-                            contest.post_contest_status ===
-                              "verification_complete" ||
-                            contest.post_contest_status === "payouts_processed"
-                          ) {
-                            return "paid";
-                          }
-                          // Show "completed" for ended contests
-                          return "completed";
-                        })()
+                      ? getEndedOpportunityPhaseLabel(contest.post_contest_status)
                       : contest.status || "Unknown"}
               </Badge>
             </div>
@@ -2189,15 +2348,11 @@ export function ContestListClient({
               )}
               onClick={(e) => {
                 e.stopPropagation();
-                setButtonLoading(contest.id, 'view', true);
-                const href = isAdminView
-                  ? `/dashboard/admin/contests/${contest.id}`
-                  : `/dashboard/contests/${contest.id}`;
-                router.push(href);
+                goToContestDetail(contest.id);
               }}
-              disabled={loadingButtons[contest.id]?.view}
+              disabled={navigatingContestId === contest.id}
             >
-              {loadingButtons[contest.id]?.view ? (
+              {navigatingContestId === contest.id ? (
                 <ButtonLoadingSpinner />
               ) : (
                 <Eye className="h-4 w-4" />
@@ -2223,10 +2378,7 @@ export function ContestListClient({
           if ((e.target as HTMLElement).closest("button")) {
             return;
           }
-          const href = isAdminView
-            ? `/dashboard/admin/contests/${contest.id}`
-            : `/dashboard/contests/${contest.id}`;
-          router.push(href);
+          goToContestDetail(contest.id);
         }}
       >
         <div className="absolute top-4 right-3 z-10">
@@ -2472,15 +2624,11 @@ export function ContestListClient({
               className="flex w-full items-center justify-center gap-2 bg-[#D9C0FF61] px-3 py-3 text-[#7F39EC] rounded-full text-sm font-medium"
               onClick={(e) => {
                 e.stopPropagation();
-                setButtonLoading(contest.id, 'view', true);
-                const href = isAdminView
-                  ? `/dashboard/admin/contests/${contest.id}`
-                  : `/dashboard/contests/${contest.id}`;
-                router.push(href);
+                goToContestDetail(contest.id);
               }}
-              disabled={loadingButtons[contest.id]?.view}
+              disabled={navigatingContestId === contest.id}
             >
-              {loadingButtons[contest.id]?.view ? (
+              {navigatingContestId === contest.id ? (
                 <ButtonLoadingSpinner />
               ) : (
                 <Eye className="h-4 w-4" />
@@ -2499,11 +2647,11 @@ export function ContestListClient({
   // Apply sorting to currentContests when no additional filters are applied
   const sortedCurrentContests = useMemo(() => {
     if (
-      contestStatusFilter !== "all" ||
       platformFilter !== "all" ||
       contestTypeFilter !== "all" ||
       contestFormatFilter !== "all" ||
-      searchQuery.trim() !== ""
+      searchQuery.trim() !== "" ||
+      (showPostContestPipeline && postContestPhaseFilter !== "all")
     ) {
       return filteredAndSortedContests; // Use filtered and sorted results
     }
@@ -2609,11 +2757,12 @@ export function ContestListClient({
     currentContests,
     sortOption,
     filteredAndSortedContests,
-    contestStatusFilter,
     platformFilter,
     contestTypeFilter,
     searchQuery,
     selectedTab,
+    showPostContestPipeline,
+    postContestPhaseFilter,
   ]);
 
   const displayContests = sortedCurrentContests;
@@ -2623,7 +2772,7 @@ export function ContestListClient({
     setPage(1);
   }, [
     selectedTab,
-    contestStatusFilter,
+    postContestPhaseFilter,
     platformFilter,
     contestTypeFilter,
     contestFormatFilter,
@@ -2978,16 +3127,17 @@ export function ContestListClient({
         <>
           {/* Header with filters */}
           <div className="flex flex-col gap-4 mb-3">
-            {/* Search and View Toggle Row */}
-            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-              {/* Search Input */}
-              <div className="relative max-w-md w-full">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
-                {searchQuery && (
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-stretch w-full min-w-0 lg:max-w-xl xl:max-w-2xl">
+              <div className="relative flex-1 min-w-0">
+                <Search
+                  className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none"
+                  aria-hidden
+                />
+                {searchQuery.trim() !== "" && (
                   <button
                     type="button"
                     onClick={() => setSearchQuery("")}
-                    className="absolute right-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
+                    className="absolute right-3 top-1/2 -translate-y-1/2 h-8 w-8 flex items-center justify-center text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors rounded-md"
                     aria-label="Clear search"
                   >
                     <X className="h-4 w-4" />
@@ -2995,125 +3145,173 @@ export function ContestListClient({
                 )}
                 <Input
                   type="text"
-                  placeholder="Search contests by title..."
+                  role="searchbox"
+                  enterKeyHint="search"
+                  autoComplete="off"
+                  placeholder="Search by title…"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && searchQuery.trim() !== "") {
+                      e.preventDefault();
+                      brandContestsResultsRef.current?.scrollIntoView({
+                        behavior: "smooth",
+                        block: "start",
+                      });
+                    }
+                  }}
                   className={cn(
-                    "pl-10 border w-full",
-                    searchQuery && "pr-10",
+                    "pl-10 h-11 w-full text-sm sm:text-base border rounded-xl shadow-sm",
+                    searchQuery.trim() !== "" && "pr-10",
                     isDark
-                      ? "border-gray-500 bg-[#020817] text-white"
-                      : "border-gray-400 text-black",
+                      ? "border-gray-600 bg-[#020817] text-white placeholder:text-gray-500"
+                      : "border-gray-300 bg-white text-gray-900 placeholder:text-gray-500",
                   )}
                 />
               </div>
-              <div className="flex gap-2">
-                {/* Format Toggle: All / Text/Image contests vs Video contests */}
-                <div className="flex items-center gap-1 border border-gray-400 rounded-md p-1">
+              {searchQuery.trim() !== "" && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  className={cn(
+                    "h-11 w-full sm:w-auto shrink-0 rounded-xl font-semibold text-sm",
+                    isDark
+                      ? "border-violet-400/60 text-violet-100 bg-transparent hover:bg-white/10 hover:text-white"
+                      : "border-[#7F39EC] text-[#7F39EC] bg-[#D9C0FF26] hover:bg-[#D9C0FF61]",
+                  )}
+                  onClick={() =>
+                    brandContestsResultsRef.current?.scrollIntoView({
+                      behavior: "smooth",
+                      block: "start",
+                    })
+                  }
+                >
+                  Search
+                </Button>
+              )}
+            </div>
+
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-stretch lg:justify-between lg:gap-4">
+              <div
+                className={cn(
+                  "w-full min-w-0 overflow-x-auto -mx-1 px-1 sm:mx-0 sm:px-0 sm:overflow-visible",
+                  "[scrollbar-width:thin]",
+                )}
+              >
+                <div
+                  role="group"
+                  aria-label="Contest format"
+                  className={cn(
+                    "flex w-full sm:w-auto rounded-xl border p-1 gap-1 min-h-[2.75rem] box-border",
+                    isDark
+                      ? "border-gray-600 bg-[#020817]/60"
+                      : "border-gray-300 bg-gray-50/90",
+                  )}
+                >
                   <button
                     type="button"
                     onClick={() => setContestFormatFilter("all")}
-                    className={cn(
-                      "flex items-center gap-2 px-3 py-2 rounded transition-colors text-sm font-medium",
-                      contestFormatFilter === "all"
-                        ? isDark
-                          ? "bg-[#7F39EC] text-white"
-                          : "bg-[#7F39EC] text-white"
-                        : isDark
-                          ? "text-gray-300 hover:text-white"
-                          : "text-gray-600 hover:text-gray-900 hover:bg-gray-100",
-                    )}
                     title="All contests"
+                    className={cn(
+                      "flex-1 sm:flex-initial flex items-center justify-center gap-2 px-3 sm:px-4 py-2.5 rounded-lg text-sm font-semibold whitespace-nowrap min-h-[2.5rem] transition-colors",
+                      contestFormatFilter === "all"
+                        ? "bg-[#7F39EC] text-white shadow-sm"
+                        : isDark
+                          ? "text-gray-300 hover:text-white hover:bg-white/10"
+                          : "text-gray-700 hover:bg-white hover:text-gray-900",
+                    )}
                   >
-                    <LayoutGrid className="h-4 w-4" />
-                    <span className="inline">All</span>
+                    <LayoutGrid className="h-4 w-4 shrink-0 opacity-90" />
+                    <span>All</span>
                   </button>
                   <button
                     type="button"
                     onClick={() => setContestFormatFilter("text_image")}
+                    title="Text and image contests"
                     className={cn(
-                      "flex items-center gap-2 px-3 py-2 rounded transition-colors text-sm font-medium",
+                      "flex-1 sm:flex-initial flex items-center justify-center gap-2 px-3 sm:px-4 py-2.5 rounded-lg text-sm font-semibold whitespace-nowrap min-h-[2.5rem] transition-colors",
                       contestFormatFilter === "text_image"
-                        ? isDark
-                          ? "bg-[#7F39EC] text-white"
-                          : "bg-[#7F39EC] text-white"
+                        ? "bg-[#7F39EC] text-white shadow-sm"
                         : isDark
-                          ? "text-gray-300 hover:text-white"
-                          : "text-gray-600 hover:text-gray-900 hover:bg-gray-100",
+                          ? "text-gray-300 hover:text-white hover:bg-white/10"
+                          : "text-gray-700 hover:bg-white hover:text-gray-900",
                     )}
-                    title="Text/Image contests"
                   >
-                    <FileText className="h-4 w-4" />
-                    <span className="inline">Text/Image contests</span>
+                    <FileText className="h-4 w-4 shrink-0 opacity-90" />
+                    <span>Text & image</span>
                   </button>
                   <button
                     type="button"
                     onClick={() => setContestFormatFilter("video")}
-                    className={cn(
-                      "flex items-center gap-2 px-3 py-2 rounded transition-colors text-sm font-medium",
-                      contestFormatFilter === "video"
-                        ? isDark
-                          ? "bg-[#7F39EC] text-white"
-                          : "bg-[#7F39EC] text-white"
-                        : isDark
-                          ? "text-gray-300 hover:text-white"
-                          : "text-gray-600 hover:text-gray-900 hover:bg-gray-100",
-                    )}
                     title="Video contests"
-                  >
-                    <PlayCircle className="h-4 w-4" />
-                    <span className="inline">Video contests</span>
-                  </button>
-                </div>
-
-                {/* View Toggle Buttons */}
-                <div className="hidden min-[650px]:flex items-center gap-1 border border-gray-400 rounded-md p-1">
-                  <button
-                    onClick={() => setViewMode("grid")}
                     className={cn(
-                      "flex items-center gap-2 px-3 py-2 rounded transition-colors text-sm font-medium",
-                      viewMode === "grid"
-                        ? isDark
-                          ? "bg-[#7F39EC] text-white"
-                          : "bg-[#7F39EC] text-white"
+                      "flex-1 sm:flex-initial flex items-center justify-center gap-2 px-3 sm:px-4 py-2.5 rounded-lg text-sm font-semibold whitespace-nowrap min-h-[2.5rem] transition-colors",
+                      contestFormatFilter === "video"
+                        ? "bg-[#7F39EC] text-white shadow-sm"
                         : isDark
-                          ? "text-gray-300 hover:text-white"
-                          : "text-gray-600 hover:text-gray-900 hover:bg-gray-100",
+                          ? "text-gray-300 hover:text-white hover:bg-white/10"
+                          : "text-gray-700 hover:bg-white hover:text-gray-900",
                     )}
-                    title="Grid View"
                   >
-                    <LayoutGrid className="h-4 w-4" />
-                    <span className="hidden sm:inline">Grid View</span>
-                  </button>
-                  <button
-                    onClick={() => setViewMode("list")}
-                    className={cn(
-                      "flex items-center gap-2 px-3 py-2 rounded transition-colors text-sm font-medium",
-                      viewMode === "list"
-                        ? isDark
-                          ? "bg-[#7F39EC] text-white"
-                          : "bg-[#7F39EC] text-white"
-                        : isDark
-                          ? "text-gray-300 hover:text-white"
-                          : "text-gray-600 hover:text-gray-900 hover:bg-gray-100",
-                    )}
-                    title="List View"
-                  >
-                    <List className="h-4 w-4" />
-                    <span className="hidden sm:inline">List View</span>
+                    <PlayCircle className="h-4 w-4 shrink-0 opacity-90" />
+                    <span>Video</span>
                   </button>
                 </div>
               </div>
+
+              <div
+                role="group"
+                aria-label="Layout"
+                className={cn(
+                  "hidden lg:flex w-full sm:w-auto shrink-0 rounded-xl border p-1 gap-1 min-h-[2.75rem] items-stretch box-border",
+                  isDark
+                    ? "border-gray-600 bg-[#020817]/60"
+                    : "border-gray-300 bg-gray-50/90",
+                )}
+              >
+                <button
+                  type="button"
+                  onClick={() => setViewMode("grid")}
+                  title="Grid view"
+                  className={cn(
+                    "flex-1 sm:flex-initial flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-sm font-semibold whitespace-nowrap min-h-[2.5rem] transition-colors min-w-[5.5rem]",
+                    displayViewMode === "grid"
+                      ? "bg-[#7F39EC] text-white shadow-sm"
+                      : isDark
+                        ? "text-gray-300 hover:text-white hover:bg-white/10"
+                        : "text-gray-700 hover:bg-white hover:text-gray-900",
+                  )}
+                >
+                  <LayoutGrid className="h-4 w-4 shrink-0 opacity-90" />
+                  <span>Grid</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setViewMode("list")}
+                  title="List view"
+                  className={cn(
+                    "flex-1 sm:flex-initial flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-sm font-semibold whitespace-nowrap min-h-[2.5rem] transition-colors min-w-[5.5rem]",
+                    displayViewMode === "list"
+                      ? "bg-[#7F39EC] text-white shadow-sm"
+                      : isDark
+                        ? "text-gray-300 hover:text-white hover:bg-white/10"
+                        : "text-gray-700 hover:bg-white hover:text-gray-900",
+                  )}
+                >
+                  <List className="h-4 w-4 shrink-0 opacity-90" />
+                  <span>List</span>
+                </button>
+              </div>
             </div>
-            {/* Filters - Wraps to next row when overflow */}
-            <div className="flex flex-wrap items-center gap-2 w-full">
+            {/* Sort, platform, type — workflow status is in tabs below */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-2 w-full">
               <Select
                 value={sortOption}
                 onValueChange={(value) =>
                   setSortOption(value as SortOptionType)
                 }
               >
-                <SelectTrigger className="w-full sm:w-[200px] min-w-[150px] border border-gray-400">
+                <SelectTrigger className="w-full min-w-0 border border-gray-400 rounded-xl">
                   <SelectValue placeholder="Sort by" />
                 </SelectTrigger>
                 <SelectContent isDark={isDark}>
@@ -3157,7 +3355,7 @@ export function ContestListClient({
               </Select>
 
               <Select value={platformFilter} onValueChange={setPlatformFilter}>
-                <SelectTrigger className="w-full sm:w-[150px] min-w-[120px] border border-gray-400">
+                <SelectTrigger className="w-full min-w-0 border border-gray-400 rounded-xl">
                   <SelectValue placeholder="Platform" />
                 </SelectTrigger>
                 <SelectContent isDark={isDark}>
@@ -3169,36 +3367,12 @@ export function ContestListClient({
                 </SelectContent>
               </Select>
 
-              {/* Contest Status Filter */}
-              <Select
-                value={contestStatusFilter}
-                onValueChange={setContestStatusFilter}
-              >
-                <SelectTrigger className="w-full sm:w-[150px] min-w-[120px] border border-gray-400">
-                  <SelectValue placeholder="Contest Status" />
-                </SelectTrigger>
-                <SelectContent isDark={isDark}>
-                  <SelectItem isDark={isDark} value="all">
-                    All Status
-                  </SelectItem>
-                  <SelectItem isDark={isDark} value="live">
-                    Live
-                  </SelectItem>
-                  <SelectItem isDark={isDark} value="upcoming">
-                    Upcoming
-                  </SelectItem>
-                  <SelectItem isDark={isDark} value="ended">
-                    completed
-                  </SelectItem>
-                </SelectContent>
-              </Select>
-
               {/* Contest Type Filter */}
               <Select
                 value={contestTypeFilter}
                 onValueChange={setContestTypeFilter}
               >
-                <SelectTrigger className="w-full sm:w-[150px] min-w-[120px] border border-gray-400">
+                <SelectTrigger className="w-full min-w-0 border border-gray-400 rounded-xl">
                   <SelectValue placeholder="Contest Type" />
                 </SelectTrigger>
                 <SelectContent isDark={isDark}>
@@ -3216,335 +3390,252 @@ export function ContestListClient({
             </div>
           </div>
 
-          {/* Enhanced Status Filter Tabs - More Responsive */}
-          <Tabs
-            value={selectedTab}
-            onValueChange={setSelectedTab}
-            className="w-full mb-8"
+          {/* Status — workflow row; payout phases only for All / Ended */}
+          <div className="w-full space-y-4 mb-8">
+            <div className="w-full overflow-x-auto pb-1 [-webkit-overflow-scrolling:touch] scrollbar-hide">
+              <EnhancedTabs
+                tabs={brandPipelineTabs}
+                activeTab={
+                  brandPipelineTabs.some((t) => t.id === selectedTab)
+                    ? selectedTab
+                    : ""
+                }
+                onTabChange={(id) => setSelectedTab(id)}
+                isDark={isDark}
+                light={!isDark}
+                fillWidth={false}
+                className="shadow-sm"
+              />
+            </div>
+            {showPostContestPipeline ? (
+              <div
+                className={cn(
+                  "rounded-2xl border p-3 sm:p-4 space-y-3 transition-colors",
+                  isDark
+                    ? "border-white/10 bg-white/[0.04]"
+                    : "border-gray-200/90 bg-gray-50/70",
+                )}
+              >
+                <div className="flex flex-col gap-0.5 sm:flex-row sm:items-baseline sm:justify-between sm:gap-4">
+                  <p
+                    className={cn(
+                      "text-[11px] font-semibold uppercase tracking-wide",
+                      isDark ? "text-gray-400" : "text-gray-500",
+                    )}
+                  >
+                    After contest ends
+                  </p>
+                  <p
+                    className={cn(
+                      "text-xs leading-snug max-w-xl",
+                      isDark ? "text-gray-500" : "text-gray-600",
+                    )}
+                  >
+                    Narrow by payout step — only applies to{" "}
+                    {selectedTab === "all" ? (
+                      <>
+                        <span className="font-medium text-[#7F39EC]">
+                          ended
+                        </span>{" "}
+                        contests in this list.
+                      </>
+                    ) : (
+                      <>your ended contests.</>
+                    )}
+                  </p>
+                </div>
+                <div className="w-full overflow-x-auto pb-1 [-webkit-overflow-scrolling:touch] scrollbar-hide">
+                  <EnhancedTabs
+                    tabs={brandPostContestTabs}
+                    activeTab={postContestPhaseFilter}
+                    onTabChange={(id) =>
+                      setPostContestPhaseFilter(id as BrandPostPhaseId)
+                    }
+                    isDark={isDark}
+                    light={!isDark}
+                    fillWidth={false}
+                    className="shadow-sm"
+                  />
+                </div>
+              </div>
+            ) : null}
+          </div>
+
+          <div
+            ref={brandContestsResultsRef}
+            id="brand-contests-results"
+            className="scroll-mt-4 mt-4"
           >
-            <TabsList className="flex gap-6">
-              <TabsTrigger
-                value="all"
-                className={cn(
-                  "border",
-                  isDark
-                    ? "border-gray-400 text-white"
-                    : "border-gray-500 text-gray-800",
-                )}
+            {displayViewMode === "grid" ? (
+              <div
+                className="grid gap-6"
+                style={{
+                  gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))",
+                }}
               >
-                All{" "}
-                <Badge
-                  variant="secondary"
-                  className="ml-2 data-[state=active]:bg-primary-foreground/20 data-[state=active]:text-primary-foreground"
-                >
-                  {contestsByStatus.all.length}
-                </Badge>
-              </TabsTrigger>
-              <TabsTrigger
-                value="draft"
-                className={cn(
-                  "border",
-                  isDark
-                    ? "border-gray-400 text-white"
-                    : "border-gray-500 text-gray-800",
-                )}
-              >
-                Draft{" "}
-                <Badge
-                  variant="secondary"
-                  className="ml-2 data-[state=active]:bg-primary-foreground/20 data-[state=active]:text-primary-foreground"
-                >
-                  {contestsByStatus.draft.length}
-                </Badge>
-              </TabsTrigger>
-              <TabsTrigger
-                className={cn(
-                  "border",
-                  isDark
-                    ? "border-gray-400 text-white"
-                    : "border-gray-500 text-gray-800",
-                )}
-                value="pending_approval"
-              >
-                Pending Approval{" "}
-                <Badge
-                  variant="secondary"
-                  className="ml-2 data-[state=active]:bg-primary-foreground/20 data-[state=active]:text-primary-foreground"
-                >
-                  {contestsByStatus.pending_approval.length}
-                </Badge>
-              </TabsTrigger>
-              <TabsTrigger
-                value="ready"
-                className={cn(
-                  "border",
-                  isDark
-                    ? "border-gray-400 text-white"
-                    : "border-gray-500 text-gray-800",
-                )}
-              >
-                Ready{" "}
-                <Badge
-                  variant="secondary"
-                  className="ml-2 data-[state=active]:bg-primary-foreground/20 data-[state=active]:text-primary-foreground"
-                >
-                  {contestsByStatus.ready.length}
-                </Badge>
-              </TabsTrigger>
-              <TabsTrigger
-                value="active"
-                className={cn(
-                  "border",
-                  isDark
-                    ? "border-gray-400 text-white"
-                    : "border-gray-500 text-gray-800",
-                )}
-              >
-                Active{" "}
-                <Badge
-                  variant="secondary"
-                  className="ml-2 data-[state=active]:bg-primary-foreground/20 data-[state=active]:text-primary-foreground"
-                >
-                  {contestsByStatus.active.length}
-                </Badge>
-              </TabsTrigger>
-              <TabsTrigger
-                className={cn(
-                  "border",
-                  isDark
-                    ? "border-gray-400 text-white"
-                    : "border-gray-500 text-gray-800",
-                )}
-                value="pending_verification"
-              >
-                Pending Verification{" "}
-                <Badge
-                  variant="secondary"
-                  className="ml-2 data-[state=active]:bg-primary-foreground/20 data-[state=active]:text-primary-foreground"
-                >
-                  {contestsByStatus.pending_verification.length}
-                </Badge>
-              </TabsTrigger>
-              <TabsTrigger
-                value="done"
-                className={cn(
-                  "border",
-                  isDark
-                    ? "border-gray-400 text-white"
-                    : "border-gray-500 text-gray-800",
-                )}
-              >
-                Done{" "}
-                <Badge
-                  variant="secondary"
-                  className="ml-2 data-[state=active]:bg-primary-foreground/20 data-[state=active]:text-primary-foreground"
-                >
-                  {contestsByStatus.done.length}
-                </Badge>
-              </TabsTrigger>
-              <TabsTrigger
-                value="rejected"
-                className={cn(
-                  "border",
-                  isDark
-                    ? "border-gray-400 text-white"
-                    : "border-gray-500 text-gray-800",
-                )}
-              >
-                Rejected{" "}
-                <Badge
-                  variant="secondary"
-                  className="ml-2 data-[state=active]:bg-primary-foreground/20 data-[state=active]:text-primary-foreground"
-                >
-                  {contestsByStatus.rejected.length}
-                </Badge>
-              </TabsTrigger>
-            </TabsList>
-            {Object.keys(contestsByStatus).map((tabValue) => (
-              <TabsContent key={tabValue} value={tabValue} className="mt-4">
-                <div>
-                  {viewMode === "grid" ? (
-                    <div
-                      className="grid gap-6"
+                {total > 0 ? (
+                  paginatedContests.map((contest) => renderContestCard(contest))
+                ) : (
+                  <div className="col-span-full text-center py-12">
+                    <h3
+                      className="text-lg font-semibold"
                       style={{
-                        gridTemplateColumns:
-                          "repeat(auto-fill, minmax(320px, 1fr))",
+                        color: isDark ? "white" : "black",
+                        transition: "none",
                       }}
                     >
-                      {total > 0 ? (
-                        paginatedContests.map((contest) =>
-                          renderContestCard(contest),
-                        )
-                      ) : (
-                        <div className="col-span-full text-center py-12">
-                          <h3
-                            className="text-lg font-semibold"
-                            style={{
-                              color: isDark ? "white" : "black",
-                              transition: "none",
-                            }}
-                          >
-                            No Contests Found
-                          </h3>
-                          <p
-                            className="mt-2"
-                            style={{
-                              color: isDark ? "#94a3b8" : "#64748b",
-                              transition: "none",
-                            }}
-                          >
-                            {platformFilter !== "all" ||
-                            contestStatusFilter !== "all" ||
-                            contestTypeFilter !== "all"
-                              ? `No contests match the current filters for ${tabValue
-                                  .split("_")
-                                  .join(" ")} status.`
-                              : `No contests found for ${tabValue
-                                  .split("_")
-                                  .join(" ")} status.`}
-                          </p>
-                        </div>
-                      )}
-                    </div>
-                  ) : (
-                    <div className="flex flex-col gap-4">
-                      {total > 0 ? (
-                        paginatedContests.map((contest) =>
-                          renderContestListItem(contest),
-                        )
-                      ) : (
-                        <div className="text-center py-12">
-                          <h3
-                            className="text-lg font-semibold"
-                            style={{
-                              color: isDark ? "white" : "black",
-                              transition: "none",
-                            }}
-                          >
-                            No Contests Found
-                          </h3>
-                          <p
-                            className="mt-2"
-                            style={{
-                              color: isDark ? "#94a3b8" : "#64748b",
-                              transition: "none",
-                            }}
-                          >
-                            {platformFilter !== "all" ||
-                            contestStatusFilter !== "all" ||
-                            contestTypeFilter !== "all"
-                              ? `No contests match the current filters for ${tabValue
-                                  .split("_")
-                                  .join(" ")} status.`
-                              : `No contests found for ${tabValue
-                                  .split("_")
-                                  .join(" ")} status.`}
-                          </p>
-                        </div>
-                      )}
-                    </div>
-                  )}
+                      No Contests Found
+                    </h3>
+                    <p
+                      className="mt-2"
+                      style={{
+                        color: isDark ? "#94a3b8" : "#64748b",
+                        transition: "none",
+                      }}
+                    >
+                      {platformFilter !== "all" ||
+                      contestTypeFilter !== "all" ||
+                      searchQuery.trim() !== "" ||
+                      contestFormatFilter !== "all"
+                        ? `No contests match the current filters for ${brandListFilterPhrase(selectedTab, postContestPhaseFilter)}.`
+                        : `No contests found for ${brandListFilterPhrase(selectedTab, postContestPhaseFilter)}.`}
+                    </p>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="flex flex-col gap-4">
+                {total > 0 ? (
+                  paginatedContests.map((contest) =>
+                    renderContestListItem(contest),
+                  )
+                ) : (
+                  <div className="text-center py-12">
+                    <h3
+                      className="text-lg font-semibold"
+                      style={{
+                        color: isDark ? "white" : "black",
+                        transition: "none",
+                      }}
+                    >
+                      No Contests Found
+                    </h3>
+                    <p
+                      className="mt-2"
+                      style={{
+                        color: isDark ? "#94a3b8" : "#64748b",
+                        transition: "none",
+                      }}
+                    >
+                      {platformFilter !== "all" ||
+                      contestTypeFilter !== "all" ||
+                      searchQuery.trim() !== "" ||
+                      contestFormatFilter !== "all"
+                        ? `No contests match the current filters for ${brandListFilterPhrase(selectedTab, postContestPhaseFilter)}.`
+                        : `No contests found for ${brandListFilterPhrase(selectedTab, postContestPhaseFilter)}.`}
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
 
-                  {total > 0 && (
-                    <div className="mt-6 flex flex-col gap-2 items-center text-center sm:flex-row sm:items-center sm:justify-between sm:text-left">
-                      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-4">
-                        <div
-                          className="text-sm"
-                          style={{
-                            color: isDark ? "#cbd5e1" : "#4b5563",
-                            transition: "none",
-                          }}
-                        >
-                          {(() => {
-                            const startItem = (page - 1) * limit + 1;
-                            const endItem = Math.min(page * limit, total);
-                            return `Showing ${startItem}-${endItem} of ${total} contests`;
-                          })()}
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <span
-                            className="text-sm"
-                            style={{
-                              color: isDark ? "#cbd5e1" : "#4b5563",
-                              transition: "none",
-                            }}
+            {total > 0 && (
+              <div className="mt-6 flex flex-col gap-2 items-center text-center sm:flex-row sm:items-center sm:justify-between sm:text-left">
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-4">
+                  <div
+                    className="text-sm"
+                    style={{
+                      color: isDark ? "#cbd5e1" : "#4b5563",
+                      transition: "none",
+                    }}
+                  >
+                    {(() => {
+                      const startItem = (page - 1) * limit + 1;
+                      const endItem = Math.min(page * limit, total);
+                      return `Showing ${startItem}-${endItem} of ${total} contests`;
+                    })()}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span
+                      className="text-sm"
+                      style={{
+                        color: isDark ? "#cbd5e1" : "#4b5563",
+                        transition: "none",
+                      }}
+                    >
+                      Show:
+                    </span>
+                    <Select
+                      value={limit.toString()}
+                      onValueChange={(value) => {
+                        const newLimit = parseInt(value, 10);
+                        setLimit(newLimit);
+                        setPage(1);
+                      }}
+                    >
+                      <SelectTrigger
+                        className={cn(
+                          "w-20",
+                          isDark && "border border-gray-600",
+                        )}
+                      >
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent
+                        isDark={isDark}
+                        className={cn(
+                          isDark &&
+                            "border-gray-600 bg-[#07031D] text-white",
+                        )}
+                      >
+                        {[9, 15, 21, 30].map((size) => (
+                          <SelectItem
+                            isDark={isDark}
+                            key={size}
+                            value={size.toString()}
+                            className={cn(
+                              isDark &&
+                                "bg-[#07031D] text-white focus:bg-slate-800 data-[state=checked]:bg-slate-700",
+                            )}
                           >
-                            Show:
-                          </span>
-                          <Select
-                            value={limit.toString()}
-                            onValueChange={(value) => {
-                              const newLimit = parseInt(value, 10);
-                              setLimit(newLimit);
-                              setPage(1);
-                            }}
-                          >
-                            <SelectTrigger
-                              className={cn(
-                                "w-20",
-                                isDark && "border border-gray-600",
-                              )}
-                            >
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent
-                              isDark={isDark}
-                              className={cn(
-                                isDark &&
-                                  "border-gray-600 bg-[#07031D] text-white",
-                              )}
-                            >
-                              {[9, 15, 21, 30].map((size) => (
-                                <SelectItem
-                                  isDark={isDark}
-                                  key={size}
-                                  value={size.toString()}
-                                  className={cn(
-                                    isDark &&
-                                      "bg-[#07031D] text-white focus:bg-slate-800 data-[state=checked]:bg-slate-700",
-                                  )}
-                                >
-                                  {size}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                          <span
-                            className="text-sm"
-                            style={{
-                              color: isDark ? "#cbd5e1" : "#4b5563",
-                              transition: "none",
-                            }}
-                          >
-                            per page
-                          </span>
-                        </div>
-                      </div>
-                      {totalPages > 1 && (
-                        <PaginationControls
-                          page={page}
-                          limit={limit}
-                          total={total}
-                          totalPages={totalPages}
-                          hasNextPage={hasNextPage}
-                          hasPreviousPage={hasPreviousPage}
-                          onPageChange={setPage}
-                          onLimitChange={setLimit}
-                          loading={false}
-                          isDark={isDark}
-                          showResultInfo={false}
-                          showPageSizeSelector={false}
-                          showEdgeButtons={false}
-                          showPrevNextButtons={true}
-                          pageSizeOptions={[9, 15, 21, 30]}
-                        />
-                      )}
-                    </div>
-                  )}
+                            {size}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <span
+                      className="text-sm"
+                      style={{
+                        color: isDark ? "#cbd5e1" : "#4b5563",
+                        transition: "none",
+                      }}
+                    >
+                      per page
+                    </span>
+                  </div>
                 </div>
-              </TabsContent>
-            ))}
-          </Tabs>
+                {totalPages > 1 && (
+                  <PaginationControls
+                    page={page}
+                    limit={limit}
+                    total={total}
+                    totalPages={totalPages}
+                    hasNextPage={hasNextPage}
+                    hasPreviousPage={hasPreviousPage}
+                    onPageChange={setPage}
+                    onLimitChange={setLimit}
+                    loading={false}
+                    isDark={isDark}
+                    showResultInfo={false}
+                    showPageSizeSelector={false}
+                    showEdgeButtons={false}
+                    showPrevNextButtons={true}
+                    pageSizeOptions={[9, 15, 21, 30]}
+                  />
+                )}
+              </div>
+            )}
+          </div>
           {shouldShowContestTypeGuide && (
             <div className="mt-10">{contestTypeGuideCards}</div>
           )}

@@ -13,6 +13,8 @@ interface EnhancedTabsProps {
   className?: string;
   isDark?: boolean;
   light?: boolean;
+  /** When false, tabs use natural width — wrap in overflow-x-auto for long lists */
+  fillWidth?: boolean;
 }
 
 export function EnhancedTabs({
@@ -22,6 +24,7 @@ export function EnhancedTabs({
   className = "",
   isDark = false,
   light = false,
+  fillWidth = true,
 }: EnhancedTabsProps) {
   const getTabClasses = (tab: Tab, index: number) => {
     const isActive = activeTab === tab.id;
@@ -45,8 +48,11 @@ export function EnhancedTabs({
       hoverRoundedClasses = "hover";
     }
 
+    const widthClasses = fillWidth
+      ? "flex-1"
+      : "shrink-0 flex-none whitespace-nowrap px-3 sm:px-4";
     const baseClasses = `flex items-center justify-center gap-2 
-  flex-1 px-4 sm:px-6 py-2 sm:py-3.5 font-medium transition-all duration-200`;
+  ${fillWidth ? "px-4 sm:px-6 py-2 sm:py-3.5" : "py-2 sm:py-2.5"} ${widthClasses} font-medium text-sm sm:text-[0.95rem] transition-all duration-200`;
 
     if (isActive) {
       return `${baseClasses} ${activeRoundedClasses} bg-[#662EBD] text-white shadow-sm`;
@@ -68,10 +74,13 @@ export function EnhancedTabs({
     : "bg-[#E4E4E4]";
 
   return (
-    <div className={`${containerBg} rounded-full flex ${className}`}>
+    <div
+      className={`${containerBg} rounded-full flex flex-nowrap ${fillWidth ? "w-full" : "w-max max-w-none"} ${className}`}
+    >
       {tabs.map((tab, index) => (
         <button
           key={tab.id}
+          type="button"
           onClick={() => onTabChange(tab.id)}
           className={getTabClasses(tab, index)}
         >

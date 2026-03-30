@@ -68,6 +68,7 @@ export async function GET(
       )
       .eq("contest_id", contestId)
       .eq("is_eligible", true)
+      .is("deleted_at", null)
       .order("tweet_created_at", { ascending: false });
 
     // Filter by creator if specified
@@ -123,7 +124,8 @@ export async function GET(
       `
       )
       .eq("contest_id", contestId)
-      .eq("is_eligible", true);
+      .eq("is_eligible", true)
+      .is("deleted_at", null);
 
     if (creatorsError) {
       console.error("[twitter-feed] Error fetching creators", creatorsError);

@@ -80,13 +80,13 @@ export async function updateSession(request: NextRequest): Promise<UpdateSession
         // If /verify-otp is now under /auth (e.g., /auth/verify-otp), this single check is sufficient.
         // /choose-username is removed as it should typically be accessed by authenticated users.
         const isPublicAuthPath = currentPath.startsWith('/auth')
-        
+        const isPublicMarketingHome = currentPath === '/'
 
-        // The root middleware.ts matcher ensures this function only runs on
-        // /dashboard/* or /choose-username.
-        // If an unauthenticated user is trying to access one of these,
-        // and it's NOT one of the explicitly allowed public auth paths, redirect to signin.
-        if (!isPublicAuthPath) {
+        // The root middleware.ts matcher ensures this function only runs on matched routes
+        // (e.g. /dashboard/*, /choose-username, /auth/*, /).
+        // If an unauthenticated user is trying to access a protected path,
+        // and it's NOT an allowed public path, redirect to signin.
+        if (!isPublicAuthPath && !isPublicMarketingHome) {
             const signInUrl = new URL('/auth/signin', request.url)
             signInUrl.searchParams.set('next', currentPath)
             return { response: NextResponse.redirect(signInUrl), user: null, supabase }

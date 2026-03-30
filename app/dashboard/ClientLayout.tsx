@@ -29,6 +29,7 @@ import {
   CreditCard,
   Maximize,
   Minimize,
+  Loader2,
 } from "lucide-react";
 import {
   Breadcrumb,
@@ -51,9 +52,10 @@ import ChatSuppport from "@/components/ChatSupport";
 import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
 import { createClient } from "@/utils/supabase/client";
-import { useClientAuth } from "@/hooks/use-client-auth";
+import { completeLogout } from "@/lib/auth-utils";
 import { useFullscreen } from "@/hooks/use-fullscreen";
 import { subscriptionPlans } from "@/constants/subscriptionPlans";
+import { MARKETING_HOME_AS_GUEST } from "@/constants/marketingHome";
 import Link from "next/link";
 import Image from "next/image";
 import goldLogoHorizontal from "@/public/images/gold_logo_horizontal.svg";
@@ -245,6 +247,15 @@ function DashboardContent({
   const [isReviewModalOpen, setIsReviewModalOpen] = useState(false);
   const userRole =
     (user?.user_type as "advertiser" | "creator" | "admin") || null;
+
+  const accountTypeLabel =
+    userRole === "advertiser"
+      ? "Brand"
+      : userRole === "creator"
+        ? "Creator"
+        : userRole === "admin"
+          ? "Admin"
+          : null;
   const pathname = usePathname();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [profileSidebarOpen, setProfileSidebarOpen] = useState(false);
@@ -292,7 +303,7 @@ function DashboardContent({
   });
   // Track very small screens (≤ 400px) so we can force 85% zoom and hide the toggle
   const [isSmallScreen, setIsSmallScreen] = useState(false);
-  const { logout } = useClientAuth();
+  const [isSigningOut, setIsSigningOut] = useState(false);
   const {
     isFullscreen,
     isSupported: isFullscreenSupported,
@@ -301,12 +312,14 @@ function DashboardContent({
   } = useFullscreen();
 
   const handleSignOut = async () => {
+    setIsSigningOut(true);
     try {
-      await logout();
+      await completeLogout();
       console.log("Sign out successful");
-      router.push("/");
     } catch (error) {
       console.error("Error signing out:", error);
+    } finally {
+      setIsSigningOut(false);
     }
   };
 
@@ -962,7 +975,7 @@ function DashboardContent({
             <div className="relative flex items-center justify-center flex-1 z-10">
               {!sidebarCollapsed ? (
                 <Link
-                  href="/"
+                  href={MARKETING_HOME_AS_GUEST}
                   className="flex items-center group transition-all duration-300"
                 >
                   <div
@@ -989,7 +1002,7 @@ function DashboardContent({
                 </Link>
               ) : (
                 <Link
-                  href="/"
+                  href={MARKETING_HOME_AS_GUEST}
                   className="flex items-center justify-center group transition-all duration-300"
                 >
                   <div
@@ -1238,7 +1251,12 @@ function DashboardContent({
                         <div className="absolute inset-0 bg-[radial-gradient(circle_at_70%_50%,rgba(236,72,153,0.08),transparent)]"></div>
                         <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.01)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.01)_1px,transparent_1px)] bg-[size:32px_32px]"></div> */}
 
-                        <div>
+                        <Link
+                          href={MARKETING_HOME_AS_GUEST}
+                          onClick={() => setOpen(false)}
+                          className="inline-flex shrink-0 rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 focus-visible:ring-offset-2"
+                          aria-label="Go to home"
+                        >
                           <Image
                             src={
                               currentMode === "dark" ? goldLogoHorizontal : logo
@@ -1248,7 +1266,7 @@ function DashboardContent({
                             height={100}
                             className="h-[50px] mt-5 w-auto transition-all duration-300"
                           />
-                        </div>
+                        </Link>
                         <SheetDescription className="sr-only">
                           Dashboard navigation menu
                         </SheetDescription>
@@ -1944,7 +1962,12 @@ function DashboardContent({
                     <SheetTrigger asChild>
                       <Button
                         variant="ghost"
-                        className="h-8 px-3"
+                        className={cn(
+                          "h-auto min-h-9 py-1.5 px-2.5 sm:px-3 gap-0 rounded-xl border transition-colors",
+                          currentMode === "light"
+                            ? "border-transparent hover:border-violet-200 hover:bg-violet-50/90"
+                            : "border-transparent hover:border-violet-500/25 hover:bg-white/[0.06]",
+                        )}
                         // style={{
                         //   backgroundColor:
                         //     currentMode === "light"
@@ -1969,25 +1992,44 @@ function DashboardContent({
                         //   e.currentTarget.style.color = `rgba(${mode.text.muted}, 1)`;
                         // }}
                       >
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2.5">
                           {avatarSrc ? (
-                            <Avatar className="h-5 w-5">
+                            <Avatar className="h-9 w-9 ring-2 ring-violet-500/15 shrink-0">
                               <AvatarImage src={avatarSrc} alt={displayName} />
                               <AvatarFallback className="bg-gradient-to-br from-violet-600 to-purple-600 text-white text-xs font-bold">
                                 {avatarFallback}
                               </AvatarFallback>
                             </Avatar>
                           ) : (
-                            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-violet-600 to-purple-600 flex items-center justify-center text-white text-md font-bold">
+                            <div className="h-9 w-9 shrink-0 rounded-full bg-gradient-to-br from-violet-600 to-purple-600 flex items-center justify-center text-white text-sm font-bold ring-2 ring-violet-500/15">
                               {avatarFallback}
                             </div>
                           )}
-                          <span
-                            className="hidden sm:block text-md font-medium truncate"
-                            title={displayName}
-                          >
-                            {displayName}
-                          </span>
+                          <div className="hidden sm:flex flex-col items-start min-w-0 text-left">
+                            <span
+                              className={cn(
+                                "text-sm font-semibold leading-tight truncate max-w-[9rem] md:max-w-[11rem]",
+                                currentMode === "light"
+                                  ? "text-slate-900"
+                                  : "text-white",
+                              )}
+                              title={displayName}
+                            >
+                              {displayName}
+                            </span>
+                            {accountTypeLabel ? (
+                              <span
+                                className={cn(
+                                  "mt-1 inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide",
+                                  currentMode === "light"
+                                    ? "bg-violet-100 text-violet-800"
+                                    : "bg-violet-500/20 text-violet-200 ring-1 ring-violet-400/30",
+                                )}
+                              >
+                                {accountTypeLabel}
+                              </span>
+                            ) : null}
+                          </div>
                         </div>
                       </Button>
                     </SheetTrigger>
@@ -2081,25 +2123,20 @@ function DashboardContent({
                                 {displayName}
                               </SheetTitle>
 
-                              <div className="flex-1 min-w-0">
+                              <div className="flex-1 min-w-0 mt-1">
                                 <span
                                   className={cn(
-                                    "block text-start mt-[2px] text-sm font-medium",
+                                    "inline-flex items-center rounded-full px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide",
                                     currentMode === "light"
-                                      ? "text-gray-700"
-                                      : "text-white"
+                                      ? "bg-violet-100 text-violet-800 ring-1 ring-violet-200/80"
+                                      : "bg-violet-500/20 text-violet-100 ring-1 ring-violet-400/35",
                                   )}
-                                  // style={{
-                                  //   backgroundColor: `rgba(${theme.primary}, 0.2)`,
-                                  //   color: `rgba(${theme.primary}, 1)`,
-                                  //   borderColor: `rgba(${theme.primary}, 0.2)`,
-                                  // }}
                                 >
                                   {userRole === "advertiser"
-                                    ? "Advertiser"
+                                    ? "Brand"
                                     : userRole === "creator"
-                                    ? "Creator"
-                                    : "Admin"}
+                                      ? "Creator"
+                                      : "Admin"}
                                 </span>
                               </div>
                             </div>
@@ -2427,9 +2464,17 @@ function DashboardContent({
                           }}
                         >
                           <Button
+                            type="button"
                             onClick={handleSignOut}
+                            disabled={isSigningOut}
+                            aria-busy={isSigningOut}
+                            aria-label={
+                              isSigningOut
+                                ? "Signing out"
+                                : "Sign out, end your session"
+                            }
                             variant="ghost"
-                            className="w-full border-[#E50000] bg-[#A8000014] hover:bg-[#A8000014] text-black justify-start gap-3 p-3 h-auto border transition-all duration-300"
+                            className="w-full border-[#E50000] bg-[#A8000014] hover:bg-[#A8000014] text-black justify-start gap-3 p-3 h-auto border transition-all duration-300 disabled:opacity-90 disabled:pointer-events-none"
                             // style={{
                             //   backgroundColor: "rgba(244, 63, 94, 0.2)",
                             //   borderColor: "rgba(244, 63, 94, 0.2)",
@@ -2453,19 +2498,27 @@ function DashboardContent({
                             // }}
                           >
                             <div
-                              className="w-10 h-10 bg-[#FF323224] rounded-lg flex items-center justify-center"
+                              className="w-10 h-10 bg-[#FF323224] rounded-lg flex items-center justify-center shrink-0"
                               // style={{
                               //   backgroundColor: "rgba(244, 63, 94, 0.2)",
                               // }}
                             >
-                              <LogOut
-                                className="h-5 w-5"
-                                style={{
-                                  color: "rgb(244, 63, 94)",
-                                }}
-                              />
+                              {isSigningOut ? (
+                                <Loader2
+                                  className="h-5 w-5 animate-spin"
+                                  style={{ color: "rgb(244, 63, 94)" }}
+                                  aria-hidden
+                                />
+                              ) : (
+                                <LogOut
+                                  className="h-5 w-5"
+                                  style={{
+                                    color: "rgb(244, 63, 94)",
+                                  }}
+                                />
+                              )}
                             </div>
-                            <div className="flex-1 text-left">
+                            <div className="flex-1 text-left min-w-0">
                               <div
                                 className={cn(
                                   "text-md font-semibold",
@@ -2474,7 +2527,7 @@ function DashboardContent({
                                     : "text-white"
                                 )}
                               >
-                                Sign Out
+                                {isSigningOut ? "Signing out…" : "Sign Out"}
                               </div>
                               <div
                                 className={cn(
@@ -2488,7 +2541,9 @@ function DashboardContent({
                                 //   color: "rgba(244, 63, 94, 0.8)",
                                 // }}
                               >
-                                End your session
+                                {isSigningOut
+                                  ? "Please wait"
+                                  : "End your session"}
                               </div>
                             </div>
                           </Button>

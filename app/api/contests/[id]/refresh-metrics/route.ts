@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/utils/supabase/server";
+import { revalidateLeaderboardCache } from "@/lib/leaderboard-cache";
 import { createClient as createAdminSupabaseClient } from "@supabase/supabase-js";
 import {
   METRICS_REFRESH_COOLDOWN_MS_OPPORTUNITIES,
@@ -13,7 +14,10 @@ import {
   getMissingQueueEnv,
   enqueueMetricsRefreshJob,
 } from "@/lib/queue/metrics-refresh-queue";
-import { isInstagramInsightsQueueEnabled } from "@/lib/queue/instagram-insights-queue";
+import { ensureTwitterMetricsRunForEnqueue } from "@/lib/twitter-metrics-refresh-runs";
+import {
+  isInstagramInsightsQueueEnabled,
+} from "@/lib/queue/instagram-insights-queue";
 import {
   isQStashEnabled,
   triggerProcessMetricsQueue,
@@ -299,6 +303,55 @@ export async function POST(
         1,
         Math.ceil(participantCount / BATCH_SIZE),
       );
+
+      const runEnsure = await ensureTwitterMetricsRunForEnqueue(supabaseAdmin, {
+        contestId,
+        isRaid: isRaidCampaign,
+        totalBatches,
+        totalParticipants: participantCount,
+        creatorScopeId: null,
+      });
+      if (!runEnsure.ok) {
+        return NextResponse.json(
+          { error: runEnsure.error },
+          { status: 500 }
+        );
+      }
+      if (runEnsure.alreadyActive) {
+        const processUrl = `${baseUrl}/api/cron/process-metrics-queue`;
+        const doFetchActive = () =>
+          fetch(processUrl, {
+            method: "POST",
+            headers: {
+              ...(process.env.CRON_SECRET
+                ? { Authorization: `Bearer ${process.env.CRON_SECRET}` }
+                : {}),
+            },
+          }).catch((e) =>
+            console.warn(
+              "[refresh-metrics] Trigger process-metrics-queue (active run) failed:",
+              e
+            )
+          );
+        if (isQStashEnabled()) {
+          triggerProcessMetricsQueue(baseUrl).then((res) => {
+            if (res?.error) doFetchActive();
+          }).catch(() => doFetchActive());
+        } else {
+          doFetchActive();
+        }
+        return NextResponse.json({
+          success: true,
+          queued: true,
+          message: "Refresh already in progress.",
+          contestId,
+          runId: runEnsure.runId,
+          nextRefreshAvailable: new Date(
+            now.getTime() + cooldownMs
+          ).toISOString(),
+        });
+      }
+
       let job: Parameters<typeof enqueueMetricsRefreshJob>[0];
       if (isRaidCampaign) {
         job = {
@@ -306,9 +359,16 @@ export async function POST(
           isRaid: true,
           batchIndex: 0,
           totalBatches,
+          runId: runEnsure.runId,
         };
       } else {
-        job = { contestId, isRaid: false, batchIndex: 0, totalBatches };
+        job = {
+          contestId,
+          isRaid: false,
+          batchIndex: 0,
+          totalBatches,
+          runId: runEnsure.runId,
+        };
       }
 
       console.log(
@@ -321,6 +381,15 @@ export async function POST(
           `[metrics-refresh-queue] Enqueue failed for contest ${contestId}:`,
           enqueueResult.error,
         );
+        await supabaseAdmin
+          .from("twitter_metrics_refresh_runs")
+          .update({
+            status: "failed",
+            error_message: enqueueResult.error.slice(0, 2000),
+            finished_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", runEnsure.runId);
         return NextResponse.json(
           {
             error: `Failed to start metrics refresh: ${enqueueResult.error}`,
@@ -366,6 +435,8 @@ export async function POST(
         doFetch();
       }
 
+      // Leaderboard cache is revalidated when twitter-refresh-tweets / fetch-raid-engagements
+      // finish (including after queued batches), not when the job is only enqueued.
       return NextResponse.json({
         success: true,
         queued: true,
@@ -373,6 +444,7 @@ export async function POST(
         contestId,
         contestTitle: contest.title,
         platform: contest.platform,
+        runId: runEnsure.runId,
         nextRefreshAvailable: new Date(
           now.getTime() + cooldownMs,
         ).toISOString(),
@@ -459,6 +531,7 @@ export async function POST(
       `[refresh-metrics] contestId=${contestId} sync refresh completed in ${syncElapsedMs}ms`,
     );
 
+    revalidateLeaderboardCache(contestId);
     return NextResponse.json({
       success: true,
       message: `${cronName} refreshed successfully`,

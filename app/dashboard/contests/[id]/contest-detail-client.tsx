@@ -85,12 +85,17 @@ import TwitterRejectionModal from "@/components/TwitterRejectionModal";
 import PaymentModal from "@/components/PaymentModal";
 import ManualPointsModal from "@/components/ManualPointsModal";
 import { CreatorSubmissionsModal } from "@/components/CreatorSubmissionsModal";
+import { InstagramCreatorAnalyticsModal } from "@/components/contest/InstagramCreatorAnalyticsModal";
 import { BudgetProgress } from "@/components/BudgetProgress";
 import { YouTubeAnalyticsPanel } from "@/components/youtube/YouTubeAnalyticsPanel";
 import { YT_ANALYTICS_DEFAULT_WINDOW_DAYS } from "@/lib/youtube-constants";
 import { PaginationControls } from "@/components/ui/pagination-controls";
 import { TwitterFeed } from "@/components/twitter-feed";
 import { getTwitterSubmissionActionKind } from "@/lib/twitter/analytics-twitter-submission-kind";
+import {
+  twitterSubmissionIsCampaignEligible,
+  twitterSubmissionIsDeletedFromTwitter,
+} from "@/lib/twitter/twitter-tweet-visibility";
 import {
   Tooltip,
   TooltipContent,
@@ -137,6 +142,7 @@ import {
   BarChart2,
   BarChart3,
   TrendingUp,
+  Zap,
   CheckCheck,
   Gift,
   Tag,
@@ -295,7 +301,8 @@ interface Submission {
   manual_points_adjustment?: number; // Manual points adjustment for Twitter tweets
   manual_points_reason?: string | null; // Reason for manual points adjustment
   tweet_id?: string; // Twitter tweet ID
-  filter_status?: string | null; // Eligibility filter status: 'pending', 'eligible', 'filtered_out', 'deleted'
+  deleted_at?: string | null;
+  excluded_by_submission_cap?: boolean;
   // Nested creator object for compatibility
   creator?: {
     id: string | null;
@@ -327,6 +334,21 @@ type InstagramInsightsRefreshRunSummary = {
   started_at: string;
   last_batch_completed_at: string | null;
   finished_at: string | null;
+};
+
+type TwitterMetricsRefreshRunSummary = {
+  id: string;
+  status: "pending" | "running" | "completed" | "failed" | "cancelled";
+  is_raid: boolean;
+  total_batches: number;
+  current_batch_index: number;
+  total_participants: number;
+  processed_participants: number;
+  tweets_upserted: number;
+  started_at: string;
+  last_batch_completed_at: string | null;
+  finished_at: string | null;
+  error_message?: string | null;
 };
 
 interface ContestDetailClientProps {
@@ -375,6 +397,278 @@ function getTwitterSubmissionPointsForRanking(submission: any): number {
     return pts;
   }
   return base + manual;
+}
+
+/** Compact submission status filters for Twitter (used below table controls; top row hidden for Twitter). */
+function TwitterContestSubmissionStatusTabs({
+  activeStatusTab,
+  onValueChange,
+  isDark,
+  currentSubmissions,
+  getStatus,
+}: {
+  activeStatusTab: string;
+  onValueChange: (value: string) => void;
+  isDark: boolean;
+  currentSubmissions: any[];
+  getStatus: (s: any) => string;
+}) {
+  return (
+    <div className="mb-4 px-4">
+      <Tabs
+        value={activeStatusTab}
+        onValueChange={onValueChange}
+        className="w-full"
+      >
+        <TabsList className="flex w-full flex-wrap gap-2 h-auto p-1">
+          <TabsTrigger
+            value="all"
+            className={cn(
+              "flex-1 min-w-[100px] gap-2 text-sm",
+              isDark
+                ? "text-white border border-gray-500"
+                : "data-[state=inactive]:bg-gray-100",
+            )}
+          >
+            <Users className="h-3.5 w-3.5 shrink-0" />
+            All
+            <Badge
+              variant="secondary"
+              className={cn(
+                "ml-1 px-1.5 py-0.5 text-xs h-5",
+                isDark
+                  ? "text-white bg-[#FFFFFF36]"
+                  : "text-[#7F39EC] bg-purple-200",
+              )}
+            >
+              {currentSubmissions.length}
+            </Badge>
+          </TabsTrigger>
+          <TabsTrigger
+            value="not_rejected"
+            className={cn(
+              "flex-1 min-w-[100px] gap-2 text-sm",
+              isDark
+                ? "text-white border border-gray-500"
+                : "data-[state=inactive]:bg-gray-100",
+            )}
+          >
+            <CheckCircle className="h-3.5 w-3.5 shrink-0" />
+            Not Rejected
+            <Badge
+              variant="secondary"
+              className={cn(
+                "ml-1 px-1.5 py-0.5 text-xs h-5",
+                isDark
+                  ? "text-white bg-[#FFFFFF36]"
+                  : "text-[#7F39EC] bg-purple-200",
+              )}
+            >
+              {
+                currentSubmissions.filter((s) => getStatus(s) !== "rejected")
+                  .length
+              }
+            </Badge>
+          </TabsTrigger>
+          <TabsTrigger
+            value="verified_or_paid"
+            className={cn(
+              "flex-1 min-w-[100px] gap-2 text-sm",
+              isDark
+                ? "text-white border border-gray-500"
+                : "data-[state=inactive]:bg-gray-100",
+            )}
+          >
+            <CheckCircle2 className="h-3.5 w-3.5 shrink-0" />
+            <Wallet className="h-3.5 w-3.5 shrink-0" />
+            Verified + Paid
+            <Badge
+              variant="secondary"
+              className={cn(
+                "ml-1 px-1.5 py-0.5 text-xs h-5",
+                isDark
+                  ? "text-white bg-[#FFFFFF36]"
+                  : "text-[#7F39EC] bg-purple-200",
+              )}
+            >
+              {
+                currentSubmissions.filter((s) => {
+                  const st = getStatus(s);
+                  return st === "verified" || st === "paid";
+                }).length
+              }
+            </Badge>
+          </TabsTrigger>
+          <TabsTrigger
+            value="pending"
+            className={cn(
+              "flex-1 min-w-[100px] gap-2 text-sm",
+              isDark
+                ? "text-white border border-gray-500"
+                : "data-[state=inactive]:bg-gray-100",
+            )}
+          >
+            <Clock className="h-3.5 w-3.5 shrink-0" />
+            Pending
+            <Badge
+              variant="secondary"
+              className={cn(
+                "ml-1 px-1.5 py-0.5 text-xs h-5",
+                isDark
+                  ? "text-white bg-[#FFFFFF36]"
+                  : "text-[#7F39EC] bg-purple-200",
+              )}
+            >
+              {
+                currentSubmissions.filter((s) => getStatus(s) === "pending")
+                  .length
+              }
+            </Badge>
+          </TabsTrigger>
+          <TabsTrigger
+            value="rejected"
+            className={cn(
+              "flex-1 min-w-[100px] gap-2 text-sm",
+              isDark
+                ? "text-white border border-gray-500"
+                : "data-[state=inactive]:bg-gray-100",
+            )}
+          >
+            <XCircle className="h-3.5 w-3.5 shrink-0" />
+            Rejected
+            <Badge
+              variant="secondary"
+              className={cn(
+                "ml-1 px-1.5 py-0.5 text-xs h-5",
+                isDark
+                  ? "text-white bg-[#FFFFFF36]"
+                  : "text-red-600 bg-red-200",
+              )}
+            >
+              {
+                currentSubmissions.filter((s) => getStatus(s) === "rejected")
+                  .length
+              }
+            </Badge>
+          </TabsTrigger>
+          <TabsTrigger
+            value="verified"
+            className={cn(
+              "flex-1 min-w-[100px] gap-2 text-sm",
+              isDark
+                ? "text-white border border-gray-500"
+                : "data-[state=inactive]:bg-gray-100",
+            )}
+          >
+            <CheckCircle2 className="h-3.5 w-3.5 shrink-0" />
+            Verified
+            <Badge
+              variant="secondary"
+              className={cn(
+                "ml-1 px-1.5 py-0.5 text-xs h-5",
+                isDark
+                  ? "text-white bg-[#FFFFFF36]"
+                  : "text-[#7F39EC] bg-purple-200",
+              )}
+            >
+              {
+                currentSubmissions.filter((s) => getStatus(s) === "verified")
+                  .length
+              }
+            </Badge>
+          </TabsTrigger>
+          <TabsTrigger
+            value="paid"
+            className={cn(
+              "flex-1 min-w-[100px] gap-2 text-sm",
+              isDark
+                ? "text-white border border-gray-500"
+                : "data-[state=inactive]:bg-gray-100",
+            )}
+          >
+            <Wallet className="h-3.5 w-3.5 shrink-0" />
+            Paid
+            <Badge
+              variant="secondary"
+              className={cn(
+                "ml-1 px-1.5 py-0.5 text-xs h-5",
+                isDark
+                  ? "text-white bg-[#FFFFFF36]"
+                  : "text-[#7F39EC] bg-purple-200",
+              )}
+            >
+              {currentSubmissions.filter((s) => getStatus(s) === "paid").length}
+            </Badge>
+          </TabsTrigger>
+        </TabsList>
+      </Tabs>
+    </div>
+  );
+}
+
+/** Per-creator tweet status breakdown (creator-wise), same pattern as Instagram/YouTube stacked pills. */
+function TwitterCreatorRowStatusPills({
+  submissions,
+  getStatus,
+}: {
+  submissions: any[];
+  getStatus: (s: any) => string;
+}) {
+  const subs = submissions || [];
+  const st = (s: any) => getStatus(s);
+  const verified = subs.filter((s) => st(s) === "verified").length;
+  const paid = subs.filter((s) => st(s) === "paid").length;
+  const rejected = subs.filter((s) => st(s) === "rejected").length;
+  const pending = subs.filter((s) => st(s) === "pending").length;
+
+  type Chip = { label: string; n: number; className: string };
+  const ordered: Chip[] = [
+    {
+      label: "Verified",
+      n: verified,
+      className:
+        "bg-green-100 text-green-700 border border-green-200 dark:bg-green-950/40 dark:text-green-200 dark:border-green-800",
+    },
+    {
+      label: "Paid",
+      n: paid,
+      className:
+        "bg-blue-100 text-blue-700 border border-blue-200 dark:bg-blue-950/40 dark:text-blue-200 dark:border-blue-800",
+    },
+    {
+      label: "Rejected",
+      n: rejected,
+      className:
+        "bg-red-100 text-red-700 border border-red-200 dark:bg-red-950/40 dark:text-red-200 dark:border-red-800",
+    },
+    {
+      label: "Pending",
+      n: pending,
+      className:
+        "bg-amber-100 text-amber-800 border border-amber-200 dark:bg-amber-950/40 dark:text-amber-200 dark:border-amber-800",
+    },
+  ];
+  const chips = ordered.filter((c) => c.n > 0);
+
+  return (
+    <div className="flex flex-col flex-wrap gap-1.5 justify-center items-center max-w-[180px] mx-auto">
+      {chips.length === 0 ? (
+        <span className="text-[11px] text-muted-foreground">—</span>
+      ) : (
+        chips.map((c) => (
+          <Badge
+            key={c.label}
+            className={cn(
+              "text-[11px] whitespace-nowrap font-medium px-2 py-0.5",
+              c.className,
+            )}
+          >
+            {c.label}: {c.n}
+          </Badge>
+        ))
+      )}
+    </div>
+  );
 }
 
 function formatDurationSeconds(sec: number): string {
@@ -459,9 +753,15 @@ export default function ContestDetailClient({
     useState<InstagramInsightsRefreshRunSummary | null>(null);
   const [showInstagramRunPopup, setShowInstagramRunPopup] = useState(false);
   const [instagramRunCompleted, setInstagramRunCompleted] = useState(false);
+  const [twitterRun, setTwitterRun] =
+    useState<TwitterMetricsRefreshRunSummary | null>(null);
+  const [showTwitterRunPopup, setShowTwitterRunPopup] = useState(false);
+  const [twitterRunCompleted, setTwitterRunCompleted] = useState(false);
   const [refreshElapsedSeconds, setRefreshElapsedSeconds] = useState<
     number | null
   >(null);
+  const [twitterRefreshElapsedSeconds, setTwitterRefreshElapsedSeconds] =
+    useState<number | null>(null);
 
   // Status update states
   const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
@@ -561,12 +861,39 @@ export default function ContestDetailClient({
     setRefreshElapsedSeconds(
       Math.max(0, Math.floor((finished - started) / 1000)),
     );
+    return () => { };
+  }, [instagramRun?.id, instagramRun?.started_at, instagramRun?.status, instagramRun?.finished_at]);
+
+  useEffect(() => {
+    if (!twitterRun?.started_at) {
+      setTwitterRefreshElapsedSeconds(null);
+      return;
+    }
+    const started = new Date(twitterRun.started_at).getTime();
+    const isRunning = twitterRun.status === "running";
+
+    if (isRunning) {
+      const tick = () =>
+        setTwitterRefreshElapsedSeconds(
+          Math.max(0, Math.floor((Date.now() - started) / 1000)),
+        );
+      tick();
+      const interval = setInterval(tick, 1000);
+      return () => clearInterval(interval);
+    }
+
+    const finished = twitterRun.finished_at
+      ? new Date(twitterRun.finished_at).getTime()
+      : Date.now();
+    setTwitterRefreshElapsedSeconds(
+      Math.max(0, Math.floor((finished - started) / 1000)),
+    );
     return () => {};
   }, [
-    instagramRun?.id,
-    instagramRun?.started_at,
-    instagramRun?.status,
-    instagramRun?.finished_at,
+    twitterRun?.id,
+    twitterRun?.started_at,
+    twitterRun?.status,
+    twitterRun?.finished_at,
   ]);
 
   // Refresh metrics state
@@ -736,19 +1063,45 @@ export default function ContestDetailClient({
     "all" | "eligible" | "not_eligible"
   >("all");
 
-  // Participant filter for Twitter contests (creator-wise view)
-  const [participantFilter, setParticipantFilter] = useState<
-    "all" | "rejected" | "available"
-  >("all");
-  const [sortOption, setSortOption] = useState<
-    "views_desc" | "views_asc" | "time_desc" | "time_asc"
-  >("views_desc");
+  type SortOption =
+    | "views_desc"
+    | "views_asc"
+    | "time_desc"
+    | "time_asc"
+    | "points_desc"
+    | "points_asc"
+    | "impressions_desc"
+    | "impressions_asc"
+    | "submissions_desc"
+    | "submissions_asc";
+  const [sortOption, setSortOption] = useState<SortOption>("views_desc");
+
+  const isTwitterTextImageContest =
+    (currentContest?.platform?.toLowerCase() === "twitter" ||
+      currentContest?.platform?.toLowerCase() === "x") &&
+    currentContest?.contest_format === "text_image";
+
+  // Default sort: points for Twitter/X text campaigns, views for other platforms
+  useEffect(() => {
+    if (!currentContest?.id) return;
+    setSortOption(isTwitterTextImageContest ? "points_desc" : "views_desc");
+  }, [currentContest?.id, isTwitterTextImageContest]);
 
   // Creator-wise view state
   const [viewMode, setViewMode] = useState<"normal" | "creator-wise">("normal");
   const [selectedCreatorForModal, setSelectedCreatorForModal] = useState<
     string | null
   >(null);
+  const [igAnalyticsOpen, setIgAnalyticsOpen] = useState(false);
+  const [igAnalyticsCreatorId, setIgAnalyticsCreatorId] = useState<
+    string | null
+  >(null);
+  const [igAnalyticsCreatorLabel, setIgAnalyticsCreatorLabel] = useState("");
+  const [igAnalyticsLoadingCreatorId, setIgAnalyticsLoadingCreatorId] =
+    useState<string | null>(null);
+  const clearIgAnalyticsButtonLoading = useCallback(() => {
+    setIgAnalyticsLoadingCreatorId(null);
+  }, []);
   // YouTube table: which columns are visible (admin/brand can customize)
   const [ytVisibleColumns, setYtVisibleColumns] = useState<string[]>(
     YT_COLUMN_IDS as unknown as string[],
@@ -845,13 +1198,11 @@ export default function ContestDetailClient({
 
     // Apply eligibility filter for Twitter tweets
     if (isTwitterTweet && activeEligibilityTab !== "all") {
-      const filterStatus = (submission as any).filter_status;
+      const elOk = twitterSubmissionIsCampaignEligible(submission as any);
       if (activeEligibilityTab === "eligible") {
-        // Show only eligible tweets
-        if (filterStatus !== "eligible") return false;
+        if (!elOk) return false;
       } else if (activeEligibilityTab === "not_eligible") {
-        // Show only not eligible tweets (deleted, filtered_out, pending, etc.)
-        if (filterStatus === "eligible") return false;
+        if (elOk) return false;
       }
     }
 
@@ -860,6 +1211,44 @@ export default function ContestDetailClient({
 
   // Sort filtered submissions
   const sortedSubmissions = [...filteredSubmissions].sort((a, b) => {
+    if (isTwitterTextImageContest) {
+      const twImpressions = (s: Submission) =>
+        Number((s as any).other_stats?.impressions ?? 0);
+      switch (sortOption) {
+        case "points_asc":
+          return (
+            getTwitterSubmissionPointsForRanking(a) -
+            getTwitterSubmissionPointsForRanking(b)
+          );
+        case "points_desc":
+          return (
+            getTwitterSubmissionPointsForRanking(b) -
+            getTwitterSubmissionPointsForRanking(a)
+          );
+        case "impressions_asc":
+          return twImpressions(a) - twImpressions(b);
+        case "impressions_desc":
+          return twImpressions(b) - twImpressions(a);
+        case "submissions_asc":
+        case "submissions_desc":
+          return 0;
+        case "time_desc": {
+          const at = a.created_at ? new Date(a.created_at).getTime() : 0;
+          const bt = b.created_at ? new Date(b.created_at).getTime() : 0;
+          return bt - at;
+        }
+        case "time_asc": {
+          const at = a.created_at ? new Date(a.created_at).getTime() : 0;
+          const bt = b.created_at ? new Date(b.created_at).getTime() : 0;
+          return at - bt;
+        }
+        case "views_asc":
+          return twImpressions(a) - twImpressions(b);
+        case "views_desc":
+        default:
+          return twImpressions(b) - twImpressions(a);
+      }
+    }
     switch (sortOption) {
       case "views_asc":
         return (a.views || 0) - (b.views || 0);
@@ -1951,22 +2340,41 @@ export default function ContestDetailClient({
   const sortedCreatorGroups = useMemo(() => {
     if (!groupSubmissionsByCreator) return [];
 
-    const isTwitterLeaderboard =
-      (currentContest?.platform?.toLowerCase() === "twitter" ||
-        currentContest?.platform?.toLowerCase() === "x") &&
-      currentContest?.contest_format === "text_image" &&
-      currentContest?.contest_type === "leaderboard";
-
-    if (isTwitterLeaderboard) {
-      // Sort by aggregated tweet points (descending), same signal as prize ranking
+    // Twitter/X text-image: points, impressions, submitted, submissions
+    if (isTwitterTextImageContest) {
       return [...groupSubmissionsByCreator].sort((a: any, b: any) => {
-        const totalPointsA = a.metrics?.points || 0;
-        const totalPointsB = b.metrics?.points || 0;
-        return totalPointsB - totalPointsA; // Descending order
+        const pts = (g: any) => Number(g.metrics?.points ?? 0);
+        const impr = (g: any) => Number(g.metrics?.impressions ?? 0);
+        const subs = (g: any) => Number(g.totalCount ?? 0);
+        const t = (g: any) =>
+          g.firstSubmittedAt ? new Date(g.firstSubmittedAt).getTime() : 0;
+        switch (sortOption) {
+          case "points_asc":
+            return pts(a) - pts(b);
+          case "points_desc":
+            return pts(b) - pts(a);
+          case "impressions_asc":
+            return impr(a) - impr(b);
+          case "impressions_desc":
+            return impr(b) - impr(a);
+          case "submissions_asc":
+            return subs(a) - subs(b);
+          case "submissions_desc":
+            return subs(b) - subs(a);
+          case "time_desc":
+            return t(b) - t(a);
+          case "time_asc":
+            return t(a) - t(b);
+          case "views_asc":
+            return impr(a) - impr(b);
+          case "views_desc":
+            return impr(b) - impr(a);
+          default:
+            return pts(b) - pts(a);
+        }
       });
     }
 
-    // For other contests, sort creator groups based on the current sort option
     const groups = [...groupSubmissionsByCreator] as any[];
 
     return groups.sort((a, b) => {
@@ -1996,7 +2404,7 @@ export default function ContestDetailClient({
           return (b.metrics.views || 0) - (a.metrics.views || 0);
       }
     });
-  }, [groupSubmissionsByCreator, currentContest, sortOption]);
+  }, [groupSubmissionsByCreator, isTwitterTextImageContest, sortOption]);
 
   // Check if we should show rejection reason column
   const showRejectionReasonColumn = useMemo(() => {
@@ -2040,8 +2448,8 @@ export default function ContestDetailClient({
         );
 
         // Check if creator has at least one eligible tweet
-        const hasEligibleTweet = creatorAllSubmissions.some(
-          (s: any) => (s as any).filter_status === "eligible",
+        const hasEligibleTweet = creatorAllSubmissions.some((s: any) =>
+          twitterSubmissionIsCampaignEligible(s),
         );
 
         if (activeEligibilityTab === "eligible") {
@@ -2053,27 +2461,8 @@ export default function ContestDetailClient({
       });
     }
 
-    // Apply participant filter for Twitter contests
-    if (isTwitterContest && participantFilter !== "all") {
-      filtered = filtered.filter((group: any) => {
-        const moderationStatus = group.creator_moderation_status || "pending";
-        if (participantFilter === "rejected") {
-          return moderationStatus === "rejected";
-        } else if (participantFilter === "available") {
-          return moderationStatus !== "rejected";
-        }
-        return true;
-      });
-    }
-
     return filtered;
-  }, [
-    sortedCreatorGroups,
-    participantFilter,
-    activeEligibilityTab,
-    currentContest,
-    currentSubmissions,
-  ]);
+  }, [sortedCreatorGroups, activeEligibilityTab, currentContest, currentSubmissions]);
 
   // Pagination calculations for creator-wise view
   const creatorWiseTotalPages = filteredCreatorGroups
@@ -2092,7 +2481,7 @@ export default function ContestDetailClient({
   useEffect(() => {
     setCurrentPage(1);
     setCreatorWisePage(1);
-  }, [activeStatusTab, viewMode, sortOption, participantFilter]);
+  }, [activeStatusTab, viewMode, sortOption]);
 
   // Aggregate financial totals for the currently selected status tab (from filtered creator groups)
   const statusFilterFinancialTotals = useMemo(() => {
@@ -2638,7 +3027,7 @@ export default function ContestDetailClient({
             title: "Bonus paid",
             description:
               "Flat fee bonus credited to creator. Main reward was not paid.",
-            variant: "default",
+            variant: "payment",
           });
           if (!options?.skipReload)
             setTimeout(() => window.location.reload(), 1000);
@@ -2747,7 +3136,7 @@ export default function ContestDetailClient({
                 newStatus === "mark_both_paid"
                   ? "Expected reward and bonus credited to creator."
                   : "Tweet payment processed. Reward granted for this tweet added to withdrawal.",
-              variant: "default",
+              variant: "payment",
             });
             if (!options?.skipReload)
               setTimeout(() => window.location.reload(), 1000);
@@ -2785,7 +3174,7 @@ export default function ContestDetailClient({
                 newStatus === "mark_both_paid"
                   ? "Expected reward and bonus credited to creator."
                   : "Payment processed successfully.",
-              variant: "default",
+              variant: "payment",
             });
             if (!options?.skipReload)
               setTimeout(() => window.location.reload(), 1000);
@@ -2896,7 +3285,7 @@ export default function ContestDetailClient({
               title: "✅ Submission Verified",
               description:
                 "Content has been verified and is now eligible for rewards",
-              variant: "default" as const,
+              variant: "success" as const,
             };
           case "rejected":
             return {
@@ -2910,25 +3299,25 @@ export default function ContestDetailClient({
             return {
               title: "⏳ Status Reset to Pending",
               description: "Submission is back in pending review",
-              variant: "default" as const,
+              variant: "pending" as const,
             };
           case "paid":
             return {
               title: "💰 Payment Confirmed",
               description: "Payment has been processed and confirmed",
-              variant: "default" as const,
+              variant: "payment" as const,
             };
           case "mark_bonus_paid":
             return {
               title: "🎁 Bonus Paid",
               description: "Flat fee bonus marked as paid",
-              variant: "default" as const,
+              variant: "payment" as const,
             };
           case "mark_both_paid":
             return {
               title: "💰 Payment & Bonus Paid",
               description: "Standard reward and bonus paid together",
-              variant: "default" as const,
+              variant: "payment" as const,
             };
           default:
             return {
@@ -3165,18 +3554,15 @@ export default function ContestDetailClient({
           variant: "destructive",
         });
       } else {
-        const actionText =
-          action === "verified" || action === "approve"
-            ? "Verified"
-            : action === "rejected" || action === "reject"
-              ? "Rejected"
-              : action === "pending"
-                ? "Set to Pending"
-                : "Updated";
+        const actionText = action === "verified" || action === "approve" ? "Verified" : action === "rejected" || action === "reject" ? "Rejected" : action === "pending" ? "Set to Pending" : "Updated";
         toast({
-          title: "✅Success",
+          title: isRejectBulk
+            ? "Bulk rejection complete"
+            : isPendingBulk
+              ? "Bulk update complete"
+              : "✅Success",
           description: `Successfully ${actionText} ${totalProcessed} submissions.`,
-          variant: "default",
+          variant: bulkVariant,
         });
       }
 
@@ -3330,7 +3716,7 @@ export default function ContestDetailClient({
       toast({
         title: "Success",
         description: "Creator payment processed successfully",
-        variant: "default",
+        variant: "payment",
       });
 
       // Refresh page after a delay to show updated payment status
@@ -3399,7 +3785,7 @@ export default function ContestDetailClient({
         title: "Success",
         description:
           "Expected reward and flat bonus credited for this creator based on their points.",
-        variant: "default",
+        variant: "payment",
       });
       setTimeout(() => window.location.reload(), 1000);
     } catch (error: any) {
@@ -3544,6 +3930,7 @@ export default function ContestDetailClient({
       toast({
         title: "Downloading...",
         description: "Please wait while downloading.",
+        variant: "pending",
       });
 
       const apiUrl = `/api/admin/download-reel?submissionId=${submissionId}`;
@@ -3658,6 +4045,7 @@ export default function ContestDetailClient({
       toast({
         title: "Download Started",
         description: "Your video download has started.",
+        variant: "success",
       });
       setDownloadingSubmissionId(null);
     } catch (error: any) {
@@ -3734,26 +4122,31 @@ export default function ContestDetailClient({
             return {
               title: "📋 Status: Pending Review",
               description: "Contest is now pending review phase",
+              variant: "pending" as const,
             };
           case "in_review":
             return {
               title: "🔍 Status: In Review",
               description: "Contest is currently under review",
+              variant: "pending" as const,
             };
           case "verification_complete":
             return {
               title: "✅ Status: Verification Complete",
               description: "All submissions have been verified",
+              variant: "success" as const,
             };
           case "payouts_processed":
             return {
               title: "💰 Status: Payouts Processed",
               description: "All payments have been processed",
+              variant: "payment" as const,
             };
           default:
             return {
               title: "Status Updated",
               description: result.message,
+              variant: "default" as const,
             };
         }
       };
@@ -3856,9 +4249,8 @@ export default function ContestDetailClient({
     if (!cooldownInfo.canRefresh) {
       toast({
         title: "Please Wait",
-        description: `You can refresh again in ${
-          cooldownInfo.remainingMinutes
-        } minute${cooldownInfo.remainingMinutes !== 1 ? "s" : ""}`,
+        description: `You can refresh again in ${cooldownInfo.remainingMinutes
+          } minute${cooldownInfo.remainingMinutes !== 1 ? "s" : ""}`,
         variant: "destructive",
       });
       return;
@@ -3894,13 +4286,18 @@ export default function ContestDetailClient({
       }
 
       if (result?.queued) {
-        // Poll until refresh completes; for Instagram use run status, for Twitter use last-metrics-updated
+        // Poll until refresh completes; Instagram/Twitter admin: run status; else last-metrics-updated
         const isInstagram =
           currentContest.platform?.toLowerCase() === "instagram";
+        const platformLower = currentContest.platform?.toLowerCase() ?? "";
+        const isTwitterPlatform =
+          platformLower === "twitter" || platformLower === "x";
         const isInstagramAdmin = isInstagram && isAdminView;
+        const isTwitterAdmin = isTwitterPlatform && isAdminView;
         const previousUpdated = currentContest.last_metrics_updated ?? null;
         const pollIntervalMs = 3000;
-        const pollMaxMs = 120000; // 2 min
+        const pollMaxMs =
+          isInstagramAdmin || isTwitterAdmin ? 600000 : 120000;
         const startedAt = Date.now();
         const pollTimer = setInterval(async () => {
           if (Date.now() - startedAt > pollMaxMs) {
@@ -3937,11 +4334,60 @@ export default function ContestDetailClient({
                       title: "Instagram insights refresh completed",
                       description: `Reviewed ${run.reviewed_count ?? 0}, Processed ${run.processed_submissions ?? 0}. Success: ${run.success_count ?? 0}, Permanent failure: ${run.permanent_failure_count ?? 0}, Temporary failure: ${run.temporary_failure_count ?? 0}, Skipped: ${run.skipped_recent_count ?? 0}.`,
                       duration: 10000,
+                      variant: "success",
                     });
                   }
                   // Keep popup visible for 10 seconds, then hide and reload
                   setTimeout(() => {
                     setShowInstagramRunPopup(false);
+                    window.location.reload();
+                  }, 10000);
+                } else {
+                  window.location.reload();
+                }
+                return;
+              }
+            } else if (isTwitterAdmin) {
+              const res = await fetch(
+                `/api/contests/${contestId}/twitter-metrics-refresh/status`,
+              );
+              if (!res.ok) return;
+              const data = await res.json();
+              const run = data?.run as TwitterMetricsRefreshRunSummary | null;
+              if (run) {
+                setTwitterRun(run);
+                setShowTwitterRunPopup(true);
+              }
+              const status = run?.status;
+              if (
+                status === "completed" ||
+                status === "failed" ||
+                status === "cancelled"
+              ) {
+                clearInterval(pollTimer);
+                setIsRefreshingMetrics(false);
+                if (run) {
+                  setTwitterRun(run);
+                  setTwitterRunCompleted(true);
+                  if (status === "completed") {
+                    toast({
+                      title: "Twitter metrics refresh completed",
+                      description: `${run.is_raid ? "Raid" : "Awareness"} · Participants ${run.processed_participants ?? 0}/${run.total_participants ?? 0} · Rows touched ${run.tweets_upserted ?? 0}`,
+                      duration: 10000,
+                      variant: "success",
+                    });
+                  } else if (status === "failed") {
+                    toast({
+                      title: "Twitter metrics refresh failed",
+                      description:
+                        run.error_message?.slice(0, 500) ??
+                        "The refresh run ended with an error.",
+                      duration: 12000,
+                      variant: "destructive",
+                    });
+                  }
+                  setTimeout(() => {
+                    setShowTwitterRunPopup(false);
                     window.location.reload();
                   }, 10000);
                 } else {
@@ -3970,9 +4416,9 @@ export default function ContestDetailClient({
       } else {
         toast({
           title: "Success! 🎉",
-          description: `${
-            result?.message ?? "Budget and leaderboard updated!"
-          }`,
+          description: `${result?.message ?? "Budget and leaderboard updated!"
+            }`,
+          variant: "success",
         });
         if (currentContest.platform?.toLowerCase() === "twitter") {
           fetchTwitterMetrics();
@@ -4049,6 +4495,7 @@ export default function ContestDetailClient({
         title: "Analytics Updated",
         description:
           result.message || `Updated ${result.updated} submission(s)`,
+        variant: "success",
       });
 
       if (result.reauth_needed?.length) {
@@ -4109,6 +4556,7 @@ export default function ContestDetailClient({
         title: "All metrics updated",
         description:
           data2?.message || "Basic and detailed analytics refreshed.",
+        variant: "success",
       });
       setTimeout(() => window.location.reload(), 1200);
     } catch (e: any) {
@@ -4614,17 +5062,31 @@ export default function ContestDetailClient({
         ),
       );
 
+      const tweetModerationVariant =
+        action === "approve"
+          ? "success"
+          : action === "reject"
+            ? "destructive"
+            : action === "paid"
+              ? "payment"
+              : "pending";
+      const tweetModerationTitle =
+        action === "reject"
+          ? "Tweet rejected"
+          : action === "pending"
+            ? "Tweet set to pending"
+            : "Success";
       toast({
-        title: "Success",
-        description: `Tweet ${
-          action === "approve"
-            ? "approved"
-            : action === "reject"
-              ? "rejected"
-              : action === "paid"
-                ? "marked as paid"
-                : "set to pending"
-        } successfully`,
+        title: tweetModerationTitle,
+        description: `Tweet ${action === "approve"
+          ? "approved"
+          : action === "reject"
+            ? "rejected"
+            : action === "paid"
+              ? "marked as paid"
+              : "set to pending"
+          } successfully`,
+        variant: tweetModerationVariant,
       });
 
       // Clear contest cache and refresh contest list to update budget tracker
@@ -4770,9 +5232,8 @@ export default function ContestDetailClient({
         }
         toast({
           title: "Success",
-          description: `Creator ${
-            action === "approve" ? "approved" : "rejected"
-          } and payment reversed successfully`,
+          description: `Creator ${action === "approve" ? "approved" : "rejected"
+            } and payment reversed successfully`,
         });
       } else {
         const response = await fetch(
@@ -4798,9 +5259,8 @@ export default function ContestDetailClient({
 
         toast({
           title: "Success",
-          description: `Creator ${
-            action === "approve" ? "approved" : "rejected"
-          } and payment reversed successfully`,
+          description: `Creator ${action === "approve" ? "approved" : "rejected"
+            } and payment reversed successfully`,
         });
       }
 
@@ -4894,9 +5354,8 @@ export default function ContestDetailClient({
           }
           toast({
             title: "Success",
-            description: `Creator @${
-              pendingTwitterRejection.creatorUsername || "creator"
-            } and all tweets have been rejected (payments reversed where applicable).`,
+            description: `Creator @${pendingTwitterRejection.creatorUsername || "creator"
+              } and all tweets have been rejected (payments reversed where applicable).`,
           });
         } else {
           // Leaderboard: use creator-level moderation API
@@ -4920,9 +5379,8 @@ export default function ContestDetailClient({
 
           toast({
             title: "Success",
-            description: `Creator @${
-              pendingTwitterRejection.creatorUsername || "creator"
-            } has been rejected`,
+            description: `Creator @${pendingTwitterRejection.creatorUsername || "creator"
+              } has been rejected`,
           });
         }
 
@@ -5006,6 +5464,7 @@ export default function ContestDetailClient({
       toast({
         title: "Success",
         description: `Points adjusted successfully`,
+        variant: "success",
       });
 
       if (
@@ -5080,64 +5539,67 @@ export default function ContestDetailClient({
 
   return (
     <div>
-      <div className="flex flex-col px-1 lg:flex-row lg:justify-between lg:items-center gap-4 mb-8">
-        <div className="flex flex-col sm:flex-row sm:items-center gap-3">
-          <Button
-            className="cursor-pointer"
-            variant="ghost"
-            size="icon"
-            asChild
-          >
-            <Link
-              href={
-                isAdminView
-                  ? "/dashboard/admin/contests"
-                  : "/dashboard/contests"
-              }
+      <header
+        className={cn(
+          "mb-8 px-1 pb-6 border-b",
+          isDark ? "border-white/10" : "border-gray-200/90",
+        )}
+      >
+        <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between lg:gap-8">
+          <div className="flex gap-3 min-w-0">
+            <Button
+              className="cursor-pointer shrink-0 mt-0.5"
+              variant="ghost"
+              size="icon"
+              asChild
             >
-              <ArrowLeft className="h-5 w-5" />
-            </Link>
-          </Button>
-          <div className="flex flex-wrap items-center gap-2">
-            <h1
-              className={cn(
-                "text-lg sm:text-xl md:text-2xl font-bold text-gray-900 break-words",
-                isDark ? "text-white" : "text-gray-900",
-              )}
-            >
-              {currentContest.title}
-            </h1>
-
-            {/* Status + Contest type */}
-
-            <Badge
-              className={cn(
-                contestStatusBadgeInfo.className,
-                "capitalize text-sm font-medium px-3 py-1 rounded-full",
-              )}
-            >
-              {contestStatusBadgeInfo.text}
-            </Badge>
-            {currentContest.contest_type && (
-              <Badge
-                // variant={
-                //   currentContest.contest_type === "cpm" ? "secondary" : "default"
-                // }
-
+              <Link
+                href={
+                  isAdminView
+                    ? "/dashboard/admin/contests"
+                    : "/dashboard/contests"
+                }
+              >
+                <ArrowLeft className="h-5 w-5" />
+              </Link>
+            </Button>
+            <div className="min-w-0 space-y-3 flex-1">
+              <h1
                 className={cn(
-                  "capitalize text-sm font-medium px-3 py-1 rounded-full",
-                  isDark
-                    ? "bg-purple-500/20 text-purple-300 border-purple-400"
-                    : "bg-purple-100 text-purple-900 border-purple-400",
+                  "text-2xl sm:text-3xl font-bold tracking-tight text-balance leading-snug",
+                  isDark ? "text-white" : "text-gray-900",
                 )}
               >
-                {currentContest.contest_type === "cpm" ? "CPM" : "Leaderboard"}
-              </Badge>
-            )}
+                {currentContest.title}
+              </h1>
+              <div className="flex flex-wrap items-center gap-2">
+                <Badge
+                  className={cn(
+                    contestStatusBadgeInfo.className,
+                    "capitalize text-xs sm:text-sm font-medium px-2.5 py-0.5 sm:px-3 sm:py-1 rounded-full border",
+                  )}
+                >
+                  {contestStatusBadgeInfo.text}
+                </Badge>
+                {currentContest.contest_type && (
+                  <Badge
+                    className={cn(
+                      "capitalize text-xs sm:text-sm font-medium px-2.5 py-0.5 sm:px-3 sm:py-1 rounded-full border",
+                      isDark
+                        ? "bg-purple-500/15 text-purple-200 border-purple-400/50"
+                        : "bg-purple-50 text-purple-900 border-purple-200",
+                    )}
+                  >
+                    {currentContest.contest_type === "cpm"
+                      ? "CPM"
+                      : "Leaderboard"}
+                  </Badge>
+                )}
+              </div>
+            </div>
           </div>
-        </div>
         {/* Quick Actions Bar */}
-        <div className="flex gap-4 items-center mb-3">
+        <div className="flex flex-wrap gap-2 items-center lg:justify-end shrink-0 w-full lg:w-auto pl-0 sm:pl-12 lg:pl-0 lg:max-w-[min(100%,28rem)]">
           {/* Contest Status Update Button */}
           {canUpdateContestStatus() && (
             <Dialog
@@ -5150,12 +5612,13 @@ export default function ContestDetailClient({
                   size="sm"
                   variant="outline"
                   className={cn(
+                    "rounded-xl",
                     isDark
-                      ? "py-3 border border-purple-400 text-purple-400"
-                      : "border-purple-500 text-purple-500",
+                      ? "border-purple-400/60 text-purple-300 hover:bg-white/5"
+                      : "border-purple-400/50 text-purple-700 hover:bg-purple-50",
                   )}
                 >
-                  <Settings className="h-4 w-4" />
+                  <Settings className="h-4 w-4 shrink-0" />
                   Update Status
                 </Button>
               </DialogTrigger>
@@ -5272,7 +5735,7 @@ export default function ContestDetailClient({
           {contest.moderation_status === "approved" && (
             <Button
               size="sm"
-              className="flex items-center gap-2 mt-3 text-md bg-[#6C43D0] hover:bg-[#6C43D0] text-white transition-all duration-200 hover:scale-105"
+              className="inline-flex items-center gap-2 text-sm font-semibold rounded-xl bg-[#4A00BE] hover:bg-[#4A00BE]/90 text-white shadow-sm"
               onClick={async (e) => {
                 e.stopPropagation();
                 try {
@@ -5301,11 +5764,16 @@ export default function ContestDetailClient({
             <Button
               variant="outline"
               size="sm"
-              className="flex items-center gap-2 bg-[#6C43D0] hover:bg-[#6C43D0] text-white transition-all duration-200 hover:scale-105"
+              className={cn(
+                "inline-flex items-center gap-2 rounded-xl font-medium transition-colors",
+                isDark
+                  ? "border-white/20 bg-transparent text-white hover:bg-white/10"
+                  : "border-[#4A00BE]/35 bg-white text-[#4A00BE] hover:bg-[#4A00BE]/[0.06]",
+              )}
               onClick={handleShare}
             >
-              <Share2 className="h-4 w-4" />
-              <span className="hidden sm:inline font-medium">Share</span>
+              <Share2 className="h-4 w-4 shrink-0" />
+              <span className="hidden sm:inline">Share</span>
             </Button>
           )}
 
@@ -5313,7 +5781,12 @@ export default function ContestDetailClient({
             <Button
               size="sm"
               variant="outline"
-              className="flex items-center gap-2 bg-[#6C43D0] hover:bg-[#6C43D0] text-white transition-all duration-200 hover:scale-105"
+              className={cn(
+                "inline-flex items-center gap-2 rounded-xl font-medium transition-colors",
+                isDark
+                  ? "border-white/20 bg-transparent text-white hover:bg-white/10"
+                  : "border-gray-300 bg-white text-gray-900 hover:bg-gray-50",
+              )}
               asChild
             >
               <Link
@@ -5339,7 +5812,8 @@ export default function ContestDetailClient({
             />
           )}
         </div>
-      </div>
+        </div>
+      </header>
 
       {/* Modern Contest Overview - Redesigned for better UX */}
       <div className="space-y-6 mb-8">
@@ -9778,6 +10252,7 @@ export default function ContestDetailClient({
                                     title: "Saved",
                                     description:
                                       "Payout adjustment saved. It will apply to payouts and persist after refresh.",
+                                    variant: "success",
                                   });
                                 } catch (err: any) {
                                   console.error(
@@ -10239,6 +10714,105 @@ export default function ContestDetailClient({
                               )}
                             </div>
                           )}
+                        {isAdminView &&
+                          (currentContest.platform?.toLowerCase() ===
+                            "twitter" ||
+                            currentContest.platform?.toLowerCase() === "x") &&
+                          showTwitterRunPopup &&
+                          twitterRun && (
+                            <div className="ml-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white/90 dark:bg-slate-900/80 px-4 py-3 shadow-md flex flex-col gap-1 min-w-[220px]">
+                              <div className="flex items-center justify-between gap-2">
+                                <span className="text-xs font-semibold text-slate-800 dark:text-slate-100">
+                                  {twitterRunCompleted
+                                    ? "Twitter refresh summary"
+                                    : "Twitter refresh in progress"}
+                                </span>
+                                <span className="text-[10px] text-slate-500 dark:text-slate-400">
+                                  Batch {twitterRun.current_batch_index ?? 0}/
+                                  {twitterRun.total_batches ?? 1}
+                                </span>
+                              </div>
+                              <div className="text-[10px] text-slate-500 dark:text-slate-400">
+                                {twitterRun.is_raid ? "Raid campaign" : "Awareness"}{" "}
+                                · Participants in scope:{" "}
+                                {twitterRun.total_participants ?? 0}
+                              </div>
+                              <div className="w-full h-1.5 rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden">
+                                {(() => {
+                                  const totalP =
+                                    twitterRun.total_participants ?? 0;
+                                  const proc =
+                                    twitterRun.processed_participants ?? 0;
+                                  const totalB = twitterRun.total_batches ?? 1;
+                                  const batchIx =
+                                    twitterRun.current_batch_index ?? 0;
+                                  const byParticipants =
+                                    totalP > 0 && proc > 0
+                                      ? (proc / totalP) * 100
+                                      : 0;
+                                  const byBatches =
+                                    totalB > 0 ? (batchIx / totalB) * 100 : 0;
+                                  const pct = Math.max(
+                                    byParticipants,
+                                    byBatches,
+                                  );
+                                  return (
+                                    <div
+                                      className="h-full bg-sky-500 transition-all"
+                                      style={{
+                                        width: `${Math.min(
+                                          100,
+                                          Math.max(0, Math.round(pct)),
+                                        )}%`,
+                                      }}
+                                    />
+                                  );
+                                })()}
+                              </div>
+                              <div className="flex flex-wrap items-center justify-between gap-1 text-[11px] text-slate-600 dark:text-slate-300">
+                                <span>
+                                  Processed{" "}
+                                  <strong>
+                                    {twitterRun.processed_participants ?? 0}
+                                  </strong>
+                                  {" / "}
+                                  {twitterRun.total_participants ?? 0}
+                                  {" · "}Touched{" "}
+                                  <strong>
+                                    {twitterRun.tweets_upserted ?? 0}
+                                  </strong>
+                                </span>
+                                <span className="uppercase tracking-wide text-[10px]">
+                                  {twitterRun.status}
+                                </span>
+                              </div>
+                              {twitterRun.error_message &&
+                                twitterRun.status === "failed" && (
+                                  <p className="text-[10px] text-red-600 dark:text-red-400 line-clamp-3">
+                                    {twitterRun.error_message}
+                                  </p>
+                                )}
+                              {twitterRefreshElapsedSeconds != null && (
+                                <>
+                                  <div className="my-1 border-t border-slate-200 dark:border-slate-600" />
+                                  <div className="flex items-center gap-1.5 text-[10px] text-slate-600 dark:text-slate-400">
+                                    <Clock className="h-3 w-3 shrink-0" />
+                                    <span>
+                                      {twitterRun.status === "running"
+                                        ? "Elapsed"
+                                        : "Duration"}
+                                      :{" "}
+                                      <strong className="text-slate-700 dark:text-slate-300">
+                                        {formatDurationSeconds(
+                                          twitterRefreshElapsedSeconds,
+                                        )}
+                                      </strong>
+                                    </span>
+                                  </div>
+                                </>
+                              )}
+                            </div>
+                          )}
                       </div>
                     </div>
                   </CardContent>
@@ -10388,239 +10962,241 @@ export default function ContestDetailClient({
                   </DialogContent>
                 </Dialog>
 
-                {/* Enhanced Status Filter Tabs */}
-                <div>
-                  <div className="py-4">
-                    <Tabs
-                      value={activeStatusTab}
-                      onValueChange={(value) =>
-                        setActiveStatusTab(value as any)
-                      }
-                      className="w-full"
-                    >
-                      <TabsList className="flex gap-5 w-full h-auto p-1">
-                        <TabsTrigger
-                          value="all"
-                          className={cn(
-                            "flex-1 gap-3 items-center px-1 border",
-                            isDark
-                              ? "text-white border-gray-400"
-                              : "text-[#7F39EC] border-[#7F39EC]",
-                          )}
-                        >
-                          <div className="flex items-center gap-1">
-                            <Users className="h-3.5 w-3.5 mr-1 mb-0.5" />
-                            <span className="text-[13px] font-medium">All</span>
-                          </div>
-                          <Badge
-                            variant="secondary"
+                {/* Enhanced Status Filter Tabs — Twitter text/image uses compact row near table only */}
+                {!isTwitterTextImageContest && (
+                  <div>
+                    <div className="py-4">
+                      <Tabs
+                        value={activeStatusTab}
+                        onValueChange={(value) =>
+                          setActiveStatusTab(value as any)
+                        }
+                        className="w-full"
+                      >
+                        <TabsList className="flex gap-5 w-full h-auto p-1">
+                          <TabsTrigger
+                            value="all"
                             className={cn(
-                              "px-1.5 py-0.5 text-sm h-5",
+                              "flex-1 gap-3 items-center px-1 border",
                               isDark
-                                ? "text-white bg-[#FFFFFF36]"
-                                : "text-[#7F39EC] bg-purple-200",
+                                ? "text-white border-gray-400"
+                                : "text-[#7F39EC] border-[#7F39EC]",
                             )}
                           >
-                            {currentSubmissions.length}
-                          </Badge>
-                        </TabsTrigger>
-                        <TabsTrigger
-                          value="not_rejected"
-                          className={cn(
-                            "flex-1 gap-3 items-center px-1 border",
-                            isDark
-                              ? "text-white border-gray-400"
-                              : "text-[#7F39EC] border-[#7F39EC]",
-                          )}
-                        >
-                          <div className="flex items-center gap-1">
-                            <CheckCircle className="h-3.5 w-3.5 mr-1 mb-0.5" />
-                            <span className="text-[13px] font-medium">
-                              Not Rejected
-                            </span>
-                          </div>
-                          <Badge
-                            variant="secondary"
+                            <div className="flex items-center gap-1">
+                              <Users className="h-3.5 w-3.5 mr-1 mb-0.5" />
+                              <span className="text-[13px] font-medium">
+                                All
+                              </span>
+                            </div>
+                            <Badge
+                              variant="secondary"
+                              className={cn(
+                                "px-1.5 py-0.5 text-sm h-5",
+                                isDark
+                                  ? "text-white bg-[#FFFFFF36]"
+                                  : "text-[#7F39EC] bg-purple-200",
+                              )}
+                            >
+                              {currentSubmissions.length}
+                            </Badge>
+                          </TabsTrigger>
+                          <TabsTrigger
+                            value="not_rejected"
                             className={cn(
-                              "px-1.5 py-0.5 text-sm h-5",
+                              "flex-1 gap-3 items-center px-1 border",
                               isDark
-                                ? "text-white bg-[#FFFFFF36]"
-                                : "text-[#7F39EC] bg-purple-200",
+                                ? "text-white border-gray-400"
+                                : "text-[#7F39EC] border-[#7F39EC]",
                             )}
                           >
-                            {
-                              currentSubmissions.filter(
+                            <div className="flex items-center gap-1">
+                              <CheckCircle className="h-3.5 w-3.5 mr-1 mb-0.5" />
+                              <span className="text-[13px] font-medium">
+                                Not Rejected
+                              </span>
+                            </div>
+                            <Badge
+                              variant="secondary"
+                              className={cn(
+                                "px-1.5 py-0.5 text-sm h-5",
+                                isDark
+                                  ? "text-white bg-[#FFFFFF36]"
+                                  : "text-[#7F39EC] bg-purple-200",
+                              )}
+                            >
+                              {currentSubmissions.filter(
                                 (s) => getStatus(s) !== "rejected",
-                              ).length
-                            }
-                          </Badge>
-                        </TabsTrigger>
-                        <TabsTrigger
-                          value="verified_or_paid"
-                          className={cn(
-                            "flex-1 gap-3 items-center px-1 border",
-                            isDark
-                              ? "text-white border-gray-400"
-                              : "text-[#7F39EC] border-[#7F39EC]",
-                          )}
-                        >
-                          <div className="flex items-center gap-1">
-                            <CheckCircle2 className="h-3.5 w-3.5 mb-0.5" />
-                            <Wallet className="h-3.5 w-3.5 mr-1" />
-                            <span className="text-[13px] font-medium">
-                              Verified + Paid
-                            </span>
-                          </div>
-                          <Badge
-                            variant="secondary"
+                              ).length}
+                            </Badge>
+                          </TabsTrigger>
+                          <TabsTrigger
+                            value="verified_or_paid"
                             className={cn(
-                              "px-1.5 py-0.5 text-sm h-5",
+                              "flex-1 gap-3 items-center px-1 border",
                               isDark
-                                ? "text-white bg-[#FFFFFF36]"
-                                : "text-[#7F39EC] bg-purple-200",
+                                ? "text-white border-gray-400"
+                                : "text-[#7F39EC] border-[#7F39EC]",
                             )}
                           >
-                            {
-                              currentSubmissions.filter((s) => {
-                                const status = getStatus(s);
-                                return (
-                                  status === "verified" || status === "paid"
-                                );
-                              }).length
-                            }
-                          </Badge>
-                        </TabsTrigger>
-                        <TabsTrigger
-                          value="pending"
-                          className={cn(
-                            "flex-1 gap-3 items-center px-1 border",
-                            isDark
-                              ? "text-white border-gray-400"
-                              : "text-[#7F39EC] border-[#7F39EC]",
-                          )}
-                        >
-                          <div className="flex items-center gap-1">
-                            <Clock className="h-3.5 w-3.5 mr-1 mb-0.5" />
-                            <span className="text-[13px] font-medium">
-                              Pending
-                            </span>
-                          </div>
-                          <Badge
-                            variant="secondary"
+                            <div className="flex items-center gap-1">
+                              <CheckCircle2 className="h-3.5 w-3.5 mb-0.5" />
+                              <Wallet className="h-3.5 w-3.5 mr-1" />
+                              <span className="text-[13px] font-medium">
+                                Verified + Paid
+                              </span>
+                            </div>
+                            <Badge
+                              variant="secondary"
+                              className={cn(
+                                "px-1.5 py-0.5 text-sm h-5",
+                                isDark
+                                  ? "text-white bg-[#FFFFFF36]"
+                                  : "text-[#7F39EC] bg-purple-200",
+                              )}
+                            >
+                              {
+                                currentSubmissions.filter((s) => {
+                                  const status = getStatus(s);
+                                  return (
+                                    status === "verified" || status === "paid"
+                                  );
+                                }).length
+                              }
+                            </Badge>
+                          </TabsTrigger>
+                          <TabsTrigger
+                            value="pending"
                             className={cn(
-                              "px-1.5 py-0.5 text-sm h-5",
+                              "flex-1 gap-3 items-center px-1 border",
                               isDark
-                                ? "text-white bg-[#FFFFFF36]"
-                                : "text-[#7F39EC] bg-purple-200",
+                                ? "text-white border-gray-400"
+                                : "text-[#7F39EC] border-[#7F39EC]",
                             )}
                           >
-                            {
-                              currentSubmissions.filter((s) => {
-                                const status = getStatus(s);
-                                return status === "pending";
-                              }).length
-                            }
-                          </Badge>
-                        </TabsTrigger>
-                        <TabsTrigger
-                          value="verified"
-                          className={cn(
-                            "flex-1 gap-3 items-center px-1 border",
-                            isDark
-                              ? "text-white border-gray-400"
-                              : "text-[#7F39EC] border-[#7F39EC]",
-                          )}
-                        >
-                          <div className="flex items-center gap-1">
-                            <CheckCircle2 className="h-3.5 w-3.5 mr-1 mb-0.5" />
-                            <span className="text-[13px] font-medium">
-                              Verified
-                            </span>
-                          </div>
-                          <Badge
-                            variant="secondary"
+                            <div className="flex items-center gap-1">
+                              <Clock className="h-3.5 w-3.5 mr-1 mb-0.5" />
+                              <span className="text-[13px] font-medium">
+                                Pending
+                              </span>
+                            </div>
+                            <Badge
+                              variant="secondary"
+                              className={cn(
+                                "px-1.5 py-0.5 text-sm h-5",
+                                isDark
+                                  ? "text-white bg-[#FFFFFF36]"
+                                  : "text-[#7F39EC] bg-purple-200",
+                              )}
+                            >
+                              {
+                                currentSubmissions.filter((s) => {
+                                  const status = getStatus(s);
+                                  return status === "pending";
+                                }).length
+                              }
+                            </Badge>
+                          </TabsTrigger>
+                          <TabsTrigger
+                            value="verified"
                             className={cn(
-                              "px-1.5 py-0.5 text-sm h-5",
+                              "flex-1 gap-3 items-center px-1 border",
                               isDark
-                                ? "text-white bg-[#FFFFFF36]"
-                                : "text-[#7F39EC] bg-purple-200",
+                                ? "text-white border-gray-400"
+                                : "text-[#7F39EC] border-[#7F39EC]",
                             )}
                           >
-                            {
-                              currentSubmissions.filter((s) => {
-                                const status = getStatus(s);
-                                return status === "verified";
-                              }).length
-                            }
-                          </Badge>
-                        </TabsTrigger>
-                        <TabsTrigger
-                          value="rejected"
-                          className={cn(
-                            "flex-1 gap-3 items-center px-1 border",
-                            isDark
-                              ? "text-white border-gray-400"
-                              : "text-[#7F39EC] border-[#7F39EC]",
-                          )}
-                        >
-                          <div className="flex items-center gap-1">
-                            <XCircle className="h-3.5 w-3.5 mr-1 mb-0.5" />
-                            <span className="text-[13px] font-medium">
-                              Rejected
-                            </span>
-                          </div>
-                          <Badge
-                            variant="secondary"
+                            <div className="flex items-center gap-1">
+                              <CheckCircle2 className="h-3.5 w-3.5 mr-1 mb-0.5" />
+                              <span className="text-[13px] font-medium">
+                                Verified
+                              </span>
+                            </div>
+                            <Badge
+                              variant="secondary"
+                              className={cn(
+                                "px-1.5 py-0.5 text-sm h-5",
+                                isDark
+                                  ? "text-white bg-[#FFFFFF36]"
+                                  : "text-[#7F39EC] bg-purple-200",
+                              )}
+                            >
+                              {
+                                currentSubmissions.filter((s) => {
+                                  const status = getStatus(s);
+                                  return status === "verified";
+                                }).length
+                              }
+                            </Badge>
+                          </TabsTrigger>
+                          <TabsTrigger
+                            value="rejected"
                             className={cn(
-                              "px-1.5 py-0.5 text-sm h-5",
+                              "flex-1 gap-3 items-center px-1 border",
                               isDark
-                                ? "text-white bg-[#FFFFFF36]"
-                                : "text-[#7F39EC] bg-purple-200",
+                                ? "text-white border-gray-400"
+                                : "text-[#7F39EC] border-[#7F39EC]",
                             )}
                           >
-                            {
-                              currentSubmissions.filter(
-                                (s) => s.status === "rejected",
-                              ).length
-                            }
-                          </Badge>
-                        </TabsTrigger>
-                        <TabsTrigger
-                          value="paid"
-                          className={cn(
-                            "flex-1 gap-3 items-center px-1 border",
-                            isDark
-                              ? "text-white border-gray-400"
-                              : "text-[#7F39EC] border-[#7F39EC]",
-                          )}
-                        >
-                          <div className="flex items-center gap-1">
-                            <Wallet className="h-3.5 w-3.5 mr-1 mb-0.5" />
-                            <span className="text-[13px] font-medium">
-                              Paid
-                            </span>
-                          </div>
-                          <Badge
-                            variant="secondary"
+                            <div className="flex items-center gap-1">
+                              <XCircle className="h-3.5 w-3.5 mr-1 mb-0.5" />
+                              <span className="text-[13px] font-medium">
+                                Rejected
+                              </span>
+                            </div>
+                            <Badge
+                              variant="secondary"
+                              className={cn(
+                                "px-1.5 py-0.5 text-sm h-5",
+                                isDark
+                                  ? "text-white bg-[#FFFFFF36]"
+                                  : "text-[#7F39EC] bg-purple-200",
+                              )}
+                            >
+                              {
+                                currentSubmissions.filter(
+                                  (s) => getStatus(s) === "rejected",
+                                ).length
+                              }
+                            </Badge>
+                          </TabsTrigger>
+                          <TabsTrigger
+                            value="paid"
                             className={cn(
-                              "px-1.5 py-0.5 text-sm h-5",
+                              "flex-1 gap-3 items-center px-1 border",
                               isDark
-                                ? "text-white bg-[#FFFFFF36]"
-                                : "text-[#7F39EC] bg-purple-200",
+                                ? "text-white border-gray-400"
+                                : "text-[#7F39EC] border-[#7F39EC]",
                             )}
                           >
-                            {
-                              currentSubmissions.filter((s) => {
-                                const status = getStatus(s);
-                                return status === "paid";
-                              }).length
-                            }
-                          </Badge>
-                        </TabsTrigger>
-                      </TabsList>
-                    </Tabs>
+                            <div className="flex items-center gap-1">
+                              <Wallet className="h-3.5 w-3.5 mr-1 mb-0.5" />
+                              <span className="text-[13px] font-medium">
+                                Paid
+                              </span>
+                            </div>
+                            <Badge
+                              variant="secondary"
+                              className={cn(
+                                "px-1.5 py-0.5 text-sm h-5",
+                                isDark
+                                  ? "text-white bg-[#FFFFFF36]"
+                                  : "text-[#7F39EC] bg-purple-200",
+                              )}
+                            >
+                              {
+                                currentSubmissions.filter((s) => {
+                                  const status = getStatus(s);
+                                  return status === "paid";
+                                }).length
+                              }
+                            </Badge>
+                          </TabsTrigger>
+                        </TabsList>
+                      </Tabs>
+                    </div>
                   </div>
-                </div>
+                )}
 
                 {/* Financial totals for selected status tab (leaderboard/CPM only) */}
                 {(currentContest?.contest_type === "leaderboard" ||
@@ -10783,7 +11359,7 @@ export default function ContestDetailClient({
                                   currentSubmissions.filter(
                                     (s) =>
                                       (s as any).is_twitter_tweet === true &&
-                                      (s as any).filter_status === "eligible",
+                                      twitterSubmissionIsCampaignEligible(s),
                                   ).length
                                 }
                               </Badge>
@@ -10816,7 +11392,7 @@ export default function ContestDetailClient({
                                   currentSubmissions.filter(
                                     (s) =>
                                       (s as any).is_twitter_tweet === true &&
-                                      (s as any).filter_status !== "eligible",
+                                      !twitterSubmissionIsCampaignEligible(s),
                                   ).length
                                 }
                               </Badge>
@@ -10883,7 +11459,9 @@ export default function ContestDetailClient({
                             </span>
                             <Select
                               value={sortOption}
-                              onValueChange={(v) => setSortOption(v as any)}
+                              onValueChange={(v) =>
+                                setSortOption(v as SortOption)
+                              }
                             >
                               <SelectTrigger
                                 className={cn(
@@ -10896,18 +11474,85 @@ export default function ContestDetailClient({
                                 <SelectValue placeholder="Sort submissions" />
                               </SelectTrigger>
                               <SelectContent isDark={isDark}>
-                                <SelectItem isDark={isDark} value="views_desc">
-                                  Views • High → Low
-                                </SelectItem>
-                                <SelectItem value="views_asc" isDark={isDark}>
-                                  Views • Low → High
-                                </SelectItem>
-                                <SelectItem value="time_desc" isDark={isDark}>
-                                  Submitted • Newest First
-                                </SelectItem>
-                                <SelectItem value="time_asc" isDark={isDark}>
-                                  Submitted • Oldest First
-                                </SelectItem>
+                                {isTwitterTextImageContest ? (
+                                  <>
+                                    <SelectItem
+                                      isDark={isDark}
+                                      value="points_desc"
+                                    >
+                                      Points • High → Low
+                                    </SelectItem>
+                                    <SelectItem
+                                      isDark={isDark}
+                                      value="points_asc"
+                                    >
+                                      Points • Low → High
+                                    </SelectItem>
+                                    <SelectItem
+                                      isDark={isDark}
+                                      value="impressions_desc"
+                                    >
+                                      Impressions • High → Low
+                                    </SelectItem>
+                                    <SelectItem
+                                      isDark={isDark}
+                                      value="impressions_asc"
+                                    >
+                                      Impressions • Low → High
+                                    </SelectItem>
+                                    <SelectItem
+                                      isDark={isDark}
+                                      value="time_desc"
+                                    >
+                                      Submitted • Newest First
+                                    </SelectItem>
+                                    <SelectItem
+                                      isDark={isDark}
+                                      value="time_asc"
+                                    >
+                                      Submitted • Oldest First
+                                    </SelectItem>
+                                    <SelectItem
+                                      isDark={isDark}
+                                      value="submissions_desc"
+                                    >
+                                      Submissions • High → Low
+                                    </SelectItem>
+                                    <SelectItem
+                                      isDark={isDark}
+                                      value="submissions_asc"
+                                    >
+                                      Submissions • Low → High
+                                    </SelectItem>
+                                  </>
+                                ) : (
+                                  <>
+                                    <SelectItem
+                                      isDark={isDark}
+                                      value="views_desc"
+                                    >
+                                      Views • High → Low
+                                    </SelectItem>
+                                    <SelectItem
+                                      value="views_asc"
+                                      isDark={isDark}
+                                    >
+                                      Views • Low → High
+                                    </SelectItem>
+                                    <SelectItem
+                                      value="time_desc"
+                                      isDark={isDark}
+                                    >
+                                      Submitted • Newest First
+                                    </SelectItem>
+                                    <SelectItem
+                                      value="time_asc"
+                                      isDark={isDark}
+                                    >
+                                      Submitted • Oldest First
+                                    </SelectItem>
+                                  </>
+                                )}
                               </SelectContent>
                             </Select>
                           </div>
@@ -11022,6 +11667,18 @@ export default function ContestDetailClient({
                           )}
                         </div>
                       </div>
+                      {isTwitterTextImageContest && viewMode === "normal" && (
+                        <TwitterContestSubmissionStatusTabs
+                          activeStatusTab={activeStatusTab}
+                          onValueChange={(v) => {
+                            setActiveStatusTab(v as any);
+                            setCurrentPage(1);
+                          }}
+                          isDark={isDark}
+                          currentSubmissions={currentSubmissions}
+                          getStatus={getStatus}
+                        />
+                      )}
                       {viewMode === "normal" && (
                         <Table>
                           <TableHeader>
@@ -11321,10 +11978,11 @@ export default function ContestDetailClient({
                               const isLoading =
                                 isLoadingSubmission[submission.id] || false;
                               const rank = globalIndex + 1;
-                              // Check if tweet is deleted (filter_status === "deleted")
                               const isDeleted =
                                 isTwitterTweet &&
-                                (submission as any).filter_status === "deleted";
+                                twitterSubmissionIsDeletedFromTwitter(
+                                  submission as any,
+                                );
 
                               // Compute expected and granted rewards separately
                               const getExpectedReward = () => {
@@ -13489,9 +14147,9 @@ export default function ContestDetailClient({
                             {(currentContest?.platform?.toLowerCase() ===
                               "twitter" ||
                               currentContest?.platform?.toLowerCase() ===
-                                "x") &&
+                              "x") &&
                               currentContest?.contest_format ===
-                                "text_image" && (
+                              "text_image" && (
                                 <div className="mb-4 px-4">
                                   <Tabs
                                     value={participantFilter}
@@ -13904,54 +14562,37 @@ export default function ContestDetailClient({
                                                 "status",
                                               )
                                             : true) && (
-                                            <TableCell>
-                                              <div className="flex flex-col items-center gap-1">
-                                                {/* Creator-level moderation status for Twitter campaigns */}
-                                                {(currentContest.platform?.toLowerCase() ===
-                                                  "twitter" ||
-                                                  currentContest.platform?.toLowerCase() ===
+                                              <TableCell>
+                                                <div className="flex flex-col items-center gap-1">
+                                                  {(currentContest.platform?.toLowerCase() ===
+                                                    "twitter" ||
+                                                    currentContest.platform?.toLowerCase() ===
                                                     "x") &&
-                                                currentContest.contest_format ===
-                                                  "text_image" &&
-                                                group.creator_moderation_status ? (
-                                                  <>
-                                                    {group.creator_moderation_status ===
-                                                    "rejected" ? (
-                                                      <Badge className="bg-red-500 text-white text-xs">
-                                                        Rejected
-                                                      </Badge>
-                                                    ) : group.paid ? (
-                                                      <Badge className="bg-blue-500 text-white text-xs">
-                                                        Paid
-                                                      </Badge>
-                                                    ) : group.creator_moderation_status ===
-                                                        "verified" ||
-                                                      group.statusCounts
-                                                        .verified > 0 ? (
-                                                      <Badge className="bg-green-500 text-white text-xs">
-                                                        Verified
-                                                      </Badge>
-                                                    ) : (
-                                                      <Badge className="bg-yellow-500 text-white text-xs">
-                                                        Pending
-                                                      </Badge>
-                                                    )}
-                                                    {group.creator_rejection_reason && (
-                                                      <span
-                                                        className={cn(
-                                                          "text-xs italic truncate max-w-[150px] text-center",
-                                                          isDark
-                                                            ? "text-red-400"
-                                                            : "text-red-600",
-                                                        )}
-                                                        title={
-                                                          group.creator_rejection_reason
+                                                  currentContest.contest_format ===
+                                                    "text_image" ? (
+                                                    <>
+                                                      <TwitterCreatorRowStatusPills
+                                                        submissions={
+                                                          group.submissions || []
                                                         }
-                                                      >
-                                                        {group
-                                                          .creator_rejection_reason
-                                                          .length > 20
-                                                          ? group.creator_rejection_reason.substring(
+                                                        getStatus={getStatus}
+                                                      />
+                                                      {group.creator_rejection_reason && (
+                                                        <span
+                                                          className={cn(
+                                                            "text-xs italic truncate max-w-[150px] text-center",
+                                                            isDark
+                                                              ? "text-red-400"
+                                                              : "text-red-600",
+                                                          )}
+                                                          title={
+                                                            group.creator_rejection_reason
+                                                          }
+                                                        >
+                                                          {group
+                                                            .creator_rejection_reason
+                                                            .length > 20
+                                                            ? group.creator_rejection_reason.substring(
                                                               0,
                                                               20,
                                                             ) + "..."
@@ -14604,6 +15245,51 @@ export default function ContestDetailClient({
                                                 >
                                                   View All ({group.totalCount})
                                                 </Button>
+                                                {isAdminView &&
+                                                  currentContest.platform
+                                                    ?.toLowerCase()
+                                                    .includes("instagram") && (
+                                                    <Button
+                                                      size="sm"
+                                                      variant="outline"
+                                                      className={cn(
+                                                        "border min-w-[8.5rem] inline-flex items-center justify-center gap-1.5",
+                                                        isDark
+                                                          ? "bg-[#170337] border-purple-500/50 text-white"
+                                                          : "border-purple-300 bg-purple-50 text-purple-900",
+                                                      )}
+                                                      disabled={
+                                                        igAnalyticsLoadingCreatorId ===
+                                                        group.creator.id
+                                                      }
+                                                      onClick={() => {
+                                                        setIgAnalyticsCreatorId(
+                                                          group.creator.id,
+                                                        );
+                                                        setIgAnalyticsCreatorLabel(
+                                                          userTableUsername ||
+                                                            group.creator
+                                                              .username ||
+                                                            platformUsername ||
+                                                            group.creator.id,
+                                                        );
+                                                        setIgAnalyticsLoadingCreatorId(
+                                                          group.creator.id,
+                                                        );
+                                                        setIgAnalyticsOpen(true);
+                                                      }}
+                                                    >
+                                                      {igAnalyticsLoadingCreatorId ===
+                                                      group.creator.id ? (
+                                                        <>
+                                                          <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin" />
+                                                          Opening…
+                                                        </>
+                                                      ) : (
+                                                        "Show analytics"
+                                                      )}
+                                                    </Button>
+                                                  )}
                                                 {/* YouTube per-creator analytics refresh (admin only) */}
                                                 {isAdminView &&
                                                   currentContest.platform?.toLowerCase() ===
@@ -14980,7 +15666,7 @@ export default function ContestDetailClient({
                                                                       description:
                                                                         "Creator payment processed successfully",
                                                                       variant:
-                                                                        "default",
+                                                                        "payment",
                                                                     });
                                                                     setTimeout(
                                                                       () => {
@@ -15198,6 +15884,7 @@ export default function ContestDetailClient({
                   contestTitle={currentContest?.title || "Contest"}
                   isDark={isDark}
                   showHeader={true}
+                  showRefreshButton={false}
                   lastMetricsUpdated={currentContest?.last_metrics_updated}
                   cooldownType={
                     (isAdminView ? "admin" : "brand") as
@@ -15219,43 +15906,7 @@ export default function ContestDetailClient({
               )}
             >
               <CardHeader>
-                <div className="flex items-center justify-between">
-                  <CardTitle>Contest Analytics</CardTitle>
-                  {/* Refresh Metrics Button - Only show for Twitter campaigns */}
-                  {currentContest?.platform?.toLowerCase() === "twitter" &&
-                    (() => {
-                      const refreshBtn = getRefreshButtonState();
-                      const analyticsRefreshLabel = isRefreshingMetrics
-                        ? "Updating..."
-                        : "Refresh Metrics";
-                      return (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={handleRefreshMetrics}
-                          disabled={refreshBtn.isDisabled}
-                          className={cn(
-                            "flex items-center gap-2",
-                            isDark
-                              ? "border-slate-700 text-slate-300 hover:bg-slate-800"
-                              : "border-slate-300 text-slate-700 hover:bg-slate-50",
-                          )}
-                          title={
-                            refreshBtn.disabledReason ||
-                            "Refresh metrics from Twitter API"
-                          }
-                        >
-                          <RefreshCw
-                            className={cn(
-                              "h-4 w-4",
-                              isRefreshingMetrics && "animate-spin",
-                            )}
-                          />
-                          {analyticsRefreshLabel}
-                        </Button>
-                      );
-                    })()}
-                </div>
+                <CardTitle>Contest Analytics</CardTitle>
                 {/* Analytics Filter Tabs */}
                 <div className="mt-4">
                   <Tabs
@@ -15382,6 +16033,7 @@ export default function ContestDetailClient({
                         total_replies: 0,
                         total_retweets: 0,
                         total_quote_reposts: 0,
+                        total_engagement: 0,
                         total_impressions: 0,
                         total_points: 0,
                       };
@@ -15464,6 +16116,12 @@ export default function ContestDetailClient({
                         }
                       }
 
+                      metrics.total_engagement =
+                        metrics.total_likes +
+                        metrics.total_replies +
+                        metrics.total_retweets +
+                        metrics.total_quote_reposts;
+
                       return metrics;
                     };
 
@@ -15472,7 +16130,7 @@ export default function ContestDetailClient({
                       calculatedMetrics || twitterMetrics;
 
                     return (
-                      <div className="space-y-8 mb-8">
+                      <div className="space-y-6 mb-8">
                         {/* For Raid Campaigns: Show Target Tweet, Target Metrics, and Current Achieved */}
                         {(() => {
                           const isRaid =
@@ -16444,7 +17102,7 @@ export default function ContestDetailClient({
                           >
                             Campaign Metrics
                           </h3>
-                          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+                          <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-4 mb-6">
                             {(() => {
                               const renderMetricCard = (
                                 icon: React.ReactNode,
@@ -16452,29 +17110,31 @@ export default function ContestDetailClient({
                                 value: string | number,
                                 iconBgClass: string,
                                 barGradientClass: string,
+                                hint?: string,
                               ) => (
                                 <div
                                   className={cn(
-                                    "group rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 overflow-hidden relative",
+                                    "group rounded-xl shadow-md hover:shadow-lg transition-all duration-300 overflow-hidden relative min-w-0",
                                     isDark
                                       ? "bg-[#180438] border border-white/20 backdrop-blur-2xl"
                                       : "bg-gradient-to-br from-white to-blue-50 border border-blue-100",
                                   )}
+                                  title={hint}
                                 >
-                                  <div className="p-6 relative z-10">
-                                    <div className="flex items-center justify-between mb-4">
+                                  <div className="p-3 sm:p-4 relative z-10">
+                                    <div className="flex items-start gap-3 mb-2">
                                       <div
                                         className={cn(
-                                          "w-12 h-12 flex items-center justify-center rounded-xl shadow-lg backdrop-blur-sm",
+                                          "w-10 h-10 shrink-0 flex items-center justify-center rounded-lg shadow-md backdrop-blur-sm",
                                           iconBgClass,
                                         )}
                                       >
                                         {icon}
                                       </div>
-                                      <div className="text-right">
+                                      <div className="min-w-0">
                                         <p
                                           className={cn(
-                                            "text-sm font-medium uppercase tracking-wide",
+                                            "text-[11px] sm:text-xs font-medium uppercase tracking-wide leading-tight line-clamp-2",
                                             isDark
                                               ? "text-white/90 drop-shadow-sm"
                                               : "text-gray-500",
@@ -16484,7 +17144,7 @@ export default function ContestDetailClient({
                                         </p>
                                         <p
                                           className={cn(
-                                            "text-2xl font-bold mt-1",
+                                            "text-lg sm:text-xl font-bold mt-0.5 tabular-nums",
                                             isDark
                                               ? "text-white drop-shadow-lg bg-gradient-to-r from-white to-blue-200 bg-clip-text text-transparent"
                                               : "text-gray-900",
@@ -16509,7 +17169,7 @@ export default function ContestDetailClient({
                               return (
                                 <>
                                   {renderMetricCard(
-                                    <FileText className="h-6 w-6 text-white" />,
+                                    <FileText className="h-5 w-5 text-white" />,
                                     "Total Tweets",
                                     metricsForDisplay?.total_tweets || 0,
                                     isDark
@@ -16520,7 +17180,19 @@ export default function ContestDetailClient({
                                       : "bg-gradient-to-r from-blue-200 to-blue-300",
                                   )}
                                   {renderMetricCard(
-                                    <ThumbsUp className="h-6 w-6 text-white" />,
+                                    <Zap className="h-5 w-5 text-white" />,
+                                    "Total engagement",
+                                    metricsForDisplay?.total_engagement ?? 0,
+                                    isDark
+                                      ? "bg-white/20 border border-white/30 backdrop-blur-2xl shadow-lg shadow-white/20"
+                                      : "bg-gradient-to-br from-violet-500 to-violet-600 text-white",
+                                    isDark
+                                      ? "bg-gradient-to-r from-violet-400 via-fuchsia-400 to-pink-400 shadow-lg shadow-violet-400/70 animate-pulse"
+                                      : "bg-gradient-to-r from-violet-200 to-fuchsia-200",
+                                    "Sum of likes plus reply, retweet, and quote submission counts.",
+                                  )}
+                                  {renderMetricCard(
+                                    <ThumbsUp className="h-5 w-5 text-white" />,
                                     "Total Likes",
                                     metricsForDisplay?.total_likes || 0,
                                     isDark
@@ -16531,7 +17203,7 @@ export default function ContestDetailClient({
                                       : "bg-gradient-to-r from-pink-200 to-pink-300",
                                   )}
                                   {renderMetricCard(
-                                    <MessageCircle className="h-6 w-6 text-white" />,
+                                    <MessageCircle className="h-5 w-5 text-white" />,
                                     "Reply posts",
                                     metricsForDisplay?.total_replies || 0,
                                     isDark
@@ -16542,7 +17214,7 @@ export default function ContestDetailClient({
                                       : "bg-gradient-to-r from-orange-200 to-orange-300",
                                   )}
                                   {renderMetricCard(
-                                    <Share2 className="h-6 w-6 text-white" />,
+                                    <Share2 className="h-5 w-5 text-white" />,
                                     "Retweet posts",
                                     metricsForDisplay?.total_retweets || 0,
                                     isDark
@@ -16553,7 +17225,7 @@ export default function ContestDetailClient({
                                       : "bg-gradient-to-r from-cyan-200 to-cyan-300",
                                   )}
                                   {renderMetricCard(
-                                    <RefreshCw className="h-6 w-6 text-white" />,
+                                    <RefreshCw className="h-5 w-5 text-white" />,
                                     "Quote posts",
                                     metricsForDisplay?.total_quote_reposts || 0,
                                     isDark
@@ -16564,7 +17236,7 @@ export default function ContestDetailClient({
                                       : "bg-gradient-to-r from-indigo-200 to-indigo-300",
                                   )}
                                   {renderMetricCard(
-                                    <Eye className="h-6 w-6 text-white" />,
+                                    <Eye className="h-5 w-5 text-white" />,
                                     "Total Impressions",
                                     metricsForDisplay?.total_impressions || 0,
                                     isDark
@@ -16575,7 +17247,7 @@ export default function ContestDetailClient({
                                       : "bg-gradient-to-r from-green-200 to-green-300",
                                   )}
                                   {renderMetricCard(
-                                    <TrendingUp className="h-6 w-6 text-white" />,
+                                    <TrendingUp className="h-5 w-5 text-white" />,
                                     "Total Points",
                                     metricsForDisplay?.total_points || 0,
                                     isDark
@@ -18181,6 +18853,24 @@ export default function ContestDetailClient({
             setPaymentModalOpen(true);
           }}
           isAdminView={isAdminView}
+        />
+      )}
+
+      {igAnalyticsCreatorId && (
+        <InstagramCreatorAnalyticsModal
+          open={igAnalyticsOpen}
+          onOpenChange={(o) => {
+            setIgAnalyticsOpen(o);
+            if (!o) {
+              setIgAnalyticsCreatorId(null);
+              setIgAnalyticsLoadingCreatorId(null);
+            }
+          }}
+          contestId={contestId}
+          creatorId={igAnalyticsCreatorId}
+          creatorLabel={igAnalyticsCreatorLabel}
+          isDark={isDark}
+          onFetchComplete={clearIgAnalyticsButtonLoading}
         />
       )}
     </div>
