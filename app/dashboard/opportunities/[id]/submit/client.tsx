@@ -1601,6 +1601,26 @@ export default function SubmitContentPage({
         );
       }
 
+      // Validate ownership: extract @username from URL and compare with connected account
+      const usernameMatch = link.match(/tiktok\.com\/@([\w.-]+)\//i);
+      const urlUsername = usernameMatch ? usernameMatch[1].toLowerCase() : null;
+      const connectedUsername = tiktokAccount?.username?.toLowerCase();
+
+      if (
+        urlUsername &&
+        connectedUsername &&
+        urlUsername !== connectedUsername
+      ) {
+        const errorMessage = `Link ${index + 1}: This video belongs to @${usernameMatch![1]}, not your connected TikTok account (@${tiktokAccount.username}). You can only submit your own content.`;
+        setError(errorMessage);
+        toast({
+          title: "Not Your Content",
+          description: errorMessage,
+          variant: "destructive",
+        });
+        return;
+      }
+
       const response = await fetch(
         `/api/auth/tiktok/video-info?video_id=${videoId}`,
         {
@@ -1621,15 +1641,24 @@ export default function SubmitContentPage({
           share_count: 0,
         };
       } else {
-        videoData = {
-          id: videoId,
-          share_url: link,
-          title: "TikTok Video",
-          view_count: 0,
-          like_count: 0,
-          comment_count: 0,
-          share_count: 0,
-        };
+        // API returned an error – likely the video doesn't belong to this user
+        const errorData = await response.json().catch(() => ({}));
+        const is404 = response.status === 404;
+        if (is404) {
+          const errorMessage = `Link ${index + 1}: This video was not found in your connected TikTok account. You can only submit your own TikTok videos.`;
+          setError(errorMessage);
+          toast({
+            title: "Not Your Content",
+            description: errorMessage,
+            variant: "destructive",
+          });
+          return;
+        }
+        // For other errors (token expired, etc.), show the API error
+        throw new Error(
+          errorData?.error ||
+            `Failed to verify TikTok video for link ${index + 1}.`,
+        );
       }
 
       // Check content age if create_time is available
@@ -2356,6 +2385,7 @@ export default function SubmitContentPage({
     if (submissionError) {
       throw submissionError;
     }
+    await bustLeaderboardCache(contestId);
   };
 
   /**
@@ -2443,6 +2473,8 @@ export default function SubmitContentPage({
         `Failed to submit ${errors.length} videos. Please try again.`,
       );
     }
+
+    await bustLeaderboardCache(contestId);
 
     // Update state
     const newSubmittedCount = currentSubmitted + totalSubmissions;
@@ -5040,6 +5072,33 @@ export default function SubmitContentPage({
                                 return;
                               }
 
+                              // Validate ownership: extract @username from URL and compare with connected account
+                              const usernameMatch = tiktokVideoLink.match(
+                                /tiktok\.com\/@([\w.-]+)\//i,
+                              );
+                              const urlUsername = usernameMatch
+                                ? usernameMatch[1].toLowerCase()
+                                : null;
+                              const connectedUsername =
+                                tiktokAccount?.username?.toLowerCase();
+
+                              if (
+                                urlUsername &&
+                                connectedUsername &&
+                                urlUsername !== connectedUsername
+                              ) {
+                                toast({
+                                  title: "Not Your Content",
+                                  description: `This video belongs to @${usernameMatch![1]}, not your connected TikTok account (@${tiktokAccount.username}). You can only submit your own content.`,
+                                  variant: "destructive",
+                                });
+                                setError(
+                                  `This video belongs to @${usernameMatch![1]}, not your connected TikTok account (@${tiktokAccount.username}). You can only submit your own content.`,
+                                );
+                                setIsFetchingTiktokVideo(false);
+                                return;
+                              }
+
                               const response = await fetch(
                                 `/api/auth/tiktok/video-info?video_id=${videoId}`,
                                 {
@@ -5063,15 +5122,27 @@ export default function SubmitContentPage({
                                   },
                                 );
                               } else {
-                                setTiktokVideoPreview({
-                                  id: videoId,
-                                  share_url: tiktokVideoLink,
-                                  title: "TikTok Video",
-                                  view_count: 0,
-                                  like_count: 0,
-                                  comment_count: 0,
-                                  share_count: 0,
-                                });
+                                // API failed – video likely doesn't belong to user
+                                const errorData = await response
+                                  .json()
+                                  .catch(() => ({}));
+                                if (response.status === 404) {
+                                  toast({
+                                    title: "Not Your Content",
+                                    description:
+                                      "This video was not found in your connected TikTok account. You can only submit your own TikTok videos.",
+                                    variant: "destructive",
+                                  });
+                                  setError(
+                                    "This video was not found in your connected TikTok account. You can only submit your own TikTok videos.",
+                                  );
+                                  setIsFetchingTiktokVideo(false);
+                                  return;
+                                }
+                                throw new Error(
+                                  errorData?.error ||
+                                    "Failed to verify TikTok video.",
+                                );
                               }
 
                               toast({

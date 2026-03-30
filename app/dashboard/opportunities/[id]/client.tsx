@@ -837,6 +837,9 @@ export function ContestClientPage({
     };
   };
 
+  // Detect if user just submitted content (redirect from submit page)
+  const justSubmitted = searchParams.get("success") === "content_submitted";
+
   const fetchLeaderboard = async (
     pageToFetch: number = 1,
     groupByCreator: boolean = false,
@@ -887,6 +890,8 @@ export function ContestClientPage({
         limit: String(leaderboardItemsPerPage),
       });
       if (groupByCreator) params.set("groupBy", "creator");
+      // Bypass server cache when user just submitted (to avoid stale empty data)
+      if (justSubmitted) params.set("fresh", "1");
       const response = await fetch(
         `/api/leaderboard/${contestId}?${params.toString()}`,
       );
@@ -2451,8 +2456,7 @@ export function ContestClientPage({
                                   ? "Joined"
                                   : joinCampaignLoading
                                     ? "Joining..."
-                                    : user &&
-                                        twitterConnectStatus === "loading"
+                                    : user && twitterConnectStatus === "loading"
                                       ? "Checking…"
                                       : "Join Twitter Campaign"
                                 : "Submit Your Entry!"}
@@ -6159,17 +6163,17 @@ export function ContestClientPage({
                                   <div className="text-lg sm:text-xl font-extrabold leading-none">
                                     #
                                     {isCreatorWiseMyCard
-                                      ? combinedRankForCard ?? "?"
+                                      ? (combinedRankForCard ?? "?")
                                       : bestSubmission
-                                        ? (typeof bestSubmission.rank === "number"
-                                            ? bestSubmission.rank
-                                            : bestSubmission.status ===
-                                                "rejected"
-                                              ? "—"
-                                              : rankLookupMap.get(
-                                                    bestSubmission.id,
-                                                  ) ?? "?")
-                                        : myLeaderboardEntry?.rank ?? "?"}
+                                        ? typeof bestSubmission.rank ===
+                                          "number"
+                                          ? bestSubmission.rank
+                                          : bestSubmission.status === "rejected"
+                                            ? "—"
+                                            : (rankLookupMap.get(
+                                                bestSubmission.id,
+                                              ) ?? "?")
+                                        : (myLeaderboardEntry?.rank ?? "?")}
                                   </div>
                                   {!isCreatorWiseMyCard &&
                                     bestSubmission &&
@@ -6492,7 +6496,9 @@ export function ContestClientPage({
                                       <>
                                         {isCreatorWiseMyCard ? (
                                           <>
-                                            {(combinedViewsForCard ?? 0).toLocaleString()}{" "}
+                                            {(
+                                              combinedViewsForCard ?? 0
+                                            ).toLocaleString()}{" "}
                                             views
                                           </>
                                         ) : (
@@ -6565,9 +6571,7 @@ export function ContestClientPage({
                                             <div className="flex flex-wrap items-center gap-1.5 text-xs text-slate-600 dark:text-slate-400 bg-green-50 dark:bg-green-900/20 px-2 py-1.5 rounded-md border border-green-200 dark:border-green-800">
                                               <div className="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0" />
                                               <span className="whitespace-nowrap">
-                                                {formatMoney(
-                                                  earningsBase,
-                                                )}{" "}
+                                                {formatMoney(earningsBase)}{" "}
                                                 {contestType === "cpm"
                                                   ? "CPM"
                                                   : "Prize"}
@@ -6624,8 +6628,7 @@ export function ContestClientPage({
                                         .leaderboard_contest
                                         .prizes as PrizeInfo[]
                                     ).find(
-                                      (p) =>
-                                        p.position === prizeRankForZone,
+                                      (p) => p.position === prizeRankForZone,
                                     );
                                     if (prizeInfo) {
                                       const prizeText =
@@ -6848,9 +6851,9 @@ export function ContestClientPage({
                                                       : submission.status ===
                                                           "rejected"
                                                         ? null
-                                                        : rankLookupMap.get(
+                                                        : (rankLookupMap.get(
                                                             submission.id,
-                                                          ) ?? null;
+                                                          ) ?? null);
 
                                                   // Earnings display based on modal view mode
                                                   let prizeDisplay = null;
@@ -10017,7 +10020,7 @@ export function ContestClientPage({
                                               "text-[11px] sm:text-xs font-medium uppercase tracking-wide leading-tight line-clamp-2",
                                               isDark
                                                 ? "text-white/90 drop-shadow-sm"
-                                              : "text-gray-500",
+                                                : "text-gray-500",
                                             )}
                                           >
                                             {label}

@@ -3409,6 +3409,7 @@ export default function ContestDetailClient({
     }
   };
 
+ 
   const handleBulkUpdateSubmissionStatus = async (
     submissionIds: string[],
     action: "approve" | "verified" | "reject" | "rejected" | "pending" | "paid",
@@ -3432,7 +3433,7 @@ export default function ContestDetailClient({
     // Set loading state for all
     setIsLoadingSubmission((prev) => {
       const newLoadingState = { ...prev };
-      submissionIds.forEach((id) => (newLoadingState[id] = true));
+      submissionIds.forEach(id => newLoadingState[id] = true);
       return newLoadingState;
     });
 
@@ -3441,48 +3442,30 @@ export default function ContestDetailClient({
 
       if (normalIds.length > 0) {
         // Map action for normal submissions
-        const normalAction =
-          action === "approve"
-            ? "verified"
-            : action === "reject"
-              ? "rejected"
-              : action;
+        const normalAction = action === "approve" ? "verified" : action === "reject" ? "rejected" : action;
         promises.push(
           fetch("/api/admin/bulk-verify-submissions", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              submissionIds: normalIds,
-              action: normalAction,
-              reason,
-            }),
-          }).then((res) => res.json()),
+            body: JSON.stringify({ submissionIds: normalIds, action: normalAction, reason }),
+          }).then(res => res.json())
         );
       }
 
       if (twitterIds.length > 0) {
         // Map action for Twitter submissions
-        const twitterAction =
-          action === "verified" || action === "approve"
-            ? "approve"
-            : action === "rejected" || action === "reject"
-              ? "reject"
-              : action;
+        const twitterAction = action === "verified" || action === "approve" ? "approve" : action === "rejected" || action === "reject" ? "reject" : action;
         promises.push(
           fetch(`/api/contests/${contestId}/bulk-moderate-submissions`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              tweetIds: twitterIds,
-              action: twitterAction,
-              reason,
-            }),
-          }).then((res) => res.json()),
+            body: JSON.stringify({ tweetIds: twitterIds, action: twitterAction, reason }),
+          }).then(res => res.json())
         );
       }
 
       const results = await Promise.all(promises);
-
+      
       let hasError = false;
       let errorMessage = "";
       let totalProcessed = 0;
@@ -3496,41 +3479,26 @@ export default function ContestDetailClient({
           errorMessage = result.error || "Bulk API failed";
           continue;
         }
-
+        
         if (result.results && Array.isArray(result.results)) {
           result.results.forEach((item: any) => {
             const data = item.data;
             if (data?.submission) {
-              updatedSubmissionsMap.set(item.id, data.submission);
-              totalProcessed++;
+               updatedSubmissionsMap.set(item.id, data.submission);
+               totalProcessed++;
             } else if (data?.success) {
-              // Update twitter statuses based on action
-              const twitterAction =
-                action === "verified" || action === "approve"
-                  ? "approve"
-                  : action === "rejected" || action === "reject"
-                    ? "reject"
-                    : action;
-              const moderationStatus =
-                twitterAction === "approve"
-                  ? "verified"
-                  : twitterAction === "reject"
-                    ? "rejected"
-                    : twitterAction;
-              updatedSubmissionsMap.set(item.id, {
-                moderation_status: moderationStatus,
-                ...(twitterAction === "reject"
-                  ? { manual_points_reason: reason }
-                  : {}),
-              });
-              totalProcessed++;
+               // Update twitter statuses based on action
+               const twitterAction = action === "verified" || action === "approve" ? "approve" : action === "rejected" || action === "reject" ? "reject" : action;
+               const moderationStatus = twitterAction === "approve" ? "verified" : twitterAction === "reject" ? "rejected" : twitterAction;
+               updatedSubmissionsMap.set(item.id, { moderation_status: moderationStatus, ...(twitterAction === 'reject' ? { manual_points_reason: reason } : {}) });
+               totalProcessed++;
             }
           });
         }
         if (result.errors && result.errors.length > 0) {
-          hasError = true;
-          errorMessage = "Some updates failed. Check console for details.";
-          console.error("Bulk update errors:", result.errors);
+           hasError = true;
+           errorMessage = "Some updates failed. Check console for details.";
+           console.error("Bulk update errors:", result.errors);
         }
       }
 
@@ -3555,6 +3523,21 @@ export default function ContestDetailClient({
         });
       } else {
         const actionText = action === "verified" || action === "approve" ? "Verified" : action === "rejected" || action === "reject" ? "Rejected" : action === "pending" ? "Set to Pending" : "Updated";
+        const isRejectBulk =
+          action === "rejected" || action === "reject";
+        const isPendingBulk = action === "pending";
+        const isVerifiedBulk =
+          action === "verified" || action === "approve";
+        const isPaidBulk = action === "paid";
+        const bulkVariant = isRejectBulk
+          ? "destructive"
+          : isPendingBulk
+            ? "pending"
+            : isVerifiedBulk
+              ? "success"
+              : isPaidBulk
+                ? "payment"
+                : "default";
         toast({
           title: isRejectBulk
             ? "Bulk rejection complete"
@@ -3565,12 +3548,10 @@ export default function ContestDetailClient({
           variant: bulkVariant,
         });
       }
-
+      
       // Refresh UI to sync database states completely
-      setTimeout(
-        () => window.dispatchEvent(new Event("contests:refresh")),
-        1000,
-      );
+      setTimeout(() => window.dispatchEvent(new Event("contests:refresh")), 1000);
+
     } catch (error: any) {
       console.error("Bulk update failed:", error);
       toast({
@@ -3581,9 +3562,7 @@ export default function ContestDetailClient({
     } finally {
       setIsLoadingSubmission((prev) => {
         const resetState = { ...prev };
-        submissionIds.forEach((id) => {
-          delete resetState[id];
-        });
+        submissionIds.forEach(id => { delete resetState[id]; });
         return resetState;
       });
     }
@@ -14143,87 +14122,19 @@ export default function ContestDetailClient({
                       {viewMode === "creator-wise" &&
                         groupSubmissionsByCreator && (
                           <>
-                            {/* Participant Filter Tabs for Twitter contests */}
-                            {(currentContest?.platform?.toLowerCase() ===
-                              "twitter" ||
-                              currentContest?.platform?.toLowerCase() ===
-                              "x") &&
-                              currentContest?.contest_format ===
-                              "text_image" && (
-                                <div className="mb-4 px-4">
-                                  <Tabs
-                                    value={participantFilter}
-                                    onValueChange={(v) => {
-                                      setParticipantFilter(
-                                        v as "all" | "rejected" | "available",
-                                      );
-                                      setCreatorWisePage(1);
-                                    }}
-                                  >
-                                    <TabsList className="grid w-full grid-cols-3">
-                                      <TabsTrigger
-                                        value="all"
-                                        className="text-sm"
-                                      >
-                                        All Participants
-                                        <Badge
-                                          variant="secondary"
-                                          className={cn(
-                                            "ml-2 px-1.5 py-0.5 text-xs h-5",
-                                            isDark
-                                              ? "text-white bg-[#FFFFFF36]"
-                                              : "text-[#7F39EC] bg-purple-200",
-                                          )}
-                                        >
-                                          {sortedCreatorGroups?.length || 0}
-                                        </Badge>
-                                      </TabsTrigger>
-                                      <TabsTrigger
-                                        value="rejected"
-                                        className="text-sm"
-                                      >
-                                        Rejected Participants
-                                        <Badge
-                                          variant="secondary"
-                                          className={cn(
-                                            "ml-2 px-1.5 py-0.5 text-xs h-5",
-                                            isDark
-                                              ? "text-white bg-[#FFFFFF36]"
-                                              : "text-red-600 bg-red-200",
-                                          )}
-                                        >
-                                          {sortedCreatorGroups?.filter(
-                                            (g: any) =>
-                                              (g.creator_moderation_status ||
-                                                "pending") === "rejected",
-                                          ).length || 0}
-                                        </Badge>
-                                      </TabsTrigger>
-                                      <TabsTrigger
-                                        value="available"
-                                        className="text-sm"
-                                      >
-                                        Available Participants
-                                        <Badge
-                                          variant="secondary"
-                                          className={cn(
-                                            "ml-2 px-1.5 py-0.5 text-xs h-5",
-                                            isDark
-                                              ? "text-white bg-[#FFFFFF36]"
-                                              : "text-green-600 bg-green-200",
-                                          )}
-                                        >
-                                          {sortedCreatorGroups?.filter(
-                                            (g: any) =>
-                                              (g.creator_moderation_status ||
-                                                "pending") !== "rejected",
-                                          ).length || 0}
-                                        </Badge>
-                                      </TabsTrigger>
-                                    </TabsList>
-                                  </Tabs>
-                                </div>
-                              )}
+                              {/* Creator-wise: compact status filters (Twitter); large top row hidden for Twitter */}
+                            {isTwitterTextImageContest && (
+                              <TwitterContestSubmissionStatusTabs
+                                activeStatusTab={activeStatusTab}
+                                onValueChange={(v) => {
+                                  setActiveStatusTab(v as any);
+                                  setCreatorWisePage(1);
+                                }}
+                                isDark={isDark}
+                                currentSubmissions={currentSubmissions}
+                                getStatus={getStatus}
+                              />
+                            )}
                             <Table>
                               <TableHeader>
                                 <TableRow
@@ -14503,6 +14414,9 @@ export default function ContestDetailClient({
                                           ?.user_username ||
                                         group.creator?.username ||
                                         null;
+                                      const userTableUsername =
+                                        (primarySubmission as any)
+                                          ?.user_username || null;
                                       // Platform-specific handle (Instagram / YouTube / Twitter etc.)
                                       const platformUsername =
                                         primarySubmission?.creator_username ||
