@@ -97,6 +97,14 @@ type PrizeInfo = {
   position: number;
   amount: number;
 };
+
+type TwitterMetricsRefreshRunSummary = {
+  id: string;
+  status: string;
+  started_at?: string | null;
+  finished_at?: string | null;
+  error_message?: string | null;
+};
 // Tabs will be dynamically generated based on contest platform
 type TabConfig = { id: string; label: string };
 const getTabs = (platform?: string | null): TabConfig[] => {
@@ -192,9 +200,8 @@ const generateAllDummyLeaderboardData = (
       content_link: "https://www.example.com/watch?v=dQw4w9WgXcQ", // A familiar link for all :)
       platform: platforms[i % platforms.length],
       user_platform_username: username,
-      user_full_name: `${
-        isMyEntry ? "The One And Only" : "Talented"
-      } ${username.replace(/\d+/g, "")}`,
+      user_full_name: `${isMyEntry ? "The One And Only" : "Talented"
+        } ${username.replace(/\d+/g, "")}`,
       creator_pfp_url: `https://i.pravatar.cc/150?u=${creatorId}`,
       user_platform_pfp_url: `https://i.pravatar.cc/150?u=${creatorId}_platform`,
     });
@@ -359,6 +366,250 @@ export function ContestClientPage({
   // Refresh metrics state for opportunities
   const [isRefreshingMetrics, setIsRefreshingMetrics] = useState(false);
 
+  const { toast } = useToast();
+
+  const [twitterMetricsRun, setTwitterMetricsRun] =
+    useState<TwitterMetricsRefreshRunSummary | null>(null);
+  const [twitterMetricsRunProgress, setTwitterMetricsRunProgress] =
+    useState<number>(0);
+  const [twitterMetricsRunElapsedSeconds, setTwitterMetricsRunElapsedSeconds] =
+    useState<number | null>(null);
+
+  const twitterMetricsRunActive =
+    twitterMetricsRun?.status === "pending" ||
+    twitterMetricsRun?.status === "running";
+
+  const twitterMetricsTargetProgressRef = useRef<number | null>(null);
+  const twitterMetricsStartedAtMsRef = useRef<number | null>(null);
+  const twitterMetricsProgressTickIntervalRef =
+    useRef<ReturnType<typeof setInterval> | null>(null);
+  const twitterMetricsStatusPollIntervalRef =
+    useRef<ReturnType<typeof setInterval> | null>(null);
+  const twitterMetricsTrackedRunIdRef = useRef<string | null>(null);
+
+  const twitterMetricsRunStorageKey = useCallback(() => {
+    return `twitter-metrics-run:opportunities:${contestId}`;
+  }, [contestId]);
+
+  const clearTwitterMetricsRunIntervals = useCallback(() => {
+    if (twitterMetricsProgressTickIntervalRef.current) {
+      clearInterval(twitterMetricsProgressTickIntervalRef.current);
+      twitterMetricsProgressTickIntervalRef.current = null;
+    }
+    if (twitterMetricsStatusPollIntervalRef.current) {
+      clearInterval(twitterMetricsStatusPollIntervalRef.current);
+      twitterMetricsStatusPollIntervalRef.current = null;
+    }
+  }, []);
+
+  const formatMmSs = useCallback((seconds: number) => {
+    const s = Math.max(0, seconds);
+    const mm = Math.floor(s / 60);
+    const ss = s % 60;
+    return `${String(mm).padStart(2, "0")}:${String(ss).padStart(
+      2,
+      "0",
+    )}`;
+  }, []);
+
+  const startTrackingTwitterMetricsRun = useCallback(
+    (run: TwitterMetricsRefreshRunSummary) => {
+      if (!contestId) return;
+      const runId = run.id;
+
+      // Avoid restarting if we're already tracking this run.
+      if (
+        twitterMetricsTrackedRunIdRef.current === runId &&
+        twitterMetricsProgressTickIntervalRef.current &&
+        twitterMetricsStatusPollIntervalRef.current
+      ) {
+        return;
+      }
+
+      twitterMetricsTrackedRunIdRef.current = runId;
+      twitterMetricsTargetProgressRef.current = Math.floor(
+        90 + Math.random() * 10,
+      );
+      twitterMetricsStartedAtMsRef.current = run.started_at
+        ? new Date(run.started_at).getTime()
+        : Date.now();
+
+      try {
+        if (typeof window !== "undefined") {
+          sessionStorage.setItem(
+            twitterMetricsRunStorageKey(),
+            JSON.stringify({
+              runId,
+              startedAt: run.started_at ?? new Date().toISOString(),
+            }),
+          );
+        }
+      } catch {
+        // ignore
+      }
+
+      setTwitterMetricsRun(run);
+      setTwitterMetricsRunProgress(1);
+      setTwitterMetricsRunElapsedSeconds(0);
+      setIsRefreshingMetrics(true);
+
+      clearTwitterMetricsRunIntervals();
+
+      const avgMs = 120_000; // 2 minute average for leaderboard/metrics refresh
+      twitterMetricsProgressTickIntervalRef.current = setInterval(() => {
+        const startedMs = twitterMetricsStartedAtMsRef.current;
+        if (!startedMs) return;
+
+        const elapsedMs = Date.now() - startedMs;
+        const cap = twitterMetricsTargetProgressRef.current ?? 95;
+        const computed = 1 + (elapsedMs / avgMs) * (cap - 1);
+        const nextProgress = Math.max(1, Math.min(cap, computed));
+
+        setTwitterMetricsRunProgress(nextProgress);
+        setTwitterMetricsRunElapsedSeconds(
+          Math.max(0, Math.floor(elapsedMs / 1000)),
+        );
+      }, 250);
+
+      twitterMetricsStatusPollIntervalRef.current = setInterval(async () => {
+        try {
+          const res = await fetch(
+            `/api/contests/${contestId}/twitter-metrics-refresh/status`,
+          );
+          if (!res.ok) return;
+          const data = await res.json();
+          const latestRun = data?.run as TwitterMetricsRefreshRunSummary | null;
+          if (!latestRun) return;
+          if (latestRun.id !== runId) return;
+
+          setTwitterMetricsRun(latestRun);
+          const status = latestRun.status;
+          const isTerminal =
+            status === "completed" ||
+            status === "failed" ||
+            status === "cancelled";
+          if (!isTerminal) return;
+
+          clearTwitterMetricsRunIntervals();
+          setTwitterMetricsRunProgress(100);
+          setIsRefreshingMetrics(false);
+
+          try {
+            if (typeof window !== "undefined") {
+              sessionStorage.removeItem(twitterMetricsRunStorageKey());
+            }
+          } catch {
+            // ignore
+          }
+
+          if (status === "completed") {
+            setTimeout(() => window.location.reload(), 800);
+          } else {
+            toast({
+              title: "Refresh failed",
+              description:
+                latestRun.error_message?.slice(0, 500) ??
+                "The refresh run ended with an error.",
+              variant: "destructive",
+            });
+          }
+        } catch {
+          // ignore
+        }
+      }, 3000);
+    },
+    [
+      clearTwitterMetricsRunIntervals,
+      contestId,
+      toast,
+      twitterMetricsRunStorageKey,
+    ],
+  );
+
+  // Rehydrate loader/progress if a run is already active (e.g. tab switch).
+  useEffect(() => {
+    if (!contest?.id) return;
+    let cancelled = false;
+
+    (async () => {
+      try {
+        try {
+          const raw =
+            typeof window !== "undefined"
+              ? sessionStorage.getItem(twitterMetricsRunStorageKey())
+              : null;
+          if (raw) {
+            const parsed = JSON.parse(raw) as
+              | { runId?: string; startedAt?: string }
+              | undefined;
+            if (parsed?.runId) {
+              startTrackingTwitterMetricsRun({
+                id: parsed.runId,
+                status: "running",
+                started_at: parsed.startedAt ?? new Date().toISOString(),
+                finished_at: null,
+              });
+            }
+          }
+        } catch {
+          // ignore
+        }
+
+        const res = await fetch(
+          `/api/contests/${contest.id}/twitter-metrics-refresh/status`,
+        );
+        if (!res.ok) return;
+        const data = await res.json();
+        const run = data?.run as TwitterMetricsRefreshRunSummary | null;
+        if (cancelled) return;
+        if (!run) {
+          try {
+            if (typeof window !== "undefined") {
+              sessionStorage.removeItem(twitterMetricsRunStorageKey());
+            }
+          } catch {
+            // ignore
+          }
+          return;
+        }
+
+        if (run.status === "pending" || run.status === "running") {
+          startTrackingTwitterMetricsRun(run);
+        } else {
+          clearTwitterMetricsRunIntervals();
+          setTwitterMetricsRun(null);
+          setTwitterMetricsRunProgress(0);
+          setTwitterMetricsRunElapsedSeconds(null);
+          setIsRefreshingMetrics(false);
+          try {
+            if (typeof window !== "undefined") {
+              sessionStorage.removeItem(twitterMetricsRunStorageKey());
+            }
+          } catch {
+            // ignore
+          }
+        }
+      } catch {
+        // best-effort only
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    contest?.id,
+    clearTwitterMetricsRunIntervals,
+    startTrackingTwitterMetricsRun,
+    twitterMetricsRunStorageKey,
+  ]);
+
+  useEffect(() => {
+    return () => {
+      clearTwitterMetricsRunIntervals();
+    };
+  }, [clearTwitterMetricsRunIntervals]);
+
   // Twitter campaign metrics state
   const [twitterMetrics, setTwitterMetrics] = useState<any>(null);
   const [loadingMetrics, setLoadingMetrics] = useState(false);
@@ -384,8 +635,6 @@ export function ContestClientPage({
     Record<string, string[]>
   >({});
   const [creatorInterests, setCreatorInterests] = useState<string[]>([]);
-
-  const { toast } = useToast();
 
   // Scroll spy state and functionality
   const [activeSection, setActiveSection] = useState("earning-opportunities");
@@ -499,13 +748,13 @@ export function ContestClientPage({
           creator_id: entry.creator_id,
           creator_username: entry.app_username || entry.creator_id,
           creator_full_name: entry.app_full_name || null,
-          creator_pfp_url: null,
-          user_platform_pfp_url: null,
+          creator_pfp_url: entry.creator_pfp_url ?? null,
+          user_platform_pfp_url: entry.user_platform_pfp_url ?? null,
           submissions: [entry],
           total_views: 0,
-            // Twitter/X "creator-wise" leaderboard is already aggregated by creator,
-            // and the API returns `total_earnings` (not `earnings`).
-            total_earnings: entry.total_earnings ?? entry.earnings ?? 0,
+          // Twitter/X "creator-wise" leaderboard is already aggregated by creator,
+          // and the API returns `total_earnings` (not `earnings`).
+          total_earnings: entry.total_earnings ?? entry.earnings ?? 0,
           best_submission: entry,
           best_rank: currentRank,
           submission_count: entry.total_eligible_tweets || 0,
@@ -721,7 +970,12 @@ export function ContestClientPage({
     setIsRefreshingMetrics(true);
 
     let result:
-      | { queued?: boolean; error?: string; lastMetricsUpdated?: string }
+      | {
+        queued?: boolean;
+        error?: string;
+        lastMetricsUpdated?: string;
+        runId?: string;
+      }
       | undefined = undefined;
     try {
       const response = await fetch(
@@ -739,7 +993,42 @@ export function ContestClientPage({
       }
 
       if (result?.queued) {
-        // Metrics refresh queued; keep "Updating..." until done, then reload the page
+        const runId = result.runId;
+        const isTwitterPlatform =
+          contest?.platform?.toLowerCase() === "twitter" ||
+          contest?.platform?.toLowerCase() === "x";
+
+        // Prefer DB run tracking for Twitter so the loader persists across tab switches.
+        if (runId && isTwitterPlatform) {
+          try {
+            const res = await fetch(
+              `/api/contests/${contest.id}/twitter-metrics-refresh/status`,
+            );
+            if (res.ok) {
+              const data = await res.json();
+              const run = data?.run as TwitterMetricsRefreshRunSummary | null;
+              if (
+                run?.id === runId &&
+                (run.status === "pending" || run.status === "running")
+              ) {
+                startTrackingTwitterMetricsRun(run);
+                return;
+              }
+            }
+          } catch {
+            // ignore; we'll fallback to approximate started_at
+          }
+
+          startTrackingTwitterMetricsRun({
+            id: runId,
+            status: "running",
+            started_at: new Date().toISOString(),
+            finished_at: null,
+          });
+          return;
+        }
+
+        // Fallback for non-Twitter (or if runId is missing): timestamp-based polling.
         const previousUpdated = contest?.last_metrics_updated ?? null;
         const pollIntervalMs = 3000;
         const pollMaxMs = 120000; // 2 min
@@ -812,12 +1101,13 @@ export function ContestClientPage({
 
     const isDisabled =
       isRefreshingMetrics ||
+      twitterMetricsRunActive ||
       !cooldownInfo.canRefresh ||
       isLocked ||
       contestHasEnded;
 
     let disabledReason = "";
-    if (isRefreshingMetrics) {
+    if (isRefreshingMetrics || twitterMetricsRunActive) {
       disabledReason = "Refreshing metrics...";
     } else if (contestHasEnded) {
       disabledReason = "Contest has ended";
@@ -1097,13 +1387,13 @@ export function ContestClientPage({
             data.creator_wise_rank != null ||
             data.creator_wise_total_earnings != null
             ? {
-                total_views: data.creator_wise_total_views ?? 0,
-                total_earnings: data.creator_wise_total_earnings ?? 0,
-                rank:
-                  data.creator_wise_rank === undefined
-                    ? null
-                    : data.creator_wise_rank,
-              }
+              total_views: data.creator_wise_total_views ?? 0,
+              total_earnings: data.creator_wise_total_earnings ?? 0,
+              rank:
+                data.creator_wise_rank === undefined
+                  ? null
+                  : data.creator_wise_rank,
+            }
             : null,
         );
 
@@ -2066,13 +2356,12 @@ export function ContestClientPage({
                   {/* Enhanced Status and Type Badges */}
                   <div className="flex flex-wrap items-center gap-4 mb-6">
                     <Badge
-                      className={`text-sm px-6 py-3 font-bold rounded-full shadow-xl border-2 border-white/40 backdrop-blur-md transition-all duration-300 hover:scale-105 ${
-                        contest.status === "active"
-                          ? "bg-gradient-to-r from-green-400 to-emerald-500 text-green-900 shadow-green-500/25"
-                          : contest.status === "upcoming"
-                            ? "bg-gradient-to-r from-blue-400 to-cyan-500 text-blue-900 shadow-blue-500/25"
-                            : "bg-gradient-to-r from-slate-400 to-gray-500 text-slate-900 shadow-slate-500/25"
-                      }`}
+                      className={`text-sm px-6 py-3 font-bold rounded-full shadow-xl border-2 border-white/40 backdrop-blur-md transition-all duration-300 hover:scale-105 ${contest.status === "active"
+                        ? "bg-gradient-to-r from-green-400 to-emerald-500 text-green-900 shadow-green-500/25"
+                        : contest.status === "upcoming"
+                          ? "bg-gradient-to-r from-blue-400 to-cyan-500 text-blue-900 shadow-blue-500/25"
+                          : "bg-gradient-to-r from-slate-400 to-gray-500 text-slate-900 shadow-slate-500/25"
+                        }`}
                     >
                       <span className="flex items-center gap-2">
                         {contest.status === "active" ? (
@@ -2159,17 +2448,17 @@ export function ContestClientPage({
                     </div>
                     <div className="text-4xl lg:text-6xl font-black text-white mb-2 drop-shadow-lg">
                       {contest.contest_type === "cpm" &&
-                      contest.contest_based_details?.cpm_contest
+                        contest.contest_based_details?.cpm_contest
                         ? formatMoney(
-                            contest.contest_based_details.cpm_contest
-                              .total_budget,
-                          )
+                          contest.contest_based_details.cpm_contest
+                            .total_budget,
+                        )
                         : contest.contest_type === "leaderboard" &&
-                            contest.contest_based_details?.leaderboard_contest
+                          contest.contest_based_details?.leaderboard_contest
                           ? formatMoney(
-                              contest.contest_based_details.leaderboard_contest
-                                .total_prize,
-                            )
+                            contest.contest_based_details.leaderboard_contest
+                              .total_prize,
+                          )
                           : contest.total_prize
                             ? formatMoney(contest.total_prize || 0)
                             : "$0.00"}
@@ -2269,7 +2558,18 @@ export function ContestClientPage({
                       isDark ? "text-slate-300" : "text-slate-500",
                     )}
                   >
-                    Submitted {formatTimeAgo(existingSubmission.created_at)}
+                    {(contest?.platform?.toLowerCase() === "twitter" ||
+                      contest?.platform?.toLowerCase() === "x"
+                      ? "Joined "
+                      : "Submitted ") +
+                      formatTimeAgo(
+                        contest?.platform?.toLowerCase() === "twitter" ||
+                          contest?.platform?.toLowerCase() === "x"
+                          ? ((existingSubmission as any)?.joined_at ||
+                            existingSubmission.created_at ||
+                            null)
+                          : existingSubmission.created_at,
+                      )}
                   </p>
                 </div>
               ) : submissionCount > 0 &&
@@ -2317,17 +2617,15 @@ export function ContestClientPage({
                     size="lg"
                     onClick={handleSubmitContent}
                     disabled={contest.status?.toLowerCase() !== "active"}
-                    className={`relative overflow-hidden text-lg font-bold py-4 px-8 h-auto rounded-2xl shadow-xl transition-all duration-500 ease-out transform ${
-                      contest.status?.toLowerCase() === "active"
-                        ? "bg-[#4A00BE] text-white border-0 hover:shadow-2xl hover:scale-105"
-                        : "bg-gradient-to-r from-slate-300 to-slate-400 dark:from-slate-600 dark:to-slate-700 text-slate-500 dark:text-slate-400 cursor-not-allowed"
-                    }`}
+                    className={`relative overflow-hidden text-lg font-bold py-4 px-8 h-auto rounded-2xl shadow-xl transition-all duration-500 ease-out transform ${contest.status?.toLowerCase() === "active"
+                      ? "bg-[#4A00BE] text-white border-0 hover:shadow-2xl hover:scale-105"
+                      : "bg-gradient-to-r from-slate-300 to-slate-400 dark:from-slate-600 dark:to-slate-700 text-slate-500 dark:text-slate-400 cursor-not-allowed"
+                      }`}
                   >
                     <span className="relative z-10">
                       {contest.status?.toLowerCase() === "active"
-                        ? `Submit More Videos (${
-                            maxSubmissions - submissionCount
-                          } remaining)`
+                        ? `Submit More Videos (${maxSubmissions - submissionCount
+                        } remaining)`
                         : "Contest Not Active"}
                     </span>
                     {contest.status?.toLowerCase() === "active" && (
@@ -2416,11 +2714,10 @@ export function ContestClientPage({
                         (twitterConnectStatus === "disconnected" ||
                           twitterConnectStatus === "loading"))
                     }
-                    className={`relative overflow-hidden text-lg font-bold py-4  px-8 h-auto rounded-2xl shadow-xl transition-all duration-500 ease-out transform ${
-                      contest.status?.toLowerCase() === "active"
-                        ? "bg-[#4A00BE] text-white border-0 hover:shadow-2xl"
-                        : "bg-gradient-to-r from-slate-300 to-slate-400 dark:from-slate-600 dark:to-slate-700 text-slate-500 dark:text-slate-400 cursor-not-allowed"
-                    }`}
+                    className={`relative overflow-hidden text-lg font-bold py-4  px-8 h-auto rounded-2xl shadow-xl transition-all duration-500 ease-out transform ${contest.status?.toLowerCase() === "active"
+                      ? "bg-[#4A00BE] text-white border-0 hover:shadow-2xl"
+                      : "bg-gradient-to-r from-slate-300 to-slate-400 dark:from-slate-600 dark:to-slate-700 text-slate-500 dark:text-slate-400 cursor-not-allowed"
+                      }`}
                   >
                     {/* Animated shine effect for active button */}
                     {contest.status?.toLowerCase() === "active" && (
@@ -2450,7 +2747,7 @@ export function ContestClientPage({
                                   : joinCampaignLoading
                                     ? "Joining..."
                                     : user &&
-                                        twitterConnectStatus === "loading"
+                                      twitterConnectStatus === "loading"
                                       ? "Checking…"
                                       : "Join Twitter Campaign"
                                 : "Submit Your Entry!"}
@@ -2478,7 +2775,7 @@ export function ContestClientPage({
                         className={cn(
                           "mt-4 max-w-lg mx-auto text-center",
                           twitterJoinError.kind !== "generic" &&
-                            "border border-[#7F39EC] bg-[#D9C0FF26]",
+                          "border border-[#7F39EC] bg-[#D9C0FF26]",
                         )}
                       >
                         <AlertDescription
@@ -2495,17 +2792,17 @@ export function ContestClientPage({
                         </AlertDescription>
                         {(twitterJoinError.kind === "not_connected" ||
                           twitterJoinError.kind === "bio") && (
-                          <Link href="/dashboard/settings">
-                            <Button
-                              variant="link"
-                              className="mt-1 text-[#7F39EC]"
-                            >
-                              {twitterJoinError.kind === "bio"
-                                ? "Open Settings to update X bio"
-                                : "Connect X in Settings"}
-                            </Button>
-                          </Link>
-                        )}
+                            <Link href="/dashboard/settings">
+                              <Button
+                                variant="link"
+                                className="mt-1 text-[#7F39EC]"
+                              >
+                                {twitterJoinError.kind === "bio"
+                                  ? "Open Settings to update X bio"
+                                  : "Connect X in Settings"}
+                              </Button>
+                            </Link>
+                          )}
                       </Alert>
                     )}
 
@@ -2672,12 +2969,12 @@ export function ContestClientPage({
                 >
                   {contest.start_date && contest.end_date
                     ? `${formatLocalDateTime(contest.start_date, {
-                        month: "short",
-                        day: "numeric",
-                      })} - ${formatLocalDateTime(contest.end_date, {
-                        month: "short",
-                        day: "numeric",
-                      })}`
+                      month: "short",
+                      day: "numeric",
+                    })} - ${formatLocalDateTime(contest.end_date, {
+                      month: "short",
+                      day: "numeric",
+                    })}`
                     : "Dates TBD"}
                 </p>
               </div>
@@ -2754,16 +3051,16 @@ export function ContestClientPage({
                   )}
                 >
                   {contest.contest_type === "cpm" &&
-                  contest.contest_based_details?.cpm_contest
+                    contest.contest_based_details?.cpm_contest
                     ? formatMoney(
-                        contest.contest_based_details.cpm_contest.total_budget,
-                      )
+                      contest.contest_based_details.cpm_contest.total_budget,
+                    )
                     : contest.contest_type === "leaderboard" &&
-                        contest.contest_based_details?.leaderboard_contest
+                      contest.contest_based_details?.leaderboard_contest
                       ? formatMoney(
-                          contest.contest_based_details.leaderboard_contest
-                            .total_prize,
-                        )
+                        contest.contest_based_details.leaderboard_contest
+                          .total_prize,
+                      )
                       : contest.total_prize // Fallback to old field if necessary for older data
                         ? formatMoney(contest.total_prize || 0)
                         : "$0.00"}
@@ -2776,17 +3073,15 @@ export function ContestClientPage({
                   )}
                 >
                   {contest.contest_type === "leaderboard" &&
-                  contest.contest_based_details?.leaderboard_contest
-                    ?.winner_count
-                    ? `${
-                        contest.contest_based_details.leaderboard_contest
-                          .winner_count
-                      } winner${
-                        contest.contest_based_details.leaderboard_contest
-                          .winner_count !== 1
-                          ? "s"
-                          : ""
-                      }`
+                    contest.contest_based_details?.leaderboard_contest
+                      ?.winner_count
+                    ? `${contest.contest_based_details.leaderboard_contest
+                      .winner_count
+                    } winner${contest.contest_based_details.leaderboard_contest
+                      .winner_count !== 1
+                      ? "s"
+                      : ""
+                    }`
                     : contest.contest_type === "cpm"
                       ? "CPM based"
                       : "Total prize"}
@@ -2933,7 +3228,7 @@ export function ContestClientPage({
                       )}
                     >
                       {contest.live_submission_count !== null &&
-                      contest.live_submission_count >= 0
+                        contest.live_submission_count >= 0
                         ? contest.live_submission_count
                         : 0}
                     </p>
@@ -3097,10 +3392,10 @@ export function ContestClientPage({
                       >
                         {contest.end_date
                           ? formatLocalDateTime(contest.end_date, {
-                              month: "short",
-                              day: "numeric",
-                              year: "numeric",
-                            })
+                            month: "short",
+                            day: "numeric",
+                            year: "numeric",
+                          })
                           : "Date not specified"}
                       </div>
                       {contest.end_date && (
@@ -3204,15 +3499,14 @@ export function ContestClientPage({
                         <button
                           key={section.id}
                           onClick={() => scrollToSection(section.id)}
-                          className={`px-4 py-2 rounded-lg text-[13px] font-medium whitespace-nowrap transition-all duration-200 ${
-                            activeSection === section.id
-                              ? isDark
-                                ? "bg-blue-900/30 text-blue-300 border-b-2 border-blue-500"
-                                : "bg-blue-100 text-blue-700 border-b-2 border-blue-500"
-                              : isDark
-                                ? "text-slate-200 hover:text-slate-200"
-                                : "text-slate-600 hover:text-slate-900 hover:bg-slate-100"
-                          }`}
+                          className={`px-4 py-2 rounded-lg text-[13px] font-medium whitespace-nowrap transition-all duration-200 ${activeSection === section.id
+                            ? isDark
+                              ? "bg-blue-900/30 text-blue-300 border-b-2 border-blue-500"
+                              : "bg-blue-100 text-blue-700 border-b-2 border-blue-500"
+                            : isDark
+                              ? "text-slate-200 hover:text-slate-200"
+                              : "text-slate-600 hover:text-slate-900 hover:bg-slate-100"
+                            }`}
                         >
                           {section.label}
                         </button>
@@ -3314,13 +3608,13 @@ export function ContestClientPage({
                         // Dynamic grid based on contest type and available data
                         contest.contest_type === "cpm"
                           ? contest.contest_based_details?.cpm_contest
-                              ?.min_views != null &&
+                            ?.min_views != null &&
                             contest.contest_based_details?.cpm_contest
                               ?.max_views != null
                             ? "md:grid-cols-2 lg:grid-cols-4" // 4 cards: Pay Rate, Total Budget, Min Views, Max Views
                             : "md:grid-cols-2 lg:grid-cols-3" // 3 cards: Pay Rate, Total Budget, + one view requirement
                           : "md:grid-cols-2 lg:grid-cols-2" // 2 cards: Prize Pool, Winners
-                      }`}
+                        }`}
                     >
                       {/* Pay Rate / Prize Pool */}
                       <div
@@ -3349,18 +3643,18 @@ export function ContestClientPage({
                           )}
                         >
                           {contest.contest_type === "cpm" &&
-                          contest.contest_based_details?.cpm_contest
+                            contest.contest_based_details?.cpm_contest
                             ? formatMoney(
-                                contest.contest_based_details.cpm_contest
-                                  .cpm_rate_usd * 100,
-                              )
+                              contest.contest_based_details.cpm_contest
+                                .cpm_rate_usd * 100,
+                            )
                             : contest.contest_type === "leaderboard" &&
-                                contest.contest_based_details
-                                  ?.leaderboard_contest
+                              contest.contest_based_details
+                                ?.leaderboard_contest
                               ? formatMoney(
-                                  contest.contest_based_details
-                                    .leaderboard_contest.total_prize,
-                                )
+                                contest.contest_based_details
+                                  .leaderboard_contest.total_prize,
+                              )
                               : contest.total_prize
                                 ? formatMoney(contest.total_prize || 0)
                                 : "$0.00"}
@@ -3406,16 +3700,16 @@ export function ContestClientPage({
                           )}
                         >
                           {contest.contest_type === "cpm" &&
-                          contest.contest_based_details?.cpm_contest
+                            contest.contest_based_details?.cpm_contest
                             ? formatMoney(
-                                contest.contest_based_details.cpm_contest
-                                  .total_budget,
-                              )
+                              contest.contest_based_details.cpm_contest
+                                .total_budget,
+                            )
                             : contest.contest_type === "leaderboard" &&
-                                contest.contest_based_details
-                                  ?.leaderboard_contest
+                              contest.contest_based_details
+                                ?.leaderboard_contest
                               ? contest.contest_based_details
-                                  .leaderboard_contest.winner_count
+                                .leaderboard_contest.winner_count
                               : "N/A"}
                         </div>
                         <div
@@ -3436,82 +3730,82 @@ export function ContestClientPage({
                           <>
                             {contest.contest_based_details.cpm_contest
                               .min_views != null && (
-                              <div
-                                className={cn(
-                                  "rounded-lg p-4",
-                                  isDark
-                                    ? "border border-[#D1B7F9]"
-                                    : "bg-slate-50",
-                                )}
-                              >
-                                <div className="flex items-center gap-2 mb-2">
-                                  <Eye className="h-4 w-4 text-orange-600 dark:text-orange-400" />
-                                  <span
+                                <div
+                                  className={cn(
+                                    "rounded-lg p-4",
+                                    isDark
+                                      ? "border border-[#D1B7F9]"
+                                      : "bg-slate-50",
+                                  )}
+                                >
+                                  <div className="flex items-center gap-2 mb-2">
+                                    <Eye className="h-4 w-4 text-orange-600 dark:text-orange-400" />
+                                    <span
+                                      className={cn(
+                                        "text-sm font-medium",
+                                        isDark ? "text-white" : "text-slate-600",
+                                      )}
+                                    >
+                                      Min Views
+                                    </span>
+                                  </div>
+                                  <div
                                     className={cn(
-                                      "text-sm font-medium",
-                                      isDark ? "text-white" : "text-slate-600",
+                                      "text-2xl font-bold",
+                                      isDark ? "text-white" : "text-slate-900",
                                     )}
                                   >
-                                    Min Views
-                                  </span>
+                                    {contest.contest_based_details.cpm_contest.min_views.toLocaleString()}
+                                  </div>
+                                  <div
+                                    className={cn(
+                                      "text-xs",
+                                      isDark ? "text-gray-300" : "text-slate-500",
+                                    )}
+                                  >
+                                    required
+                                  </div>
                                 </div>
-                                <div
-                                  className={cn(
-                                    "text-2xl font-bold",
-                                    isDark ? "text-white" : "text-slate-900",
-                                  )}
-                                >
-                                  {contest.contest_based_details.cpm_contest.min_views.toLocaleString()}
-                                </div>
-                                <div
-                                  className={cn(
-                                    "text-xs",
-                                    isDark ? "text-gray-300" : "text-slate-500",
-                                  )}
-                                >
-                                  required
-                                </div>
-                              </div>
-                            )}
+                              )}
                             {contest.contest_based_details.cpm_contest
                               .max_views != null && (
-                              <div
-                                className={cn(
-                                  "rounded-lg p-4",
-                                  isDark
-                                    ? "border border-[#D1B7F9]"
-                                    : "bg-slate-50",
-                                )}
-                              >
-                                <div className="flex items-center gap-2 mb-2">
-                                  <Eye className="h-4 w-4 text-purple-600 dark:text-purple-400" />
-                                  <span
+                                <div
+                                  className={cn(
+                                    "rounded-lg p-4",
+                                    isDark
+                                      ? "border border-[#D1B7F9]"
+                                      : "bg-slate-50",
+                                  )}
+                                >
+                                  <div className="flex items-center gap-2 mb-2">
+                                    <Eye className="h-4 w-4 text-purple-600 dark:text-purple-400" />
+                                    <span
+                                      className={cn(
+                                        "text-sm font-medium",
+                                        isDark ? "text-white" : "text-slate-600",
+                                      )}
+                                    >
+                                      Max Views
+                                    </span>
+                                  </div>
+                                  <div
                                     className={cn(
-                                      "text-sm font-medium",
-                                      isDark ? "text-white" : "text-slate-600",
+                                      "text-2xl font-bold",
+                                      isDark ? "text-white" : "text-slate-900",
                                     )}
                                   >
-                                    Max Views
-                                  </span>
+                                    {contest.contest_based_details.cpm_contest.max_views.toLocaleString()}
+                                  </div>
+                                  <div
+                                    className={cn(
+                                      "text-xs",
+                                      isDark ? "text-gray-300" : "text-slate-500",
+                                    )}
+                                  >
+                                    counted
+                                  </div>
                                 </div>
-                                <div
-                                  className={cn(
-                                    "text-2xl font-bold",
-                                    isDark ? "text-white" : "text-slate-900",
-                                  )}
-                                >
-                                  {contest.contest_based_details.cpm_contest.max_views.toLocaleString()}
-                                </div>
-                                <div
-                                  className={cn(
-                                    "text-xs",
-                                    isDark ? "text-gray-300" : "text-slate-500",
-                                  )}
-                                >
-                                  counted
-                                </div>
-                              </div>
-                            )}
+                              )}
                           </>
                         )}
                     </div>
@@ -3597,39 +3891,39 @@ export function ContestClientPage({
                               </div>
                               {contest.contest_based_details.leaderboard_contest
                                 .total_budget && (
-                                <div
-                                  className={cn(
-                                    "rounded-lg p-3 border",
-                                    isDark
-                                      ? "bg-slate-800 border-green-700/30"
-                                      : "bg-white border-green-200",
-                                  )}
-                                >
                                   <div
                                     className={cn(
-                                      "text-xs mb-1",
+                                      "rounded-lg p-3 border",
                                       isDark
-                                        ? "text-green-300"
-                                        : "text-green-700",
+                                        ? "bg-slate-800 border-green-700/30"
+                                        : "bg-white border-green-200",
                                     )}
                                   >
-                                    Total Budget
+                                    <div
+                                      className={cn(
+                                        "text-xs mb-1",
+                                        isDark
+                                          ? "text-green-300"
+                                          : "text-green-700",
+                                      )}
+                                    >
+                                      Total Budget
+                                    </div>
+                                    <div
+                                      className={cn(
+                                        "text-lg font-bold",
+                                        isDark
+                                          ? "text-green-100"
+                                          : "text-green-900",
+                                      )}
+                                    >
+                                      {formatMoney(
+                                        contest.contest_based_details
+                                          .leaderboard_contest.total_budget,
+                                      )}
+                                    </div>
                                   </div>
-                                  <div
-                                    className={cn(
-                                      "text-lg font-bold",
-                                      isDark
-                                        ? "text-green-100"
-                                        : "text-green-900",
-                                    )}
-                                  >
-                                    {formatMoney(
-                                      contest.contest_based_details
-                                        .leaderboard_contest.total_budget,
-                                    )}
-                                  </div>
-                                </div>
-                              )}
+                                )}
                             </div>
                           </div>
                         )}
@@ -3719,35 +4013,35 @@ export function ContestClientPage({
                             {/* Flat Fee Bonus Cap (for CPM contests) */}
                             {contest.contest_based_details?.cpm_contest
                               ?.flat_fee_bonus_cap && (
-                              <div className="mt-3">
-                                <p
-                                  className={cn(
-                                    "text-sm font-medium",
-                                    isDark
-                                      ? "text-green-200"
-                                      : "text-green-800",
-                                  )}
-                                >
-                                  💰 Flat Fee Bonus Cap:{" "}
-                                  {formatMoney(
-                                    contest.contest_based_details.cpm_contest
-                                      .flat_fee_bonus_cap,
-                                  )}
-                                </p>
-                                <p
-                                  className={cn(
-                                    "text-xs mt-2",
-                                    isDark
-                                      ? "text-green-400"
-                                      : "text-green-600",
-                                  )}
-                                >
-                                  Maximum total flat fee bonus to distribute
-                                  across all creators. Once this cap is reached,
-                                  no more flat fee bonuses will be given.
-                                </p>
-                              </div>
-                            )}
+                                <div className="mt-3">
+                                  <p
+                                    className={cn(
+                                      "text-sm font-medium",
+                                      isDark
+                                        ? "text-green-200"
+                                        : "text-green-800",
+                                    )}
+                                  >
+                                    💰 Flat Fee Bonus Cap:{" "}
+                                    {formatMoney(
+                                      contest.contest_based_details.cpm_contest
+                                        .flat_fee_bonus_cap,
+                                    )}
+                                  </p>
+                                  <p
+                                    className={cn(
+                                      "text-xs mt-2",
+                                      isDark
+                                        ? "text-green-400"
+                                        : "text-green-600",
+                                    )}
+                                  >
+                                    Maximum total flat fee bonus to distribute
+                                    across all creators. Once this cap is reached,
+                                    no more flat fee bonuses will be given.
+                                  </p>
+                                </div>
+                              )}
                           </div>
                         )}
 
@@ -4043,128 +4337,128 @@ export function ContestClientPage({
                           </div>
                           {contest.contest_based_details.leaderboard_contest
                             .flat_fee_bonus && (
-                            <div
-                              className={cn(
-                                "bg-gradient-to-r rounded-lg p-4 border",
-                                isDark
-                                  ? "from-green-900/20 to-emerald-900/20 border-green-700/50"
-                                  : "from-green-50 to-emerald-50 border-green-200",
-                              )}
-                            >
-                              <div className="flex items-center gap-3">
-                                <Gift
-                                  className={cn(
-                                    "h-6 w-6",
-                                    isDark
-                                      ? "text-green-400"
-                                      : "text-green-600",
-                                  )}
-                                />
-                                <div>
-                                  <div
+                              <div
+                                className={cn(
+                                  "bg-gradient-to-r rounded-lg p-4 border",
+                                  isDark
+                                    ? "from-green-900/20 to-emerald-900/20 border-green-700/50"
+                                    : "from-green-50 to-emerald-50 border-green-200",
+                                )}
+                              >
+                                <div className="flex items-center gap-3">
+                                  <Gift
                                     className={cn(
-                                      "text-sm font-medium",
+                                      "h-6 w-6",
                                       isDark
-                                        ? "text-green-200"
-                                        : "text-green-800",
+                                        ? "text-green-400"
+                                        : "text-green-600",
                                     )}
-                                  >
-                                    Bonus Budget
-                                  </div>
-                                  <div
-                                    className={cn(
-                                      "text-2xl font-bold",
-                                      isDark
-                                        ? "text-green-100"
-                                        : "text-green-900",
-                                    )}
-                                  >
-                                    {formatMoney(
-                                      contest.contest_based_details
-                                        .leaderboard_contest.flat_fee_bonus,
-                                    )}
-                                  </div>
-                                  <div
-                                    className={cn(
-                                      "text-xs mt-0.5",
-                                      isDark
-                                        ? "text-green-300"
-                                        : "text-green-700",
-                                    )}
-                                  >
-                                    per verified submission
+                                  />
+                                  <div>
+                                    <div
+                                      className={cn(
+                                        "text-sm font-medium",
+                                        isDark
+                                          ? "text-green-200"
+                                          : "text-green-800",
+                                      )}
+                                    >
+                                      Bonus Budget
+                                    </div>
+                                    <div
+                                      className={cn(
+                                        "text-2xl font-bold",
+                                        isDark
+                                          ? "text-green-100"
+                                          : "text-green-900",
+                                      )}
+                                    >
+                                      {formatMoney(
+                                        contest.contest_based_details
+                                          .leaderboard_contest.flat_fee_bonus,
+                                      )}
+                                    </div>
+                                    <div
+                                      className={cn(
+                                        "text-xs mt-0.5",
+                                        isDark
+                                          ? "text-green-300"
+                                          : "text-green-700",
+                                      )}
+                                    >
+                                      per verified submission
+                                    </div>
                                   </div>
                                 </div>
                               </div>
-                            </div>
-                          )}
+                            )}
                         </div>
 
                         {/* Bonus Budget Note */}
                         {contest.contest_based_details.leaderboard_contest
                           .flat_fee_bonus && (
-                          <div
-                            className={cn(
-                              "mb-6 p-4 border rounded-lg",
-                              isDark
-                                ? "bg-green-900/10 border-green-700/50"
-                                : "bg-green-50 border-green-200",
-                            )}
-                          >
-                            <div className="flex items-start gap-3">
-                              <Gift
-                                className={cn(
-                                  "h-5 w-5 mt-0.5 flex-shrink-0",
-                                  isDark ? "text-green-400" : "text-green-600",
-                                )}
-                              />
-                              <div>
-                                <p
+                            <div
+                              className={cn(
+                                "mb-6 p-4 border rounded-lg",
+                                isDark
+                                  ? "bg-green-900/10 border-green-700/50"
+                                  : "bg-green-50 border-green-200",
+                              )}
+                            >
+                              <div className="flex items-start gap-3">
+                                <Gift
                                   className={cn(
-                                    "text-sm font-semibold mb-1",
-                                    isDark
-                                      ? "text-green-200"
-                                      : "text-green-900",
+                                    "h-5 w-5 mt-0.5 flex-shrink-0",
+                                    isDark ? "text-green-400" : "text-green-600",
                                   )}
-                                >
-                                  Additional Bonus Earnings
-                                </p>
-                                <p
-                                  className={cn(
-                                    "text-sm",
-                                    isDark
-                                      ? "text-green-300"
-                                      : "text-green-800",
-                                  )}
-                                >
-                                  Every verified submission receives{" "}
-                                  <span className="font-bold">
-                                    {formatMoney(
-                                      contest.contest_based_details
-                                        .leaderboard_contest.flat_fee_bonus,
+                                />
+                                <div>
+                                  <p
+                                    className={cn(
+                                      "text-sm font-semibold mb-1",
+                                      isDark
+                                        ? "text-green-200"
+                                        : "text-green-900",
                                     )}
-                                  </span>{" "}
-                                  as a guaranteed bonus, on top of any prizes
-                                  won from the leaderboard positions above
-                                  {contest.contest_based_details
-                                    .leaderboard_contest.total_budget && (
-                                    <>
-                                      , until the bonus budget of{" "}
-                                      <span className="font-bold">
-                                        {formatMoney(
-                                          contest.contest_based_details
-                                            .leaderboard_contest.total_budget,
-                                        )}
-                                      </span>{" "}
-                                      is reached
-                                    </>
-                                  )}
-                                  .
-                                </p>
+                                  >
+                                    Additional Bonus Earnings
+                                  </p>
+                                  <p
+                                    className={cn(
+                                      "text-sm",
+                                      isDark
+                                        ? "text-green-300"
+                                        : "text-green-800",
+                                    )}
+                                  >
+                                    Every verified submission receives{" "}
+                                    <span className="font-bold">
+                                      {formatMoney(
+                                        contest.contest_based_details
+                                          .leaderboard_contest.flat_fee_bonus,
+                                      )}
+                                    </span>{" "}
+                                    as a guaranteed bonus, on top of any prizes
+                                    won from the leaderboard positions above
+                                    {contest.contest_based_details
+                                      .leaderboard_contest.total_budget && (
+                                        <>
+                                          , until the bonus budget of{" "}
+                                          <span className="font-bold">
+                                            {formatMoney(
+                                              contest.contest_based_details
+                                                .leaderboard_contest.total_budget,
+                                            )}
+                                          </span>{" "}
+                                          is reached
+                                        </>
+                                      )}
+                                    .
+                                  </p>
+                                </div>
                               </div>
                             </div>
-                          </div>
-                        )}
+                          )}
 
                         {/* Prize Distribution List */}
                         <div>
@@ -4763,6 +5057,15 @@ export function ContestClientPage({
                     const raidTarget = twitterCampaign?.raid_target;
                     const twitterKeywords = twitterCampaign?.keywords || [];
                     const twitterMentions = twitterCampaign?.mentions || [];
+                    const raidCpmPer1000Usd =
+                      contest.contest_type === "cpm" &&
+                        contest.contest_based_details?.cpm_contest
+                          ?.cpm_rate_usd != null
+                        ? formatMoney(
+                          contest.contest_based_details.cpm_contest
+                            .cpm_rate_usd * 100,
+                        )
+                        : null;
 
                     return (
                       contest.platform?.toLowerCase() === "twitter" &&
@@ -4836,146 +5139,337 @@ export function ContestClientPage({
 
                           {raidTarget?.metrics && (
                             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                              <div>
-                                <p
+                              <div
+                                className={cn(
+                                  "rounded-xl p-4 border flex items-center justify-between gap-4",
+                                  isDark
+                                    ? "border-slate-700 bg-slate-900/30"
+                                    : "border-slate-200 bg-white/80",
+                                )}
+                              >
+                                <div className="min-w-0">
+                                  <p
+                                    className={cn(
+                                      "text-xs uppercase tracking-wide font-medium",
+                                      isDark
+                                        ? "text-slate-300"
+                                        : "text-slate-600",
+                                    )}
+                                  >
+                                    Target Likes
+                                  </p>
+                                  <p
+                                    className={cn(
+                                      "text-base font-semibold",
+                                      isDark
+                                        ? "text-slate-100"
+                                        : "text-slate-800",
+                                    )}
+                                  >
+                                    {typeof raidTarget.metrics.likes ===
+                                      "number"
+                                      ? raidTarget.metrics.likes.toLocaleString()
+                                      : raidTarget.metrics.likes ?? "Not specified"}
+                                  </p>
+                                </div>
+                                <div
                                   className={cn(
-                                    "text-xs uppercase tracking-wide font-medium",
+                                    "w-12 h-12 rounded-xl flex items-center justify-center shrink-0",
                                     isDark
-                                      ? "text-slate-300"
-                                      : "text-slate-600",
+                                      ? "bg-pink-500/10 border border-pink-500/25 text-pink-200"
+                                      : "bg-pink-50 border border-pink-100 text-pink-600",
                                   )}
                                 >
-                                  Target Likes
-                                </p>
-                                <p
-                                  className={cn(
-                                    "text-base font-semibold",
-                                    isDark
-                                      ? "text-slate-100"
-                                      : "text-slate-800",
-                                  )}
-                                >
-                                  {raidTarget.metrics.likes ?? "Not specified"}
-                                </p>
+                                  <ThumbsUp className="h-6 w-6" />
+                                </div>
                               </div>
-                              <div>
-                                <p
+
+                              <div
+                                className={cn(
+                                  "rounded-xl p-4 border flex items-center justify-between gap-4",
+                                  isDark
+                                    ? "border-slate-700 bg-slate-900/30"
+                                    : "border-slate-200 bg-white/80",
+                                )}
+                              >
+                                <div className="min-w-0">
+                                  <p
+                                    className={cn(
+                                      "text-xs uppercase tracking-wide font-medium",
+                                      isDark
+                                        ? "text-slate-300"
+                                        : "text-slate-600",
+                                    )}
+                                  >
+                                    Target Replies
+                                  </p>
+                                  <p
+                                    className={cn(
+                                      "text-base font-semibold",
+                                      isDark
+                                        ? "text-slate-100"
+                                        : "text-slate-800",
+                                    )}
+                                  >
+                                    {typeof raidTarget.metrics.comments ===
+                                      "number"
+                                      ? raidTarget.metrics.comments.toLocaleString()
+                                      : raidTarget.metrics.comments ?? "Not specified"}
+                                  </p>
+                                </div>
+                                <div
                                   className={cn(
-                                    "text-xs uppercase tracking-wide font-medium",
+                                    "w-12 h-12 rounded-xl flex items-center justify-center shrink-0",
                                     isDark
-                                      ? "text-slate-300"
-                                      : "text-slate-600",
+                                      ? "bg-orange-500/10 border border-orange-500/25 text-orange-200"
+                                      : "bg-orange-50 border border-orange-100 text-orange-600",
                                   )}
                                 >
-                                  Target Replies
-                                </p>
-                                <p
-                                  className={cn(
-                                    "text-base font-semibold",
-                                    isDark
-                                      ? "text-slate-100"
-                                      : "text-slate-800",
-                                  )}
-                                >
-                                  {raidTarget.metrics.comments ??
-                                    "Not specified"}
-                                </p>
+                                  <MessageCircle className="h-6 w-6" />
+                                </div>
                               </div>
-                              <div>
-                                <p
+
+                              <div
+                                className={cn(
+                                  "rounded-xl p-4 border flex items-center justify-between gap-4",
+                                  isDark
+                                    ? "border-slate-700 bg-slate-900/30"
+                                    : "border-slate-200 bg-white/80",
+                                )}
+                              >
+                                <div className="min-w-0">
+                                  <p
+                                    className={cn(
+                                      "text-xs uppercase tracking-wide font-medium",
+                                      isDark
+                                        ? "text-slate-300"
+                                        : "text-slate-600",
+                                    )}
+                                  >
+                                    Target Retweets
+                                  </p>
+                                  <p
+                                    className={cn(
+                                      "text-base font-semibold",
+                                      isDark
+                                        ? "text-slate-100"
+                                        : "text-slate-800",
+                                    )}
+                                  >
+                                    {typeof raidTarget.metrics.retweets ===
+                                      "number"
+                                      ? raidTarget.metrics.retweets.toLocaleString()
+                                      : raidTarget.metrics.retweets ?? "Not specified"}
+                                  </p>
+                                </div>
+                                <div
                                   className={cn(
-                                    "text-xs uppercase tracking-wide font-medium",
+                                    "w-12 h-12 rounded-xl flex items-center justify-center shrink-0",
                                     isDark
-                                      ? "text-slate-300"
-                                      : "text-slate-600",
+                                      ? "bg-sky-500/10 border border-sky-500/25 text-sky-200"
+                                      : "bg-sky-50 border border-sky-100 text-sky-600",
                                   )}
                                 >
-                                  Target Retweets
-                                </p>
-                                <p
-                                  className={cn(
-                                    "text-base font-semibold",
-                                    isDark
-                                      ? "text-slate-100"
-                                      : "text-slate-800",
-                                  )}
-                                >
-                                  {raidTarget.metrics.retweets ??
-                                    "Not specified"}
-                                </p>
+                                  <Share2 className="h-6 w-6" />
+                                </div>
                               </div>
                             </div>
                           )}
 
+                          <div
+                            className={cn(
+                              "rounded-xl border p-4 sm:p-5 space-y-3",
+                              isDark
+                                ? "border-violet-500/30 bg-violet-950/25"
+                                : "border-violet-200 bg-gradient-to-br from-white to-violet-50/70",
+                            )}
+                          >
+                            <div className="flex items-start gap-2">
+                              <Info
+                                className={cn(
+                                  "h-5 w-5 shrink-0 mt-0.5",
+                                  isDark
+                                    ? "text-violet-300"
+                                    : "text-violet-600",
+                                )}
+                                aria-hidden
+                              />
+                              <div className="min-w-0 space-y-3">
+                                <p
+                                  className={cn(
+                                    "text-sm font-semibold",
+                                    isDark
+                                      ? "text-violet-100"
+                                      : "text-violet-900",
+                                  )}
+                                >
+                                  How points and participation work (raid)
+                                </p>
+                                <p
+                                  className={cn(
+                                    "text-sm leading-relaxed",
+                                    isDark
+                                      ? "text-slate-200"
+                                      : "text-slate-700",
+                                  )}
+                                >
+                                  The more you quote-repost, comment, and retweet
+                                  in relation to the{" "}
+                                  <strong>target tweet</strong>, the more points
+                                  you can earn. You can also earn additional
+                                  points based on the{" "}
+                                  <strong>quality and reach</strong> of your
+                                  own posts.
+                                </p>
+                                <p
+                                  className={cn(
+                                    "text-sm leading-relaxed",
+                                    isDark
+                                      ? "text-slate-200"
+                                      : "text-slate-700",
+                                  )}
+                                >
+                                  After you engage, open the{" "}
+                                  <strong>Leaderboard</strong> or{" "}
+                                  <strong>Twitter Feed</strong> tab and use
+                                  the <strong>Refresh</strong> button there to
+                                  pull the latest numbers. You&apos;ll see your
+                                  participation (tweets, quotes, comments) and
+                                  your points and ranking.
+                                </p>
+                                <p
+                                  className={cn(
+                                    "text-sm leading-relaxed",
+                                    isDark
+                                      ? "text-slate-200"
+                                      : "text-slate-700",
+                                  )}
+                                >
+                                  <strong>New to raids?</strong> You need at
+                                  least one qualifying action—such as a
+                                  retweet, quote repost, or comment on the
+                                  target tweet—to be eligible for points (see Brief &
+                                  Participation Guidelines for more detailed info & rules). We
+                                  don&apos;t publish a fixed points formula;
+                                  points reflect engagement quality and reach:
+                                  stronger, authentic engagement generally
+                                  earns more points.
+                                </p>
+                                <p
+                                  className={cn(
+                                    "text-sm leading-relaxed",
+                                    isDark
+                                      ? "text-slate-200"
+                                      : "text-slate-700",
+                                  )}
+                                >
+                                  <strong>Tip:</strong> The more you engage, the
+                                  more points you can earn. Don&apos;t compromise
+                                  on quality and avoid spam.
+                                </p>
+                                {raidCpmPer1000Usd ? (
+                                  <p
+                                    className={cn(
+                                      "text-sm leading-relaxed",
+                                      isDark
+                                        ? "text-slate-200"
+                                        : "text-slate-700",
+                                    )}
+                                  >
+                                    <strong>Earnings (CPM):</strong> This
+                                    contest pays{" "}
+                                    <strong>{raidCpmPer1000Usd}</strong> per{" "}
+                                    <strong>1,000 points</strong>—that rate is
+                                    the CPM/Pay Rate shown under Earning
+                                    Opportunities above.
+                                  </p>
+                                ) : (
+                                  <p
+                                    className={cn(
+                                      "text-sm leading-relaxed",
+                                      isDark
+                                        ? "text-slate-300"
+                                        : "text-slate-600",
+                                    )}
+                                  >
+                                    Prize rules for this format are listed under{" "}
+                                    <strong>Earning Opportunities</strong> and
+                                    the contest brief.
+                                  </p>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+
                           {(twitterKeywords.length > 0 ||
                             twitterMentions.length > 0) && (
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                              {twitterKeywords.length > 0 && (
-                                <div>
-                                  <p
-                                    className={cn(
-                                      "text-xs uppercase tracking-wide font-medium mb-1",
-                                      isDark
-                                        ? "text-slate-300"
-                                        : "text-slate-600",
-                                    )}
-                                  >
-                                    Suggested Keywords & Hashtags
-                                  </p>
-                                  <div className="flex flex-wrap gap-2">
-                                    {twitterKeywords.map(
-                                      (keyword: string, idx: number) => (
-                                        <Badge
-                                          key={`${keyword}-${idx}`}
-                                          variant="outline"
-                                          className={cn(
-                                            "rounded-full text-xs px-3 py-1",
-                                            isDark
-                                              ? "border-slate-600 text-slate-100"
-                                              : "border-slate-300 text-slate-800",
-                                          )}
-                                        >
-                                          {keyword}
-                                        </Badge>
-                                      ),
-                                    )}
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                {twitterKeywords.length > 0 && (
+                                  <div>
+                                    <p
+                                      className={cn(
+                                        "text-xs uppercase tracking-wide font-medium mb-1",
+                                        isDark
+                                          ? "text-slate-300"
+                                          : "text-slate-600",
+                                      )}
+                                    >
+                                      Suggested Keywords & Hashtags
+                                    </p>
+                                    <div className="flex flex-wrap gap-2">
+                                      {twitterKeywords.map(
+                                        (keyword: string, idx: number) => (
+                                          <Badge
+                                            key={`${keyword}-${idx}`}
+                                            variant="outline"
+                                            className={cn(
+                                              "rounded-full text-xs px-3 py-1",
+                                              isDark
+                                                ? "border-slate-600 text-slate-100"
+                                                : "border-slate-300 text-slate-800",
+                                            )}
+                                          >
+                                            {keyword}
+                                          </Badge>
+                                        ),
+                                      )}
+                                    </div>
                                   </div>
-                                </div>
-                              )}
-                              {twitterMentions.length > 0 && (
-                                <div>
-                                  <p
-                                    className={cn(
-                                      "text-xs uppercase tracking-wide font-medium mb-1",
-                                      isDark
-                                        ? "text-slate-300"
-                                        : "text-slate-600",
-                                    )}
-                                  >
-                                    Accounts to Mention
-                                  </p>
-                                  <div className="flex flex-wrap gap-2">
-                                    {twitterMentions.map(
-                                      (mention: string, idx: number) => (
-                                        <Badge
-                                          key={`${mention}-${idx}`}
-                                          variant="outline"
-                                          className={cn(
-                                            "rounded-full text-xs px-3 py-1",
-                                            isDark
-                                              ? "border-slate-600 text-slate-100"
-                                              : "border-slate-300 text-slate-800",
-                                          )}
-                                        >
-                                          {mention}
-                                        </Badge>
-                                      ),
-                                    )}
+                                )}
+                                {twitterMentions.length > 0 && (
+                                  <div>
+                                    <p
+                                      className={cn(
+                                        "text-xs uppercase tracking-wide font-medium mb-1",
+                                        isDark
+                                          ? "text-slate-300"
+                                          : "text-slate-600",
+                                      )}
+                                    >
+                                      Accounts to Mention
+                                    </p>
+                                    <div className="flex flex-wrap gap-2">
+                                      {twitterMentions.map(
+                                        (mention: string, idx: number) => (
+                                          <Badge
+                                            key={`${mention}-${idx}`}
+                                            variant="outline"
+                                            className={cn(
+                                              "rounded-full text-xs px-3 py-1",
+                                              isDark
+                                                ? "border-slate-600 text-slate-100"
+                                                : "border-slate-300 text-slate-800",
+                                            )}
+                                          >
+                                            {mention}
+                                          </Badge>
+                                        ),
+                                      )}
+                                    </div>
                                   </div>
-                                </div>
-                              )}
-                            </div>
-                          )}
+                                )}
+                              </div>
+                            )}
                         </div>
                       )
                     );
@@ -5375,20 +5869,20 @@ export function ContestClientPage({
                   </h3>
 
                   {contest.resources &&
-                  ((Array.isArray(contest.resources) &&
-                    contest.resources.length > 0) ||
-                    (typeof contest.resources === "object" &&
-                      Object.keys(contest.resources).length > 0)) ? (
+                    ((Array.isArray(contest.resources) &&
+                      contest.resources.length > 0) ||
+                      (typeof contest.resources === "object" &&
+                        Object.keys(contest.resources).length > 0)) ? (
                     <div className="grid gap-4">
                       {(Array.isArray(contest.resources)
                         ? contest.resources
                         : Object.entries(contest.resources).map(
-                            ([description, url]) => ({
-                              url,
-                              description,
-                              type: "external",
-                            }),
-                          )
+                          ([description, url]) => ({
+                            url,
+                            description,
+                            type: "external",
+                          }),
+                        )
                       ).map((resource: any, idx: number) => {
                         const isImage =
                           resource.url &&
@@ -5823,9 +6317,101 @@ export function ContestClientPage({
 
           <TabPanel value="leaderboard" activeTab={activeTab}>
             {loadingLeaderboard ? (
-              // <p className="text-center py-4">Loading leaderboard...</p>
-              <div className="flex items-center justify-center h-[60vh]">
-                <PageLoadingSpinner mode="light" />
+              <div className="p-6 space-y-4">
+                {(() => {
+                  const twitterLb =
+                    contest?.platform?.toLowerCase() === "twitter" ||
+                    contest?.platform?.toLowerCase() === "x";
+                  return (
+                    <>
+                      <div
+                        className={cn(
+                          "flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between rounded-xl border p-4 sm:p-5 shadow-sm",
+                          isDark
+                            ? "bg-gradient-to-b from-[#1a0a3d]/90 to-[#170337] border-white/10"
+                            : "bg-gradient-to-b from-white to-purple-50/35 border-gray-200/90",
+                        )}
+                      >
+                        <div className="min-w-0 flex-1 space-y-1">
+                          <div className="flex items-center gap-2 min-w-0">
+                            <span
+                              className={cn(
+                                "inline-flex h-2 w-2 shrink-0 rounded-full animate-pulse",
+                                isDark
+                                  ? "bg-fuchsia-400 shadow-[0_0_8px_rgba(232,121,249,0.6)]"
+                                  : "bg-purple-500",
+                              )}
+                              aria-hidden
+                            />
+                            <h2
+                              className={cn(
+                                "text-lg sm:text-xl font-bold tracking-tight truncate",
+                                isDark ? "text-white" : "text-gray-900",
+                              )}
+                            >
+                              Leaderboard
+                            </h2>
+                          </div>
+                          <p
+                            className={cn(
+                              "text-xs sm:text-sm max-w-xl leading-relaxed",
+                              isDark ? "text-gray-400" : "text-gray-600",
+                            )}
+                          >
+                            {twitterLb
+                              ? "Ranks and scores reflect data we already have for this contest. When the list appears, use Leaderboard Metrics to refresh all participants from X if you need the latest."
+                              : "Loading rankings and eligible submissions for this contest."}
+                          </p>
+                        </div>
+                      </div>
+                      <Card
+                        className={cn(
+                          "border overflow-hidden",
+                          isDark
+                            ? "bg-[#180438]/80 border-purple-500/20"
+                            : "bg-gradient-to-br from-white to-purple-50/50 border-purple-100",
+                        )}
+                      >
+                        <CardContent className="flex flex-col items-center justify-center gap-4 py-14 px-6">
+                          <div className="relative">
+                            <div
+                              className={cn(
+                                "absolute inset-0 rounded-full blur-xl opacity-40",
+                                isDark ? "bg-fuchsia-500" : "bg-purple-400",
+                              )}
+                            />
+                            <Loader2
+                              className={cn(
+                                "relative h-10 w-10 animate-spin",
+                                isDark ? "text-fuchsia-300" : "text-purple-600",
+                              )}
+                            />
+                          </div>
+                          <div className="text-center space-y-1">
+                            <p
+                              className={cn(
+                                "text-sm font-semibold",
+                                isDark ? "text-white" : "text-gray-900",
+                              )}
+                            >
+                              Loading leaderboard
+                            </p>
+                            <p
+                              className={cn(
+                                "text-xs max-w-sm mx-auto",
+                                isDark ? "text-gray-400" : "text-gray-600",
+                              )}
+                            >
+                              {twitterLb
+                                ? "Fetching rows from the contest database. This is separate from syncing X; use Refresh all participants after load if you need a full pull."
+                                : "Fetching leaderboard data. Thanks for waiting."}
+                            </p>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    </>
+                  );
+                })()}
               </div>
             ) : error ? (
               <Alert variant="destructive">
@@ -5837,7 +6423,7 @@ export function ContestClientPage({
                 {(isCreatorModeTotals
                   ? creatorWiseLeaderboard.length
                   : leaderboard.length) === 0 &&
-                effectiveLeaderboardTotalEntries === 0 ? (
+                  effectiveLeaderboardTotalEntries === 0 ? (
                   <div className="text-center py-8">
                     <Trophy className="mx-auto h-12 w-12 text-slate-400" />
                     <p
@@ -5916,15 +6502,14 @@ export function ContestClientPage({
                               }
                               size="sm"
                               onClick={() => setLeaderboardViewMode("simple")}
-                              className={`text-xs px-3 py-1.5 transition-all duration-200 flex-1 sm:flex-none ${
-                                leaderboardViewMode === "simple"
-                                  ? isDark
-                                    ? "bg-purple-600 text-white"
-                                    : "bg-purple-500 text-white"
-                                  : isDark
-                                    ? "text-slate-300 hover:text-purple-400 hover:bg-purple-900/20"
-                                    : "text-slate-600 hover:text-purple-600 hover:bg-purple-50"
-                              }`}
+                              className={`text-xs px-3 py-1.5 transition-all duration-200 flex-1 sm:flex-none ${leaderboardViewMode === "simple"
+                                ? isDark
+                                  ? "bg-purple-600 text-white"
+                                  : "bg-purple-500 text-white"
+                                : isDark
+                                  ? "text-slate-300 hover:text-purple-400 hover:bg-purple-900/20"
+                                  : "text-slate-600 hover:text-purple-600 hover:bg-purple-50"
+                                }`}
                             >
                               <span className="flex items-center gap-1.5">
                                 <div className="w-2 h-2 rounded-full bg-current opacity-60" />
@@ -5939,15 +6524,14 @@ export function ContestClientPage({
                               }
                               size="sm"
                               onClick={() => setLeaderboardViewMode("detailed")}
-                              className={`text-xs px-3 py-1.5 transition-all duration-200 flex-1 sm:flex-none ${
-                                leaderboardViewMode === "detailed"
-                                  ? isDark
-                                    ? "bg-purple-600 text-white"
-                                    : "bg-purple-500 text-white"
-                                  : isDark
-                                    ? "text-slate-300 hover:text-purple-400 hover:bg-purple-900/20"
-                                    : "text-slate-600 hover:text-purple-600 hover:bg-purple-50"
-                              }`}
+                              className={`text-xs px-3 py-1.5 transition-all duration-200 flex-1 sm:flex-none ${leaderboardViewMode === "detailed"
+                                ? isDark
+                                  ? "bg-purple-600 text-white"
+                                  : "bg-purple-500 text-white"
+                                : isDark
+                                  ? "text-slate-300 hover:text-purple-400 hover:bg-purple-900/20"
+                                  : "text-slate-600 hover:text-purple-600 hover:bg-purple-50"
+                                }`}
                             >
                               <span className="flex items-center gap-1.5">
                                 <div className="w-2 h-2 rounded-full bg-current opacity-60" />
@@ -6015,15 +6599,14 @@ export function ContestClientPage({
                               }
                               size="sm"
                               onClick={() => setLeaderboardDisplayMode("submission")}
-                              className={`text-xs px-3 py-1.5 transition-all duration-200 flex-1 sm:flex-none ${
-                                leaderboardDisplayMode === "submission"
-                                  ? isDark
-                                    ? "bg-purple-600 text-white"
-                                    : "bg-purple-500 text-white"
-                                  : isDark
-                                    ? "text-slate-300 hover:text-purple-400 hover:bg-purple-900/20"
-                                    : "text-slate-600 hover:text-purple-600 hover:bg-purple-50"
-                              }`}
+                              className={`text-xs px-3 py-1.5 transition-all duration-200 flex-1 sm:flex-none ${leaderboardDisplayMode === "submission"
+                                ? isDark
+                                  ? "bg-purple-600 text-white"
+                                  : "bg-purple-500 text-white"
+                                : isDark
+                                  ? "text-slate-300 hover:text-purple-400 hover:bg-purple-900/20"
+                                  : "text-slate-600 hover:text-purple-600 hover:bg-purple-50"
+                                }`}
                             >
                               <span className="flex items-center gap-1.5">
                                 <div className="w-2 h-2 rounded-full bg-current opacity-60" />
@@ -6038,15 +6621,14 @@ export function ContestClientPage({
                               }
                               size="sm"
                               onClick={() => setLeaderboardDisplayMode("creator")}
-                              className={`text-xs px-3 py-1.5 transition-all duration-200 flex-1 sm:flex-none ${
-                                leaderboardDisplayMode === "creator"
-                                  ? isDark
-                                    ? "bg-purple-600 text-white"
-                                    : "bg-purple-500 text-white"
-                                  : isDark
-                                    ? "text-slate-300 hover:text-purple-400 hover:bg-purple-900/20"
-                                    : "text-slate-600 hover:text-purple-600 hover:bg-purple-50"
-                              }`}
+                              className={`text-xs px-3 py-1.5 transition-all duration-200 flex-1 sm:flex-none ${leaderboardDisplayMode === "creator"
+                                ? isDark
+                                  ? "bg-purple-600 text-white"
+                                  : "bg-purple-500 text-white"
+                                : isDark
+                                  ? "text-slate-300 hover:text-purple-400 hover:bg-purple-900/20"
+                                  : "text-slate-600 hover:text-purple-600 hover:bg-purple-50"
+                                }`}
                             >
                               <span className="flex items-center gap-1.5">
                                 <div className="w-2 h-2 rounded-full bg-current opacity-60" />
@@ -6109,6 +6691,18 @@ export function ContestClientPage({
                           clientEligibleEarningsSum)
                         : null;
 
+                      const cardPlatform =
+                        contest?.platform?.toLowerCase() ?? "";
+                      const isTwitterCard =
+                        cardPlatform === "twitter" || cardPlatform === "x";
+                      const joinedAtForMyCard = isTwitterCard
+                        ? ((myLeaderboardEntry as any)?.joined_at ||
+                          (displayEntry as any)?.joined_at ||
+                          myLeaderboardEntry?.created_at ||
+                          displayEntry?.created_at ||
+                          null)
+                        : (displayEntry?.created_at ?? null);
+
                       const prizeRankForZone = isCreatorWiseMyCard
                         ? (combinedRankForCard ?? myLeaderboardEntry?.rank)
                         : myLeaderboardEntry?.rank;
@@ -6124,44 +6718,50 @@ export function ContestClientPage({
                                 : "border-[#D9C0FF] bg-white",
                             )}
                           >
-                            <CardContent className="p-3 sm:p-4 flex flex-col sm:flex-row sm:items-center gap-1 sm:space-x-1">
-                              <div className="flex flex-1 items-center gap-3 sm:gap-4 min-w-0">
+                            <CardContent className="p-3.5 sm:p-4 flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
+                              <div className="flex flex-1 items-start sm:items-center gap-3 sm:gap-4 min-w-0">
                                 <div
                                   className={cn(
-                                    "flex flex-col items-center justify-center w-10 sm:w-12 flex-shrink-0 rounded-xl px-1 py-1.5",
+                                    "flex flex-col items-center justify-center w-10 sm:w-12 flex-shrink-0 rounded-xl px-1 py-1.5 shadow-sm",
                                     isDark
                                       ? "bg-[#C9A7FF26] text-[#F5EBFF]"
                                       : "bg-[#D9C0FF40] text-[#4A00BE]",
                                   )}
                                 >
-                                  <div className="text-lg sm:text-xl font-extrabold leading-none">
-                                    #
+                                  <div className="text-lg sm:text-xl font-extrabold leading-none tabular-nums">
                                     {isCreatorWiseMyCard
                                       ? combinedRankForCard ?? "?"
                                       : bestSubmission
                                         ? (typeof bestSubmission.rank === "number"
-                                            ? bestSubmission.rank
-                                            : bestSubmission.status ===
-                                                "rejected"
-                                              ? "—"
-                                              : rankLookupMap.get(
-                                                    bestSubmission.id,
-                                                  ) ?? "?")
+                                          ? bestSubmission.rank
+                                          : bestSubmission.status ===
+                                            "rejected"
+                                            ? "—"
+                                            : rankLookupMap.get(
+                                              bestSubmission.id,
+                                            ) ?? "?")
                                         : myLeaderboardEntry?.rank ?? "?"}
                                   </div>
                                   {!isCreatorWiseMyCard &&
                                     bestSubmission &&
                                     myLeaderboardEntry &&
                                     bestSubmission.id !==
-                                      myLeaderboardEntry.id && (
+                                    myLeaderboardEntry.id && (
                                       <span className="mt-1 inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-primary/15 text-primary">
                                         Best
                                       </span>
                                     )}
                                 </div>
 
-                                <div className="flex items-center gap-3 min-w-0">
-                                  <Avatar className="h-10 w-10 sm:h-12 sm:w-12 border-2 border-primary/30 flex-shrink-0">
+                                <div className="flex items-start sm:items-center gap-3 min-w-0 flex-1">
+                                  <Avatar
+                                    className={cn(
+                                      "h-11 w-11 sm:h-12 sm:w-12 flex-shrink-0 border-2 transition-all",
+                                      isDark
+                                        ? "border-white/15 shadow-[0_0_0_3px_rgba(201,167,255,0.08)]"
+                                        : "border-violet-200 shadow-[0_0_0_3px_rgba(139,92,246,0.10)]",
+                                    )}
+                                  >
                                     <AvatarImage
                                       src={
                                         displayEntry.user_platform_pfp_url ??
@@ -6171,11 +6771,11 @@ export function ContestClientPage({
                                       alt={
                                         contest?.platform === "twitter"
                                           ? (displayEntry as any)
-                                              .app_username ||
-                                            displayEntry.user_platform_username
+                                            .app_username ||
+                                          displayEntry.user_platform_username
                                           : displayEntry.user_platform_username
                                       }
-                                        referrerPolicy="no-referrer"
+                                      referrerPolicy="no-referrer"
                                       loading="lazy"
                                     />
                                     <AvatarFallback
@@ -6183,56 +6783,106 @@ export function ContestClientPage({
                                         "bg-primary/20",
                                         isDark ? "text-white" : "text-gray-900",
                                       )}
-                                    
+
                                     >
                                       {(contest?.platform === "twitter"
                                         ? ((displayEntry as any)
-                                            .app_username as string | undefined)
+                                          .app_username as string | undefined)
                                         : displayEntry.user_platform_username)?.[0]?.toUpperCase() ||
                                         "U"}
                                     </AvatarFallback>
                                   </Avatar>
 
-                                  <div className="flex flex-col min-w-0">
-                                    <div className="flex items-center gap-2 mb-1">
-                                      <p
-                                        className={cn(
-                                          "text-sm sm:text-base font-semibold truncate",
-                                          isDark
-                                            ? "text-white"
-                                            : "text-gray-700",
+                                  <div className="flex flex-col min-w-0 flex-1">
+                                    <div className="flex items-center gap-2 mb-0.5 min-w-0">
+                                      {(() => {
+                                        const isTwitter =
+                                          contest?.platform?.toLowerCase() ===
+                                          "twitter" ||
+                                          contest?.platform?.toLowerCase() ===
+                                          "x";
+                                        const displayName = isTwitter
+                                          ? ((displayEntry as any).app_full_name as
+                                            | string
+                                            | null
+                                            | undefined) ||
+                                          ((myLeaderboardEntry as any)
+                                            ?.app_full_name as
+                                            | string
+                                            | null
+                                            | undefined) ||
+                                          ((displayEntry as any).app_username as
+                                            | string
+                                            | null
+                                            | undefined) ||
+                                          displayEntry.user_platform_username
+                                          : displayEntry.user_platform_username;
+                                        const handleRaw = isTwitter
+                                          ? ((displayEntry as any).app_username as
+                                            | string
+                                            | null
+                                            | undefined) ||
+                                          displayEntry.user_platform_username
+                                          : null;
+                                        const handle = handleRaw
+                                          ? String(handleRaw).replace(/^@/, "")
+                                          : "";
+                                        return (
+                                          <div className="flex items-center gap-2 min-w-0">
+                                            <p
+                                              className={cn(
+                                                "text-sm sm:text-base font-semibold truncate",
+                                                isDark
+                                                  ? "text-white"
+                                                  : "text-gray-900",
+                                              )}
+                                              title={displayName || undefined}
+                                            >
+                                              {displayName || "You"}
+                                            </p>
+                                            {!isTwitter && (
+                                              <span
+                                                className={cn(
+                                                  "inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold tracking-wide border shrink-0",
+                                                  isDark
+                                                    ? "bg-white/[0.06] border-white/10 text-violet-100"
+                                                    : "bg-violet-50 border-violet-100 text-violet-700",
+                                                )}
+                                              >
+                                                You
+                                              </span>
+                                            )}
+                                            {!isTwitter && handle ? (
+                                              <span
+                                                className={cn(
+                                                  "text-xs font-medium truncate",
+                                                  isDark
+                                                    ? "text-fuchsia-200/80"
+                                                    : "text-violet-600",
+                                                )}
+                                                title={`@${handle}`}
+                                              >
+                                                @{handle}
+                                              </span>
+                                            ) : null}
+                                          </div>
+                                        );
+                                      })()}
+                                      {!isCreatorWiseMyCard &&
+                                        bestSubmission &&
+                                        myLeaderboardEntry &&
+                                        bestSubmission.id !==
+                                        myLeaderboardEntry.id && (
+                                          <span className="text-xs text-primary/70 ml-2">
+                                            • Best Performance
+                                          </span>
                                         )}
-                                        title={
-                                          contest?.platform === "twitter"
-                                            ? (displayEntry as any)
-                                                .app_username ||
-                                              displayEntry.user_platform_username
-                                            : displayEntry.user_platform_username
-                                        }
-                                      >
-                                        {(contest?.platform === "twitter"
-                                          ? (displayEntry as any)
-                                              .app_username ||
-                                            displayEntry.user_platform_username
-                                          : displayEntry.user_platform_username) +
-                                          " "}
-                                        (You)
-                                        {!isCreatorWiseMyCard &&
-                                          bestSubmission &&
-                                          myLeaderboardEntry &&
-                                          bestSubmission.id !==
-                                            myLeaderboardEntry.id && (
-                                            <span className="text-xs text-primary/70 ml-2">
-                                              • Best Performance
-                                            </span>
-                                          )}
-                                        {isCreatorWiseMyCard &&
-                                          eligibleSubs.length > 1 && (
-                                            <span className="text-xs text-slate-500 dark:text-slate-400 ml-2">
-                                              • Combined eligible submissions
-                                            </span>
-                                          )}
-                                      </p>
+                                      {isCreatorWiseMyCard &&
+                                        eligibleSubs.length > 1 && (
+                                          <span className="text-xs text-slate-500 dark:text-slate-400 ml-2">
+                                            • Combined eligible submissions
+                                          </span>
+                                        )}
                                       {renderVerificationBadges(
                                         displayEntry.status,
                                       )}
@@ -6277,33 +6927,33 @@ export function ContestClientPage({
                                             {(displayEntry as any)
                                               .rejection_reason.length > 50
                                               ? `${(
-                                                  displayEntry as any
-                                                ).rejection_reason.substring(
-                                                  0,
-                                                  50,
-                                                )}...`
+                                                displayEntry as any
+                                              ).rejection_reason.substring(
+                                                0,
+                                                50,
+                                              )}...`
                                               : (displayEntry as any)
-                                                  .rejection_reason}
+                                                .rejection_reason}
                                           </p>
                                           {(displayEntry as any)
                                             .rejection_reason.length > 50 && (
-                                            <Button
-                                              variant="ghost"
-                                              size="sm"
-                                              className="h-6 px-2 text-xs text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20"
-                                              onClick={() => {
-                                                setRejectionReasonModalOpen(
-                                                  true,
-                                                );
-                                                setRejectionReasonText(
-                                                  (displayEntry as any)
-                                                    .rejection_reason,
-                                                );
-                                              }}
-                                            >
-                                              More
-                                            </Button>
-                                          )}
+                                              <Button
+                                                variant="ghost"
+                                                size="sm"
+                                                className="h-6 px-2 text-xs text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20"
+                                                onClick={() => {
+                                                  setRejectionReasonModalOpen(
+                                                    true,
+                                                  );
+                                                  setRejectionReasonText(
+                                                    (displayEntry as any)
+                                                      .rejection_reason,
+                                                  );
+                                                }}
+                                              >
+                                                More
+                                              </Button>
+                                            )}
                                         </div>
                                       )}
                                     {/* Show explanation for rejected entries */}
@@ -6326,123 +6976,114 @@ export function ContestClientPage({
                                       (displayEntry as any)
                                         .moderation_status === "rejected"
                                     ) && (
-                                      <p
-                                        className={cn(
-                                          "text-xs mb-2",
-                                          isDark
-                                            ? "text-gray-300"
-                                            : "text-slate-500",
-                                        )}
-                                      >
-                                        Submitted:{" "}
-                                        {formatTimeAgo(displayEntry.created_at)}
-                                      </p>
-                                    )}
+                                        <p
+                                          className={cn(
+                                            "text-xs mb-2",
+                                            isDark
+                                              ? "text-gray-300"
+                                              : "text-slate-500",
+                                          )}
+                                        >
+                                          {isTwitterCard
+                                            ? "Joined"
+                                            : "Submitted"}
+                                          :{" "}
+                                          {formatTimeAgo(joinedAtForMyCard)}
+                                        </p>
+                                      )}
                                     {/* Twitter Metrics - Horizontal Layout - Hide for rejected entries */}
-                                    {contest?.platform === "twitter" &&
+                                    {isTwitterCard &&
                                       (displayEntry as any)
                                         .total_eligible_tweets !== undefined &&
                                       !(
                                         (displayEntry as any)
                                           .moderation_status === "rejected"
                                       ) && (
-                                        <div className="flex flex-wrap items-center gap-3 mt-1">
-                                          <div className="flex items-center gap-1">
-                                            <FileText
-                                              className={cn(
-                                                "h-3.5 w-3.5",
-                                                isDark
-                                                  ? "text-gray-400"
-                                                  : "text-slate-500",
-                                              )}
-                                            />
-                                            <span
-                                              className={cn(
-                                                "text-xs",
-                                                isDark
-                                                  ? "text-gray-400"
-                                                  : "text-slate-600",
-                                              )}
-                                            >
-                                              {(displayEntry as any)
-                                                .total_eligible_tweets ||
-                                                0}{" "}
-                                              tweets
-                                            </span>
-                                          </div>
-                                          <div className="flex items-center gap-1">
-                                            <Eye
-                                              className={cn(
-                                                "h-3.5 w-3.5",
-                                                isDark
-                                                  ? "text-gray-400"
-                                                  : "text-slate-500",
-                                              )}
-                                            />
-                                            <span
-                                              className={cn(
-                                                "text-xs",
-                                                isDark
-                                                  ? "text-gray-400"
-                                                  : "text-slate-600",
-                                              )}
-                                            >
-                                              {(
-                                                (displayEntry as any)
-                                                  .total_impressions || 0
-                                              ).toLocaleString()}{" "}
-                                              impressions
-                                            </span>
-                                          </div>
-                                          <div className="flex items-center gap-1">
-                                            <ThumbsUp className="h-3.5 w-3.5 text-pink-500" />
-                                            <span
-                                              className={cn(
-                                                "text-xs",
-                                                isDark
-                                                  ? "text-gray-300"
-                                                  : "text-gray-700",
-                                              )}
-                                            >
-                                              {(displayEntry as any)
-                                                .total_likes || 0}
-                                            </span>
-                                          </div>
-                                          <div className="flex items-center gap-1">
-                                            <RefreshCw className="h-3.5 w-3.5 text-green-500" />
-                                            <span
-                                              className={cn(
-                                                "text-xs",
-                                                isDark
-                                                  ? "text-gray-300"
-                                                  : "text-gray-700",
-                                              )}
-                                            >
-                                              {(displayEntry as any)
-                                                .total_retweets || 0}
-                                            </span>
-                                          </div>
-                                          <div className="flex items-center gap-1">
-                                            <MessageCircle
-                                              className={cn(
-                                                "h-3.5 w-3.5",
-                                                isDark
-                                                  ? "text-gray-400"
-                                                  : "text-gray-600",
-                                              )}
-                                            />
-                                            <span
-                                              className={cn(
-                                                "text-xs",
-                                                isDark
-                                                  ? "text-gray-300"
-                                                  : "text-gray-700",
-                                              )}
-                                            >
-                                              {(displayEntry as any)
-                                                .total_replies || 0}
-                                            </span>
-                                          </div>
+                                        <div className="flex flex-wrap gap-1.5 sm:gap-2 mt-1">
+                                          {[
+                                            {
+                                              Icon: FileText,
+                                              iconClass: isDark
+                                                ? "text-violet-300"
+                                                : "text-violet-600",
+                                              chipBg: isDark
+                                                ? "bg-violet-500/10 border-violet-500/25"
+                                                : "bg-violet-50 border-violet-100",
+                                              text: `${(displayEntry as any).total_eligible_tweets || 0} Tweets`,
+                                              title: `Tweets: ${(displayEntry as any).total_eligible_tweets || 0}`,
+                                            },
+                                            {
+                                              Icon: Eye,
+                                              iconClass: isDark
+                                                ? "text-emerald-300"
+                                                : "text-emerald-600",
+                                              chipBg: isDark
+                                                ? "bg-emerald-500/10 border-emerald-500/25"
+                                                : "bg-emerald-50 border-emerald-100",
+                                              text: `${((displayEntry as any).total_impressions || 0).toLocaleString()} Impressions`,
+                                              title: `Impressions: ${((displayEntry as any).total_impressions || 0).toLocaleString()}`,
+                                            },
+                                            {
+                                              Icon: ThumbsUp,
+                                              iconClass: isDark
+                                                ? "text-pink-300"
+                                                : "text-pink-600",
+                                              chipBg: isDark
+                                                ? "bg-pink-500/10 border-pink-500/25"
+                                                : "bg-pink-50 border-pink-100",
+                                              text: `${(displayEntry as any).total_likes || 0} Likes`,
+                                              title: `Likes: ${(displayEntry as any).total_likes || 0}`,
+                                            },
+                                            {
+                                              Icon: RefreshCw,
+                                              iconClass: isDark
+                                                ? "text-teal-300"
+                                                : "text-teal-600",
+                                              chipBg: isDark
+                                                ? "bg-teal-500/10 border-teal-500/25"
+                                                : "bg-teal-50 border-teal-100",
+                                              text: `${(displayEntry as any).total_retweets || 0} Retweets`,
+                                              title: `Retweets: ${(displayEntry as any).total_retweets || 0}`,
+                                            },
+                                            {
+                                              Icon: MessageCircle,
+                                              iconClass: isDark
+                                                ? "text-sky-300"
+                                                : "text-sky-600",
+                                              chipBg: isDark
+                                                ? "bg-sky-500/10 border-sky-500/25"
+                                                : "bg-sky-50 border-sky-100",
+                                              text: `${(displayEntry as any).total_replies || 0} Replies`,
+                                              title: `Replies: ${(displayEntry as any).total_replies || 0}`,
+                                            },
+                                          ].map(
+                                            ({
+                                              Icon,
+                                              iconClass,
+                                              chipBg,
+                                              text,
+                                              title,
+                                            }) => (
+                                              <div
+                                                key={`${title}-${text}`}
+                                                className={cn(
+                                                  "inline-flex items-center gap-1.5 rounded-lg border px-2 py-1 text-[11px] sm:text-xs font-medium tabular-nums",
+                                                  chipBg,
+                                                  isDark ? "text-slate-200" : "text-slate-700",
+                                                )}
+                                                title={title}
+                                              >
+                                                <Icon
+                                                  className={cn(
+                                                    "h-3.5 w-3.5 shrink-0",
+                                                    iconClass,
+                                                  )}
+                                                  aria-hidden
+                                                />
+                                                <span className="whitespace-nowrap">{text}</span>
+                                              </div>
+                                            ),
+                                          )}
                                         </div>
                                       )}
                                   </div>
@@ -6453,7 +7094,7 @@ export function ContestClientPage({
                                 <div className="flex items-center space-x-2">
                                   <p
                                     className={cn(
-                                      "text-base sm:text-lg font-bold",
+                                      "text-base sm:text-lg font-bold tabular-nums ml-auto text-right",
                                       isDark ? "text-white" : "text-gray-900",
                                     )}
                                   >
@@ -6462,8 +7103,8 @@ export function ContestClientPage({
                                         {typeof (displayEntry as any)
                                           .total_points === "number"
                                           ? (
-                                              displayEntry as any
-                                            ).total_points.toLocaleString()
+                                            displayEntry as any
+                                          ).total_points.toLocaleString()
                                           : "0"}{" "}
                                         points
                                       </>
@@ -6491,7 +7132,7 @@ export function ContestClientPage({
                                   if (
                                     contest?.platform === "twitter" &&
                                     (displayEntry as any).moderation_status ===
-                                      "rejected"
+                                    "rejected"
                                   ) {
                                     return null;
                                   }
@@ -6511,11 +7152,11 @@ export function ContestClientPage({
                                       (isTwitter &&
                                         ((displayEntry as any).paid === true ||
                                           contest?.post_contest_status ===
-                                            "payouts_processed"));
+                                          "payouts_processed"));
                                     const earningsLabel = isEarned
                                       ? isTwitter &&
                                         contest?.post_contest_status ===
-                                          "payouts_processed"
+                                        "payouts_processed"
                                         ? "Paid"
                                         : "Earned"
                                       : "Expected";
@@ -6525,12 +7166,12 @@ export function ContestClientPage({
                                       const flatFeeBonus =
                                         contestType === "cpm"
                                           ? (
-                                              contest.contest_based_details as any
-                                            )?.cpm_contest?.flat_fee_bonus || 0
+                                            contest.contest_based_details as any
+                                          )?.cpm_contest?.flat_fee_bonus || 0
                                           : (
-                                              contest.contest_based_details as any
-                                            )?.leaderboard_contest
-                                              ?.flat_fee_bonus || 0;
+                                            contest.contest_based_details as any
+                                          )?.leaderboard_contest
+                                            ?.flat_fee_bonus || 0;
 
                                       if (flatFeeBonus > 0) {
                                         const totalEarnings =
@@ -6574,12 +7215,12 @@ export function ContestClientPage({
                                       const flatFeeBonus =
                                         contestType === "cpm"
                                           ? (
-                                              contest.contest_based_details as any
-                                            )?.cpm_contest?.flat_fee_bonus || 0
+                                            contest.contest_based_details as any
+                                          )?.cpm_contest?.flat_fee_bonus || 0
                                           : (
-                                              contest.contest_based_details as any
-                                            )?.leaderboard_contest
-                                              ?.flat_fee_bonus || 0;
+                                            contest.contest_based_details as any
+                                          )?.leaderboard_contest
+                                            ?.flat_fee_bonus || 0;
 
                                       const totalEarnings =
                                         earningsBase + flatFeeBonus;
@@ -6743,15 +7384,14 @@ export function ContestClientPage({
                                                 onClick={() =>
                                                   setModalViewMode("simple")
                                                 }
-                                                className={`text-xs px-3 py-1.5 transition-all duration-200 ${
-                                                  modalViewMode === "simple"
-                                                    ? isDark
-                                                      ? "bg-purple-600 text-white"
-                                                      : "bg-purple-500 text-white"
-                                                    : isDark
-                                                      ? "text-slate-300 hover:text-purple-400 hover:bg-purple-900/20"
-                                                      : "text-slate-600 hover:text-purple-600 hover:bg-purple-50"
-                                                }`}
+                                                className={`text-xs px-3 py-1.5 transition-all duration-200 ${modalViewMode === "simple"
+                                                  ? isDark
+                                                    ? "bg-purple-600 text-white"
+                                                    : "bg-purple-500 text-white"
+                                                  : isDark
+                                                    ? "text-slate-300 hover:text-purple-400 hover:bg-purple-900/20"
+                                                    : "text-slate-600 hover:text-purple-600 hover:bg-purple-50"
+                                                  }`}
                                               >
                                                 Simple
                                               </Button>
@@ -6765,15 +7405,14 @@ export function ContestClientPage({
                                                 onClick={() =>
                                                   setModalViewMode("detailed")
                                                 }
-                                                className={`text-xs px-3 py-1.5 transition-all duration-200 ${
-                                                  modalViewMode === "detailed"
-                                                    ? isDark
-                                                      ? "bg-purple-600 text-white"
-                                                      : "bg-purple-500 text-white"
-                                                    : isDark
-                                                      ? "text-slate-300 hover:text-purple-400 hover:bg-purple-900/20"
-                                                      : "text-slate-600 hover:text-purple-600 hover:bg-purple-50"
-                                                }`}
+                                                className={`text-xs px-3 py-1.5 transition-all duration-200 ${modalViewMode === "detailed"
+                                                  ? isDark
+                                                    ? "bg-purple-600 text-white"
+                                                    : "bg-purple-500 text-white"
+                                                  : isDark
+                                                    ? "text-slate-300 hover:text-purple-400 hover:bg-purple-900/20"
+                                                    : "text-slate-600 hover:text-purple-600 hover:bg-purple-50"
+                                                  }`}
                                               >
                                                 Detailed
                                               </Button>
@@ -6803,7 +7442,7 @@ export function ContestClientPage({
                                             getUserSubmissions();
                                           const totalPages = Math.ceil(
                                             userSubmissions.length /
-                                              modalItemsPerPage,
+                                            modalItemsPerPage,
                                           );
                                           const startIndex =
                                             (modalCurrentPage - 1) *
@@ -6822,37 +7461,37 @@ export function ContestClientPage({
                                                 (submission, index) => {
                                                   const actualRank =
                                                     typeof submission.rank ===
-                                                    "number"
+                                                      "number"
                                                       ? submission.rank
                                                       : submission.status ===
-                                                          "rejected"
+                                                        "rejected"
                                                         ? null
                                                         : rankLookupMap.get(
-                                                            submission.id,
-                                                          ) ?? null;
+                                                          submission.id,
+                                                        ) ?? null;
 
                                                   // Earnings display based on modal view mode
                                                   let prizeDisplay = null;
                                                   if (submission.earnings > 0) {
                                                     const isTwitter =
                                                       contest?.platform ===
-                                                        "twitter" ||
+                                                      "twitter" ||
                                                       contest?.platform === "x";
                                                     const isEarned =
                                                       submission.status ===
-                                                        "verified" ||
+                                                      "verified" ||
                                                       submission.status ===
-                                                        "paid" ||
+                                                      "paid" ||
                                                       (isTwitter &&
                                                         ((submission as any)
                                                           .paid === true ||
                                                           contest?.post_contest_status ===
-                                                            "payouts_processed"));
+                                                          "payouts_processed"));
                                                     const earningsLabel =
                                                       isEarned
                                                         ? isTwitter &&
                                                           contest?.post_contest_status ===
-                                                            "payouts_processed"
+                                                          "payouts_processed"
                                                           ? "Paid"
                                                           : "Earned"
                                                         : "Expected";
@@ -6860,22 +7499,22 @@ export function ContestClientPage({
                                                     const flatFeeBonus =
                                                       contestType === "cpm"
                                                         ? (
-                                                            contest.contest_based_details as any
-                                                          )?.cpm_contest
-                                                            ?.flat_fee_bonus ||
-                                                          0
+                                                          contest.contest_based_details as any
+                                                        )?.cpm_contest
+                                                          ?.flat_fee_bonus ||
+                                                        0
                                                         : (
-                                                            contest.contest_based_details as any
-                                                          )?.leaderboard_contest
-                                                            ?.flat_fee_bonus ||
-                                                          0;
+                                                          contest.contest_based_details as any
+                                                        )?.leaderboard_contest
+                                                          ?.flat_fee_bonus ||
+                                                        0;
                                                     const totalEarnings =
                                                       submission.earnings +
                                                       flatFeeBonus;
 
                                                     if (
                                                       modalViewMode ===
-                                                        "detailed" &&
+                                                      "detailed" &&
                                                       flatFeeBonus > 0
                                                     ) {
                                                       prizeDisplay = (
@@ -6914,7 +7553,7 @@ export function ContestClientPage({
                                                                 submission.earnings,
                                                               )}{" "}
                                                               {contestType ===
-                                                              "cpm"
+                                                                "cpm"
                                                                 ? "CPM"
                                                                 : "Prize"}
                                                             </span>
@@ -6964,8 +7603,7 @@ export function ContestClientPage({
                                                       className="border border-slate-200 dark:border-slate-700"
                                                     >
                                                       <CardContent className="p-3 sm:p-4 flex items-center space-x-3 sm:space-x-4">
-                                                        <div className="text-lg sm:text-xl font-bold text-primary w-10 sm:w-12 text-center flex-shrink-0">
-                                                          #
+                                                        <div className="text-lg sm:text-xl font-bold text-primary w-10 sm:w-12 text-center flex-shrink-0 tabular-nums">
                                                           {actualRank != null
                                                             ? actualRank
                                                             : "—"}
@@ -6980,8 +7618,8 @@ export function ContestClientPage({
                                                             alt={
                                                               submission.user_platform_username
                                                             }
-                                                              referrerPolicy="no-referrer"
-                                      loading="lazy"
+                                                            referrerPolicy="no-referrer"
+                                                            loading="lazy"
                                                           />
                                                           <AvatarFallback
                                                             className={cn(
@@ -6990,7 +7628,7 @@ export function ContestClientPage({
                                                                 ? "text-primary-foreground"
                                                                 : "text-primary",
                                                             )}
-                                              
+
                                                           >
                                                             {submission.user_platform_username?.[0]?.toUpperCase() ||
                                                               "U"}
@@ -7007,12 +7645,12 @@ export function ContestClientPage({
                                                               )}
                                                             >
                                                               {contest?.platform ===
-                                                              "twitter"
+                                                                "twitter"
                                                                 ? (
-                                                                    submission as any
-                                                                  )
-                                                                    .app_username ||
-                                                                  submission.user_platform_username
+                                                                  submission as any
+                                                                )
+                                                                  .app_username ||
+                                                                submission.user_platform_username
                                                                 : submission.user_platform_username}{" "}
                                                               {submission.id ===
                                                                 myLeaderboardEntry?.id &&
@@ -7030,9 +7668,22 @@ export function ContestClientPage({
                                                                 : "text-gray-600",
                                                             )}
                                                           >
-                                                            Submitted:{" "}
+                                                            {contest?.platform?.toLowerCase() ===
+                                                              "twitter" ||
+                                                              contest?.platform?.toLowerCase() ===
+                                                              "x"
+                                                              ? "Joined: "
+                                                              : "Submitted: "}{" "}
                                                             {formatTimeAgo(
-                                                              submission.created_at,
+                                                              contest?.platform?.toLowerCase() ===
+                                                                "twitter" ||
+                                                                contest?.platform?.toLowerCase() ===
+                                                                "x"
+                                                                ? ((submission as any)
+                                                                  ?.joined_at ||
+                                                                  submission.created_at ||
+                                                                  null)
+                                                                : submission.created_at,
                                                             )}
                                                           </p>
                                                           <div
@@ -7063,7 +7714,7 @@ export function ContestClientPage({
                                                   getUserSubmissions();
                                                 const totalPages = Math.ceil(
                                                   userSubmissions.length /
-                                                    modalItemsPerPage,
+                                                  modalItemsPerPage,
                                                 );
 
                                                 if (totalPages <= 1)
@@ -7129,7 +7780,7 @@ export function ContestClientPage({
                                                               key={pageNum}
                                                               variant={
                                                                 modalCurrentPage ===
-                                                                pageNum
+                                                                  pageNum
                                                                   ? "default"
                                                                   : "outline"
                                                               }
@@ -7197,99 +7848,178 @@ export function ContestClientPage({
                       const isTwitterLeaderboardRefresh =
                         contest?.platform?.toLowerCase() === "twitter" ||
                         contest?.platform?.toLowerCase() === "x";
-                      const refreshLabelLarge = isRefreshingMetrics
-                        ? "Updating..."
-                        : isContestEnded
-                          ? "Contest Ended"
-                          : !cooldownInfo?.canRefresh
-                            ? `Wait ${cooldownInfo?.remainingMinutes}m`
-                            : isTwitterLeaderboardRefresh
-                              ? "Refresh all participants"
-                              : "Refresh Metrics";
-                      const refreshLabelSmall = isRefreshingMetrics
-                        ? "Updating..."
-                        : isContestEnded
-                          ? "Contest Ended"
-                          : !cooldownInfo?.canRefresh
-                            ? `${cooldownInfo?.remainingMinutes}m`
-                            : isTwitterLeaderboardRefresh
-                              ? "All"
-                              : "Refresh";
+                      const isButtonBusy =
+                        isRefreshingMetrics || twitterMetricsRunActive;
+                      const busyPct = twitterMetricsRunProgress
+                        ? Math.max(1, Math.min(100, Math.floor(twitterMetricsRunProgress)))
+                        : 1;
+                      const idleLabelLarge = isContestEnded
+                        ? "Contest Ended"
+                        : !cooldownInfo?.canRefresh
+                          ? `Wait ${cooldownInfo?.remainingMinutes}m`
+                          : "Refresh";
+                      const idleLabelSmall = isContestEnded
+                        ? "Ended"
+                        : !cooldownInfo?.canRefresh
+                          ? `${cooldownInfo?.remainingMinutes}m`
+                          : "Refresh";
+                      const refreshTitle =
+                        disabledReason ||
+                        (isTwitterLeaderboardRefresh
+                          ? "Fetches the latest tweets and metrics for everyone on this leaderboard (full contest sync)."
+                          : "Refresh metrics and leaderboard");
                       return (
                         <div
                           className={cn(
-                            "flex items-center justify-between p-4 rounded-xl border shadow-sm mb-4",
+                            "flex flex-col gap-2 p-3.5 sm:p-4 rounded-xl border shadow-sm mb-3",
                             isDark
-                              ? "bg-[#180438] border-gray-700"
-                              : "bg-white border-gray-300",
+                              ? "bg-gradient-to-b from-[#1a0a3d]/90 to-[#180438] border-white/10"
+                              : "bg-gradient-to-b from-white to-purple-50/35 border-gray-200/90",
                           )}
                         >
-                          <div className="flex items-center gap-3">
-                            <div
-                              className={cn(
-                                "p-2 rounded-lg",
-                                isDark
-                                  ? "bg-purple-900/30 text-purple-400"
-                                  : "bg-purple-100 text-purple-600",
-                              )}
-                            >
-                              <RefreshCw className="h-5 w-5" />
-                            </div>
-                            <div>
+                          <div className="min-w-0 flex flex-col gap-1.5">
+                            <div className="flex items-center gap-2 min-w-0">
+                              <span
+                                className={cn(
+                                  "inline-flex h-2 w-2 shrink-0 rounded-full",
+                                  isButtonBusy
+                                    ? isDark
+                                      ? "bg-amber-400 shadow-[0_0_8px_rgba(251,191,36,0.5)] animate-pulse"
+                                      : "bg-amber-500 animate-pulse"
+                                    : isDark
+                                      ? "bg-fuchsia-400 shadow-[0_0_8px_rgba(232,121,249,0.6)]"
+                                      : "bg-purple-500",
+                                )}
+                                aria-hidden
+                              />
                               <h3
                                 className={cn(
-                                  "text-lg font-semibold",
+                                  "text-base sm:text-lg font-bold tracking-tight",
                                   isDark ? "text-white" : "text-gray-900",
                                 )}
                               >
                                 Leaderboard Metrics
                               </h3>
-                              <p
+                            </div>
+                            <p
+                              className={cn(
+                                "text-xs sm:text-sm max-w-2xl leading-relaxed",
+                                isDark ? "text-gray-400" : "text-gray-600",
+                              )}
+                            >
+                              {isButtonBusy
+                                ? isTwitterLeaderboardRefresh
+                                  ? "Fetching the latest posts and metrics for everyone on the leaderboard. Large contests often take a couple of minutes."
+                                  : "Refreshing metrics and leaderboard…"
+                                : isTwitterLeaderboardRefresh
+                                  ? "Scores reflect data we last pulled from X. Refresh when you need the whole leaderboard up to date."
+                                  : "Refresh to update engagement and rankings from the platform."}
+                            </p>
+                          </div>
+
+                          <div className="flex flex-row items-center justify-between gap-3 pt-0.5">
+                            <p
+                              className={cn(
+                                "text-xs font-medium min-w-0 flex-1",
+                                isDark ? "text-gray-500" : "text-gray-500",
+                              )}
+                            >
+                              {contest?.last_metrics_updated
+                                ? `Last updated ${formatTimeAgo(
+                                  contest.last_metrics_updated,
+                                )}`
+                                : "Metrics not yet updated"}
+                            </p>
+                            <Button
+                              onClick={handleRefreshMetrics}
+                              disabled={isDisabled}
+                              variant="outline"
+                              size="sm"
+                              className={cn(
+                                "shrink-0 h-9 px-3 sm:px-4 rounded-lg font-medium gap-2 border-2 transition-all w-auto",
+                                isDark
+                                  ? "border-purple-400/40 text-purple-100 hover:bg-purple-950/50 hover:border-purple-400/60"
+                                  : "border-purple-400/50 text-purple-700 hover:bg-purple-50 hover:border-purple-500",
+                                isDisabled &&
+                                "opacity-55 cursor-not-allowed hover:bg-transparent",
+                                isButtonBusy &&
+                                (isDark
+                                  ? "border-purple-400/50 bg-purple-950/30"
+                                  : "border-purple-500/60 bg-purple-50/80"),
+                              )}
+                              title={refreshTitle}
+                            >
+                              {isButtonBusy ? (
+                                <Loader2 className="h-4 w-4 animate-spin shrink-0" />
+                              ) : (
+                                <RefreshCw className="h-4 w-4 shrink-0" />
+                              )}
+                              <span className="truncate hidden sm:inline">
+                                {isButtonBusy ? "Updating..." : idleLabelLarge}
+                              </span>
+                              <span className="truncate sm:hidden">
+                                {isButtonBusy ? "Updating…" : idleLabelSmall}
+                              </span>
+                            </Button>
+                          </div>
+
+                          {isButtonBusy && isTwitterLeaderboardRefresh ? (
+                            <div
+                              className={cn(
+                                "mt-2 space-y-1.5 border-t pt-3",
+                                isDark ? "border-white/10" : "border-slate-200/80",
+                              )}
+                            >
+                              <div
                                 className={cn(
-                                  "text-sm",
+                                  "flex items-center justify-between gap-2 text-[11px]",
                                   isDark ? "text-gray-400" : "text-gray-600",
                                 )}
                               >
-                                {contest?.last_metrics_updated
-                                  ? `Last updated: ${formatTimeAgo(
-                                      contest.last_metrics_updated,
+                                <span className="min-w-0 truncate">
+                                  {twitterMetricsRunElapsedSeconds !== null
+                                    ? `Elapsed ${formatMmSs(
+                                      twitterMetricsRunElapsedSeconds,
                                     )}`
-                                  : "Metrics not yet updated"}
+                                    : "Starting…"}
+                                </span>
+                                <span
+                                  className={cn(
+                                    "text-[10px] tabular-nums font-semibold shrink-0",
+                                    isDark
+                                      ? "text-fuchsia-200"
+                                      : "text-purple-600",
+                                  )}
+                                >
+                                  {busyPct}%
+                                </span>
+                              </div>
+                              <div
+                                className={cn(
+                                  "h-2 w-full rounded-full overflow-hidden",
+                                  isDark ? "bg-white/10" : "bg-purple-100/80",
+                                )}
+                              >
+                                <div
+                                  className={cn(
+                                    "h-full rounded-full transition-[width] duration-300 ease-out shadow-sm",
+                                    isDark
+                                      ? "bg-gradient-to-r from-purple-400 via-fuchsia-400 to-pink-400"
+                                      : "bg-gradient-to-r from-purple-600 via-fuchsia-500 to-pink-500",
+                                  )}
+                                  style={{ width: `${busyPct}%` }}
+                                />
+                              </div>
+                              <p
+                                className={cn(
+                                  "text-[10px] hidden sm:block",
+                                  isDark ? "text-gray-500" : "text-gray-500",
+                                )}
+                              >
+                                Large contests can take a few minutes.
                               </p>
                             </div>
-                          </div>
-                          <Button
-                            onClick={handleRefreshMetrics}
-                            disabled={isDisabled}
-                            variant="outline"
-                            size="sm"
-                            className={cn(
-                              "flex items-center gap-2",
-                              isDisabled
-                                ? "opacity-60 cursor-not-allowed"
-                                : isDark
-                                  ? "border-purple-600 text-purple-300 hover:bg-purple-900/30"
-                                  : "border-purple-500 text-purple-600 hover:bg-purple-50",
-                            )}
-                            title={
-                              disabledReason ||
-                              (isTwitterLeaderboardRefresh
-                                ? "Refresh all participants: fetch latest tweets and metrics for everyone on the leaderboard."
-                                : "Refresh metrics and leaderboard")
-                            }
-                          >
-                            {isRefreshingMetrics ? (
-                              <Loader2 className="h-4 w-4 animate-spin" />
-                            ) : (
-                              <RefreshCw className="h-4 w-4" />
-                            )}
-                            <span className="hidden sm:inline">
-                              {refreshLabelLarge}
-                            </span>
-                            <span className="sm:hidden">
-                              {refreshLabelSmall}
-                            </span>
-                          </Button>
+                          ) : null}
                         </div>
                       );
                     })()}
@@ -7345,7 +8075,7 @@ export function ContestClientPage({
                             (() => {
                               const totalPages = Math.ceil(
                                 getCreatorVideos.length /
-                                  creatorVideosItemsPerPage,
+                                creatorVideosItemsPerPage,
                               );
                               const startIndex =
                                 (creatorVideosCurrentPage - 1) *
@@ -7501,12 +8231,12 @@ export function ContestClientPage({
                                     ) {
                                       const prizeInfo = actualRank
                                         ? (
-                                            contest.contest_based_details
-                                              .leaderboard_contest
-                                              .prizes as PrizeInfo[]
-                                          ).find(
-                                            (p) => p.position === actualRank,
-                                          )
+                                          contest.contest_based_details
+                                            .leaderboard_contest
+                                            .prizes as PrizeInfo[]
+                                        ).find(
+                                          (p) => p.position === actualRank,
+                                        )
                                         : null;
                                       if (prizeInfo) {
                                         const prizeText =
@@ -7595,8 +8325,8 @@ export function ContestClientPage({
                                                 alt={
                                                   video.user_platform_username
                                                 }
-                                                  referrerPolicy="no-referrer"
-                                      loading="lazy"
+                                                referrerPolicy="no-referrer"
+                                                loading="lazy"
                                               />
                                               <AvatarFallback className="bg-violet-100 text-violet-600 font-semibold text-xs sm:text-base"
                                               >
@@ -7616,10 +8346,10 @@ export function ContestClientPage({
                                                   )}
                                                 >
                                                   {contest?.platform ===
-                                                  "twitter"
+                                                    "twitter"
                                                     ? (video as any)
-                                                        .app_username ||
-                                                      video.user_platform_username
+                                                      .app_username ||
+                                                    video.user_platform_username
                                                     : video.user_platform_username}
                                                 </p>
                                                 {renderVerificationBadges(
@@ -7634,9 +8364,21 @@ export function ContestClientPage({
                                                     : "text-slate-500",
                                                 )}
                                               >
-                                                Submitted:{" "}
+                                                {contest?.platform?.toLowerCase() ===
+                                                  "twitter" ||
+                                                  contest?.platform?.toLowerCase() ===
+                                                  "x"
+                                                  ? "Joined: "
+                                                  : "Submitted: "}{" "}
                                                 {formatTimeAgo(
-                                                  video.created_at,
+                                                  contest?.platform?.toLowerCase() ===
+                                                    "twitter" ||
+                                                    contest?.platform?.toLowerCase() ===
+                                                    "x"
+                                                    ? ((video as any)?.joined_at ||
+                                                      video.created_at ||
+                                                      null)
+                                                    : video.created_at,
                                                 )}
                                               </p>
                                             </div>
@@ -7718,7 +8460,7 @@ export function ContestClientPage({
                                                 key={pageNum}
                                                 variant={
                                                   creatorVideosCurrentPage ===
-                                                  pageNum
+                                                    pageNum
                                                     ? "default"
                                                     : "outline"
                                                 }
@@ -7809,11 +8551,11 @@ export function ContestClientPage({
                               </p>
                               {contest?.live_submission_count !== null &&
                                 contest?.live_submission_count !==
-                                  undefined && (
+                                undefined && (
                                   <div className="flex items-center gap-2 mt-2">
                                     <span className="font-medium">
                                       {leaderboardDisplayMode === "creator" &&
-                                      creatorWiseLeaderboard.length > 0
+                                        creatorWiseLeaderboard.length > 0
                                         ? "Creators:"
                                         : "Submissions:"}
                                     </span>
@@ -7874,218 +8616,299 @@ export function ContestClientPage({
                     )}
                     {/* Render leaderboard based on display mode */}
                     {leaderboardDisplayMode === "creator" &&
-                    groupedLeaderboardByCreator
+                      groupedLeaderboardByCreator
                       ? // Creator-wise display
-                        groupedLeaderboardByCreator.map(
-                          (creatorGroup, index) => {
-                            // For Twitter, use current_rank from API.
-                            // For server-side creator-wise (non-Twitter), best_rank is global creator rank from API.
-                            // Otherwise use continuous creator rank from client-side pagination.
-                            const isTwitterCreator =
-                              contest?.platform === "twitter" ||
-                              contest?.platform === "x";
-                            const isServerCreatorWise =
-                              !isTwitterCreator &&
-                              creatorWiseLeaderboard.length > 0;
+                      groupedLeaderboardByCreator.map(
+                        (creatorGroup, index) => {
+                          // For Twitter, use current_rank from API.
+                          // For server-side creator-wise (non-Twitter), best_rank is global creator rank from API.
+                          // Otherwise use continuous creator rank from client-side pagination.
+                          const isTwitterCreator =
+                            contest?.platform === "twitter" ||
+                            contest?.platform === "x";
+                          const isServerCreatorWise =
+                            !isTwitterCreator &&
+                            creatorWiseLeaderboard.length > 0;
 
-                            let rank: number;
-                            if (
-                              (isTwitterCreator || isServerCreatorWise) &&
-                              (creatorGroup as any).best_rank != null
-                            ) {
-                              rank = (creatorGroup as any).best_rank;
-                            } else {
-                              const creatorOffset = Object.entries(
-                                creatorsPerPageRef.current,
+                          let rank: number;
+                          if (
+                            (isTwitterCreator || isServerCreatorWise) &&
+                            (creatorGroup as any).best_rank != null
+                          ) {
+                            rank = (creatorGroup as any).best_rank;
+                          } else {
+                            const creatorOffset = Object.entries(
+                              creatorsPerPageRef.current,
+                            )
+                              .filter(
+                                ([page]) =>
+                                  Number(page) > 0 &&
+                                  Number(page) < leaderboardCurrentPage,
                               )
-                                .filter(
-                                  ([page]) =>
-                                    Number(page) > 0 &&
-                                    Number(page) < leaderboardCurrentPage,
-                                )
-                                .reduce(
-                                  (sum, [, count]) => sum + (count as number),
-                                  0,
-                                );
-                              rank = creatorOffset + index + 1;
-                            }
-                            let prizeDisplay = null;
-
-                            // Calculate total earnings including bonuses
-                            const flatFeeBonus =
-                              contestType === "cpm"
-                                ? (contest.contest_based_details as any)
-                                    ?.cpm_contest?.flat_fee_bonus || 0
-                                : (contest.contest_based_details as any)
-                                    ?.leaderboard_contest?.flat_fee_bonus || 0;
-
-                            const totalEarnings =
-                              creatorGroup.total_earnings +
-                              flatFeeBonus * creatorGroup.submission_count;
-
-                            const contestStatus = contest?.status;
-                            const postContestStatus =
-                              contest?.post_contest_status;
-                            const isLeaderboardContest =
-                              contest?.contest_type === "leaderboard";
-                            const hasPaidSubmission =
-                              (creatorGroup as any).has_paid_submission ===
-                                true ||
-                              creatorGroup.submissions.some(
-                                (submission) => submission.status === "paid",
+                              .reduce(
+                                (sum, [, count]) => sum + (count as number),
+                                0,
                               );
-                            const hasPayoutsProcessed =
-                              contestStatus === "ended" &&
-                              postContestStatus === "payouts_processed";
-                            const isTwitter =
-                              contest?.platform === "twitter" ||
-                              contest?.platform === "x";
-                            // Twitter: also check leaderboard paid field (twitter_campaign_leaderboard.paid)
-                            const twitterPaid =
-                              isTwitter && (creatorGroup as any).paid === true;
-                            const shouldShowActualEarnings =
-                              hasPaidSubmission ||
-                              twitterPaid ||
-                              (isTwitter && hasPayoutsProcessed);
-                            const earningsLabel = shouldShowActualEarnings
-                              ? isTwitter &&
-                                (hasPayoutsProcessed || twitterPaid)
-                                ? "Paid"
-                                : "Total Earned"
-                              : contestStatus === "active" &&
-                                  isLeaderboardContest
-                                ? "Winning Zone"
-                                : "Expected";
+                            rank = creatorOffset + index + 1;
+                          }
+                          let prizeDisplay = null;
 
-                            const hasEarningsToDisplay =
-                              creatorGroup.total_earnings > 0 ||
-                              flatFeeBonus > 0;
-                            const shouldDisplayEarnings =
-                              shouldShowActualEarnings && hasEarningsToDisplay;
+                          // Calculate total earnings including bonuses
+                          const flatFeeBonus =
+                            contestType === "cpm"
+                              ? (contest.contest_based_details as any)
+                                ?.cpm_contest?.flat_fee_bonus || 0
+                              : (contest.contest_based_details as any)
+                                ?.leaderboard_contest?.flat_fee_bonus || 0;
 
-                            if (shouldDisplayEarnings) {
+                          const totalEarnings =
+                            creatorGroup.total_earnings +
+                            flatFeeBonus * creatorGroup.submission_count;
+
+                          const contestStatus = contest?.status;
+                          const postContestStatus =
+                            contest?.post_contest_status;
+                          const isLeaderboardContest =
+                            contest?.contest_type === "leaderboard";
+                          const hasPaidSubmission =
+                            (creatorGroup as any).has_paid_submission ===
+                            true ||
+                            creatorGroup.submissions.some(
+                              (submission) => submission.status === "paid",
+                            );
+                          const hasPayoutsProcessed =
+                            contestStatus === "ended" &&
+                            postContestStatus === "payouts_processed";
+                          const isTwitter =
+                            contest?.platform === "twitter" ||
+                            contest?.platform === "x";
+                          // Twitter: also check leaderboard paid field (twitter_campaign_leaderboard.paid)
+                          const twitterPaid =
+                            isTwitter && (creatorGroup as any).paid === true;
+                          const shouldShowActualEarnings =
+                            hasPaidSubmission ||
+                            twitterPaid ||
+                            (isTwitter && hasPayoutsProcessed);
+                          const earningsLabel = shouldShowActualEarnings
+                            ? isTwitter &&
+                              (hasPayoutsProcessed || twitterPaid)
+                              ? "Paid"
+                              : "Total Earned"
+                            : contestStatus === "active" &&
+                              isLeaderboardContest
+                              ? "Winning Zone"
+                              : "Expected";
+
+                          const hasEarningsToDisplay =
+                            creatorGroup.total_earnings > 0 ||
+                            flatFeeBonus > 0;
+                          const shouldDisplayEarnings =
+                            shouldShowActualEarnings && hasEarningsToDisplay;
+
+                          if (shouldDisplayEarnings) {
+                            if (
+                              leaderboardViewMode === "detailed" &&
+                              flatFeeBonus > 0
+                            ) {
+                              prizeDisplay = (
+                                <div className="space-y-1">
+                                  <div className="font-semibold text-green-600 dark:text-green-400 text-base">
+                                    {earningsLabel}:{" "}
+                                    {formatMoney(totalEarnings)}
+                                  </div>
+                                  <div className="flex flex-wrap items-center gap-1.5 text-xs text-slate-600 dark:text-slate-400 bg-green-50 dark:bg-green-900/20 px-2 py-1.5 rounded-md border border-green-200 dark:border-green-800">
+                                    <div className="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0" />
+                                    <span className="whitespace-nowrap">
+                                      {formatMoney(
+                                        creatorGroup.total_earnings,
+                                      )}{" "}
+                                      {contestType === "cpm"
+                                        ? "CPM"
+                                        : "Prize"}
+                                    </span>
+                                    <span className="text-green-600 dark:text-green-400">
+                                      +
+                                    </span>
+                                    <span className="whitespace-nowrap">
+                                      {formatMoney(
+                                        flatFeeBonus *
+                                        creatorGroup.submission_count,
+                                      )}{" "}
+                                      Bonus ({creatorGroup.submission_count}{" "}
+                                      sub.)
+                                    </span>
+                                  </div>
+                                </div>
+                              );
+                            } else {
+                              prizeDisplay = (
+                                <div className="font-semibold text-green-600 dark:text-green-400 text-base">
+                                  {earningsLabel}:{" "}
+                                  {formatMoney(totalEarnings)}
+                                </div>
+                              );
+                            }
+                          } else if (
+                            contest.contest_type === "leaderboard" &&
+                            Array.isArray(
+                              contest.contest_based_details
+                                ?.leaderboard_contest?.prizes,
+                            )
+                          ) {
+                            const prizes = contest.contest_based_details
+                              .leaderboard_contest.prizes as PrizeInfo[];
+                            // Sum prize for each of this creator's submissions
+                            const submissionRanks = (
+                              creatorGroup as { submission_ranks?: number[] }
+                            ).submission_ranks ?? [creatorGroup.best_rank];
+                            let totalPrizeAmount = 0;
+                            for (const rank of submissionRanks) {
+                              const info = prizes.find(
+                                (p) => p.position === rank,
+                              );
+                              if (info) totalPrizeAmount += info.amount;
+                            }
+                            if (totalPrizeAmount > 0) {
+                              const prizeText =
+                                contest.status === "active"
+                                  ? "Winning Zone"
+                                  : "Prize";
+                              const totalPrize =
+                                totalPrizeAmount +
+                                flatFeeBonus * creatorGroup.submission_count;
+
                               if (
                                 leaderboardViewMode === "detailed" &&
                                 flatFeeBonus > 0
                               ) {
                                 prizeDisplay = (
                                   <div className="space-y-1">
-                                    <div className="font-semibold text-green-600 dark:text-green-400 text-base">
-                                      {earningsLabel}:{" "}
-                                      {formatMoney(totalEarnings)}
+                                    <div
+                                      className={`font-semibold text-base flex items-center ${"text-purple-500 dark:text-purple-400"}`}
+                                    >
+                                      <Trophy className="h-4 w-4 mr-1.5 flex-shrink-0" />
+                                      {prizeText}: {formatMoney(totalPrize)}
                                     </div>
-                                    <div className="flex flex-wrap items-center gap-1.5 text-xs text-slate-600 dark:text-slate-400 bg-green-50 dark:bg-green-900/20 px-2 py-1.5 rounded-md border border-green-200 dark:border-green-800">
-                                      <div className="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0" />
-                                      <span className="whitespace-nowrap">
-                                        {formatMoney(
-                                          creatorGroup.total_earnings,
-                                        )}{" "}
-                                        {contestType === "cpm"
-                                          ? "CPM"
-                                          : "Prize"}
-                                      </span>
-                                      <span className="text-green-600 dark:text-green-400">
-                                        +
-                                      </span>
-                                      <span className="whitespace-nowrap">
-                                        {formatMoney(
-                                          flatFeeBonus *
-                                            creatorGroup.submission_count,
-                                        )}{" "}
-                                        Bonus ({creatorGroup.submission_count}{" "}
-                                        sub.)
-                                      </span>
+                                    <div className="text-xs text-purple-600 dark:text-purple-500">
+                                      ({formatMoney(totalPrizeAmount)} Prize
+                                      {submissionRanks.length > 1 &&
+                                        ` (${submissionRanks.length} videos)`}{" "}
+                                      +{" "}
+                                      {formatMoney(
+                                        flatFeeBonus *
+                                        creatorGroup.submission_count,
+                                      )}{" "}
+                                      Bonus)
                                     </div>
                                   </div>
                                 );
                               } else {
                                 prizeDisplay = (
-                                  <div className="font-semibold text-green-600 dark:text-green-400 text-base">
-                                    {earningsLabel}:{" "}
-                                    {formatMoney(totalEarnings)}
-                                  </div>
+                                  <span
+                                    className={`font-semibold flex items-center ${"text-purple-500 dark:text-purple-400"}`}
+                                  >
+                                    <Trophy className="h-4 w-4 mr-1.5 flex-shrink-0" />
+                                    {prizeText}: {formatMoney(totalPrize)}
+                                  </span>
                                 );
-                              }
-                            } else if (
-                              contest.contest_type === "leaderboard" &&
-                              Array.isArray(
-                                contest.contest_based_details
-                                  ?.leaderboard_contest?.prizes,
-                              )
-                            ) {
-                              const prizes = contest.contest_based_details
-                                .leaderboard_contest.prizes as PrizeInfo[];
-                              // Sum prize for each of this creator's submissions
-                              const submissionRanks = (
-                                creatorGroup as { submission_ranks?: number[] }
-                              ).submission_ranks ?? [creatorGroup.best_rank];
-                              let totalPrizeAmount = 0;
-                              for (const rank of submissionRanks) {
-                                const info = prizes.find(
-                                  (p) => p.position === rank,
-                                );
-                                if (info) totalPrizeAmount += info.amount;
-                              }
-                              if (totalPrizeAmount > 0) {
-                                const prizeText =
-                                  contest.status === "active"
-                                    ? "Winning Zone"
-                                    : "Prize";
-                                const totalPrize =
-                                  totalPrizeAmount +
-                                  flatFeeBonus * creatorGroup.submission_count;
-
-                                if (
-                                  leaderboardViewMode === "detailed" &&
-                                  flatFeeBonus > 0
-                                ) {
-                                  prizeDisplay = (
-                                    <div className="space-y-1">
-                                      <div
-                                        className={`font-semibold text-base flex items-center ${"text-purple-500 dark:text-purple-400"}`}
-                                      >
-                                        <Trophy className="h-4 w-4 mr-1.5 flex-shrink-0" />
-                                        {prizeText}: {formatMoney(totalPrize)}
-                                      </div>
-                                      <div className="text-xs text-purple-600 dark:text-purple-500">
-                                        ({formatMoney(totalPrizeAmount)} Prize
-                                        {submissionRanks.length > 1 &&
-                                          ` (${submissionRanks.length} videos)`}{" "}
-                                        +{" "}
-                                        {formatMoney(
-                                          flatFeeBonus *
-                                            creatorGroup.submission_count,
-                                        )}{" "}
-                                        Bonus)
-                                      </div>
-                                    </div>
-                                  );
-                                } else {
-                                  prizeDisplay = (
-                                    <span
-                                      className={`font-semibold flex items-center ${"text-purple-500 dark:text-purple-400"}`}
-                                    >
-                                      <Trophy className="h-4 w-4 mr-1.5 flex-shrink-0" />
-                                      {prizeText}: {formatMoney(totalPrize)}
-                                    </span>
-                                  );
-                                }
                               }
                             }
+                          }
 
-                            return (
-                              <div
-                                key={creatorGroup.creator_id}
-                                className="border border-[#D1B7F9] rounded-xl overflow-hidden"
-                              >
-                                <CardContent className="p-3 sm:p-4 flex flex-col sm:flex-row sm:items-center sm:space-x-4 space-y-3 sm:space-y-0 justify-between">
-                                  <div className="flex items-center space-x-3 md:space-x-4">
-                                    <h2 className="text-lg sm:text-xl font-bold text-slate-400 dark:text-slate-500 w-6 sm:w-8 text-center flex-shrink-0">
-                                      {contest?.platform === "twitter"
-                                        ? `#${rank}`
-                                        : rank}
-                                    </h2>
-                                    <Avatar className="h-10 w-10 sm:h-12 sm:w-12 border flex-shrink-0">
+                          const twitterDisplayName = isTwitter
+                            ? (creatorGroup as any).app_full_name ||
+                            (creatorGroup as any).app_username ||
+                            creatorGroup.creator_username
+                            : (creatorGroup as any).user_platform_username ??
+                            creatorGroup.creator_username;
+                          const twitterHandleRaw =
+                            (creatorGroup as any).app_username ??
+                            (creatorGroup as any).user_platform_username ??
+                            creatorGroup.creator_username;
+                          const twitterHandle = twitterHandleRaw
+                            ? String(twitterHandleRaw).replace(/^@/, "")
+                            : "";
+                          const showTwitterHandle =
+                            isTwitter &&
+                            twitterHandle &&
+                            twitterDisplayName.replace(/^@/, "").toLowerCase() !==
+                            twitterHandle.toLowerCase();
+
+                          return (
+                            <div
+                              key={creatorGroup.creator_id}
+                              className={cn(
+                                "group relative overflow-hidden border transition-all duration-200",
+                                isTwitter
+                                  ? cn(
+                                    "rounded-2xl hover:shadow-lg hover:border-violet-400/45",
+                                    isDark
+                                      ? "bg-gradient-to-br from-[#1f0d45]/95 to-[#180438] border-white/10 shadow-md shadow-black/25"
+                                      : "bg-gradient-to-br from-white via-white to-violet-50/60 border-violet-200/85 shadow-sm",
+                                  )
+                                  : cn(
+                                    "rounded-xl hover:border-slate-300/80",
+                                    isDark
+                                      ? "bg-[#170337] border-slate-600/70"
+                                      : "bg-white border-slate-200/90 shadow-sm",
+                                  ),
+                              )}
+                            >
+                              <CardContent className="p-3 sm:p-4">
+                                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3 sm:justify-between">
+                                  <div className="flex min-w-0 flex-1 items-start gap-3 sm:gap-3">
+                                    <div
+                                      className={cn(
+                                        "flex shrink-0 items-center justify-center rounded-lg font-semibold tabular-nums",
+                                        isTwitter
+                                          ? cn(
+                                            "h-11 w-11 sm:h-12 sm:w-12 text-sm sm:text-base",
+                                            rank === 1 &&
+                                            (isDark
+                                              ? "bg-gradient-to-br from-amber-500/30 to-amber-800/20 text-amber-100 ring-1 ring-amber-400/50"
+                                              : "bg-gradient-to-br from-amber-100 to-amber-50 text-amber-950 ring-1 ring-amber-300/70 shadow-sm"),
+                                            rank === 2 &&
+                                            (isDark
+                                              ? "bg-gradient-to-br from-slate-400/25 to-slate-700/15 text-slate-100 ring-1 ring-slate-400/40"
+                                              : "bg-gradient-to-br from-slate-100 to-white text-slate-800 ring-1 ring-slate-300/70 shadow-sm"),
+                                            rank === 3 &&
+                                            (isDark
+                                              ? "bg-gradient-to-br from-orange-500/28 to-amber-900/20 text-orange-100 ring-1 ring-orange-400/45"
+                                              : "bg-gradient-to-br from-orange-100 to-amber-50 text-orange-950 ring-1 ring-orange-300/65 shadow-sm"),
+                                            rank > 3 &&
+                                            (isDark
+                                              ? "bg-white/[0.06] text-slate-400 ring-1 ring-white/10"
+                                              : "bg-violet-50/90 text-slate-600 ring-1 ring-violet-100"),
+                                          )
+                                          : cn(
+                                            "h-8 w-8 text-sm",
+                                            isDark
+                                              ? "text-slate-400"
+                                              : "text-slate-500",
+                                          ),
+                                      )}
+                                      title={`Rank ${rank}`}
+                                    >
+                                      {rank}
+                                    </div>
+                                    <Avatar
+                                      className={cn(
+                                        "shrink-0 transition-all duration-200",
+                                        isTwitter
+                                          ? cn(
+                                            "h-11 w-11 sm:h-12 sm:w-12 border-2",
+                                            isDark
+                                              ? "border-white/15 group-hover:border-fuchsia-400/50 group-hover:shadow-[0_0_0_3px_rgba(232,121,249,0.15)]"
+                                              : "border-violet-100 group-hover:border-violet-300 group-hover:shadow-[0_0_0_3px_rgba(139,92,246,0.12)]",
+                                          )
+                                          : cn(
+                                            "h-10 w-10 sm:h-11 sm:w-11 border",
+                                            isDark
+                                              ? "border-slate-600"
+                                              : "border-slate-200",
+                                          ),
+                                      )}
+                                    >
                                       <AvatarImage
                                         src={
                                           creatorGroup.user_platform_pfp_url ??
@@ -8093,154 +8916,201 @@ export function ContestClientPage({
                                           undefined
                                         }
                                         alt={
-                                          (creatorGroup as any).user_platform_username ??
+                                          (creatorGroup as any)
+                                            .user_platform_username ??
                                           creatorGroup.creator_username
                                         }
-                                          referrerPolicy="no-referrer"
-                                      loading="lazy"
+                                        referrerPolicy="no-referrer"
+                                        loading="lazy"
                                       />
-                                      <AvatarFallback className="bg-violet-100 text-violet-600 font-semibold text-xs sm:text-base">
-                                        {((creatorGroup as any).user_platform_username ??
-                                          creatorGroup.creator_username)?.[0]?.toUpperCase() ||
-                                          "U"}
+                                      <AvatarFallback
+                                        className={cn(
+                                          "font-semibold text-xs sm:text-sm",
+                                          isTwitter
+                                            ? isDark
+                                              ? "bg-fuchsia-950/50 text-fuchsia-200"
+                                              : "bg-violet-100 text-violet-700"
+                                            : isDark
+                                              ? "bg-slate-700/50 text-slate-200"
+                                              : "bg-violet-50 text-violet-700",
+                                        )}
+                                      >
+                                        {(
+                                          (creatorGroup as any)
+                                            .user_platform_username ??
+                                          creatorGroup.creator_username
+                                        )?.[0]?.toUpperCase() || "U"}
                                       </AvatarFallback>
                                     </Avatar>
 
-                                    <div className="flex-grow min-w-0">
-                                      <div className="flex items-center gap-2 mb-1">
-                                        <p
-                                          className={cn(
-                                            "text-sm sm:text-base font-semibold truncate",
-                                            isDark
-                                              ? "text-white"
-                                              : "text-gray-700",
+                                    <div className="min-w-0 flex-1 space-y-0.5">
+                                      <div className="min-w-0">
+                                        <div className="flex items-start justify-between gap-2 min-w-0">
+                                          <span
+                                            className={cn(
+                                              "min-w-0 text-sm sm:text-base font-semibold leading-snug",
+                                              isDark
+                                                ? "text-white"
+                                                : "text-slate-900",
+                                            )}
+                                          >
+                                            {twitterDisplayName}
+                                          </span>
+                                          {!isTwitter && (
+                                            <div className="flex shrink-0 items-center gap-0.5">
+                                              <span
+                                                className={cn(
+                                                  "text-sm sm:text-base font-semibold tabular-nums whitespace-nowrap leading-snug",
+                                                  isDark
+                                                    ? "text-slate-100"
+                                                    : "text-slate-800",
+                                                )}
+                                              >
+                                                {creatorGroup.total_views.toLocaleString()}{" "}
+                                                views
+                                              </span>
+                                              <Button
+                                                variant="ghost"
+                                                size="sm"
+                                                onClick={() => {
+                                                  setSelectedCreatorId(
+                                                    creatorGroup.creator_id,
+                                                  );
+                                                  setShowCreatorVideosModal(true);
+                                                  setCreatorVideosCurrentPage(1);
+                                                }}
+                                                className="h-7 w-7 p-0 shrink-0"
+                                                title="View all videos by this creator"
+                                              >
+                                                <Eye
+                                                  className={cn(
+                                                    "h-4 w-4",
+                                                    isDark
+                                                      ? "text-slate-400"
+                                                      : "text-slate-600",
+                                                  )}
+                                                />
+                                              </Button>
+                                            </div>
                                           )}
-                                        >
-                                          {contest?.platform === "twitter"
-                                            ? (creatorGroup as any)
-                                                .app_full_name ||
-                                              (creatorGroup as any)
-                                                .app_username ||
-                                              creatorGroup.creator_username
-                                            : (creatorGroup as any).user_platform_username ??
-                                              creatorGroup.creator_username}
-                                        </p>
+                                        </div>
+                                        {showTwitterHandle ? (
+                                          <p
+                                            className={cn(
+                                              "text-xs font-medium truncate mt-0.5",
+                                              isDark
+                                                ? "text-fuchsia-300/90"
+                                                : "text-violet-600",
+                                            )}
+                                          >
+                                            @{twitterHandle}
+                                          </p>
+                                        ) : null}
                                       </div>
-                                      {contest?.platform === "twitter" ? (
-                                        <div className="flex flex-wrap items-center gap-3 mt-1.5">
-                                          <div className="flex items-center gap-1">
-                                            <FileText
+                                      {isTwitter ? (
+                                        <div className="flex flex-wrap gap-1.5 sm:gap-2">
+                                          {[
+                                            {
+                                              Icon: FileText,
+                                              iconClass: isDark
+                                                ? "text-violet-300"
+                                                : "text-violet-600",
+                                              chipBg: isDark
+                                                ? "bg-violet-500/10 border-violet-500/25"
+                                                : "bg-violet-50 border-violet-100",
+                                              text: String(
+                                                (creatorGroup as any).total_eligible_tweets ||
+                                                0,
+                                              ),
+                                              title: `Tweets: ${(creatorGroup as any).total_eligible_tweets || 0}`,
+                                            },
+                                            {
+                                              Icon: Eye,
+                                              iconClass: isDark
+                                                ? "text-emerald-300"
+                                                : "text-emerald-600",
+                                              chipBg: isDark
+                                                ? "bg-emerald-500/10 border-emerald-500/25"
+                                                : "bg-emerald-50 border-emerald-100",
+                                              text: String(
+                                                ((creatorGroup as any).total_impressions ||
+                                                  0
+                                                ).toLocaleString(),
+                                              ),
+                                              title: `Impressions: ${((creatorGroup as any).total_impressions || 0).toLocaleString()}`,
+                                            },
+                                            {
+                                              Icon: ThumbsUp,
+                                              iconClass: isDark
+                                                ? "text-pink-300"
+                                                : "text-pink-600",
+                                              chipBg: isDark
+                                                ? "bg-pink-500/10 border-pink-500/25"
+                                                : "bg-pink-50 border-pink-100",
+                                              text: String((creatorGroup as any).total_likes || 0),
+                                              title: `Likes: ${(creatorGroup as any).total_likes || 0}`,
+                                            },
+                                            {
+                                              Icon: RefreshCw,
+                                              iconClass: isDark
+                                                ? "text-teal-300"
+                                                : "text-teal-600",
+                                              chipBg: isDark
+                                                ? "bg-teal-500/10 border-teal-500/25"
+                                                : "bg-teal-50 border-teal-100",
+                                              text: String((creatorGroup as any).total_retweets || 0),
+                                              title: `Retweets: ${(creatorGroup as any).total_retweets || 0}`,
+                                            },
+                                            {
+                                              Icon: MessageCircle,
+                                              iconClass: isDark
+                                                ? "text-sky-300"
+                                                : "text-sky-600",
+                                              chipBg: isDark
+                                                ? "bg-sky-500/10 border-sky-500/25"
+                                                : "bg-sky-50 border-sky-100",
+                                              text: String((creatorGroup as any).total_replies || 0),
+                                              title: `Replies: ${(creatorGroup as any).total_replies || 0}`,
+                                            },
+                                          ].map(({ Icon, iconClass, chipBg, text, title }) => (
+                                            <div
+                                              key={`${title}-${text}`}
                                               className={cn(
-                                                "h-3.5 w-3.5",
+                                                "inline-flex items-center gap-1.5 rounded-lg border px-2 py-1 text-[11px] sm:text-xs font-medium tabular-nums",
+                                                chipBg,
                                                 isDark
-                                                  ? "text-gray-400"
-                                                  : "text-slate-500",
+                                                  ? "text-slate-200"
+                                                  : "text-slate-700",
                                               )}
-                                            />
-                                            <span
-                                              className={cn(
-                                                "text-xs",
-                                                isDark
-                                                  ? "text-gray-400"
-                                                  : "text-slate-600",
-                                              )}
+                                              title={title}
                                             >
-                                              {(creatorGroup as any)
-                                                .total_eligible_tweets ||
-                                                0}{" "}
-                                              tweets
-                                            </span>
-                                          </div>
-                                          <div className="flex items-center gap-1">
-                                            <Eye
-                                              className={cn(
-                                                "h-3.5 w-3.5",
-                                                isDark
-                                                  ? "text-gray-400"
-                                                  : "text-slate-500",
-                                              )}
-                                            />
-                                            <span
-                                              className={cn(
-                                                "text-xs",
-                                                isDark
-                                                  ? "text-gray-400"
-                                                  : "text-slate-600",
-                                              )}
-                                            >
-                                              {(
-                                                (creatorGroup as any)
-                                                  .total_impressions || 0
-                                              ).toLocaleString()}{" "}
-                                              impressions
-                                            </span>
-                                          </div>
-                                          <div className="flex items-center gap-1">
-                                            <ThumbsUp className="h-3.5 w-3.5 text-pink-500" />
-                                            <span
-                                              className={cn(
-                                                "text-xs",
-                                                isDark
-                                                  ? "text-gray-300"
-                                                  : "text-gray-700",
-                                              )}
-                                            >
-                                              {(creatorGroup as any)
-                                                .total_likes || 0}
-                                            </span>
-                                          </div>
-                                          <div className="flex items-center gap-1">
-                                            <RefreshCw className="h-3.5 w-3.5 text-green-500" />
-                                            <span
-                                              className={cn(
-                                                "text-xs",
-                                                isDark
-                                                  ? "text-gray-300"
-                                                  : "text-gray-700",
-                                              )}
-                                            >
-                                              {(creatorGroup as any)
-                                                .total_retweets || 0}
-                                            </span>
-                                          </div>
-                                          <div className="flex items-center gap-1">
-                                            <MessageCircle
-                                              className={cn(
-                                                "h-3.5 w-3.5",
-                                                isDark
-                                                  ? "text-gray-400"
-                                                  : "text-gray-600",
-                                              )}
-                                            />
-                                            <span
-                                              className={cn(
-                                                "text-xs",
-                                                isDark
-                                                  ? "text-gray-300"
-                                                  : "text-gray-700",
-                                              )}
-                                            >
-                                              {(creatorGroup as any)
-                                                .total_replies || 0}
-                                            </span>
-                                          </div>
+                                              <Icon
+                                                className={cn(
+                                                  "h-3.5 w-3.5 shrink-0",
+                                                  iconClass,
+                                                )}
+                                                aria-hidden
+                                              />
+                                              <span>{text}</span>
+                                            </div>
+                                          ))}
                                         </div>
                                       ) : (
-                                        <div className="flex items-center gap-1 mt-1.5">
+                                        <div className="flex items-center gap-1.5">
                                           <Video
                                             className={cn(
-                                              "h-4 w-4",
+                                              "h-3.5 w-3.5 shrink-0 opacity-80",
                                               isDark
-                                                ? "text-gray-400"
+                                                ? "text-slate-500"
                                                 : "text-slate-500",
                                             )}
                                           />
                                           <p
                                             className={cn(
-                                              "text-xs",
+                                              "text-xs font-normal leading-snug",
                                               isDark
-                                                ? "text-gray-400"
-                                                : "text-slate-700",
+                                                ? "text-slate-500"
+                                                : "text-slate-500",
                                             )}
                                           >
                                             {creatorGroup.submission_count}{" "}
@@ -8252,130 +9122,154 @@ export function ContestClientPage({
                                       )}
                                     </div>
                                   </div>
-                                  <div className="flex flex-col items-end space-y-0.5 sm:space-y-1 flex-shrink-0 ml-auto pl-2">
-                                    {contest?.platform === "twitter" ? (
-                                      <div className="flex items-center space-x-2">
-                                        <p
-                                          className={cn(
-                                            "text-base sm:text-lg font-bold",
-                                            isDark
-                                              ? "text-white"
-                                              : "text-gray-700",
-                                          )}
-                                        >
-                                          {typeof (creatorGroup as any)
-                                            .total_points === "number"
-                                            ? (
-                                                creatorGroup as any
-                                              ).total_points.toLocaleString()
-                                            : "0"}{" "}
-                                          points
-                                        </p>
-                                      </div>
-                                    ) : (
-                                      <>
-                                        <div className="flex items-center space-x-2">
-                                          <p
-                                            className={cn(
-                                              "text-base sm:text-lg font-bold",
-                                              isDark
-                                                ? "text-white"
-                                                : "text-gray-700",
-                                            )}
-                                          >
-                                            {creatorGroup.total_views.toLocaleString()}{" "}
-                                            views
-                                          </p>
-                                          <Button
-                                            variant="ghost"
-                                            size="sm"
-                                            onClick={() => {
-                                              setSelectedCreatorId(
-                                                creatorGroup.creator_id,
-                                              );
-                                              setShowCreatorVideosModal(true);
-                                              setCreatorVideosCurrentPage(1);
-                                            }}
-                                            className="h-6 w-6 p-0"
-                                            title="View all videos"
-                                          >
-                                            <Eye
-                                              className={cn(
-                                                "h-4 w-4",
-                                                isDark
-                                                  ? "text-gray-400"
-                                                  : "text-gray-600",
-                                              )}
-                                            />
-                                          </Button>
-                                        </div>
-                                      </>
+
+                                  <div
+                                    className={cn(
+                                      isTwitter
+                                        ? "flex flex-col gap-2 sm:items-end sm:text-right shrink-0 w-full sm:w-auto sm:min-w-[7.5rem] border-t sm:border-t-0 pt-3 sm:pt-0"
+                                        : "flex items-center shrink-0 sm:items-end sm:text-right",
+                                      isDark ? "border-white/10" : "border-violet-100",
                                     )}
-                                    {prizeDisplay && (
-                                      <div className="text-xs sm:text-sm mt-2">
+                                  >
+                                    {isTwitter ? (
+                                      <p
+                                        className={cn(
+                                          "text-base sm:text-lg font-bold tabular-nums ml-auto text-right",
+                                          isDark
+                                            ? "text-white"
+                                            : "text-gray-900",
+                                        )}
+                                      >
+                                        {typeof (creatorGroup as any)
+                                          .total_points === "number"
+                                          ? (
+                                            creatorGroup as any
+                                          ).total_points.toLocaleString()
+                                          : "0"}{" "}
+                                        points
+                                      </p>
+                                    ) : null}
+                                    {!isTwitter && prizeDisplay && (
+                                      <div className="text-xs sm:text-sm mt-2 w-full sm:w-auto">
                                         {prizeDisplay}
                                       </div>
                                     )}
                                   </div>
-                                </CardContent>
-                              </div>
-                            );
-                          },
-                        )
+                                </div>
+                              </CardContent>
+                            </div>
+                          );
+                        },
+                      )
                       : // Submission-wise display (original)
-                        leaderboard.map((entry, index) => {
-                          const rank =
-                            (leaderboardCurrentPage - 1) *
-                              leaderboardItemsPerPage +
-                            index +
-                            1;
-                          let prizeDisplay = null;
+                      leaderboard.map((entry, index) => {
+                        const rank =
+                          (leaderboardCurrentPage - 1) *
+                          leaderboardItemsPerPage +
+                          index +
+                          1;
+                        let prizeDisplay = null;
 
-                          if (entry.earnings > 0) {
-                            // Twitter CPM/leaderboard: show Paid when payouts_processed; others use verified/paid only
-                            const isTwitter =
-                              contest?.platform === "twitter" ||
-                              contest?.platform === "x";
-                            if (contestType === "cpm") {
-                              const isEarned =
-                                entry.status === "verified" ||
-                                entry.status === "paid" ||
-                                (isTwitter &&
-                                  ((entry as any).paid === true ||
-                                    contest?.post_contest_status ===
-                                      "payouts_processed"));
-                              const earningsLabel = isEarned
-                                ? isTwitter &&
+                        if (entry.earnings > 0) {
+                          // Twitter CPM/leaderboard: show Paid when payouts_processed; others use verified/paid only
+                          const isTwitter =
+                            contest?.platform === "twitter" ||
+                            contest?.platform === "x";
+                          if (contestType === "cpm") {
+                            const isEarned =
+                              entry.status === "verified" ||
+                              entry.status === "paid" ||
+                              (isTwitter &&
+                                ((entry as any).paid === true ||
                                   contest?.post_contest_status ===
-                                    "payouts_processed"
-                                  ? "Paid"
-                                  : "Earned"
-                                : "Expected";
+                                  "payouts_processed"));
+                            const earningsLabel = isEarned
+                              ? isTwitter &&
+                                contest?.post_contest_status ===
+                                "payouts_processed"
+                                ? "Paid"
+                                : "Earned"
+                              : "Expected";
 
-                              // Check if there's a flat fee bonus
+                            // Check if there's a flat fee bonus
+                            const flatFeeBonus =
+                              (contest.contest_based_details as any)
+                                ?.cpm_contest?.flat_fee_bonus || 0;
+
+                            // Calculate total earnings (CPM + Bonus if applicable)
+                            const totalEarnings =
+                              entry.earnings + flatFeeBonus;
+
+                            // Show detailed breakdown if in detailed mode and bonus exists
+                            if (
+                              leaderboardViewMode === "detailed" &&
+                              flatFeeBonus > 0
+                            ) {
+                              prizeDisplay = (
+                                <div className="space-y-1">
+                                  <div className="font-semibold text-green-600 dark:text-green-400 text-base">
+                                    {earningsLabel}:{" "}
+                                    {formatMoney(totalEarnings)}
+                                  </div>
+                                  <div className="flex flex-wrap items-center gap-1.5 text-xs text-slate-600 dark:text-slate-400 bg-green-50 dark:bg-green-900/20 px-2 py-1.5 rounded-md border border-green-200 dark:border-green-800">
+                                    <div className="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0" />
+                                    <span className="whitespace-nowrap">
+                                      {formatMoney(entry.earnings)} CPM
+                                    </span>
+                                    <span className="text-green-600 dark:text-green-400">
+                                      +
+                                    </span>
+                                    <span className="whitespace-nowrap">
+                                      {formatMoney(flatFeeBonus)} Bonus
+                                    </span>
+                                  </div>
+                                </div>
+                              );
+                            } else {
+                              prizeDisplay = (
+                                <div className="font-semibold text-green-600 dark:text-green-400 text-base">
+                                  {earningsLabel}:{" "}
+                                  {formatMoney(totalEarnings)}
+                                </div>
+                              );
+                            }
+                          } else {
+                            // For leaderboard contests with earnings (Twitter: "Paid" when payouts_processed)
+                            const leaderboardLabel =
+                              isTwitter &&
+                                contest?.post_contest_status ===
+                                "payouts_processed"
+                                ? "Paid"
+                                : "Earned";
+                            if (
+                              contestType === "leaderboard" &&
+                              leaderboardViewMode === "detailed"
+                            ) {
+                              // Check for flat fee bonus in leaderboard contests
                               const flatFeeBonus =
                                 (contest.contest_based_details as any)
-                                  ?.cpm_contest?.flat_fee_bonus || 0;
+                                  ?.leaderboard_contest?.flat_fee_bonus || 0;
 
-                              // Calculate total earnings (CPM + Bonus if applicable)
-                              const totalEarnings =
-                                entry.earnings + flatFeeBonus;
-
-                              // Show detailed breakdown if in detailed mode and bonus exists
-                              if (
-                                leaderboardViewMode === "detailed" &&
-                                flatFeeBonus > 0
-                              ) {
+                              if (flatFeeBonus > 0) {
+                                const totalEarnings =
+                                  entry.earnings + flatFeeBonus;
                                 prizeDisplay = (
                                   <div className="space-y-1">
-                                    <div className="font-semibold text-green-600 dark:text-green-400 text-base">
-                                      {earningsLabel}:{" "}
+                                    <div
+                                      className={cn(
+                                        "font-semibold text-base",
+                                        isDark
+                                          ? "text-green-300"
+                                          : "text-green-600",
+                                      )}
+                                    >
+                                      {leaderboardLabel}:{" "}
                                       {formatMoney(totalEarnings)}
                                     </div>
                                     <div className="flex flex-wrap items-center gap-1.5 text-xs text-slate-600 dark:text-slate-400 bg-green-50 dark:bg-green-900/20 px-2 py-1.5 rounded-md border border-green-200 dark:border-green-800">
                                       <div className="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0" />
                                       <span className="whitespace-nowrap">
-                                        {formatMoney(entry.earnings)} CPM
+                                        {formatMoney(entry.earnings)} Prize
                                       </span>
                                       <span className="text-green-600 dark:text-green-400">
                                         +
@@ -8389,188 +9283,166 @@ export function ContestClientPage({
                               } else {
                                 prizeDisplay = (
                                   <div className="font-semibold text-green-600 dark:text-green-400 text-base">
-                                    {earningsLabel}:{" "}
-                                    {formatMoney(totalEarnings)}
+                                    {leaderboardLabel}:{" "}
+                                    {formatMoney(entry.earnings)}
                                   </div>
                                 );
                               }
                             } else {
-                              // For leaderboard contests with earnings (Twitter: "Paid" when payouts_processed)
-                              const leaderboardLabel =
-                                isTwitter &&
-                                contest?.post_contest_status ===
-                                  "payouts_processed"
-                                  ? "Paid"
-                                  : "Earned";
-                              if (
-                                contestType === "leaderboard" &&
-                                leaderboardViewMode === "detailed"
-                              ) {
-                                // Check for flat fee bonus in leaderboard contests
-                                const flatFeeBonus =
-                                  (contest.contest_based_details as any)
-                                    ?.leaderboard_contest?.flat_fee_bonus || 0;
+                              // Simple view for leaderboard or non-CPM contests
+                              prizeDisplay = (
+                                <span className="font-semibold text-green-600 dark:text-green-400">
+                                  {leaderboardLabel}:{" "}
+                                  {formatMoney(entry.earnings)}
+                                </span>
+                              );
+                            }
+                          }
+                        } else if (
+                          contest.contest_type === "leaderboard" &&
+                          Array.isArray(
+                            contest.contest_based_details?.leaderboard_contest
+                              ?.prizes,
+                          )
+                        ) {
+                          const prizeInfo = (
+                            contest.contest_based_details.leaderboard_contest
+                              .prizes as PrizeInfo[]
+                          ).find((p) => p.position === rank);
+                          if (prizeInfo) {
+                            const prizeText =
+                              contest.status === "active"
+                                ? "Winning Zone"
+                                : "Prize";
 
-                                if (flatFeeBonus > 0) {
-                                  const totalEarnings =
-                                    entry.earnings + flatFeeBonus;
-                                  prizeDisplay = (
-                                    <div className="space-y-1">
-                                      <div
-                                        className={cn(
-                                          "font-semibold text-base",
-                                          isDark
-                                            ? "text-green-300"
-                                            : "text-green-600",
-                                        )}
-                                      >
-                                        {leaderboardLabel}:{" "}
+                            // In detailed mode, show bonus information if available
+                            if (leaderboardViewMode === "detailed") {
+                              const flatFeeBonus =
+                                (contest.contest_based_details as any)
+                                  ?.leaderboard_contest?.flat_fee_bonus || 0;
+
+                              if (flatFeeBonus > 0) {
+                                const totalEarnings =
+                                  prizeInfo.amount + flatFeeBonus;
+                                prizeDisplay = (
+                                  <div
+                                    className={`font-semibold flex items-center ${"text-purple-500 dark:text-purple-400"}`}
+                                  >
+                                    <Trophy className="h-4 w-4 mr-1.5 flex-shrink-0" />
+                                    <div>
+                                      <div>
+                                        {prizeText}:{" "}
                                         {formatMoney(totalEarnings)}
                                       </div>
-                                      <div className="flex flex-wrap items-center gap-1.5 text-xs text-slate-600 dark:text-slate-400 bg-green-50 dark:bg-green-900/20 px-2 py-1.5 rounded-md border border-green-200 dark:border-green-800">
-                                        <div className="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0" />
-                                        <span className="whitespace-nowrap">
-                                          {formatMoney(entry.earnings)} Prize
-                                        </span>
-                                        <span className="text-green-600 dark:text-green-400">
-                                          +
-                                        </span>
-                                        <span className="whitespace-nowrap">
-                                          {formatMoney(flatFeeBonus)} Bonus
-                                        </span>
+                                      <div className="text-xs text-purple-600 dark:text-purple-500">
+                                        ({formatMoney(prizeInfo.amount)} Prize
+                                        + {formatMoney(flatFeeBonus)} Bonus)
                                       </div>
                                     </div>
-                                  );
-                                } else {
-                                  prizeDisplay = (
-                                    <div className="font-semibold text-green-600 dark:text-green-400 text-base">
-                                      {leaderboardLabel}:{" "}
-                                      {formatMoney(entry.earnings)}
-                                    </div>
-                                  );
-                                }
-                              } else {
-                                // Simple view for leaderboard or non-CPM contests
-                                prizeDisplay = (
-                                  <span className="font-semibold text-green-600 dark:text-green-400">
-                                    {leaderboardLabel}:{" "}
-                                    {formatMoney(entry.earnings)}
-                                  </span>
+                                  </div>
                                 );
-                              }
-                            }
-                          } else if (
-                            contest.contest_type === "leaderboard" &&
-                            Array.isArray(
-                              contest.contest_based_details?.leaderboard_contest
-                                ?.prizes,
-                            )
-                          ) {
-                            const prizeInfo = (
-                              contest.contest_based_details.leaderboard_contest
-                                .prizes as PrizeInfo[]
-                            ).find((p) => p.position === rank);
-                            if (prizeInfo) {
-                              const prizeText =
-                                contest.status === "active"
-                                  ? "Winning Zone"
-                                  : "Prize";
-
-                              // In detailed mode, show bonus information if available
-                              if (leaderboardViewMode === "detailed") {
-                                const flatFeeBonus =
-                                  (contest.contest_based_details as any)
-                                    ?.leaderboard_contest?.flat_fee_bonus || 0;
-
-                                if (flatFeeBonus > 0) {
-                                  const totalEarnings =
-                                    prizeInfo.amount + flatFeeBonus;
-                                  prizeDisplay = (
-                                    <div
-                                      className={`font-semibold flex items-center ${"text-purple-500 dark:text-purple-400"}`}
-                                    >
-                                      <Trophy className="h-4 w-4 mr-1.5 flex-shrink-0" />
-                                      <div>
-                                        <div>
-                                          {prizeText}:{" "}
-                                          {formatMoney(totalEarnings)}
-                                        </div>
-                                        <div className="text-xs text-purple-600 dark:text-purple-500">
-                                          ({formatMoney(prizeInfo.amount)} Prize
-                                          + {formatMoney(flatFeeBonus)} Bonus)
-                                        </div>
-                                      </div>
-                                    </div>
-                                  );
-                                } else {
-                                  prizeDisplay = (
-                                    <span
-                                      className={`font-semibold flex items-center ${"text-purple-500 dark:text-purple-400"}`}
-                                    >
-                                      <Trophy className="h-4 w-4 mr-1.5 flex-shrink-0" />
-                                      {prizeText}:{" "}
-                                      {formatMoney(prizeInfo.amount)}
-                                    </span>
-                                  );
-                                }
                               } else {
-                                // Simple view
                                 prizeDisplay = (
                                   <span
                                     className={`font-semibold flex items-center ${"text-purple-500 dark:text-purple-400"}`}
                                   >
                                     <Trophy className="h-4 w-4 mr-1.5 flex-shrink-0" />
-                                    {prizeText}: {formatMoney(prizeInfo.amount)}
+                                    {prizeText}:{" "}
+                                    {formatMoney(prizeInfo.amount)}
                                   </span>
                                 );
                               }
+                            } else {
+                              // Simple view
+                              prizeDisplay = (
+                                <span
+                                  className={`font-semibold flex items-center ${"text-purple-500 dark:text-purple-400"}`}
+                                >
+                                  <Trophy className="h-4 w-4 mr-1.5 flex-shrink-0" />
+                                  {prizeText}: {formatMoney(prizeInfo.amount)}
+                                </span>
+                              );
                             }
                           }
+                        }
 
-                          return (
-                            <div
-                              key={entry.id}
-                              className="border border-[#D1B7F9] rounded-xl overflow-hidden"
-                            >
-                              <CardContent className="p-3 sm:p-4 flex flex-col sm:flex-row sm:items-center sm:space-x-4 space-y-3 sm:space-y-0 justify-between">
-                                <div className="flex items-center space-x-3 md:space-x-4">
-                                  <h2 className="text-lg sm:text-xl font-bold text-slate-400 dark:text-slate-500 w-6 sm:w-8 text-center flex-shrink-0">
-                                    {rank}
-                                  </h2>
-                                  <Avatar className="h-10 w-10 sm:h-12 sm:w-12 border flex-shrink-0">
-                                    <AvatarImage
-                                      src={
-                                        entry.user_platform_pfp_url ??
-                                        entry.creator_pfp_url ??
-                                        undefined
-                                      }
-                                      alt={
-                                        contest?.platform === "twitter"
-                                          ? (entry as any).app_username ||
-                                            entry.user_platform_username
-                                          : entry.user_platform_username
-                                      }
-                                        referrerPolicy="no-referrer"
-                                      loading="lazy"
-                                    />
-                                    <AvatarFallback className="bg-violet-100 text-violet-600 font-semibold text-xs sm:text-base">
-                                      {(contest?.platform === "twitter"
-                                        ? ((entry as any).app_username as
-                                            | string
-                                            | undefined)
-                                        : entry.user_platform_username)?.[0]?.toUpperCase() ||
-                                        "U"}
-                                    </AvatarFallback>
-                                  </Avatar>
+                        const entryIsTwitter =
+                          contest?.platform === "twitter" ||
+                          contest?.platform === "x";
 
-                                  <div className="flex-grow min-w-0">
-                                    <div className="flex items-center gap-2 mb-1">
+                        return (
+                          <div
+                            key={entry.id}
+                            className={cn(
+                              "rounded-xl overflow-hidden border",
+                              entryIsTwitter
+                                ? "border-[#D1B7F9]"
+                                : isDark
+                                  ? "border-slate-600/70 bg-[#170337]"
+                                  : "border-slate-200/90 bg-white shadow-sm",
+                            )}
+                          >
+                            <CardContent className="p-3.5 sm:p-4">
+                              <div className="flex items-center gap-3 sm:gap-3.5">
+                                <div
+                                  className={cn(
+                                    "w-7 shrink-0 pt-0.5 text-center text-sm font-semibold tabular-nums",
+                                    entryIsTwitter
+                                      ? isDark
+                                        ? "text-slate-400"
+                                        : "text-slate-400"
+                                      : isDark
+                                        ? "text-slate-400"
+                                        : "text-slate-500",
+                                  )}
+                                >
+                                  {rank}
+                                </div>
+                                <Avatar
+                                  className={cn(
+                                    "h-10 w-10 shrink-0 border sm:h-11 sm:w-11",
+                                    isDark ? "border-slate-600" : "border-slate-200",
+                                  )}
+                                >
+                                  <AvatarImage
+                                    src={
+                                      entry.user_platform_pfp_url ??
+                                      entry.creator_pfp_url ??
+                                      undefined
+                                    }
+                                    alt={
+                                      entryIsTwitter
+                                        ? (entry as any).app_username ||
+                                        entry.user_platform_username
+                                        : entry.user_platform_username
+                                    }
+                                    referrerPolicy="no-referrer"
+                                    loading="lazy"
+                                  />
+                                  <AvatarFallback
+                                    className={cn(
+                                      "font-semibold text-xs sm:text-sm",
+                                      isDark
+                                        ? "bg-slate-700/50 text-slate-200"
+                                        : "bg-violet-50 text-violet-700",
+                                    )}
+                                  >
+                                    {(entryIsTwitter
+                                      ? ((entry as any).app_username as
+                                        | string
+                                        | undefined)
+                                      : entry.user_platform_username)?.[0]?.toUpperCase() ||
+                                      "U"}
+                                  </AvatarFallback>
+                                </Avatar>
+
+                                <div className="flex min-w-0 flex-1 items-center justify-between gap-4">
+                                  <div className="min-w-0 space-y-1">
+                                    <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5">
                                       <p
                                         className={cn(
-                                          "text-sm sm:text-base font-semibold truncate",
-                                          isDark
-                                            ? "text-white"
-                                            : "text-gray-700",
+                                          "text-sm sm:text-base font-semibold leading-tight",
+                                          isDark ? "text-white" : "text-slate-900",
                                         )}
                                       >
                                         {entry.user_platform_username}
@@ -8579,32 +9451,36 @@ export function ContestClientPage({
                                     </div>
                                     <p
                                       className={cn(
-                                        "text-xs",
-                                        isDark
-                                          ? "text-gray-300"
-                                          : "text-slate-500",
+                                        "text-xs leading-tight",
+                                        isDark ? "text-slate-500" : "text-slate-500",
                                       )}
                                     >
-                                      Submitted:{" "}
-                                      {formatTimeAgo(entry.created_at)}
+                                      {entryIsTwitter
+                                        ? "Joined: "
+                                        : "Submitted: "}{" "}
+                                      {formatTimeAgo(
+                                        entryIsTwitter
+                                          ? ((entry as any)?.joined_at ||
+                                            entry.created_at ||
+                                            null)
+                                          : entry.created_at,
+                                      )}
                                     </p>
                                   </div>
-                                </div>
-                                <div className="flex flex-col items-end space-y-0.5 sm:space-y-1 flex-shrink-0 ml-auto pl-2">
-                                  <div className="flex items-center space-x-2">
+                                  <div className="shrink-0 text-right pl-2">
                                     <p
                                       className={cn(
-                                        "text-base sm:text-lg font-bold",
-                                        isDark ? "text-white" : "text-gray-700",
+                                        "text-base font-semibold tabular-nums sm:text-lg leading-tight",
+                                        isDark ? "text-slate-100" : "text-slate-800",
                                       )}
                                     >
-                                      {contest?.platform === "twitter" ? (
+                                      {entryIsTwitter ? (
                                         <>
-                                          {typeof (entry as any)
-                                            .total_points === "number"
+                                          {typeof (entry as any).total_points ===
+                                            "number"
                                             ? (
-                                                entry as any
-                                              ).total_points.toLocaleString()
+                                              entry as any
+                                            ).total_points.toLocaleString()
                                             : "0"}{" "}
                                           points
                                         </>
@@ -8617,17 +9493,18 @@ export function ContestClientPage({
                                         </>
                                       )}
                                     </p>
+                                    {prizeDisplay ? (
+                                      <div className="mt-1 text-xs sm:text-sm">
+                                        {prizeDisplay}
+                                      </div>
+                                    ) : null}
                                   </div>
-                                  {prizeDisplay && (
-                                    <div className="text-xs sm:text-sm">
-                                      {prizeDisplay}
-                                    </div>
-                                  )}
                                 </div>
-                              </CardContent>
-                            </div>
-                          );
-                        })}
+                              </div>
+                            </CardContent>
+                          </div>
+                        );
+                      })}
 
                     {/* Pagination Controls */}
                     {effectiveLeaderboardTotalPages > 1 && (
@@ -8639,8 +9516,8 @@ export function ContestClientPage({
                             fetchLeaderboard(
                               leaderboardCurrentPage - 1,
                               contest?.platform?.toLowerCase() !== "twitter" &&
-                                contest?.platform?.toLowerCase() !== "x" &&
-                                leaderboardDisplayMode === "creator",
+                              contest?.platform?.toLowerCase() !== "x" &&
+                              leaderboardDisplayMode === "creator",
                             )
                           }
                           disabled={leaderboardCurrentPage <= 1}
@@ -8663,8 +9540,8 @@ export function ContestClientPage({
                             fetchLeaderboard(
                               leaderboardCurrentPage + 1,
                               contest?.platform?.toLowerCase() !== "twitter" &&
-                                contest?.platform?.toLowerCase() !== "x" &&
-                                leaderboardDisplayMode === "creator",
+                              contest?.platform?.toLowerCase() !== "x" &&
+                              leaderboardDisplayMode === "creator",
                             )
                           }
                           disabled={
@@ -8770,7 +9647,7 @@ export function ContestClientPage({
                         : sub.other_stats.points || 0;
                     const manualPoints =
                       typeof sub.other_stats.manual_points_adjustment ===
-                      "number"
+                        "number"
                         ? sub.other_stats.manual_points_adjustment
                         : 0;
                     metrics.total_points += basePoints + manualPoints;
@@ -9022,9 +9899,9 @@ export function ContestClientPage({
                               twitterMetrics?.target_quote_reposts ??
                               (targetMetrics.quote_reposts
                                 ? parseInt(
-                                    String(targetMetrics.quote_reposts),
-                                    10,
-                                  )
+                                  String(targetMetrics.quote_reposts),
+                                  10,
+                                )
                                 : null);
 
                             return (
@@ -9288,15 +10165,15 @@ export function ContestClientPage({
 
                                   const hasCurrentMetrics =
                                     twitterMetrics.target_current_likes !==
-                                      null ||
+                                    null ||
                                     twitterMetrics.target_current_comments !==
-                                      null ||
+                                    null ||
                                     twitterMetrics.target_current_retweets !==
-                                      null ||
+                                    null ||
                                     twitterMetrics.target_current_quote_reposts !==
-                                      null ||
+                                    null ||
                                     twitterMetrics.target_current_views !==
-                                      null ||
+                                    null ||
                                     twitterMetrics.targets_reached !== null;
 
                                   return hasCurrentMetrics ? (
@@ -9325,9 +10202,9 @@ export function ContestClientPage({
                                             const progress =
                                               target !== null && target > 0
                                                 ? Math.min(
-                                                    100,
-                                                    (current / target) * 100,
-                                                  )
+                                                  100,
+                                                  (current / target) * 100,
+                                                )
                                                 : 0;
 
                                             return (
@@ -9452,9 +10329,9 @@ export function ContestClientPage({
                                             const progress =
                                               target !== null && target > 0
                                                 ? Math.min(
-                                                    100,
-                                                    (current / target) * 100,
-                                                  )
+                                                  100,
+                                                  (current / target) * 100,
+                                                )
                                                 : 0;
 
                                             return (
@@ -9579,9 +10456,9 @@ export function ContestClientPage({
                                             const progress =
                                               target !== null && target > 0
                                                 ? Math.min(
-                                                    100,
-                                                    (current / target) * 100,
-                                                  )
+                                                  100,
+                                                  (current / target) * 100,
+                                                )
                                                 : 0;
 
                                             return (
@@ -9706,9 +10583,9 @@ export function ContestClientPage({
                                             const progress =
                                               target !== null && target > 0
                                                 ? Math.min(
-                                                    100,
-                                                    (current / target) * 100,
-                                                  )
+                                                  100,
+                                                  (current / target) * 100,
+                                                )
                                                 : 0;
 
                                             return (
@@ -9822,124 +10699,124 @@ export function ContestClientPage({
                                           })()}
                                         {twitterMetrics.target_current_views !==
                                           null && (
-                                          <div
-                                            className={cn(
-                                              "group bg-white rounded-2xl shadow-xl hover:shadow-2xl transition-all duration-300 hover:scale-105 overflow-hidden",
-                                              isDark
-                                                ? "bg-[#170337]"
-                                                : "bg-white border border-slate-200",
-                                            )}
-                                          >
-                                            <CardContent className="p-6 flex justify-between items-center">
-                                              <div
-                                                className={cn(
-                                                  "flex-1 space-y-2",
-                                                  isDark
-                                                    ? "text-white"
-                                                    : "text-slate-800",
-                                                )}
-                                              >
-                                                <p
+                                            <div
+                                              className={cn(
+                                                "group bg-white rounded-2xl shadow-xl hover:shadow-2xl transition-all duration-300 hover:scale-105 overflow-hidden",
+                                                isDark
+                                                  ? "bg-[#170337]"
+                                                  : "bg-white border border-slate-200",
+                                              )}
+                                            >
+                                              <CardContent className="p-6 flex justify-between items-center">
+                                                <div
                                                   className={cn(
-                                                    "text-sm font-semibold uppercase tracking-wide",
-                                                    isDark
-                                                      ? "text-slate-200"
-                                                      : "text-slate-600",
-                                                  )}
-                                                >
-                                                  Current Views
-                                                </p>
-                                                <p
-                                                  className={cn(
-                                                    "text-2xl font-black",
+                                                    "flex-1 space-y-2",
                                                     isDark
                                                       ? "text-white"
                                                       : "text-slate-800",
                                                   )}
                                                 >
-                                                  {(
-                                                    twitterMetrics.target_current_views ||
-                                                    0
-                                                  ).toLocaleString()}
-                                                </p>
-                                              </div>
-                                              <div className="w-14 h-14 flex items-center justify-center rounded-2xl bg-gradient-to-br from-green-500 to-emerald-600 text-white shadow-lg group-hover:shadow-xl transition-all duration-300">
-                                                <Eye className="h-7 w-7" />
-                                              </div>
-                                            </CardContent>
-                                          </div>
-                                        )}
+                                                  <p
+                                                    className={cn(
+                                                      "text-sm font-semibold uppercase tracking-wide",
+                                                      isDark
+                                                        ? "text-slate-200"
+                                                        : "text-slate-600",
+                                                    )}
+                                                  >
+                                                    Current Views
+                                                  </p>
+                                                  <p
+                                                    className={cn(
+                                                      "text-2xl font-black",
+                                                      isDark
+                                                        ? "text-white"
+                                                        : "text-slate-800",
+                                                    )}
+                                                  >
+                                                    {(
+                                                      twitterMetrics.target_current_views ||
+                                                      0
+                                                    ).toLocaleString()}
+                                                  </p>
+                                                </div>
+                                                <div className="w-14 h-14 flex items-center justify-center rounded-2xl bg-gradient-to-br from-green-500 to-emerald-600 text-white shadow-lg group-hover:shadow-xl transition-all duration-300">
+                                                  <Eye className="h-7 w-7" />
+                                                </div>
+                                              </CardContent>
+                                            </div>
+                                          )}
                                       </div>
                                       {/* Targets Reached Status */}
                                       {twitterMetrics.targets_reached !==
                                         null && (
-                                        <div
-                                          className={cn(
-                                            "rounded-xl p-4 border flex items-center gap-3",
-                                            twitterMetrics.targets_reached
-                                              ? isDark
-                                                ? "bg-green-900/30 border-green-700"
-                                                : "bg-green-50 border-green-200"
-                                              : isDark
-                                                ? "bg-yellow-900/30 border-yellow-700"
-                                                : "bg-yellow-50 border-yellow-200",
-                                          )}
-                                        >
-                                          {twitterMetrics.targets_reached ? (
-                                            <CheckCircle2
-                                              className={cn(
-                                                "h-6 w-6 flex-shrink-0",
-                                                isDark
-                                                  ? "text-green-400"
-                                                  : "text-green-600",
-                                              )}
-                                            />
-                                          ) : (
-                                            <Clock
-                                              className={cn(
-                                                "h-6 w-6 flex-shrink-0",
-                                                isDark
-                                                  ? "text-yellow-400"
-                                                  : "text-yellow-600",
-                                              )}
-                                            />
-                                          )}
-                                          <div>
-                                            <p
-                                              className={cn(
-                                                "text-sm font-semibold",
-                                                twitterMetrics.targets_reached
-                                                  ? isDark
-                                                    ? "text-green-300"
-                                                    : "text-green-800"
-                                                  : isDark
-                                                    ? "text-yellow-300"
-                                                    : "text-yellow-800",
-                                              )}
-                                            >
-                                              {twitterMetrics.targets_reached
-                                                ? "Targets Reached"
-                                                : "Targets Not Yet Reached"}
-                                            </p>
-                                            <p
-                                              className={cn(
-                                                "text-xs mt-1",
-                                                twitterMetrics.targets_reached
-                                                  ? isDark
+                                          <div
+                                            className={cn(
+                                              "rounded-xl p-4 border flex items-center gap-3",
+                                              twitterMetrics.targets_reached
+                                                ? isDark
+                                                  ? "bg-green-900/30 border-green-700"
+                                                  : "bg-green-50 border-green-200"
+                                                : isDark
+                                                  ? "bg-yellow-900/30 border-yellow-700"
+                                                  : "bg-yellow-50 border-yellow-200",
+                                            )}
+                                          >
+                                            {twitterMetrics.targets_reached ? (
+                                              <CheckCircle2
+                                                className={cn(
+                                                  "h-6 w-6 flex-shrink-0",
+                                                  isDark
                                                     ? "text-green-400"
-                                                    : "text-green-700"
-                                                  : isDark
+                                                    : "text-green-600",
+                                                )}
+                                              />
+                                            ) : (
+                                              <Clock
+                                                className={cn(
+                                                  "h-6 w-6 flex-shrink-0",
+                                                  isDark
                                                     ? "text-yellow-400"
-                                                    : "text-yellow-700",
-                                              )}
-                                            >
-                                              {twitterMetrics.targets_reached
-                                                ? "All target metrics have been achieved. Contest will end when targets are reached."
-                                                : "Keep engaging with the target tweet to reach the goals!"}
-                                            </p>
+                                                    : "text-yellow-600",
+                                                )}
+                                              />
+                                            )}
+                                            <div>
+                                              <p
+                                                className={cn(
+                                                  "text-sm font-semibold",
+                                                  twitterMetrics.targets_reached
+                                                    ? isDark
+                                                      ? "text-green-300"
+                                                      : "text-green-800"
+                                                    : isDark
+                                                      ? "text-yellow-300"
+                                                      : "text-yellow-800",
+                                                )}
+                                              >
+                                                {twitterMetrics.targets_reached
+                                                  ? "Targets Reached"
+                                                  : "Targets Not Yet Reached"}
+                                              </p>
+                                              <p
+                                                className={cn(
+                                                  "text-xs mt-1",
+                                                  twitterMetrics.targets_reached
+                                                    ? isDark
+                                                      ? "text-green-400"
+                                                      : "text-green-700"
+                                                    : isDark
+                                                      ? "text-yellow-400"
+                                                      : "text-yellow-700",
+                                                )}
+                                              >
+                                                {twitterMetrics.targets_reached
+                                                  ? "All target metrics have been achieved. Contest will end when targets are reached."
+                                                  : "Keep engaging with the target tweet to reach the goals!"}
+                                              </p>
+                                            </div>
                                           </div>
-                                        </div>
-                                      )}
+                                        )}
                                     </div>
                                   ) : null;
                                 })()}
@@ -9993,7 +10870,7 @@ export function ContestClientPage({
                                               "text-[11px] sm:text-xs font-medium uppercase tracking-wide leading-tight line-clamp-2",
                                               isDark
                                                 ? "text-white/90 drop-shadow-sm"
-                                              : "text-gray-500",
+                                                : "text-gray-500",
                                             )}
                                           >
                                             {label}
@@ -10084,7 +10961,7 @@ export function ContestClientPage({
                                       <RefreshCw className="h-5 w-5 text-white" />,
                                       "Quote posts",
                                       metricsForDisplay?.total_quote_reposts ||
-                                        0,
+                                      0,
                                       isDark
                                         ? "bg-white/20 border border-white/30 backdrop-blur-2xl shadow-lg shadow-white/20"
                                         : "bg-gradient-to-br from-indigo-500 to-indigo-600 text-white",
@@ -10238,16 +11115,16 @@ export function ContestClientPage({
                             <p className="text-xl font-bold">
                               {contest?.start_date && contest?.end_date
                                 ? (() => {
-                                    const start = new Date(contest.start_date);
-                                    const end = new Date(contest.end_date);
-                                    const diffTime = Math.abs(
-                                      end.getTime() - start.getTime(),
-                                    );
-                                    const diffDays = Math.ceil(
-                                      diffTime / (1000 * 60 * 60 * 24),
-                                    );
-                                    return `${diffDays} days`;
-                                  })()
+                                  const start = new Date(contest.start_date);
+                                  const end = new Date(contest.end_date);
+                                  const diffTime = Math.abs(
+                                    end.getTime() - start.getTime(),
+                                  );
+                                  const diffDays = Math.ceil(
+                                    diffTime / (1000 * 60 * 60 * 24),
+                                  );
+                                  return `${diffDays} days`;
+                                })()
                                 : "N/A"}
                             </p>
                           </div>
@@ -10351,12 +11228,12 @@ export function ContestClientPage({
                                 >
                                   {filteredAnalyticsSubmissions?.length > 0
                                     ? Math.round(
-                                        filteredAnalyticsSubmissions.reduce(
-                                          (sum: number, s: any) =>
-                                            sum + (s.views || 0),
-                                          0,
-                                        ) / filteredAnalyticsSubmissions.length,
-                                      ).toLocaleString()
+                                      filteredAnalyticsSubmissions.reduce(
+                                        (sum: number, s: any) =>
+                                          sum + (s.views || 0),
+                                        0,
+                                      ) / filteredAnalyticsSubmissions.length,
+                                    ).toLocaleString()
                                     : 0}
                                 </p>
                               </div>
@@ -10400,10 +11277,10 @@ export function ContestClientPage({
                                 >
                                   {filteredAnalyticsSubmissions?.length > 0
                                     ? Math.max(
-                                        ...filteredAnalyticsSubmissions.map(
-                                          (s: any) => s.views || 0,
-                                        ),
-                                      ).toLocaleString()
+                                      ...filteredAnalyticsSubmissions.map(
+                                        (s: any) => s.views || 0,
+                                      ),
+                                    ).toLocaleString()
                                     : 0}
                                 </p>
                               </div>
