@@ -141,8 +141,6 @@ export class TikTokProvider implements IPlatformProvider {
         like_count: v.like_count || 0,
         comment_count: v.comment_count || 0,
         share_count: v.share_count || 0,
-        favorite_count: v.favorite_count || 0,
-        download_count: v.download_count || 0, // Fallback for backward compatibility
       };
     });
 
@@ -189,8 +187,6 @@ export class TikTokProvider implements IPlatformProvider {
         likeCount: v.like_count || 0,
         commentCount: v.comment_count || 0,
         shareCount: v.share_count || 0,
-        saveCount: v.download_count || 0,
-        favoriteCount: v.favorite_count || 0,
         duration: v.duration,
         cover_image_url: v.cover_image_url,
         publishedAt,

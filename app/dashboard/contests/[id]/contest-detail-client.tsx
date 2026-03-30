@@ -206,20 +206,20 @@ interface Contest {
   title: string;
   // Moderation status (admin workflow)
   moderation_status:
-  | "draft"
-  | "pending_approval"
-  | "approved"
-  | "published"
-  | "rejected";
+    | "draft"
+    | "pending_approval"
+    | "approved"
+    | "published"
+    | "rejected";
   // Contest lifecycle status (only for published contests)
   status: "upcoming" | "active" | "ended" | "incomplete" | "unknown" | null;
   // Post-contest status for ended contests
   post_contest_status?:
-  | "pending_review"
-  | "in_review"
-  | "verification_complete"
-  | "payouts_processed"
-  | null;
+    | "pending_review"
+    | "in_review"
+    | "verification_complete"
+    | "payouts_processed"
+    | null;
   contest_type?: "leaderboard" | "cpm" | null;
   thumbnail_url?: string | null;
   brief_html?: string | null;
@@ -243,9 +243,9 @@ interface Contest {
   // Categories, subcategories, and interests
   categories?: string[] | null;
   subcategories?:
-  | Array<{ category: string; subcategory: string }>
-  | Record<string, string[]>
-  | null; // Can be flat array or grouped object format
+    | Array<{ category: string; subcategory: string }>
+    | Record<string, string[]>
+    | null; // Can be flat array or grouped object format
   interests?: string[] | null;
   // Region data (JSONB format: { "North America": ["United States", "Canada"], ... })
   region?: Record<string, string[]> | null;
@@ -264,20 +264,20 @@ interface Submission {
   created_at: string;
   content_link: string;
   status:
-  | "pending"
-  | "verified"
-  | "rejected"
-  | "paid"
-  | "mark_bonus_paid"
-  | "mark_both_paid";
+    | "pending"
+    | "verified"
+    | "rejected"
+    | "paid"
+    | "mark_bonus_paid"
+    | "mark_both_paid";
   views: number | null;
   other_stats: Record<string, any> | null;
   insights_status?:
-  | "ok"
-  | "temporary_failure"
-  | "permanent_failure"
-  | null
-  | string;
+    | "ok"
+    | "temporary_failure"
+    | "permanent_failure"
+    | null
+    | string;
   last_insights_update?: string | null;
   platform: string | null;
   video_thumbnail_url: string | null;
@@ -561,8 +561,13 @@ export default function ContestDetailClient({
     setRefreshElapsedSeconds(
       Math.max(0, Math.floor((finished - started) / 1000)),
     );
-    return () => { };
-  }, [instagramRun?.id, instagramRun?.started_at, instagramRun?.status, instagramRun?.finished_at]);
+    return () => {};
+  }, [
+    instagramRun?.id,
+    instagramRun?.started_at,
+    instagramRun?.status,
+    instagramRun?.finished_at,
+  ]);
 
   // Refresh metrics state
   const [isRefreshingMetrics, setIsRefreshingMetrics] = useState(false);
@@ -594,10 +599,10 @@ export default function ContestDetailClient({
       | undefined;
     const yt = vis?.youtube_analytics_visibility as
       | {
-        show_core_to_brand?: boolean;
-        show_traffic_to_brand?: boolean;
-        show_demographics_to_brand?: boolean;
-      }
+          show_core_to_brand?: boolean;
+          show_traffic_to_brand?: boolean;
+          show_demographics_to_brand?: boolean;
+        }
       | undefined;
     setModalShowCore(yt?.show_core_to_brand === true);
     setModalShowTraffic(yt?.show_traffic_to_brand === true);
@@ -630,10 +635,10 @@ export default function ContestDetailClient({
       prev.map((submission) =>
         submission.creator_id === creatorId
           ? {
-            ...submission,
-            status: "verified",
-            moderation_status: "verified",
-          }
+              ...submission,
+              status: "verified",
+              moderation_status: "verified",
+            }
           : submission,
       ),
     );
@@ -798,7 +803,7 @@ export default function ContestDetailClient({
           if (valid.length > 0) setYtVisibleColumns(valid);
         }
       }
-    } catch (_) { }
+    } catch (_) {}
   }, []);
 
   const setYtVisibleColumnsAndPersist = useCallback((next: string[]) => {
@@ -809,7 +814,7 @@ export default function ContestDetailClient({
           YT_VISIBLE_COLUMNS_STORAGE_KEY,
           JSON.stringify(next),
         );
-    } catch (_) { }
+    } catch (_) {}
   }, []);
 
   // Helper function to get status for both Twitter tweets and regular submissions
@@ -982,7 +987,8 @@ export default function ContestDetailClient({
             aggRetweets += submission.other_stats?.retweets || 0;
             aggQuoteReposts += submission.other_stats?.quote_reposts || 0;
             aggImpressions += submission.other_stats?.impressions || 0;
-            aggPointsFromSubs += getTwitterSubmissionPointsForRanking(submission);
+            aggPointsFromSubs +=
+              getTwitterSubmissionPointsForRanking(submission);
 
             // DEBUG: Log each submission's base points contribution for Twitter CPM
             if (
@@ -1010,14 +1016,13 @@ export default function ContestDetailClient({
           calculatedBasePoints > 0
             ? calculatedBasePoints
             : Math.max(
-              0,
-              (leaderboardData.total_points || 0) -
-              (leaderboardData.manual_points_adjustment || 0),
-            );
+                0,
+                (leaderboardData.total_points || 0) -
+                  (leaderboardData.manual_points_adjustment || 0),
+              );
 
         const hasTweetSubs = creatorSubmissions.some((s: any) => {
-          const st =
-            (s.is_twitter_tweet && s.moderation_status) || s.status;
+          const st = (s.is_twitter_tweet && s.moderation_status) || s.status;
           return st !== "rejected";
         });
 
@@ -1093,9 +1098,7 @@ export default function ContestDetailClient({
           metrics: {
             views: 0, // Not applicable for Twitter
             // Like Instagram: sums from individual tweets after status/eligibility filters
-            likes: hasTweetSubs
-              ? aggLikes
-              : leaderboardData.total_likes || 0,
+            likes: hasTweetSubs ? aggLikes : leaderboardData.total_likes || 0,
             comments: hasTweetSubs
               ? aggReplies
               : leaderboardData.total_replies || 0,
@@ -1164,10 +1167,7 @@ export default function ContestDetailClient({
         if (!submission.is_twitter_tweet || !submission.creator_id) return;
         const cid = submission.creator_id as string;
         const add = getTwitterSubmissionPointsForRanking(submission);
-        creatorPointsTotals.set(
-          cid,
-          (creatorPointsTotals.get(cid) || 0) + add,
-        );
+        creatorPointsTotals.set(cid, (creatorPointsTotals.get(cid) || 0) + add);
       });
 
       const sortedByPoints = Array.from(creatorPointsTotals.entries()).sort(
@@ -1407,9 +1407,9 @@ export default function ContestDetailClient({
         const flatFeeBonus =
           currentContest?.contest_type === "cpm"
             ? (currentContest?.contest_based_details as any)?.cpm_contest
-              ?.flat_fee_bonus || 0
+                ?.flat_fee_bonus || 0
             : (currentContest?.contest_based_details as any)
-              ?.leaderboard_contest?.flat_fee_bonus || 0;
+                ?.leaderboard_contest?.flat_fee_bonus || 0;
 
         // Calculate bonus with budget constraints (include paid so Bonus Expected is not 0 after grant)
         if (flatFeeBonus > 0) {
@@ -1417,15 +1417,15 @@ export default function ContestDetailClient({
           const totalBudget =
             currentContest?.contest_type === "cpm"
               ? (currentContest?.contest_based_details as any)?.cpm_contest
-                ?.total_budget || 0
+                  ?.total_budget || 0
               : (currentContest?.contest_based_details as any)
-                ?.leaderboard_contest?.total_budget || 0;
+                  ?.leaderboard_contest?.total_budget || 0;
 
           // For CPM contests, check flat_fee_bonus_cap if configured
           const bonusBudget =
             currentContest?.contest_type === "cpm"
               ? (currentContest?.contest_based_details as any)?.cpm_contest
-                ?.flat_fee_bonus_cap || totalBudget
+                  ?.flat_fee_bonus_cap || totalBudget
               : totalBudget;
 
           // Calculate current total expected bonuses across all creators processed so far
@@ -1459,9 +1459,9 @@ export default function ContestDetailClient({
         const flatFeeBonus =
           currentContest?.contest_type === "cpm"
             ? (currentContest?.contest_based_details as any)?.cpm_contest
-              ?.flat_fee_bonus || 0
+                ?.flat_fee_bonus || 0
             : (currentContest?.contest_based_details as any)
-              ?.leaderboard_contest?.flat_fee_bonus || 0;
+                ?.leaderboard_contest?.flat_fee_bonus || 0;
         const actualBonus = (submission as any).bonus_amount || flatFeeBonus;
         group.bonus.granted += actualBonus;
       }
@@ -1480,8 +1480,8 @@ export default function ContestDetailClient({
         const submissionBasePoints = submission.other_stats?.base_points || 0;
         const submissionManualPoints = Number(
           (submission as any).manual_points_adjustment ??
-          submission.other_stats?.manual_points_adjustment ??
-          0,
+            submission.other_stats?.manual_points_adjustment ??
+            0,
         );
         const submissionTotalPoints = submission.other_stats?.points || 0;
 
@@ -2083,9 +2083,9 @@ export default function ContestDetailClient({
   const creatorWiseHasPreviousPage = creatorWisePage > 1;
   const paginatedCreatorGroups = filteredCreatorGroups
     ? filteredCreatorGroups.slice(
-      (creatorWisePage - 1) * creatorWiseItemsPerPage,
-      creatorWisePage * creatorWiseItemsPerPage,
-    )
+        (creatorWisePage - 1) * creatorWiseItemsPerPage,
+        creatorWisePage * creatorWiseItemsPerPage,
+      )
     : [];
 
   // Reset to page 1 when filter or sort changes
@@ -2259,93 +2259,93 @@ export default function ContestDetailClient({
         case "draft":
           return isDarkMode
             ? {
-              text: "Draft",
-              className: dark(
-                "bg-gray-700",
-                "text-gray-100",
-                "border-gray-500",
-              ),
-            }
+                text: "Draft",
+                className: dark(
+                  "bg-gray-700",
+                  "text-gray-100",
+                  "border-gray-500",
+                ),
+              }
             : {
-              text: "Draft",
-              className: light(
-                "bg-gray-200",
-                "text-gray-800",
-                "border-gray-400",
-              ),
-            };
+                text: "Draft",
+                className: light(
+                  "bg-gray-200",
+                  "text-gray-800",
+                  "border-gray-400",
+                ),
+              };
         case "pending_approval":
           return isDarkMode
             ? {
-              text: "Pending Approval",
-              className: dark(
-                "bg-yellow-900/40",
-                "text-yellow-200",
-                "border-yellow-500",
-              ),
-            }
+                text: "Pending Approval",
+                className: dark(
+                  "bg-yellow-900/40",
+                  "text-yellow-200",
+                  "border-yellow-500",
+                ),
+              }
             : {
-              text: "Pending Approval",
-              className: light(
-                "bg-yellow-100",
-                "text-yellow-900",
-                "border-yellow-400",
-              ),
-            };
+                text: "Pending Approval",
+                className: light(
+                  "bg-yellow-100",
+                  "text-yellow-900",
+                  "border-yellow-400",
+                ),
+              };
         case "approved":
           return isDarkMode
             ? {
-              text: "Ready to Publish",
-              className: dark(
-                "bg-blue-900/40",
-                "text-blue-200",
-                "border-blue-500",
-              ),
-            }
+                text: "Ready to Publish",
+                className: dark(
+                  "bg-blue-900/40",
+                  "text-blue-200",
+                  "border-blue-500",
+                ),
+              }
             : {
-              text: "Ready to Publish",
-              className: light(
-                "bg-blue-100",
-                "text-blue-800",
-                "border-blue-400",
-              ),
-            };
+                text: "Ready to Publish",
+                className: light(
+                  "bg-blue-100",
+                  "text-blue-800",
+                  "border-blue-400",
+                ),
+              };
         case "rejected":
           return isDarkMode
             ? {
-              text: "Rejected",
-              className: dark(
-                "bg-red-900/40",
-                "text-red-200",
-                "border-red-500",
-              ),
-            }
+                text: "Rejected",
+                className: dark(
+                  "bg-red-900/40",
+                  "text-red-200",
+                  "border-red-500",
+                ),
+              }
             : {
-              text: "Rejected",
-              className: light(
-                "bg-red-100",
-                "text-red-800",
-                "border-red-400",
-              ),
-            };
+                text: "Rejected",
+                className: light(
+                  "bg-red-100",
+                  "text-red-800",
+                  "border-red-400",
+                ),
+              };
         default:
           return isDarkMode
             ? {
-              text: "Unknown",
-              className: dark(
-                "bg-slate-700",
-                "text-slate-100",
-                "border-slate-500",
-              ),
-            }
+                text: "Unknown",
+                className: dark(
+                  "bg-slate-700",
+                  "text-slate-100",
+                  "border-slate-500",
+                ),
+              }
             : {
-              text: "Unknown",
-              className: light(
-                "bg-slate-200",
-                "text-slate-800",
-                "border-slate-400",
-              ),
-            };
+                text: "Unknown",
+                className: light(
+                  "bg-slate-200",
+                  "text-slate-800",
+                  "border-slate-400",
+                ),
+              };
       }
     }
 
@@ -2354,169 +2354,169 @@ export default function ContestDetailClient({
       case "active":
         return isDarkMode
           ? {
-            text: "Live",
-            className: dark(
-              "bg-green-900/40",
-              "text-green-200",
-              "border-green-500",
-            ),
-          }
-          : {
-            text: "Live",
-            className: light(
-              "bg-green-100",
-              "text-green-800",
-              "border-green-400",
-            ),
-          };
-      case "upcoming":
-        return isDarkMode
-          ? {
-            text: "Upcoming",
-            className: dark(
-              "bg-blue-900/40",
-              "text-blue-200",
-              "border-blue-500",
-            ),
-          }
-          : {
-            text: "Upcoming",
-            className: light(
-              "bg-blue-100",
-              "text-blue-800",
-              "border-blue-400",
-            ),
-          };
-      case "ended":
-        if (contest.post_contest_status === "pending_review") {
-          return isDarkMode
-            ? {
-              text: "Pending Review",
-              className: dark(
-                "bg-yellow-900/40",
-                "text-yellow-200",
-                "border-yellow-500",
-              ),
-            }
-            : {
-              text: "Pending Review",
-              className: light(
-                "bg-yellow-100",
-                "text-yellow-900",
-                "border-yellow-400",
-              ),
-            };
-        }
-        if (contest.post_contest_status === "in_review") {
-          return isDarkMode
-            ? {
-              text: "In Review",
-              className: dark(
-                "bg-orange-900/40",
-                "text-orange-200",
-                "border-orange-500",
-              ),
-            }
-            : {
-              text: "In Review",
-              className: light(
-                "bg-orange-100",
-                "text-orange-900",
-                "border-orange-400",
-              ),
-            };
-        }
-        if (contest.post_contest_status === "verification_complete") {
-          return isDarkMode
-            ? {
-              text: "Verified - Payment Processing",
-              className: dark(
-                "bg-purple-900/40",
-                "text-purple-200",
-                "border-purple-500",
-              ),
-            }
-            : {
-              text: "Verified - Payment Processing",
-              className: light(
-                "bg-purple-100",
-                "text-purple-800",
-                "border-purple-400",
-              ),
-            };
-        }
-        if (contest.post_contest_status === "payouts_processed") {
-          return isDarkMode
-            ? {
-              text: "Verified - Payment Released",
+              text: "Live",
               className: dark(
                 "bg-green-900/40",
                 "text-green-200",
                 "border-green-500",
               ),
             }
-            : {
-              text: "Verified - Payment Released",
+          : {
+              text: "Live",
               className: light(
                 "bg-green-100",
                 "text-green-800",
                 "border-green-400",
               ),
             };
+      case "upcoming":
+        return isDarkMode
+          ? {
+              text: "Upcoming",
+              className: dark(
+                "bg-blue-900/40",
+                "text-blue-200",
+                "border-blue-500",
+              ),
+            }
+          : {
+              text: "Upcoming",
+              className: light(
+                "bg-blue-100",
+                "text-blue-800",
+                "border-blue-400",
+              ),
+            };
+      case "ended":
+        if (contest.post_contest_status === "pending_review") {
+          return isDarkMode
+            ? {
+                text: "Pending Review",
+                className: dark(
+                  "bg-yellow-900/40",
+                  "text-yellow-200",
+                  "border-yellow-500",
+                ),
+              }
+            : {
+                text: "Pending Review",
+                className: light(
+                  "bg-yellow-100",
+                  "text-yellow-900",
+                  "border-yellow-400",
+                ),
+              };
+        }
+        if (contest.post_contest_status === "in_review") {
+          return isDarkMode
+            ? {
+                text: "In Review",
+                className: dark(
+                  "bg-orange-900/40",
+                  "text-orange-200",
+                  "border-orange-500",
+                ),
+              }
+            : {
+                text: "In Review",
+                className: light(
+                  "bg-orange-100",
+                  "text-orange-900",
+                  "border-orange-400",
+                ),
+              };
+        }
+        if (contest.post_contest_status === "verification_complete") {
+          return isDarkMode
+            ? {
+                text: "Verified - Payment Processing",
+                className: dark(
+                  "bg-purple-900/40",
+                  "text-purple-200",
+                  "border-purple-500",
+                ),
+              }
+            : {
+                text: "Verified - Payment Processing",
+                className: light(
+                  "bg-purple-100",
+                  "text-purple-800",
+                  "border-purple-400",
+                ),
+              };
+        }
+        if (contest.post_contest_status === "payouts_processed") {
+          return isDarkMode
+            ? {
+                text: "Verified - Payment Released",
+                className: dark(
+                  "bg-green-900/40",
+                  "text-green-200",
+                  "border-green-500",
+                ),
+              }
+            : {
+                text: "Verified - Payment Released",
+                className: light(
+                  "bg-green-100",
+                  "text-green-800",
+                  "border-green-400",
+                ),
+              };
         }
         return isDarkMode
           ? {
-            text: "Ended",
-            className: dark(
-              "bg-gray-700",
-              "text-gray-100",
-              "border-gray-500",
-            ),
-          }
+              text: "Ended",
+              className: dark(
+                "bg-gray-700",
+                "text-gray-100",
+                "border-gray-500",
+              ),
+            }
           : {
-            text: "Ended",
-            className: light(
-              "bg-gray-200",
-              "text-gray-800",
-              "border-gray-400",
-            ),
-          };
+              text: "Ended",
+              className: light(
+                "bg-gray-200",
+                "text-gray-800",
+                "border-gray-400",
+              ),
+            };
       case "incomplete":
         return isDarkMode
           ? {
-            text: "Incomplete",
-            className: dark(
-              "bg-yellow-900/40",
-              "text-yellow-200",
-              "border-yellow-500",
-            ),
-          }
+              text: "Incomplete",
+              className: dark(
+                "bg-yellow-900/40",
+                "text-yellow-200",
+                "border-yellow-500",
+              ),
+            }
           : {
-            text: "Incomplete",
-            className: light(
-              "bg-yellow-100",
-              "text-yellow-900",
-              "border-yellow-400",
-            ),
-          };
+              text: "Incomplete",
+              className: light(
+                "bg-yellow-100",
+                "text-yellow-900",
+                "border-yellow-400",
+              ),
+            };
       default:
         return isDarkMode
           ? {
-            text: "Unknown",
-            className: dark(
-              "bg-slate-700",
-              "text-slate-100",
-              "border-slate-500",
-            ),
-          }
+              text: "Unknown",
+              className: dark(
+                "bg-slate-700",
+                "text-slate-100",
+                "border-slate-500",
+              ),
+            }
           : {
-            text: "Unknown",
-            className: light(
-              "bg-slate-200",
-              "text-slate-800",
-              "border-slate-400",
-            ),
-          };
+              text: "Unknown",
+              className: light(
+                "bg-slate-200",
+                "text-slate-800",
+                "border-slate-400",
+              ),
+            };
     }
   };
 
@@ -2626,11 +2626,11 @@ export default function ContestDetailClient({
             prev.map((s) =>
               s.id === submissionId
                 ? {
-                  ...s,
-                  bonus_paid: true,
-                  bonus_paid_at: new Date().toISOString(),
-                  ...(bonusAmount > 0 ? { bonus_amount: bonusAmount } : {}),
-                }
+                    ...s,
+                    bonus_paid: true,
+                    bonus_paid_at: new Date().toISOString(),
+                    ...(bonusAmount > 0 ? { bonus_amount: bonusAmount } : {}),
+                  }
                 : s,
             ),
           );
@@ -2721,23 +2721,23 @@ export default function ContestDetailClient({
               prev.map((s) =>
                 s.id === submissionId
                   ? {
-                    ...s,
-                    paid: true,
-                    earnings: amountCents,
-                    ...(newStatus === "mark_both_paid"
-                      ? {
-                        bonus_paid: true,
-                        bonus_paid_at: new Date().toISOString(),
-                        ...(bonusAmountFromApi > 0
-                          ? { bonus_amount: bonusAmountFromApi }
-                          : {}),
-                      }
-                      : {}),
-                    ...((s as any).moderation_status !== undefined
-                      ? { moderation_status: "paid" as const }
-                      : {}),
-                    ...("status" in s ? { status: "paid" } : {}),
-                  }
+                      ...s,
+                      paid: true,
+                      earnings: amountCents,
+                      ...(newStatus === "mark_both_paid"
+                        ? {
+                            bonus_paid: true,
+                            bonus_paid_at: new Date().toISOString(),
+                            ...(bonusAmountFromApi > 0
+                              ? { bonus_amount: bonusAmountFromApi }
+                              : {}),
+                          }
+                        : {}),
+                      ...((s as any).moderation_status !== undefined
+                        ? { moderation_status: "paid" as const }
+                        : {}),
+                      ...("status" in s ? { status: "paid" } : {}),
+                    }
                   : s,
               ),
             );
@@ -2841,7 +2841,7 @@ export default function ContestDetailClient({
           typeof result === "string" && result.trim().length > 0
             ? result
             : result?.error ||
-            `Failed to update submission status (HTTP ${response.status})`;
+              `Failed to update submission status (HTTP ${response.status})`;
         throw new Error(message);
       }
 
@@ -3043,7 +3043,7 @@ export default function ContestDetailClient({
     // Set loading state for all
     setIsLoadingSubmission((prev) => {
       const newLoadingState = { ...prev };
-      submissionIds.forEach(id => newLoadingState[id] = true);
+      submissionIds.forEach((id) => (newLoadingState[id] = true));
       return newLoadingState;
     });
 
@@ -3052,30 +3052,48 @@ export default function ContestDetailClient({
 
       if (normalIds.length > 0) {
         // Map action for normal submissions
-        const normalAction = action === "approve" ? "verified" : action === "reject" ? "rejected" : action;
+        const normalAction =
+          action === "approve"
+            ? "verified"
+            : action === "reject"
+              ? "rejected"
+              : action;
         promises.push(
           fetch("/api/admin/bulk-verify-submissions", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ submissionIds: normalIds, action: normalAction, reason }),
-          }).then(res => res.json())
+            body: JSON.stringify({
+              submissionIds: normalIds,
+              action: normalAction,
+              reason,
+            }),
+          }).then((res) => res.json()),
         );
       }
 
       if (twitterIds.length > 0) {
         // Map action for Twitter submissions
-        const twitterAction = action === "verified" || action === "approve" ? "approve" : action === "rejected" || action === "reject" ? "reject" : action;
+        const twitterAction =
+          action === "verified" || action === "approve"
+            ? "approve"
+            : action === "rejected" || action === "reject"
+              ? "reject"
+              : action;
         promises.push(
           fetch(`/api/contests/${contestId}/bulk-moderate-submissions`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ tweetIds: twitterIds, action: twitterAction, reason }),
-          }).then(res => res.json())
+            body: JSON.stringify({
+              tweetIds: twitterIds,
+              action: twitterAction,
+              reason,
+            }),
+          }).then((res) => res.json()),
         );
       }
 
       const results = await Promise.all(promises);
-      
+
       let hasError = false;
       let errorMessage = "";
       let totalProcessed = 0;
@@ -3089,26 +3107,41 @@ export default function ContestDetailClient({
           errorMessage = result.error || "Bulk API failed";
           continue;
         }
-        
+
         if (result.results && Array.isArray(result.results)) {
           result.results.forEach((item: any) => {
             const data = item.data;
             if (data?.submission) {
-               updatedSubmissionsMap.set(item.id, data.submission);
-               totalProcessed++;
+              updatedSubmissionsMap.set(item.id, data.submission);
+              totalProcessed++;
             } else if (data?.success) {
-               // Update twitter statuses based on action
-               const twitterAction = action === "verified" || action === "approve" ? "approve" : action === "rejected" || action === "reject" ? "reject" : action;
-               const moderationStatus = twitterAction === "approve" ? "verified" : twitterAction === "reject" ? "rejected" : twitterAction;
-               updatedSubmissionsMap.set(item.id, { moderation_status: moderationStatus, ...(twitterAction === 'reject' ? { manual_points_reason: reason } : {}) });
-               totalProcessed++;
+              // Update twitter statuses based on action
+              const twitterAction =
+                action === "verified" || action === "approve"
+                  ? "approve"
+                  : action === "rejected" || action === "reject"
+                    ? "reject"
+                    : action;
+              const moderationStatus =
+                twitterAction === "approve"
+                  ? "verified"
+                  : twitterAction === "reject"
+                    ? "rejected"
+                    : twitterAction;
+              updatedSubmissionsMap.set(item.id, {
+                moderation_status: moderationStatus,
+                ...(twitterAction === "reject"
+                  ? { manual_points_reason: reason }
+                  : {}),
+              });
+              totalProcessed++;
             }
           });
         }
         if (result.errors && result.errors.length > 0) {
-           hasError = true;
-           errorMessage = "Some updates failed. Check console for details.";
-           console.error("Bulk update errors:", result.errors);
+          hasError = true;
+          errorMessage = "Some updates failed. Check console for details.";
+          console.error("Bulk update errors:", result.errors);
         }
       }
 
@@ -3132,17 +3165,26 @@ export default function ContestDetailClient({
           variant: "destructive",
         });
       } else {
-        const actionText = action === "verified" || action === "approve" ? "Verified" : action === "rejected" || action === "reject" ? "Rejected" : action === "pending" ? "Set to Pending" : "Updated";
+        const actionText =
+          action === "verified" || action === "approve"
+            ? "Verified"
+            : action === "rejected" || action === "reject"
+              ? "Rejected"
+              : action === "pending"
+                ? "Set to Pending"
+                : "Updated";
         toast({
           title: "✅Success",
           description: `Successfully ${actionText} ${totalProcessed} submissions.`,
           variant: "default",
         });
       }
-      
-      // Refresh UI to sync database states completely
-      setTimeout(() => window.dispatchEvent(new Event("contests:refresh")), 1000);
 
+      // Refresh UI to sync database states completely
+      setTimeout(
+        () => window.dispatchEvent(new Event("contests:refresh")),
+        1000,
+      );
     } catch (error: any) {
       console.error("Bulk update failed:", error);
       toast({
@@ -3153,7 +3195,9 @@ export default function ContestDetailClient({
     } finally {
       setIsLoadingSubmission((prev) => {
         const resetState = { ...prev };
-        submissionIds.forEach(id => { delete resetState[id]; });
+        submissionIds.forEach((id) => {
+          delete resetState[id];
+        });
         return resetState;
       });
     }
@@ -3174,8 +3218,12 @@ export default function ContestDetailClient({
       : reason;
 
     // Use bulk API wrapper for rejection
-    await handleBulkUpdateSubmissionStatus(pendingRejectionSubmissionIds, "rejected", fullReason);
-    
+    await handleBulkUpdateSubmissionStatus(
+      pendingRejectionSubmissionIds,
+      "rejected",
+      fullReason,
+    );
+
     setRejectionModalOpen(false);
     setPendingRejectionSubmissionIds([]);
   };
@@ -3808,8 +3856,9 @@ export default function ContestDetailClient({
     if (!cooldownInfo.canRefresh) {
       toast({
         title: "Please Wait",
-        description: `You can refresh again in ${cooldownInfo.remainingMinutes
-          } minute${cooldownInfo.remainingMinutes !== 1 ? "s" : ""}`,
+        description: `You can refresh again in ${
+          cooldownInfo.remainingMinutes
+        } minute${cooldownInfo.remainingMinutes !== 1 ? "s" : ""}`,
         variant: "destructive",
       });
       return;
@@ -3921,8 +3970,9 @@ export default function ContestDetailClient({
       } else {
         toast({
           title: "Success! 🎉",
-          description: `${result?.message ?? "Budget and leaderboard updated!"
-            }`,
+          description: `${
+            result?.message ?? "Budget and leaderboard updated!"
+          }`,
         });
         if (currentContest.platform?.toLowerCase() === "twitter") {
           fetchTwitterMetrics();
@@ -4085,8 +4135,9 @@ export default function ContestDetailClient({
     } else if (isLocked) {
       disabledReason = "Metrics are locked after contest review begins";
     } else if (!cooldownInfo.canRefresh) {
-      disabledReason = `Please wait ${cooldownInfo.remainingMinutes
-        } more minute${cooldownInfo.remainingMinutes !== 1 ? "s" : ""}`;
+      disabledReason = `Please wait ${
+        cooldownInfo.remainingMinutes
+      } more minute${cooldownInfo.remainingMinutes !== 1 ? "s" : ""}`;
     }
 
     return { isDisabled, disabledReason };
@@ -4129,6 +4180,17 @@ export default function ContestDetailClient({
             <path
               fill="url(#instagram-gradient)"
               d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.949-.073zm0 5.838c-3.403 0-6.162 2.759-6.162 6.162s2.759 6.163 6.162 6.163 6.162-2.759 6.162-6.163c0-3.403-2.759-6.162-6.162-6.162zm0 10.162c-2.209 0-4-1.79-4-4 0-2.209 1.791-4 4-4s4 1.791 4 4c0 2.21-1.791 4-4 4zm6.406-11.845c-.796 0-1.441.645-1.441 1.44s.645 1.44 1.441 1.44c.795 0 1.439-.645 1.439-1.44s-.644-1.44-1.439-1.44z"
+            />
+          </svg>
+        </div>
+      );
+    if (lowerPlatform?.includes("tiktok"))
+      return (
+        <div className="flex items-center justify-center w-6 h-6">
+          <svg viewBox="0 0 24 24" className="w-6 h-6">
+            <path
+              d="M19.59 6.69a4.83 4.83 0 0 1-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 0 1-2.88 2.5 2.89 2.89 0 0 1-2.89-2.89 2.89 2.89 0 0 1 2.89-2.89c.28 0 .54.04.79.1v-3.5a6.37 6.37 0 0 0-.79-.05A6.34 6.34 0 0 0 3.15 15.2a6.34 6.34 0 0 0 6.34 6.34 6.34 6.34 0 0 0 6.34-6.34V8.71a8.21 8.21 0 0 0 4.76 1.52V6.69h-1z"
+              fill="#000000"
             />
           </svg>
         </div>
@@ -4190,6 +4252,15 @@ export default function ContestDetailClient({
         total_interactions: igStats.total_interactions || 0,
         avg_watch_time_ms: igStats.avg_watch_time_ms || 0,
         total_watch_time_ms: igStats.total_watch_time_ms || 0,
+      };
+    } else if (platform?.includes("tiktok")) {
+      const tiktokStats = stats.tiktok || stats;
+      return {
+        views: baseViews,
+        likes: tiktokStats.likes || tiktokStats.like_count || 0,
+        comments: tiktokStats.comments || tiktokStats.comment_count || 0,
+        shares: tiktokStats.shares || tiktokStats.share_count || 0,
+        engagement_rate: tiktokStats.engagement_rate || 0,
       };
     } else if (platform?.includes("twitter")) {
       const twitterStats = stats.twitter || stats;
@@ -4528,31 +4599,32 @@ export default function ContestDetailClient({
           (sub): Submission =>
             sub.id === tweetId
               ? {
-                ...sub,
-                moderation_status: newModerationStatus,
-                status: newModerationStatus,
-                ...(action === "paid"
-                  ? {
-                    paid: true,
-                    paid_at: paidAt,
-                    earnings: earningsCents,
-                  }
-                  : {}),
-              }
+                  ...sub,
+                  moderation_status: newModerationStatus,
+                  status: newModerationStatus,
+                  ...(action === "paid"
+                    ? {
+                        paid: true,
+                        paid_at: paidAt,
+                        earnings: earningsCents,
+                      }
+                    : {}),
+                }
               : sub,
         ),
       );
 
       toast({
         title: "Success",
-        description: `Tweet ${action === "approve"
-          ? "approved"
-          : action === "reject"
-            ? "rejected"
-            : action === "paid"
-              ? "marked as paid"
-              : "set to pending"
-          } successfully`,
+        description: `Tweet ${
+          action === "approve"
+            ? "approved"
+            : action === "reject"
+              ? "rejected"
+              : action === "paid"
+                ? "marked as paid"
+                : "set to pending"
+        } successfully`,
       });
 
       // Clear contest cache and refresh contest list to update budget tracker
@@ -4698,8 +4770,9 @@ export default function ContestDetailClient({
         }
         toast({
           title: "Success",
-          description: `Creator ${action === "approve" ? "approved" : "rejected"
-            } and payment reversed successfully`,
+          description: `Creator ${
+            action === "approve" ? "approved" : "rejected"
+          } and payment reversed successfully`,
         });
       } else {
         const response = await fetch(
@@ -4725,8 +4798,9 @@ export default function ContestDetailClient({
 
         toast({
           title: "Success",
-          description: `Creator ${action === "approve" ? "approved" : "rejected"
-            } and payment reversed successfully`,
+          description: `Creator ${
+            action === "approve" ? "approved" : "rejected"
+          } and payment reversed successfully`,
         });
       }
 
@@ -4820,8 +4894,9 @@ export default function ContestDetailClient({
           }
           toast({
             title: "Success",
-            description: `Creator @${pendingTwitterRejection.creatorUsername || "creator"
-              } and all tweets have been rejected (payments reversed where applicable).`,
+            description: `Creator @${
+              pendingTwitterRejection.creatorUsername || "creator"
+            } and all tweets have been rejected (payments reversed where applicable).`,
           });
         } else {
           // Leaderboard: use creator-level moderation API
@@ -4845,8 +4920,9 @@ export default function ContestDetailClient({
 
           toast({
             title: "Success",
-            description: `Creator @${pendingTwitterRejection.creatorUsername || "creator"
-              } has been rejected`,
+            description: `Creator @${
+              pendingTwitterRejection.creatorUsername || "creator"
+            } has been rejected`,
           });
         }
 
@@ -5508,63 +5584,63 @@ export default function ContestDetailClient({
                   {/* Total Budget (if set) */}
                   {currentContest.contest_based_details?.leaderboard_contest
                     ?.total_budget && (
-                      <div
-                        className={cn(
-                          "pt-4 mb-4",
-                          isDark
-                            ? "border-t border-white/30"
-                            : "border-t border-yellow-200",
-                        )}
-                      >
-                        <div className="flex items-center justify-between">
-                          <div className="flex-1">
-                            <p
-                              className={cn(
-                                "text-sm font-medium uppercase tracking-wide",
-                                isDark
-                                  ? "text-white/90 drop-shadow-sm"
-                                  : "text-gray-500",
-                              )}
-                            >
-                              Total Budget
-                            </p>
-                            <p
-                              className={cn(
-                                "text-xl font-bold mt-1",
-                                isDark
-                                  ? "text-cyan-300 drop-shadow-sm"
-                                  : "text-blue-600",
-                              )}
-                            >
-                              {formatMoney(
-                                currentContest.contest_based_details
-                                  .leaderboard_contest.total_budget,
-                              )}
-                            </p>
-                            <p
-                              className={cn(
-                                "text-xs mt-1",
-                                isDark
-                                  ? "text-white/70 drop-shadow-sm"
-                                  : "text-gray-600",
-                              )}
-                            >
-                              For bonuses & extras
-                            </p>
-                          </div>
-                          <div
+                    <div
+                      className={cn(
+                        "pt-4 mb-4",
+                        isDark
+                          ? "border-t border-white/30"
+                          : "border-t border-yellow-200",
+                      )}
+                    >
+                      <div className="flex items-center justify-between">
+                        <div className="flex-1">
+                          <p
                             className={cn(
-                              "w-10 h-10 flex items-center justify-center rounded-lg",
+                              "text-sm font-medium uppercase tracking-wide",
                               isDark
-                                ? "bg-cyan-400/30 text-cyan-300 backdrop-blur-sm"
-                                : "bg-blue-100 text-blue-600",
+                                ? "text-white/90 drop-shadow-sm"
+                                : "text-gray-500",
                             )}
                           >
-                            <span className="text-lg">💰</span>
-                          </div>
+                            Total Budget
+                          </p>
+                          <p
+                            className={cn(
+                              "text-xl font-bold mt-1",
+                              isDark
+                                ? "text-cyan-300 drop-shadow-sm"
+                                : "text-blue-600",
+                            )}
+                          >
+                            {formatMoney(
+                              currentContest.contest_based_details
+                                .leaderboard_contest.total_budget,
+                            )}
+                          </p>
+                          <p
+                            className={cn(
+                              "text-xs mt-1",
+                              isDark
+                                ? "text-white/70 drop-shadow-sm"
+                                : "text-gray-600",
+                            )}
+                          >
+                            For bonuses & extras
+                          </p>
+                        </div>
+                        <div
+                          className={cn(
+                            "w-10 h-10 flex items-center justify-center rounded-lg",
+                            isDark
+                              ? "bg-cyan-400/30 text-cyan-300 backdrop-blur-sm"
+                              : "bg-blue-100 text-blue-600",
+                          )}
+                        >
+                          <span className="text-lg">💰</span>
                         </div>
                       </div>
-                    )}
+                    </div>
+                  )}
 
                   <div
                     className={cn(
@@ -5804,7 +5880,7 @@ export default function ContestDetailClient({
 
           {currentContest.contest_type === "cpm" &&
             currentContest.contest_based_details?.cpm_contest?.total_budget !=
-            null && (
+              null && (
               <div
                 className={cn(
                   "group rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 overflow-hidden relative",
@@ -5985,7 +6061,7 @@ export default function ContestDetailClient({
         {/* Budget Progress Tracker - Two-Color Visualization (CPM) */}
         {currentContest.contest_type === "cpm" &&
           currentContest.contest_based_details?.cpm_contest?.total_budget !=
-          null &&
+            null &&
           currentContest.contest_based_details.cpm_contest.total_budget > 0 && (
             <div
               className={cn(
@@ -6671,46 +6747,46 @@ export default function ContestDetailClient({
                         </div>
                         {currentContest.contest_based_details.cpm_contest
                           .min_views != null && (
-                            <div
+                          <div
+                            className={cn(
+                              "flex justify-between items-center p-3 rounded-md border",
+                              isDark ? "border-gray-600" : "border-gray-400",
+                            )}
+                          >
+                            <span
                               className={cn(
-                                "flex justify-between items-center p-3 rounded-md border",
-                                isDark ? "border-gray-600" : "border-gray-400",
+                                "text-md font-medium",
+                                isDark ? "text-white" : "text-black",
                               )}
                             >
-                              <span
-                                className={cn(
-                                  "text-md font-medium",
-                                  isDark ? "text-white" : "text-black",
-                                )}
-                              >
-                                Min Views:
-                              </span>
-                              <span className="font-semibold text-md text-foreground">
-                                {currentContest.contest_based_details.cpm_contest.min_views.toLocaleString()}
-                              </span>
-                            </div>
-                          )}
+                              Min Views:
+                            </span>
+                            <span className="font-semibold text-md text-foreground">
+                              {currentContest.contest_based_details.cpm_contest.min_views.toLocaleString()}
+                            </span>
+                          </div>
+                        )}
                         {currentContest.contest_based_details.cpm_contest
                           .max_views != null && (
-                            <div
+                          <div
+                            className={cn(
+                              "flex justify-between items-center p-3 rounded-md border",
+                              isDark ? "border-gray-600" : "border-gray-400",
+                            )}
+                          >
+                            <span
                               className={cn(
-                                "flex justify-between items-center p-3 rounded-md border",
-                                isDark ? "border-gray-600" : "border-gray-400",
+                                "text-md font-medium",
+                                isDark ? "text-white" : "text-black",
                               )}
                             >
-                              <span
-                                className={cn(
-                                  "text-md font-medium",
-                                  isDark ? "text-white" : "text-black",
-                                )}
-                              >
-                                Max Views (Cap):
-                              </span>
-                              <span className="font-semibold text-md text-foreground">
-                                {currentContest.contest_based_details.cpm_contest.max_views.toLocaleString()}
-                              </span>
-                            </div>
-                          )}
+                              Max Views (Cap):
+                            </span>
+                            <span className="font-semibold text-md text-foreground">
+                              {currentContest.contest_based_details.cpm_contest.max_views.toLocaleString()}
+                            </span>
+                          </div>
+                        )}
                         {/* <div>
                           <h4 className="text-sm font-medium mt-3 mb-2 text-foreground">
                             Terms & Conditions
@@ -6797,10 +6873,10 @@ export default function ContestDetailClient({
                                   </span>
                                   <span className="font-semibold text-sm text-foreground">
                                     {typeof twitterPointsConfig.likes_weight ===
-                                      "number"
+                                    "number"
                                       ? twitterPointsConfig.likes_weight.toFixed(
-                                        2,
-                                      )
+                                          2,
+                                        )
                                       : twitterPointsConfig.likes_weight}
                                   </span>
                                 </div>
@@ -6824,15 +6900,15 @@ export default function ContestDetailClient({
                                   </span>
                                   <span className="font-semibold text-sm text-foreground">
                                     {typeof twitterPointsConfig.comments_weight ===
-                                      "object"
+                                    "object"
                                       ? twitterPointsConfig.comments_weight.base_weight?.toFixed(
-                                        2,
-                                      ) || "N/A"
-                                      : typeof twitterPointsConfig.comments_weight ===
-                                        "number"
-                                        ? twitterPointsConfig.comments_weight.toFixed(
                                           2,
-                                        )
+                                        ) || "N/A"
+                                      : typeof twitterPointsConfig.comments_weight ===
+                                          "number"
+                                        ? twitterPointsConfig.comments_weight.toFixed(
+                                            2,
+                                          )
                                         : twitterPointsConfig.comments_weight}
                                   </span>
                                 </div>
@@ -6856,97 +6932,97 @@ export default function ContestDetailClient({
                                   </span>
                                   <span className="font-semibold text-sm text-foreground">
                                     {typeof twitterPointsConfig.retweets_weight ===
-                                      "object"
+                                    "object"
                                       ? twitterPointsConfig.retweets_weight.base_weight?.toFixed(
-                                        2,
-                                      ) || "N/A"
-                                      : typeof twitterPointsConfig.retweets_weight ===
-                                        "number"
-                                        ? twitterPointsConfig.retweets_weight.toFixed(
                                           2,
-                                        )
+                                        ) || "N/A"
+                                      : typeof twitterPointsConfig.retweets_weight ===
+                                          "number"
+                                        ? twitterPointsConfig.retweets_weight.toFixed(
+                                            2,
+                                          )
                                         : twitterPointsConfig.retweets_weight}
                                   </span>
                                 </div>
                               )}
                               {twitterPointsConfig.quote_reposts_weight !=
                                 null && (
-                                  <div
+                                <div
+                                  className={cn(
+                                    "flex justify-between items-center p-3 rounded-md border",
+                                    isDark
+                                      ? "border-gray-600"
+                                      : "border-gray-400",
+                                  )}
+                                >
+                                  <span
                                     className={cn(
-                                      "flex justify-between items-center p-3 rounded-md border",
-                                      isDark
-                                        ? "border-gray-600"
-                                        : "border-gray-400",
+                                      "text-sm font-medium",
+                                      isDark ? "text-white" : "text-black",
                                     )}
                                   >
-                                    <span
-                                      className={cn(
-                                        "text-sm font-medium",
-                                        isDark ? "text-white" : "text-black",
-                                      )}
-                                    >
-                                      Quote Reposts Weight:
-                                    </span>
-                                    <span className="font-semibold text-sm text-foreground">
-                                      {typeof twitterPointsConfig.quote_reposts_weight ===
-                                        "object"
-                                        ? twitterPointsConfig.quote_reposts_weight.base_weight?.toFixed(
+                                    Quote Reposts Weight:
+                                  </span>
+                                  <span className="font-semibold text-sm text-foreground">
+                                    {typeof twitterPointsConfig.quote_reposts_weight ===
+                                    "object"
+                                      ? twitterPointsConfig.quote_reposts_weight.base_weight?.toFixed(
                                           2,
                                         ) || "N/A"
-                                        : typeof twitterPointsConfig.quote_reposts_weight ===
+                                      : typeof twitterPointsConfig.quote_reposts_weight ===
                                           "number"
-                                          ? twitterPointsConfig.quote_reposts_weight.toFixed(
+                                        ? twitterPointsConfig.quote_reposts_weight.toFixed(
                                             2,
                                           )
-                                          : twitterPointsConfig.quote_reposts_weight}
-                                    </span>
-                                  </div>
-                                )}
+                                        : twitterPointsConfig.quote_reposts_weight}
+                                  </span>
+                                </div>
+                              )}
                               {twitterPointsConfig.impressions_weight !=
                                 null && (
-                                  <div
+                                <div
+                                  className={cn(
+                                    "flex justify-between items-center p-3 rounded-md border",
+                                    isDark
+                                      ? "border-gray-600"
+                                      : "border-gray-400",
+                                  )}
+                                >
+                                  <span
                                     className={cn(
-                                      "flex justify-between items-center p-3 rounded-md border",
-                                      isDark
-                                        ? "border-gray-600"
-                                        : "border-gray-400",
+                                      "text-sm font-medium",
+                                      isDark ? "text-white" : "text-black",
                                     )}
                                   >
-                                    <span
-                                      className={cn(
-                                        "text-sm font-medium",
-                                        isDark ? "text-white" : "text-black",
-                                      )}
-                                    >
-                                      Impressions Weight:
-                                    </span>
-                                    <span className="font-semibold text-sm text-foreground">
-                                      {typeof twitterPointsConfig.impressions_weight ===
-                                        "number"
-                                        ? twitterPointsConfig.impressions_weight.toFixed(
+                                    Impressions Weight:
+                                  </span>
+                                  <span className="font-semibold text-sm text-foreground">
+                                    {typeof twitterPointsConfig.impressions_weight ===
+                                    "number"
+                                      ? twitterPointsConfig.impressions_weight.toFixed(
                                           2,
                                         )
-                                        : twitterPointsConfig.impressions_weight}
-                                    </span>
-                                  </div>
-                                )}
+                                      : twitterPointsConfig.impressions_weight}
+                                  </span>
+                                </div>
+                              )}
                             </div>
 
                             {/* Engagement Multipliers */}
                             {(() => {
                               const commentsWeightObj =
                                 typeof twitterPointsConfig.comments_weight ===
-                                  "object"
+                                "object"
                                   ? twitterPointsConfig.comments_weight
                                   : null;
                               const retweetsWeightObj =
                                 typeof twitterPointsConfig.retweets_weight ===
-                                  "object"
+                                "object"
                                   ? twitterPointsConfig.retweets_weight
                                   : null;
                               const quoteRepostsWeightObj =
                                 typeof twitterPointsConfig.quote_reposts_weight ===
-                                  "object"
+                                "object"
                                   ? twitterPointsConfig.quote_reposts_weight
                                   : null;
 
@@ -6984,139 +7060,139 @@ export default function ContestDetailClient({
                                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
                                           {commentsWeightObj.likes_multiplier !=
                                             null && (
-                                              <div
+                                            <div
+                                              className={cn(
+                                                "flex justify-between items-center p-2 rounded-md border text-xs",
+                                                isDark
+                                                  ? "border-gray-700"
+                                                  : "border-gray-300",
+                                              )}
+                                            >
+                                              <span
                                                 className={cn(
-                                                  "flex justify-between items-center p-2 rounded-md border text-xs",
+                                                  "text-xs",
                                                   isDark
-                                                    ? "border-gray-700"
-                                                    : "border-gray-300",
+                                                    ? "text-gray-300"
+                                                    : "text-gray-700",
                                                 )}
                                               >
-                                                <span
-                                                  className={cn(
-                                                    "text-xs",
-                                                    isDark
-                                                      ? "text-gray-300"
-                                                      : "text-gray-700",
-                                                  )}
-                                                >
-                                                  Likes:
-                                                </span>
-                                                <span className="font-medium text-xs text-foreground">
-                                                  {
-                                                    commentsWeightObj.likes_multiplier
-                                                  }
-                                                </span>
-                                              </div>
-                                            )}
+                                                Likes:
+                                              </span>
+                                              <span className="font-medium text-xs text-foreground">
+                                                {
+                                                  commentsWeightObj.likes_multiplier
+                                                }
+                                              </span>
+                                            </div>
+                                          )}
                                           {commentsWeightObj.replies_multiplier !=
                                             null && (
-                                              <div
+                                            <div
+                                              className={cn(
+                                                "flex justify-between items-center p-2 rounded-md border text-xs",
+                                                isDark
+                                                  ? "border-gray-700"
+                                                  : "border-gray-300",
+                                              )}
+                                            >
+                                              <span
                                                 className={cn(
-                                                  "flex justify-between items-center p-2 rounded-md border text-xs",
+                                                  "text-xs",
                                                   isDark
-                                                    ? "border-gray-700"
-                                                    : "border-gray-300",
+                                                    ? "text-gray-300"
+                                                    : "text-gray-700",
                                                 )}
                                               >
-                                                <span
-                                                  className={cn(
-                                                    "text-xs",
-                                                    isDark
-                                                      ? "text-gray-300"
-                                                      : "text-gray-700",
-                                                  )}
-                                                >
-                                                  Replies:
-                                                </span>
-                                                <span className="font-medium text-xs text-foreground">
-                                                  {
-                                                    commentsWeightObj.replies_multiplier
-                                                  }
-                                                </span>
-                                              </div>
-                                            )}
+                                                Replies:
+                                              </span>
+                                              <span className="font-medium text-xs text-foreground">
+                                                {
+                                                  commentsWeightObj.replies_multiplier
+                                                }
+                                              </span>
+                                            </div>
+                                          )}
                                           {commentsWeightObj.impressions_multiplier !=
                                             null && (
-                                              <div
+                                            <div
+                                              className={cn(
+                                                "flex justify-between items-center p-2 rounded-md border text-xs",
+                                                isDark
+                                                  ? "border-gray-700"
+                                                  : "border-gray-300",
+                                              )}
+                                            >
+                                              <span
                                                 className={cn(
-                                                  "flex justify-between items-center p-2 rounded-md border text-xs",
+                                                  "text-xs",
                                                   isDark
-                                                    ? "border-gray-700"
-                                                    : "border-gray-300",
+                                                    ? "text-gray-300"
+                                                    : "text-gray-700",
                                                 )}
                                               >
-                                                <span
-                                                  className={cn(
-                                                    "text-xs",
-                                                    isDark
-                                                      ? "text-gray-300"
-                                                      : "text-gray-700",
-                                                  )}
-                                                >
-                                                  Impressions:
-                                                </span>
-                                                <span className="font-medium text-xs text-foreground">
-                                                  {
-                                                    commentsWeightObj.impressions_multiplier
-                                                  }
-                                                </span>
-                                              </div>
-                                            )}
+                                                Impressions:
+                                              </span>
+                                              <span className="font-medium text-xs text-foreground">
+                                                {
+                                                  commentsWeightObj.impressions_multiplier
+                                                }
+                                              </span>
+                                            </div>
+                                          )}
                                           {commentsWeightObj.retweets_multiplier !=
                                             null && (
-                                              <div
+                                            <div
+                                              className={cn(
+                                                "flex justify-between items-center p-2 rounded-md border text-xs",
+                                                isDark
+                                                  ? "border-gray-700"
+                                                  : "border-gray-300",
+                                              )}
+                                            >
+                                              <span
                                                 className={cn(
-                                                  "flex justify-between items-center p-2 rounded-md border text-xs",
+                                                  "text-xs",
                                                   isDark
-                                                    ? "border-gray-700"
-                                                    : "border-gray-300",
+                                                    ? "text-gray-300"
+                                                    : "text-gray-700",
                                                 )}
                                               >
-                                                <span
-                                                  className={cn(
-                                                    "text-xs",
-                                                    isDark
-                                                      ? "text-gray-300"
-                                                      : "text-gray-700",
-                                                  )}
-                                                >
-                                                  Retweets:
-                                                </span>
-                                                <span className="font-medium text-xs text-foreground">
-                                                  {
-                                                    commentsWeightObj.retweets_multiplier
-                                                  }
-                                                </span>
-                                              </div>
-                                            )}
+                                                Retweets:
+                                              </span>
+                                              <span className="font-medium text-xs text-foreground">
+                                                {
+                                                  commentsWeightObj.retweets_multiplier
+                                                }
+                                              </span>
+                                            </div>
+                                          )}
                                           {commentsWeightObj.quote_reposts_multiplier !=
                                             null && (
-                                              <div
+                                            <div
+                                              className={cn(
+                                                "flex justify-between items-center p-2 rounded-md border text-xs",
+                                                isDark
+                                                  ? "border-gray-700"
+                                                  : "border-gray-300",
+                                              )}
+                                            >
+                                              <span
                                                 className={cn(
-                                                  "flex justify-between items-center p-2 rounded-md border text-xs",
+                                                  "text-xs",
                                                   isDark
-                                                    ? "border-gray-700"
-                                                    : "border-gray-300",
+                                                    ? "text-gray-300"
+                                                    : "text-gray-700",
                                                 )}
                                               >
-                                                <span
-                                                  className={cn(
-                                                    "text-xs",
-                                                    isDark
-                                                      ? "text-gray-300"
-                                                      : "text-gray-700",
-                                                  )}
-                                                >
-                                                  Quote Reposts:
-                                                </span>
-                                                <span className="font-medium text-xs text-foreground">
-                                                  {
-                                                    commentsWeightObj.quote_reposts_multiplier
-                                                  }
-                                                </span>
-                                              </div>
-                                            )}
+                                                Quote Reposts:
+                                              </span>
+                                              <span className="font-medium text-xs text-foreground">
+                                                {
+                                                  commentsWeightObj.quote_reposts_multiplier
+                                                }
+                                              </span>
+                                            </div>
+                                          )}
                                         </div>
                                       </div>
                                     )}
@@ -7133,139 +7209,139 @@ export default function ContestDetailClient({
                                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
                                           {retweetsWeightObj.likes_multiplier !=
                                             null && (
-                                              <div
+                                            <div
+                                              className={cn(
+                                                "flex justify-between items-center p-2 rounded-md border text-xs",
+                                                isDark
+                                                  ? "border-gray-700"
+                                                  : "border-gray-300",
+                                              )}
+                                            >
+                                              <span
                                                 className={cn(
-                                                  "flex justify-between items-center p-2 rounded-md border text-xs",
+                                                  "text-xs",
                                                   isDark
-                                                    ? "border-gray-700"
-                                                    : "border-gray-300",
+                                                    ? "text-gray-300"
+                                                    : "text-gray-700",
                                                 )}
                                               >
-                                                <span
-                                                  className={cn(
-                                                    "text-xs",
-                                                    isDark
-                                                      ? "text-gray-300"
-                                                      : "text-gray-700",
-                                                  )}
-                                                >
-                                                  Likes:
-                                                </span>
-                                                <span className="font-medium text-xs text-foreground">
-                                                  {
-                                                    retweetsWeightObj.likes_multiplier
-                                                  }
-                                                </span>
-                                              </div>
-                                            )}
+                                                Likes:
+                                              </span>
+                                              <span className="font-medium text-xs text-foreground">
+                                                {
+                                                  retweetsWeightObj.likes_multiplier
+                                                }
+                                              </span>
+                                            </div>
+                                          )}
                                           {retweetsWeightObj.replies_multiplier !=
                                             null && (
-                                              <div
+                                            <div
+                                              className={cn(
+                                                "flex justify-between items-center p-2 rounded-md border text-xs",
+                                                isDark
+                                                  ? "border-gray-700"
+                                                  : "border-gray-300",
+                                              )}
+                                            >
+                                              <span
                                                 className={cn(
-                                                  "flex justify-between items-center p-2 rounded-md border text-xs",
+                                                  "text-xs",
                                                   isDark
-                                                    ? "border-gray-700"
-                                                    : "border-gray-300",
+                                                    ? "text-gray-300"
+                                                    : "text-gray-700",
                                                 )}
                                               >
-                                                <span
-                                                  className={cn(
-                                                    "text-xs",
-                                                    isDark
-                                                      ? "text-gray-300"
-                                                      : "text-gray-700",
-                                                  )}
-                                                >
-                                                  Replies:
-                                                </span>
-                                                <span className="font-medium text-xs text-foreground">
-                                                  {
-                                                    retweetsWeightObj.replies_multiplier
-                                                  }
-                                                </span>
-                                              </div>
-                                            )}
+                                                Replies:
+                                              </span>
+                                              <span className="font-medium text-xs text-foreground">
+                                                {
+                                                  retweetsWeightObj.replies_multiplier
+                                                }
+                                              </span>
+                                            </div>
+                                          )}
                                           {retweetsWeightObj.impressions_multiplier !=
                                             null && (
-                                              <div
+                                            <div
+                                              className={cn(
+                                                "flex justify-between items-center p-2 rounded-md border text-xs",
+                                                isDark
+                                                  ? "border-gray-700"
+                                                  : "border-gray-300",
+                                              )}
+                                            >
+                                              <span
                                                 className={cn(
-                                                  "flex justify-between items-center p-2 rounded-md border text-xs",
+                                                  "text-xs",
                                                   isDark
-                                                    ? "border-gray-700"
-                                                    : "border-gray-300",
+                                                    ? "text-gray-300"
+                                                    : "text-gray-700",
                                                 )}
                                               >
-                                                <span
-                                                  className={cn(
-                                                    "text-xs",
-                                                    isDark
-                                                      ? "text-gray-300"
-                                                      : "text-gray-700",
-                                                  )}
-                                                >
-                                                  Impressions:
-                                                </span>
-                                                <span className="font-medium text-xs text-foreground">
-                                                  {
-                                                    retweetsWeightObj.impressions_multiplier
-                                                  }
-                                                </span>
-                                              </div>
-                                            )}
+                                                Impressions:
+                                              </span>
+                                              <span className="font-medium text-xs text-foreground">
+                                                {
+                                                  retweetsWeightObj.impressions_multiplier
+                                                }
+                                              </span>
+                                            </div>
+                                          )}
                                           {retweetsWeightObj.retweets_multiplier !=
                                             null && (
-                                              <div
+                                            <div
+                                              className={cn(
+                                                "flex justify-between items-center p-2 rounded-md border text-xs",
+                                                isDark
+                                                  ? "border-gray-700"
+                                                  : "border-gray-300",
+                                              )}
+                                            >
+                                              <span
                                                 className={cn(
-                                                  "flex justify-between items-center p-2 rounded-md border text-xs",
+                                                  "text-xs",
                                                   isDark
-                                                    ? "border-gray-700"
-                                                    : "border-gray-300",
+                                                    ? "text-gray-300"
+                                                    : "text-gray-700",
                                                 )}
                                               >
-                                                <span
-                                                  className={cn(
-                                                    "text-xs",
-                                                    isDark
-                                                      ? "text-gray-300"
-                                                      : "text-gray-700",
-                                                  )}
-                                                >
-                                                  Retweets:
-                                                </span>
-                                                <span className="font-medium text-xs text-foreground">
-                                                  {
-                                                    retweetsWeightObj.retweets_multiplier
-                                                  }
-                                                </span>
-                                              </div>
-                                            )}
+                                                Retweets:
+                                              </span>
+                                              <span className="font-medium text-xs text-foreground">
+                                                {
+                                                  retweetsWeightObj.retweets_multiplier
+                                                }
+                                              </span>
+                                            </div>
+                                          )}
                                           {retweetsWeightObj.quote_reposts_multiplier !=
                                             null && (
-                                              <div
+                                            <div
+                                              className={cn(
+                                                "flex justify-between items-center p-2 rounded-md border text-xs",
+                                                isDark
+                                                  ? "border-gray-700"
+                                                  : "border-gray-300",
+                                              )}
+                                            >
+                                              <span
                                                 className={cn(
-                                                  "flex justify-between items-center p-2 rounded-md border text-xs",
+                                                  "text-xs",
                                                   isDark
-                                                    ? "border-gray-700"
-                                                    : "border-gray-300",
+                                                    ? "text-gray-300"
+                                                    : "text-gray-700",
                                                 )}
                                               >
-                                                <span
-                                                  className={cn(
-                                                    "text-xs",
-                                                    isDark
-                                                      ? "text-gray-300"
-                                                      : "text-gray-700",
-                                                  )}
-                                                >
-                                                  Quote Reposts:
-                                                </span>
-                                                <span className="font-medium text-xs text-foreground">
-                                                  {
-                                                    retweetsWeightObj.quote_reposts_multiplier
-                                                  }
-                                                </span>
-                                              </div>
-                                            )}
+                                                Quote Reposts:
+                                              </span>
+                                              <span className="font-medium text-xs text-foreground">
+                                                {
+                                                  retweetsWeightObj.quote_reposts_multiplier
+                                                }
+                                              </span>
+                                            </div>
+                                          )}
                                         </div>
                                       </div>
                                     )}
@@ -7282,139 +7358,139 @@ export default function ContestDetailClient({
                                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
                                           {quoteRepostsWeightObj.likes_multiplier !=
                                             null && (
-                                              <div
+                                            <div
+                                              className={cn(
+                                                "flex justify-between items-center p-2 rounded-md border text-xs",
+                                                isDark
+                                                  ? "border-gray-700"
+                                                  : "border-gray-300",
+                                              )}
+                                            >
+                                              <span
                                                 className={cn(
-                                                  "flex justify-between items-center p-2 rounded-md border text-xs",
+                                                  "text-xs",
                                                   isDark
-                                                    ? "border-gray-700"
-                                                    : "border-gray-300",
+                                                    ? "text-gray-300"
+                                                    : "text-gray-700",
                                                 )}
                                               >
-                                                <span
-                                                  className={cn(
-                                                    "text-xs",
-                                                    isDark
-                                                      ? "text-gray-300"
-                                                      : "text-gray-700",
-                                                  )}
-                                                >
-                                                  Likes:
-                                                </span>
-                                                <span className="font-medium text-xs text-foreground">
-                                                  {
-                                                    quoteRepostsWeightObj.likes_multiplier
-                                                  }
-                                                </span>
-                                              </div>
-                                            )}
+                                                Likes:
+                                              </span>
+                                              <span className="font-medium text-xs text-foreground">
+                                                {
+                                                  quoteRepostsWeightObj.likes_multiplier
+                                                }
+                                              </span>
+                                            </div>
+                                          )}
                                           {quoteRepostsWeightObj.replies_multiplier !=
                                             null && (
-                                              <div
+                                            <div
+                                              className={cn(
+                                                "flex justify-between items-center p-2 rounded-md border text-xs",
+                                                isDark
+                                                  ? "border-gray-700"
+                                                  : "border-gray-300",
+                                              )}
+                                            >
+                                              <span
                                                 className={cn(
-                                                  "flex justify-between items-center p-2 rounded-md border text-xs",
+                                                  "text-xs",
                                                   isDark
-                                                    ? "border-gray-700"
-                                                    : "border-gray-300",
+                                                    ? "text-gray-300"
+                                                    : "text-gray-700",
                                                 )}
                                               >
-                                                <span
-                                                  className={cn(
-                                                    "text-xs",
-                                                    isDark
-                                                      ? "text-gray-300"
-                                                      : "text-gray-700",
-                                                  )}
-                                                >
-                                                  Replies:
-                                                </span>
-                                                <span className="font-medium text-xs text-foreground">
-                                                  {
-                                                    quoteRepostsWeightObj.replies_multiplier
-                                                  }
-                                                </span>
-                                              </div>
-                                            )}
+                                                Replies:
+                                              </span>
+                                              <span className="font-medium text-xs text-foreground">
+                                                {
+                                                  quoteRepostsWeightObj.replies_multiplier
+                                                }
+                                              </span>
+                                            </div>
+                                          )}
                                           {quoteRepostsWeightObj.impressions_multiplier !=
                                             null && (
-                                              <div
+                                            <div
+                                              className={cn(
+                                                "flex justify-between items-center p-2 rounded-md border text-xs",
+                                                isDark
+                                                  ? "border-gray-700"
+                                                  : "border-gray-300",
+                                              )}
+                                            >
+                                              <span
                                                 className={cn(
-                                                  "flex justify-between items-center p-2 rounded-md border text-xs",
+                                                  "text-xs",
                                                   isDark
-                                                    ? "border-gray-700"
-                                                    : "border-gray-300",
+                                                    ? "text-gray-300"
+                                                    : "text-gray-700",
                                                 )}
                                               >
-                                                <span
-                                                  className={cn(
-                                                    "text-xs",
-                                                    isDark
-                                                      ? "text-gray-300"
-                                                      : "text-gray-700",
-                                                  )}
-                                                >
-                                                  Impressions:
-                                                </span>
-                                                <span className="font-medium text-xs text-foreground">
-                                                  {
-                                                    quoteRepostsWeightObj.impressions_multiplier
-                                                  }
-                                                </span>
-                                              </div>
-                                            )}
+                                                Impressions:
+                                              </span>
+                                              <span className="font-medium text-xs text-foreground">
+                                                {
+                                                  quoteRepostsWeightObj.impressions_multiplier
+                                                }
+                                              </span>
+                                            </div>
+                                          )}
                                           {quoteRepostsWeightObj.retweets_multiplier !=
                                             null && (
-                                              <div
+                                            <div
+                                              className={cn(
+                                                "flex justify-between items-center p-2 rounded-md border text-xs",
+                                                isDark
+                                                  ? "border-gray-700"
+                                                  : "border-gray-300",
+                                              )}
+                                            >
+                                              <span
                                                 className={cn(
-                                                  "flex justify-between items-center p-2 rounded-md border text-xs",
+                                                  "text-xs",
                                                   isDark
-                                                    ? "border-gray-700"
-                                                    : "border-gray-300",
+                                                    ? "text-gray-300"
+                                                    : "text-gray-700",
                                                 )}
                                               >
-                                                <span
-                                                  className={cn(
-                                                    "text-xs",
-                                                    isDark
-                                                      ? "text-gray-300"
-                                                      : "text-gray-700",
-                                                  )}
-                                                >
-                                                  Retweets:
-                                                </span>
-                                                <span className="font-medium text-xs text-foreground">
-                                                  {
-                                                    quoteRepostsWeightObj.retweets_multiplier
-                                                  }
-                                                </span>
-                                              </div>
-                                            )}
+                                                Retweets:
+                                              </span>
+                                              <span className="font-medium text-xs text-foreground">
+                                                {
+                                                  quoteRepostsWeightObj.retweets_multiplier
+                                                }
+                                              </span>
+                                            </div>
+                                          )}
                                           {quoteRepostsWeightObj.quote_reposts_multiplier !=
                                             null && (
-                                              <div
+                                            <div
+                                              className={cn(
+                                                "flex justify-between items-center p-2 rounded-md border text-xs",
+                                                isDark
+                                                  ? "border-gray-700"
+                                                  : "border-gray-300",
+                                              )}
+                                            >
+                                              <span
                                                 className={cn(
-                                                  "flex justify-between items-center p-2 rounded-md border text-xs",
+                                                  "text-xs",
                                                   isDark
-                                                    ? "border-gray-700"
-                                                    : "border-gray-300",
+                                                    ? "text-gray-300"
+                                                    : "text-gray-700",
                                                 )}
                                               >
-                                                <span
-                                                  className={cn(
-                                                    "text-xs",
-                                                    isDark
-                                                      ? "text-gray-300"
-                                                      : "text-gray-700",
-                                                  )}
-                                                >
-                                                  Quote Reposts:
-                                                </span>
-                                                <span className="font-medium text-xs text-foreground">
-                                                  {
-                                                    quoteRepostsWeightObj.quote_reposts_multiplier
-                                                  }
-                                                </span>
-                                              </div>
-                                            )}
+                                                Quote Reposts:
+                                              </span>
+                                              <span className="font-medium text-xs text-foreground">
+                                                {
+                                                  quoteRepostsWeightObj.quote_reposts_multiplier
+                                                }
+                                              </span>
+                                            </div>
+                                          )}
                                         </div>
                                       </div>
                                     )}
@@ -7477,66 +7553,66 @@ export default function ContestDetailClient({
                               )}
                               {cpmPointsConfig.quote_repost_base_points !=
                                 null && (
-                                  <div
+                                <div
+                                  className={cn(
+                                    "flex justify-between items-center p-3 rounded-md border",
+                                    isDark
+                                      ? "border-gray-600"
+                                      : "border-gray-400",
+                                  )}
+                                >
+                                  <span
                                     className={cn(
-                                      "flex justify-between items-center p-3 rounded-md border",
-                                      isDark
-                                        ? "border-gray-600"
-                                        : "border-gray-400",
+                                      "text-sm font-medium",
+                                      isDark ? "text-white" : "text-black",
                                     )}
                                   >
-                                    <span
-                                      className={cn(
-                                        "text-sm font-medium",
-                                        isDark ? "text-white" : "text-black",
-                                      )}
-                                    >
-                                      Quote Repost Base Points:
-                                    </span>
-                                    <span className="font-semibold text-sm text-foreground">
-                                      {cpmPointsConfig.quote_repost_base_points}
-                                    </span>
-                                  </div>
-                                )}
+                                    Quote Repost Base Points:
+                                  </span>
+                                  <span className="font-semibold text-sm text-foreground">
+                                    {cpmPointsConfig.quote_repost_base_points}
+                                  </span>
+                                </div>
+                              )}
                             </div>
 
                             {/* Engagement Multipliers for CPM */}
                             {(() => {
                               const hasCommentMultipliers =
                                 cpmPointsConfig.comment_likes_multiplier !=
-                                null ||
+                                  null ||
                                 cpmPointsConfig.comment_replies_multiplier !=
-                                null ||
+                                  null ||
                                 cpmPointsConfig.comment_impressions_multiplier !=
-                                null ||
+                                  null ||
                                 cpmPointsConfig.comment_retweets_multiplier !=
-                                null ||
+                                  null ||
                                 cpmPointsConfig.comment_quote_reposts_multiplier !=
-                                null;
+                                  null;
 
                               const hasRetweetMultipliers =
                                 cpmPointsConfig.retweet_likes_multiplier !=
-                                null ||
+                                  null ||
                                 cpmPointsConfig.retweet_replies_multiplier !=
-                                null ||
+                                  null ||
                                 cpmPointsConfig.retweet_impressions_multiplier !=
-                                null ||
+                                  null ||
                                 cpmPointsConfig.retweet_retweets_multiplier !=
-                                null ||
+                                  null ||
                                 cpmPointsConfig.retweet_quote_reposts_multiplier !=
-                                null;
+                                  null;
 
                               const hasQuoteRepostMultipliers =
                                 cpmPointsConfig.quote_repost_likes_multiplier !=
-                                null ||
+                                  null ||
                                 cpmPointsConfig.quote_repost_replies_multiplier !=
-                                null ||
+                                  null ||
                                 cpmPointsConfig.quote_repost_impressions_multiplier !=
-                                null ||
+                                  null ||
                                 cpmPointsConfig.quote_repost_retweets_multiplier !=
-                                null ||
+                                  null ||
                                 cpmPointsConfig.quote_repost_quote_reposts_multiplier !=
-                                null;
+                                  null;
 
                               if (
                                 !hasCommentMultipliers &&
@@ -7560,139 +7636,139 @@ export default function ContestDetailClient({
                                       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
                                         {cpmPointsConfig.comment_likes_multiplier !=
                                           null && (
-                                            <div
+                                          <div
+                                            className={cn(
+                                              "flex justify-between items-center p-2 rounded-md border text-xs",
+                                              isDark
+                                                ? "border-gray-700"
+                                                : "border-gray-300",
+                                            )}
+                                          >
+                                            <span
                                               className={cn(
-                                                "flex justify-between items-center p-2 rounded-md border text-xs",
+                                                "text-xs",
                                                 isDark
-                                                  ? "border-gray-700"
-                                                  : "border-gray-300",
+                                                  ? "text-gray-300"
+                                                  : "text-gray-700",
                                               )}
                                             >
-                                              <span
-                                                className={cn(
-                                                  "text-xs",
-                                                  isDark
-                                                    ? "text-gray-300"
-                                                    : "text-gray-700",
-                                                )}
-                                              >
-                                                Likes:
-                                              </span>
-                                              <span className="font-medium text-xs text-foreground">
-                                                {
-                                                  cpmPointsConfig.comment_likes_multiplier
-                                                }
-                                              </span>
-                                            </div>
-                                          )}
+                                              Likes:
+                                            </span>
+                                            <span className="font-medium text-xs text-foreground">
+                                              {
+                                                cpmPointsConfig.comment_likes_multiplier
+                                              }
+                                            </span>
+                                          </div>
+                                        )}
                                         {cpmPointsConfig.comment_replies_multiplier !=
                                           null && (
-                                            <div
+                                          <div
+                                            className={cn(
+                                              "flex justify-between items-center p-2 rounded-md border text-xs",
+                                              isDark
+                                                ? "border-gray-700"
+                                                : "border-gray-300",
+                                            )}
+                                          >
+                                            <span
                                               className={cn(
-                                                "flex justify-between items-center p-2 rounded-md border text-xs",
+                                                "text-xs",
                                                 isDark
-                                                  ? "border-gray-700"
-                                                  : "border-gray-300",
+                                                  ? "text-gray-300"
+                                                  : "text-gray-700",
                                               )}
                                             >
-                                              <span
-                                                className={cn(
-                                                  "text-xs",
-                                                  isDark
-                                                    ? "text-gray-300"
-                                                    : "text-gray-700",
-                                                )}
-                                              >
-                                                Replies:
-                                              </span>
-                                              <span className="font-medium text-xs text-foreground">
-                                                {
-                                                  cpmPointsConfig.comment_replies_multiplier
-                                                }
-                                              </span>
-                                            </div>
-                                          )}
+                                              Replies:
+                                            </span>
+                                            <span className="font-medium text-xs text-foreground">
+                                              {
+                                                cpmPointsConfig.comment_replies_multiplier
+                                              }
+                                            </span>
+                                          </div>
+                                        )}
                                         {cpmPointsConfig.comment_impressions_multiplier !=
                                           null && (
-                                            <div
+                                          <div
+                                            className={cn(
+                                              "flex justify-between items-center p-2 rounded-md border text-xs",
+                                              isDark
+                                                ? "border-gray-700"
+                                                : "border-gray-300",
+                                            )}
+                                          >
+                                            <span
                                               className={cn(
-                                                "flex justify-between items-center p-2 rounded-md border text-xs",
+                                                "text-xs",
                                                 isDark
-                                                  ? "border-gray-700"
-                                                  : "border-gray-300",
+                                                  ? "text-gray-300"
+                                                  : "text-gray-700",
                                               )}
                                             >
-                                              <span
-                                                className={cn(
-                                                  "text-xs",
-                                                  isDark
-                                                    ? "text-gray-300"
-                                                    : "text-gray-700",
-                                                )}
-                                              >
-                                                Impressions:
-                                              </span>
-                                              <span className="font-medium text-xs text-foreground">
-                                                {
-                                                  cpmPointsConfig.comment_impressions_multiplier
-                                                }
-                                              </span>
-                                            </div>
-                                          )}
+                                              Impressions:
+                                            </span>
+                                            <span className="font-medium text-xs text-foreground">
+                                              {
+                                                cpmPointsConfig.comment_impressions_multiplier
+                                              }
+                                            </span>
+                                          </div>
+                                        )}
                                         {cpmPointsConfig.comment_retweets_multiplier !=
                                           null && (
-                                            <div
+                                          <div
+                                            className={cn(
+                                              "flex justify-between items-center p-2 rounded-md border text-xs",
+                                              isDark
+                                                ? "border-gray-700"
+                                                : "border-gray-300",
+                                            )}
+                                          >
+                                            <span
                                               className={cn(
-                                                "flex justify-between items-center p-2 rounded-md border text-xs",
+                                                "text-xs",
                                                 isDark
-                                                  ? "border-gray-700"
-                                                  : "border-gray-300",
+                                                  ? "text-gray-300"
+                                                  : "text-gray-700",
                                               )}
                                             >
-                                              <span
-                                                className={cn(
-                                                  "text-xs",
-                                                  isDark
-                                                    ? "text-gray-300"
-                                                    : "text-gray-700",
-                                                )}
-                                              >
-                                                Retweets:
-                                              </span>
-                                              <span className="font-medium text-xs text-foreground">
-                                                {
-                                                  cpmPointsConfig.comment_retweets_multiplier
-                                                }
-                                              </span>
-                                            </div>
-                                          )}
+                                              Retweets:
+                                            </span>
+                                            <span className="font-medium text-xs text-foreground">
+                                              {
+                                                cpmPointsConfig.comment_retweets_multiplier
+                                              }
+                                            </span>
+                                          </div>
+                                        )}
                                         {cpmPointsConfig.comment_quote_reposts_multiplier !=
                                           null && (
-                                            <div
+                                          <div
+                                            className={cn(
+                                              "flex justify-between items-center p-2 rounded-md border text-xs",
+                                              isDark
+                                                ? "border-gray-700"
+                                                : "border-gray-300",
+                                            )}
+                                          >
+                                            <span
                                               className={cn(
-                                                "flex justify-between items-center p-2 rounded-md border text-xs",
+                                                "text-xs",
                                                 isDark
-                                                  ? "border-gray-700"
-                                                  : "border-gray-300",
+                                                  ? "text-gray-300"
+                                                  : "text-gray-700",
                                               )}
                                             >
-                                              <span
-                                                className={cn(
-                                                  "text-xs",
-                                                  isDark
-                                                    ? "text-gray-300"
-                                                    : "text-gray-700",
-                                                )}
-                                              >
-                                                Quote Reposts:
-                                              </span>
-                                              <span className="font-medium text-xs text-foreground">
-                                                {
-                                                  cpmPointsConfig.comment_quote_reposts_multiplier
-                                                }
-                                              </span>
-                                            </div>
-                                          )}
+                                              Quote Reposts:
+                                            </span>
+                                            <span className="font-medium text-xs text-foreground">
+                                              {
+                                                cpmPointsConfig.comment_quote_reposts_multiplier
+                                              }
+                                            </span>
+                                          </div>
+                                        )}
                                       </div>
                                     </div>
                                   )}
@@ -7706,139 +7782,139 @@ export default function ContestDetailClient({
                                       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
                                         {cpmPointsConfig.retweet_likes_multiplier !=
                                           null && (
-                                            <div
+                                          <div
+                                            className={cn(
+                                              "flex justify-between items-center p-2 rounded-md border text-xs",
+                                              isDark
+                                                ? "border-gray-700"
+                                                : "border-gray-300",
+                                            )}
+                                          >
+                                            <span
                                               className={cn(
-                                                "flex justify-between items-center p-2 rounded-md border text-xs",
+                                                "text-xs",
                                                 isDark
-                                                  ? "border-gray-700"
-                                                  : "border-gray-300",
+                                                  ? "text-gray-300"
+                                                  : "text-gray-700",
                                               )}
                                             >
-                                              <span
-                                                className={cn(
-                                                  "text-xs",
-                                                  isDark
-                                                    ? "text-gray-300"
-                                                    : "text-gray-700",
-                                                )}
-                                              >
-                                                Likes:
-                                              </span>
-                                              <span className="font-medium text-xs text-foreground">
-                                                {
-                                                  cpmPointsConfig.retweet_likes_multiplier
-                                                }
-                                              </span>
-                                            </div>
-                                          )}
+                                              Likes:
+                                            </span>
+                                            <span className="font-medium text-xs text-foreground">
+                                              {
+                                                cpmPointsConfig.retweet_likes_multiplier
+                                              }
+                                            </span>
+                                          </div>
+                                        )}
                                         {cpmPointsConfig.retweet_replies_multiplier !=
                                           null && (
-                                            <div
+                                          <div
+                                            className={cn(
+                                              "flex justify-between items-center p-2 rounded-md border text-xs",
+                                              isDark
+                                                ? "border-gray-700"
+                                                : "border-gray-300",
+                                            )}
+                                          >
+                                            <span
                                               className={cn(
-                                                "flex justify-between items-center p-2 rounded-md border text-xs",
+                                                "text-xs",
                                                 isDark
-                                                  ? "border-gray-700"
-                                                  : "border-gray-300",
+                                                  ? "text-gray-300"
+                                                  : "text-gray-700",
                                               )}
                                             >
-                                              <span
-                                                className={cn(
-                                                  "text-xs",
-                                                  isDark
-                                                    ? "text-gray-300"
-                                                    : "text-gray-700",
-                                                )}
-                                              >
-                                                Replies:
-                                              </span>
-                                              <span className="font-medium text-xs text-foreground">
-                                                {
-                                                  cpmPointsConfig.retweet_replies_multiplier
-                                                }
-                                              </span>
-                                            </div>
-                                          )}
+                                              Replies:
+                                            </span>
+                                            <span className="font-medium text-xs text-foreground">
+                                              {
+                                                cpmPointsConfig.retweet_replies_multiplier
+                                              }
+                                            </span>
+                                          </div>
+                                        )}
                                         {cpmPointsConfig.retweet_impressions_multiplier !=
                                           null && (
-                                            <div
+                                          <div
+                                            className={cn(
+                                              "flex justify-between items-center p-2 rounded-md border text-xs",
+                                              isDark
+                                                ? "border-gray-700"
+                                                : "border-gray-300",
+                                            )}
+                                          >
+                                            <span
                                               className={cn(
-                                                "flex justify-between items-center p-2 rounded-md border text-xs",
+                                                "text-xs",
                                                 isDark
-                                                  ? "border-gray-700"
-                                                  : "border-gray-300",
+                                                  ? "text-gray-300"
+                                                  : "text-gray-700",
                                               )}
                                             >
-                                              <span
-                                                className={cn(
-                                                  "text-xs",
-                                                  isDark
-                                                    ? "text-gray-300"
-                                                    : "text-gray-700",
-                                                )}
-                                              >
-                                                Impressions:
-                                              </span>
-                                              <span className="font-medium text-xs text-foreground">
-                                                {
-                                                  cpmPointsConfig.retweet_impressions_multiplier
-                                                }
-                                              </span>
-                                            </div>
-                                          )}
+                                              Impressions:
+                                            </span>
+                                            <span className="font-medium text-xs text-foreground">
+                                              {
+                                                cpmPointsConfig.retweet_impressions_multiplier
+                                              }
+                                            </span>
+                                          </div>
+                                        )}
                                         {cpmPointsConfig.retweet_retweets_multiplier !=
                                           null && (
-                                            <div
+                                          <div
+                                            className={cn(
+                                              "flex justify-between items-center p-2 rounded-md border text-xs",
+                                              isDark
+                                                ? "border-gray-700"
+                                                : "border-gray-300",
+                                            )}
+                                          >
+                                            <span
                                               className={cn(
-                                                "flex justify-between items-center p-2 rounded-md border text-xs",
+                                                "text-xs",
                                                 isDark
-                                                  ? "border-gray-700"
-                                                  : "border-gray-300",
+                                                  ? "text-gray-300"
+                                                  : "text-gray-700",
                                               )}
                                             >
-                                              <span
-                                                className={cn(
-                                                  "text-xs",
-                                                  isDark
-                                                    ? "text-gray-300"
-                                                    : "text-gray-700",
-                                                )}
-                                              >
-                                                Retweets:
-                                              </span>
-                                              <span className="font-medium text-xs text-foreground">
-                                                {
-                                                  cpmPointsConfig.retweet_retweets_multiplier
-                                                }
-                                              </span>
-                                            </div>
-                                          )}
+                                              Retweets:
+                                            </span>
+                                            <span className="font-medium text-xs text-foreground">
+                                              {
+                                                cpmPointsConfig.retweet_retweets_multiplier
+                                              }
+                                            </span>
+                                          </div>
+                                        )}
                                         {cpmPointsConfig.retweet_quote_reposts_multiplier !=
                                           null && (
-                                            <div
+                                          <div
+                                            className={cn(
+                                              "flex justify-between items-center p-2 rounded-md border text-xs",
+                                              isDark
+                                                ? "border-gray-700"
+                                                : "border-gray-300",
+                                            )}
+                                          >
+                                            <span
                                               className={cn(
-                                                "flex justify-between items-center p-2 rounded-md border text-xs",
+                                                "text-xs",
                                                 isDark
-                                                  ? "border-gray-700"
-                                                  : "border-gray-300",
+                                                  ? "text-gray-300"
+                                                  : "text-gray-700",
                                               )}
                                             >
-                                              <span
-                                                className={cn(
-                                                  "text-xs",
-                                                  isDark
-                                                    ? "text-gray-300"
-                                                    : "text-gray-700",
-                                                )}
-                                              >
-                                                Quote Reposts:
-                                              </span>
-                                              <span className="font-medium text-xs text-foreground">
-                                                {
-                                                  cpmPointsConfig.retweet_quote_reposts_multiplier
-                                                }
-                                              </span>
-                                            </div>
-                                          )}
+                                              Quote Reposts:
+                                            </span>
+                                            <span className="font-medium text-xs text-foreground">
+                                              {
+                                                cpmPointsConfig.retweet_quote_reposts_multiplier
+                                              }
+                                            </span>
+                                          </div>
+                                        )}
                                       </div>
                                     </div>
                                   )}
@@ -7852,139 +7928,139 @@ export default function ContestDetailClient({
                                       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
                                         {cpmPointsConfig.quote_repost_likes_multiplier !=
                                           null && (
-                                            <div
+                                          <div
+                                            className={cn(
+                                              "flex justify-between items-center p-2 rounded-md border text-xs",
+                                              isDark
+                                                ? "border-gray-700"
+                                                : "border-gray-300",
+                                            )}
+                                          >
+                                            <span
                                               className={cn(
-                                                "flex justify-between items-center p-2 rounded-md border text-xs",
+                                                "text-xs",
                                                 isDark
-                                                  ? "border-gray-700"
-                                                  : "border-gray-300",
+                                                  ? "text-gray-300"
+                                                  : "text-gray-700",
                                               )}
                                             >
-                                              <span
-                                                className={cn(
-                                                  "text-xs",
-                                                  isDark
-                                                    ? "text-gray-300"
-                                                    : "text-gray-700",
-                                                )}
-                                              >
-                                                Likes:
-                                              </span>
-                                              <span className="font-medium text-xs text-foreground">
-                                                {
-                                                  cpmPointsConfig.quote_repost_likes_multiplier
-                                                }
-                                              </span>
-                                            </div>
-                                          )}
+                                              Likes:
+                                            </span>
+                                            <span className="font-medium text-xs text-foreground">
+                                              {
+                                                cpmPointsConfig.quote_repost_likes_multiplier
+                                              }
+                                            </span>
+                                          </div>
+                                        )}
                                         {cpmPointsConfig.quote_repost_replies_multiplier !=
                                           null && (
-                                            <div
+                                          <div
+                                            className={cn(
+                                              "flex justify-between items-center p-2 rounded-md border text-xs",
+                                              isDark
+                                                ? "border-gray-700"
+                                                : "border-gray-300",
+                                            )}
+                                          >
+                                            <span
                                               className={cn(
-                                                "flex justify-between items-center p-2 rounded-md border text-xs",
+                                                "text-xs",
                                                 isDark
-                                                  ? "border-gray-700"
-                                                  : "border-gray-300",
+                                                  ? "text-gray-300"
+                                                  : "text-gray-700",
                                               )}
                                             >
-                                              <span
-                                                className={cn(
-                                                  "text-xs",
-                                                  isDark
-                                                    ? "text-gray-300"
-                                                    : "text-gray-700",
-                                                )}
-                                              >
-                                                Replies:
-                                              </span>
-                                              <span className="font-medium text-xs text-foreground">
-                                                {
-                                                  cpmPointsConfig.quote_repost_replies_multiplier
-                                                }
-                                              </span>
-                                            </div>
-                                          )}
+                                              Replies:
+                                            </span>
+                                            <span className="font-medium text-xs text-foreground">
+                                              {
+                                                cpmPointsConfig.quote_repost_replies_multiplier
+                                              }
+                                            </span>
+                                          </div>
+                                        )}
                                         {cpmPointsConfig.quote_repost_impressions_multiplier !=
                                           null && (
-                                            <div
+                                          <div
+                                            className={cn(
+                                              "flex justify-between items-center p-2 rounded-md border text-xs",
+                                              isDark
+                                                ? "border-gray-700"
+                                                : "border-gray-300",
+                                            )}
+                                          >
+                                            <span
                                               className={cn(
-                                                "flex justify-between items-center p-2 rounded-md border text-xs",
+                                                "text-xs",
                                                 isDark
-                                                  ? "border-gray-700"
-                                                  : "border-gray-300",
+                                                  ? "text-gray-300"
+                                                  : "text-gray-700",
                                               )}
                                             >
-                                              <span
-                                                className={cn(
-                                                  "text-xs",
-                                                  isDark
-                                                    ? "text-gray-300"
-                                                    : "text-gray-700",
-                                                )}
-                                              >
-                                                Impressions:
-                                              </span>
-                                              <span className="font-medium text-xs text-foreground">
-                                                {
-                                                  cpmPointsConfig.quote_repost_impressions_multiplier
-                                                }
-                                              </span>
-                                            </div>
-                                          )}
+                                              Impressions:
+                                            </span>
+                                            <span className="font-medium text-xs text-foreground">
+                                              {
+                                                cpmPointsConfig.quote_repost_impressions_multiplier
+                                              }
+                                            </span>
+                                          </div>
+                                        )}
                                         {cpmPointsConfig.quote_repost_retweets_multiplier !=
                                           null && (
-                                            <div
+                                          <div
+                                            className={cn(
+                                              "flex justify-between items-center p-2 rounded-md border text-xs",
+                                              isDark
+                                                ? "border-gray-700"
+                                                : "border-gray-300",
+                                            )}
+                                          >
+                                            <span
                                               className={cn(
-                                                "flex justify-between items-center p-2 rounded-md border text-xs",
+                                                "text-xs",
                                                 isDark
-                                                  ? "border-gray-700"
-                                                  : "border-gray-300",
+                                                  ? "text-gray-300"
+                                                  : "text-gray-700",
                                               )}
                                             >
-                                              <span
-                                                className={cn(
-                                                  "text-xs",
-                                                  isDark
-                                                    ? "text-gray-300"
-                                                    : "text-gray-700",
-                                                )}
-                                              >
-                                                Retweets:
-                                              </span>
-                                              <span className="font-medium text-xs text-foreground">
-                                                {
-                                                  cpmPointsConfig.quote_repost_retweets_multiplier
-                                                }
-                                              </span>
-                                            </div>
-                                          )}
+                                              Retweets:
+                                            </span>
+                                            <span className="font-medium text-xs text-foreground">
+                                              {
+                                                cpmPointsConfig.quote_repost_retweets_multiplier
+                                              }
+                                            </span>
+                                          </div>
+                                        )}
                                         {cpmPointsConfig.quote_repost_quote_reposts_multiplier !=
                                           null && (
-                                            <div
+                                          <div
+                                            className={cn(
+                                              "flex justify-between items-center p-2 rounded-md border text-xs",
+                                              isDark
+                                                ? "border-gray-700"
+                                                : "border-gray-300",
+                                            )}
+                                          >
+                                            <span
                                               className={cn(
-                                                "flex justify-between items-center p-2 rounded-md border text-xs",
+                                                "text-xs",
                                                 isDark
-                                                  ? "border-gray-700"
-                                                  : "border-gray-300",
+                                                  ? "text-gray-300"
+                                                  : "text-gray-700",
                                               )}
                                             >
-                                              <span
-                                                className={cn(
-                                                  "text-xs",
-                                                  isDark
-                                                    ? "text-gray-300"
-                                                    : "text-gray-700",
-                                                )}
-                                              >
-                                                Quote Reposts:
-                                              </span>
-                                              <span className="font-medium text-xs text-foreground">
-                                                {
-                                                  cpmPointsConfig.quote_repost_quote_reposts_multiplier
-                                                }
-                                              </span>
-                                            </div>
-                                          )}
+                                              Quote Reposts:
+                                            </span>
+                                            <span className="font-medium text-xs text-foreground">
+                                              {
+                                                cpmPointsConfig.quote_repost_quote_reposts_multiplier
+                                              }
+                                            </span>
+                                          </div>
+                                        )}
                                       </div>
                                     </div>
                                   )}
@@ -8053,8 +8129,8 @@ export default function ContestDetailClient({
                                   typeof (currentContest as any)
                                     .payment_details === "string"
                                     ? JSON.parse(
-                                      (currentContest as any).payment_details,
-                                    )
+                                        (currentContest as any).payment_details,
+                                      )
                                     : (currentContest as any).payment_details;
                                 return formatMoney(
                                   paymentDetails.total_prize_pool || 0,
@@ -8091,8 +8167,8 @@ export default function ContestDetailClient({
                                   typeof (currentContest as any)
                                     .payment_details === "string"
                                     ? JSON.parse(
-                                      (currentContest as any).payment_details,
-                                    )
+                                        (currentContest as any).payment_details,
+                                      )
                                     : (currentContest as any).payment_details;
                                 return (
                                   paymentDetails.commission_percentage || 0
@@ -8111,8 +8187,8 @@ export default function ContestDetailClient({
                                   typeof (currentContest as any)
                                     .payment_details === "string"
                                     ? JSON.parse(
-                                      (currentContest as any).payment_details,
-                                    )
+                                        (currentContest as any).payment_details,
+                                      )
                                     : (currentContest as any).payment_details;
                                 return formatMoney(
                                   paymentDetails.commission_amount || 0,
@@ -8165,9 +8241,9 @@ export default function ContestDetailClient({
                                     typeof (currentContest as any)
                                       .payment_details === "string"
                                       ? JSON.parse(
-                                        (currentContest as any)
-                                          .payment_details,
-                                      )
+                                          (currentContest as any)
+                                            .payment_details,
+                                        )
                                       : (currentContest as any).payment_details;
                                   return formatMoney(
                                     paymentDetails.total_amount_paid || 0,
@@ -8180,10 +8256,10 @@ export default function ContestDetailClient({
                           {(() => {
                             const paymentDetails =
                               typeof (currentContest as any).payment_details ===
-                                "string"
+                              "string"
                                 ? JSON.parse(
-                                  (currentContest as any).payment_details,
-                                )
+                                    (currentContest as any).payment_details,
+                                  )
                                 : (currentContest as any).payment_details;
                             const walletUsed =
                               paymentDetails.wallet_amount_used || 0;
@@ -8399,8 +8475,8 @@ export default function ContestDetailClient({
                                   typeof (currentContest as any)
                                     .payment_details === "string"
                                     ? JSON.parse(
-                                      (currentContest as any).payment_details,
-                                    )
+                                        (currentContest as any).payment_details,
+                                      )
                                     : (currentContest as any).payment_details;
                                 return paymentDetails.payment_status ===
                                   "completed"
@@ -8412,10 +8488,10 @@ export default function ContestDetailClient({
                           {(() => {
                             const paymentDetails =
                               typeof (currentContest as any).payment_details ===
-                                "string"
+                              "string"
                                 ? JSON.parse(
-                                  (currentContest as any).payment_details,
-                                )
+                                    (currentContest as any).payment_details,
+                                  )
                                 : (currentContest as any).payment_details;
                             return paymentDetails.paid_at ? (
                               <span
@@ -8753,91 +8829,91 @@ export default function ContestDetailClient({
                   ?.flat_fee_bonus ||
                   currentContest.contest_based_details?.leaderboard_contest
                     ?.flat_fee_bonus) && (
-                    <div className="space-y-3">
-                      <h3 className="font-semibold text-lg text-foreground flex items-center gap-2">
-                        <Gift className="h-5 w-5 text-green-600" />
-                        Guaranteed Flat Bonus
-                      </h3>
-                      <div
+                  <div className="space-y-3">
+                    <h3 className="font-semibold text-lg text-foreground flex items-center gap-2">
+                      <Gift className="h-5 w-5 text-green-600" />
+                      Guaranteed Flat Bonus
+                    </h3>
+                    <div
+                      className={cn(
+                        "border p-4 rounded-lg",
+                        isDark
+                          ? "bg-green-950/40 border-green-800"
+                          : "border-green-300 bg-green-50/50 rounded-xl p-4",
+                      )}
+                    >
+                      <p
                         className={cn(
-                          "border p-4 rounded-lg",
-                          isDark
-                            ? "bg-green-950/40 border-green-800"
-                            : "border-green-300 bg-green-50/50 rounded-xl p-4",
+                          "text-2xl font-bold mb-2",
+                          isDark ? "text-green-300" : "text-green-900",
                         )}
                       >
-                        <p
-                          className={cn(
-                            "text-2xl font-bold mb-2",
-                            isDark ? "text-green-300" : "text-green-900",
-                          )}
-                        >
-                          {formatMoney(
-                            (
-                              currentContest.contest_based_details
-                                ?.cpm_contest as any
-                            )?.flat_fee_bonus ||
+                        {formatMoney(
+                          (
+                            currentContest.contest_based_details
+                              ?.cpm_contest as any
+                          )?.flat_fee_bonus ||
                             (
                               currentContest.contest_based_details
                                 ?.leaderboard_contest as any
                             )?.flat_fee_bonus ||
                             0,
-                          )}{" "}
-                          per verified submission
-                        </p>
-                        <p
-                          className={cn(
-                            "text-sm",
-                            isDark ? "text-green-400" : "text-green-700",
-                          )}
-                        >
-                          🎁 Each creator earns this guaranteed amount for EVERY
-                          verified submission, regardless of views or ranking!
-                          Paid after the contest ends along with other earnings.
-                        </p>
-                        {/* Flat Fee Bonus Cap (for CPM contests) */}
-                        {currentContest.contest_type === "cpm" &&
-                          (
-                            currentContest.contest_based_details
-                              ?.cpm_contest as any
-                          )?.flat_fee_bonus_cap && (
-                            <div
+                        )}{" "}
+                        per verified submission
+                      </p>
+                      <p
+                        className={cn(
+                          "text-sm",
+                          isDark ? "text-green-400" : "text-green-700",
+                        )}
+                      >
+                        🎁 Each creator earns this guaranteed amount for EVERY
+                        verified submission, regardless of views or ranking!
+                        Paid after the contest ends along with other earnings.
+                      </p>
+                      {/* Flat Fee Bonus Cap (for CPM contests) */}
+                      {currentContest.contest_type === "cpm" &&
+                        (
+                          currentContest.contest_based_details
+                            ?.cpm_contest as any
+                        )?.flat_fee_bonus_cap && (
+                          <div
+                            className={cn(
+                              "mt-3 pt-3 border-t",
+                              isDark
+                                ? "border-green-700/50"
+                                : "border-green-200",
+                            )}
+                          >
+                            <p
                               className={cn(
-                                "mt-3 pt-3 border-t",
-                                isDark
-                                  ? "border-green-700/50"
-                                  : "border-green-200",
+                                "text-sm font-medium",
+                                isDark ? "text-green-200" : "text-green-800",
                               )}
                             >
-                              <p
-                                className={cn(
-                                  "text-sm font-medium",
-                                  isDark ? "text-green-200" : "text-green-800",
-                                )}
-                              >
-                                💰 Flat Fee Bonus Cap:{" "}
-                                {formatMoney(
-                                  (
-                                    currentContest.contest_based_details
-                                      ?.cpm_contest as any
-                                  )?.flat_fee_bonus_cap,
-                                )}
-                              </p>
-                              <p
-                                className={cn(
-                                  "text-xs mt-1",
-                                  isDark ? "text-green-400" : "text-green-600",
-                                )}
-                              >
-                                Maximum total flat fee bonus to distribute across
-                                all creators. Once this cap is reached, no more
-                                flat fee bonuses will be given.
-                              </p>
-                            </div>
-                          )}
-                      </div>
+                              💰 Flat Fee Bonus Cap:{" "}
+                              {formatMoney(
+                                (
+                                  currentContest.contest_based_details
+                                    ?.cpm_contest as any
+                                )?.flat_fee_bonus_cap,
+                              )}
+                            </p>
+                            <p
+                              className={cn(
+                                "text-xs mt-1",
+                                isDark ? "text-green-400" : "text-green-600",
+                              )}
+                            >
+                              Maximum total flat fee bonus to distribute across
+                              all creators. Once this cap is reached, no more
+                              flat fee bonuses will be given.
+                            </p>
+                          </div>
+                        )}
                     </div>
-                  )}
+                  </div>
+                )}
 
                 {/* Multiple Submissions Section */}
                 {(currentContest as any).multiple_submissions_enabled && (
@@ -9002,104 +9078,104 @@ export default function ContestDetailClient({
                             <div className="flex-1 min-w-0 space-y-3">
                               {currentContest.contest_based_details
                                 ?.twitter_campaign?.raid_target?.link && (
-                                  <a
-                                    href={
-                                      currentContest.contest_based_details
-                                        ?.twitter_campaign?.raid_target?.link
-                                    }
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className={cn(
-                                      "block text-base font-medium hover:underline mb-1 break-all",
-                                      isDark
-                                        ? "text-sky-300"
-                                        : "text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300",
-                                    )}
-                                  >
-                                    {
-                                      currentContest.contest_based_details
-                                        ?.twitter_campaign?.raid_target?.link
-                                    }
-                                  </a>
-                                )}
+                                <a
+                                  href={
+                                    currentContest.contest_based_details
+                                      ?.twitter_campaign?.raid_target?.link
+                                  }
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className={cn(
+                                    "block text-base font-medium hover:underline mb-1 break-all",
+                                    isDark
+                                      ? "text-sky-300"
+                                      : "text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300",
+                                  )}
+                                >
+                                  {
+                                    currentContest.contest_based_details
+                                      ?.twitter_campaign?.raid_target?.link
+                                  }
+                                </a>
+                              )}
 
                               {currentContest.contest_based_details
                                 ?.twitter_campaign?.raid_target
                                 ?.description && (
-                                  <div
-                                    className={cn(
-                                      "text-sm leading-relaxed",
-                                      isDark
-                                        ? "text-white"
-                                        : "text-gray-700 dark:text-gray-300",
-                                    )}
-                                  >
-                                    {
-                                      currentContest.contest_based_details
-                                        ?.twitter_campaign?.raid_target
-                                        ?.description
-                                    }
-                                  </div>
-                                )}
+                                <div
+                                  className={cn(
+                                    "text-sm leading-relaxed",
+                                    isDark
+                                      ? "text-white"
+                                      : "text-gray-700 dark:text-gray-300",
+                                  )}
+                                >
+                                  {
+                                    currentContest.contest_based_details
+                                      ?.twitter_campaign?.raid_target
+                                      ?.description
+                                  }
+                                </div>
+                              )}
 
                               {currentContest.contest_based_details
                                 ?.twitter_campaign?.raid_target?.metrics && (
-                                  <div className="flex flex-wrap gap-4 mt-2 text-sm">
-                                    {typeof currentContest.contest_based_details
-                                      ?.twitter_campaign?.raid_target?.metrics
-                                      ?.likes === "number" && (
-                                        <div className="flex items-center gap-1">
-                                          <ThumbsUp className="h-4 w-4" />
-                                          <span>Target Likes:</span>
-                                          <span className="font-medium">
-                                            {currentContest.contest_based_details?.twitter_campaign?.raid_target?.metrics.likes?.toLocaleString()}
-                                          </span>
-                                        </div>
-                                      )}
-                                    {typeof currentContest.contest_based_details
-                                      ?.twitter_campaign?.raid_target?.metrics
-                                      ?.comments === "number" && (
-                                        <div className="flex items-center gap-1">
-                                          <MessageCircle className="h-4 w-4" />
-                                          <span>Target Comments:</span>
-                                          <span className="font-medium">
-                                            {currentContest.contest_based_details?.twitter_campaign?.raid_target?.metrics.comments?.toLocaleString()}
-                                          </span>
-                                        </div>
-                                      )}
-                                    {typeof currentContest.contest_based_details
-                                      ?.twitter_campaign?.raid_target?.metrics
-                                      ?.quote_reposts === "number" && (
-                                        <div className="flex items-center gap-1">
-                                          <MessageCircle className="h-4 w-4" />
-                                          <span>Target Quote Reposts:</span>
-                                          <span className="font-medium">
-                                            {currentContest.contest_based_details?.twitter_campaign?.raid_target?.metrics.quote_reposts?.toLocaleString()}
-                                          </span>
-                                        </div>
-                                      )}
-                                    {typeof currentContest.contest_based_details
-                                      ?.twitter_campaign?.raid_target?.metrics
-                                      ?.retweets === "number" && (
-                                        <div className="flex items-center gap-1">
-                                          {/* <Repeat className="h-4 w-4" /> */}
-                                          <span>Target Retweets:</span>
-                                          <span className="font-medium">
-                                            {currentContest.contest_based_details?.twitter_campaign?.raid_target?.metrics.retweets?.toLocaleString()}
-                                          </span>
-                                        </div>
-                                      )}
-                                  </div>
-                                )}
+                                <div className="flex flex-wrap gap-4 mt-2 text-sm">
+                                  {typeof currentContest.contest_based_details
+                                    ?.twitter_campaign?.raid_target?.metrics
+                                    ?.likes === "number" && (
+                                    <div className="flex items-center gap-1">
+                                      <ThumbsUp className="h-4 w-4" />
+                                      <span>Target Likes:</span>
+                                      <span className="font-medium">
+                                        {currentContest.contest_based_details?.twitter_campaign?.raid_target?.metrics.likes?.toLocaleString()}
+                                      </span>
+                                    </div>
+                                  )}
+                                  {typeof currentContest.contest_based_details
+                                    ?.twitter_campaign?.raid_target?.metrics
+                                    ?.comments === "number" && (
+                                    <div className="flex items-center gap-1">
+                                      <MessageCircle className="h-4 w-4" />
+                                      <span>Target Comments:</span>
+                                      <span className="font-medium">
+                                        {currentContest.contest_based_details?.twitter_campaign?.raid_target?.metrics.comments?.toLocaleString()}
+                                      </span>
+                                    </div>
+                                  )}
+                                  {typeof currentContest.contest_based_details
+                                    ?.twitter_campaign?.raid_target?.metrics
+                                    ?.quote_reposts === "number" && (
+                                    <div className="flex items-center gap-1">
+                                      <MessageCircle className="h-4 w-4" />
+                                      <span>Target Quote Reposts:</span>
+                                      <span className="font-medium">
+                                        {currentContest.contest_based_details?.twitter_campaign?.raid_target?.metrics.quote_reposts?.toLocaleString()}
+                                      </span>
+                                    </div>
+                                  )}
+                                  {typeof currentContest.contest_based_details
+                                    ?.twitter_campaign?.raid_target?.metrics
+                                    ?.retweets === "number" && (
+                                    <div className="flex items-center gap-1">
+                                      {/* <Repeat className="h-4 w-4" /> */}
+                                      <span>Target Retweets:</span>
+                                      <span className="font-medium">
+                                        {currentContest.contest_based_details?.twitter_campaign?.raid_target?.metrics.retweets?.toLocaleString()}
+                                      </span>
+                                    </div>
+                                  )}
+                                </div>
+                              )}
 
                               {(currentContest.contest_based_details
                                 ?.twitter_campaign?.keywords &&
                                 currentContest.contest_based_details
                                   .twitter_campaign.keywords.length > 0) ||
-                                (currentContest.contest_based_details
-                                  ?.twitter_campaign?.mentions &&
-                                  currentContest.contest_based_details
-                                    .twitter_campaign.mentions.length > 0) ? (
+                              (currentContest.contest_based_details
+                                ?.twitter_campaign?.mentions &&
+                                currentContest.contest_based_details
+                                  .twitter_campaign.mentions.length > 0) ? (
                                 <div className="mt-4 space-y-2">
                                   {currentContest.contest_based_details
                                     ?.twitter_campaign?.keywords &&
@@ -9363,12 +9439,12 @@ export default function ContestDetailClient({
                         {(Array.isArray(currentContest.resources)
                           ? currentContest.resources
                           : Object.entries(currentContest.resources).map(
-                            ([description, url]) => ({
-                              url,
-                              description,
-                              type: "external",
-                            }),
-                          )
+                              ([description, url]) => ({
+                                url,
+                                description,
+                                type: "external",
+                              }),
+                            )
                         ).map((resource, idx) => {
                           const isImage =
                             resource.url.startsWith("data:image") ||
@@ -9593,22 +9669,26 @@ export default function ContestDetailClient({
                               onChange={(e) => {
                                 const raw = e.target.value;
                                 if (raw === "") {
-                                  setCurrentContest((prev) => ({
-                                    ...prev,
-                                    payout_adjustment_percentage: null,
-                                  }) as any);
+                                  setCurrentContest(
+                                    (prev) =>
+                                      ({
+                                        ...prev,
+                                        payout_adjustment_percentage: null,
+                                      }) as any,
+                                  );
                                   return;
                                 }
                                 const pct = Number.parseFloat(raw);
-                                if (
-                                  Number.isNaN(pct) || pct < 0 || pct > 100
-                                )
+                                if (Number.isNaN(pct) || pct < 0 || pct > 100)
                                   return;
-                                setCurrentContest((prev) => ({
-                                  ...prev,
-                                  payout_adjustment_percentage:
-                                    Math.round(pct * 100) / 100,
-                                }) as any);
+                                setCurrentContest(
+                                  (prev) =>
+                                    ({
+                                      ...prev,
+                                      payout_adjustment_percentage:
+                                        Math.round(pct * 100) / 100,
+                                    }) as any,
+                                );
                               }}
                               className={cn(
                                 "w-16 px-2 py-1 rounded-md border text-xs bg-transparent",
@@ -9632,10 +9712,13 @@ export default function ContestDetailClient({
                                   | "cpm_only"
                                   | "bonus_only"
                                   | "combined";
-                                setCurrentContest((prev) => ({
-                                  ...prev,
-                                  payout_adjustment_mode: value,
-                                }) as any);
+                                setCurrentContest(
+                                  (prev) =>
+                                    ({
+                                      ...prev,
+                                      payout_adjustment_mode: value,
+                                    }) as any,
+                                );
                               }}
                               className={cn(
                                 "px-2 py-1 rounded-md border text-xs bg-transparent",
@@ -9721,7 +9804,7 @@ export default function ContestDetailClient({
                           const isYoutubeAdmin =
                             isAdminView &&
                             currentContest.platform?.toLowerCase() ===
-                            "youtube";
+                              "youtube";
 
                           if (!isYoutubeAdmin) {
                             return (
@@ -9756,15 +9839,15 @@ export default function ContestDetailClient({
                           const ytLast =
                             (
                               currentContest.contest_based_details as
-                              | Record<
-                                string,
-                                {
-                                  core?: string;
-                                  traffic?: string;
-                                  demographics?: string;
-                                }
-                              >
-                              | undefined
+                                | Record<
+                                    string,
+                                    {
+                                      core?: string;
+                                      traffic?: string;
+                                      demographics?: string;
+                                    }
+                                  >
+                                | undefined
                             )?.youtube_metrics_last_updated || {};
                           const btnClass =
                             "flex items-center py-2 px-3 gap-2 rounded-2xl border transition-all text-sm";
@@ -9824,8 +9907,8 @@ export default function ContestDetailClient({
                                     Basic:{" "}
                                     {currentContest.last_metrics_updated
                                       ? formatTimeAgo(
-                                        currentContest.last_metrics_updated,
-                                      )
+                                          currentContest.last_metrics_updated,
+                                        )
                                       : "Never"}
                                   </span>
                                 </div>
@@ -9844,7 +9927,7 @@ export default function ContestDetailClient({
                                       (anyRefreshInProgress ||
                                         !cooldownInfo.canRefresh ||
                                         ytPostContestLocked) &&
-                                      "opacity-60 cursor-not-allowed",
+                                        "opacity-60 cursor-not-allowed",
                                     )}
                                     title={
                                       ytPostContestLocked
@@ -9877,9 +9960,9 @@ export default function ContestDetailClient({
                                       "flex items-center py-2 px-3 gap-2 rounded-2xl border transition-all text-sm",
                                       "border-slate-400 text-slate-600 hover:bg-slate-100 hover:border-slate-500",
                                       isDark &&
-                                      "text-slate-400 border-slate-500 hover:bg-slate-800 hover:border-slate-400",
+                                        "text-slate-400 border-slate-500 hover:bg-slate-800 hover:border-slate-400",
                                       anyRefreshInProgress &&
-                                      "opacity-60 cursor-not-allowed",
+                                        "opacity-60 cursor-not-allowed",
                                     )}
                                     title="Choose what the brand sees for this campaign"
                                   >
@@ -10262,20 +10345,20 @@ export default function ContestDetailClient({
                             setCurrentContest((prev) =>
                               prev
                                 ? {
-                                  ...prev,
-                                  contest_based_details: {
-                                    ...((prev.contest_based_details as Record<
-                                      string,
-                                      unknown
-                                    >) || {}),
-                                    youtube_analytics_visibility: {
-                                      show_core_to_brand: modalShowCore,
-                                      show_traffic_to_brand: modalShowTraffic,
-                                      show_demographics_to_brand:
-                                        modalShowDemo,
+                                    ...prev,
+                                    contest_based_details: {
+                                      ...((prev.contest_based_details as Record<
+                                        string,
+                                        unknown
+                                      >) || {}),
+                                      youtube_analytics_visibility: {
+                                        show_core_to_brand: modalShowCore,
+                                        show_traffic_to_brand: modalShowTraffic,
+                                        show_demographics_to_brand:
+                                          modalShowDemo,
+                                      },
                                     },
-                                  },
-                                }
+                                  }
                                 : prev,
                             );
                             setAdminControlsModalOpen(false);
@@ -10365,9 +10448,11 @@ export default function ContestDetailClient({
                                 : "text-[#7F39EC] bg-purple-200",
                             )}
                           >
-                            {currentSubmissions.filter(
-                              (s) => getStatus(s) !== "rejected",
-                            ).length}
+                            {
+                              currentSubmissions.filter(
+                                (s) => getStatus(s) !== "rejected",
+                              ).length
+                            }
                           </Badge>
                         </TabsTrigger>
                         <TabsTrigger
@@ -10543,10 +10628,10 @@ export default function ContestDetailClient({
                   (() => {
                     const flatFeeBonus =
                       currentContest?.contest_type === "cpm"
-                        ? (currentContest?.contest_based_details as any)
-                            ?.cpm_contest?.flat_fee_bonus ?? 0
-                        : (currentContest?.contest_based_details as any)
-                            ?.leaderboard_contest?.flat_fee_bonus ?? 0;
+                        ? ((currentContest?.contest_based_details as any)
+                            ?.cpm_contest?.flat_fee_bonus ?? 0)
+                        : ((currentContest?.contest_based_details as any)
+                            ?.leaderboard_contest?.flat_fee_bonus ?? 0);
                     const tot = statusFilterFinancialTotals;
                     const hasBonus =
                       flatFeeBonus > 0 ||
@@ -10578,50 +10663,50 @@ export default function ContestDetailClient({
                             : "text-slate-900",
                       );
                     return (
-                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 py-3">
-                    {/* Always show reward cards */}
-                    <div className={cardClass}>
-                      <p className={labelClass}>Expected Reward</p>
-                      <p className={valueClass()}>
-                        {formatMoney(tot.totalExpectedReward)}
-                      </p>
-                    </div>
-                    <div className={cardClass}>
-                      <p className={labelClass}>Reward Granted</p>
-                      <p className={valueClass(true)}>
-                        {formatMoney(tot.totalRewardGranted)}
-                      </p>
-                    </div>
-                    {/* When bonus exists, also show bonus and total cards */}
-                    {hasBonus && (
-                      <>
+                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 py-3">
+                        {/* Always show reward cards */}
                         <div className={cardClass}>
-                          <p className={labelClass}>Expected Bonus</p>
+                          <p className={labelClass}>Expected Reward</p>
                           <p className={valueClass()}>
-                            {formatMoney(tot.totalBonusExpected)}
+                            {formatMoney(tot.totalExpectedReward)}
                           </p>
                         </div>
                         <div className={cardClass}>
-                          <p className={labelClass}>Bonus Granted</p>
+                          <p className={labelClass}>Reward Granted</p>
                           <p className={valueClass(true)}>
-                            {formatMoney(tot.totalBonusGranted)}
+                            {formatMoney(tot.totalRewardGranted)}
                           </p>
                         </div>
-                        <div className={cardClass}>
-                          <p className={labelClass}>Expected Total</p>
-                          <p className={valueClass()}>
-                            {formatMoney(expectedTotal)}
-                          </p>
-                        </div>
-                        <div className={cardClass}>
-                          <p className={labelClass}>Granted Total</p>
-                          <p className={valueClass(true)}>
-                            {formatMoney(grantedTotal)}
-                          </p>
-                        </div>
-                      </>
-                    )}
-                  </div>
+                        {/* When bonus exists, also show bonus and total cards */}
+                        {hasBonus && (
+                          <>
+                            <div className={cardClass}>
+                              <p className={labelClass}>Expected Bonus</p>
+                              <p className={valueClass()}>
+                                {formatMoney(tot.totalBonusExpected)}
+                              </p>
+                            </div>
+                            <div className={cardClass}>
+                              <p className={labelClass}>Bonus Granted</p>
+                              <p className={valueClass(true)}>
+                                {formatMoney(tot.totalBonusGranted)}
+                              </p>
+                            </div>
+                            <div className={cardClass}>
+                              <p className={labelClass}>Expected Total</p>
+                              <p className={valueClass()}>
+                                {formatMoney(expectedTotal)}
+                              </p>
+                            </div>
+                            <div className={cardClass}>
+                              <p className={labelClass}>Granted Total</p>
+                              <p className={valueClass(true)}>
+                                {formatMoney(grantedTotal)}
+                              </p>
+                            </div>
+                          </>
+                        )}
+                      </div>
                     );
                   })()}
 
@@ -10830,111 +10915,111 @@ export default function ContestDetailClient({
                           {currentContest.platform
                             ?.toLowerCase()
                             .includes("youtube") && (
-                              <Dialog
-                                open={ytColumnsModalOpen}
-                                onOpenChange={setYtColumnsModalOpen}
+                            <Dialog
+                              open={ytColumnsModalOpen}
+                              onOpenChange={setYtColumnsModalOpen}
+                            >
+                              <DialogTrigger asChild>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  disabled={anyYtRefreshInProgress}
+                                  className={cn(
+                                    "h-12 gap-2",
+                                    isDark
+                                      ? "border-slate-600 text-slate-300 hover:bg-slate-800"
+                                      : "border-slate-300 text-slate-700 hover:bg-slate-50",
+                                    anyYtRefreshInProgress &&
+                                      "opacity-60 cursor-not-allowed",
+                                  )}
+                                  title={
+                                    anyYtRefreshInProgress
+                                      ? "Unavailable while metrics are refreshing"
+                                      : "Choose which columns to show in the table"
+                                  }
+                                >
+                                  <Columns2 className="h-4 w-4" />
+                                  Modify headers
+                                </Button>
+                              </DialogTrigger>
+                              <DialogContent
+                                className={cn(
+                                  "max-w-[95vw] w-full sm:max-w-md max-h-[90vh] flex flex-col",
+                                  isDark
+                                    ? "bg-[#1a0a2e] border-gray-600"
+                                    : "bg-white",
+                                )}
                               >
-                                <DialogTrigger asChild>
+                                <DialogHeader className="flex-shrink-0">
+                                  <DialogTitle>
+                                    Customize YouTube table columns
+                                  </DialogTitle>
+                                  <DialogDescription>
+                                    Show or hide columns in the submissions
+                                    table. Changes apply to both Normal and
+                                    Creator-wise views.
+                                  </DialogDescription>
+                                </DialogHeader>
+                                <div className="grid gap-3 py-4 overflow-y-auto min-h-0 max-h-[min(60vh,320px)] sm:max-h-[min(65vh,400px)] pr-1 -mr-1">
+                                  {ytColumnsAvailableInModal.map((col) => (
+                                    <div
+                                      key={col.id}
+                                      className="flex items-center space-x-2"
+                                    >
+                                      <Checkbox
+                                        id={`yt-col-${col.id}`}
+                                        checked={ytVisibleColumns.includes(
+                                          col.id,
+                                        )}
+                                        onCheckedChange={(checked) => {
+                                          if (checked) {
+                                            setYtVisibleColumnsAndPersist([
+                                              ...ytVisibleColumns,
+                                              col.id,
+                                            ]);
+                                          } else {
+                                            setYtVisibleColumnsAndPersist(
+                                              ytVisibleColumns.filter(
+                                                (c) => c !== col.id,
+                                              ),
+                                            );
+                                          }
+                                        }}
+                                      />
+                                      <Label
+                                        htmlFor={`yt-col-${col.id}`}
+                                        className={cn(
+                                          "text-sm font-medium cursor-pointer",
+                                          isDark
+                                            ? "text-slate-200"
+                                            : "text-slate-800",
+                                        )}
+                                      >
+                                        {col.label}
+                                      </Label>
+                                    </div>
+                                  ))}
+                                </div>
+                                <DialogFooter className="flex-shrink-0 border-t pt-4 mt-2">
                                   <Button
                                     variant="outline"
-                                    size="sm"
-                                    disabled={anyYtRefreshInProgress}
-                                    className={cn(
-                                      "h-12 gap-2",
-                                      isDark
-                                        ? "border-slate-600 text-slate-300 hover:bg-slate-800"
-                                        : "border-slate-300 text-slate-700 hover:bg-slate-50",
-                                      anyYtRefreshInProgress &&
-                                      "opacity-60 cursor-not-allowed",
-                                    )}
-                                    title={
-                                      anyYtRefreshInProgress
-                                        ? "Unavailable while metrics are refreshing"
-                                        : "Choose which columns to show in the table"
-                                    }
+                                    onClick={() => {
+                                      setYtVisibleColumnsAndPersist([
+                                        ...ytAvailableColumnIds,
+                                      ]);
+                                    }}
                                   >
-                                    <Columns2 className="h-4 w-4" />
-                                    Modify headers
+                                    Show all
                                   </Button>
-                                </DialogTrigger>
-                                <DialogContent
-                                  className={cn(
-                                    "max-w-[95vw] w-full sm:max-w-md max-h-[90vh] flex flex-col",
-                                    isDark
-                                      ? "bg-[#1a0a2e] border-gray-600"
-                                      : "bg-white",
-                                  )}
-                                >
-                                  <DialogHeader className="flex-shrink-0">
-                                    <DialogTitle>
-                                      Customize YouTube table columns
-                                    </DialogTitle>
-                                    <DialogDescription>
-                                      Show or hide columns in the submissions
-                                      table. Changes apply to both Normal and
-                                      Creator-wise views.
-                                    </DialogDescription>
-                                  </DialogHeader>
-                                  <div className="grid gap-3 py-4 overflow-y-auto min-h-0 max-h-[min(60vh,320px)] sm:max-h-[min(65vh,400px)] pr-1 -mr-1">
-                                    {ytColumnsAvailableInModal.map((col) => (
-                                      <div
-                                        key={col.id}
-                                        className="flex items-center space-x-2"
-                                      >
-                                        <Checkbox
-                                          id={`yt-col-${col.id}`}
-                                          checked={ytVisibleColumns.includes(
-                                            col.id,
-                                          )}
-                                          onCheckedChange={(checked) => {
-                                            if (checked) {
-                                              setYtVisibleColumnsAndPersist([
-                                                ...ytVisibleColumns,
-                                                col.id,
-                                              ]);
-                                            } else {
-                                              setYtVisibleColumnsAndPersist(
-                                                ytVisibleColumns.filter(
-                                                  (c) => c !== col.id,
-                                                ),
-                                              );
-                                            }
-                                          }}
-                                        />
-                                        <Label
-                                          htmlFor={`yt-col-${col.id}`}
-                                          className={cn(
-                                            "text-sm font-medium cursor-pointer",
-                                            isDark
-                                              ? "text-slate-200"
-                                              : "text-slate-800",
-                                          )}
-                                        >
-                                          {col.label}
-                                        </Label>
-                                      </div>
-                                    ))}
-                                  </div>
-                                  <DialogFooter className="flex-shrink-0 border-t pt-4 mt-2">
-                                    <Button
-                                      variant="outline"
-                                      onClick={() => {
-                                        setYtVisibleColumnsAndPersist([
-                                          ...ytAvailableColumnIds,
-                                        ]);
-                                      }}
-                                    >
-                                      Show all
-                                    </Button>
-                                    <Button
-                                      onClick={() => setYtColumnsModalOpen(false)}
-                                    >
-                                      Done
-                                    </Button>
-                                  </DialogFooter>
-                                </DialogContent>
-                              </Dialog>
-                            )}
+                                  <Button
+                                    onClick={() => setYtColumnsModalOpen(false)}
+                                  >
+                                    Done
+                                  </Button>
+                                </DialogFooter>
+                              </DialogContent>
+                            </Dialog>
+                          )}
                         </div>
                       </div>
                       {viewMode === "normal" && (
@@ -10954,9 +11039,9 @@ export default function ContestDetailClient({
                               {(currentContest.platform?.toLowerCase() ===
                                 "twitter" ||
                                 currentContest.platform?.toLowerCase() ===
-                                "x") &&
+                                  "x") &&
                                 currentContest.contest_format ===
-                                "text_image" && (
+                                  "text_image" && (
                                   <TableHead className="min-w-[200px]">
                                     Tweet
                                   </TableHead>
@@ -10965,8 +11050,8 @@ export default function ContestDetailClient({
                               {(currentContest.platform?.toLowerCase() ===
                                 "twitter" ||
                                 currentContest.platform?.toLowerCase() ===
-                                "x") &&
-                                currentContest.contest_format === "text_image" ? (
+                                  "x") &&
+                              currentContest.contest_format === "text_image" ? (
                                 <>
                                   <TableHead className="text-center">
                                     Total Points
@@ -11003,28 +11088,28 @@ export default function ContestDetailClient({
                                     .includes("youtube")
                                     ? ytVisibleColumns.includes("views")
                                     : true) && (
-                                      <TableHead className="text-center">
-                                        Views
-                                      </TableHead>
-                                    )}
+                                    <TableHead className="text-center">
+                                      Views
+                                    </TableHead>
+                                  )}
                                   {(currentContest.platform
                                     ?.toLowerCase()
                                     .includes("youtube")
                                     ? ytVisibleColumns.includes("likes")
                                     : true) && (
-                                      <TableHead className="text-center">
-                                        Likes
-                                      </TableHead>
-                                    )}
+                                    <TableHead className="text-center">
+                                      Likes
+                                    </TableHead>
+                                  )}
                                   {(currentContest.platform
                                     ?.toLowerCase()
                                     .includes("youtube")
                                     ? ytVisibleColumns.includes("comments")
                                     : true) && (
-                                      <TableHead className="text-center">
-                                        Comments
-                                      </TableHead>
-                                    )}
+                                    <TableHead className="text-center">
+                                      Comments
+                                    </TableHead>
+                                  )}
                                   {currentContest.platform
                                     ?.toLowerCase()
                                     .includes("youtube") &&
@@ -11039,142 +11124,149 @@ export default function ContestDetailClient({
                               {/* Dynamic headers based on contest platform */}
                               {currentContest.platform
                                 ?.toLowerCase()
+                                .includes("tiktok") && (
+                                <TableHead className="text-center">
+                                  Shares
+                                </TableHead>
+                              )}
+                              {currentContest.platform
+                                ?.toLowerCase()
                                 .includes("instagram") && (
-                                  <>
+                                <>
+                                  <TableHead className="text-center">
+                                    Shares
+                                  </TableHead>
+                                  <TableHead className="text-center">
+                                    Saves
+                                  </TableHead>
+                                  <TableHead className="text-center">
+                                    Reach
+                                  </TableHead>
+                                  <TableHead className="text-center">
+                                    Interactions
+                                  </TableHead>
+                                  <TableHead className="text-center">
+                                    Avg Watch Time
+                                  </TableHead>
+                                  <TableHead className="text-center">
+                                    Total Watch Time
+                                  </TableHead>
+                                  {isAdminView && (
                                     <TableHead className="text-center">
-                                      Shares
+                                      Insights status
                                     </TableHead>
-                                    <TableHead className="text-center">
-                                      Saves
-                                    </TableHead>
-                                    <TableHead className="text-center">
-                                      Reach
-                                    </TableHead>
-                                    <TableHead className="text-center">
-                                      Interactions
-                                    </TableHead>
-                                    <TableHead className="text-center">
-                                      Avg Watch Time
-                                    </TableHead>
-                                    <TableHead className="text-center">
-                                      Total Watch Time
-                                    </TableHead>
-                                    {isAdminView && (
-                                      <TableHead className="text-center">
-                                        Insights status
-                                      </TableHead>
-                                    )}
-                                  </>
-                                )}
+                                  )}
+                                </>
+                              )}
                               {currentContest.platform
                                 ?.toLowerCase()
                                 .includes("youtube") && (
-                                  <>
-                                    {canSeeCore &&
-                                      ytVisibleColumns.includes("shares") && (
-                                        <TableHead className="text-center">
-                                          Shares
-                                        </TableHead>
-                                      )}
-                                    {canSeeCore &&
-                                      ytVisibleColumns.includes(
-                                        "avg_view_pct",
-                                      ) && (
-                                        <TableHead className="text-center">
-                                          Avg View %
-                                        </TableHead>
-                                      )}
-                                    {canSeeCore &&
-                                      ytVisibleColumns.includes("watch_time") && (
-                                        <TableHead className="text-center">
-                                          Watch Time
-                                        </TableHead>
-                                      )}
-                                    {canSeeCore &&
-                                      ytVisibleColumns.includes(
-                                        "avg_duration",
-                                      ) && (
-                                        <TableHead className="text-center">
-                                          Avg Duration
-                                        </TableHead>
-                                      )}
-                                    {canSeeCore &&
-                                      ytVisibleColumns.includes(
-                                        "engaged_views",
-                                      ) && (
-                                        <TableHead className="text-center">
-                                          Engaged Views
-                                        </TableHead>
-                                      )}
-                                    {canSeeCore &&
-                                      ytVisibleColumns.includes(
-                                        "subs_gained",
-                                      ) && (
-                                        <TableHead className="text-center">
-                                          Subs Gained
-                                        </TableHead>
-                                      )}
-                                    {canSeeCore &&
-                                      ytVisibleColumns.includes("bot_score") && (
-                                        <TableHead className="text-center">
-                                          Bot Score
-                                        </TableHead>
-                                      )}
-                                    {canSeeCore &&
-                                      ytVisibleColumns.includes("analytics") && (
-                                        <TableHead className="text-center">
-                                          Analytics
-                                        </TableHead>
-                                      )}
-                                    {canSeeTraffic &&
-                                      ytVisibleColumns.includes(
-                                        "top_traffic_source",
-                                      ) && (
-                                        <TableHead className="text-center">
-                                          Top Traffic Source
-                                        </TableHead>
-                                      )}
-                                  </>
-                                )}
+                                <>
+                                  {canSeeCore &&
+                                    ytVisibleColumns.includes("shares") && (
+                                      <TableHead className="text-center">
+                                        Shares
+                                      </TableHead>
+                                    )}
+                                  {canSeeCore &&
+                                    ytVisibleColumns.includes(
+                                      "avg_view_pct",
+                                    ) && (
+                                      <TableHead className="text-center">
+                                        Avg View %
+                                      </TableHead>
+                                    )}
+                                  {canSeeCore &&
+                                    ytVisibleColumns.includes("watch_time") && (
+                                      <TableHead className="text-center">
+                                        Watch Time
+                                      </TableHead>
+                                    )}
+                                  {canSeeCore &&
+                                    ytVisibleColumns.includes(
+                                      "avg_duration",
+                                    ) && (
+                                      <TableHead className="text-center">
+                                        Avg Duration
+                                      </TableHead>
+                                    )}
+                                  {canSeeCore &&
+                                    ytVisibleColumns.includes(
+                                      "engaged_views",
+                                    ) && (
+                                      <TableHead className="text-center">
+                                        Engaged Views
+                                      </TableHead>
+                                    )}
+                                  {canSeeCore &&
+                                    ytVisibleColumns.includes(
+                                      "subs_gained",
+                                    ) && (
+                                      <TableHead className="text-center">
+                                        Subs Gained
+                                      </TableHead>
+                                    )}
+                                  {canSeeCore &&
+                                    ytVisibleColumns.includes("bot_score") && (
+                                      <TableHead className="text-center">
+                                        Bot Score
+                                      </TableHead>
+                                    )}
+                                  {canSeeCore &&
+                                    ytVisibleColumns.includes("analytics") && (
+                                      <TableHead className="text-center">
+                                        Analytics
+                                      </TableHead>
+                                    )}
+                                  {canSeeTraffic &&
+                                    ytVisibleColumns.includes(
+                                      "top_traffic_source",
+                                    ) && (
+                                      <TableHead className="text-center">
+                                        Top Traffic Source
+                                      </TableHead>
+                                    )}
+                                </>
+                              )}
                               {/* Show reward columns for leaderboard and CPM contests, hide for Twitter CPM campaigns */}
                               {!(
                                 (currentContest.platform?.toLowerCase() ===
                                   "twitter" ||
                                   currentContest.platform?.toLowerCase() ===
-                                  "x") &&
+                                    "x") &&
                                 currentContest.contest_format === "text_image"
                               ) ||
-                                (currentContest.contest_type === "leaderboard" &&
-                                  (currentContest.platform?.toLowerCase() ===
-                                    "twitter" ||
-                                    currentContest.platform?.toLowerCase() ===
+                              (currentContest.contest_type === "leaderboard" &&
+                                (currentContest.platform?.toLowerCase() ===
+                                  "twitter" ||
+                                  currentContest.platform?.toLowerCase() ===
                                     "x") &&
-                                  currentContest.contest_format ===
+                                currentContest.contest_format ===
                                   "text_image") ||
-                                currentContest.contest_type === "cpm" ? (
+                              currentContest.contest_type === "cpm" ? (
                                 <>
                                   {(currentContest.platform
                                     ?.toLowerCase()
                                     .includes("youtube")
                                     ? ytVisibleColumns.includes(
-                                      "expected_reward",
-                                    )
+                                        "expected_reward",
+                                      )
                                     : true) && (
-                                      <TableHead className="text-center">
-                                        Expected Reward
-                                      </TableHead>
-                                    )}
+                                    <TableHead className="text-center">
+                                      Expected Reward
+                                    </TableHead>
+                                  )}
                                   {(currentContest.platform
                                     ?.toLowerCase()
                                     .includes("youtube")
                                     ? ytVisibleColumns.includes(
-                                      "reward_granted",
-                                    )
+                                        "reward_granted",
+                                      )
                                     : true) && (
-                                      <TableHead className="text-center">
-                                        Reward Granted
-                                      </TableHead>
-                                    )}
+                                    <TableHead className="text-center">
+                                      Reward Granted
+                                    </TableHead>
+                                  )}
                                 </>
                               ) : null}
                               {(currentContest.platform
@@ -11182,28 +11274,28 @@ export default function ContestDetailClient({
                                 .includes("youtube")
                                 ? ytVisibleColumns.includes("status")
                                 : true) && (
-                                  <TableHead className="text-center">
-                                    Status
-                                  </TableHead>
-                                )}
+                                <TableHead className="text-center">
+                                  Status
+                                </TableHead>
+                              )}
                               {(currentContest.platform
                                 ?.toLowerCase()
                                 .includes("youtube")
                                 ? ytVisibleColumns.includes("status")
                                 : true) && (
-                                  <TableHead className="text-center min-w-[140px]">
-                                    Rejection reason
-                                  </TableHead>
-                                )}
+                                <TableHead className="text-center min-w-[140px]">
+                                  Rejection reason
+                                </TableHead>
+                              )}
                               {(currentContest.platform
                                 ?.toLowerCase()
                                 .includes("youtube")
                                 ? ytVisibleColumns.includes("submitted")
                                 : true) && (
-                                  <TableHead className="text-center">
-                                    Submitted
-                                  </TableHead>
-                                )}
+                                <TableHead className="text-center">
+                                  Submitted
+                                </TableHead>
+                              )}
                               <TableHead className="text-center">
                                 Actions
                               </TableHead>
@@ -11219,7 +11311,7 @@ export default function ContestDetailClient({
                                 (submission as any).is_twitter_tweet === true;
                               const statusToUse = isTwitterTweet
                                 ? (submission as any).moderation_status ||
-                                submission.status
+                                  submission.status
                                 : submission.status;
                               // Use status directly (no normalization needed since we use "verified" instead of "approved")
                               const normalizedStatusForBadge = statusToUse;
@@ -11253,9 +11345,9 @@ export default function ContestDetailClient({
                                       (currentContest.platform?.toLowerCase() ===
                                         "twitter" ||
                                         currentContest.platform?.toLowerCase() ===
-                                        "x") &&
+                                          "x") &&
                                       currentContest.contest_format ===
-                                      "text_image";
+                                        "text_image";
 
                                     if (isTwitterLeaderboard) {
                                       // Use creator's rank based on total points
@@ -11310,9 +11402,9 @@ export default function ContestDetailClient({
                                       (currentContest.platform?.toLowerCase() ===
                                         "twitter" ||
                                         currentContest.platform?.toLowerCase() ===
-                                        "x") &&
+                                          "x") &&
                                       currentContest.contest_format ===
-                                      "text_image";
+                                        "text_image";
 
                                     if (isTwitterCpm) {
                                       // Calculate total points: base_points + manual_points_adjustment
@@ -11384,13 +11476,13 @@ export default function ContestDetailClient({
                                 const isTwitterLeaderboard =
                                   isTwitterTweet &&
                                   currentContest.contest_type ===
-                                  "leaderboard" &&
+                                    "leaderboard" &&
                                   (currentContest.platform?.toLowerCase() ===
                                     "twitter" ||
                                     currentContest.platform?.toLowerCase() ===
-                                    "x") &&
+                                      "x") &&
                                   currentContest.contest_format ===
-                                  "text_image";
+                                    "text_image";
 
                                 if (submission.status === "paid") {
                                   let dollars = 0;
@@ -11464,10 +11556,10 @@ export default function ContestDetailClient({
                                     isDeleted && "opacity-60",
                                     isDark ? "" : "bg-white hover:bg-slate-100",
                                     rank <= 3 &&
-                                    !isDeleted &&
-                                    (isDark
-                                      ? "bg-gradient-to-r from-violet-900/20 to-transparent border-l-4 border-l-violet-400"
-                                      : "bg-gradient-to-r from-yellow-50 to-transparent border-l-4 border-l-yellow-400"),
+                                      !isDeleted &&
+                                      (isDark
+                                        ? "bg-gradient-to-r from-violet-900/20 to-transparent border-l-4 border-l-violet-400"
+                                        : "bg-gradient-to-r from-yellow-50 to-transparent border-l-4 border-l-yellow-400"),
                                   )}
                                 >
                                   <TableCell className="font-bold text-center">
@@ -11568,13 +11660,13 @@ export default function ContestDetailClient({
                                                     ? "text-purple-400 hover:text-purple-300"
                                                     : "text-blue-600 hover:text-blue-800",
                                                   downloadingSubmissionId ===
-                                                  submission.id &&
-                                                  "opacity-50 cursor-not-allowed",
+                                                    submission.id &&
+                                                    "opacity-50 cursor-not-allowed",
                                                 )}
                                                 title="Download Reel/Short"
                                               >
                                                 {downloadingSubmissionId ===
-                                                  submission.id ? (
+                                                submission.id ? (
                                                   <>
                                                     <Loader2 className="h-3 w-3 animate-spin" />
                                                     Downloading...
@@ -11616,10 +11708,10 @@ export default function ContestDetailClient({
                                               ?.tweet_type === "reply"
                                               ? "REPLY"
                                               : submission.other_stats
-                                                ?.tweet_type === "quote"
+                                                    ?.tweet_type === "quote"
                                                 ? "QUOTE"
                                                 : submission.other_stats
-                                                  ?.tweet_type === "retweet"
+                                                      ?.tweet_type === "retweet"
                                                   ? "RETWEET"
                                                   : "TWEET"}
                                           </Badge>
@@ -11698,9 +11790,9 @@ export default function ContestDetailClient({
                                             {formatMetricValue(
                                               (submission.other_stats
                                                 ?.base_points || 0) +
-                                              ((submission as any)
-                                                .manual_points_adjustment ||
-                                                0),
+                                                ((submission as any)
+                                                  .manual_points_adjustment ||
+                                                  0),
                                             )}
                                           </span>
                                           <span
@@ -11729,9 +11821,9 @@ export default function ContestDetailClient({
                                             {formatMetricValue(
                                               submission.other_stats
                                                 ?.base_points ||
-                                              submission.other_stats
-                                                ?.points ||
-                                              0,
+                                                submission.other_stats
+                                                  ?.points ||
+                                                0,
                                             )}
                                           </span>
                                           <span
@@ -11756,8 +11848,8 @@ export default function ContestDetailClient({
                                                 .manual_points_adjustment > 0
                                                 ? "text-green-600"
                                                 : (submission as any)
-                                                  .manual_points_adjustment <
-                                                  0
+                                                      .manual_points_adjustment <
+                                                    0
                                                   ? "text-red-600"
                                                   : isDark
                                                     ? "text-white"
@@ -11785,31 +11877,31 @@ export default function ContestDetailClient({
                                           </span>
                                           {(submission as any)
                                             .manual_points_reason && (
-                                              <span
-                                                className={cn(
-                                                  "text-xs mt-0.5 italic truncate max-w-[100px]",
-                                                  isDark
-                                                    ? "text-slate-400"
-                                                    : "text-slate-600",
-                                                )}
-                                                title={
-                                                  (submission as any)
-                                                    .manual_points_reason
-                                                }
-                                              >
-                                                {(submission as any)
-                                                  .manual_points_reason.length >
-                                                  15
-                                                  ? (
+                                            <span
+                                              className={cn(
+                                                "text-xs mt-0.5 italic truncate max-w-[100px]",
+                                                isDark
+                                                  ? "text-slate-400"
+                                                  : "text-slate-600",
+                                              )}
+                                              title={
+                                                (submission as any)
+                                                  .manual_points_reason
+                                              }
+                                            >
+                                              {(submission as any)
+                                                .manual_points_reason.length >
+                                              15
+                                                ? (
                                                     submission as any
                                                   ).manual_points_reason.substring(
                                                     0,
                                                     15,
                                                   ) + "..."
-                                                  : (submission as any)
+                                                : (submission as any)
                                                     .manual_points_reason}
-                                              </span>
-                                            )}
+                                            </span>
+                                          )}
                                         </div>
                                       </TableCell>
                                       {/* Likes */}
@@ -11827,7 +11919,7 @@ export default function ContestDetailClient({
                                             >
                                               {formatMetricValue(
                                                 submission.other_stats?.likes ||
-                                                0,
+                                                  0,
                                               )}
                                             </span>
                                           </div>
@@ -11980,15 +12072,15 @@ export default function ContestDetailClient({
                                             >
                                               {(submission as any)
                                                 .manual_points_reason.length >
-                                                20
+                                              20
                                                 ? (
-                                                  submission as any
-                                                ).manual_points_reason.substring(
-                                                  0,
-                                                  20,
-                                                ) + "..."
+                                                    submission as any
+                                                  ).manual_points_reason.substring(
+                                                    0,
+                                                    20,
+                                                  ) + "..."
                                                 : (submission as any)
-                                                  .manual_points_reason}
+                                                    .manual_points_reason}
                                             </span>
                                           </div>
                                         ) : (
@@ -12013,101 +12105,101 @@ export default function ContestDetailClient({
                                         .includes("youtube")
                                         ? ytVisibleColumns.includes("views")
                                         : true) && (
-                                          <TableCell className="text-center">
-                                            <div className="flex flex-col items-center">
-                                              <span
-                                                className={cn(
-                                                  "font-bold  text-sm",
-                                                  isDark
-                                                    ? "text-white"
-                                                    : "text-slate-900",
-                                                )}
-                                              >
-                                                {formatMetricValue(metrics.views)}
-                                              </span>
-                                              <span
-                                                className={cn(
-                                                  "text-xs ",
-                                                  isDark
-                                                    ? "text-white"
-                                                    : "text-slate-500",
-                                                )}
-                                              >
-                                                views
-                                              </span>
-                                            </div>
-                                          </TableCell>
-                                        )}
+                                        <TableCell className="text-center">
+                                          <div className="flex flex-col items-center">
+                                            <span
+                                              className={cn(
+                                                "font-bold  text-sm",
+                                                isDark
+                                                  ? "text-white"
+                                                  : "text-slate-900",
+                                              )}
+                                            >
+                                              {formatMetricValue(metrics.views)}
+                                            </span>
+                                            <span
+                                              className={cn(
+                                                "text-xs ",
+                                                isDark
+                                                  ? "text-white"
+                                                  : "text-slate-500",
+                                              )}
+                                            >
+                                              views
+                                            </span>
+                                          </div>
+                                        </TableCell>
+                                      )}
                                       {(currentContest.platform
                                         ?.toLowerCase()
                                         .includes("youtube")
                                         ? ytVisibleColumns.includes("likes")
                                         : true) && (
-                                          <TableCell className="text-center">
-                                            <div className="flex flex-col items-center">
-                                              <div className="flex items-center gap-1">
-                                                <ThumbsUp className="h-3 w-3 text-purple-400" />
-                                                <span
-                                                  className={cn(
-                                                    "font-bold text-sm",
-                                                    isDark
-                                                      ? "text-white"
-                                                      : "text-slate-900",
-                                                  )}
-                                                >
-                                                  {formatMetricValue(
-                                                    metrics.likes,
-                                                  )}
-                                                </span>
-                                              </div>
+                                        <TableCell className="text-center">
+                                          <div className="flex flex-col items-center">
+                                            <div className="flex items-center gap-1">
+                                              <ThumbsUp className="h-3 w-3 text-purple-400" />
                                               <span
                                                 className={cn(
-                                                  "text-xs ",
+                                                  "font-bold text-sm",
                                                   isDark
                                                     ? "text-white"
-                                                    : "text-slate-500",
+                                                    : "text-slate-900",
                                                 )}
                                               >
-                                                likes
+                                                {formatMetricValue(
+                                                  metrics.likes,
+                                                )}
                                               </span>
                                             </div>
-                                          </TableCell>
-                                        )}
+                                            <span
+                                              className={cn(
+                                                "text-xs ",
+                                                isDark
+                                                  ? "text-white"
+                                                  : "text-slate-500",
+                                              )}
+                                            >
+                                              likes
+                                            </span>
+                                          </div>
+                                        </TableCell>
+                                      )}
                                       {(currentContest.platform
                                         ?.toLowerCase()
                                         .includes("youtube")
                                         ? ytVisibleColumns.includes("comments")
                                         : true) && (
-                                          <TableCell className="text-center">
-                                            <div className="flex flex-col items-center">
-                                              <div className="flex items-center gap-1">
-                                                <MessageCircle className="h-3 w-3 text-purple-400" />
-                                                <span
-                                                  className={cn(
-                                                    "font-bold text-sm",
-                                                    isDark
-                                                      ? "text-white"
-                                                      : "text-slate-900 dark:text-slate-100",
-                                                  )}
-                                                >
-                                                  {formatMetricValue(
-                                                    metrics.comments,
-                                                  )}
-                                                </span>
-                                              </div>
+                                        <TableCell className="text-center">
+                                          <div className="flex flex-col items-center">
+                                            <div className="flex items-center gap-1">
+                                              <MessageCircle className="h-3 w-3 text-purple-400" />
                                               <span
                                                 className={cn(
-                                                  "text-xs ",
+                                                  "font-bold text-sm",
                                                   isDark
                                                     ? "text-white"
-                                                    : "text-slate-500",
+                                                    : "text-slate-900 dark:text-slate-100",
                                                 )}
                                               >
-                                                comments
+                                                {formatMetricValue(
+                                                  metrics.comments,
+                                                )}
                                               </span>
                                             </div>
-                                          </TableCell>
-                                        )}
+                                            <span
+                                              className={cn(
+                                                "text-xs ",
+                                                isDark
+                                                  ? "text-white"
+                                                  : "text-slate-500",
+                                              )}
+                                            >
+                                              comments
+                                            </span>
+                                          </div>
+                                        </TableCell>
+                                      )}
                                       {currentContest.platform
                                         ?.toLowerCase()
                                         .includes("youtube") &&
@@ -12128,7 +12220,7 @@ export default function ContestDetailClient({
                                               >
                                                 {formatMetricValue(
                                                   (metrics as any).dislikes ??
-                                                  0,
+                                                    0,
                                                 )}
                                               </span>
                                             </div>
@@ -12139,172 +12231,129 @@ export default function ContestDetailClient({
                                   {/* Dynamic data cells based on contest platform */}
                                   {currentContest.platform
                                     ?.toLowerCase()
+                                    .includes("tiktok") && (
+                                    <TableCell className="text-center font-mono text-sm">
+                                      <div className="flex items-center justify-center gap-1">
+                                        <Share2 className="h-3 w-3 text-purple-500" />
+                                        {formatMetricValue(metrics.shares)}
+                                      </div>
+                                    </TableCell>
+                                  )}
+                                  {currentContest.platform
+                                    ?.toLowerCase()
                                     .includes("instagram") && (
-                                      <>
-                                        <TableCell className="text-center font-mono text-sm">
-                                          <div className="flex items-center justify-center gap-1">
-                                            <Share2 className="h-3 w-3 text-purple-500" />
-                                            {formatMetricValue(metrics.shares)}
-                                          </div>
-                                        </TableCell>
-                                        <TableCell className="text-center font-mono text-sm">
-                                          {formatMetricValue(
-                                            (metrics as any).saves,
-                                          )}
-                                        </TableCell>
-                                        <TableCell className="text-center font-mono text-sm">
-                                          {formatMetricValue(
-                                            (metrics as any).reach,
-                                          )}
-                                        </TableCell>
-                                        <TableCell className="text-center font-mono text-sm">
-                                          {formatMetricValue(
-                                            (metrics as any).total_interactions,
-                                          )}
-                                        </TableCell>
-                                        <TableCell className="text-center font-mono text-sm">
-                                          <div className="flex flex-col items-center">
-                                            <span className="font-bold">
-                                              {formatWatchTime(
-                                                (metrics as any)
-                                                  .avg_watch_time_ms,
-                                              )}
-                                            </span>
-                                            <span
-                                              className={cn(
-                                                "text-xs",
-                                                isDark
-                                                  ? "text-slate-400"
-                                                  : "text-slate-500",
-                                              )}
-                                            >
-                                              avg
-                                            </span>
-                                          </div>
-                                        </TableCell>
-                                        <TableCell className="text-center font-mono text-sm">
-                                          <div className="flex flex-col items-center">
-                                            <span className="font-bold">
-                                              {formatWatchTime(
-                                                (metrics as any)
-                                                  .total_watch_time_ms,
-                                              )}
-                                            </span>
-                                            <span
-                                              className={cn(
-                                                "text-xs",
-                                                isDark
-                                                  ? "text-slate-400"
-                                                  : "text-slate-500",
-                                              )}
-                                            >
-                                              total
-                                            </span>
-                                          </div>
-                                        </TableCell>
-                                        {isAdminView && (
-                                          <TableCell className="text-center">
-                                            {(() => {
-                                              const meta = getInsightsStatusMeta(
-                                                submission.insights_status ??
+                                    <>
+                                      <TableCell className="text-center font-mono text-sm">
+                                        <div className="flex items-center justify-center gap-1">
+                                          <Share2 className="h-3 w-3 text-purple-500" />
+                                          {formatMetricValue(metrics.shares)}
+                                        </div>
+                                      </TableCell>
+                                      <TableCell className="text-center font-mono text-sm">
+                                        {formatMetricValue(
+                                          (metrics as any).saves,
+                                        )}
+                                      </TableCell>
+                                      <TableCell className="text-center font-mono text-sm">
+                                        {formatMetricValue(
+                                          (metrics as any).reach,
+                                        )}
+                                      </TableCell>
+                                      <TableCell className="text-center font-mono text-sm">
+                                        {formatMetricValue(
+                                          (metrics as any).total_interactions,
+                                        )}
+                                      </TableCell>
+                                      <TableCell className="text-center font-mono text-sm">
+                                        <div className="flex flex-col items-center">
+                                          <span className="font-bold">
+                                            {formatWatchTime(
+                                              (metrics as any)
+                                                .avg_watch_time_ms,
+                                            )}
+                                          </span>
+                                          <span
+                                            className={cn(
+                                              "text-xs",
+                                              isDark
+                                                ? "text-slate-400"
+                                                : "text-slate-500",
+                                            )}
+                                          >
+                                            avg
+                                          </span>
+                                        </div>
+                                      </TableCell>
+                                      <TableCell className="text-center font-mono text-sm">
+                                        <div className="flex flex-col items-center">
+                                          <span className="font-bold">
+                                            {formatWatchTime(
+                                              (metrics as any)
+                                                .total_watch_time_ms,
+                                            )}
+                                          </span>
+                                          <span
+                                            className={cn(
+                                              "text-xs",
+                                              isDark
+                                                ? "text-slate-400"
+                                                : "text-slate-500",
+                                            )}
+                                          >
+                                            total
+                                          </span>
+                                        </div>
+                                      </TableCell>
+                                      {isAdminView && (
+                                        <TableCell className="text-center">
+                                          {(() => {
+                                            const meta = getInsightsStatusMeta(
+                                              submission.insights_status ??
                                                 null,
-                                              );
-                                              return (
-                                                <div className="flex items-center justify-center">
-                                                  <Tooltip>
-                                                    <TooltipTrigger asChild>
+                                            );
+                                            return (
+                                              <div className="flex items-center justify-center">
+                                                <Tooltip>
+                                                  <TooltipTrigger asChild>
+                                                    <span
+                                                      className={cn(
+                                                        "inline-flex items-center justify-center rounded-full border px-2 py-1 text-xs font-medium",
+                                                        meta.pillClass,
+                                                      )}
+                                                    >
                                                       <span
                                                         className={cn(
-                                                          "inline-flex items-center justify-center rounded-full border px-2 py-1 text-xs font-medium",
-                                                          meta.pillClass,
+                                                          "h-2.5 w-2.5 rounded-full",
+                                                          meta.dotClass,
                                                         )}
-                                                      >
-                                                        <span
-                                                          className={cn(
-                                                            "h-2.5 w-2.5 rounded-full",
-                                                            meta.dotClass,
-                                                          )}
-                                                        />
-                                                      </span>
-                                                    </TooltipTrigger>
-                                                    <TooltipContent className="whitespace-pre-line">
-                                                      {meta.help}
-                                                    </TooltipContent>
-                                                  </Tooltip>
-                                                </div>
-                                              );
-                                            })()}
-                                          </TableCell>
-                                        )}
-                                      </>
-                                    )}
+                                                      />
+                                                    </span>
+                                                  </TooltipTrigger>
+                                                  <TooltipContent className="whitespace-pre-line">
+                                                    {meta.help}
+                                                  </TooltipContent>
+                                                </Tooltip>
+                                              </div>
+                                            );
+                                          })()}
+                                        </TableCell>
+                                      )}
+                                    </>
+                                  )}
                                   {/* YouTube-specific metric cells */}
                                   {currentContest.platform
                                     ?.toLowerCase()
                                     .includes("youtube") && (
-                                      <>
-                                        {canSeeCore &&
-                                          ytVisibleColumns.includes("shares") && (
-                                            <TableCell className="text-center font-mono text-sm">
-                                              <div className="flex items-center justify-center gap-1">
-                                                <Share2 className="h-3 w-3 text-purple-500" />
-                                                {(metrics as any).shares > 0 ? (
-                                                  formatMetricValue(
-                                                    (metrics as any).shares,
-                                                  )
-                                                ) : (
-                                                  <span
-                                                    className={cn(
-                                                      "text-xs",
-                                                      isDark
-                                                        ? "text-slate-500"
-                                                        : "text-slate-400",
-                                                    )}
-                                                  >
-                                                    —
-                                                  </span>
-                                                )}
-                                              </div>
-                                            </TableCell>
-                                          )}
-                                        {canSeeCore &&
-                                          ytVisibleColumns.includes(
-                                            "avg_view_pct",
-                                          ) && (
-                                            <TableCell className="text-center font-mono text-sm">
-                                              {(metrics as any)
-                                                .avg_view_percentage > 0 ? (
-                                                <div className="flex flex-col items-center">
-                                                  <span
-                                                    className={cn(
-                                                      "font-bold",
-                                                      (metrics as any)
-                                                        .avg_view_percentage < 10
-                                                        ? "text-red-500"
-                                                        : (metrics as any)
-                                                          .avg_view_percentage <
-                                                          30
-                                                          ? "text-yellow-500"
-                                                          : "text-green-500",
-                                                    )}
-                                                  >
-                                                    {(
-                                                      (metrics as any)
-                                                        .avg_view_percentage as number
-                                                    ).toFixed(1)}
-                                                    %
-                                                  </span>
-                                                  <span
-                                                    className={cn(
-                                                      "text-xs",
-                                                      isDark
-                                                        ? "text-slate-400"
-                                                        : "text-slate-500",
-                                                    )}
-                                                  >
-                                                    watched
-                                                  </span>
-                                                </div>
+                                    <>
+                                      {canSeeCore &&
+                                        ytVisibleColumns.includes("shares") && (
+                                          <TableCell className="text-center font-mono text-sm">
+                                            <div className="flex items-center justify-center gap-1">
+                                              <Share2 className="h-3 w-3 text-purple-500" />
+                                              {(metrics as any).shares > 0 ? (
+                                                formatMetricValue(
+                                                  (metrics as any).shares,
+                                                )
                                               ) : (
                                                 <span
                                                   className={cn(
@@ -12317,548 +12366,601 @@ export default function ContestDetailClient({
                                                   —
                                                 </span>
                                               )}
-                                            </TableCell>
-                                          )}
-                                        {canSeeCore &&
-                                          ytVisibleColumns.includes(
-                                            "watch_time",
-                                          ) && (
-                                            <TableCell className="text-center font-mono text-sm">
-                                              {(metrics as any)
-                                                .estimated_minutes_watched > 0 ? (
-                                                <div className="flex flex-col items-center">
-                                                  <span className="font-bold">
-                                                    {formatWatchTime(
-                                                      (metrics as any)
-                                                        .estimated_minutes_watched *
-                                                      60 *
-                                                      1000,
-                                                    )}
-                                                  </span>
-                                                  <span
-                                                    className={cn(
-                                                      "text-xs",
-                                                      isDark
-                                                        ? "text-slate-400"
-                                                        : "text-slate-500",
-                                                    )}
-                                                  >
-                                                    total
-                                                  </span>
-                                                </div>
-                                              ) : (
-                                                <span
-                                                  className={cn(
-                                                    "text-xs",
-                                                    isDark
-                                                      ? "text-slate-500"
-                                                      : "text-slate-400",
-                                                  )}
-                                                >
-                                                  —
-                                                </span>
-                                              )}
-                                            </TableCell>
-                                          )}
-                                        {canSeeCore &&
-                                          ytVisibleColumns.includes(
-                                            "avg_duration",
-                                          ) && (
-                                            <TableCell className="text-center font-mono text-sm">
-                                              {(metrics as any)
-                                                .avg_view_duration_seconds !=
-                                                null &&
-                                                (metrics as any)
-                                                  .avg_view_duration_seconds > 0 ? (
-                                                <span className="font-bold">
-                                                  {
-                                                    (metrics as any)
-                                                      .avg_view_duration_seconds
-                                                  }
-                                                  s
-                                                </span>
-                                              ) : (
-                                                <span
-                                                  className={cn(
-                                                    "text-xs",
-                                                    isDark
-                                                      ? "text-slate-500"
-                                                      : "text-slate-400",
-                                                  )}
-                                                >
-                                                  —
-                                                </span>
-                                              )}
-                                            </TableCell>
-                                          )}
-                                        {canSeeCore &&
-                                          ytVisibleColumns.includes(
-                                            "engaged_views",
-                                          ) && (
-                                            <TableCell className="text-center font-mono text-sm">
-                                              {(metrics as any).engaged_views !=
-                                                null ? (
-                                                <div className="flex flex-col items-center">
-                                                  <span className="font-bold">
-                                                    {formatMetricValue(
-                                                      (metrics as any)
-                                                        .engaged_views,
-                                                    )}
-                                                  </span>
-                                                  {(metrics as any).views > 0 && (
-                                                    <span
-                                                      className={cn(
-                                                        "text-xs",
-                                                        isDark
-                                                          ? "text-slate-400"
-                                                          : "text-slate-500",
-                                                      )}
-                                                    >
-                                                      {(
-                                                        ((metrics as any)
-                                                          .engaged_views /
-                                                          (metrics as any)
-                                                            .views) *
-                                                        100
-                                                      ).toFixed(1)}
-                                                      %
-                                                    </span>
-                                                  )}
-                                                </div>
-                                              ) : (
-                                                <span
-                                                  className={cn(
-                                                    "text-xs",
-                                                    isDark
-                                                      ? "text-slate-500"
-                                                      : "text-slate-400",
-                                                  )}
-                                                >
-                                                  —
-                                                </span>
-                                              )}
-                                            </TableCell>
-                                          )}
-                                        {canSeeCore &&
-                                          ytVisibleColumns.includes(
-                                            "subs_gained",
-                                          ) && (
-                                            <TableCell className="text-center font-mono text-sm">
-                                              {(metrics as any)
-                                                .subscribers_gained != null ? (
+                                            </div>
+                                          </TableCell>
+                                        )}
+                                      {canSeeCore &&
+                                        ytVisibleColumns.includes(
+                                          "avg_view_pct",
+                                        ) && (
+                                          <TableCell className="text-center font-mono text-sm">
+                                            {(metrics as any)
+                                              .avg_view_percentage > 0 ? (
+                                              <div className="flex flex-col items-center">
                                                 <span
                                                   className={cn(
                                                     "font-bold",
                                                     (metrics as any)
-                                                      .subscribers_gained > 0
-                                                      ? "text-green-600"
-                                                      : isDark
-                                                        ? "text-slate-400"
-                                                        : "text-slate-600",
+                                                      .avg_view_percentage < 10
+                                                      ? "text-red-500"
+                                                      : (metrics as any)
+                                                            .avg_view_percentage <
+                                                          30
+                                                        ? "text-yellow-500"
+                                                        : "text-green-500",
                                                   )}
                                                 >
-                                                  {(metrics as any)
-                                                    .subscribers_gained > 0
-                                                    ? "+"
-                                                    : ""}
-                                                  {
+                                                  {(
                                                     (metrics as any)
-                                                      .subscribers_gained
-                                                  }
+                                                      .avg_view_percentage as number
+                                                  ).toFixed(1)}
+                                                  %
                                                 </span>
-                                              ) : (
                                                 <span
                                                   className={cn(
                                                     "text-xs",
-                                                    isDark
-                                                      ? "text-slate-500"
-                                                      : "text-slate-400",
-                                                  )}
-                                                >
-                                                  —
-                                                </span>
-                                              )}
-                                            </TableCell>
-                                          )}
-                                        {canSeeCore &&
-                                          ytVisibleColumns.includes(
-                                            "bot_score",
-                                          ) && (
-                                            <TableCell className="text-center">
-                                              {(metrics as any).bot_score !==
-                                                null &&
-                                                (metrics as any).bot_score !==
-                                                undefined ? (
-                                                <div className="flex flex-col items-center gap-0.5">
-                                                  <span
-                                                    className={cn(
-                                                      "inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold border",
-                                                      (metrics as any)
-                                                        .bot_score >= 60
-                                                        ? "bg-red-100 text-red-700 border-red-300"
-                                                        : (metrics as any)
-                                                          .bot_score >= 30
-                                                          ? "bg-yellow-100 text-yellow-700 border-yellow-300"
-                                                          : "bg-green-100 text-green-600 border-green-300",
-                                                    )}
-                                                    title={
-                                                      (
-                                                        metrics as any
-                                                      ).bot_flags?.join("\n") ||
-                                                      "No flags"
-                                                    }
-                                                  >
-                                                    {(metrics as any).bot_score >=
-                                                      60
-                                                      ? "⚠ "
-                                                      : ""}
-                                                    {(metrics as any).bot_score}
-                                                    /100
-                                                  </span>
-                                                  {(metrics as any).bot_flags
-                                                    ?.length > 0 && (
-                                                      <span
-                                                        className={cn(
-                                                          "text-xs",
-                                                          isDark
-                                                            ? "text-slate-400"
-                                                            : "text-slate-500",
-                                                        )}
-                                                      >
-                                                        {
-                                                          (metrics as any).bot_flags
-                                                            .length
-                                                        }{" "}
-                                                        flag
-                                                        {(metrics as any).bot_flags
-                                                          .length !== 1
-                                                          ? "s"
-                                                          : ""}
-                                                      </span>
-                                                    )}
-                                                </div>
-                                              ) : (
-                                                <span
-                                                  className={cn(
-                                                    "text-xs",
-                                                    isDark
-                                                      ? "text-slate-500"
-                                                      : "text-slate-400",
-                                                  )}
-                                                >
-                                                  No data
-                                                </span>
-                                              )}
-                                            </TableCell>
-                                          )}
-                                        {canSeeCore &&
-                                          ytVisibleColumns.includes(
-                                            "analytics",
-                                          ) && (
-                                            <TableCell className="text-center">
-                                              <YouTubeAnalyticsPanel
-                                                metrics={{
-                                                  views: (metrics as any).views,
-                                                  likes: (metrics as any).likes,
-                                                  dislikes: (metrics as any)
-                                                    .dislikes,
-                                                  comments: (metrics as any)
-                                                    .comments,
-                                                  shares: (metrics as any).shares,
-                                                  subscribers_gained: (
-                                                    metrics as any
-                                                  ).subscribers_gained,
-                                                  subscribers_lost: (
-                                                    metrics as any
-                                                  ).subscribers_lost,
-                                                  videos_added_to_playlists: (
-                                                    metrics as any
-                                                  ).videos_added_to_playlists,
-                                                  videos_removed_from_playlists: (
-                                                    metrics as any
-                                                  ).videos_removed_from_playlists,
-                                                  estimated_minutes_watched: (
-                                                    metrics as any
-                                                  ).estimated_minutes_watched,
-                                                  avg_view_duration_seconds: (
-                                                    metrics as any
-                                                  ).avg_view_duration_seconds,
-                                                  avg_view_percentage: (
-                                                    metrics as any
-                                                  ).avg_view_percentage,
-                                                  engaged_views: (metrics as any)
-                                                    .engaged_views,
-                                                  traffic_sources: (
-                                                    metrics as any
-                                                  ).traffic_sources,
-                                                  demographics: (metrics as any)
-                                                    .demographics,
-                                                  bot_score: (metrics as any)
-                                                    .bot_score,
-                                                  bot_flags: (metrics as any)
-                                                    .bot_flags,
-                                                  analytics_needs_reauth: (
-                                                    metrics as any
-                                                  ).analytics_needs_reauth,
-                                                  last_basic_update: (
-                                                    metrics as any
-                                                  ).last_basic_update,
-                                                  last_traffic_update: (
-                                                    metrics as any
-                                                  ).last_traffic_update,
-                                                  last_demographics_update: (
-                                                    metrics as any
-                                                  ).last_demographics_update,
-                                                }}
-                                                isDark={isDark}
-                                                showCore={canSeeCore}
-                                                showTraffic={canSeeTraffic}
-                                                showDemographics={canSeeDemo}
-                                              >
-                                                <button
-                                                  className={cn(
-                                                    "inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs transition-colors",
-                                                    isDark
-                                                      ? "bg-slate-800 hover:bg-slate-700 text-slate-300"
-                                                      : "bg-slate-100 hover:bg-purple-100 text-slate-600 hover:text-purple-700",
-                                                  )}
-                                                  title="View full analytics breakdown"
-                                                >
-                                                  <BarChart2 className="h-3 w-3" />
-                                                  Details
-                                                </button>
-                                              </YouTubeAnalyticsPanel>
-                                            </TableCell>
-                                          )}
-                                        {canSeeTraffic &&
-                                          ytVisibleColumns.includes(
-                                            "top_traffic_source",
-                                          ) &&
-                                          (() => {
-                                            const ts = (metrics as any)
-                                              .traffic_sources as
-                                              | Record<string, number>
-                                              | null
-                                              | undefined;
-                                            if (
-                                              !ts ||
-                                              typeof ts !== "object" ||
-                                              Object.keys(ts).length === 0
-                                            ) {
-                                              return (
-                                                <TableCell className="text-center text-xs font-mono">
-                                                  <span
-                                                    className={cn(
-                                                      isDark
-                                                        ? "text-slate-500"
-                                                        : "text-slate-400",
-                                                    )}
-                                                  >
-                                                    —
-                                                  </span>
-                                                </TableCell>
-                                              );
-                                            }
-                                            const entries = Object.entries(ts);
-                                            const top = entries.reduce(
-                                              (best, [k, v]) =>
-                                                v > best.pct
-                                                  ? { key: k, pct: v }
-                                                  : best,
-                                              {
-                                                key: entries[0][0],
-                                                pct: entries[0][1],
-                                              },
-                                            );
-                                            const label =
-                                              YT_TRAFFIC_SOURCE_LABELS[top.key] ||
-                                              top.key;
-                                            return (
-                                              <TableCell className="text-center text-xs font-mono">
-                                                <span className="font-medium">
-                                                  {label}
-                                                </span>
-                                                <span
-                                                  className={cn(
-                                                    "ml-1",
                                                     isDark
                                                       ? "text-slate-400"
                                                       : "text-slate-500",
                                                   )}
                                                 >
-                                                  {top.pct.toFixed(1)}%
-                                                </span>
-                                              </TableCell>
-                                            );
-                                          })()}
-                                      </>
-                                    )}
-                                  {/* Show reward cells for leaderboard and CPM contests, hide for Twitter CPM campaigns */}
-                                  {!(
-                                    (currentContest.platform?.toLowerCase() ===
-                                      "twitter" ||
-                                      currentContest.platform?.toLowerCase() ===
-                                      "x") &&
-                                    currentContest.contest_format ===
-                                    "text_image"
-                                  ) ||
-                                    (currentContest.contest_type ===
-                                      "leaderboard" &&
-                                      (currentContest.platform?.toLowerCase() ===
-                                        "twitter" ||
-                                        currentContest.platform?.toLowerCase() ===
-                                        "x") &&
-                                      currentContest.contest_format ===
-                                      "text_image") ||
-                                    currentContest.contest_type === "cpm" ? (
-                                    <>
-                                      {(currentContest.platform
-                                        ?.toLowerCase()
-                                        .includes("youtube")
-                                        ? ytVisibleColumns.includes(
-                                          "expected_reward",
-                                        )
-                                        : true) && (
-                                          <TableCell className="text-center">
-                                            <div className="flex flex-col items-center">
-                                              <div className="flex flex-col items-center">
-                                                <span
-                                                  className={cn(
-                                                    "text-lg font-bold tracking-wide",
-                                                    expectedInfo.className.includes(
-                                                      "text-slate-500",
-                                                    )
-                                                      ? isDark
-                                                        ? "text-slate-400"
-                                                        : "text-slate-500"
-                                                      : expectedInfo.className.includes(
-                                                        "text-slate-700",
-                                                      )
-                                                        ? isDark
-                                                          ? "text-slate-200"
-                                                          : "text-slate-700"
-                                                        : isDark
-                                                          ? "text-white"
-                                                          : "text-slate-900",
-                                                  )}
-                                                >
-                                                  $
-                                                  {expectedInfo.amount.toFixed(2)}
-                                                </span>
-                                                <span
-                                                  className={cn(
-                                                    "text-xs uppercase tracking-wide",
-                                                    isDark
-                                                      ? "text-white"
-                                                      : "text-slate-800",
-                                                  )}
-                                                >
-                                                  {expectedInfo.label}
+                                                  watched
                                                 </span>
                                               </div>
-                                            </div>
+                                            ) : (
+                                              <span
+                                                className={cn(
+                                                  "text-xs",
+                                                  isDark
+                                                    ? "text-slate-500"
+                                                    : "text-slate-400",
+                                                )}
+                                              >
+                                                —
+                                              </span>
+                                            )}
                                           </TableCell>
                                         )}
-                                      {(currentContest.platform
-                                        ?.toLowerCase()
-                                        .includes("youtube")
-                                        ? ytVisibleColumns.includes(
-                                          "reward_granted",
-                                        )
-                                        : true) && (
-                                          <TableCell className="text-center">
-                                            <div className="flex flex-col items-center">
-                                              {grantedInfo.amount > 0 ? (
-                                                <div className="flex flex-col items-center">
+                                      {canSeeCore &&
+                                        ytVisibleColumns.includes(
+                                          "watch_time",
+                                        ) && (
+                                          <TableCell className="text-center font-mono text-sm">
+                                            {(metrics as any)
+                                              .estimated_minutes_watched > 0 ? (
+                                              <div className="flex flex-col items-center">
+                                                <span className="font-bold">
+                                                  {formatWatchTime(
+                                                    (metrics as any)
+                                                      .estimated_minutes_watched *
+                                                      60 *
+                                                      1000,
+                                                  )}
+                                                </span>
+                                                <span
+                                                  className={cn(
+                                                    "text-xs",
+                                                    isDark
+                                                      ? "text-slate-400"
+                                                      : "text-slate-500",
+                                                  )}
+                                                >
+                                                  total
+                                                </span>
+                                              </div>
+                                            ) : (
+                                              <span
+                                                className={cn(
+                                                  "text-xs",
+                                                  isDark
+                                                    ? "text-slate-500"
+                                                    : "text-slate-400",
+                                                )}
+                                              >
+                                                —
+                                              </span>
+                                            )}
+                                          </TableCell>
+                                        )}
+                                      {canSeeCore &&
+                                        ytVisibleColumns.includes(
+                                          "avg_duration",
+                                        ) && (
+                                          <TableCell className="text-center font-mono text-sm">
+                                            {(metrics as any)
+                                              .avg_view_duration_seconds !=
+                                              null &&
+                                            (metrics as any)
+                                              .avg_view_duration_seconds > 0 ? (
+                                              <span className="font-bold">
+                                                {
+                                                  (metrics as any)
+                                                    .avg_view_duration_seconds
+                                                }
+                                                s
+                                              </span>
+                                            ) : (
+                                              <span
+                                                className={cn(
+                                                  "text-xs",
+                                                  isDark
+                                                    ? "text-slate-500"
+                                                    : "text-slate-400",
+                                                )}
+                                              >
+                                                —
+                                              </span>
+                                            )}
+                                          </TableCell>
+                                        )}
+                                      {canSeeCore &&
+                                        ytVisibleColumns.includes(
+                                          "engaged_views",
+                                        ) && (
+                                          <TableCell className="text-center font-mono text-sm">
+                                            {(metrics as any).engaged_views !=
+                                            null ? (
+                                              <div className="flex flex-col items-center">
+                                                <span className="font-bold">
+                                                  {formatMetricValue(
+                                                    (metrics as any)
+                                                      .engaged_views,
+                                                  )}
+                                                </span>
+                                                {(metrics as any).views > 0 && (
                                                   <span
                                                     className={cn(
-                                                      "text-lg font-bold",
-                                                      grantedInfo.className.includes(
-                                                        "text-red-600",
-                                                      )
-                                                        ? isDark
-                                                          ? "text-red-400"
-                                                          : "text-red-600"
-                                                        : grantedInfo.className.includes(
-                                                          "text-blue-600",
-                                                        )
-                                                          ? isDark
-                                                            ? "text-blue-400"
-                                                            : "text-blue-600"
-                                                          : grantedInfo.className.includes(
-                                                            "text-amber-600",
-                                                          )
-                                                            ? isDark
-                                                              ? "text-amber-400"
-                                                              : "text-amber-600"
-                                                            : grantedInfo.className.includes(
-                                                              "text-slate-500",
-                                                            )
-                                                              ? isDark
-                                                                ? "text-slate-400"
-                                                                : "text-slate-500"
-                                                              : isDark
-                                                                ? "text-white"
-                                                                : "text-slate-900",
-                                                    )}
-                                                  >
-                                                    $
-                                                    {grantedInfo.amount.toFixed(
-                                                      2,
-                                                    )}
-                                                  </span>
-                                                  <span
-                                                    className={cn(
-                                                      "text-xs uppercase tracking-wide",
+                                                      "text-xs",
                                                       isDark
                                                         ? "text-slate-400"
                                                         : "text-slate-500",
                                                     )}
                                                   >
-                                                    {grantedInfo.label}
+                                                    {(
+                                                      ((metrics as any)
+                                                        .engaged_views /
+                                                        (metrics as any)
+                                                          .views) *
+                                                      100
+                                                    ).toFixed(1)}
+                                                    %
                                                   </span>
-                                                </div>
-                                              ) : (
-                                                <div className="flex flex-col items-center">
-                                                  <span
-                                                    className={cn(
-                                                      "text-sm font-semibold",
-                                                      grantedInfo.className.includes(
-                                                        "text-red-600",
-                                                      )
-                                                        ? isDark
-                                                          ? "text-red-400"
-                                                          : "text-red-600"
-                                                        : grantedInfo.className.includes(
-                                                          "text-blue-600",
-                                                        )
-                                                          ? isDark
-                                                            ? "text-blue-400"
-                                                            : "text-blue-600"
-                                                          : grantedInfo.className.includes(
-                                                            "text-amber-600",
-                                                          )
-                                                            ? isDark
-                                                              ? "text-amber-400"
-                                                              : "text-amber-600"
-                                                            : grantedInfo.className.includes(
-                                                              "text-slate-500",
-                                                            )
-                                                              ? isDark
-                                                                ? "text-slate-400"
-                                                                : "text-slate-500"
-                                                              : isDark
-                                                                ? "text-white"
-                                                                : "text-slate-900",
-                                                    )}
-                                                  >
-                                                    {grantedInfo.label}
-                                                  </span>
-                                                </div>
-                                              )}
-                                            </div>
+                                                )}
+                                              </div>
+                                            ) : (
+                                              <span
+                                                className={cn(
+                                                  "text-xs",
+                                                  isDark
+                                                    ? "text-slate-500"
+                                                    : "text-slate-400",
+                                                )}
+                                              >
+                                                —
+                                              </span>
+                                            )}
                                           </TableCell>
                                         )}
+                                      {canSeeCore &&
+                                        ytVisibleColumns.includes(
+                                          "subs_gained",
+                                        ) && (
+                                          <TableCell className="text-center font-mono text-sm">
+                                            {(metrics as any)
+                                              .subscribers_gained != null ? (
+                                              <span
+                                                className={cn(
+                                                  "font-bold",
+                                                  (metrics as any)
+                                                    .subscribers_gained > 0
+                                                    ? "text-green-600"
+                                                    : isDark
+                                                      ? "text-slate-400"
+                                                      : "text-slate-600",
+                                                )}
+                                              >
+                                                {(metrics as any)
+                                                  .subscribers_gained > 0
+                                                  ? "+"
+                                                  : ""}
+                                                {
+                                                  (metrics as any)
+                                                    .subscribers_gained
+                                                }
+                                              </span>
+                                            ) : (
+                                              <span
+                                                className={cn(
+                                                  "text-xs",
+                                                  isDark
+                                                    ? "text-slate-500"
+                                                    : "text-slate-400",
+                                                )}
+                                              >
+                                                —
+                                              </span>
+                                            )}
+                                          </TableCell>
+                                        )}
+                                      {canSeeCore &&
+                                        ytVisibleColumns.includes(
+                                          "bot_score",
+                                        ) && (
+                                          <TableCell className="text-center">
+                                            {(metrics as any).bot_score !==
+                                              null &&
+                                            (metrics as any).bot_score !==
+                                              undefined ? (
+                                              <div className="flex flex-col items-center gap-0.5">
+                                                <span
+                                                  className={cn(
+                                                    "inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold border",
+                                                    (metrics as any)
+                                                      .bot_score >= 60
+                                                      ? "bg-red-100 text-red-700 border-red-300"
+                                                      : (metrics as any)
+                                                            .bot_score >= 30
+                                                        ? "bg-yellow-100 text-yellow-700 border-yellow-300"
+                                                        : "bg-green-100 text-green-600 border-green-300",
+                                                  )}
+                                                  title={
+                                                    (
+                                                      metrics as any
+                                                    ).bot_flags?.join("\n") ||
+                                                    "No flags"
+                                                  }
+                                                >
+                                                  {(metrics as any).bot_score >=
+                                                  60
+                                                    ? "⚠ "
+                                                    : ""}
+                                                  {(metrics as any).bot_score}
+                                                  /100
+                                                </span>
+                                                {(metrics as any).bot_flags
+                                                  ?.length > 0 && (
+                                                  <span
+                                                    className={cn(
+                                                      "text-xs",
+                                                      isDark
+                                                        ? "text-slate-400"
+                                                        : "text-slate-500",
+                                                    )}
+                                                  >
+                                                    {
+                                                      (metrics as any).bot_flags
+                                                        .length
+                                                    }{" "}
+                                                    flag
+                                                    {(metrics as any).bot_flags
+                                                      .length !== 1
+                                                      ? "s"
+                                                      : ""}
+                                                  </span>
+                                                )}
+                                              </div>
+                                            ) : (
+                                              <span
+                                                className={cn(
+                                                  "text-xs",
+                                                  isDark
+                                                    ? "text-slate-500"
+                                                    : "text-slate-400",
+                                                )}
+                                              >
+                                                No data
+                                              </span>
+                                            )}
+                                          </TableCell>
+                                        )}
+                                      {canSeeCore &&
+                                        ytVisibleColumns.includes(
+                                          "analytics",
+                                        ) && (
+                                          <TableCell className="text-center">
+                                            <YouTubeAnalyticsPanel
+                                              metrics={{
+                                                views: (metrics as any).views,
+                                                likes: (metrics as any).likes,
+                                                dislikes: (metrics as any)
+                                                  .dislikes,
+                                                comments: (metrics as any)
+                                                  .comments,
+                                                shares: (metrics as any).shares,
+                                                subscribers_gained: (
+                                                  metrics as any
+                                                ).subscribers_gained,
+                                                subscribers_lost: (
+                                                  metrics as any
+                                                ).subscribers_lost,
+                                                videos_added_to_playlists: (
+                                                  metrics as any
+                                                ).videos_added_to_playlists,
+                                                videos_removed_from_playlists: (
+                                                  metrics as any
+                                                ).videos_removed_from_playlists,
+                                                estimated_minutes_watched: (
+                                                  metrics as any
+                                                ).estimated_minutes_watched,
+                                                avg_view_duration_seconds: (
+                                                  metrics as any
+                                                ).avg_view_duration_seconds,
+                                                avg_view_percentage: (
+                                                  metrics as any
+                                                ).avg_view_percentage,
+                                                engaged_views: (metrics as any)
+                                                  .engaged_views,
+                                                traffic_sources: (
+                                                  metrics as any
+                                                ).traffic_sources,
+                                                demographics: (metrics as any)
+                                                  .demographics,
+                                                bot_score: (metrics as any)
+                                                  .bot_score,
+                                                bot_flags: (metrics as any)
+                                                  .bot_flags,
+                                                analytics_needs_reauth: (
+                                                  metrics as any
+                                                ).analytics_needs_reauth,
+                                                last_basic_update: (
+                                                  metrics as any
+                                                ).last_basic_update,
+                                                last_traffic_update: (
+                                                  metrics as any
+                                                ).last_traffic_update,
+                                                last_demographics_update: (
+                                                  metrics as any
+                                                ).last_demographics_update,
+                                              }}
+                                              isDark={isDark}
+                                              showCore={canSeeCore}
+                                              showTraffic={canSeeTraffic}
+                                              showDemographics={canSeeDemo}
+                                            >
+                                              <button
+                                                className={cn(
+                                                  "inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs transition-colors",
+                                                  isDark
+                                                    ? "bg-slate-800 hover:bg-slate-700 text-slate-300"
+                                                    : "bg-slate-100 hover:bg-purple-100 text-slate-600 hover:text-purple-700",
+                                                )}
+                                                title="View full analytics breakdown"
+                                              >
+                                                <BarChart2 className="h-3 w-3" />
+                                                Details
+                                              </button>
+                                            </YouTubeAnalyticsPanel>
+                                          </TableCell>
+                                        )}
+                                      {canSeeTraffic &&
+                                        ytVisibleColumns.includes(
+                                          "top_traffic_source",
+                                        ) &&
+                                        (() => {
+                                          const ts = (metrics as any)
+                                            .traffic_sources as
+                                            | Record<string, number>
+                                            | null
+                                            | undefined;
+                                          if (
+                                            !ts ||
+                                            typeof ts !== "object" ||
+                                            Object.keys(ts).length === 0
+                                          ) {
+                                            return (
+                                              <TableCell className="text-center text-xs font-mono">
+                                                <span
+                                                  className={cn(
+                                                    isDark
+                                                      ? "text-slate-500"
+                                                      : "text-slate-400",
+                                                  )}
+                                                >
+                                                  —
+                                                </span>
+                                              </TableCell>
+                                            );
+                                          }
+                                          const entries = Object.entries(ts);
+                                          const top = entries.reduce(
+                                            (best, [k, v]) =>
+                                              v > best.pct
+                                                ? { key: k, pct: v }
+                                                : best,
+                                            {
+                                              key: entries[0][0],
+                                              pct: entries[0][1],
+                                            },
+                                          );
+                                          const label =
+                                            YT_TRAFFIC_SOURCE_LABELS[top.key] ||
+                                            top.key;
+                                          return (
+                                            <TableCell className="text-center text-xs font-mono">
+                                              <span className="font-medium">
+                                                {label}
+                                              </span>
+                                              <span
+                                                className={cn(
+                                                  "ml-1",
+                                                  isDark
+                                                    ? "text-slate-400"
+                                                    : "text-slate-500",
+                                                )}
+                                              >
+                                                {top.pct.toFixed(1)}%
+                                              </span>
+                                            </TableCell>
+                                          );
+                                        })()}
+                                    </>
+                                  )}
+                                  {/* Show reward cells for leaderboard and CPM contests, hide for Twitter CPM campaigns */}
+                                  {!(
+                                    (currentContest.platform?.toLowerCase() ===
+                                      "twitter" ||
+                                      currentContest.platform?.toLowerCase() ===
+                                        "x") &&
+                                    currentContest.contest_format ===
+                                      "text_image"
+                                  ) ||
+                                  (currentContest.contest_type ===
+                                    "leaderboard" &&
+                                    (currentContest.platform?.toLowerCase() ===
+                                      "twitter" ||
+                                      currentContest.platform?.toLowerCase() ===
+                                        "x") &&
+                                    currentContest.contest_format ===
+                                      "text_image") ||
+                                  currentContest.contest_type === "cpm" ? (
+                                    <>
+                                      {(currentContest.platform
+                                        ?.toLowerCase()
+                                        .includes("youtube")
+                                        ? ytVisibleColumns.includes(
+                                            "expected_reward",
+                                          )
+                                        : true) && (
+                                        <TableCell className="text-center">
+                                          <div className="flex flex-col items-center">
+                                            <div className="flex flex-col items-center">
+                                              <span
+                                                className={cn(
+                                                  "text-lg font-bold tracking-wide",
+                                                  expectedInfo.className.includes(
+                                                    "text-slate-500",
+                                                  )
+                                                    ? isDark
+                                                      ? "text-slate-400"
+                                                      : "text-slate-500"
+                                                    : expectedInfo.className.includes(
+                                                          "text-slate-700",
+                                                        )
+                                                      ? isDark
+                                                        ? "text-slate-200"
+                                                        : "text-slate-700"
+                                                      : isDark
+                                                        ? "text-white"
+                                                        : "text-slate-900",
+                                                )}
+                                              >
+                                                $
+                                                {expectedInfo.amount.toFixed(2)}
+                                              </span>
+                                              <span
+                                                className={cn(
+                                                  "text-xs uppercase tracking-wide",
+                                                  isDark
+                                                    ? "text-white"
+                                                    : "text-slate-800",
+                                                )}
+                                              >
+                                                {expectedInfo.label}
+                                              </span>
+                                            </div>
+                                          </div>
+                                        </TableCell>
+                                      )}
+                                      {(currentContest.platform
+                                        ?.toLowerCase()
+                                        .includes("youtube")
+                                        ? ytVisibleColumns.includes(
+                                            "reward_granted",
+                                          )
+                                        : true) && (
+                                        <TableCell className="text-center">
+                                          <div className="flex flex-col items-center">
+                                            {grantedInfo.amount > 0 ? (
+                                              <div className="flex flex-col items-center">
+                                                <span
+                                                  className={cn(
+                                                    "text-lg font-bold",
+                                                    grantedInfo.className.includes(
+                                                      "text-red-600",
+                                                    )
+                                                      ? isDark
+                                                        ? "text-red-400"
+                                                        : "text-red-600"
+                                                      : grantedInfo.className.includes(
+                                                            "text-blue-600",
+                                                          )
+                                                        ? isDark
+                                                          ? "text-blue-400"
+                                                          : "text-blue-600"
+                                                        : grantedInfo.className.includes(
+                                                              "text-amber-600",
+                                                            )
+                                                          ? isDark
+                                                            ? "text-amber-400"
+                                                            : "text-amber-600"
+                                                          : grantedInfo.className.includes(
+                                                                "text-slate-500",
+                                                              )
+                                                            ? isDark
+                                                              ? "text-slate-400"
+                                                              : "text-slate-500"
+                                                            : isDark
+                                                              ? "text-white"
+                                                              : "text-slate-900",
+                                                  )}
+                                                >
+                                                  $
+                                                  {grantedInfo.amount.toFixed(
+                                                    2,
+                                                  )}
+                                                </span>
+                                                <span
+                                                  className={cn(
+                                                    "text-xs uppercase tracking-wide",
+                                                    isDark
+                                                      ? "text-slate-400"
+                                                      : "text-slate-500",
+                                                  )}
+                                                >
+                                                  {grantedInfo.label}
+                                                </span>
+                                              </div>
+                                            ) : (
+                                              <div className="flex flex-col items-center">
+                                                <span
+                                                  className={cn(
+                                                    "text-sm font-semibold",
+                                                    grantedInfo.className.includes(
+                                                      "text-red-600",
+                                                    )
+                                                      ? isDark
+                                                        ? "text-red-400"
+                                                        : "text-red-600"
+                                                      : grantedInfo.className.includes(
+                                                            "text-blue-600",
+                                                          )
+                                                        ? isDark
+                                                          ? "text-blue-400"
+                                                          : "text-blue-600"
+                                                        : grantedInfo.className.includes(
+                                                              "text-amber-600",
+                                                            )
+                                                          ? isDark
+                                                            ? "text-amber-400"
+                                                            : "text-amber-600"
+                                                          : grantedInfo.className.includes(
+                                                                "text-slate-500",
+                                                              )
+                                                            ? isDark
+                                                              ? "text-slate-400"
+                                                              : "text-slate-500"
+                                                            : isDark
+                                                              ? "text-white"
+                                                              : "text-slate-900",
+                                                  )}
+                                                >
+                                                  {grantedInfo.label}
+                                                </span>
+                                              </div>
+                                            )}
+                                          </div>
+                                        </TableCell>
+                                      )}
                                     </>
                                   ) : null}
                                   {(currentContest.platform
@@ -12866,107 +12968,111 @@ export default function ContestDetailClient({
                                     .includes("youtube")
                                     ? ytVisibleColumns.includes("status")
                                     : true) && (
-                                      <TableCell className="text-center">
-                                        <div className="flex flex-col items-center">
-                                          <Badge
-                                            variant="outline"
-                                            className={cn(
-                                              "text-xs inline-flex items-center gap-1 px-3 py-1 font-medium",
-                                              submissionStatus.className,
-                                            )}
-                                          >
-                                            {submissionStatus.icon}{" "}
-                                            {submissionStatus.text}
-                                          </Badge>
-                                        </div>
-                                      </TableCell>
-                                    )}
+                                    <TableCell className="text-center">
+                                      <div className="flex flex-col items-center">
+                                        <Badge
+                                          variant="outline"
+                                          className={cn(
+                                            "text-xs inline-flex items-center gap-1 px-3 py-1 font-medium",
+                                            submissionStatus.className,
+                                          )}
+                                        >
+                                          {submissionStatus.icon}{" "}
+                                          {submissionStatus.text}
+                                        </Badge>
+                                      </div>
+                                    </TableCell>
+                                  )}
                                   {/* Rejection reason column - show for same visibility as Status */}
                                   {(currentContest.platform
                                     ?.toLowerCase()
                                     .includes("youtube")
                                     ? ytVisibleColumns.includes("status")
                                     : true) && (
-                                      <TableCell
-                                        className={cn(
-                                          "text-center text-xs max-w-[200px]",
-                                          isDark
-                                            ? "text-slate-300"
-                                            : "text-slate-700",
-                                        )}
-                                      >
-                                        {statusToUse === "rejected" ? (
-                                          (() => {
-                                            const details =
-                                              getFullRejectionDetails(
-                                                (submission as any).metadata,
-                                              );
-                                            const reason = details?.reason ?? null;
-                                            return (
-                                              <div className="flex flex-col items-center gap-1">
-                                                {reason && (
-                                                  <span
-                                                    className="truncate max-w-full px-1"
-                                                    title={reason}
-                                                  >
-                                                    {reason.length > 25
-                                                      ? reason.slice(0, 25) + "…"
-                                                      : reason}
-                                                  </span>
-                                                )}
-                                                <Button
-                                                  variant="outline"
-                                                  size="sm"
-                                                  className="text-xs h-6 px-2"
-                                                  onClick={() =>
-                                                    setRejectionDetailsModalSubmission({
-                                                      id: submission.id,
-                                                      metadata: (submission as
-                                                        any).metadata,
-                                                    })
-                                                  }
-                                                >
-                                                  Check
-                                                </Button>
-                                              </div>
+                                    <TableCell
+                                      className={cn(
+                                        "text-center text-xs max-w-[200px]",
+                                        isDark
+                                          ? "text-slate-300"
+                                          : "text-slate-700",
+                                      )}
+                                    >
+                                      {statusToUse === "rejected" ? (
+                                        (() => {
+                                          const details =
+                                            getFullRejectionDetails(
+                                              (submission as any).metadata,
                                             );
-                                          })()
-                                        ) : (
-                                          <span className="text-slate-500">
-                                            —
-                                          </span>
-                                        )}
-                                      </TableCell>
-                                    )}
+                                          const reason =
+                                            details?.reason ?? null;
+                                          return (
+                                            <div className="flex flex-col items-center gap-1">
+                                              {reason && (
+                                                <span
+                                                  className="truncate max-w-full px-1"
+                                                  title={reason}
+                                                >
+                                                  {reason.length > 25
+                                                    ? reason.slice(0, 25) + "…"
+                                                    : reason}
+                                                </span>
+                                              )}
+                                              <Button
+                                                variant="outline"
+                                                size="sm"
+                                                className="text-xs h-6 px-2"
+                                                onClick={() =>
+                                                  setRejectionDetailsModalSubmission(
+                                                    {
+                                                      id: submission.id,
+                                                      metadata: (
+                                                        submission as any
+                                                      ).metadata,
+                                                    },
+                                                  )
+                                                }
+                                              >
+                                                Check
+                                              </Button>
+                                            </div>
+                                          );
+                                        })()
+                                      ) : (
+                                        <span className="text-slate-500">
+                                          —
+                                        </span>
+                                      )}
+                                    </TableCell>
+                                  )}
                                   {(currentContest.platform
                                     ?.toLowerCase()
                                     .includes("youtube")
                                     ? ytVisibleColumns.includes("submitted")
                                     : true) && (
-                                      <TableCell
-                                        className={cn(
-                                          "text-center text-xs",
-                                          isDark
-                                            ? "text-white"
-                                            : "text-slate-700",
-                                        )}
-                                      >
-                                        <div className="flex flex-col">
-                                          <span>
-                                            {formatLocalDateTime(
-                                              submission.created_at,
-                                              { dateStyle: "short" },
-                                            )}
-                                          </span>
-                                          <span className="text-xs">
-                                            {formatLocalDateTime(
-                                              submission.created_at,
-                                              { timeStyle: "short" },
-                                            )}
-                                          </span>
-                                        </div>
-                                      </TableCell>
-                                    )}
+                                    <TableCell
+                                      className={cn(
+                                        "text-center text-xs",
+                                        isDark
+                                          ? "text-white"
+                                          : "text-slate-700",
+                                      )}
+                                    >
+                                      <div className="flex flex-col">
+                                        <span>
+                                          {formatLocalDateTime(
+                                            submission.created_at,
+                                            { dateStyle: "short" },
+                                          )}
+                                        </span>
+                                        <span className="text-xs">
+                                          {formatLocalDateTime(
+                                            submission.created_at,
+                                            { timeStyle: "short" },
+                                          )}
+                                        </span>
+                                      </div>
+                                    </TableCell>
+                                  )}
                                   <TableCell className="text-center">
                                     <DropdownMenu>
                                       <DropdownMenuTrigger asChild>
@@ -13053,16 +13159,16 @@ export default function ContestDetailClient({
                                             {/* Regular submission controls */}
                                             {currentContest.post_contest_status !==
                                               "payouts_processed" && (
-                                                <>
-                                                  <DropdownMenuLabel className="text-purple-500">
-                                                    Change Status
-                                                  </DropdownMenuLabel>
-                                                  <DropdownMenuSeparator />
-                                                </>
-                                              )}
+                                              <>
+                                                <DropdownMenuLabel className="text-purple-500">
+                                                  Change Status
+                                                </DropdownMenuLabel>
+                                                <DropdownMenuSeparator />
+                                              </>
+                                            )}
                                             {submission.status !== "verified" &&
                                               currentContest.post_contest_status !==
-                                              "payouts_processed" &&
+                                                "payouts_processed" &&
                                               (submission.status === "paid" ? (
                                                 <DropdownMenuItem
                                                   disabled={isLoading}
@@ -13090,7 +13196,7 @@ export default function ContestDetailClient({
                                               ))}
                                             {submission.status !== "rejected" &&
                                               currentContest.post_contest_status !==
-                                              "payouts_processed" &&
+                                                "payouts_processed" &&
                                               (submission.status === "paid" ? (
                                                 <DropdownMenuItem
                                                   disabled={isLoading}
@@ -13122,7 +13228,7 @@ export default function ContestDetailClient({
                                         )}
                                         {submission.status !== "pending" &&
                                           currentContest.post_contest_status !==
-                                          "payouts_processed" &&
+                                            "payouts_processed" &&
                                           (submission.status === "paid" ? (
                                             <DropdownMenuItem
                                               disabled={isLoading}
@@ -13154,7 +13260,7 @@ export default function ContestDetailClient({
                                           submission.status !== "paid" &&
                                           isAdminView &&
                                           currentContest.post_contest_status ===
-                                          "verification_complete" && (
+                                            "verification_complete" && (
                                             <>
                                               <DropdownMenuItem
                                                 disabled={isLoading}
@@ -13181,8 +13287,8 @@ export default function ContestDetailClient({
                                           )}
                                         {currentContest.post_contest_status !==
                                           "payouts_processed" && (
-                                            <DropdownMenuSeparator />
-                                          )}
+                                          <DropdownMenuSeparator />
+                                        )}
                                         <DropdownMenuItem asChild>
                                           <a
                                             href={submission.content_link}
@@ -13198,7 +13304,7 @@ export default function ContestDetailClient({
                                         {isAdminView &&
                                           !isTwitterTweet &&
                                           currentContest.platform?.toLowerCase() ===
-                                          "youtube" && (
+                                            "youtube" && (
                                             <>
                                               <DropdownMenuSeparator />
                                               <DropdownMenuLabel className="text-purple-500">
@@ -13211,7 +13317,7 @@ export default function ContestDetailClient({
                                                     submission.id
                                                   ] !== undefined &&
                                                     loadingDetailedAnalytics[
-                                                    submission.id
+                                                      submission.id
                                                     ] !== null)
                                                 }
                                                 onClick={() =>
@@ -13257,7 +13363,7 @@ export default function ContestDetailClient({
                                                     submission.id
                                                   ] !== undefined &&
                                                     loadingDetailedAnalytics[
-                                                    submission.id
+                                                      submission.id
                                                     ] !== null)
                                                 }
                                                 onClick={() =>
@@ -13303,7 +13409,7 @@ export default function ContestDetailClient({
                                                     submission.id
                                                   ] !== undefined &&
                                                     loadingDetailedAnalytics[
-                                                    submission.id
+                                                      submission.id
                                                     ] !== null)
                                                 }
                                                 onClick={() =>
@@ -13383,9 +13489,9 @@ export default function ContestDetailClient({
                             {(currentContest?.platform?.toLowerCase() ===
                               "twitter" ||
                               currentContest?.platform?.toLowerCase() ===
-                              "x") &&
+                                "x") &&
                               currentContest?.contest_format ===
-                              "text_image" && (
+                                "text_image" && (
                                 <div className="mb-4 px-4">
                                   <Tabs
                                     value={participantFilter}
@@ -13480,10 +13586,10 @@ export default function ContestDetailClient({
                                     .includes("youtube")
                                     ? ytVisibleColumns.includes("status")
                                     : true) && (
-                                      <TableHead className="text-center">
-                                        Status
-                                      </TableHead>
-                                    )}
+                                    <TableHead className="text-center">
+                                      Status
+                                    </TableHead>
+                                  )}
                                   {isAdminView &&
                                     currentContest.platform
                                       ?.toLowerCase()
@@ -13496,8 +13602,8 @@ export default function ContestDetailClient({
                                   {(currentContest.platform?.toLowerCase() ===
                                     "twitter" ||
                                     currentContest.platform?.toLowerCase() ===
-                                    "x") &&
-                                    currentContest.contest_format ===
+                                      "x") &&
+                                  currentContest.contest_format ===
                                     "text_image" ? (
                                     <>
                                       <TableHead className="text-center">
@@ -13532,65 +13638,68 @@ export default function ContestDetailClient({
                                         .includes("youtube")
                                         ? ytVisibleColumns.includes("views")
                                         : true) && (
-                                          <TableHead className="text-center">
-                                            Views
-                                          </TableHead>
-                                        )}
+                                        <TableHead className="text-center">
+                                          Views
+                                        </TableHead>
+                                      )}
                                       {(currentContest.platform
                                         ?.toLowerCase()
                                         .includes("youtube")
                                         ? ytVisibleColumns.includes("likes")
                                         : true) && (
-                                          <TableHead className="text-center">
-                                            Likes
-                                          </TableHead>
-                                        )}
+                                        <TableHead className="text-center">
+                                          Likes
+                                        </TableHead>
+                                      )}
                                       {(currentContest.platform
                                         ?.toLowerCase()
                                         .includes("youtube")
                                         ? ytVisibleColumns.includes("comments")
                                         : true) && (
-                                          <TableHead className="text-center">
-                                            Comments
-                                          </TableHead>
-                                        )}
+                                        <TableHead className="text-center">
+                                          Comments
+                                        </TableHead>
+                                      )}
                                       {(currentContest.platform
                                         ?.toLowerCase()
                                         .includes("instagram") ||
+                                        currentContest.platform
+                                          ?.toLowerCase()
+                                          .includes("tiktok") ||
                                         (canSeeCore &&
                                           (currentContest.platform
                                             ?.toLowerCase()
                                             .includes("youtube")
                                             ? ytVisibleColumns.includes(
-                                              "shares",
-                                            )
+                                                "shares",
+                                              )
                                             : true))) && (
-                                          <TableHead className="text-center">
-                                            Shares
-                                          </TableHead>
-                                        )}
+                                        <TableHead className="text-center">
+                                          Shares
+                                        </TableHead>
+                                      )}
                                       {/* Instagram-specific metrics */}
                                       {currentContest.platform
                                         ?.toLowerCase()
                                         .includes("instagram") && (
-                                          <>
-                                            <TableHead className="text-center">
-                                              Saves
-                                            </TableHead>
-                                            <TableHead className="text-center">
-                                              Reach
-                                            </TableHead>
-                                            <TableHead className="text-center">
-                                              Interactions
-                                            </TableHead>
-                                            <TableHead className="text-center">
-                                              Avg Watch Time
-                                            </TableHead>
-                                            <TableHead className="text-center">
-                                              Total Watch Time
-                                            </TableHead>
-                                          </>
-                                        )}
+                                        <>
+                                          <TableHead className="text-center">
+                                            Saves
+                                          </TableHead>
+                                          <TableHead className="text-center">
+                                            Reach
+                                          </TableHead>
+                                          <TableHead className="text-center">
+                                            Interactions
+                                          </TableHead>
+                                          <TableHead className="text-center">
+                                            Avg Watch Time
+                                          </TableHead>
+                                          <TableHead className="text-center">
+                                            Total Watch Time
+                                          </TableHead>
+                                        </>
+                                      )}
                                     </>
                                   )}
                                   {/* Show reward columns for leaderboard and CPM contests */}
@@ -13598,76 +13707,76 @@ export default function ContestDetailClient({
                                     (currentContest.platform?.toLowerCase() ===
                                       "twitter" ||
                                       currentContest.platform?.toLowerCase() ===
-                                      "x") &&
-                                    currentContest.contest_format ===
-                                    "text_image"
-                                  ) ||
-                                    ((currentContest.contest_type ===
-                                      "leaderboard" ||
-                                      currentContest.contest_type === "cpm") &&
-                                      (currentContest.platform?.toLowerCase() ===
-                                        "twitter" ||
-                                        currentContest.platform?.toLowerCase() ===
                                         "x") &&
-                                      currentContest.contest_format ===
+                                    currentContest.contest_format ===
+                                      "text_image"
+                                  ) ||
+                                  ((currentContest.contest_type ===
+                                    "leaderboard" ||
+                                    currentContest.contest_type === "cpm") &&
+                                    (currentContest.platform?.toLowerCase() ===
+                                      "twitter" ||
+                                      currentContest.platform?.toLowerCase() ===
+                                        "x") &&
+                                    currentContest.contest_format ===
                                       "text_image") ? (
                                     <>
                                       {(currentContest.platform
                                         ?.toLowerCase()
                                         .includes("youtube")
                                         ? ytVisibleColumns.includes(
-                                          "expected_reward",
-                                        )
+                                            "expected_reward",
+                                          )
                                         : true) && (
-                                          <TableHead className="text-center">
-                                            Expected Reward
-                                          </TableHead>
-                                        )}
+                                        <TableHead className="text-center">
+                                          Expected Reward
+                                        </TableHead>
+                                      )}
                                       {(currentContest.platform
                                         ?.toLowerCase()
                                         .includes("youtube")
                                         ? ytVisibleColumns.includes(
-                                          "reward_granted",
-                                        )
+                                            "reward_granted",
+                                          )
                                         : true) && (
-                                          <TableHead className="text-center">
-                                            Reward Granted
-                                          </TableHead>
-                                        )}
+                                        <TableHead className="text-center">
+                                          Reward Granted
+                                        </TableHead>
+                                      )}
                                     </>
                                   ) : null}
                                   {(() => {
                                     const flatFeeBonus =
                                       currentContest.contest_type === "cpm"
                                         ? (
-                                          currentContest.contest_based_details as any
-                                        )?.cpm_contest?.flat_fee_bonus
+                                            currentContest.contest_based_details as any
+                                          )?.cpm_contest?.flat_fee_bonus
                                         : (
-                                          currentContest.contest_based_details as any
-                                        )?.leaderboard_contest
-                                          ?.flat_fee_bonus;
+                                            currentContest.contest_based_details as any
+                                          )?.leaderboard_contest
+                                            ?.flat_fee_bonus;
                                     return flatFeeBonus > 0;
                                   })() && (
-                                      <>
-                                        <TableHead className="text-center">
-                                          Bonus Expected
-                                        </TableHead>
-                                        <TableHead className="text-center">
-                                          Bonus Granted
-                                        </TableHead>
-                                      </>
-                                    )}
+                                    <>
+                                      <TableHead className="text-center">
+                                        Bonus Expected
+                                      </TableHead>
+                                      <TableHead className="text-center">
+                                        Bonus Granted
+                                      </TableHead>
+                                    </>
+                                  )}
                                   {/* Manual Points Adjustment and Reason Columns - Show for Twitter leaderboard and CPM campaigns */}
                                   {(currentContest.platform?.toLowerCase() ===
                                     "twitter" ||
                                     currentContest.platform?.toLowerCase() ===
-                                    "x") &&
+                                      "x") &&
                                     currentContest.contest_format ===
-                                    "text_image" &&
+                                      "text_image" &&
                                     (currentContest.contest_type ===
                                       "leaderboard" ||
                                       currentContest.contest_type ===
-                                      "cpm") && (
+                                        "cpm") && (
                                       <>
                                         <TableHead className="text-center">
                                           Creator Manual Points Adjustment
@@ -13688,10 +13797,10 @@ export default function ContestDetailClient({
                                     .includes("youtube")
                                     ? ytVisibleColumns.includes("submitted")
                                     : true) && (
-                                      <TableHead className="text-center">
-                                        First Submitted
-                                      </TableHead>
-                                    )}
+                                    <TableHead className="text-center">
+                                      First Submitted
+                                    </TableHead>
+                                  )}
                                   <TableHead className="text-center">
                                     Actions
                                   </TableHead>
@@ -13713,22 +13822,29 @@ export default function ContestDetailClient({
                                     (group: any, index: number) => {
                                       const globalIndex =
                                         (creatorWisePage - 1) *
-                                        creatorWiseItemsPerPage +
+                                          creatorWiseItemsPerPage +
                                         index;
                                       const hasVerifiedOrPaidSubmissions =
                                         (group.statusCounts?.verified || 0) >
-                                        0 ||
+                                          0 ||
                                         (group.statusCounts?.paid || 0) > 0;
                                       const bonusExpectedForDisplay =
                                         hasVerifiedOrPaidSubmissions
                                           ? group.bonus.expected
                                           : 0;
-                                      // Prefer username coming from users table if available (mapped as user_username on submissions)
+                                      // Prefer full name / display name from submission or creator object
                                       const primarySubmission =
                                         group.submissions?.[0];
-                                      const userTableUsername =
+                                      const creatorFullName =
+                                        primarySubmission?.creator_display_name ||
+                                        group.creator?.full_name ||
+                                        null;
+                                      // Username from users table or creator object
+                                      const creatorUsername =
                                         (primarySubmission as any)
-                                          ?.user_username || null;
+                                          ?.user_username ||
+                                        group.creator?.username ||
+                                        null;
                                       // Platform-specific handle (Instagram / YouTube / Twitter etc.)
                                       const platformUsername =
                                         primarySubmission?.creator_username ||
@@ -13749,19 +13865,30 @@ export default function ContestDetailClient({
                                                   }
                                                 />
                                                 <AvatarFallback className="bg-violet-100 text-violet-600 font-semibold text-xs sm:text-base">
-                                                  {group.creator.username?.[0]?.toUpperCase() ||
+                                                  {(creatorFullName ||
+                                                    creatorUsername)?.[0]?.toUpperCase() ||
                                                     "U"}
                                                 </AvatarFallback>
                                               </Avatar>
-                                              <div className="flex flex-col">
-                                                <span className="font-semibold text-md">
-                                                  {userTableUsername ||
-                                                    group.creator.username}
+                                              <div className="flex flex-col min-w-0">
+                                                <span className="font-semibold text-md truncate whitespace-nowrap">
+                                                  {creatorFullName ||
+                                                    creatorUsername ||
+                                                    "Unknown Creator"}
                                                 </span>
-                                                {/* Platform username / handle (Instagram / YouTube / Twitter etc.), on its own line */}
-                                                {platformUsername && (
-                                                  <span className="text-[11px] text-slate-800">
-                                                    {platformUsername}
+                                                {/* Username / platform handle below the full name */}
+                                                {(creatorUsername ||
+                                                  platformUsername) && (
+                                                  <span
+                                                    className={cn(
+                                                      "text-[11px]",
+                                                      isDark
+                                                        ? "text-gray-300"
+                                                        : "text-slate-500",
+                                                    )}
+                                                  >
+                                                    {creatorUsername ||
+                                                      platformUsername}
                                                   </span>
                                                 )}
                                               </div>
@@ -13774,111 +13901,111 @@ export default function ContestDetailClient({
                                             ?.toLowerCase()
                                             .includes("youtube")
                                             ? ytVisibleColumns.includes(
-                                              "status",
-                                            )
+                                                "status",
+                                              )
                                             : true) && (
-                                              <TableCell>
-                                                <div className="flex flex-col items-center gap-1">
-                                                  {/* Creator-level moderation status for Twitter campaigns */}
-                                                  {(currentContest.platform?.toLowerCase() ===
-                                                    "twitter" ||
-                                                    currentContest.platform?.toLowerCase() ===
+                                            <TableCell>
+                                              <div className="flex flex-col items-center gap-1">
+                                                {/* Creator-level moderation status for Twitter campaigns */}
+                                                {(currentContest.platform?.toLowerCase() ===
+                                                  "twitter" ||
+                                                  currentContest.platform?.toLowerCase() ===
                                                     "x") &&
-                                                    currentContest.contest_format ===
-                                                    "text_image" &&
-                                                    group.creator_moderation_status ? (
-                                                    <>
-                                                      {group.creator_moderation_status ===
-                                                        "rejected" ? (
-                                                        <Badge className="bg-red-500 text-white text-xs">
-                                                          Rejected
-                                                        </Badge>
-                                                      ) : group.paid ? (
-                                                        <Badge className="bg-blue-500 text-white text-xs">
-                                                          Paid
-                                                        </Badge>
-                                                      ) : group.creator_moderation_status ===
+                                                currentContest.contest_format ===
+                                                  "text_image" &&
+                                                group.creator_moderation_status ? (
+                                                  <>
+                                                    {group.creator_moderation_status ===
+                                                    "rejected" ? (
+                                                      <Badge className="bg-red-500 text-white text-xs">
+                                                        Rejected
+                                                      </Badge>
+                                                    ) : group.paid ? (
+                                                      <Badge className="bg-blue-500 text-white text-xs">
+                                                        Paid
+                                                      </Badge>
+                                                    ) : group.creator_moderation_status ===
                                                         "verified" ||
-                                                        group.statusCounts
-                                                          .verified > 0 ? (
-                                                        <Badge className="bg-green-500 text-white text-xs">
-                                                          Verified
-                                                        </Badge>
-                                                      ) : (
-                                                        <Badge className="bg-yellow-500 text-white text-xs">
-                                                          Pending
-                                                        </Badge>
-                                                      )}
-                                                      {group.creator_rejection_reason && (
-                                                        <span
-                                                          className={cn(
-                                                            "text-xs italic truncate max-w-[150px] text-center",
-                                                            isDark
-                                                              ? "text-red-400"
-                                                              : "text-red-600",
-                                                          )}
-                                                          title={
-                                                            group.creator_rejection_reason
-                                                          }
-                                                        >
-                                                          {group
-                                                            .creator_rejection_reason
-                                                            .length > 20
-                                                            ? group.creator_rejection_reason.substring(
+                                                      group.statusCounts
+                                                        .verified > 0 ? (
+                                                      <Badge className="bg-green-500 text-white text-xs">
+                                                        Verified
+                                                      </Badge>
+                                                    ) : (
+                                                      <Badge className="bg-yellow-500 text-white text-xs">
+                                                        Pending
+                                                      </Badge>
+                                                    )}
+                                                    {group.creator_rejection_reason && (
+                                                      <span
+                                                        className={cn(
+                                                          "text-xs italic truncate max-w-[150px] text-center",
+                                                          isDark
+                                                            ? "text-red-400"
+                                                            : "text-red-600",
+                                                        )}
+                                                        title={
+                                                          group.creator_rejection_reason
+                                                        }
+                                                      >
+                                                        {group
+                                                          .creator_rejection_reason
+                                                          .length > 20
+                                                          ? group.creator_rejection_reason.substring(
                                                               0,
                                                               20,
                                                             ) + "..."
-                                                            : group.creator_rejection_reason}
-                                                        </span>
-                                                      )}
-                                                    </>
-                                                  ) : (
-                                                    <div className="flex flex-col flex-wrap gap-2 justify-center items-center">
-                                                      {group.statusCounts
-                                                        .verified > 0 && (
-                                                          <Badge className="bg-green-100 text-green-700 border border-green-200 text-xs whitespace-nowrap">
-                                                            Verified:{" "}
-                                                            {
-                                                              group.statusCounts
-                                                                .verified
-                                                            }
-                                                          </Badge>
-                                                        )}
-                                                      {group.statusCounts.paid >
-                                                        0 && (
-                                                          <Badge className="bg-blue-100 text-blue-700 border border-blue-200 text-xs whitespace-nowrap">
-                                                            Paid:{" "}
-                                                            {
-                                                              group.statusCounts
-                                                                .paid
-                                                            }
-                                                          </Badge>
-                                                        )}
-                                                      {group.statusCounts
-                                                        .pending > 0 && (
-                                                          <Badge className="bg-amber-100 text-amber-700 border border-amber-200 text-xs whitespace-nowrap">
-                                                            Pending:{" "}
-                                                            {
-                                                              group.statusCounts
-                                                                .pending
-                                                            }
-                                                          </Badge>
-                                                        )}
-                                                      {group.statusCounts
-                                                        .rejected > 0 && (
-                                                          <Badge className="bg-red-100 text-red-700 border border-red-200 text-xs whitespace-nowrap">
-                                                            Rejected:{" "}
-                                                            {
-                                                              group.statusCounts
-                                                                .rejected
-                                                            }
-                                                          </Badge>
-                                                        )}
-                                                    </div>
-                                                  )}
-                                                </div>
-                                              </TableCell>
-                                            )}
+                                                          : group.creator_rejection_reason}
+                                                      </span>
+                                                    )}
+                                                  </>
+                                                ) : (
+                                                  <div className="flex flex-col flex-wrap gap-2 justify-center items-center">
+                                                    {group.statusCounts
+                                                      .verified > 0 && (
+                                                      <Badge className="bg-green-100 text-green-700 border border-green-200 text-xs whitespace-nowrap">
+                                                        Verified:{" "}
+                                                        {
+                                                          group.statusCounts
+                                                            .verified
+                                                        }
+                                                      </Badge>
+                                                    )}
+                                                    {group.statusCounts.paid >
+                                                      0 && (
+                                                      <Badge className="bg-blue-100 text-blue-700 border border-blue-200 text-xs whitespace-nowrap">
+                                                        Paid:{" "}
+                                                        {
+                                                          group.statusCounts
+                                                            .paid
+                                                        }
+                                                      </Badge>
+                                                    )}
+                                                    {group.statusCounts
+                                                      .pending > 0 && (
+                                                      <Badge className="bg-amber-100 text-amber-700 border border-amber-200 text-xs whitespace-nowrap">
+                                                        Pending:{" "}
+                                                        {
+                                                          group.statusCounts
+                                                            .pending
+                                                        }
+                                                      </Badge>
+                                                    )}
+                                                    {group.statusCounts
+                                                      .rejected > 0 && (
+                                                      <Badge className="bg-red-100 text-red-700 border border-red-200 text-xs whitespace-nowrap">
+                                                        Rejected:{" "}
+                                                        {
+                                                          group.statusCounts
+                                                            .rejected
+                                                        }
+                                                      </Badge>
+                                                    )}
+                                                  </div>
+                                                )}
+                                              </div>
+                                            </TableCell>
+                                          )}
                                           {isAdminView &&
                                             currentContest.platform
                                               ?.toLowerCase()
@@ -13977,8 +14104,8 @@ export default function ContestDetailClient({
                                           {(currentContest.platform?.toLowerCase() ===
                                             "twitter" ||
                                             currentContest.platform?.toLowerCase() ===
-                                            "x") &&
-                                            currentContest.contest_format ===
+                                              "x") &&
+                                          currentContest.contest_format ===
                                             "text_image" ? (
                                             <>
                                               {/* Total Points */}
@@ -13995,9 +14122,9 @@ export default function ContestDetailClient({
                                                     {formatMetricValue(
                                                       (group.metrics
                                                         .base_points || 0) +
-                                                      (group.metrics
-                                                        .manual_points_adjustment ||
-                                                        0),
+                                                        (group.metrics
+                                                          .manual_points_adjustment ||
+                                                          0),
                                                     )}
                                                   </span>
                                                   <span
@@ -14055,7 +14182,7 @@ export default function ContestDetailClient({
                                                           tweetManualPoints > 0
                                                             ? "text-green-600"
                                                             : tweetManualPoints <
-                                                              0
+                                                                0
                                                               ? "text-red-600"
                                                               : isDark
                                                                 ? "text-white"
@@ -14101,13 +14228,13 @@ export default function ContestDetailClient({
                                               <TableCell className="text-center">
                                                 {formatMetricValue(
                                                   group.metrics.quote_reposts ||
-                                                  0,
+                                                    0,
                                                 )}
                                               </TableCell>
                                               <TableCell className="text-center">
                                                 {formatMetricValue(
                                                   group.metrics.impressions ||
-                                                  0,
+                                                    0,
                                                 )}
                                               </TableCell>
                                             </>
@@ -14117,216 +14244,219 @@ export default function ContestDetailClient({
                                                 ?.toLowerCase()
                                                 .includes("youtube")
                                                 ? ytVisibleColumns.includes(
-                                                  "views",
-                                                )
+                                                    "views",
+                                                  )
                                                 : true) && (
-                                                  <TableCell className="text-center">
-                                                    {group.metrics.views.toLocaleString()}
-                                                  </TableCell>
-                                                )}
+                                                <TableCell className="text-center">
+                                                  {group.metrics.views.toLocaleString()}
+                                                </TableCell>
+                                              )}
                                               {(currentContest.platform
                                                 ?.toLowerCase()
                                                 .includes("youtube")
                                                 ? ytVisibleColumns.includes(
-                                                  "likes",
-                                                )
+                                                    "likes",
+                                                  )
                                                 : true) && (
-                                                  <TableCell className="text-center">
-                                                    {group.metrics.likes.toLocaleString()}
-                                                  </TableCell>
-                                                )}
+                                                <TableCell className="text-center">
+                                                  {group.metrics.likes.toLocaleString()}
+                                                </TableCell>
+                                              )}
                                               {(currentContest.platform
                                                 ?.toLowerCase()
                                                 .includes("youtube")
                                                 ? ytVisibleColumns.includes(
-                                                  "comments",
-                                                )
+                                                    "comments",
+                                                  )
                                                 : true) && (
-                                                  <TableCell className="text-center">
-                                                    {group.metrics.comments.toLocaleString()}
-                                                  </TableCell>
-                                                )}
+                                                <TableCell className="text-center">
+                                                  {group.metrics.comments.toLocaleString()}
+                                                </TableCell>
+                                              )}
                                               {(currentContest.platform
                                                 ?.toLowerCase()
                                                 .includes("instagram") ||
+                                                currentContest.platform
+                                                  ?.toLowerCase()
+                                                  .includes("tiktok") ||
                                                 (canSeeCore &&
                                                   (currentContest.platform
                                                     ?.toLowerCase()
                                                     .includes("youtube")
                                                     ? ytVisibleColumns.includes(
-                                                      "shares",
-                                                    )
+                                                        "shares",
+                                                      )
                                                     : true))) && (
-                                                  <TableCell className="text-center font-mono text-sm">
-                                                    <div className="flex items-center justify-center gap-1">
-                                                      <Share2 className="h-3 w-3 text-purple-500" />
-                                                      {formatMetricValue(
-                                                        group.metrics.shares || 0,
-                                                      )}
-                                                    </div>
-                                                  </TableCell>
-                                                )}
+                                                <TableCell className="text-center font-mono text-sm">
+                                                  <div className="flex items-center justify-center gap-1">
+                                                    <Share2 className="h-3 w-3 text-purple-500" />
+                                                    {formatMetricValue(
+                                                      group.metrics.shares || 0,
+                                                    )}
+                                                  </div>
+                                                </TableCell>
+                                              )}
                                               {/* Instagram-specific metrics */}
                                               {currentContest.platform
                                                 ?.toLowerCase()
                                                 .includes("instagram") && (
-                                                  <>
-                                                    <TableCell className="text-center font-mono text-sm">
-                                                      {formatMetricValue(
-                                                        group.metrics.saves || 0,
-                                                      )}
-                                                    </TableCell>
-                                                    <TableCell className="text-center font-mono text-sm">
-                                                      {formatMetricValue(
-                                                        group.metrics.reach || 0,
-                                                      )}
-                                                    </TableCell>
-                                                    <TableCell className="text-center font-mono text-sm">
-                                                      {formatMetricValue(
-                                                        group.metrics
-                                                          .interactions || 0,
-                                                      )}
-                                                    </TableCell>
-                                                    <TableCell className="text-center font-mono text-sm">
-                                                      <div className="flex flex-col items-center">
-                                                        <span className="font-bold">
-                                                          {formatWatchTime(
-                                                            group.totalCount >
-                                                              0 &&
-                                                              group.metrics
-                                                                .avg_watch_time_ms >
+                                                <>
+                                                  <TableCell className="text-center font-mono text-sm">
+                                                    {formatMetricValue(
+                                                      group.metrics.saves || 0,
+                                                    )}
+                                                  </TableCell>
+                                                  <TableCell className="text-center font-mono text-sm">
+                                                    {formatMetricValue(
+                                                      group.metrics.reach || 0,
+                                                    )}
+                                                  </TableCell>
+                                                  <TableCell className="text-center font-mono text-sm">
+                                                    {formatMetricValue(
+                                                      group.metrics
+                                                        .interactions || 0,
+                                                    )}
+                                                  </TableCell>
+                                                  <TableCell className="text-center font-mono text-sm">
+                                                    <div className="flex flex-col items-center">
+                                                      <span className="font-bold">
+                                                        {formatWatchTime(
+                                                          group.totalCount >
+                                                            0 &&
+                                                            group.metrics
+                                                              .avg_watch_time_ms >
                                                               0
-                                                              ? Math.round(
+                                                            ? Math.round(
                                                                 (group.metrics
                                                                   .avg_watch_time_ms ||
                                                                   0) /
-                                                                group.totalCount,
+                                                                  group.totalCount,
                                                               )
-                                                              : 0,
-                                                          )}
-                                                        </span>
-                                                        <span
-                                                          className={cn(
-                                                            "text-xs",
-                                                            isDark
-                                                              ? "text-slate-400"
-                                                              : "text-slate-500",
-                                                          )}
-                                                        >
-                                                          avg
-                                                        </span>
-                                                      </div>
-                                                    </TableCell>
-                                                    <TableCell className="text-center font-mono text-sm">
-                                                      <div className="flex flex-col items-center">
-                                                        <span className="font-bold">
-                                                          {formatWatchTime(
-                                                            group.metrics
-                                                              .total_watch_time_ms ||
+                                                            : 0,
+                                                        )}
+                                                      </span>
+                                                      <span
+                                                        className={cn(
+                                                          "text-xs",
+                                                          isDark
+                                                            ? "text-slate-400"
+                                                            : "text-slate-500",
+                                                        )}
+                                                      >
+                                                        avg
+                                                      </span>
+                                                    </div>
+                                                  </TableCell>
+                                                  <TableCell className="text-center font-mono text-sm">
+                                                    <div className="flex flex-col items-center">
+                                                      <span className="font-bold">
+                                                        {formatWatchTime(
+                                                          group.metrics
+                                                            .total_watch_time_ms ||
                                                             0,
-                                                          )}
-                                                        </span>
-                                                        <span
-                                                          className={cn(
-                                                            "text-xs",
-                                                            isDark
-                                                              ? "text-slate-400"
-                                                              : "text-slate-500",
-                                                          )}
-                                                        >
-                                                          total
-                                                        </span>
-                                                      </div>
-                                                    </TableCell>
-                                                  </>
-                                                )}
+                                                        )}
+                                                      </span>
+                                                      <span
+                                                        className={cn(
+                                                          "text-xs",
+                                                          isDark
+                                                            ? "text-slate-400"
+                                                            : "text-slate-500",
+                                                        )}
+                                                      >
+                                                        total
+                                                      </span>
+                                                    </div>
+                                                  </TableCell>
+                                                </>
+                                              )}
                                             </>
                                           )}
                                           {/* Show reward columns for leaderboard and CPM contests (including Twitter) */}
                                           {(currentContest.contest_type ===
                                             "leaderboard" ||
                                             currentContest.contest_type ===
-                                            "cpm") && (
-                                              <>
-                                                {(currentContest.platform
-                                                  ?.toLowerCase()
-                                                  .includes("youtube")
-                                                  ? ytVisibleColumns.includes(
+                                              "cpm") && (
+                                            <>
+                                              {(currentContest.platform
+                                                ?.toLowerCase()
+                                                .includes("youtube")
+                                                ? ytVisibleColumns.includes(
                                                     "expected_reward",
                                                   )
-                                                  : true) && (
-                                                    <TableCell className="text-center font-medium">
-                                                      <div className="flex items-center justify-center gap-1">
-                                                        {formatMoney(
-                                                          group.earnings.expected,
-                                                        )}
-                                                        {group.isCapped && (
-                                                          <span
-                                                            className="text-amber-600 cursor-help"
-                                                            title={`Capped at ${formatMoney(
-                                                              currentContest.max_earnings_per_creator,
-                                                            )}. Original: ${formatMoney(
-                                                              group.earningsBeforeCap,
-                                                            )}`}
-                                                          >
-                                                            ⚠️
-                                                          </span>
-                                                        )}
-                                                      </div>
-                                                    </TableCell>
-                                                  )}
-                                                {(currentContest.platform
-                                                  ?.toLowerCase()
-                                                  .includes("youtube")
-                                                  ? ytVisibleColumns.includes(
+                                                : true) && (
+                                                <TableCell className="text-center font-medium">
+                                                  <div className="flex items-center justify-center gap-1">
+                                                    {formatMoney(
+                                                      group.earnings.expected,
+                                                    )}
+                                                    {group.isCapped && (
+                                                      <span
+                                                        className="text-amber-600 cursor-help"
+                                                        title={`Capped at ${formatMoney(
+                                                          currentContest.max_earnings_per_creator,
+                                                        )}. Original: ${formatMoney(
+                                                          group.earningsBeforeCap,
+                                                        )}`}
+                                                      >
+                                                        ⚠️
+                                                      </span>
+                                                    )}
+                                                  </div>
+                                                </TableCell>
+                                              )}
+                                              {(currentContest.platform
+                                                ?.toLowerCase()
+                                                .includes("youtube")
+                                                ? ytVisibleColumns.includes(
                                                     "reward_granted",
                                                   )
-                                                  : true) && (
-                                                    <TableCell className="text-center font-medium text-green-600">
-                                                      {formatMoney(
-                                                        group.earnings.granted,
-                                                      )}
-                                                    </TableCell>
+                                                : true) && (
+                                                <TableCell className="text-center font-medium text-green-600">
+                                                  {formatMoney(
+                                                    group.earnings.granted,
                                                   )}
-                                              </>
-                                            )}
+                                                </TableCell>
+                                              )}
+                                            </>
+                                          )}
                                           {(() => {
                                             const flatFeeBonus =
                                               currentContest.contest_type ===
-                                                "cpm"
+                                              "cpm"
                                                 ? (
-                                                  currentContest.contest_based_details as any
-                                                )?.cpm_contest?.flat_fee_bonus
+                                                    currentContest.contest_based_details as any
+                                                  )?.cpm_contest?.flat_fee_bonus
                                                 : (
-                                                  currentContest.contest_based_details as any
-                                                )?.leaderboard_contest
-                                                  ?.flat_fee_bonus;
+                                                    currentContest.contest_based_details as any
+                                                  )?.leaderboard_contest
+                                                    ?.flat_fee_bonus;
                                             return flatFeeBonus > 0;
                                           })() && (
-                                              <>
-                                                <TableCell className="text-center font-medium">
-                                                  {formatMoney(
-                                                    bonusExpectedForDisplay,
-                                                  )}
-                                                </TableCell>
-                                                <TableCell className="text-center font-medium text-green-600">
-                                                  {formatMoney(
-                                                    group.bonus.granted,
-                                                  )}
-                                                </TableCell>
-                                              </>
-                                            )}
+                                            <>
+                                              <TableCell className="text-center font-medium">
+                                                {formatMoney(
+                                                  bonusExpectedForDisplay,
+                                                )}
+                                              </TableCell>
+                                              <TableCell className="text-center font-medium text-green-600">
+                                                {formatMoney(
+                                                  group.bonus.granted,
+                                                )}
+                                              </TableCell>
+                                            </>
+                                          )}
                                           {/* Manual Points Adjustment and Reason Columns - Show for Twitter leaderboard and CPM campaigns */}
                                           {(currentContest.platform?.toLowerCase() ===
                                             "twitter" ||
                                             currentContest.platform?.toLowerCase() ===
-                                            "x") &&
+                                              "x") &&
                                             currentContest.contest_format ===
-                                            "text_image" &&
+                                              "text_image" &&
                                             (currentContest.contest_type ===
                                               "leaderboard" ||
                                               currentContest.contest_type ===
-                                              "cpm") && (
+                                                "cpm") && (
                                               <>
                                                 <TableCell className="text-center">
                                                   <div className="flex flex-col items-center">
@@ -14338,8 +14468,8 @@ export default function ContestDetailClient({
                                                           0
                                                           ? "text-green-600"
                                                           : group.metrics
-                                                            .creator_manual_points_adjustment <
-                                                            0
+                                                                .creator_manual_points_adjustment <
+                                                              0
                                                             ? "text-red-600"
                                                             : isDark
                                                               ? "text-white"
@@ -14348,13 +14478,13 @@ export default function ContestDetailClient({
                                                     >
                                                       {group.metrics
                                                         .creator_manual_points_adjustment >
-                                                        0
+                                                      0
                                                         ? "+"
                                                         : ""}
                                                       {formatMetricValue(
                                                         group.metrics
                                                           .creator_manual_points_adjustment ||
-                                                        0,
+                                                          0,
                                                       )}
                                                     </span>
                                                   </div>
@@ -14379,11 +14509,11 @@ export default function ContestDetailClient({
                                                           .manual_points_reason
                                                           .length > 30
                                                           ? group.metrics.manual_points_reason.substring(
-                                                            0,
-                                                            30,
-                                                          ) + "..."
+                                                              0,
+                                                              30,
+                                                            ) + "..."
                                                           : group.metrics
-                                                            .manual_points_reason}
+                                                              .manual_points_reason}
                                                       </span>
                                                     </div>
                                                   ) : (
@@ -14421,9 +14551,9 @@ export default function ContestDetailClient({
                                                       .creator_rejection_reason
                                                       .length > 30
                                                       ? group.creator_rejection_reason.substring(
-                                                        0,
-                                                        30,
-                                                      ) + "..."
+                                                          0,
+                                                          30,
+                                                        ) + "..."
                                                       : group.creator_rejection_reason}
                                                   </span>
                                                 </div>
@@ -14445,15 +14575,15 @@ export default function ContestDetailClient({
                                             ?.toLowerCase()
                                             .includes("youtube")
                                             ? ytVisibleColumns.includes(
-                                              "submitted",
-                                            )
+                                                "submitted",
+                                              )
                                             : true) && (
-                                              <TableCell className="text-center text-sm">
-                                                {formatLocalDateTime(
-                                                  group.firstSubmittedAt,
-                                                )}
-                                              </TableCell>
-                                            )}
+                                            <TableCell className="text-center text-sm">
+                                              {formatLocalDateTime(
+                                                group.firstSubmittedAt,
+                                              )}
+                                            </TableCell>
+                                          )}
                                           <TableCell className="text-center">
                                             <div className="flex flex-col items-center gap-2">
                                               <div className="flex items-center gap-2">
@@ -14477,7 +14607,7 @@ export default function ContestDetailClient({
                                                 {/* YouTube per-creator analytics refresh (admin only) */}
                                                 {isAdminView &&
                                                   currentContest.platform?.toLowerCase() ===
-                                                  "youtube" && (
+                                                    "youtube" && (
                                                     <DropdownMenu>
                                                       <DropdownMenuTrigger
                                                         asChild
@@ -14505,7 +14635,7 @@ export default function ContestDetailClient({
                                                           disabled={
                                                             ytPostContestLocked ||
                                                             !!loadingDetailedAnalytics[
-                                                            group.creator.id
+                                                              group.creator.id
                                                             ]
                                                           }
                                                           onClick={() =>
@@ -14526,7 +14656,7 @@ export default function ContestDetailClient({
                                                           disabled={
                                                             ytPostContestLocked ||
                                                             !!loadingDetailedAnalytics[
-                                                            group.creator.id
+                                                              group.creator.id
                                                             ]
                                                           }
                                                           onClick={() =>
@@ -14548,7 +14678,7 @@ export default function ContestDetailClient({
                                                           disabled={
                                                             ytPostContestLocked ||
                                                             !!loadingDetailedAnalytics[
-                                                            group.creator.id
+                                                              group.creator.id
                                                             ]
                                                           }
                                                           onClick={() =>
@@ -14569,7 +14699,7 @@ export default function ContestDetailClient({
                                                           disabled={
                                                             ytPostContestLocked ||
                                                             !!loadingDetailedAnalytics[
-                                                            group.creator.id
+                                                              group.creator.id
                                                             ]
                                                           }
                                                           onClick={() =>
@@ -14590,7 +14720,7 @@ export default function ContestDetailClient({
                                                           disabled={
                                                             ytPostContestLocked ||
                                                             !!loadingDetailedAnalytics[
-                                                            group.creator.id
+                                                              group.creator.id
                                                             ]
                                                           }
                                                           onClick={() =>
@@ -14614,9 +14744,9 @@ export default function ContestDetailClient({
                                                 {(currentContest.platform?.toLowerCase() ===
                                                   "twitter" ||
                                                   currentContest.platform?.toLowerCase() ===
-                                                  "x") &&
+                                                    "x") &&
                                                   currentContest.contest_format ===
-                                                  "text_image" && (
+                                                    "text_image" && (
                                                     <DropdownMenu>
                                                       <DropdownMenuTrigger
                                                         asChild
@@ -14633,82 +14763,82 @@ export default function ContestDetailClient({
                                                         {(group.creator_moderation_status !==
                                                           "verified" ||
                                                           group.paid) && (
-                                                            <DropdownMenuItem
-                                                              onClick={() => {
-                                                                if (group.paid) {
-                                                                  // Show reversal confirmation when any tweet is paid (revert + approve)
-                                                                  setConfirmTwitterCreatorReversal(
-                                                                    {
-                                                                      creatorId:
-                                                                        group
-                                                                          .creator
-                                                                          .id,
-                                                                      action:
-                                                                        "approve",
-                                                                    },
-                                                                  );
-                                                                } else {
-                                                                  // Direct approval for non-paid creators
-                                                                  (async () => {
-                                                                    try {
-                                                                      const response =
-                                                                        await fetch(
-                                                                          `/api/contests/${contestId}/moderate-creator`,
-                                                                          {
-                                                                            method:
-                                                                              "POST",
-                                                                            headers:
+                                                          <DropdownMenuItem
+                                                            onClick={() => {
+                                                              if (group.paid) {
+                                                                // Show reversal confirmation when any tweet is paid (revert + approve)
+                                                                setConfirmTwitterCreatorReversal(
+                                                                  {
+                                                                    creatorId:
+                                                                      group
+                                                                        .creator
+                                                                        .id,
+                                                                    action:
+                                                                      "approve",
+                                                                  },
+                                                                );
+                                                              } else {
+                                                                // Direct approval for non-paid creators
+                                                                (async () => {
+                                                                  try {
+                                                                    const response =
+                                                                      await fetch(
+                                                                        `/api/contests/${contestId}/moderate-creator`,
+                                                                        {
+                                                                          method:
+                                                                            "POST",
+                                                                          headers:
                                                                             {
                                                                               "Content-Type":
                                                                                 "application/json",
                                                                             },
-                                                                            body: JSON.stringify(
-                                                                              {
-                                                                                creatorId:
-                                                                                  group
-                                                                                    .creator
-                                                                                    .id,
-                                                                                action:
-                                                                                  "approve",
-                                                                              },
-                                                                            ),
-                                                                          },
-                                                                        );
-                                                                      if (
-                                                                        response.ok
-                                                                      ) {
-                                                                        markCreatorSubmissionsVerifiedLocally(
-                                                                          group
-                                                                            .creator
-                                                                            .id,
-                                                                        );
-                                                                        window.location.reload();
-                                                                      } else {
-                                                                        const error =
-                                                                          await response.json();
-                                                                        alert(
-                                                                          error.error ||
-                                                                          "Failed to approve creator",
-                                                                        );
-                                                                      }
-                                                                    } catch (error) {
-                                                                      console.error(
-                                                                        "Error approving creator:",
-                                                                        error,
+                                                                          body: JSON.stringify(
+                                                                            {
+                                                                              creatorId:
+                                                                                group
+                                                                                  .creator
+                                                                                  .id,
+                                                                              action:
+                                                                                "approve",
+                                                                            },
+                                                                          ),
+                                                                        },
                                                                       );
+                                                                    if (
+                                                                      response.ok
+                                                                    ) {
+                                                                      markCreatorSubmissionsVerifiedLocally(
+                                                                        group
+                                                                          .creator
+                                                                          .id,
+                                                                      );
+                                                                      window.location.reload();
+                                                                    } else {
+                                                                      const error =
+                                                                        await response.json();
                                                                       alert(
-                                                                        "Failed to approve creator",
+                                                                        error.error ||
+                                                                          "Failed to approve creator",
                                                                       );
                                                                     }
-                                                                  })();
-                                                                }
-                                                              }}
-                                                              className="text-green-600"
-                                                            >
-                                                              <CheckCircle className="h-4 w-4 mr-2" />
-                                                              Approve Creator
-                                                            </DropdownMenuItem>
-                                                          )}
+                                                                  } catch (error) {
+                                                                    console.error(
+                                                                      "Error approving creator:",
+                                                                      error,
+                                                                    );
+                                                                    alert(
+                                                                      "Failed to approve creator",
+                                                                    );
+                                                                  }
+                                                                })();
+                                                              }
+                                                            }}
+                                                            className="text-green-600"
+                                                          >
+                                                            <CheckCircle className="h-4 w-4 mr-2" />
+                                                            Approve Creator
+                                                          </DropdownMenuItem>
+                                                        )}
 
                                                         <DropdownMenuItem
                                                           onClick={() => {
@@ -14740,65 +14870,65 @@ export default function ContestDetailClient({
 
                                                         {group.creator_moderation_status !==
                                                           "rejected" && (
-                                                            <DropdownMenuItem
-                                                              onClick={() => {
-                                                                if (group.paid) {
-                                                                  // Show reversal confirmation for paid creators
-                                                                  setConfirmTwitterCreatorReversal(
-                                                                    {
-                                                                      creatorId:
-                                                                        group
-                                                                          .creator
-                                                                          .id,
-                                                                      action:
-                                                                        "reject",
-                                                                      needRejectionReason: true,
-                                                                      creatorUsername:
-                                                                        group
-                                                                          .creator
-                                                                          .username,
-                                                                    },
-                                                                  );
-                                                                } else {
-                                                                  // Direct rejection for non-paid creators
-                                                                  setPendingTwitterRejection(
-                                                                    {
-                                                                      id: group
+                                                          <DropdownMenuItem
+                                                            onClick={() => {
+                                                              if (group.paid) {
+                                                                // Show reversal confirmation for paid creators
+                                                                setConfirmTwitterCreatorReversal(
+                                                                  {
+                                                                    creatorId:
+                                                                      group
                                                                         .creator
                                                                         .id,
-                                                                      type: "creator",
-                                                                      creatorId:
-                                                                        group
-                                                                          .creator
-                                                                          .id,
-                                                                      creatorUsername:
-                                                                        group
-                                                                          .creator
-                                                                          .username,
-                                                                    },
-                                                                  );
-                                                                  setTwitterRejectionModalOpen(
-                                                                    true,
-                                                                  );
-                                                                }
-                                                              }}
-                                                              className="text-red-600"
-                                                            >
-                                                              <XCircle className="h-4 w-4 mr-2" />
-                                                              Reject Creator
-                                                            </DropdownMenuItem>
-                                                          )}
+                                                                    action:
+                                                                      "reject",
+                                                                    needRejectionReason: true,
+                                                                    creatorUsername:
+                                                                      group
+                                                                        .creator
+                                                                        .username,
+                                                                  },
+                                                                );
+                                                              } else {
+                                                                // Direct rejection for non-paid creators
+                                                                setPendingTwitterRejection(
+                                                                  {
+                                                                    id: group
+                                                                      .creator
+                                                                      .id,
+                                                                    type: "creator",
+                                                                    creatorId:
+                                                                      group
+                                                                        .creator
+                                                                        .id,
+                                                                    creatorUsername:
+                                                                      group
+                                                                        .creator
+                                                                        .username,
+                                                                  },
+                                                                );
+                                                                setTwitterRejectionModalOpen(
+                                                                  true,
+                                                                );
+                                                              }
+                                                            }}
+                                                            className="text-red-600"
+                                                          >
+                                                            <XCircle className="h-4 w-4 mr-2" />
+                                                            Reject Creator
+                                                          </DropdownMenuItem>
+                                                        )}
                                                         {/* Payment options for Twitter creators (leaderboard and CPM) - hide for rejected */}
                                                         {currentContest.post_contest_status ===
                                                           "verification_complete" &&
                                                           !group.paid &&
                                                           group.creator_moderation_status !==
-                                                          "rejected" &&
+                                                            "rejected" &&
                                                           isAdminView &&
                                                           (currentContest.contest_type ===
                                                             "leaderboard" ||
                                                             currentContest.contest_type ===
-                                                            "cpm") && (
+                                                              "cpm") && (
                                                             <>
                                                               <DropdownMenuSeparator />
                                                               <DropdownMenuItem
@@ -14820,10 +14950,10 @@ export default function ContestDetailClient({
                                                                           method:
                                                                             "POST",
                                                                           headers:
-                                                                          {
-                                                                            "Content-Type":
-                                                                              "application/json",
-                                                                          },
+                                                                            {
+                                                                              "Content-Type":
+                                                                                "application/json",
+                                                                            },
                                                                           body: JSON.stringify(
                                                                             {
                                                                               creatorId:
@@ -14841,7 +14971,7 @@ export default function ContestDetailClient({
                                                                         await response.json();
                                                                       throw new Error(
                                                                         error.error ||
-                                                                        "Failed to process payment",
+                                                                          "Failed to process payment",
                                                                       );
                                                                     }
                                                                     toast({
@@ -14888,9 +15018,9 @@ export default function ContestDetailClient({
                                                                 }}
                                                                 disabled={
                                                                   isLoadingSubmission[
-                                                                  group
-                                                                    .creator
-                                                                    .id
+                                                                    group
+                                                                      .creator
+                                                                      .id
                                                                   ]
                                                                 }
                                                               >
@@ -14910,9 +15040,9 @@ export default function ContestDetailClient({
                                                                 }}
                                                                 disabled={
                                                                   isLoadingSubmission[
-                                                                  group
-                                                                    .creator
-                                                                    .id
+                                                                    group
+                                                                      .creator
+                                                                      .id
                                                                   ]
                                                                 }
                                                               >
@@ -14923,56 +15053,56 @@ export default function ContestDetailClient({
                                                               {(() => {
                                                                 const flatFeeBonus =
                                                                   currentContest.contest_type ===
-                                                                    "cpm"
+                                                                  "cpm"
                                                                     ? (
-                                                                      currentContest.contest_based_details as any
-                                                                    )
-                                                                      ?.cpm_contest
-                                                                      ?.flat_fee_bonus
+                                                                        currentContest.contest_based_details as any
+                                                                      )
+                                                                        ?.cpm_contest
+                                                                        ?.flat_fee_bonus
                                                                     : (
-                                                                      currentContest.contest_based_details as any
-                                                                    )
-                                                                      ?.leaderboard_contest
-                                                                      ?.flat_fee_bonus;
+                                                                        currentContest.contest_based_details as any
+                                                                      )
+                                                                        ?.leaderboard_contest
+                                                                        ?.flat_fee_bonus;
                                                                 return (
                                                                   flatFeeBonus >
                                                                   0
                                                                 );
                                                               })() && (
-                                                                  <>
-                                                                    <DropdownMenuItem
-                                                                      onClick={() => {
-                                                                        const tweetIds =
-                                                                          (
-                                                                            group.submissions ||
-                                                                            []
+                                                                <>
+                                                                  <DropdownMenuItem
+                                                                    onClick={() => {
+                                                                      const tweetIds =
+                                                                        (
+                                                                          group.submissions ||
+                                                                          []
+                                                                        )
+                                                                          .filter(
+                                                                            (
+                                                                              s: any,
+                                                                            ) =>
+                                                                              s.is_twitter_tweet,
                                                                           )
-                                                                            .filter(
-                                                                              (
-                                                                                s: any,
-                                                                              ) =>
-                                                                                s.is_twitter_tweet,
-                                                                            )
-                                                                            .map(
-                                                                              (
-                                                                                s: any,
-                                                                              ) =>
-                                                                                s.id,
-                                                                            );
-                                                                        handleCreatorMarkBothPaid(
-                                                                          group
-                                                                            .creator
-                                                                            .id,
-                                                                          tweetIds,
-                                                                        );
-                                                                      }}
-                                                                    >
-                                                                      <DollarSign className="h-4 w-4 mr-2" />
-                                                                      Mark Both as
-                                                                      Paid
-                                                                    </DropdownMenuItem>
-                                                                  </>
-                                                                )}
+                                                                          .map(
+                                                                            (
+                                                                              s: any,
+                                                                            ) =>
+                                                                              s.id,
+                                                                          );
+                                                                      handleCreatorMarkBothPaid(
+                                                                        group
+                                                                          .creator
+                                                                          .id,
+                                                                        tweetIds,
+                                                                      );
+                                                                    }}
+                                                                  >
+                                                                    <DollarSign className="h-4 w-4 mr-2" />
+                                                                    Mark Both as
+                                                                    Paid
+                                                                  </DropdownMenuItem>
+                                                                </>
+                                                              )}
                                                             </>
                                                           )}
                                                       </DropdownMenuContent>
@@ -15071,9 +15201,9 @@ export default function ContestDetailClient({
                   lastMetricsUpdated={currentContest?.last_metrics_updated}
                   cooldownType={
                     (isAdminView ? "admin" : "brand") as
-                    | "opportunities"
-                    | "brand"
-                    | "admin"
+                      | "opportunities"
+                      | "brand"
+                      | "admin"
                   }
                   postContestStatus={currentContest?.post_contest_status}
                 />
@@ -15275,8 +15405,10 @@ export default function ContestDetailClient({
                         if (isTwitterTweet && sub.other_stats) {
                           metrics.total_tweets += 1;
                           metrics.total_likes += sub.other_stats.likes || 0;
-                          const actionKind = getTwitterSubmissionActionKind(sub);
-                          if (actionKind === "reply") metrics.total_replies += 1;
+                          const actionKind =
+                            getTwitterSubmissionActionKind(sub);
+                          if (actionKind === "reply")
+                            metrics.total_replies += 1;
                           if (actionKind === "retweet")
                             metrics.total_retweets += 1;
                           if (actionKind === "quote")
@@ -15290,7 +15422,7 @@ export default function ContestDetailClient({
                               : sub.other_stats.points || 0;
                           const manualPoints =
                             typeof sub.other_stats.manual_points_adjustment ===
-                              "number"
+                            "number"
                               ? sub.other_stats.manual_points_adjustment
                               : 0;
                           metrics.total_points += basePoints + manualPoints;
@@ -15379,9 +15511,9 @@ export default function ContestDetailClient({
                             twitterMetrics?.target_quote_reposts ??
                             (targetMetrics.quote_reposts
                               ? parseInt(
-                                String(targetMetrics.quote_reposts),
-                                10,
-                              )
+                                  String(targetMetrics.quote_reposts),
+                                  10,
+                                )
                               : null);
 
                           return (
@@ -15643,15 +15775,15 @@ export default function ContestDetailClient({
 
                                 const hasCurrentMetrics =
                                   twitterMetrics.target_current_likes !==
-                                  null ||
+                                    null ||
                                   twitterMetrics.target_current_comments !==
-                                  null ||
+                                    null ||
                                   twitterMetrics.target_current_retweets !==
-                                  null ||
+                                    null ||
                                   twitterMetrics.target_current_quote_reposts !==
-                                  null ||
+                                    null ||
                                   twitterMetrics.target_current_views !==
-                                  null ||
+                                    null ||
                                   twitterMetrics.targets_reached !== null;
 
                                 return hasCurrentMetrics ? (
@@ -15680,9 +15812,9 @@ export default function ContestDetailClient({
                                           const progress =
                                             target !== null && target > 0
                                               ? Math.min(
-                                                100,
-                                                (current / target) * 100,
-                                              )
+                                                  100,
+                                                  (current / target) * 100,
+                                                )
                                               : 0;
 
                                           return (
@@ -15807,9 +15939,9 @@ export default function ContestDetailClient({
                                           const progress =
                                             target !== null && target > 0
                                               ? Math.min(
-                                                100,
-                                                (current / target) * 100,
-                                              )
+                                                  100,
+                                                  (current / target) * 100,
+                                                )
                                               : 0;
 
                                           return (
@@ -15934,9 +16066,9 @@ export default function ContestDetailClient({
                                           const progress =
                                             target !== null && target > 0
                                               ? Math.min(
-                                                100,
-                                                (current / target) * 100,
-                                              )
+                                                  100,
+                                                  (current / target) * 100,
+                                                )
                                               : 0;
 
                                           return (
@@ -16061,9 +16193,9 @@ export default function ContestDetailClient({
                                           const progress =
                                             target !== null && target > 0
                                               ? Math.min(
-                                                100,
-                                                (current / target) * 100,
-                                              )
+                                                  100,
+                                                  (current / target) * 100,
+                                                )
                                               : 0;
 
                                           return (
@@ -16177,124 +16309,124 @@ export default function ContestDetailClient({
                                         })()}
                                       {twitterMetrics.target_current_views !==
                                         null && (
-                                          <div
-                                            className={cn(
-                                              "group bg-white rounded-2xl shadow-xl hover:shadow-2xl transition-all duration-300 hover:scale-105 overflow-hidden",
-                                              isDark
-                                                ? "bg-[#170337]"
-                                                : "bg-white border border-slate-200",
-                                            )}
-                                          >
-                                            <CardContent className="p-6 flex justify-between items-center">
-                                              <div
+                                        <div
+                                          className={cn(
+                                            "group bg-white rounded-2xl shadow-xl hover:shadow-2xl transition-all duration-300 hover:scale-105 overflow-hidden",
+                                            isDark
+                                              ? "bg-[#170337]"
+                                              : "bg-white border border-slate-200",
+                                          )}
+                                        >
+                                          <CardContent className="p-6 flex justify-between items-center">
+                                            <div
+                                              className={cn(
+                                                "flex-1 space-y-2",
+                                                isDark
+                                                  ? "text-white"
+                                                  : "text-slate-800",
+                                              )}
+                                            >
+                                              <p
                                                 className={cn(
-                                                  "flex-1 space-y-2",
+                                                  "text-sm font-semibold uppercase tracking-wide",
+                                                  isDark
+                                                    ? "text-slate-200"
+                                                    : "text-slate-600",
+                                                )}
+                                              >
+                                                Current Views
+                                              </p>
+                                              <p
+                                                className={cn(
+                                                  "text-2xl font-black",
                                                   isDark
                                                     ? "text-white"
                                                     : "text-slate-800",
                                                 )}
                                               >
-                                                <p
-                                                  className={cn(
-                                                    "text-sm font-semibold uppercase tracking-wide",
-                                                    isDark
-                                                      ? "text-slate-200"
-                                                      : "text-slate-600",
-                                                  )}
-                                                >
-                                                  Current Views
-                                                </p>
-                                                <p
-                                                  className={cn(
-                                                    "text-2xl font-black",
-                                                    isDark
-                                                      ? "text-white"
-                                                      : "text-slate-800",
-                                                  )}
-                                                >
-                                                  {(
-                                                    twitterMetrics.target_current_views ||
-                                                    0
-                                                  ).toLocaleString()}
-                                                </p>
-                                              </div>
-                                              <div className="w-14 h-14 flex items-center justify-center rounded-2xl bg-gradient-to-br from-green-500 to-emerald-600 text-white shadow-lg group-hover:shadow-xl transition-all duration-300">
-                                                <Eye className="h-7 w-7" />
-                                              </div>
-                                            </CardContent>
-                                          </div>
-                                        )}
+                                                {(
+                                                  twitterMetrics.target_current_views ||
+                                                  0
+                                                ).toLocaleString()}
+                                              </p>
+                                            </div>
+                                            <div className="w-14 h-14 flex items-center justify-center rounded-2xl bg-gradient-to-br from-green-500 to-emerald-600 text-white shadow-lg group-hover:shadow-xl transition-all duration-300">
+                                              <Eye className="h-7 w-7" />
+                                            </div>
+                                          </CardContent>
+                                        </div>
+                                      )}
                                     </div>
                                     {/* Targets Reached Status */}
                                     {twitterMetrics.targets_reached !==
                                       null && (
-                                        <div
-                                          className={cn(
-                                            "rounded-xl p-4 border flex items-center gap-3",
-                                            twitterMetrics.targets_reached
-                                              ? isDark
-                                                ? "bg-green-900/30 border-green-700"
-                                                : "bg-green-50 border-green-200"
-                                              : isDark
-                                                ? "bg-yellow-900/30 border-yellow-700"
-                                                : "bg-yellow-50 border-yellow-200",
-                                          )}
-                                        >
-                                          {twitterMetrics.targets_reached ? (
-                                            <CheckCircle2
-                                              className={cn(
-                                                "h-6 w-6 flex-shrink-0",
-                                                isDark
+                                      <div
+                                        className={cn(
+                                          "rounded-xl p-4 border flex items-center gap-3",
+                                          twitterMetrics.targets_reached
+                                            ? isDark
+                                              ? "bg-green-900/30 border-green-700"
+                                              : "bg-green-50 border-green-200"
+                                            : isDark
+                                              ? "bg-yellow-900/30 border-yellow-700"
+                                              : "bg-yellow-50 border-yellow-200",
+                                        )}
+                                      >
+                                        {twitterMetrics.targets_reached ? (
+                                          <CheckCircle2
+                                            className={cn(
+                                              "h-6 w-6 flex-shrink-0",
+                                              isDark
+                                                ? "text-green-400"
+                                                : "text-green-600",
+                                            )}
+                                          />
+                                        ) : (
+                                          <Clock
+                                            className={cn(
+                                              "h-6 w-6 flex-shrink-0",
+                                              isDark
+                                                ? "text-yellow-400"
+                                                : "text-yellow-600",
+                                            )}
+                                          />
+                                        )}
+                                        <div>
+                                          <p
+                                            className={cn(
+                                              "text-sm font-semibold",
+                                              twitterMetrics.targets_reached
+                                                ? isDark
+                                                  ? "text-green-300"
+                                                  : "text-green-800"
+                                                : isDark
+                                                  ? "text-yellow-300"
+                                                  : "text-yellow-800",
+                                            )}
+                                          >
+                                            {twitterMetrics.targets_reached
+                                              ? "Targets Reached"
+                                              : "Targets Not Yet Reached"}
+                                          </p>
+                                          <p
+                                            className={cn(
+                                              "text-xs mt-1",
+                                              twitterMetrics.targets_reached
+                                                ? isDark
                                                   ? "text-green-400"
-                                                  : "text-green-600",
-                                              )}
-                                            />
-                                          ) : (
-                                            <Clock
-                                              className={cn(
-                                                "h-6 w-6 flex-shrink-0",
-                                                isDark
+                                                  : "text-green-700"
+                                                : isDark
                                                   ? "text-yellow-400"
-                                                  : "text-yellow-600",
-                                              )}
-                                            />
-                                          )}
-                                          <div>
-                                            <p
-                                              className={cn(
-                                                "text-sm font-semibold",
-                                                twitterMetrics.targets_reached
-                                                  ? isDark
-                                                    ? "text-green-300"
-                                                    : "text-green-800"
-                                                  : isDark
-                                                    ? "text-yellow-300"
-                                                    : "text-yellow-800",
-                                              )}
-                                            >
-                                              {twitterMetrics.targets_reached
-                                                ? "Targets Reached"
-                                                : "Targets Not Yet Reached"}
-                                            </p>
-                                            <p
-                                              className={cn(
-                                                "text-xs mt-1",
-                                                twitterMetrics.targets_reached
-                                                  ? isDark
-                                                    ? "text-green-400"
-                                                    : "text-green-700"
-                                                  : isDark
-                                                    ? "text-yellow-400"
-                                                    : "text-yellow-700",
-                                              )}
-                                            >
-                                              {twitterMetrics.targets_reached
-                                                ? "All target metrics have been achieved. Contest will end when targets are reached."
-                                                : "Keep engaging with the target tweet to reach the goals!"}
-                                            </p>
-                                          </div>
+                                                  : "text-yellow-700",
+                                            )}
+                                          >
+                                            {twitterMetrics.targets_reached
+                                              ? "All target metrics have been achieved. Contest will end when targets are reached."
+                                              : "Keep engaging with the target tweet to reach the goals!"}
+                                          </p>
                                         </div>
-                                      )}
+                                      </div>
+                                    )}
                                   </div>
                                 ) : null;
                               })()}
@@ -16678,11 +16810,11 @@ export default function ContestDetailClient({
                             >
                               {filteredAnalyticsSubmissions?.length > 0
                                 ? Math.round(
-                                  filteredAnalyticsSubmissions.reduce(
-                                    (sum, s) => sum + (s.views || 0),
-                                    0,
-                                  ) / filteredAnalyticsSubmissions.length,
-                                ).toLocaleString()
+                                    filteredAnalyticsSubmissions.reduce(
+                                      (sum, s) => sum + (s.views || 0),
+                                      0,
+                                    ) / filteredAnalyticsSubmissions.length,
+                                  ).toLocaleString()
                                 : 0}
                             </p>
                           </div>
@@ -16726,10 +16858,10 @@ export default function ContestDetailClient({
                             >
                               {filteredAnalyticsSubmissions?.length > 0
                                 ? Math.max(
-                                  ...filteredAnalyticsSubmissions.map(
-                                    (s) => s.views || 0,
-                                  ),
-                                ).toLocaleString()
+                                    ...filteredAnalyticsSubmissions.map(
+                                      (s) => s.views || 0,
+                                    ),
+                                  ).toLocaleString()
                                 : 0}
                             </p>
                           </div>
@@ -16774,7 +16906,7 @@ export default function ContestDetailClient({
                                       : activeAnalyticsTab === "not_rejected"
                                         ? "Not Rejected Views"
                                         : activeAnalyticsTab ===
-                                          "verified_or_paid"
+                                            "verified_or_paid"
                                           ? "Verified/Paid Views"
                                           : "Filtered Views"}
                             </p>
@@ -17196,10 +17328,10 @@ export default function ContestDetailClient({
                                           : activeAnalyticsTab === "rejected"
                                             ? "Rejected Only"
                                             : activeAnalyticsTab ===
-                                              "not_rejected"
+                                                "not_rejected"
                                               ? "Not Rejected"
                                               : activeAnalyticsTab ===
-                                                "verified_or_paid"
+                                                  "verified_or_paid"
                                                 ? "Verified/Paid"
                                                 : "Filtered"}
                                 </p>
@@ -17689,88 +17821,89 @@ export default function ContestDetailClient({
               Rejection reason
             </DialogTitle>
           </DialogHeader>
-          {rejectionDetailsModalSubmission && (() => {
-            const parsed = parseSubmissionMetadata(
-              rejectionDetailsModalSubmission.metadata,
-            );
-            const hasStructured =
-              parsed && parsed.type === "rejection";
-            const reason = hasStructured ? parsed.reason : null;
-            const additionalNotes =
-              hasStructured ? parsed.additionalNotes : undefined;
-            const timestamp = hasStructured ? parsed.timestamp : undefined;
-            const updatedBy = hasStructured ? parsed.updatedBy : undefined;
-
-            if (!reason && !additionalNotes) {
-              return (
-                <p
-                  className={cn(
-                    "text-sm",
-                    isDark ? "text-gray-400" : "text-gray-600",
-                  )}
-                >
-                  No rejection details available.
-                </p>
+          {rejectionDetailsModalSubmission &&
+            (() => {
+              const parsed = parseSubmissionMetadata(
+                rejectionDetailsModalSubmission.metadata,
               );
-            }
-            return (
-              <div className="space-y-4 text-sm">
-                {reason && (
-                  <div>
-                    <span
-                      className={cn(
-                        "font-medium",
-                        isDark ? "text-gray-300" : "text-gray-700",
-                      )}
-                    >
-                      Reason
-                    </span>
-                    <p
-                      className={cn(
-                        "mt-1",
-                        isDark ? "text-gray-200" : "text-gray-900",
-                      )}
-                    >
-                      {reason}
-                    </p>
-                  </div>
-                )}
-                {additionalNotes && (
-                  <div>
-                    <span
-                      className={cn(
-                        "font-medium",
-                        isDark ? "text-gray-300" : "text-gray-700",
-                      )}
-                    >
-                      Additional notes
-                    </span>
-                    <p
-                      className={cn(
-                        "mt-1 whitespace-pre-wrap",
-                        isDark ? "text-gray-200" : "text-gray-900",
-                      )}
-                    >
-                      {additionalNotes}
-                    </p>
-                  </div>
-                )}
-                {timestamp && (
-                  <div
+              const hasStructured = parsed && parsed.type === "rejection";
+              const reason = hasStructured ? parsed.reason : null;
+              const additionalNotes = hasStructured
+                ? parsed.additionalNotes
+                : undefined;
+              const timestamp = hasStructured ? parsed.timestamp : undefined;
+              const updatedBy = hasStructured ? parsed.updatedBy : undefined;
+
+              if (!reason && !additionalNotes) {
+                return (
+                  <p
                     className={cn(
-                      "text-xs",
-                      isDark ? "text-gray-500" : "text-gray-500",
+                      "text-sm",
+                      isDark ? "text-gray-400" : "text-gray-600",
                     )}
                   >
-                    <span>
-                      {formatMetadataTimestamp(timestamp)}
-                      {updatedBy ? ` · Updated by moderator` : ""}
-                    </span>
-                  </div>
-                )}
-              </div>
-            );
-          })()}
+                    No rejection details available.
+                  </p>
+                );
+              }
+              return (
+                <div className="space-y-4 text-sm">
+                  {reason && (
+                    <div>
+                      <span
+                        className={cn(
+                          "font-medium",
+                          isDark ? "text-gray-300" : "text-gray-700",
+                        )}
+                      >
+                        Reason
+                      </span>
+                      <p
+                        className={cn(
+                          "mt-1",
+                          isDark ? "text-gray-200" : "text-gray-900",
+                        )}
+                      >
+                        {reason}
+                      </p>
+                    </div>
+                  )}
+                  {additionalNotes && (
+                    <div>
+                      <span
+                        className={cn(
+                          "font-medium",
+                          isDark ? "text-gray-300" : "text-gray-700",
+                        )}
+                      >
+                        Additional notes
+                      </span>
+                      <p
+                        className={cn(
+                          "mt-1 whitespace-pre-wrap",
+                          isDark ? "text-gray-200" : "text-gray-900",
+                        )}
+                      >
+                        {additionalNotes}
+                      </p>
+                    </div>
+                  )}
+                  {timestamp && (
+                    <div
+                      className={cn(
+                        "text-xs",
+                        isDark ? "text-gray-500" : "text-gray-500",
+                      )}
+                    >
+                      <span>
+                        {formatMetadataTimestamp(timestamp)}
+                        {updatedBy ? ` · Updated by moderator` : ""}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
           <DialogFooter>
             <Button
               variant="outline"
@@ -17807,61 +17940,61 @@ export default function ContestDetailClient({
       {(() => {
         const manualStats = pendingManualPointsSubmission
           ? (() => {
-            if (pendingManualPointsSubmission.type === "leaderboard") {
-              const creatorGroup = (groupSubmissionsByCreator as any[])?.find(
-                (g) =>
-                  g.creator?.id === pendingManualPointsSubmission.creatorId,
-              );
-              const submission =
-                creatorGroup?.submissions?.[0] ||
-                currentSubmissions.find(
-                  (s) => s.id === pendingManualPointsSubmission.id,
+              if (pendingManualPointsSubmission.type === "leaderboard") {
+                const creatorGroup = (groupSubmissionsByCreator as any[])?.find(
+                  (g) =>
+                    g.creator?.id === pendingManualPointsSubmission.creatorId,
                 );
-              const basePoints = creatorGroup?.metrics?.base_points || 0;
-              const tweetManualPoints =
-                creatorGroup?.metrics?.tweet_manual_points_adjustment || 0;
-              const creatorAdjustment =
-                creatorGroup?.metrics?.creator_manual_points_adjustment || 0;
+                const submission =
+                  creatorGroup?.submissions?.[0] ||
+                  currentSubmissions.find(
+                    (s) => s.id === pendingManualPointsSubmission.id,
+                  );
+                const basePoints = creatorGroup?.metrics?.base_points || 0;
+                const tweetManualPoints =
+                  creatorGroup?.metrics?.tweet_manual_points_adjustment || 0;
+                const creatorAdjustment =
+                  creatorGroup?.metrics?.creator_manual_points_adjustment || 0;
+                const totalPoints =
+                  creatorGroup?.metrics?.points ??
+                  basePoints + tweetManualPoints + creatorAdjustment;
+
+                return {
+                  totalPoints,
+                  basePoints,
+                  manualPoints: tweetManualPoints,
+                  creatorManualPointsAdjustment: creatorAdjustment,
+                  submission,
+                };
+              }
+
+              const submission = currentSubmissions.find(
+                (s) => s.id === pendingManualPointsSubmission.id,
+              );
+              if (!submission) {
+                return {
+                  totalPoints: 0,
+                  basePoints: 0,
+                  manualPoints: 0,
+                  creatorManualPointsAdjustment: 0,
+                  submission: undefined,
+                };
+              }
+              const basePoints = submission.other_stats?.base_points || 0;
+              const manualPointValue =
+                submission.manual_points_adjustment ??
+                (submission.other_stats?.manual_points_adjustment || 0);
               const totalPoints =
-                creatorGroup?.metrics?.points ??
-                basePoints + tweetManualPoints + creatorAdjustment;
+                submission.other_stats?.points || basePoints + manualPointValue;
 
               return {
                 totalPoints,
                 basePoints,
-                manualPoints: tweetManualPoints,
-                creatorManualPointsAdjustment: creatorAdjustment,
+                manualPoints: manualPointValue,
+                creatorManualPointsAdjustment: 0,
                 submission,
               };
-            }
-
-            const submission = currentSubmissions.find(
-              (s) => s.id === pendingManualPointsSubmission.id,
-            );
-            if (!submission) {
-              return {
-                totalPoints: 0,
-                basePoints: 0,
-                manualPoints: 0,
-                creatorManualPointsAdjustment: 0,
-                submission: undefined,
-              };
-            }
-            const basePoints = submission.other_stats?.base_points || 0;
-            const manualPointValue =
-              submission.manual_points_adjustment ??
-              (submission.other_stats?.manual_points_adjustment || 0);
-            const totalPoints =
-              submission.other_stats?.points || basePoints + manualPointValue;
-
-            return {
-              totalPoints,
-              basePoints,
-              manualPoints: manualPointValue,
-              creatorManualPointsAdjustment: 0,
-              submission,
-            };
-          })()
+            })()
           : null;
 
         return (

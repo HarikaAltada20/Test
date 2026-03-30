@@ -181,7 +181,10 @@ export class TikTokApiClient {
     for (let i = 0; i < fieldSets.length; i++) {
       const data = await this._fetchUserInfo(accessToken, fieldSets[i]);
 
-      if (data?.error?.code === "scope_not_authorized" && i < fieldSets.length - 1) {
+      if (
+        data?.error?.code === "scope_not_authorized" &&
+        i < fieldSets.length - 1
+      ) {
         console.warn(
           `[TikTok API Client] Scope not authorized for field set ${i + 1}, trying with fewer fields...`,
         );
@@ -242,9 +245,9 @@ export class TikTokApiClient {
       cursor: cursor ? parseInt(cursor, 10) : undefined,
     };
 
-    // Removed download_count as it's not standard in Display API v2
+    // Only request fields supported by the Display API v2
     const fields =
-      "id,create_time,cover_image_url,share_url,video_description,duration,title,view_count,like_count,comment_count,share_count,favorite_count";
+      "id,create_time,cover_image_url,share_url,video_description,duration,title,view_count,like_count,comment_count,share_count";
     const res = await fetch(`${this.baseUrl}/video/list/?fields=${fields}`, {
       method: "POST",
       headers: {
@@ -282,9 +285,9 @@ export class TikTokApiClient {
       },
     };
 
-    // Removed download_count as it's not standard in Display API v2
+    // Only request fields supported by the Display API v2
     const fields =
-      "id,create_time,cover_image_url,share_url,video_description,duration,title,view_count,like_count,comment_count,share_count,favorite_count";
+      "id,create_time,cover_image_url,share_url,video_description,duration,title,view_count,like_count,comment_count,share_count";
     const res = await fetch(`${this.baseUrl}/video/query/?fields=${fields}`, {
       method: "POST",
       headers: {

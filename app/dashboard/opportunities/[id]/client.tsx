@@ -473,9 +473,9 @@ export function ContestClientPage({
           user_platform_pfp_url: null,
           submissions: [entry],
           total_views: 0,
-            // Twitter/X "creator-wise" leaderboard is already aggregated by creator,
-            // and the API returns `total_earnings` (not `earnings`).
-            total_earnings: entry.total_earnings ?? entry.earnings ?? 0,
+          // Twitter/X "creator-wise" leaderboard is already aggregated by creator,
+          // and the API returns `total_earnings` (not `earnings`).
+          total_earnings: entry.total_earnings ?? entry.earnings ?? 0,
           best_submission: entry,
           best_rank: currentRank,
           submission_count: entry.total_eligible_tweets || 0,
@@ -875,8 +875,10 @@ export function ContestClientPage({
               creator_full_name: r.creator_full_name ?? "Unknown Creator",
               creator_pfp_url: r.creator_pfp_url ?? null,
               user_platform_pfp_url: r.user_platform_pfp_url ?? null,
-              user_platform_username: r.user_platform_username ?? r.creator_username ?? "N/A",
-              user_full_name: r.user_full_name ?? r.creator_full_name ?? "Unknown Creator",
+              user_platform_username:
+                r.user_platform_username ?? r.creator_username ?? "N/A",
+              user_full_name:
+                r.user_full_name ?? r.creator_full_name ?? "Unknown Creator",
               submissions: r.submissions ?? [],
               submission_ranks: r.submission_ranks,
               total_views: r.total_views ?? 0,
@@ -2340,6 +2342,14 @@ export function ContestClientPage({
                   <Youtube className="h-7 w-7" />
                 ) : contest.platform?.toLowerCase() === "instagram" ? (
                   <Instagram className="h-7 w-7" />
+                ) : contest.platform?.toLowerCase() === "tiktok" ? (
+                  <svg
+                    viewBox="0 0 24 24"
+                    className="h-7 w-7"
+                    fill="currentColor"
+                  >
+                    <path d="M19.59 6.69a4.83 4.83 0 0 1-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 0 1-2.88 2.5 2.89 2.89 0 0 1-2.89-2.89 2.89 2.89 0 0 1 2.89-2.89c.28 0 .54.04.79.1v-3.5a6.37 6.37 0 0 0-.79-.05A6.34 6.34 0 0 0 3.15 15.2a6.34 6.34 0 0 0 6.34 6.34 6.34 6.34 0 0 0 6.34-6.34V8.75a8.18 8.18 0 0 0 4.76 1.52v-3.4a4.85 4.85 0 0 1-1-.18z" />
+                  </svg>
                 ) : contest.platform?.toLowerCase() === "twitter" ? (
                   <svg
                     viewBox="0 0 24 24"
@@ -3046,6 +3056,14 @@ export function ContestClientPage({
                           <Youtube className="h-5 w-5 text-red-600" />
                         ) : contest.platform?.toLowerCase() === "instagram" ? (
                           <Instagram className="h-5 w-5 text-pink-600" />
+                        ) : contest.platform?.toLowerCase() === "tiktok" ? (
+                          <svg
+                            viewBox="0 0 24 24"
+                            className="h-5 w-5"
+                            fill="#000000"
+                          >
+                            <path d="M19.59 6.69a4.83 4.83 0 0 1-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 0 1-2.88 2.5 2.89 2.89 0 0 1-2.89-2.89 2.89 2.89 0 0 1 2.89-2.89c.28 0 .54.04.79.1v-3.5a6.37 6.37 0 0 0-.79-.05A6.34 6.34 0 0 0 3.15 15.2a6.34 6.34 0 0 0 6.34 6.34 6.34 6.34 0 0 0 6.34-6.34V8.75a8.18 8.18 0 0 0 4.76 1.52v-3.4a4.85 4.85 0 0 1-1-.18z" />
+                          </svg>
                         ) : (
                           <Share2 className="h-5 w-5 text-slate-600" />
                         )}
@@ -5766,7 +5784,9 @@ export function ContestClientPage({
                                   : "ghost"
                               }
                               size="sm"
-                              onClick={() => setLeaderboardDisplayMode("submission")}
+                              onClick={() =>
+                                setLeaderboardDisplayMode("submission")
+                              }
                               className={`text-xs px-3 py-1.5 transition-all duration-200 flex-1 sm:flex-none ${
                                 leaderboardDisplayMode === "submission"
                                   ? isDark
@@ -5789,7 +5809,9 @@ export function ContestClientPage({
                                   : "ghost"
                               }
                               size="sm"
-                              onClick={() => setLeaderboardDisplayMode("creator")}
+                              onClick={() =>
+                                setLeaderboardDisplayMode("creator")
+                              }
                               className={`text-xs px-3 py-1.5 transition-all duration-200 flex-1 sm:flex-none ${
                                 leaderboardDisplayMode === "creator"
                                   ? isDark
@@ -5872,7 +5894,7 @@ export function ContestClientPage({
                                             displayEntry.user_platform_username
                                           : displayEntry.user_platform_username
                                       }
-                                        referrerPolicy="no-referrer"
+                                      referrerPolicy="no-referrer"
                                       loading="lazy"
                                     />
                                     <AvatarFallback
@@ -5880,7 +5902,6 @@ export function ContestClientPage({
                                         "bg-primary/20",
                                         isDark ? "text-white" : "text-gray-900",
                                       )}
-                                    
                                     >
                                       {(contest?.platform === "twitter"
                                         ? ((displayEntry as any)
@@ -6667,8 +6688,8 @@ export function ContestClientPage({
                                                             alt={
                                                               submission.user_platform_username
                                                             }
-                                                              referrerPolicy="no-referrer"
-                                      loading="lazy"
+                                                            referrerPolicy="no-referrer"
+                                                            loading="lazy"
                                                           />
                                                           <AvatarFallback
                                                             className={cn(
@@ -6677,7 +6698,6 @@ export function ContestClientPage({
                                                                 ? "text-primary-foreground"
                                                                 : "text-primary",
                                                             )}
-                                              
                                                           >
                                                             {submission.user_platform_username?.[0]?.toUpperCase() ||
                                                               "U"}
@@ -7301,11 +7321,10 @@ export function ContestClientPage({
                                                 alt={
                                                   video.user_platform_username
                                                 }
-                                                  referrerPolicy="no-referrer"
-                                      loading="lazy"
+                                                referrerPolicy="no-referrer"
+                                                loading="lazy"
                                               />
-                                              <AvatarFallback className="bg-violet-100 text-violet-600 font-semibold text-xs sm:text-base"
-                                              >
+                                              <AvatarFallback className="bg-violet-100 text-violet-600 font-semibold text-xs sm:text-base">
                                                 {video.user_platform_username?.[0]?.toUpperCase() ||
                                                   "U"}
                                               </AvatarFallback>
@@ -7825,14 +7844,16 @@ export function ContestClientPage({
                                           undefined
                                         }
                                         alt={
-                                          (creatorGroup as any).user_platform_username ??
+                                          (creatorGroup as any)
+                                            .user_platform_username ??
                                           creatorGroup.creator_username
                                         }
-                                          referrerPolicy="no-referrer"
-                                      loading="lazy"
+                                        referrerPolicy="no-referrer"
+                                        loading="lazy"
                                       />
                                       <AvatarFallback className="bg-violet-100 text-violet-600 font-semibold text-xs sm:text-base">
-                                        {((creatorGroup as any).user_platform_username ??
+                                        {((creatorGroup as any)
+                                          .user_platform_username ??
                                           creatorGroup.creator_username)?.[0]?.toUpperCase() ||
                                           "U"}
                                       </AvatarFallback>
@@ -7854,8 +7875,9 @@ export function ContestClientPage({
                                               (creatorGroup as any)
                                                 .app_username ||
                                               creatorGroup.creator_username
-                                            : (creatorGroup as any).user_platform_username ??
-                                              creatorGroup.creator_username}
+                                            : ((creatorGroup as any)
+                                                .user_platform_username ??
+                                              creatorGroup.creator_username)}
                                         </p>
                                       </div>
                                       {contest?.platform === "twitter" ? (
@@ -8282,7 +8304,7 @@ export function ContestClientPage({
                                             entry.user_platform_username
                                           : entry.user_platform_username
                                       }
-                                        referrerPolicy="no-referrer"
+                                      referrerPolicy="no-referrer"
                                       loading="lazy"
                                     />
                                     <AvatarFallback className="bg-violet-100 text-violet-600 font-semibold text-xs sm:text-base">
@@ -8426,7 +8448,8 @@ export function ContestClientPage({
                             )
                           }
                           disabled={
-                            leaderboardCurrentPage >= effectiveLeaderboardTotalPages
+                            leaderboardCurrentPage >=
+                            effectiveLeaderboardTotalPages
                           }
                         >
                           Next
@@ -8517,7 +8540,8 @@ export function ContestClientPage({
                     const actionKind = getTwitterSubmissionActionKind(sub);
                     if (actionKind === "reply") metrics.total_replies += 1;
                     if (actionKind === "retweet") metrics.total_retweets += 1;
-                    if (actionKind === "quote") metrics.total_quote_reposts += 1;
+                    if (actionKind === "quote")
+                      metrics.total_quote_reposts += 1;
                     metrics.total_impressions += sub.views || 0;
 
                     // Calculate points as base_points + manual adjustment (avoid double counting)
