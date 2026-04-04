@@ -7,7 +7,22 @@ function clampPct(n: number): number {
   return Math.max(0, Math.min(100, Math.round(n)));
 }
 
-/** Meta X-App-Usage header: JSON with call_count, total_time, total_cputime (each 0–100). */
+function readNumericField(obj: Record<string, unknown>, keys: string[]): number {
+  for (const key of keys) {
+    const v = obj[key];
+    if (typeof v === "number" && Number.isFinite(v)) return v;
+    if (typeof v === "string") {
+      const n = Number(v);
+      if (Number.isFinite(n)) return n;
+    }
+  }
+  return NaN;
+}
+
+/**
+ * X-App-Usage: classic Graph uses call_count, total_time, total_cputime.
+ * Instagram Graph often returns call_volume, cpu_time (and sometimes total_time).
+ */
 function parseXAppUsage(headers: Headers): {
   call_count: number;
   total_time: number;
@@ -17,17 +32,17 @@ function parseXAppUsage(headers: Headers): {
   const raw = headers.get("x-app-usage");
   if (!raw?.trim()) return null;
   try {
-    const o = JSON.parse(raw) as {
-      call_count?: number;
-      total_time?: number;
-      total_cputime?: number;
-    };
-    return {
-      call_count: clampPct(Number(o.call_count ?? 0)),
-      total_time: clampPct(Number(o.total_time ?? 0)),
-      total_cputime: clampPct(Number(o.total_cputime ?? 0)),
-      raw,
-    };
+    const o = JSON.parse(raw) as Record<string, unknown>;
+    const call_count = clampPct(
+      readNumericField(o, ["call_count", "call_volume"])
+    );
+    const total_time = clampPct(
+      readNumericField(o, ["total_time", "total_wall_time"])
+    );
+    const total_cputime = clampPct(
+      readNumericField(o, ["total_cputime", "cpu_time", "cputime"])
+    );
+    return { call_count, total_time, total_cputime, raw };
   } catch {
     return null;
   }
