@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import dayjs from "dayjs";
 import { createClient as createAdminSupabaseClient } from "@supabase/supabase-js";
 import { isInstagramInsightsQueueEnabled } from "@/lib/queue/instagram-insights-queue";
+import { instagramGraphFetch } from "@/lib/meta-graph/instagram-graph-fetch";
 
 // 🎯 Types
 interface InstagramAccount {
@@ -83,7 +84,7 @@ async function refreshToken(
 ): Promise<string | null> {
   try {
     const refreshUrl = `https://graph.instagram.com/refresh_access_token?grant_type=ig_refresh_token&access_token=${accessToken}`;
-    const response = await fetch(refreshUrl);
+    const response = await instagramGraphFetch(refreshUrl);
     const data = await response.json();
 
     if (!response.ok || data.error) {
@@ -111,7 +112,7 @@ async function fetchInsights(
 ): Promise<{ views: number; stats: Record<string, number> } | null> {
   try {
     const url = `https://graph.instagram.com/${submission.video_id}/insights?metric=${METRICS}&access_token=${accessToken}`;
-    const response = await fetch(url, {
+    const response = await instagramGraphFetch(url, {
       headers: {
         "User-Agent":
           "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
