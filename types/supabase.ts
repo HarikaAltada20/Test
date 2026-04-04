@@ -568,6 +568,32 @@ export interface Database {
           error_message?: string | null;
         };
       };
+      meta_graph_app_usage: {
+        Row: {
+          id: string;
+          call_count: number;
+          total_time: number;
+          total_cputime: number;
+          updated_at: string;
+          raw_headers: Json | null;
+        };
+        Insert: {
+          id?: string;
+          call_count?: number;
+          total_time?: number;
+          total_cputime?: number;
+          updated_at?: string;
+          raw_headers?: Json | null;
+        };
+        Update: {
+          id?: string;
+          call_count?: number;
+          total_time?: number;
+          total_cputime?: number;
+          updated_at?: string;
+          raw_headers?: Json | null;
+        };
+      };
       twitter_metrics_refresh_runs: {
         Row: {
           id: string;
