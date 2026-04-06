@@ -22,7 +22,7 @@ export async function POST(request: Request) {
     if (!submissionId || !action) {
       return NextResponse.json(
         { error: "Submission ID and action are required" },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -41,7 +41,7 @@ export async function POST(request: Request) {
           error:
             "Invalid action. Must be verified, rejected, pending, paid, mark_bonus_paid, or mark_both_paid",
         },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -64,7 +64,7 @@ export async function POST(request: Request) {
       if (userError || !authUser) {
         return NextResponse.json(
           { error: "Authentication required" },
-          { status: 401 }
+          { status: 401 },
         );
       }
 
@@ -77,7 +77,7 @@ export async function POST(request: Request) {
       if (userDataError || !userData || userData.user_type !== "advertiser") {
         return NextResponse.json(
           { error: "Insufficient permissions" },
-          { status: 403 }
+          { status: 403 },
         );
       }
 
@@ -91,14 +91,14 @@ export async function POST(request: Request) {
       if (submissionError || !submission) {
         return NextResponse.json(
           { error: "Submission not found" },
-          { status: 404 }
+          { status: 404 },
         );
       }
 
       if ((submission as any).contests.advertiser_id !== authUser.id) {
         return NextResponse.json(
           { error: "You can only manage submissions for your own contests" },
-          { status: 403 }
+          { status: 403 },
         );
       }
 
@@ -117,7 +117,7 @@ export async function POST(request: Request) {
     if (submissionError || !submission) {
       return NextResponse.json(
         { error: "Submission not found" },
-        { status: 404 }
+        { status: 404 },
       );
     }
 
@@ -139,7 +139,7 @@ export async function POST(request: Request) {
           error:
             "Submission status cannot be changed after payouts are processed. Contest is fully finalized.",
         },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -157,7 +157,7 @@ export async function POST(request: Request) {
           error:
             "Payments can only be processed when contest status is 'verification_complete'",
         },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -171,7 +171,7 @@ export async function POST(request: Request) {
           error:
             "Invalid contest type. Only leaderboard and CPM contests are supported",
         },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -180,14 +180,14 @@ export async function POST(request: Request) {
     const { data: submissionFull, error: submissionFullErr } = await supabase
       .from("submissions")
       .select(
-        "id, contest_id, creator_id, status, earnings, views, paid, paid_at, bonus_paid, bonus_paid_at"
+        "id, contest_id, creator_id, status, earnings, views, paid, paid_at, bonus_paid, bonus_paid_at",
       )
       .eq("id", submissionId)
       .single();
     if (submissionFullErr || !submissionFull) {
       return NextResponse.json(
         { error: "Submission not found" },
-        { status: 404 }
+        { status: 404 },
       );
     }
 
@@ -197,8 +197,8 @@ export async function POST(request: Request) {
       action === "mark_bonus_paid"
         ? submission.status
         : shouldMarkPaid
-        ? SUBMISSION_STATUS.paid
-        : action;
+          ? SUBMISSION_STATUS.paid
+          : action;
 
     // Update the submission status
     const updateData: any = {
@@ -261,7 +261,7 @@ export async function POST(request: Request) {
       console.error("Error updating submission status:", updateError);
       return NextResponse.json(
         { error: "Failed to update submission status" },
-        { status: 500 }
+        { status: 500 },
       );
     }
 
@@ -293,7 +293,7 @@ export async function POST(request: Request) {
         try {
           const currentTotal = await MetricsService.getCreatorField(
             submissionFull.creator_id,
-            "total_views"
+            "total_views",
           );
           const { error: updCreatorErr } = await supabaseAdmin
             .from("creator_profiles")
@@ -302,7 +302,7 @@ export async function POST(request: Request) {
           if (updCreatorErr) {
             console.error(
               "Failed to update creator total_views:",
-              updCreatorErr
+              updCreatorErr,
             );
           }
         } catch (e) {
@@ -319,7 +319,7 @@ export async function POST(request: Request) {
             credited_views: currentViews,
             credited_at: new Date().toISOString(),
           },
-          { onConflict: "submission_id" }
+          { onConflict: "submission_id" },
         );
       if (snapErr) {
         console.error("Failed to snapshot credited views:", snapErr);
@@ -364,7 +364,7 @@ export async function POST(request: Request) {
 
         const currentBonusSpent = (bonusSpendingData || []).reduce(
           (sum, sub) => sum + (sub.bonus_amount || 0),
-          0
+          0,
         );
 
         // For leaderboard contests with total_budget, check if budget would be exceeded
@@ -380,7 +380,7 @@ export async function POST(request: Request) {
                   remaining: totalBudget - currentBonusSpent,
                 },
               },
-              { status: 400 }
+              { status: 400 },
             );
           }
         }
@@ -398,7 +398,7 @@ export async function POST(request: Request) {
                   remaining: flatFeeBonusCap - currentBonusSpent,
                 },
               },
-              { status: 400 }
+              { status: 400 },
             );
           }
         }
@@ -420,7 +420,7 @@ export async function POST(request: Request) {
                 contest_id: submissionFull.contest_id,
                 bonus_type: "flat_fee",
               },
-            }
+            },
           );
 
           if (!creditResult.success) {
@@ -428,7 +428,7 @@ export async function POST(request: Request) {
               {
                 error: `Failed to credit flat fee bonus: ${creditResult.error}`,
               },
-              { status: 500 }
+              { status: 500 },
             );
           }
 
@@ -442,13 +442,15 @@ export async function POST(request: Request) {
                 bonus_amount: flatFeeBonus, // Store actual bonus amount paid (in cents)
               })
               .eq("id", submissionId)
-              .select("id, status, earnings, paid, paid_at, bonus_paid, bonus_paid_at, bonus_amount")
+              .select(
+                "id, status, earnings, paid, paid_at, bonus_paid, bonus_paid_at, bonus_amount",
+              )
               .single();
 
           if (bonusUpdateError) {
             console.error(
               "Error updating bonus_paid status:",
-              bonusUpdateError
+              bonusUpdateError,
             );
           } else if (afterBonusUpdate) {
             Object.assign(updatedSubmission, afterBonusUpdate);
@@ -457,12 +459,12 @@ export async function POST(request: Request) {
       } else if (flatFeeBonus <= 0) {
         return NextResponse.json(
           { error: "No flat fee bonus configured for this contest" },
-          { status: 400 }
+          { status: 400 },
         );
       } else if (submissionFull.status !== "verified") {
         return NextResponse.json(
           { error: "Submission must be verified before paying bonus" },
-          { status: 400 }
+          { status: 400 },
         );
       }
     }
@@ -477,25 +479,9 @@ export async function POST(request: Request) {
       });
     }
 
-    // Enqueue payout job instead of doing full payout synchronously (avoid timeouts)
+    // Process payment inline to ensure money_transactions are created immediately
+    // This ensures TikTok payments work the same as Instagram bulk payments
     if (action === SUBMISSION_STATUS.paid || action === "mark_both_paid") {
-      // Try to enqueue; on failure, fall back to inline payout logic below
-      const { error: enqueueErr } = await supabaseAdmin
-        .from("payout_jobs")
-        .insert({
-          submission_id: submissionId,
-          requested_by: currentUserId,
-          payload: paymentDetails || {},
-        });
-      if (!enqueueErr) {
-        return NextResponse.json({
-          success: true,
-          queued: true,
-          message: "Payout queued for processing",
-        });
-      }
-
-      // Fallback path below keeps previous inline behavior if enqueue fails
       // Handle wallet credit/debit on status changes
       if (action === SUBMISSION_STATUS.paid || action === "mark_both_paid") {
         // Determine amount: custom from paymentDetails or default to earnings
@@ -565,7 +551,7 @@ export async function POST(request: Request) {
           const refundsCount =
             (existingRefunds || [])?.filter(
               (r: any) =>
-                !r.remarks || r.remarks === REVERSAL_TRANSACTION_REMARK
+                !r.remarks || r.remarks === REVERSAL_TRANSACTION_REMARK,
             ).length || 0;
           const nextCycle =
             rewardsCount > refundsCount ? rewardsCount : rewardsCount + 1;
@@ -604,12 +590,12 @@ export async function POST(request: Request) {
                   payout_type: customAmount ? "custom" : "standard",
                   payout_cycle: nextCycle,
                 },
-              }
+              },
             );
             if (!creditRes.success) {
               return NextResponse.json(
                 { error: `Failed to credit creator: ${creditRes.error}` },
-                { status: 500 }
+                { status: 500 },
               );
             }
           }
@@ -619,7 +605,7 @@ export async function POST(request: Request) {
             await MetricsService.incrementSubmissionWin(
               submissionFull.creator_id,
               submissionFull.contest_id,
-              submissionId
+              submissionId,
             );
           } catch (e: any) {
             console.error("Metrics update (paid) failed:", e);
@@ -687,18 +673,18 @@ export async function POST(request: Request) {
           const message = rewardErr?.message || refundErr?.message || "unknown";
           return NextResponse.json(
             { error: `Failed to fetch transactions for reversal: ${message}` },
-            { status: 500 }
+            { status: 500 },
           );
         }
 
         const totalRewards = (rewardTxns || []).reduce(
           (sum: number, tx: any) => sum + (tx.amount || 0),
-          0
+          0,
         );
         const totalReversals = (refundTxns || [])
           .filter(
             (tx: any) =>
-              !tx.remarks || tx.remarks === REVERSAL_TRANSACTION_REMARK
+              !tx.remarks || tx.remarks === REVERSAL_TRANSACTION_REMARK,
           )
           .reduce((sum: number, tx: any) => sum + (tx.amount || 0), 0);
         reversalAmount = Math.max(0, totalRewards - totalReversals);
@@ -708,12 +694,12 @@ export async function POST(request: Request) {
         // Debit creator wallet by the credited total
         const debitRes = await debitCreatorWithdrawableBalance(
           submissionFull.creator_id,
-          reversalAmount
+          reversalAmount,
         );
         if (!debitRes.success) {
           return NextResponse.json(
             { error: `Failed to reverse creator credit: ${debitRes.error}` },
-            { status: 500 }
+            { status: 500 },
           );
         }
         // Metrics revert for paid reversal: submission wins and contest wins (-1)
@@ -721,7 +707,7 @@ export async function POST(request: Request) {
           await MetricsService.decrementSubmissionWin(
             submissionFull.creator_id,
             submissionFull.contest_id,
-            submissionFull.id
+            submissionFull.id,
           );
         } catch (e: any) {
           console.error("Metrics update (revert paid) failed:", e);
@@ -743,7 +729,7 @@ export async function POST(request: Request) {
               submission_id: submissionId,
               contest_id: submissionFull.contest_id,
             },
-          }
+          },
         );
         // No longer keep earnings on reversal; it should be cleared when leaving Paid
       }
@@ -783,7 +769,7 @@ export async function POST(request: Request) {
       {
         error: "Internal server error",
       },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }
@@ -804,7 +790,7 @@ export async function GET(request: Request) {
     if (userError || !user) {
       return NextResponse.json(
         { error: "Authentication required" },
-        { status: 401 }
+        { status: 401 },
       );
     }
 
@@ -818,14 +804,14 @@ export async function GET(request: Request) {
     if (userDataError || !userData) {
       return NextResponse.json(
         { error: "User data not found" },
-        { status: 404 }
+        { status: 404 },
       );
     }
 
     if (userData.user_type !== "admin" && userData.user_type !== "advertiser") {
       return NextResponse.json(
         { error: "Insufficient permissions" },
-        { status: 403 }
+        { status: 403 },
       );
     }
 
@@ -854,7 +840,7 @@ export async function GET(request: Request) {
           username,
           full_name
         )
-      `
+      `,
       )
       .eq("status", status)
       .in("contests.contest_type", ["leaderboard", "cpm"])
@@ -864,7 +850,7 @@ export async function GET(request: Request) {
       console.error("Error fetching submissions:", submissionsError);
       return NextResponse.json(
         { error: "Failed to fetch submissions" },
-        { status: 500 }
+        { status: 500 },
       );
     }
 
@@ -878,7 +864,7 @@ export async function GET(request: Request) {
       {
         error: "Internal server error",
       },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

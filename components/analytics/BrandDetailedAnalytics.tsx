@@ -35,7 +35,7 @@ import { useAnalyticsDarkMode } from "@/hooks/use-analytics-dark-mode";
 interface BrandDetailedAnalyticsProps {
   userId: string;
   contentType?: "video" | "text_image";
-  videoPlatform?: "video" | "all" | "youtube" | "instagram";
+  videoPlatform?: string;
   twitterAnalytics?: boolean;
   contestTypeFilter: "all" | "leaderboard" | "cpm";
   onContestTypeFilterChange: (value: "all" | "leaderboard" | "cpm") => void;
@@ -73,6 +73,12 @@ export default function BrandDetailedAnalytics({
       params.set("type", contestTypeFilter);
       params.set("contentType", contentType);
       params.set("videoPlatform", videoPlatform);
+      // Determine if tiktok is selected based on videoPlatform
+      const hasTiktok =
+        videoPlatform === "all" ||
+        videoPlatform === "tiktok" ||
+        videoPlatform.includes("tiktok");
+      params.set("tiktok", hasTiktok ? "true" : "false");
       params.set("twitter", twitterAnalytics ? "true" : "false");
       if (activeFilter && activeFilter !== "all") {
         params.set("status", activeFilter);
@@ -810,7 +816,6 @@ export default function BrandDetailedAnalytics({
       {(contentType === "video" ||
         (contentType === "text_image" && twitterAnalytics)) && (
         <>
-          
           <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6">
             {(contentType === "video"
               ? [
@@ -868,8 +873,7 @@ export default function BrandDetailedAnalytics({
                     label: "Expected Views",
                     sub: "Pending + Verified + Paid",
                     tooltip: "Pending + Verified + Paid views (Twitter)",
-                    value:
-                      safeOverview.viewsByStatusTwitter?.expected ?? 0,
+                    value: safeOverview.viewsByStatusTwitter?.expected ?? 0,
                     Icon: Eye,
                   },
                   {
@@ -877,25 +881,21 @@ export default function BrandDetailedAnalytics({
                     sub: "Verified",
                     tooltip:
                       "Views from Twitter submissions marked as verified",
-                    value:
-                      safeOverview.viewsByStatusTwitter?.verified ?? 0,
+                    value: safeOverview.viewsByStatusTwitter?.verified ?? 0,
                     Icon: CheckCircle,
                   },
                   {
                     label: "Pending Views",
                     sub: "Pending",
-                    tooltip:
-                      "Views from Twitter submissions marked as pending",
-                    value:
-                      safeOverview.viewsByStatusTwitter?.pending ?? 0,
+                    tooltip: "Views from Twitter submissions marked as pending",
+                    value: safeOverview.viewsByStatusTwitter?.pending ?? 0,
                     Icon: Eye,
                   },
                   {
                     label: "Rejected Views",
                     sub: "From rejected entries",
                     tooltip: "From rejected Twitter entries",
-                    value:
-                      safeOverview.viewsByStatusTwitter?.rejected ?? 0,
+                    value: safeOverview.viewsByStatusTwitter?.rejected ?? 0,
                     Icon: AlertCircle,
                   },
                   {

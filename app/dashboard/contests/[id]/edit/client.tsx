@@ -5343,6 +5343,11 @@ export default function EditContestPage({
       return;
     }
 
+    // Preserve existing contest_based_details to avoid overwriting other data
+    let contestBasedDetails: any = contest?.contest_based_details
+      ? { ...contest.contest_based_details }
+      : {};
+
     // YouTube analytics visibility (brand side) — stored in contest_based_details.youtube_analytics_visibility
     if (!datesOnly && platform?.toLowerCase() === "youtube") {
       contestBasedDetails.youtube_analytics_visibility = {

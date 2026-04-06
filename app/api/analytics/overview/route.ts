@@ -23,7 +23,9 @@ export async function GET(request: NextRequest) {
       .toLowerCase() as "video" | "text_image";
     const videoPlatform = (searchParams.get("videoPlatform") ?? "all")
       .trim()
-      .toLowerCase() as "video" | "all" | "youtube" | "instagram";
+      .toLowerCase();
+    const tiktokParam = searchParams.get("tiktok");
+    const tiktokAnalytics = tiktokParam === "true" || tiktokParam === "1";
     const twitterParam = searchParams.get("twitter");
     const twitterAnalytics = twitterParam === "true" || twitterParam === "1";
 
@@ -80,7 +82,7 @@ export async function GET(request: NextRequest) {
       .eq("advertiser_id", user.id)
       .order("created_at", { ascending: false });
 
-    // Normalize platform key (used for Twitter contest detection)
+    // Normalize platform key (used for Twitter/TikTok contest detection)
     const normalizePlatformKey = (contest: {
       platform?: string | null;
       contest_based_details?: unknown;
@@ -88,6 +90,7 @@ export async function GET(request: NextRequest) {
       const raw = contest.platform;
       const p = (raw ?? "").toString().trim().toLowerCase();
       if (p === "x" || p === "twitter") return "twitter";
+      if (p === "tiktok" || p === "tik_tok" || p === "tik-tok") return "tiktok";
       if (p === "youtube" || p === "instagram") return p;
       const details = contest.contest_based_details as
         | { twitter_campaign?: unknown }
@@ -121,25 +124,45 @@ export async function GET(request: NextRequest) {
               contestTypeFilter,
           );
 
-    // Platform filter: video (youtube/instagram) and/or text_image (twitter); both => all selected
+    // Platform filter: video (youtube/instagram/tiktok) and/or text_image (twitter); both => all selected
     const allowedPlatforms = ((): string[] => {
-      const videoPlatforms =
-        contentType === "video"
-          ? videoPlatform === "youtube"
-            ? ["youtube"]
-            : videoPlatform === "instagram"
-              ? ["instagram"]
-              : ["youtube", "instagram"]
-          : [];
-      const twitterPlatform = twitterAnalytics ? ["twitter"] : [];
-      if (videoPlatforms.length > 0 && twitterPlatform.length > 0) {
-        return [...videoPlatforms, ...twitterPlatform];
+      const platforms: string[] = [];
+
+      if (contentType === "video") {
+        // Parse videoPlatform to determine which video platforms are selected
+        if (videoPlatform === "all") {
+          // "all" means all three video platforms selected
+          platforms.push("youtube", "instagram", "tiktok");
+        } else if (videoPlatform === "youtube_instagram") {
+          platforms.push("youtube", "instagram");
+        } else if (videoPlatform === "youtube_tiktok") {
+          platforms.push("youtube", "tiktok");
+        } else if (videoPlatform === "instagram_tiktok") {
+          platforms.push("instagram", "tiktok");
+        } else if (videoPlatform === "youtube") {
+          platforms.push("youtube");
+        } else if (videoPlatform === "instagram") {
+          platforms.push("instagram");
+        } else if (videoPlatform === "tiktok") {
+          platforms.push("tiktok");
+        } else {
+          // Fallback: check individual flags
+          platforms.push("youtube", "instagram");
+          if (tiktokAnalytics) platforms.push("tiktok");
+        }
       }
-      if (contentType === "text_image") {
-        return twitterPlatform;
+
+      // Add twitter if selected
+      if (twitterAnalytics) {
+        platforms.push("twitter");
       }
-      if (videoPlatforms.length > 0) return videoPlatforms;
-      return ["youtube", "instagram", "twitter"];
+
+      // If no platforms selected, default to all
+      if (platforms.length === 0) {
+        return ["youtube", "instagram", "tiktok", "twitter"];
+      }
+
+      return platforms;
     })();
     const contestsFilteredByPlatform =
       allowedPlatforms.length === 0

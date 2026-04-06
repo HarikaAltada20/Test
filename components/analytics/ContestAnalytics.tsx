@@ -11,7 +11,7 @@ interface ContestAnalyticsProps {
   activeFilter?: string;
   onFilterChange?: (filter: string) => void;
   contentType?: "video" | "text_image";
-  videoPlatform?: "video" | "all" | "youtube" | "instagram";
+  videoPlatform?: string;
   twitterAnalytics?: boolean;
   contestTypeFilter?: "all" | "leaderboard" | "cpm";
 }
@@ -76,9 +76,16 @@ export default function ContestAnalytics({
     try {
       setLoading(true);
       const params = new URLSearchParams();
-      if (activeFilter && activeFilter !== "all") params.set("status", activeFilter);
+      if (activeFilter && activeFilter !== "all")
+        params.set("status", activeFilter);
       params.set("contentType", contentType);
       params.set("videoPlatform", videoPlatform);
+      // Determine if tiktok is selected based on videoPlatform
+      const hasTiktok =
+        videoPlatform === "all" ||
+        videoPlatform === "tiktok" ||
+        videoPlatform.includes("tiktok");
+      params.set("tiktok", hasTiktok ? "true" : "false");
       params.set("twitter", twitterAnalytics ? "true" : "false");
       if (contestTypeFilter && contestTypeFilter !== "all") {
         params.set("type", contestTypeFilter);
@@ -105,16 +112,16 @@ export default function ContestAnalytics({
     // Use filtered contests for summary stats
     const totalSubmissions = filteredContests.reduce(
       (sum, contest) => sum + (contest.submissions?.length || 0),
-      0
+      0,
     );
     const totalViews = filteredContests.reduce(
       (sum, contest) =>
         sum +
         (contest.submissions?.reduce(
           (subSum, sub) => subSum + (sub.views || 0),
-          0
+          0,
         ) || 0),
-      0
+      0,
     );
 
     const totalSpent = filteredContests.reduce((sum, contest) => {
@@ -184,7 +191,7 @@ export default function ContestAnalytics({
           <span
             className={cn(
               "text-xs sm:text-sm",
-              isDark ? "text-gray-300" : "text-gray-600"
+              isDark ? "text-gray-300" : "text-gray-600",
             )}
           >
             Showing stats based on:
@@ -192,28 +199,30 @@ export default function ContestAnalytics({
           <span
             className={cn(
               "px-2 sm:px-3 py-1 rounded-full text-xs sm:text-sm font-medium inline-flex shrink-0 w-fit",
-              isDark ? "bg-gray-800 text-gray-100" : "bg-gray-100 text-gray-800"
+              isDark
+                ? "bg-gray-800 text-gray-100"
+                : "bg-gray-100 text-gray-800",
             )}
           >
             {activeFilter === "all"
               ? "All Submissions"
               : activeFilter === "verifiedPaid"
-              ? "Verified + Paid Submissions"
-              : activeFilter === "verified"
-              ? "Verified Submissions"
-              : activeFilter === "paid"
-              ? "Paid Submissions"
-              : activeFilter === "pending"
-              ? "Pending Submissions"
-              : activeFilter === "rejected"
-              ? "Rejected Submissions"
-              : activeFilter}
+                ? "Verified + Paid Submissions"
+                : activeFilter === "verified"
+                  ? "Verified Submissions"
+                  : activeFilter === "paid"
+                    ? "Paid Submissions"
+                    : activeFilter === "pending"
+                      ? "Pending Submissions"
+                      : activeFilter === "rejected"
+                        ? "Rejected Submissions"
+                        : activeFilter}
           </span>
         </div>
         <div
           className={cn(
             "text-xs sm:text-sm whitespace-nowrap",
-            isDark ? "text-gray-300" : "text-gray-500"
+            isDark ? "text-gray-300" : "text-gray-500",
           )}
         >
           {filteredContests.length} contest
@@ -230,7 +239,7 @@ export default function ContestAnalytics({
           <p
             className={cn(
               "text-sm mt-2",
-              isDark ? "text-gray-400" : "text-gray-500"
+              isDark ? "text-gray-400" : "text-gray-500",
             )}
           >
             Create your first contest to get started!

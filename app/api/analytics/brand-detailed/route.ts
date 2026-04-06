@@ -15,15 +15,16 @@ export async function GET(request: NextRequest) {
 
     const { searchParams } = new URL(request.url);
     const submissionStatusRaw = searchParams.get("status");
-    const submissionStatus =
-      submissionStatusRaw?.trim().toLowerCase() || null;
+    const submissionStatus = submissionStatusRaw?.trim().toLowerCase() || null;
     const contestTypeFilter = searchParams.get("type") || "all";
     const contentType = (searchParams.get("contentType") ?? "video")
       .trim()
       .toLowerCase() as "video" | "text_image";
     const videoPlatform = (searchParams.get("videoPlatform") ?? "all")
       .trim()
-      .toLowerCase() as "video" | "all" | "youtube" | "instagram";
+      .toLowerCase();
+    const tiktokParam = searchParams.get("tiktok");
+    const tiktokAnalytics = tiktokParam === "true" || tiktokParam === "1";
     const twitterParam = searchParams.get("twitter");
     const twitterAnalytics = twitterParam === "true" || twitterParam === "1";
 
@@ -204,7 +205,9 @@ export async function GET(request: NextRequest) {
 
     // If still no rows but counts indicate presence, do per-contest fallback now
     if (allSubmissions.length === 0 && (contestsByType?.length || 0) > 0) {
-      perContestFetched = await performPerContestFallback(contestsByType as any[]);
+      perContestFetched = await performPerContestFallback(
+        contestsByType as any[],
+      );
     }
 
     // Re-apply submission status filter after fallback (fallback fills allSubmissions without status filter)
@@ -219,10 +222,11 @@ export async function GET(request: NextRequest) {
         }) || [];
     }
 
-    // Normalize platform key (x -> twitter; infer twitter from contest_based_details)
+    // Normalize platform key (x -> twitter; tiktok variants; infer twitter from contest_based_details)
     const normalizePlatformKey = (c: any) => {
       const p = (c?.platform ?? "").toString().trim().toLowerCase();
       if (p === "x" || p === "twitter") return "twitter";
+      if (p === "tiktok" || p === "tik_tok" || p === "tik-tok") return "tiktok";
       const details = c?.contest_based_details as
         | { twitter_campaign?: unknown }
         | undefined;
@@ -232,21 +236,43 @@ export async function GET(request: NextRequest) {
 
     // Apply platform filter (video + twitter both allowed => all selected)
     const allowedPlatforms = ((): string[] => {
-      const videoPlatforms =
-        contentType === "video"
-          ? videoPlatform === "youtube"
-            ? ["youtube"]
-            : videoPlatform === "instagram"
-              ? ["instagram"]
-              : ["youtube", "instagram"]
-          : [];
-      const twitterPlatform = twitterAnalytics ? ["twitter"] : [];
-      if (videoPlatforms.length > 0 && twitterPlatform.length > 0) {
-        return [...videoPlatforms, ...twitterPlatform];
+      const platforms: string[] = [];
+
+      if (contentType === "video") {
+        // Parse videoPlatform to determine which video platforms are selected
+        if (videoPlatform === "all") {
+          // "all" means all three video platforms selected
+          platforms.push("youtube", "instagram", "tiktok");
+        } else if (videoPlatform === "youtube_instagram") {
+          platforms.push("youtube", "instagram");
+        } else if (videoPlatform === "youtube_tiktok") {
+          platforms.push("youtube", "tiktok");
+        } else if (videoPlatform === "instagram_tiktok") {
+          platforms.push("instagram", "tiktok");
+        } else if (videoPlatform === "youtube") {
+          platforms.push("youtube");
+        } else if (videoPlatform === "instagram") {
+          platforms.push("instagram");
+        } else if (videoPlatform === "tiktok") {
+          platforms.push("tiktok");
+        } else {
+          // Fallback: check individual flags
+          platforms.push("youtube", "instagram");
+          if (tiktokAnalytics) platforms.push("tiktok");
+        }
       }
-      if (contentType === "text_image") return twitterPlatform;
-      if (videoPlatforms.length > 0) return videoPlatforms;
-      return ["youtube", "instagram", "twitter"];
+
+      // Add twitter if selected
+      if (twitterAnalytics) {
+        platforms.push("twitter");
+      }
+
+      // If no platforms selected, default to all
+      if (platforms.length === 0) {
+        return ["youtube", "instagram", "tiktok", "twitter"];
+      }
+
+      return platforms;
     })();
     const contests =
       allowedPlatforms.length === 0
