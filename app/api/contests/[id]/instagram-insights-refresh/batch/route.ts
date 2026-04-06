@@ -15,6 +15,8 @@ import {
   type SubmissionForInsights,
   type FetchInsightsResult,
 } from "@/lib/instagram-insights";
+import { insertMetaGraphUsageLogRow } from "@/lib/meta-graph/meta-graph-usage-log";
+import type { MetaGraphUsageAccumulator } from "@/lib/meta-graph/usage-accumulator";
 
 async function mapLimit<T, R>(
   items: readonly T[],
@@ -182,6 +184,7 @@ export async function POST(
     const creatorNeedsReconnect = new Set<string>();
 
     const creatorIdList = Object.keys(submissionsByCreator);
+    const usageAccumulator: MetaGraphUsageAccumulator = {};
 
     await mapLimit(creatorIdList, 3, async (creatorId) => {
       const creator = creatorsById.get(creatorId);
@@ -246,7 +249,11 @@ export async function POST(
 
       let accessToken = account.access_token;
       if (account.token_expiry && isTokenExpiring(account.token_expiry)) {
-        const refreshResult = await refreshToken(creatorId, accessToken);
+        const refreshResult = await refreshToken(
+          creatorId,
+          accessToken,
+          usageAccumulator
+        );
         if (!refreshResult) {
           creatorNeedsReconnect.add(creatorId);
           allSubsForCreator.forEach((sub) => {
@@ -291,7 +298,8 @@ export async function POST(
         };
         const result: FetchInsightsResult = await fetchInsights(
           submission,
-          accessToken
+          accessToken,
+          usageAccumulator
         );
         const previousStatus = sub.insights_status ?? null;
 
@@ -429,6 +437,14 @@ export async function POST(
         .eq("id", runId)
         .eq("current_batch_index", batchIndex);
     }
+
+    await insertMetaGraphUsageLogRow({
+      source: "instagram_insights_batch",
+      contestId,
+      runId,
+      batchIndex,
+      accumulator: usageAccumulator,
+    });
 
     return NextResponse.json({
       hasMore,
