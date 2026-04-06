@@ -755,9 +755,6 @@ export function ContestClientPage({
           // Twitter/X "creator-wise" leaderboard is already aggregated by creator,
           // and the API returns `total_earnings` (not `earnings`).
           total_earnings: entry.total_earnings ?? entry.earnings ?? 0,
-          // Twitter/X "creator-wise" leaderboard is already aggregated by creator,
-          // and the API returns `total_earnings` (not `earnings`).
-          total_earnings: entry.total_earnings ?? entry.earnings ?? 0,
           best_submission: entry,
           best_rank: currentRank,
           submission_count: entry.total_eligible_tweets || 0,
@@ -6754,9 +6751,9 @@ export function ContestClientPage({
                                       : "bg-[#D9C0FF40] text-[#4A00BE]",
                                   )}
                                 >
-                                  <div className="text-lg sm:text-xl font-extrabold leading-none tabular-nums">
+                                   <div className="text-lg sm:text-xl font-extrabold leading-none tabular-nums">
                                     {isCreatorWiseMyCard
-                                      ? (combinedRankForCard ?? "?")
+                                      ? combinedRankForCard ?? "?"
                                       : bestSubmission
                                         ? (typeof bestSubmission.rank === "number"
                                           ? bestSubmission.rank
@@ -6767,15 +6764,6 @@ export function ContestClientPage({
                                               bestSubmission.id,
                                             ) ?? "?")
                                         : myLeaderboardEntry?.rank ?? "?"}
-                                        ? typeof bestSubmission.rank ===
-                                          "number"
-                                          ? bestSubmission.rank
-                                          : bestSubmission.status === "rejected"
-                                            ? "—"
-                                            : (rankLookupMap.get(
-                                                bestSubmission.id,
-                                              ) ?? "?")
-                                        : (myLeaderboardEntry?.rank ?? "?")}
                                   </div>
                                   {!isCreatorWiseMyCard &&
                                     bestSubmission &&
@@ -7654,8 +7642,6 @@ export function ContestClientPage({
                                                             }
                                                             referrerPolicy="no-referrer"
                                                             loading="lazy"
-                                                            referrerPolicy="no-referrer"
-                                                            loading="lazy"
                                                           />
                                                           <AvatarFallback
                                                             className={cn(
@@ -8363,8 +8349,6 @@ export function ContestClientPage({
                                                 }
                                                 referrerPolicy="no-referrer"
                                                 loading="lazy"
-                                                referrerPolicy="no-referrer"
-                                                loading="lazy"
                                               />
                                               <AvatarFallback className="bg-violet-100 text-violet-600 font-semibold text-xs sm:text-base">
                                                 {video.user_platform_username?.[0]?.toUpperCase() ||
@@ -8959,8 +8943,6 @@ export function ContestClientPage({
                                             .user_platform_username ??
                                           creatorGroup.creator_username
                                         }
-                                        referrerPolicy="no-referrer"
-                                        loading="lazy"
                                         referrerPolicy="no-referrer"
                                         loading="lazy"
                                       />
