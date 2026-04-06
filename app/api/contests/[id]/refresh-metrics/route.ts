@@ -26,7 +26,7 @@ import {
 
 export async function POST(
   request: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: { id: string } },
 ) {
   const refreshMetricsStartMs = Date.now();
   try {
@@ -46,7 +46,7 @@ export async function POST(
     const { data: contest, error: contestError } = await supabase
       .from("contests")
       .select(
-        "id, title, platform, advertiser_id, last_metrics_updated, post_contest_status, contest_based_details"
+        "id, title, platform, advertiser_id, last_metrics_updated, post_contest_status, contest_based_details",
       )
       .eq("id", contestId)
       .single();
@@ -66,7 +66,7 @@ export async function POST(
           error:
             "Metrics are locked after contest review begins. No further refresh allowed.",
         },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -78,7 +78,7 @@ export async function POST(
       if (!isOwner && !isAdmin) {
         const supabaseAdmin = createAdminSupabaseClient(
           process.env.NEXT_PUBLIC_SUPABASE_URL!,
-          process.env.SUPABASE_SERVICE_ROLE_KEY!
+          process.env.SUPABASE_SERVICE_ROLE_KEY!,
         );
         const { data: participant } = await supabaseAdmin
           .from("twitter_campaign_participants")
@@ -93,7 +93,7 @@ export async function POST(
               error:
                 "Please participate in the campaign before refreshing ....",
             },
-            { status: 403 }
+            { status: 403 },
           );
         }
       }
@@ -105,8 +105,8 @@ export async function POST(
     const cooldownMs = isOpportunitiesRefresh
       ? METRICS_REFRESH_COOLDOWN_MS_OPPORTUNITIES // 2 hours for creators
       : isAdmin
-      ? METRICS_REFRESH_COOLDOWN_MS_ADMIN // 1 minute for admins
-      : METRICS_REFRESH_COOLDOWN_MS_BRAND; // 3 minutes for brands/advertisers
+        ? METRICS_REFRESH_COOLDOWN_MS_ADMIN // 1 minute for admins
+        : METRICS_REFRESH_COOLDOWN_MS_BRAND; // 3 minutes for brands/advertisers
 
     // Database-based rate limiting using last_metrics_updated
     if (contest.last_metrics_updated) {
@@ -119,19 +119,19 @@ export async function POST(
         const userType = isOpportunitiesRefresh
           ? "creators"
           : isAdmin
-          ? "admins"
-          : "brands/owners";
+            ? "admins"
+            : "brands/owners";
         return NextResponse.json(
           {
             error: `Metrics were updated ${Math.floor(
-              timeSinceLastUpdate / 1000 / 60
+              timeSinceLastUpdate / 1000 / 60,
             )} minutes ago. Please wait ${remainingMinutes} more minutes before refreshing again.`,
             nextRefreshAvailable: new Date(
-              lastUpdate.getTime() + cooldownMs
+              lastUpdate.getTime() + cooldownMs,
             ).toISOString(),
             userType,
           },
-          { status: 429 }
+          { status: 429 },
         );
       }
     }
@@ -156,12 +156,16 @@ export async function POST(
         cronEndpoint = `/api/contests/${contestId}/twitter-refresh-tweets`;
         cronName = "Twitter Metrics";
         break;
+      case "tiktok":
+        cronEndpoint = "/api/cron/update-tiktok-metrics";
+        cronName = "TikTok Metrics";
+        break;
       default:
         return NextResponse.json(
           {
             error: `Metrics refresh not supported for platform: ${contest.platform}`,
           },
-          { status: 400 }
+          { status: 400 },
         );
     }
 
@@ -169,16 +173,19 @@ export async function POST(
     const queueEnabled = isMetricsQueueEnabled();
     const instagramQueueEnabled = isInstagramInsightsQueueEnabled();
     const useQueue = isTwitter && queueEnabled;
-    const useInstagramQueue = !isTwitter && (contest.platform?.toLowerCase() === "instagram") && instagramQueueEnabled;
+    const useInstagramQueue =
+      !isTwitter &&
+      contest.platform?.toLowerCase() === "instagram" &&
+      instagramQueueEnabled;
 
     if (isTwitter) {
       const why = queueEnabled
         ? "using queue (background refresh)"
         : `queue not configured (missing: ${getMissingQueueEnv().join(
-            ", "
+            ", ",
           )}), using sync`;
       console.log(
-        `[metrics-refresh-queue] Twitter refresh for contest ${contestId}: ${why}`
+        `[metrics-refresh-queue] Twitter refresh for contest ${contestId}: ${why}`,
       );
     }
 
@@ -204,7 +211,7 @@ export async function POST(
       if (!enqueueRes.ok) {
         return NextResponse.json(
           { error: enqueueData?.error ?? "Failed to start Instagram refresh" },
-          { status: enqueueRes.status }
+          { status: enqueueRes.status },
         );
       }
       if (enqueueData.alreadyActive) {
@@ -214,33 +221,45 @@ export async function POST(
           message: "Refresh already in progress.",
           contestId,
           runId: enqueueData.runId,
-          nextRefreshAvailable: new Date(now.getTime() + cooldownMs).toISOString(),
+          nextRefreshAvailable: new Date(
+            now.getTime() + cooldownMs,
+          ).toISOString(),
         });
       }
       const processUrl = `${baseUrl}/api/cron/process-instagram-insights-queue`;
       const doFetch = () =>
         fetch(processUrl, {
           method: "POST",
-          headers: process.env.CRON_SECRET ? { Authorization: `Bearer ${process.env.CRON_SECRET}` } : {},
+          headers: process.env.CRON_SECRET
+            ? { Authorization: `Bearer ${process.env.CRON_SECRET}` }
+            : {},
         }).catch((e) =>
-          console.warn("[refresh-metrics] Trigger Instagram processor failed:", e)
+          console.warn(
+            "[refresh-metrics] Trigger Instagram processor failed:",
+            e,
+          ),
         );
       if (isQStashEnabled()) {
-        triggerProcessInstagramInsightsQueue(baseUrl).then((res) => {
-          if (res?.error) doFetch();
-        }).catch(() => doFetch());
+        triggerProcessInstagramInsightsQueue(baseUrl)
+          .then((res) => {
+            if (res?.error) doFetch();
+          })
+          .catch(() => doFetch());
       } else {
         doFetch();
       }
       return NextResponse.json({
         success: true,
         queued: true,
-        message: "Instagram refresh started in background. Metrics will update shortly.",
+        message:
+          "Instagram refresh started in background. Metrics will update shortly.",
         contestId,
         contestTitle: contest.title,
         platform: contest.platform,
         runId: enqueueData.runId,
-        nextRefreshAvailable: new Date(now.getTime() + cooldownMs).toISOString(),
+        nextRefreshAvailable: new Date(
+          now.getTime() + cooldownMs,
+        ).toISOString(),
       });
     }
 
@@ -250,8 +269,8 @@ export async function POST(
       const baseUrl = host
         ? `${protocol}://${host}`
         : process.env.NEXT_PUBLIC_APP_URL
-        ? `https://${process.env.NEXT_PUBLIC_APP_URL}`
-        : "";
+          ? `https://${process.env.NEXT_PUBLIC_APP_URL}`
+          : "";
 
       const platform = (contest?.platform ?? "").toString().toLowerCase();
       const isTwitterPlatform = platform === "twitter" || platform === "x";
@@ -271,7 +290,7 @@ export async function POST(
       // Raid → enqueue job for fetch-raid-engagements (batched by participant). Awareness → enqueue job for twitter-refresh-tweets.
       const supabaseAdmin = createAdminSupabaseClient(
         process.env.NEXT_PUBLIC_SUPABASE_URL!,
-        process.env.SUPABASE_SERVICE_ROLE_KEY!
+        process.env.SUPABASE_SERVICE_ROLE_KEY!,
       );
       const { count: participantCountResult } = await supabaseAdmin
         .from("twitter_campaign_participants")
@@ -282,7 +301,7 @@ export async function POST(
       const BATCH_SIZE = 5;
       const totalBatches = Math.max(
         1,
-        Math.ceil(participantCount / BATCH_SIZE)
+        Math.ceil(participantCount / BATCH_SIZE),
       );
 
       const runEnsure = await ensureTwitterMetricsRunForEnqueue(supabaseAdmin, {
@@ -354,13 +373,13 @@ export async function POST(
 
       console.log(
         `[metrics-refresh-queue] Enqueueing job for contest ${contestId}`,
-        job
+        job,
       );
       const enqueueResult = await enqueueMetricsRefreshJob(job);
       if (enqueueResult.error) {
         console.error(
           `[metrics-refresh-queue] Enqueue failed for contest ${contestId}:`,
-          enqueueResult.error
+          enqueueResult.error,
         );
         await supabaseAdmin
           .from("twitter_metrics_refresh_runs")
@@ -375,13 +394,13 @@ export async function POST(
           {
             error: `Failed to start metrics refresh: ${enqueueResult.error}`,
           },
-          { status: 500 }
+          { status: 500 },
         );
       }
 
       const enqueueElapsedMs = Date.now() - refreshMetricsStartMs;
       console.log(
-        `[refresh-metrics] contestId=${contestId} enqueued in ${enqueueElapsedMs}ms - ${cronName} - Source: ${isOpportunitiesRefresh ? "Opportunities" : "Owner"}`
+        `[refresh-metrics] contestId=${contestId} enqueued in ${enqueueElapsedMs}ms - ${cronName} - Source: ${isOpportunitiesRefresh ? "Opportunities" : "Owner"}`,
       );
       // Trigger processor via QStash (event-driven) or fallback to direct POST (e.g. localhost)
       const processUrl = `${baseUrl}/api/cron/process-metrics-queue`;
@@ -394,16 +413,24 @@ export async function POST(
               : {}),
           },
         }).catch((e) =>
-          console.warn("[metrics-refresh-queue] Trigger process-metrics-queue failed:", e)
+          console.warn(
+            "[metrics-refresh-queue] Trigger process-metrics-queue failed:",
+            e,
+          ),
         );
       if (isQStashEnabled()) {
-        triggerProcessMetricsQueue(baseUrl).then((res) => {
-          if (res?.error) {
-            doFetch();
-          } else if (res?.messageId) {
-            console.log("[refresh-metrics] QStash trigger sent messageId=", res.messageId);
-          }
-        }).catch(() => doFetch());
+        triggerProcessMetricsQueue(baseUrl)
+          .then((res) => {
+            if (res?.error) {
+              doFetch();
+            } else if (res?.messageId) {
+              console.log(
+                "[refresh-metrics] QStash trigger sent messageId=",
+                res.messageId,
+              );
+            }
+          })
+          .catch(() => doFetch());
       } else {
         doFetch();
       }
@@ -419,14 +446,14 @@ export async function POST(
         platform: contest.platform,
         runId: runEnsure.runId,
         nextRefreshAvailable: new Date(
-          now.getTime() + cooldownMs
+          now.getTime() + cooldownMs,
         ).toISOString(),
         timeSinceLastUpdate: contest.last_metrics_updated
           ? Math.floor(
               (now.getTime() -
                 new Date(contest.last_metrics_updated).getTime()) /
                 1000 /
-                60
+                60,
             )
           : null,
         messageId: enqueueResult.messageId,
@@ -447,7 +474,7 @@ export async function POST(
     console.log(
       `[refresh-metrics] contestId=${contestId} starting sync refresh - ${cronName} - Source: ${
         isOpportunitiesRefresh ? "Opportunities" : "Owner"
-      }`
+      }`,
     );
 
     const cookieHeader = request.headers.get("cookie");
@@ -470,7 +497,7 @@ export async function POST(
         {
           error: `Failed to refresh ${cronName.toLowerCase()}`,
         },
-        { status: 500 }
+        { status: 500 },
       );
     }
 
@@ -479,7 +506,7 @@ export async function POST(
 
     const supabaseAdmin = createAdminSupabaseClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!
+      process.env.SUPABASE_SERVICE_ROLE_KEY!,
     );
 
     const { data: updateData, error: updateError } = await supabaseAdmin
@@ -491,17 +518,17 @@ export async function POST(
     if (updateError) {
       console.error(
         `Failed to update last_metrics_updated for contest ${contestId}:`,
-        updateError
+        updateError,
       );
     } else {
       console.log(
-        `Successfully updated last_metrics_updated for contest ${contestId} to ${currentTime}`
+        `Successfully updated last_metrics_updated for contest ${contestId} to ${currentTime}`,
       );
     }
 
     const syncElapsedMs = Date.now() - refreshMetricsStartMs;
     console.log(
-      `[refresh-metrics] contestId=${contestId} sync refresh completed in ${syncElapsedMs}ms`
+      `[refresh-metrics] contestId=${contestId} sync refresh completed in ${syncElapsedMs}ms`,
     );
 
     revalidateLeaderboardCache(contestId);
@@ -516,7 +543,7 @@ export async function POST(
         ? Math.floor(
             (now.getTime() - new Date(contest.last_metrics_updated).getTime()) /
               1000 /
-              60
+              60,
           )
         : null,
       lastMetricsUpdated: currentTime,
@@ -524,13 +551,10 @@ export async function POST(
     });
   } catch (error: any) {
     const errorElapsedMs = Date.now() - refreshMetricsStartMs;
-    console.error(
-      `[refresh-metrics] Error after ${errorElapsedMs}ms:`,
-      error
-    );
+    console.error(`[refresh-metrics] Error after ${errorElapsedMs}ms:`, error);
     return NextResponse.json(
       { error: `Refresh failed: ${error.message}` },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

@@ -1127,6 +1127,9 @@ export function ContestClientPage({
     };
   };
 
+  // Detect if user just submitted content (redirect from submit page)
+  const justSubmitted = searchParams.get("success") === "content_submitted";
+
   const fetchLeaderboard = async (
     pageToFetch: number = 1,
     groupByCreator: boolean = false,
@@ -1177,6 +1180,8 @@ export function ContestClientPage({
         limit: String(leaderboardItemsPerPage),
       });
       if (groupByCreator) params.set("groupBy", "creator");
+      // Bypass server cache when user just submitted (to avoid stale empty data)
+      if (justSubmitted) params.set("fresh", "1");
       const response = await fetch(
         `/api/leaderboard/${contestId}?${params.toString()}`,
       );
@@ -1195,8 +1200,10 @@ export function ContestClientPage({
               creator_full_name: r.creator_full_name ?? "Unknown Creator",
               creator_pfp_url: r.creator_pfp_url ?? null,
               user_platform_pfp_url: r.user_platform_pfp_url ?? null,
-              user_platform_username: r.user_platform_username ?? r.creator_username ?? "N/A",
-              user_full_name: r.user_full_name ?? r.creator_full_name ?? "Unknown Creator",
+              user_platform_username:
+                r.user_platform_username ?? r.creator_username ?? "N/A",
+              user_full_name:
+                r.user_full_name ?? r.creator_full_name ?? "Unknown Creator",
               submissions: r.submissions ?? [],
               submission_ranks: r.submission_ranks,
               total_views: r.total_views ?? 0,
@@ -2747,7 +2754,7 @@ export function ContestClientPage({
                                   : joinCampaignLoading
                                     ? "Joining..."
                                     : user &&
-                                      twitterConnectStatus === "loading"
+                                        twitterConnectStatus === "loading"
                                       ? "Checking…"
                                       : "Join Twitter Campaign"
                                 : "Submit Your Entry!"}
@@ -2885,6 +2892,14 @@ export function ContestClientPage({
                   <Youtube className="h-7 w-7" />
                 ) : contest.platform?.toLowerCase() === "instagram" ? (
                   <Instagram className="h-7 w-7" />
+                ) : contest.platform?.toLowerCase() === "tiktok" ? (
+                  <svg
+                    viewBox="0 0 24 24"
+                    className="h-7 w-7"
+                    fill="currentColor"
+                  >
+                    <path d="M19.59 6.69a4.83 4.83 0 0 1-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 0 1-2.88 2.5 2.89 2.89 0 0 1-2.89-2.89 2.89 2.89 0 0 1 2.89-2.89c.28 0 .54.04.79.1v-3.5a6.37 6.37 0 0 0-.79-.05A6.34 6.34 0 0 0 3.15 15.2a6.34 6.34 0 0 0 6.34 6.34 6.34 6.34 0 0 0 6.34-6.34V8.75a8.18 8.18 0 0 0 4.76 1.52v-3.4a4.85 4.85 0 0 1-1-.18z" />
+                  </svg>
                 ) : contest.platform?.toLowerCase() === "twitter" ? (
                   <svg
                     viewBox="0 0 24 24"
@@ -3588,6 +3603,14 @@ export function ContestClientPage({
                           <Youtube className="h-5 w-5 text-red-600" />
                         ) : contest.platform?.toLowerCase() === "instagram" ? (
                           <Instagram className="h-5 w-5 text-pink-600" />
+                        ) : contest.platform?.toLowerCase() === "tiktok" ? (
+                          <svg
+                            viewBox="0 0 24 24"
+                            className="h-5 w-5"
+                            fill="#000000"
+                          >
+                            <path d="M19.59 6.69a4.83 4.83 0 0 1-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 0 1-2.88 2.5 2.89 2.89 0 0 1-2.89-2.89 2.89 2.89 0 0 1 2.89-2.89c.28 0 .54.04.79.1v-3.5a6.37 6.37 0 0 0-.79-.05A6.34 6.34 0 0 0 3.15 15.2a6.34 6.34 0 0 0 6.34 6.34 6.34 6.34 0 0 0 6.34-6.34V8.75a8.18 8.18 0 0 0 4.76 1.52v-3.4a4.85 4.85 0 0 1-1-.18z" />
+                          </svg>
                         ) : (
                           <Share2 className="h-5 w-5 text-slate-600" />
                         )}
@@ -6728,7 +6751,7 @@ export function ContestClientPage({
                                       : "bg-[#D9C0FF40] text-[#4A00BE]",
                                   )}
                                 >
-                                  <div className="text-lg sm:text-xl font-extrabold leading-none tabular-nums">
+                                   <div className="text-lg sm:text-xl font-extrabold leading-none tabular-nums">
                                     {isCreatorWiseMyCard
                                       ? combinedRankForCard ?? "?"
                                       : bestSubmission
@@ -6783,7 +6806,7 @@ export function ContestClientPage({
                                         "bg-primary/20",
                                         isDark ? "text-white" : "text-gray-900",
                                       )}
-
+                                    
                                     >
                                       {(contest?.platform === "twitter"
                                         ? ((displayEntry as any)
@@ -7112,7 +7135,9 @@ export function ContestClientPage({
                                       <>
                                         {isCreatorWiseMyCard ? (
                                           <>
-                                            {(combinedViewsForCard ?? 0).toLocaleString()}{" "}
+                                            {(
+                                              combinedViewsForCard ?? 0
+                                            ).toLocaleString()}{" "}
                                             views
                                           </>
                                         ) : (
@@ -7185,9 +7210,7 @@ export function ContestClientPage({
                                             <div className="flex flex-wrap items-center gap-1.5 text-xs text-slate-600 dark:text-slate-400 bg-green-50 dark:bg-green-900/20 px-2 py-1.5 rounded-md border border-green-200 dark:border-green-800">
                                               <div className="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0" />
                                               <span className="whitespace-nowrap">
-                                                {formatMoney(
-                                                  earningsBase,
-                                                )}{" "}
+                                                {formatMoney(earningsBase)}{" "}
                                                 {contestType === "cpm"
                                                   ? "CPM"
                                                   : "Prize"}
@@ -7244,8 +7267,7 @@ export function ContestClientPage({
                                         .leaderboard_contest
                                         .prizes as PrizeInfo[]
                                     ).find(
-                                      (p) =>
-                                        p.position === prizeRankForZone,
+                                      (p) => p.position === prizeRankForZone,
                                     );
                                     if (prizeInfo) {
                                       const prizeText =
@@ -8328,8 +8350,7 @@ export function ContestClientPage({
                                                 referrerPolicy="no-referrer"
                                                 loading="lazy"
                                               />
-                                              <AvatarFallback className="bg-violet-100 text-violet-600 font-semibold text-xs sm:text-base"
-                                              >
+                                              <AvatarFallback className="bg-violet-100 text-violet-600 font-semibold text-xs sm:text-base">
                                                 {video.user_platform_username?.[0]?.toUpperCase() ||
                                                   "U"}
                                               </AvatarFallback>
@@ -8916,6 +8937,8 @@ export function ContestClientPage({
                                           undefined
                                         }
                                         alt={
+                                          (creatorGroup as any)
+                                            .user_platform_username ??
                                           (creatorGroup as any)
                                             .user_platform_username ??
                                           creatorGroup.creator_username
@@ -9545,7 +9568,8 @@ export function ContestClientPage({
                             )
                           }
                           disabled={
-                            leaderboardCurrentPage >= effectiveLeaderboardTotalPages
+                            leaderboardCurrentPage >=
+                            effectiveLeaderboardTotalPages
                           }
                         >
                           Next
@@ -9637,7 +9661,8 @@ export function ContestClientPage({
                     const actionKind = getTwitterSubmissionActionKind(sub);
                     if (actionKind === "reply") metrics.total_replies += 1;
                     if (actionKind === "retweet") metrics.total_retweets += 1;
-                    if (actionKind === "quote") metrics.total_quote_reposts += 1;
+                    if (actionKind === "quote")
+                      metrics.total_quote_reposts += 1;
                     metrics.total_impressions += sub.views || 0;
 
                     // Calculate points as base_points + manual adjustment (avoid double counting)
