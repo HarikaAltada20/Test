@@ -4,6 +4,7 @@
  */
 
 import dayjs from "dayjs";
+import { instagramGraphFetch } from "@/lib/meta-graph/instagram-graph-fetch";
 
 const TOKEN_REFRESH_THRESHOLD_DAYS = 10;
 const METRICS =
@@ -91,7 +92,7 @@ export async function refreshToken(
 ): Promise<{ access_token: string; expires_in?: number } | null> {
   try {
     const refreshUrl = `https://graph.instagram.com/refresh_access_token?grant_type=ig_refresh_token&access_token=${accessToken}`;
-    const response = await fetch(refreshUrl);
+    const response = await instagramGraphFetch(refreshUrl);
     const data = await response.json();
 
     if (!response.ok || data.error) {
@@ -135,7 +136,7 @@ export async function fetchInsights(
 ): Promise<FetchInsightsResult> {
   try {
     const url = `https://graph.instagram.com/${submission.video_id}/insights?metric=${METRICS}&access_token=${accessToken}`;
-    const response = await fetch(url, {
+    const response = await instagramGraphFetch(url, {
       headers: {
         "User-Agent":
           "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",

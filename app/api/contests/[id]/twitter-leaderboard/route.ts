@@ -18,15 +18,34 @@ export async function GET(
   try {
     const supabase = await createClient();
 
-    // 1) Fetch raw leaderboard rows (exclude rejected creators for opportunities leaderboard)
-    // This matches YouTube/Instagram behavior - rejected entries don't show on public leaderboard
-    const { data: leaderboardRows, error, count } = await supabase
-      .from("twitter_campaign_leaderboard")
-      .select("*", { count: "exact" })
+    // 1) Fetch active participants (join list). We include participants even if they haven't earned points yet.
+    // Anyone with a rejected leaderboard row is excluded from the merged "missing" list so they stay hidden.
+    const { data: participants, error: participantsError } = await supabase
+      .from("twitter_campaign_participants")
+      .select("creator_id, twitter_username, joined_at")
       .eq("contest_id", contestId)
-      .neq("moderation_status", "rejected") // Filter out rejected creators
-      .order("current_rank", { ascending: true })
-      .range(offset, offset + safeLimit - 1);
+      .eq("is_active", true);
+
+    if (participantsError) {
+      console.error(
+        "[twitter-leaderboard] Error fetching participants for contest",
+        contestId,
+        participantsError,
+      );
+      return NextResponse.json(
+        { success: false, error: participantsError.message },
+        { status: 500 },
+      );
+    }
+
+    // 2) Fetch leaderboard rows (exclude rejected creators for opportunities leaderboard)
+    // This matches YouTube/Instagram behavior - rejected entries don't show on public leaderboard.
+    const { data: allLeaderboardRows, error } = await supabase
+      .from("twitter_campaign_leaderboard")
+      .select("*")
+      .eq("contest_id", contestId)
+      .neq("moderation_status", "rejected")
+      .order("current_rank", { ascending: true });
 
     if (error) {
       console.error(
@@ -40,11 +59,74 @@ export async function GET(
       );
     }
 
-    const totalEntries = count ?? 0;
+    const leaderboardRows = (allLeaderboardRows as any[]) ?? [];
+    const leaderboardByCreatorId = new Map<string, any>();
+    for (const row of leaderboardRows) {
+      if (row?.creator_id) leaderboardByCreatorId.set(row.creator_id, row);
+    }
+
+    const { data: rejectedRows } = await supabase
+      .from("twitter_campaign_leaderboard")
+      .select("creator_id")
+      .eq("contest_id", contestId)
+      .eq("moderation_status", "rejected");
+    const rejectedCreatorIds = new Set(
+      (rejectedRows as any[] | null)
+        ?.map((r) => r.creator_id)
+        .filter(Boolean) ?? [],
+    );
+
+    // 3) Merge participants who don't have a leaderboard row yet (0 points / no tweets).
+    // Omit anyone with a rejected leaderboard row so they don't reappear as a 0‑point joiner.
+    const missingParticipants =
+      (participants as any[] | null)?.filter(
+        (p) =>
+          p?.creator_id &&
+          !leaderboardByCreatorId.has(p.creator_id) &&
+          !rejectedCreatorIds.has(p.creator_id),
+      ) ?? [];
+    // Sort missing participants by join date (oldest first) for stable ordering.
+    missingParticipants.sort((a, b) => {
+      const aMs = a.joined_at ? new Date(a.joined_at).getTime() : 0;
+      const bMs = b.joined_at ? new Date(b.joined_at).getTime() : 0;
+      return aMs - bMs;
+    });
+
+    const merged = [...leaderboardRows];
+    const baseRank = merged.length;
+    for (let i = 0; i < missingParticipants.length; i++) {
+      const p = missingParticipants[i];
+      merged.push({
+        id: `participant:${contestId}:${p.creator_id}`,
+        contest_id: contestId,
+        creator_id: p.creator_id,
+        moderation_status: null,
+        rejection_reason: null,
+        current_rank: baseRank + i + 1,
+        total_points: 0,
+        manual_points_adjustment: 0,
+        total_eligible_tweets: 0,
+        total_likes: 0,
+        total_replies: 0,
+        total_retweets: 0,
+        total_quote_reposts: 0,
+        total_impressions: 0,
+        paid: false,
+        paid_at: null,
+        joined_at: p.joined_at ?? null,
+        twitter_username: p.twitter_username ?? null,
+        created_at: p.joined_at ?? null,
+        updated_at: null,
+      });
+    }
+
+    const totalEntries = merged.length;
     const totalPages = safeLimit > 0 ? Math.ceil(totalEntries / safeLimit) : 1;
 
-    // If no rows, return early
-    if (!leaderboardRows || leaderboardRows.length === 0) {
+    const paged = merged.slice(offset, offset + safeLimit);
+
+    // If empty, return early
+    if (paged.length === 0) {
       return NextResponse.json({
         success: true,
         contestId,
@@ -55,19 +137,19 @@ export async function GET(
       });
     }
 
-    // 2) Collect unique creator_ids
+    // 4) Collect unique creator_ids for enrichment
     const creatorIds = Array.from(
       new Set(
-        leaderboardRows
+        paged
           .map((row: any) => row.creator_id as string | null)
-          .filter((id): id is string => Boolean(id))
-      )
+          .filter((id): id is string => Boolean(id)),
+      ),
     );
 
-    // 3) Fetch usernames for these creators from users table
+    // 5) Fetch usernames for these creators from users table
     const { data: usersData, error: usersError } = await supabase
       .from("users")
-      .select("id, username, full_name")
+      .select("id, username, full_name, profile_picture_url")
       .in("id", creatorIds);
 
     if (usersError) {
@@ -80,28 +162,37 @@ export async function GET(
 
     const userById = new Map<
       string,
-      { username: string | null; full_name: string | null }
+      {
+        username: string | null;
+        full_name: string | null;
+        profile_picture_url: string | null;
+      }
     >();
     if (usersData) {
       for (const u of usersData as any[]) {
         userById.set(u.id as string, {
           username: (u.username as string) ?? null,
           full_name: (u.full_name as string) ?? null,
+          profile_picture_url: (u.profile_picture_url as string) ?? null,
         });
       }
     }
 
-    // 4) Attach app_username/app_full_name to each leaderboard row
-    const enrichedLeaderboard = (leaderboardRows as any[]).map((row) => {
+    // 6) Attach app_username/app_full_name to each leaderboard row
+    const enrichedLeaderboard = (paged as any[]).map((row) => {
       const info = userById.get(row.creator_id as string) || {
         username: null,
         full_name: null,
+        profile_picture_url: null,
       };
 
       return {
         ...row,
         app_username: info.username,
         app_full_name: info.full_name,
+        user_platform_pfp_url:
+          row.user_platform_pfp_url ?? info.profile_picture_url ?? null,
+        creator_pfp_url: row.creator_pfp_url ?? info.profile_picture_url ?? null,
       };
     });
 

@@ -20,6 +20,15 @@ export async function GET(
 
     const supabase = await createClient();
 
+    const { count: activeParticipantCount } = await supabase
+      .from("twitter_campaign_participants")
+      .select("creator_id", { count: "exact", head: true })
+      .eq("contest_id", contestId)
+      .eq("is_active", true);
+
+    const participantTotal =
+      typeof activeParticipantCount === "number" ? activeParticipantCount : 0;
+
     // Fetch metrics from twitter_campaign_metrics table
     const { data: metrics, error } = await supabase
       .from("twitter_campaign_metrics")
@@ -79,10 +88,11 @@ export async function GET(
       });
     }
 
-    // Add max_participants to metrics
+    // Add max_participants; total_participants = everyone who joined (active), not leaderboard-only
     const metricsWithMaxParticipants = {
       ...metrics,
       max_participants: maxParticipants,
+      total_participants: participantTotal,
     };
 
     return NextResponse.json({
