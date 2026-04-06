@@ -568,29 +568,44 @@ export interface Database {
           error_message?: string | null;
         };
       };
-      meta_graph_app_usage: {
+      meta_graph_app_usage_log: {
         Row: {
           id: string;
+          created_at: string;
+          source: "instagram_insights_batch" | "instagram_insights_cron";
+          contest_id: string | null;
+          run_id: string | null;
+          batch_index: number | null;
           call_count: number;
           total_time: number;
           total_cputime: number;
-          updated_at: string;
+          business_use_case: Json | null;
           raw_headers: Json | null;
         };
         Insert: {
           id?: string;
+          created_at?: string;
+          source: "instagram_insights_batch" | "instagram_insights_cron";
+          contest_id?: string | null;
+          run_id?: string | null;
+          batch_index?: number | null;
           call_count?: number;
           total_time?: number;
           total_cputime?: number;
-          updated_at?: string;
+          business_use_case?: Json | null;
           raw_headers?: Json | null;
         };
         Update: {
           id?: string;
+          created_at?: string;
+          source?: "instagram_insights_batch" | "instagram_insights_cron";
+          contest_id?: string | null;
+          run_id?: string | null;
+          batch_index?: number | null;
           call_count?: number;
           total_time?: number;
           total_cputime?: number;
-          updated_at?: string;
+          business_use_case?: Json | null;
           raw_headers?: Json | null;
         };
       };

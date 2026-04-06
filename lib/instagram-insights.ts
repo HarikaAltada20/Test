@@ -5,6 +5,7 @@
 
 import dayjs from "dayjs";
 import { instagramGraphFetch } from "@/lib/meta-graph/instagram-graph-fetch";
+import type { MetaGraphUsageAccumulator } from "@/lib/meta-graph/usage-accumulator";
 
 const TOKEN_REFRESH_THRESHOLD_DAYS = 10;
 const METRICS =
@@ -88,11 +89,14 @@ export function hasStatsChanged(
 /** Refresh Instagram access token. Returns { access_token, expires_in? } or null. */
 export async function refreshToken(
   creatorId: string,
-  accessToken: string
+  accessToken: string,
+  usageAccumulator?: MetaGraphUsageAccumulator
 ): Promise<{ access_token: string; expires_in?: number } | null> {
   try {
     const refreshUrl = `https://graph.instagram.com/refresh_access_token?grant_type=ig_refresh_token&access_token=${accessToken}`;
-    const response = await instagramGraphFetch(refreshUrl);
+    const response = await instagramGraphFetch(refreshUrl, {
+      usageAccumulator,
+    });
     const data = await response.json();
 
     if (!response.ok || data.error) {
@@ -132,7 +136,8 @@ export function classifyInsightsError(
  */
 export async function fetchInsights(
   submission: SubmissionForInsights,
-  accessToken: string
+  accessToken: string,
+  usageAccumulator?: MetaGraphUsageAccumulator
 ): Promise<FetchInsightsResult> {
   try {
     const url = `https://graph.instagram.com/${submission.video_id}/insights?metric=${METRICS}&access_token=${accessToken}`;
@@ -141,6 +146,7 @@ export async function fetchInsights(
         "User-Agent":
           "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
       },
+      usageAccumulator,
     });
 
     if (!response.ok) {
