@@ -787,6 +787,9 @@ export interface Database {
           payout_method_details_snapshot: Json | null;
           cancelled_at: string | null;
           cancellation_reason: string | null;
+          payment_proof_link: string | null;
+          payment_proof_storage_path: string | null;
+          payment_proof_file_size_bytes: number | null;
         };
         Insert: {
           id?: string;
@@ -810,6 +813,9 @@ export interface Database {
           amount_type: "cash" | "coins";
           payout_method_type_snapshot?: string | null;
           payout_method_details_snapshot?: Json | null;
+          payment_proof_link?: string | null;
+          payment_proof_storage_path?: string | null;
+          payment_proof_file_size_bytes?: number | null;
         };
         Update: {
           id?: string;
@@ -835,6 +841,9 @@ export interface Database {
           payout_method_details_snapshot?: Json | null;
           cancelled_at?: string | null;
           cancellation_reason?: string | null;
+          payment_proof_link?: string | null;
+          payment_proof_storage_path?: string | null;
+          payment_proof_file_size_bytes?: number | null;
         };
       };
     };
