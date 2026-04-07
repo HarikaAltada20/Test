@@ -23,7 +23,7 @@ export async function POST(
 
   const { data: row, error: fetchErr } = await supabase
     .from("withdrawal_requests")
-    .select("id")
+    .select("id, payment_proof_storage_path")
     .eq("id", requestId)
     .maybeSingle();
 
@@ -88,6 +88,7 @@ export async function POST(
   }
 
   const path = `${requestId}/${Date.now()}-${originalName}`;
+  const previousPath = row.payment_proof_storage_path as string | null;
 
   const { error: uploadErr } = await supabase.storage
     .from(BUCKET)
@@ -119,7 +120,24 @@ export async function POST(
     .eq("id", requestId);
 
   if (upErr) {
+    // Roll back uploaded file to avoid orphaned storage object.
+    const { error: rollbackErr } = await supabase.storage
+      .from(BUCKET)
+      .remove([path]);
+    if (rollbackErr && !/not found/i.test(rollbackErr.message ?? "")) {
+      console.error("Storage rollback error", rollbackErr);
+    }
     return NextResponse.json({ error: upErr.message }, { status: 500 });
+  }
+
+  // Best-effort cleanup of previous file when replacing proof.
+  if (previousPath && previousPath !== path) {
+    const { error: cleanupErr } = await supabase.storage
+      .from(BUCKET)
+      .remove([previousPath]);
+    if (cleanupErr && !/not found/i.test(cleanupErr.message ?? "")) {
+      console.error("Previous proof cleanup error", cleanupErr);
+    }
   }
 
   return NextResponse.json({
@@ -154,17 +172,6 @@ export async function DELETE(
   }
 
   const path = row.payment_proof_storage_path as string | null;
-  if (path) {
-    const { error: rmErr } = await supabase.storage.from(BUCKET).remove([path]);
-    if (rmErr && !/not found/i.test(rmErr.message ?? "")) {
-      console.error("Storage remove error", rmErr);
-      return NextResponse.json(
-        { error: rmErr.message || "Could not delete file from storage" },
-        { status: 500 },
-      );
-    }
-  }
-
   const { error: upErr } = await supabase
     .from("withdrawal_requests")
     .update({
@@ -175,6 +182,18 @@ export async function DELETE(
 
   if (upErr) {
     return NextResponse.json({ error: upErr.message }, { status: 500 });
+  }
+
+  // Remove storage object after DB clear succeeds to avoid broken DB references.
+  if (path) {
+    const { error: rmErr } = await supabase.storage.from(BUCKET).remove([path]);
+    if (rmErr && !/not found/i.test(rmErr.message ?? "")) {
+      console.error("Storage remove warning after DB clear", rmErr);
+      return NextResponse.json({
+        ok: true,
+        warning: rmErr.message || "File removed from DB but storage cleanup failed",
+      });
+    }
   }
 
   return NextResponse.json({ ok: true });
