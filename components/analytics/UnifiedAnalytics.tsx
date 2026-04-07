@@ -233,6 +233,7 @@ const submissionStatusOptions = [
   { id: "verified", label: "Verified", icon: CheckCircle },
   { id: "paid", label: "Paid", icon: Wallet },
   { id: "pending", label: "Pending", icon: Clock },
+  { id: "not_rejected", label: "Not Rejected", icon: Users },
   { id: "rejected", label: "Rejected", icon: XCircle },
   { id: "verifiedPaid", label: "Verified + Paid", icon: CheckCircle },
 ];
@@ -316,8 +317,13 @@ export default function UnifiedAnalytics({ userId }: UnifiedAnalyticsProps) {
 
   const buildAnalyticsParams = () => {
     const params = new URLSearchParams();
-    if (activeFilter && activeFilter !== "all")
-      params.set("status", activeFilter);
+    if (activeFilter && activeFilter !== "all") {
+      if (activeFilter === "not_rejected") {
+        params.set("notRejected", "true");
+      } else {
+        params.set("status", activeFilter);
+      }
+    }
     // When video platforms (YouTube, Instagram, or TikTok) and Twitter are selected, API needs contentType=video + twitter=true
     const hasVideo = videoYoutube || videoInstagram || videoTiktok;
     params.set("contentType", hasVideo ? "video" : "text_image");

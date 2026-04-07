@@ -131,7 +131,13 @@ export default function CreatorAnalytics({
     try {
       setLoading(true);
       const params = new URLSearchParams();
-      if (activeFilter !== "all") params.set("status", activeFilter);
+      if (activeFilter !== "all") {
+        if (activeFilter === "not_rejected") {
+          params.set("notRejected", "true");
+        } else {
+          params.set("status", activeFilter);
+        }
+      }
       params.set("contentType", contentType);
       params.set("videoPlatform", videoPlatform);
       // Determine if tiktok is selected based on videoPlatform

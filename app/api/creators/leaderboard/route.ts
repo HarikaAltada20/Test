@@ -73,6 +73,7 @@ export async function GET(request: NextRequest) {
           youtube_account,
           instagram_account,
           twitter_account,
+          tiktok_account,
           total_money_won,
           total_contests_won,
           total_contests_participated,
@@ -190,7 +191,11 @@ export async function GET(request: NextRequest) {
             let twitterError: Error | null = null;
 
             // Submissions made: chunk contest IDs and paginate twitter_campaign_participants
-            for (let c = 0; c < contestIds.length; c += CONTEST_IDS_CHUNK_SIZE) {
+            for (
+              let c = 0;
+              c < contestIds.length;
+              c += CONTEST_IDS_CHUNK_SIZE
+            ) {
               const contestChunk = contestIds.slice(
                 c,
                 c + CONTEST_IDS_CHUNK_SIZE,
@@ -228,7 +233,11 @@ export async function GET(request: NextRequest) {
             });
 
             // Submissions won: chunk contest IDs and paginate twitter_campaign_tweets (moderation_status = 'paid')
-            for (let c = 0; c < contestIds.length; c += CONTEST_IDS_CHUNK_SIZE) {
+            for (
+              let c = 0;
+              c < contestIds.length;
+              c += CONTEST_IDS_CHUNK_SIZE
+            ) {
               const contestChunk = contestIds.slice(
                 c,
                 c + CONTEST_IDS_CHUNK_SIZE,
@@ -263,7 +272,11 @@ export async function GET(request: NextRequest) {
             });
 
             // Leaderboard: chunk contest IDs and paginate twitter_campaign_leaderboard by id
-            for (let c = 0; c < contestIds.length; c += CONTEST_IDS_CHUNK_SIZE) {
+            for (
+              let c = 0;
+              c < contestIds.length;
+              c += CONTEST_IDS_CHUNK_SIZE
+            ) {
               const contestChunk = contestIds.slice(
                 c,
                 c + CONTEST_IDS_CHUNK_SIZE,
@@ -312,10 +325,7 @@ export async function GET(request: NextRequest) {
 
                   const currentWinnings =
                     creatorWinningsMap.get(creatorId) || 0;
-                  creatorWinningsMap.set(
-                    creatorId,
-                    currentWinnings + earnings,
-                  );
+                  creatorWinningsMap.set(creatorId, currentWinnings + earnings);
 
                   const currentViews = creatorViewsMap.get(creatorId) || 0;
                   creatorViewsMap.set(creatorId, currentViews + impressions);
@@ -327,10 +337,7 @@ export async function GET(request: NextRequest) {
             if (!twitterError) {
               // Set participations (distinct contests)
               creatorContestMap.forEach((contestSet, creatorId) => {
-                platformContestParticipations.set(
-                  creatorId,
-                  contestSet.size,
-                );
+                platformContestParticipations.set(creatorId, contestSet.size);
               });
 
               creatorSubmissionsWonMap.forEach((count, creatorId) => {
@@ -559,7 +566,11 @@ export async function GET(request: NextRequest) {
             const creatorWinningsMap = new Map<string, number>();
             let twitterAllError: Error | null = null;
 
-            for (let c = 0; c < twitterContestIds.length; c += CONTEST_IDS_CHUNK_SIZE) {
+            for (
+              let c = 0;
+              c < twitterContestIds.length;
+              c += CONTEST_IDS_CHUNK_SIZE
+            ) {
               const contestChunk = twitterContestIds.slice(
                 c,
                 c + CONTEST_IDS_CHUNK_SIZE,
@@ -590,10 +601,16 @@ export async function GET(request: NextRequest) {
                   }
                 });
                 allParticipantOffset += TWITTER_ACTIVITY_PAGE_SIZE;
-              } while (allParticipantRows.length === TWITTER_ACTIVITY_PAGE_SIZE);
+              } while (
+                allParticipantRows.length === TWITTER_ACTIVITY_PAGE_SIZE
+              );
             }
 
-            for (let c = 0; c < twitterContestIds.length; c += CONTEST_IDS_CHUNK_SIZE) {
+            for (
+              let c = 0;
+              c < twitterContestIds.length;
+              c += CONTEST_IDS_CHUNK_SIZE
+            ) {
               const contestChunk = twitterContestIds.slice(
                 c,
                 c + CONTEST_IDS_CHUNK_SIZE,
@@ -624,7 +641,11 @@ export async function GET(request: NextRequest) {
               } while (paidAllTweetRows.length === TWITTER_ACTIVITY_PAGE_SIZE);
             }
 
-            for (let c = 0; c < twitterContestIds.length; c += CONTEST_IDS_CHUNK_SIZE) {
+            for (
+              let c = 0;
+              c < twitterContestIds.length;
+              c += CONTEST_IDS_CHUNK_SIZE
+            ) {
               const contestChunk = twitterContestIds.slice(
                 c,
                 c + CONTEST_IDS_CHUNK_SIZE,
@@ -671,10 +692,7 @@ export async function GET(request: NextRequest) {
 
                   const currentWinnings =
                     creatorWinningsMap.get(creatorId) || 0;
-                  creatorWinningsMap.set(
-                    creatorId,
-                    currentWinnings + earnings,
-                  );
+                  creatorWinningsMap.set(creatorId, currentWinnings + earnings);
                 });
                 lbOffset += LEADERBOARD_PAGE_SIZE;
               } while (lbPage.length === LEADERBOARD_PAGE_SIZE);
@@ -682,10 +700,7 @@ export async function GET(request: NextRequest) {
 
             if (!twitterAllError) {
               creatorContestMap.forEach((contestSet, creatorId) => {
-                twitterAllContestParticipations.set(
-                  creatorId,
-                  contestSet.size,
-                );
+                twitterAllContestParticipations.set(creatorId, contestSet.size);
               });
               creatorSubmissionsMadeMap.forEach((count, creatorId) => {
                 twitterAllSubmissionsMade.set(creatorId, count);
@@ -806,13 +821,11 @@ export async function GET(request: NextRequest) {
             twitterAllContestWins.get(creator.id) || 0;
           const twitterExtraSubmissionsWon =
             twitterAllSubmissionsWon.get(creator.id) || 0;
-     
 
           contestsParticipated += twitterExtraContests;
           submissionsMade += twitterExtraSubmissions;
           contestsWon += twitterExtraContestsWon;
           submissionsWon += twitterExtraSubmissionsWon;
-        
         }
 
         const hasYouTube = isCreator
@@ -826,6 +839,10 @@ export async function GET(request: NextRequest) {
         const hasTwitter = isCreator
           ? profile?.twitter_account !== null &&
             profile?.twitter_account !== undefined
+          : false;
+        const hasTiktok = isCreator
+          ? profile?.tiktok_account !== null &&
+            profile?.tiktok_account !== undefined
           : false;
 
         // Get affiliate_earnings and other_earnings directly from users table (separate fields)
@@ -887,6 +904,7 @@ export async function GET(request: NextRequest) {
             has_youtube: hasYouTube,
             has_instagram: hasInstagram,
             has_twitter: hasTwitter,
+            has_tiktok: hasTiktok,
           },
         };
       }),
@@ -910,6 +928,7 @@ export async function GET(request: NextRequest) {
           if (platform === "youtube") return entry.platforms.has_youtube;
           if (platform === "instagram") return entry.platforms.has_instagram;
           if (platform === "twitter") return entry.platforms.has_twitter;
+          if (platform === "tiktok") return entry.platforms.has_tiktok;
 
           // For any unknown platform value, fall back to including the entry
           return true;
@@ -988,6 +1007,9 @@ export async function GET(request: NextRequest) {
     const twitterCreatorsCount = leaders.filter(
       (entry: any) => entry.is_creator && entry.platforms.has_twitter,
     ).length;
+    const tiktokCreatorsCount = leaders.filter(
+      (entry: any) => entry.is_creator && entry.platforms.has_tiktok,
+    ).length;
 
     // Calculate summary statistics; creator-only metrics over creators, mixed metrics over summarySource
     const summary = {
@@ -996,6 +1018,7 @@ export async function GET(request: NextRequest) {
       instagramCreators: instagramCreatorsCount,
       youtubeCreators: youtubeCreatorsCount,
       twitterCreators: twitterCreatorsCount,
+      tiktokCreators: tiktokCreatorsCount,
       // creator-only aggregates
       totalContestsWon: creatorsAll.reduce(
         (sum: number, entry: any) => sum + entry.metrics.contests_won,

@@ -15,6 +15,7 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const submissionStatusRaw = searchParams.get("status");
     const submissionStatus = submissionStatusRaw?.trim().toLowerCase() || null;
+    const notRejected = searchParams.get("notRejected") === "true";
     const contestTypeFilter = (searchParams.get("type") ?? "all")
       .trim()
       .toLowerCase() as "all" | "leaderboard" | "cpm";
@@ -53,7 +54,9 @@ export async function GET(request: NextRequest) {
       `);
 
     // Apply status filter if provided (submissionStatus is lowercase, e.g. "verifiedpaid")
-    if (submissionStatus && submissionStatus !== "all") {
+    if (notRejected) {
+      submissionsQuery = submissionsQuery.neq("status", "rejected");
+    } else if (submissionStatus && submissionStatus !== "all") {
       if (submissionStatus === "verifiedpaid") {
         submissionsQuery = submissionsQuery.in("status", ["verified", "paid"]);
       } else {
@@ -192,7 +195,9 @@ export async function GET(request: NextRequest) {
         .from("twitter_campaign_tweets")
         .select("contest_id, impressions, likes, replies, moderation_status")
         .in("contest_id", twitterContestIds);
-      if (submissionStatus && submissionStatus !== "all") {
+      if (notRejected) {
+        tweetsQuery = tweetsQuery.neq("moderation_status", "rejected");
+      } else if (submissionStatus && submissionStatus !== "all") {
         if (submissionStatus === "verifiedpaid") {
           tweetsQuery = tweetsQuery.in("moderation_status", [
             "verified",

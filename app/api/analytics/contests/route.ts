@@ -177,6 +177,7 @@ export async function GET(request: NextRequest) {
       // Get list of all contests with basic metrics (include Twitter from twitter_campaign_tweets)
       const statusParam = searchParams.get("status");
       const submissionStatus = statusParam?.trim().toLowerCase() || null;
+      const notRejected = searchParams.get("notRejected") === "true";
 
       const { data: contests } = await supabase
         .from("contests")
@@ -286,7 +287,9 @@ export async function GET(request: NextRequest) {
           "contest_id",
           contestsFiltered.map((c) => c.id),
         );
-      if (submissionStatus && submissionStatus !== "all") {
+      if (notRejected) {
+        submissionsQuery = submissionsQuery.neq("status", "rejected");
+      } else if (submissionStatus && submissionStatus !== "all") {
         if (submissionStatus === "verifiedpaid") {
           submissionsQuery = submissionsQuery.in("status", [
             "verified",
@@ -314,7 +317,9 @@ export async function GET(request: NextRequest) {
             "contest_id, impressions, likes, replies, retweets, quote_reposts",
           )
           .in("contest_id", twitterContestIds);
-        if (submissionStatus && submissionStatus !== "all") {
+        if (notRejected) {
+          tweetsQuery = tweetsQuery.neq("moderation_status", "rejected");
+        } else if (submissionStatus && submissionStatus !== "all") {
           if (submissionStatus === "verifiedpaid") {
             tweetsQuery = tweetsQuery.in("moderation_status", [
               "verified",

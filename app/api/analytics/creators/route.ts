@@ -14,6 +14,7 @@ export async function GET(request: NextRequest) {
 
     const { searchParams } = new URL(request.url);
     const submissionStatus = searchParams.get("status");
+    const notRejected = searchParams.get("notRejected") === "true";
     const creatorId = searchParams.get("creatorId");
     const limit = parseInt(searchParams.get("limit") || "20");
     const offset = parseInt(searchParams.get("offset") || "0");
@@ -124,7 +125,9 @@ export async function GET(request: NextRequest) {
       }
 
       // Apply status filter if provided
-      if (submissionStatus && submissionStatus !== "all") {
+      if (notRejected) {
+        submissionsQuery = submissionsQuery.neq("status", "rejected");
+      } else if (submissionStatus && submissionStatus !== "all") {
         if (submissionStatus === "verifiedPaid") {
           submissionsQuery = submissionsQuery.in("status", [
             "verified",
@@ -352,7 +355,9 @@ export async function GET(request: NextRequest) {
       if (videoContestIds.length > 0) {
         submissionsQuery = submissionsQuery.in("contest_id", videoContestIds);
       }
-      if (statusNorm && statusNorm !== "all") {
+      if (notRejected) {
+        submissionsQuery = submissionsQuery.neq("status", "rejected");
+      } else if (statusNorm && statusNorm !== "all") {
         if (statusNorm === "verifiedpaid") {
           submissionsQuery = submissionsQuery.in("status", [
             "verified",
@@ -395,7 +400,9 @@ export async function GET(request: NextRequest) {
           .from("twitter_campaign_tweets")
           .select("creator_id, contest_id, impressions, tweet_created_at")
           .in("contest_id", twitterContestIds);
-        if (statusNorm && statusNorm !== "all") {
+        if (notRejected) {
+          tweetsQuery = tweetsQuery.neq("moderation_status", "rejected");
+        } else if (statusNorm && statusNorm !== "all") {
           if (statusNorm === "verifiedpaid") {
             tweetsQuery = tweetsQuery.in("moderation_status", [
               "verified",
@@ -405,6 +412,7 @@ export async function GET(request: NextRequest) {
             tweetsQuery = tweetsQuery.eq("moderation_status", statusNorm);
           }
         }
+        // ...existing code...
         const { data: tweets } = await tweetsQuery;
         (tweets || []).forEach((row: any) => {
           const cid = row.creator_id;

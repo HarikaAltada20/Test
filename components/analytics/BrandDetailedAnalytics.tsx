@@ -81,7 +81,11 @@ export default function BrandDetailedAnalytics({
       params.set("tiktok", hasTiktok ? "true" : "false");
       params.set("twitter", twitterAnalytics ? "true" : "false");
       if (activeFilter && activeFilter !== "all") {
-        params.set("status", activeFilter);
+        if (activeFilter === "not_rejected") {
+          params.set("notRejected", "true");
+        } else {
+          params.set("status", activeFilter);
+        }
       }
       const url = `/api/analytics/brand-detailed?${params.toString()}`;
 

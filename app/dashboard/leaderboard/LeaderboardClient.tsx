@@ -39,7 +39,8 @@ type SortBy =
   | "referrals"
   | "total_coins";
 
-type PlatformFilter = "all" | "youtube" | "instagram" | "twitter";
+type PlatformFilter = "all" | "youtube" | "instagram" | "twitter" | "tiktok";
+import { SiTiktok } from "react-icons/si";
 
 const formatNumber = (num: number): string => {
   if (num >= 1000000) return (num / 1000000).toFixed(1) + "M";
@@ -884,6 +885,27 @@ export default function LeaderboardClient({
                       <Twitter className="w-3 h-3 sm:w-4 sm:h-4 flex-shrink-0" />
                       <span className="hidden sm:inline ml-1 sm:ml-1.5">
                         Twitter
+                      </span>
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant={platform === "tiktok" ? "default" : "ghost"}
+                      className={
+                        platform === "tiktok"
+                          ? "bg-gradient-to-r from-black to-gray-700 hover:from-gray-800 hover:to-black text-white shadow-lg hover:shadow-xl transition-all duration-300 border-2 border-gray-700/30 font-bold text-xs sm:text-sm px-1.5 sm:px-3 py-1 sm:py-1.5 flex-shrink-0"
+                          : cn(
+                              "transition-all duration-300 font-semibold text-xs sm:text-sm px-1.5 sm:px-3 py-1 sm:py-1.5 flex-shrink-0",
+                              isDark
+                                ? "text-black hover:text-white hover:bg-black/20"
+                                : "text-black hover:text-gray-700 hover:bg-gray-100",
+                            )
+                      }
+                      onClick={() => setPlatform("tiktok")}
+                    >
+                      <SiTiktok className="w-3 h-3 sm:w-4 sm:h-4 flex-shrink-0" />
+                      <span className="hidden sm:inline ml-1 sm:ml-1.5">
+                        TikTok
                       </span>
                     </Button>
                   </div>

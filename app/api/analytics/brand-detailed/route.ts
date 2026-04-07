@@ -16,6 +16,7 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const submissionStatusRaw = searchParams.get("status");
     const submissionStatus = submissionStatusRaw?.trim().toLowerCase() || null;
+    const notRejected = searchParams.get("notRejected") === "true";
     const contestTypeFilter = searchParams.get("type") || "all";
     const contentType = (searchParams.get("contentType") ?? "video")
       .trim()
@@ -89,7 +90,9 @@ export async function GET(request: NextRequest) {
       `,
       )
       .eq("contests.advertiser_id", user.id);
-    if (submissionStatus && submissionStatus !== "all") {
+    if (notRejected) {
+      submissionsQuery = submissionsQuery.neq("status", "rejected");
+    } else if (submissionStatus && submissionStatus !== "all") {
       if (submissionStatus === "verifiedpaid") {
         submissionsQuery = submissionsQuery.in("status", ["verified", "paid"]);
       } else {
@@ -131,7 +134,9 @@ export async function GET(request: NextRequest) {
           )
           .in("contest_id", ids)
           .order("created_at", { ascending: false });
-        if (submissionStatus && submissionStatus !== "all") {
+        if (notRejected) {
+          chunkQuery = chunkQuery.neq("status", "rejected");
+        } else if (submissionStatus && submissionStatus !== "all") {
           if (submissionStatus === "verifiedpaid") {
             chunkQuery = chunkQuery.in("status", ["verified", "paid"]);
           } else {
@@ -187,7 +192,13 @@ export async function GET(request: NextRequest) {
     };
 
     // Apply submission status filter to submissions (verified / paid / pending / rejected)
-    if (submissionStatus && submissionStatus !== "all") {
+    if (notRejected) {
+      allSubmissions =
+        allSubmissions?.filter((sub: any) => {
+          const status = (sub.status || "").toString().toLowerCase();
+          return status !== "rejected";
+        }) || [];
+    } else if (submissionStatus && submissionStatus !== "all") {
       allSubmissions =
         allSubmissions?.filter((sub: any) => {
           const status = (sub.status || "").toString().toLowerCase();
@@ -336,7 +347,9 @@ export async function GET(request: NextRequest) {
         )
         .in("contest_id", twitterContestIds);
 
-      if (submissionStatus && submissionStatus !== "all") {
+      if (notRejected) {
+        tweetsQuery = tweetsQuery.neq("moderation_status", "rejected");
+      } else if (submissionStatus && submissionStatus !== "all") {
         if (submissionStatus === "verifiedpaid") {
           tweetsQuery = tweetsQuery.in("moderation_status", [
             "verified",
