@@ -1262,6 +1262,10 @@ export default function ContestDetailClient({
         const bt = b.created_at ? new Date(b.created_at).getTime() : 0;
         return at - bt;
       }
+      case "submissions_asc":
+      case "submissions_desc":
+        // One row per submission in normal view; order unchanged (matches Twitter text list).
+        return 0;
       case "views_desc":
       default:
         return (b.views || 0) - (a.views || 0);
@@ -2383,6 +2387,7 @@ export default function ContestDetailClient({
     const groups = [...groupSubmissionsByCreator] as any[];
 
     return groups.sort((a, b) => {
+      const subs = (g: any) => Number(g.totalCount ?? 0);
       switch (sortOption) {
         case "views_asc":
           return (a.metrics.views || 0) - (b.metrics.views || 0);
@@ -2404,6 +2409,10 @@ export default function ContestDetailClient({
             : 0;
           return at - bt;
         }
+        case "submissions_asc":
+          return subs(a) - subs(b);
+        case "submissions_desc":
+          return subs(b) - subs(a);
         case "views_desc":
         default:
           return (b.metrics.views || 0) - (a.metrics.views || 0);
@@ -11505,6 +11514,18 @@ export default function ContestDetailClient({
                                       isDark={isDark}
                                     >
                                       Submitted • Oldest First
+                                    </SelectItem>
+                                    <SelectItem
+                                      isDark={isDark}
+                                      value="submissions_desc"
+                                    >
+                                      Submissions • High → Low
+                                    </SelectItem>
+                                    <SelectItem
+                                      isDark={isDark}
+                                      value="submissions_asc"
+                                    >
+                                      Submissions • Low → High
                                     </SelectItem>
                                   </>
                                 )}

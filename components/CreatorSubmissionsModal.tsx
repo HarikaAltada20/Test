@@ -51,6 +51,11 @@ import {
 import { cn } from "@/lib/utils";
 import { toast } from "@/hooks/use-toast";
 import { applyPayoutAdjustment } from "@/lib/payout-adjustment";
+import {
+  formatMetadataTimestamp,
+  parseSubmissionMetadata,
+  getFullRejectionDetails,
+} from "@/lib/submission-metadata";
 
 interface Creator {
   id: string;
@@ -84,6 +89,7 @@ interface Submission {
   tweet_id?: string;
   deleted_at?: string | null;
   insights_status?: "ok" | "temporary_failure" | "permanent_failure" | null;
+  metadata?: any;
 }
 
 interface CreatorSubmissionsModalProps {
@@ -134,6 +140,8 @@ export function CreatorSubmissionsModal({
   const [downloadingSubmissionId, setDownloadingSubmissionId] = useState<
     string | null
   >(null);
+  const [rejectionDetailsModalSubmission, setRejectionDetailsModalSubmission] =
+    useState<{ id: string; metadata: any } | null>(null);
 
   // Read mode from data attribute
   useEffect(() => {
@@ -838,7 +846,8 @@ export function CreatorSubmissionsModal({
   const isDark = mode === "dark";
 
   return (
-    <Dialog open={isOpen} onOpenChange={onClose} isdark={isDark}>
+    <>
+      <Dialog open={isOpen} onOpenChange={onClose} isdark={isDark}>
       <DialogContent
         className="max-w-[98vw] max-h-[98vh] p-0 gap-0"
         hideCloseButton
@@ -1544,6 +1553,14 @@ export function CreatorSubmissionsModal({
                       isDark ? "bg-[#391A6A] " : "bg-gray-50"
                     )}
                   >
+                    Rejection reason
+                  </TableHead>
+                  <TableHead
+                    className={cn(
+                      "min-w-[180px]",
+                      isDark ? "bg-[#391A6A] " : "bg-gray-50"
+                    )}
+                  >
                     Submitted
                   </TableHead>
                   <TableHead
@@ -1562,14 +1579,14 @@ export function CreatorSubmissionsModal({
                     <TableCell
                       colSpan={
                         isTwitterTextImageContest
-                          ? 16 // Checkbox, #, Tweet, Total Points, Base Points, Manual Points, Likes, Replies, Retweets, Quote Reposts, Impressions, Expected Reward, Reward Granted, Manual Points Reason, Status, Submitted, Actions
+                          ? 18 // Checkbox, #, Tweet, Total Points, Base Points, Manual Points, Likes, Replies, Retweets, Quote Reposts, Impressions, Expected Reward, Reward Granted, Manual Points Reason, Status, Rejection reason, Submitted, Actions
                           : 3 + // Checkbox, #, Content
                           3 + // Views, Likes, Comments
                           (isInstagramContest ? 6 : 0) + // Shares, Saves, Reach, Interactions, Avg Watch Time, Total Watch Time
                           2 + // Expected Reward, Reward Granted
                           (hasBonus ? 2 : 0) + // Bonus Expected, Bonus Granted
                           (isAdminView && isInstagramContest ? 1 : 0) + // Insights status (admin only)
-                          3 // Status, Submitted, Actions
+                          4 // Status, Rejection reason, Submitted, Actions
                       }
                       className={cn(
                         "text-center py-8",
@@ -2239,6 +2256,62 @@ export function CreatorSubmissionsModal({
                         </TableCell>
                         <TableCell
                           className={cn(
+                            "text-center text-xs max-w-[220px]",
+                            isDark ? "text-gray-300" : "text-gray-700"
+                          )}
+                        >
+                          {normalizedStatus === "rejected" ? (
+                            (() => {
+                              const details = getFullRejectionDetails(
+                                submission.metadata
+                              );
+                              const reason = details?.reason ?? null;
+                              return (
+                                <div className="flex flex-col items-center gap-1">
+                                  {reason ? (
+                                    <span
+                                      className="truncate block max-w-[180px]"
+                                      title={reason}
+                                    >
+                                      {reason.length > 25
+                                        ? `${reason.slice(0, 25)}...`
+                                        : reason}
+                                    </span>
+                                  ) : (
+                                    <span
+                                      className={
+                                        isDark ? "text-gray-500" : "text-gray-400"
+                                      }
+                                    >
+                                      —
+                                    </span>
+                                  )}
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    className="text-xs h-6 px-2"
+                                    onClick={() =>
+                                      setRejectionDetailsModalSubmission({
+                                        id: submission.id,
+                                        metadata: submission.metadata,
+                                      })
+                                    }
+                                  >
+                                    Check
+                                  </Button>
+                                </div>
+                              );
+                            })()
+                          ) : (
+                            <span
+                              className={isDark ? "text-gray-500" : "text-gray-400"}
+                            >
+                              —
+                            </span>
+                          )}
+                        </TableCell>
+                        <TableCell
+                          className={cn(
                             "text-sm",
                             isDark ? "text-gray-400" : "text-gray-600"
                           )}
@@ -2428,5 +2501,116 @@ export function CreatorSubmissionsModal({
         </div>
       </DialogContent>
     </Dialog>
+
+      <Dialog
+        open={!!rejectionDetailsModalSubmission}
+        onOpenChange={(open) => {
+          if (!open) setRejectionDetailsModalSubmission(null);
+        }}
+      >
+        <DialogContent
+          className={cn(
+            "max-w-md",
+            isDark ? "bg-[#1a0a2e] border-gray-700 text-white" : "bg-white"
+          )}
+        >
+          <DialogTitle className="flex items-center gap-2">
+            Rejection reason
+          </DialogTitle>
+          {rejectionDetailsModalSubmission &&
+            (() => {
+              const parsed = parseSubmissionMetadata(
+                rejectionDetailsModalSubmission.metadata
+              );
+              const hasStructured = parsed && parsed.type === "rejection";
+              const reason = hasStructured ? parsed.reason : null;
+              const additionalNotes = hasStructured
+                ? parsed.additionalNotes
+                : undefined;
+              const timestamp = hasStructured ? parsed.timestamp : undefined;
+              const updatedBy = hasStructured ? parsed.updatedBy : undefined;
+
+              if (!reason && !additionalNotes) {
+                return (
+                  <p
+                    className={cn(
+                      "text-sm",
+                      isDark ? "text-gray-400" : "text-gray-600"
+                    )}
+                  >
+                    No rejection details available.
+                  </p>
+                );
+              }
+
+              return (
+                <div className="space-y-4 text-sm">
+                  {reason && (
+                    <div>
+                      <span
+                        className={cn(
+                          "font-medium",
+                          isDark ? "text-gray-300" : "text-gray-700"
+                        )}
+                      >
+                        Reason
+                      </span>
+                      <p
+                        className={cn(
+                          "mt-1",
+                          isDark ? "text-gray-200" : "text-gray-900"
+                        )}
+                      >
+                        {reason}
+                      </p>
+                    </div>
+                  )}
+                  {additionalNotes && (
+                    <div>
+                      <span
+                        className={cn(
+                          "font-medium",
+                          isDark ? "text-gray-300" : "text-gray-700"
+                        )}
+                      >
+                        Additional notes
+                      </span>
+                      <p
+                        className={cn(
+                          "mt-1 whitespace-pre-wrap",
+                          isDark ? "text-gray-200" : "text-gray-900"
+                        )}
+                      >
+                        {additionalNotes}
+                      </p>
+                    </div>
+                  )}
+                  {timestamp && (
+                    <div
+                      className={cn(
+                        "text-xs",
+                        isDark ? "text-gray-500" : "text-gray-500"
+                      )}
+                    >
+                      <span>
+                        {formatMetadataTimestamp(timestamp)}
+                        {updatedBy ? " · Updated by moderator" : ""}
+                      </span>
+                    </div>
+                  )}
+                  <div className="flex justify-end">
+                    <Button
+                      variant="outline"
+                      onClick={() => setRejectionDetailsModalSubmission(null)}
+                    >
+                      Close
+                    </Button>
+                  </div>
+                </div>
+              );
+            })()}
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }
