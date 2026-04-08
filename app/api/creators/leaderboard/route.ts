@@ -821,11 +821,13 @@ export async function GET(request: NextRequest) {
             twitterAllContestWins.get(creator.id) || 0;
           const twitterExtraSubmissionsWon =
             twitterAllSubmissionsWon.get(creator.id) || 0;
+          const twitterExtraWinnings = twitterAllWinnings.get(creator.id) || 0;
 
           contestsParticipated += twitterExtraContests;
           submissionsMade += twitterExtraSubmissions;
           contestsWon += twitterExtraContestsWon;
           submissionsWon += twitterExtraSubmissionsWon;
+          totalWinnings += twitterExtraWinnings;
         }
 
         const hasYouTube = isCreator
@@ -867,6 +869,22 @@ export async function GET(request: NextRequest) {
                 : profile?.instagram_account;
             accountDisplayName =
               igAccount?.username || igAccount?.full_name || null;
+          }
+          if (!accountDisplayName && hasTwitter) {
+            const twAccount =
+              typeof profile?.twitter_account === "string"
+                ? JSON.parse(profile?.twitter_account as unknown as string)
+                : profile?.twitter_account;
+            accountDisplayName =
+              twAccount?.username || twAccount?.name || null;
+          }
+          if (!accountDisplayName && hasTiktok) {
+            const ttAccount =
+              typeof profile?.tiktok_account === "string"
+                ? JSON.parse(profile?.tiktok_account as unknown as string)
+                : profile?.tiktok_account;
+            accountDisplayName =
+              ttAccount?.username || ttAccount?.display_name || null;
           }
         } catch {}
 

@@ -74,6 +74,8 @@ type LeaderboardEntry = {
   platforms: {
     has_youtube: boolean;
     has_instagram: boolean;
+    has_twitter: boolean;
+    has_tiktok: boolean;
   };
 };
 
@@ -82,6 +84,7 @@ type SummaryStats = {
   instagramCreators?: number;
   youtubeCreators?: number;
   twitterCreators?: number;
+  tiktokCreators?: number;
   totalWinnings: number;
   totalAffiliateEarnings: number;
   totalViews: number;
@@ -506,7 +509,8 @@ export default function LeaderboardClient({
                         Instagram
                       </span>
                       {(staticSummary.youtubeCreators !== undefined ||
-                        staticSummary.twitterCreators !== undefined) && (
+                        staticSummary.twitterCreators !== undefined ||
+                        staticSummary.tiktokCreators !== undefined) && (
                         <span
                           className={
                             isDark ? "text-violet-500" : "text-violet-400"
@@ -523,7 +527,8 @@ export default function LeaderboardClient({
                         <Youtube className="w-3 h-3 text-red-600" />
                         {staticSummary.youtubeCreators.toLocaleString()} YouTube
                       </span>
-                      {staticSummary.twitterCreators !== undefined && (
+                      {(staticSummary.twitterCreators !== undefined ||
+                        staticSummary.tiktokCreators !== undefined) && (
                         <span
                           className={
                             isDark ? "text-violet-500" : "text-violet-400"
@@ -535,9 +540,26 @@ export default function LeaderboardClient({
                     </>
                   )}
                   {staticSummary.twitterCreators !== undefined && (
+                    <>
+                      <span className="flex items-center gap-1.5">
+                        <Twitter className="w-3 h-3 text-sky-500" />
+                        {staticSummary.twitterCreators.toLocaleString()} Twitter
+                      </span>
+                      {staticSummary.tiktokCreators !== undefined && (
+                        <span
+                          className={
+                            isDark ? "text-violet-500" : "text-violet-400"
+                          }
+                        >
+                          |
+                        </span>
+                      )}
+                    </>
+                  )}
+                  {staticSummary.tiktokCreators !== undefined && (
                     <span className="flex items-center gap-1.5">
-                      <Twitter className="w-3 h-3 text-sky-500" />
-                      {staticSummary.twitterCreators.toLocaleString()} Twitter
+                      <SiTiktok className="w-3 h-3 text-black dark:text-white" />
+                      {staticSummary.tiktokCreators.toLocaleString()} TikTok
                     </span>
                   )}
                 </p>
