@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { verifyAdminAccess } from "@/utils/admin-auth";
 import { createAdminClient } from "@/utils/supabase/admin";
+import { TikTokSyncService } from "@/lib/tiktok/services/TikTokSyncService";
 
 export const dynamic = "force-dynamic";
 
@@ -14,7 +15,30 @@ export async function GET(
   }
 
   const { id: contestId, creatorId } = await context.params;
+  const sync = request.nextUrl.searchParams.get("sync") === "1";
   const admin = createAdminClient();
+
+  if (sync) {
+    try {
+      const syncService = new TikTokSyncService();
+      const result = await syncService.syncCreatorMetrics(creatorId);
+      if (!result.success) {
+        console.warn(
+          "[tiktok-account-analytics] sync completed with error:",
+          result.error,
+        );
+      }
+    } catch (e: unknown) {
+      console.error("[tiktok-account-analytics] sync failed:", e);
+      return NextResponse.json(
+        {
+          error: "Sync failed",
+          details: e instanceof Error ? e.message : String(e),
+        },
+        { status: 500 },
+      );
+    }
+  }
 
   // 1. Verify creator is in the contest (has at least one submission)
   const { data: submission, error: subError } = await admin
@@ -48,10 +72,25 @@ export async function GET(
   const tiktokAccount = profile.tiktok_account as any;
   const marketing = tiktokAccount?.marketing;
 
+  const { data: tiktokSubmissions, error: subFetchError } = await admin
+    .from("submissions")
+    .select(
+      "id, content_link, views, other_stats, last_insights_update, insights_status, created_at",
+    )
+    .eq("contest_id", contestId)
+    .eq("creator_id", creatorId)
+    .eq("platform", "tiktok")
+    .order("created_at", { ascending: true });
+
+  if (subFetchError) {
+    console.error("[tiktok-account-analytics] submissions:", subFetchError);
+  }
+
   return NextResponse.json({
-    hasMarketingAccount: !!marketing,
+    hasMarketingAccount: !!marketing?.access_token,
     marketingData: marketing || null,
     lastSyncedAt: marketing?.last_synced_at || tiktokAccount?.last_synced_at || null,
     demographics: marketing?.demographics || null,
+    submissions: tiktokSubmissions ?? [],
   });
 }

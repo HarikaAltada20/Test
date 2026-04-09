@@ -248,7 +248,8 @@ export class TikTokApiClient {
       cursor: cursor ? parseInt(cursor, 10) : undefined,
     };
 
-    // Only request fields supported by the Display API v2
+    // Fields must match the documented Video object:
+    // https://developers.tiktok.com/doc/tiktok-api-v2-video-object
     const fields =
       "id,create_time,cover_image_url,share_url,video_description,duration,title,view_count,like_count,comment_count,share_count";
     const res = await fetch(`${this.baseUrl}/video/list/?fields=${fields}`, {
@@ -288,7 +289,7 @@ export class TikTokApiClient {
       },
     };
 
-    // Only request fields supported by the Display API v2
+    // https://developers.tiktok.com/doc/tiktok-api-v2-video-object
     const fields =
       "id,create_time,cover_image_url,share_url,video_description,duration,title,view_count,like_count,comment_count,share_count";
     const res = await fetch(`${this.baseUrl}/video/query/?fields=${fields}`, {
