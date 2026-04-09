@@ -19,6 +19,7 @@ import {
   DollarSign,
   Calendar,
 } from "lucide-react";
+import { SiTiktok } from "react-icons/si";
 import { formatCurrencyFromCents } from "@/lib/currency-utils";
 import { cn } from "@/lib/utils";
 import { useAnalyticsDarkMode } from "@/hooks/use-analytics-dark-mode";
@@ -27,7 +28,7 @@ interface CreatorAnalyticsProps {
   userId: string;
   activeFilter?: string;
   contentType?: "video" | "text_image";
-  videoPlatform?: "video" | "all" | "youtube" | "instagram";
+  videoPlatform?: string;
   twitterAnalytics?: boolean;
   contestTypeFilter?: "all" | "leaderboard" | "cpm";
 }
@@ -94,6 +95,8 @@ const PlatformIcon = ({ platform }: { platform: string }) => {
     case "twitter":
     case "x":
       return <Twitter className={iconClass} />;
+    case "tiktok":
+      return <SiTiktok className={iconClass} />;
     default:
       return <div className={`${iconClass} bg-gray-400 rounded`}></div>;
   }
@@ -128,9 +131,21 @@ export default function CreatorAnalytics({
     try {
       setLoading(true);
       const params = new URLSearchParams();
-      if (activeFilter !== "all") params.set("status", activeFilter);
+      if (activeFilter !== "all") {
+        if (activeFilter === "not_rejected") {
+          params.set("notRejected", "true");
+        } else {
+          params.set("status", activeFilter);
+        }
+      }
       params.set("contentType", contentType);
       params.set("videoPlatform", videoPlatform);
+      // Determine if tiktok is selected based on videoPlatform
+      const hasTiktok =
+        videoPlatform === "all" ||
+        videoPlatform === "tiktok" ||
+        videoPlatform.includes("tiktok");
+      params.set("tiktok", hasTiktok ? "true" : "false");
       params.set("twitter", twitterAnalytics ? "true" : "false");
       if (contestTypeFilter && contestTypeFilter !== "all") {
         params.set("type", contestTypeFilter);
@@ -564,7 +579,8 @@ export default function CreatorAnalytics({
                           {(creator.submissionsYoutubeInstagram ?? 0) > 0 ||
                           (creator.submissionsTwitter ?? 0) > 0 ? (
                             <>
-                              {(creator.submissionsYoutubeInstagram ?? 0) > 0 && (
+                              {(creator.submissionsYoutubeInstagram ?? 0) >
+                                0 && (
                                 <span className="flex items-center gap-1 text-xs sm:text-sm text-muted-foreground">
                                   {(creator.submissionsYoutube ?? 0) > 0 && (
                                     <Youtube
@@ -590,8 +606,11 @@ export default function CreatorAnalytics({
                               )}
                               {(creator.submissionsTwitter ?? 0) > 0 && (
                                 <>
-                                  {(creator.submissionsYoutubeInstagram ?? 0) > 0 && (
-                                    <span className="text-muted-foreground/60">·</span>
+                                  {(creator.submissionsYoutubeInstagram ?? 0) >
+                                    0 && (
+                                    <span className="text-muted-foreground/60">
+                                      ·
+                                    </span>
                                   )}
                                   <span className="flex items-center gap-1 text-xs sm:text-sm text-muted-foreground">
                                     <Twitter

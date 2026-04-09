@@ -1,65 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient as createAdminSupabaseClient } from "@supabase/supabase-js";
-import { TikTokApiClient } from "@/lib/tiktok/api/TikTokApiClient";
-import { TikTokProvider } from "@/lib/tiktok/provider/TikTokProvider";
-
-// Type definition for the tiktok_account JSON object
-type TikTokAccount = {
-  access_token: string;
-  refresh_token: string;
-  expires_at: string; // ISO String timestamp
-  username?: string;
-  open_id?: string;
-  [key: string]: any;
-};
-
-type SubmissionUpdate = {
-  id: string;
-  views: number;
-  newOtherStats: any;
-  video_thumbnail_url?: string | null;
-};
-
-type TokenUpdate = {
-  userId: string;
-  newAccountData: TikTokAccount;
-};
-
-const isTokenExpired = (expiresAt: string): boolean =>
-  new Date(expiresAt) <= new Date();
-
-// Refresh TikTok token if needed
-async function handleTokenRefresh(
-  creator: any,
-  tokenUpdates: TokenUpdate[],
-): Promise<string | null> {
-  const account = creator.tiktok_account as TikTokAccount;
-  if (!account?.refresh_token || !isTokenExpired(account.expires_at)) {
-    return account.access_token;
-  }
-
-  try {
-    const provider = new TikTokProvider();
-    const newTokens = await provider.refreshAccessToken(account.refresh_token);
-    const newAccountData: TikTokAccount = {
-      ...account,
-      access_token: newTokens.accessToken,
-      refresh_token: newTokens.refreshToken || account.refresh_token,
-      expires_at: new Date(
-        Date.now() + (newTokens.expiresIn || 86400) * 1000,
-      ).toISOString(),
-    };
-
-    tokenUpdates.push({ userId: creator.id, newAccountData });
-    return newTokens.accessToken;
-  } catch (error) {
-    console.error(
-      `[TikTok Cron] Token refresh failed for creator ${creator.id}:`,
-      error,
-    );
-    return null;
-  }
-}
+import { TikTokSyncService } from "@/lib/tiktok/services/TikTokSyncService";
 
 // Extract TikTok video ID from a content link
 function extractTikTokVideoId(contentLink: string): string | null {
@@ -72,125 +13,6 @@ function extractTikTokVideoId(contentLink: string): string | null {
   return null;
 }
 
-// Fetch and process TikTok stats
-async function fetchTikTokStats(
-  creator: any,
-  videoIds: string[],
-  accessToken: string,
-  submissionsByCreator: Record<string, any[]>,
-): Promise<SubmissionUpdate[]> {
-  const updates: SubmissionUpdate[] = [];
-  const now = new Date().toISOString();
-
-  try {
-    const apiClient = new TikTokApiClient();
-
-    // TikTok queryVideos supports up to 20 video IDs at a time
-    const chunkSize = 20;
-    for (let i = 0; i < videoIds.length; i += chunkSize) {
-      const chunk = videoIds.slice(i, i + chunkSize);
-
-      const response = await apiClient.queryVideos(accessToken, chunk);
-      const videos = response?.data?.videos || [];
-
-      for (const video of videos) {
-        const views = video.view_count || 0;
-        const likes = video.like_count || 0;
-        const comments = video.comment_count || 0;
-        const shares = video.share_count || 0;
-
-        const matchingSubmissions = submissionsByCreator[creator.id].filter(
-          (s: any) => s.video_id === video.id,
-        );
-
-        for (const sub of matchingSubmissions) {
-          // Preserve existing stats and update with fresh data
-          const existingTikTok = (sub.other_stats?.tiktok || {}) as Record<
-            string,
-            any
-          >;
-
-          const tiktokMetrics: Record<string, any> = {
-            views,
-            likes,
-            comments,
-            shares,
-            // Carry forward any existing extra data
-            ...Object.fromEntries(
-              Object.entries(existingTikTok).filter(
-                ([key]) =>
-                  ![
-                    "views",
-                    "likes",
-                    "comments",
-                    "shares",
-                    "last_basic_update",
-                  ].includes(key),
-              ),
-            ),
-            last_basic_update: now,
-          };
-
-          updates.push({
-            id: sub.id,
-            views,
-            newOtherStats: { tiktok: tiktokMetrics },
-            video_thumbnail_url: video.cover_image_url || null,
-          });
-        }
-      }
-    }
-  } catch (error: any) {
-    console.error(
-      `[TikTok Cron] API error for creator ${creator.id}:`,
-      error.message,
-    );
-  }
-
-  return updates;
-}
-
-// Batch update database records
-async function batchUpdateDatabase(
-  supabaseAdmin: any,
-  updates: SubmissionUpdate[],
-  tokenUpdates: TokenUpdate[],
-): Promise<void> {
-  const now = new Date().toISOString();
-
-  // Update submissions
-  const updatePromises = updates.map((update) =>
-    supabaseAdmin
-      .from("submissions")
-      .update({
-        views: update.views,
-        other_stats: update.newOtherStats,
-        ...(update.video_thumbnail_url
-          ? { video_thumbnail_url: update.video_thumbnail_url }
-          : {}),
-        last_insights_update: now,
-        updated_at: now,
-      })
-      .eq("id", update.id),
-  );
-
-  // Update tokens
-  const tokenPromises = tokenUpdates.map((tokenUpdate) =>
-    supabaseAdmin
-      .from("creator_profiles")
-      .update({
-        tiktok_account: tokenUpdate.newAccountData,
-        updated_at: now,
-      })
-      .eq("id", tokenUpdate.userId),
-  );
-
-  try {
-    await Promise.allSettled([...updatePromises, ...tokenPromises]);
-  } catch (error) {
-    console.error("[TikTok Cron] Batch update failed:", error);
-  }
-}
 
 // Function to update budget spent for CPM contests
 async function updateCpmContestBudgets(
@@ -342,6 +164,8 @@ export async function GET(request: Request) {
     process.env.SUPABASE_SERVICE_ROLE_KEY!,
   );
 
+  console.log("[TikTok Cron] Job triggered. Checking authorization...");
+
   try {
     // Check if this is a contest-specific refresh
     const url = new URL(request.url);
@@ -369,12 +193,15 @@ export async function GET(request: Request) {
         .eq("platform", "tiktok")
         .is("views_locked_at", null);
       activeIds = (activeContests || []).map((c: any) => c.id);
+      console.log(`[TikTok Cron] Found ${activeIds.length} active TikTok contests.`);
       if (!activeIds.length) {
         return NextResponse.json({
           message: "No active TikTok contests to update",
         });
       }
     }
+
+    console.log("[TikTok Cron] Fetching TikTok submissions to update...");
 
     // Fetch TikTok submissions to update
     let submissionsQuery = supabaseAdmin
@@ -398,9 +225,15 @@ export async function GET(request: Request) {
     const { data: submissions, error: submissionError } =
       await submissionsQuery;
 
-    if (submissionError)
+    if (submissionError) {
+      console.error(`[TikTok Cron] Submission fetch failed: ${submissionError.message}`);
       throw new Error(`Submission fetch failed: ${submissionError.message}`);
+    }
+
+    console.log(`[TikTok Cron] Found ${submissions?.length || 0} submissions for this query.`);
+
     if (!submissions?.length) {
+      console.log("[TikTok Cron] Returning early: No submissions found.");
       return NextResponse.json({
         message: `No TikTok submissions to update${
           isContestSpecific ? ` for contest ${contestId}` : ""
@@ -423,7 +256,10 @@ export async function GET(request: Request) {
     );
 
     const creatorIds = Object.keys(submissionsByCreator);
+    console.log(`[TikTok Cron] Unique creator IDs with valid video links: ${creatorIds.length}`);
+
     if (!creatorIds.length) {
+      console.log("[TikTok Cron] Returning early: No valid video IDs found in submissions.");
       await updateCpmContestBudgets(supabaseAdmin, contestId || undefined);
       return NextResponse.json({
         message: "No valid TikTok video IDs found",
@@ -440,36 +276,30 @@ export async function GET(request: Request) {
     if (creatorsError)
       throw new Error(`Creator fetch failed: ${creatorsError.message}`);
     if (!creators?.length) {
+      console.log("[TikTok Cron] No connected TikTok accounts found to process.");
       await updateCpmContestBudgets(supabaseAdmin, contestId || undefined);
       return NextResponse.json({
         message: "No connected TikTok accounts found",
       });
     }
 
-    // Process each creator
-    const allUpdates: SubmissionUpdate[] = [];
-    const tokenUpdates: TokenUpdate[] = [];
+    console.log(`[TikTok Cron] Processing ${creators.length} creators with connected TikTok accounts.`);
+
+    // Process each creator using TikTokSyncService for advanced metrics
+    const syncService = new TikTokSyncService();
+    let totalSyncedSubmissions = 0;
 
     for (const creator of creators) {
-      const accessToken = await handleTokenRefresh(creator, tokenUpdates);
-      if (!accessToken) continue;
-
-      const videoIds = [
-        ...new Set(
-          submissionsByCreator[creator.id].map((s: any) => s.video_id),
-        ),
-      ];
-      const updates = await fetchTikTokStats(
-        creator,
-        videoIds,
-        accessToken,
-        submissionsByCreator,
-      );
-      allUpdates.push(...updates);
+      console.log(`[TikTok Refresh] Manually triggering sync for creator: ${creator.id}`);
+      const result = await syncService.syncCreatorMetrics(creator.id);
+      
+      if (result.success) {
+        totalSyncedSubmissions += result.videosSynced || 0;
+        console.log(`[TikTok Refresh] Successfully synced ${result.videosSynced} videos for ${creator.id}`);
+      } else {
+        console.error(`[TikTok Refresh] Sync failed for ${creator.id}:`, result.error);
+      }
     }
-
-    // Batch update database
-    await batchUpdateDatabase(supabaseAdmin, allUpdates, tokenUpdates);
 
     // Update CPM contest budgets for TikTok contests
     await updateCpmContestBudgets(
@@ -478,9 +308,8 @@ export async function GET(request: Request) {
     );
 
     return NextResponse.json({
-      message: `Updated ${allUpdates.length} TikTok submissions${
-        isContestSpecific ? ` for contest ${contestId}` : ""
-      }`,
+      message: `Updated total ${totalSyncedSubmissions} TikTok submissions using advanced sync service`,
+      details: isContestSpecific ? `Targeted contest ${contestId}` : `Global TikTok refresh`
     });
   } catch (error: any) {
     console.error("[TikTok Cron] Job failed:", error);

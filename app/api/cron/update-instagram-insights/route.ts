@@ -3,6 +3,8 @@ import dayjs from "dayjs";
 import { createClient as createAdminSupabaseClient } from "@supabase/supabase-js";
 import { isInstagramInsightsQueueEnabled } from "@/lib/queue/instagram-insights-queue";
 import { instagramGraphFetch } from "@/lib/meta-graph/instagram-graph-fetch";
+import { insertMetaGraphUsageLogRow } from "@/lib/meta-graph/meta-graph-usage-log";
+import type { MetaGraphUsageAccumulator } from "@/lib/meta-graph/usage-accumulator";
 
 // 🎯 Types
 interface InstagramAccount {
@@ -80,11 +82,12 @@ const hasStatsChanged = (
 // 🔄 Refresh Instagram token
 async function refreshToken(
   creatorId: string,
-  accessToken: string
+  accessToken: string,
+  usageAccumulator?: MetaGraphUsageAccumulator
 ): Promise<string | null> {
   try {
     const refreshUrl = `https://graph.instagram.com/refresh_access_token?grant_type=ig_refresh_token&access_token=${accessToken}`;
-    const response = await instagramGraphFetch(refreshUrl);
+    const response = await instagramGraphFetch(refreshUrl, { usageAccumulator });
     const data = await response.json();
 
     if (!response.ok || data.error) {
@@ -108,7 +111,8 @@ async function refreshToken(
 // 📊 Fetch insights for a submission
 async function fetchInsights(
   submission: Submission,
-  accessToken: string
+  accessToken: string,
+  usageAccumulator?: MetaGraphUsageAccumulator
 ): Promise<{ views: number; stats: Record<string, number> } | null> {
   try {
     const url = `https://graph.instagram.com/${submission.video_id}/insights?metric=${METRICS}&access_token=${accessToken}`;
@@ -117,6 +121,7 @@ async function fetchInsights(
         "User-Agent":
           "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
       },
+      usageAccumulator,
     });
 
     if (!response.ok) {
@@ -464,6 +469,7 @@ export async function GET(request: Request) {
     // 🔄 Process insights efficiently
     const updates: SubmissionUpdate[] = [];
     const tokenUpdates: TokenUpdate[] = [];
+    const usageAccumulator: MetaGraphUsageAccumulator = {};
 
     for (const creator of creators as Creator[]) {
       const account = creator.instagram_account;
@@ -482,7 +488,11 @@ export async function GET(request: Request) {
 
       // 🔄 Refresh token if needed
       if (account.token_expiry && isTokenExpiring(account.token_expiry)) {
-        const newToken = await refreshToken(creator.id, accessToken);
+        const newToken = await refreshToken(
+          creator.id,
+          accessToken,
+          usageAccumulator
+        );
         if (!newToken) continue;
 
         accessToken = newToken;
@@ -500,7 +510,11 @@ export async function GET(request: Request) {
       for (const submission of userSubmissions) {
         if (!submission.video_id) continue;
 
-        const result = await fetchInsights(submission, accessToken);
+        const result = await fetchInsights(
+          submission,
+          accessToken,
+          usageAccumulator
+        );
         if (!result) continue;
 
         const { views, stats } = result;
@@ -522,6 +536,14 @@ export async function GET(request: Request) {
         }
       }
     }
+
+    await insertMetaGraphUsageLogRow({
+      source: "instagram_insights_cron",
+      contestId: contestId || null,
+      runId: null,
+      batchIndex: null,
+      accumulator: usageAccumulator,
+    });
 
     // 💾 Batch database updates (much more efficient!)
     const now = new Date().toISOString();

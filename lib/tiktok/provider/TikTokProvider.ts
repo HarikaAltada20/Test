@@ -6,15 +6,22 @@ import {
   IPlatformProvider,
 } from "../../core/interfaces/IPlatformProvider";
 import { TikTokApiClient } from "../api/TikTokApiClient";
+import { TikTokBusinessApiClient } from "../api/TikTokBusinessApiClient";
 import crypto from "crypto";
 
 export class TikTokProvider implements IPlatformProvider {
   readonly platformId = "tiktok";
   private client: TikTokApiClient;
+  private businessClient: TikTokBusinessApiClient;
 
-  constructor(client?: TikTokApiClient) {
+  constructor(client?: TikTokApiClient, businessClient?: TikTokBusinessApiClient) {
     // Allows dependency injection for testing or fallback to default
     this.client = client || new TikTokApiClient();
+    this.businessClient = businessClient || new TikTokBusinessApiClient();
+  }
+
+  getRedirectUri(): string {
+    return this.client.getRedirectUri();
   }
 
   generateAuthUrl(
@@ -192,5 +199,24 @@ export class TikTokProvider implements IPlatformProvider {
         publishedAt,
       };
     });
+  }
+
+  /**
+   * Fetches detailed metrics from TikTok Business API for a specific video.
+   * This provides data like average watch time, completion rate, etc.
+   */
+  async getDetailedMetrics(marketingAccessToken: string, videoUrl: string) {
+    console.log(`[TikTokProvider] Fetching detailed metrics for video: ${videoUrl}`);
+    const data = await this.businessClient.getTcmReport(marketingAccessToken, videoUrl);
+    return data.data; // Return the detailed report
+  }
+
+  /**
+   * Fetches audience demographics from TikTok Business API.
+   */
+  async getDemographics(marketingAccessToken: string, creatorId: string) {
+    console.log(`[TikTokProvider] Fetching audience demographics for creator: ${creatorId}`);
+    const data = await this.businessClient.getAudienceDemographics(marketingAccessToken, creatorId);
+    return data.data;
   }
 }

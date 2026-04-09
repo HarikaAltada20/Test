@@ -76,6 +76,7 @@ type CreatorProfile = {
   id: string;
   youtube_account?: any | null;
   instagram_account?: any | null;
+  tiktok_account?: any | null;
   twitter_account?: any | null;
   total_contests_participated?: number | null;
   total_contests_won?: number | null;
@@ -342,6 +343,7 @@ const allColumns = {
     { id: "username", label: "Username" },
     { id: "youtube_account", label: "YouTube Account" },
     { id: "instagram_account", label: "Instagram Account" },
+    { id: "tiktok_account", label: "TikTok Account" },
     { id: "twitter_account", label: "Twitter Account" },
     { id: "contests_participated", label: "Contests Participated" },
     { id: "contests_won", label: "Contests Won" },
@@ -849,6 +851,22 @@ export default function AdminUsersPage() {
           try {
             const account = typeof ig === "string" ? JSON.parse(ig) : ig;
             return account?.name_of_account || account?.username || null;
+          } catch {
+            return null;
+          }
+        }
+        return null;
+      case "tiktok_account":
+        if (row.creator_profiles) {
+          const profiles = Array.isArray(row.creator_profiles)
+            ? row.creator_profiles
+            : [row.creator_profiles];
+          const profile = profiles[0];
+          const tt = profile?.tiktok_account;
+          if (!tt) return null;
+          try {
+            const account = typeof tt === "string" ? JSON.parse(tt) : tt;
+            return account?.display_name || account?.username || null;
           } catch {
             return null;
           }
@@ -1599,6 +1617,38 @@ export default function AdminUsersPage() {
 
               return 0;
             }
+            case "tiktok_account": {
+              const getTtName = (profile: CreatorProfile | null) => {
+                const tt = profile?.tiktok_account;
+                if (!tt) return "";
+                try {
+                  const account = typeof tt === "string" ? JSON.parse(tt) : tt;
+                  const rawName = account?.display_name || account?.username || "";
+                  return normalizeForAlphabetSort(rawName);
+                } catch {
+                  return "";
+                }
+              };
+
+              const aName = getTtName(aProfile);
+              const bName = getTtName(bProfile);
+
+              const aEmpty = !aName;
+              const bEmpty = !bName;
+
+              if (aEmpty !== bEmpty) {
+                return aEmpty ? 1 : -1;
+              }
+
+              if (!aEmpty && !bEmpty) {
+                const cmp = aName.localeCompare(bName);
+                if (cmp !== 0) {
+                  return sortOrder === "asc" ? cmp : -cmp;
+                }
+              }
+
+              return 0;
+            }
             case "twitter_account": {
               const getTwName = (profile: CreatorProfile | null) => {
                 const tw = profile?.twitter_account;
@@ -2103,6 +2153,7 @@ export default function AdminUsersPage() {
           : u.creator_profiles;
         let youtube: { label: string; url: string | null } | null = null;
         let instagram: { label: string; url: string | null } | null = null;
+        let tiktok: { label: string; url: string | null } | null = null;
         let twitter: { label: string; url: string | null } | null = null;
         if (cp) {
           try {
@@ -2137,6 +2188,20 @@ export default function AdminUsersPage() {
             }
           } catch {}
           try {
+            const tt =
+              typeof cp.tiktok_account === "string"
+                ? JSON.parse(cp.tiktok_account)
+                : cp.tiktok_account;
+            if (tt && (tt.username || tt.display_name)) {
+              tiktok = {
+                label: tt.display_name || tt.username || "TikTok",
+                url: tt.username
+                  ? `https://tiktok.com/@${tt.username.replace(/^@/, "")}`
+                  : null,
+              };
+            }
+          } catch {}
+          try {
             const t =
               typeof cp.twitter_account === "string"
                 ? JSON.parse(cp.twitter_account)
@@ -2165,6 +2230,7 @@ export default function AdminUsersPage() {
           country,
           youtube,
           instagram,
+          tiktok,
           twitter,
         };
       })
@@ -2182,6 +2248,7 @@ export default function AdminUsersPage() {
       country?: string;
       youtube?: { label: string; url: string | null } | null;
       instagram?: { label: string; url: string | null } | null;
+      tiktok?: { label: string; url: string | null } | null;
       twitter?: { label: string; url: string | null } | null;
     }[];
   }, [tabFiltered]);
@@ -2714,6 +2781,12 @@ export default function AdminUsersPage() {
                           <SortableHeader
                             columnId="instagram_account"
                             label="Instagram Account"
+                          />
+                        )}
+                        {isColumnVisible("tiktok_account") && (
+                          <SortableHeader
+                            columnId="tiktok_account"
+                            label="TikTok Account"
                           />
                         )}
                         {isColumnVisible("twitter_account") && (
@@ -3939,6 +4012,74 @@ export default function AdminUsersPage() {
                                           {account?.account_type && (
                                             <div className="text-xs text-muted-foreground">
                                               {account.account_type}
+                                            </div>
+                                          )}
+                                        </div>
+                                      );
+                                    } catch {
+                                      return (
+                                        <Badge variant="secondary">
+                                          Connected
+                                        </Badge>
+                                      );
+                                    }
+                                  })()}
+                                </TableCell>
+                              )}
+                              {isColumnVisible("tiktok_account") && (
+                                <TableCell className="min-w-[200px] border-r">
+                                  {(() => {
+                                    const ttAccount =
+                                      creatorProfile?.tiktok_account;
+                                    if (!ttAccount) return "-";
+                                    try {
+                                      const account =
+                                        typeof ttAccount === "string"
+                                          ? JSON.parse(ttAccount)
+                                          : ttAccount;
+
+                                      const tiktokUrl = account?.username
+                                        ? `https://tiktok.com/@${account.username.replace(/^@/, "")}`
+                                        : "";
+
+                                      return (
+                                        <div className="space-y-1">
+                                          <div className="flex items-center gap-2">
+                                            <div className="font-medium text-sm">
+                                              {account?.display_name ||
+                                                account?.username ||
+                                                "TikTok"}
+                                            </div>
+                                            {tiktokUrl && (
+                                              <a
+                                                href={tiktokUrl}
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                className="text-black dark:text-white hover:opacity-80 transition-opacity"
+                                                title="Visit TikTok Profile"
+                                              >
+                                                <svg
+                                                  className="w-5 h-5"
+                                                  fill="currentColor"
+                                                  viewBox="0 0 24 24"
+                                                  xmlns="http://www.w3.org/2000/svg"
+                                                >
+                                                  <path d="M12.525.02c1.31-.02 2.61-.01 3.91-.02.08 1.53.63 3.09 1.75 4.17 1.12 1.11 2.7 1.62 4.24 1.79v4.03c-1.44-.05-2.89-.35-4.2-.97-.57-.26-1.1-.59-1.62-.93-.01 2.92.01 5.84-.02 8.75-.08 2.22-1.15 4.39-2.91 5.74-1.76 1.34-4.11 1.83-6.26 1.37-2.14-.45-4.01-1.83-5.02-3.79-1-1.95-1.07-4.32-.2-6.32.88-1.99 2.65-3.5 4.75-4.04 1.15-.3 2.37-.33 3.54-.15V13.4c-1.29-.16-2.65-.05-3.83.6-1.18.66-2.07 1.82-2.3 3.16-.23 1.32.13 2.74 1.05 3.65.91.9 2.31 1.25 3.55.93 1.24-.31 2.19-1.32 2.47-2.55.28-1.21.05-5.91.05-7.14V.02zm-3.14 0"
+                                                  />
+                                                </svg>
+                                              </a>
+                                            )}
+                                          </div>
+                                          {account?.username && (
+                                            <div className="text-xs text-muted-foreground">
+                                              @{account.username.replace(/^@/, "")}
+                                            </div>
+                                          )}
+                                          {account?.follower_count !==
+                                            undefined && (
+                                            <div className="text-xs text-muted-foreground">
+                                              {account.follower_count.toLocaleString()}{" "}
+                                              followers
                                             </div>
                                           )}
                                         </div>

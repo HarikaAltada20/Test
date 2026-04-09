@@ -106,6 +106,11 @@ interface SocialAccount {
   bio?: string;
   refresh_token_expiry?: string; // ISO string - TikTok
   needs_reconnect?: boolean; // Set when token/connection failed; user should reconnect
+  marketing?: {
+    connected_at?: string;
+    last_synced_at?: string;
+    creator_id?: string;
+  };
 }
 
 interface CreatorProfile {
@@ -170,6 +175,8 @@ export default function SettingsPage({
   const [instagramConnected, setInstagramConnected] = useState(false);
   const [tiktokConnected, setTiktokConnected] = useState(false);
   const [isLoadingTiktok, setIsLoadingTiktok] = useState(false);
+  const [isLoadingTiktokMarketing, setIsLoadingTiktokMarketing] =
+    useState(false);
   const [isLoadingTiktokDisconnect, setIsLoadingTiktokDisconnect] =
     useState(false);
   const [mode, setMode] = useState<"light" | "dark">("light");
@@ -947,6 +954,21 @@ export default function SettingsPage({
       toast({
         title: "Error",
         description: err.message || "Failed to initiate TikTok connection",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleTiktokMarketingConnect = () => {
+    setIsLoadingTiktokMarketing(true);
+    try {
+      window.location.href = "/api/auth/tiktok/marketing/authorize";
+    } catch (err: any) {
+      console.error("[TikTok Marketing Connect] Error:", err);
+      setIsLoadingTiktokMarketing(false);
+      toast({
+        title: "Error",
+        description: err.message || "Failed to initiate TikTok Business connection",
         variant: "destructive",
       });
     }
@@ -2008,7 +2030,8 @@ export default function SettingsPage({
                   </div>
                 </div>
                 {tiktokConnected ? (
-                  <>
+                  <div className="flex flex-col gap-2">
+                    <div className="flex items-center gap-2">
                     <Button
                       variant="outline"
                       className="bg-[#C90808] text-white"
@@ -2025,7 +2048,6 @@ export default function SettingsPage({
                         onClick={handleTiktokConnect}
                         disabled={isLoadingTiktok}
                         variant="default"
-                        className="ml-2"
                       >
                         {isLoadingTiktok && (
                           <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
@@ -2033,7 +2055,10 @@ export default function SettingsPage({
                         Reconnect
                       </Button>
                     )}
-                  </>
+                    </div>
+                    
+
+                  </div>
                 ) : (
                   <Button
                     onClick={handleTiktokConnect}

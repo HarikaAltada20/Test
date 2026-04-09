@@ -54,6 +54,7 @@ export async function GET(req: NextRequest) {
       id,
       youtube_account,
       instagram_account,
+      tiktok_account,
       twitter_account,
       total_contests_participated,
       total_contests_won,

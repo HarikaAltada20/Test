@@ -83,10 +83,15 @@ export default function OverviewAnalytics({
   const fetchOverviewData = async () => {
     try {
       setLoading(true);
-      const url =
-        activeFilter !== "all"
-          ? `/api/analytics/overview?status=${activeFilter}`
-          : "/api/analytics/overview";
+
+      let url = "/api/analytics/overview";
+      if (activeFilter !== "all") {
+        if (activeFilter === "not_rejected") {
+          url += "?notRejected=true";
+        } else {
+          url += `?status=${activeFilter}`;
+        }
+      }
 
       const response = await fetch(url);
 

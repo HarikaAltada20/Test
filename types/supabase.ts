@@ -568,29 +568,44 @@ export interface Database {
           error_message?: string | null;
         };
       };
-      meta_graph_app_usage: {
+      meta_graph_app_usage_log: {
         Row: {
           id: string;
+          created_at: string;
+          source: "instagram_insights_batch" | "instagram_insights_cron";
+          contest_id: string | null;
+          run_id: string | null;
+          batch_index: number | null;
           call_count: number;
           total_time: number;
           total_cputime: number;
-          updated_at: string;
+          business_use_case: Json | null;
           raw_headers: Json | null;
         };
         Insert: {
           id?: string;
+          created_at?: string;
+          source: "instagram_insights_batch" | "instagram_insights_cron";
+          contest_id?: string | null;
+          run_id?: string | null;
+          batch_index?: number | null;
           call_count?: number;
           total_time?: number;
           total_cputime?: number;
-          updated_at?: string;
+          business_use_case?: Json | null;
           raw_headers?: Json | null;
         };
         Update: {
           id?: string;
+          created_at?: string;
+          source?: "instagram_insights_batch" | "instagram_insights_cron";
+          contest_id?: string | null;
+          run_id?: string | null;
+          batch_index?: number | null;
           call_count?: number;
           total_time?: number;
           total_cputime?: number;
-          updated_at?: string;
+          business_use_case?: Json | null;
           raw_headers?: Json | null;
         };
       };
@@ -772,6 +787,9 @@ export interface Database {
           payout_method_details_snapshot: Json | null;
           cancelled_at: string | null;
           cancellation_reason: string | null;
+          payment_proof_link: string | null;
+          payment_proof_storage_path: string | null;
+          payment_proof_file_size_bytes: number | null;
         };
         Insert: {
           id?: string;
@@ -795,6 +813,9 @@ export interface Database {
           amount_type: "cash" | "coins";
           payout_method_type_snapshot?: string | null;
           payout_method_details_snapshot?: Json | null;
+          payment_proof_link?: string | null;
+          payment_proof_storage_path?: string | null;
+          payment_proof_file_size_bytes?: number | null;
         };
         Update: {
           id?: string;
@@ -820,6 +841,9 @@ export interface Database {
           payout_method_details_snapshot?: Json | null;
           cancelled_at?: string | null;
           cancellation_reason?: string | null;
+          payment_proof_link?: string | null;
+          payment_proof_storage_path?: string | null;
+          payment_proof_file_size_bytes?: number | null;
         };
       };
     };

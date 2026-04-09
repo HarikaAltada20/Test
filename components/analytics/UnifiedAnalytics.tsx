@@ -31,6 +31,7 @@ import {
   Instagram,
   Twitter,
 } from "lucide-react";
+import { SiTiktok } from "react-icons/si";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -232,6 +233,7 @@ const submissionStatusOptions = [
   { id: "verified", label: "Verified", icon: CheckCircle },
   { id: "paid", label: "Paid", icon: Wallet },
   { id: "pending", label: "Pending", icon: Clock },
+  { id: "not_rejected", label: "Not Rejected", icon: Users },
   { id: "rejected", label: "Rejected", icon: XCircle },
   { id: "verifiedPaid", label: "Verified + Paid", icon: CheckCircle },
 ];
@@ -274,17 +276,26 @@ export default function UnifiedAnalytics({ userId }: UnifiedAnalyticsProps) {
   );
   const [videoYoutube, setVideoYoutube] = useState(true);
   const [videoInstagram, setVideoInstagram] = useState(true);
+  const [videoTiktok, setVideoTiktok] = useState(true);
   const [twitterAnalytics, setTwitterAnalytics] = useState(false);
   const [contestTypeFilter, setContestTypeFilter] =
     useState<ContestTypeFilterType>("all");
-  const videoPlatform: "all" | "youtube" | "instagram" =
-    videoYoutube && videoInstagram
+  const videoPlatform: string =
+    videoYoutube && videoInstagram && videoTiktok
       ? "all"
-      : videoYoutube
-        ? "youtube"
-        : videoInstagram
-          ? "instagram"
-          : "all";
+      : videoYoutube && videoInstagram
+        ? "youtube_instagram"
+        : videoYoutube && videoTiktok
+          ? "youtube_tiktok"
+          : videoInstagram && videoTiktok
+            ? "instagram_tiktok"
+            : videoYoutube
+              ? "youtube"
+              : videoInstagram
+                ? "instagram"
+                : videoTiktok
+                  ? "tiktok"
+                  : "all";
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [analyticsData, setAnalyticsData] = useState<any>(null);
@@ -299,18 +310,25 @@ export default function UnifiedAnalytics({ userId }: UnifiedAnalyticsProps) {
     videoPlatform,
     videoYoutube,
     videoInstagram,
+    videoTiktok,
     twitterAnalytics,
     contestTypeFilter,
   ]);
 
   const buildAnalyticsParams = () => {
     const params = new URLSearchParams();
-    if (activeFilter && activeFilter !== "all")
-      params.set("status", activeFilter);
-    // When both video and Twitter are selected, API needs contentType=video + twitter=true
-    const hasVideo = videoYoutube || videoInstagram;
+    if (activeFilter && activeFilter !== "all") {
+      if (activeFilter === "not_rejected") {
+        params.set("notRejected", "true");
+      } else {
+        params.set("status", activeFilter);
+      }
+    }
+    // When video platforms (YouTube, Instagram, or TikTok) and Twitter are selected, API needs contentType=video + twitter=true
+    const hasVideo = videoYoutube || videoInstagram || videoTiktok;
     params.set("contentType", hasVideo ? "video" : "text_image");
     params.set("videoPlatform", videoPlatform);
+    params.set("tiktok", videoTiktok ? "true" : "false");
     params.set("twitter", twitterAnalytics ? "true" : "false");
     if (contestTypeFilter && contestTypeFilter !== "all") {
       params.set("type", contestTypeFilter);
@@ -474,20 +492,22 @@ export default function UnifiedAnalytics({ userId }: UnifiedAnalyticsProps) {
                       : "bg-white hover:bg-gray-50 text-gray-700 border-gray-400",
                   )}
                 >
-                  {(videoYoutube || videoInstagram) && twitterAnalytics ? (
+                  {(videoYoutube || videoInstagram || videoTiktok) &&
+                  twitterAnalytics ? (
                     <>
                       <Video className="w-4 h-4 shrink-0" />
                       <span className="truncate">
                         {[
                           videoYoutube && "YouTube",
                           videoInstagram && "Instagram",
+                          videoTiktok && "TikTok",
                         ]
                           .filter(Boolean)
                           .join(", ")}
                         {" + Twitter"}
                       </span>
                     </>
-                  ) : videoYoutube || videoInstagram ? (
+                  ) : videoYoutube || videoInstagram || videoTiktok ? (
                     <>
                       <Video className="w-4 h-4 shrink-0" />
                       <span className="truncate">
@@ -498,6 +518,7 @@ export default function UnifiedAnalytics({ userId }: UnifiedAnalyticsProps) {
                           {[
                             videoYoutube && "YouTube",
                             videoInstagram && "Instagram",
+                            videoTiktok && "TikTok",
                           ]
                             .filter(Boolean)
                             .join(", ")}
@@ -540,7 +561,7 @@ export default function UnifiedAnalytics({ userId }: UnifiedAnalyticsProps) {
                     isDark ? "text-white focus:bg-white/10" : "text-gray-900",
                   )}
                   onClick={() => {
-                    if (videoYoutube || videoInstagram) {
+                    if (videoYoutube || videoInstagram || videoTiktok) {
                       if (!twitterAnalytics) {
                         toast({
                           title: "At least one platform required",
@@ -552,16 +573,18 @@ export default function UnifiedAnalytics({ userId }: UnifiedAnalyticsProps) {
                       }
                       setVideoYoutube(false);
                       setVideoInstagram(false);
+                      setVideoTiktok(false);
                     } else {
                       setContentType("video");
                       setVideoYoutube(true);
                       setVideoInstagram(true);
+                      setVideoTiktok(true);
                     }
                   }}
                 >
                   <input
                     type="checkbox"
-                    checked={videoYoutube || videoInstagram}
+                    checked={videoYoutube || videoInstagram || videoTiktok}
                     readOnly
                     className="h-4 w-4 rounded border-gray-400"
                   />
@@ -576,7 +599,7 @@ export default function UnifiedAnalytics({ userId }: UnifiedAnalyticsProps) {
                   )}
                   onClick={() => {
                     if (videoYoutube) {
-                      if (videoInstagram || twitterAnalytics) {
+                      if (videoInstagram || videoTiktok || twitterAnalytics) {
                         setVideoYoutube(false);
                       } else {
                         toast({
@@ -609,7 +632,7 @@ export default function UnifiedAnalytics({ userId }: UnifiedAnalyticsProps) {
                   )}
                   onClick={() => {
                     if (videoInstagram) {
-                      if (videoYoutube || twitterAnalytics) {
+                      if (videoYoutube || videoTiktok || twitterAnalytics) {
                         setVideoInstagram(false);
                       } else {
                         toast({
@@ -634,6 +657,39 @@ export default function UnifiedAnalytics({ userId }: UnifiedAnalyticsProps) {
                   <Instagram className="w-4 h-4 mr-2" />
                   Instagram
                 </DropdownMenuItem>
+                <DropdownMenuItem
+                  onSelect={(e) => e.preventDefault()}
+                  className={cn(
+                    "flex items-center gap-2 cursor-pointer pl-8",
+                    isDark ? "text-white focus:bg-white/10" : "text-gray-900",
+                  )}
+                  onClick={() => {
+                    if (videoTiktok) {
+                      if (videoYoutube || videoInstagram || twitterAnalytics) {
+                        setVideoTiktok(false);
+                      } else {
+                        toast({
+                          title: "At least one platform required",
+                          description:
+                            "Please keep at least one platform selected before unchecking.",
+                          variant: "destructive",
+                        });
+                      }
+                    } else {
+                      setVideoTiktok(true);
+                      setContentType("video");
+                    }
+                  }}
+                >
+                  <input
+                    type="checkbox"
+                    checked={videoTiktok}
+                    readOnly
+                    className="h-4 w-4 rounded border-gray-400"
+                  />
+                  <SiTiktok className="w-4 h-4 mr-2" />
+                  TikTok
+                </DropdownMenuItem>
                 <DropdownMenuSeparator
                   className={isDark ? "bg-gray-700" : "bg-gray-200"}
                 />
@@ -645,13 +701,13 @@ export default function UnifiedAnalytics({ userId }: UnifiedAnalyticsProps) {
                   )}
                   onClick={() => {
                     if (twitterAnalytics) {
-                      if (videoYoutube || videoInstagram) {
+                      if (videoYoutube || videoInstagram || videoTiktok) {
                         setTwitterAnalytics(false);
                       } else {
                         toast({
                           title: "At least one platform required",
                           description:
-                            "Please keep at least one platform selected (e.g. YouTube or Instagram) before unchecking Text/Image.",
+                            "Please keep at least one platform selected (e.g. YouTube, Instagram, or TikTok) before unchecking Text/Image.",
                           variant: "destructive",
                         });
                       }
@@ -678,13 +734,13 @@ export default function UnifiedAnalytics({ userId }: UnifiedAnalyticsProps) {
                   )}
                   onClick={() => {
                     if (twitterAnalytics) {
-                      if (videoYoutube || videoInstagram) {
+                      if (videoYoutube || videoInstagram || videoTiktok) {
                         setTwitterAnalytics(false);
                       } else {
                         toast({
                           title: "At least one platform required",
                           description:
-                            "Please keep at least one platform selected (e.g. YouTube or Instagram) before unchecking.",
+                            "Please keep at least one platform selected (e.g. YouTube, Instagram, or TikTok) before unchecking.",
                           variant: "destructive",
                         });
                       }
@@ -1152,7 +1208,11 @@ export default function UnifiedAnalytics({ userId }: UnifiedAnalyticsProps) {
         <TabPanel value="detailed" activeTab={activeTab}>
           <BrandDetailedAnalytics
             userId={userId}
-            contentType={videoYoutube || videoInstagram ? "video" : contentType}
+            contentType={
+              videoYoutube || videoInstagram || videoTiktok
+                ? "video"
+                : contentType
+            }
             videoPlatform={videoPlatform}
             twitterAnalytics={twitterAnalytics}
             contestTypeFilter={contestTypeFilter}
@@ -1167,7 +1227,11 @@ export default function UnifiedAnalytics({ userId }: UnifiedAnalyticsProps) {
           <ContestAnalytics
             userId={userId}
             activeFilter={activeFilter}
-            contentType={videoYoutube || videoInstagram ? "video" : contentType}
+            contentType={
+              videoYoutube || videoInstagram || videoTiktok
+                ? "video"
+                : contentType
+            }
             videoPlatform={videoPlatform}
             twitterAnalytics={twitterAnalytics}
             contestTypeFilter={contestTypeFilter}
@@ -1178,7 +1242,11 @@ export default function UnifiedAnalytics({ userId }: UnifiedAnalyticsProps) {
           <CreatorAnalytics
             userId={userId}
             activeFilter={activeFilter}
-            contentType={videoYoutube || videoInstagram ? "video" : contentType}
+            contentType={
+              videoYoutube || videoInstagram || videoTiktok
+                ? "video"
+                : contentType
+            }
             videoPlatform={videoPlatform}
             twitterAnalytics={twitterAnalytics}
             contestTypeFilter={contestTypeFilter}
