@@ -9,8 +9,9 @@ export async function GET(req: NextRequest) {
     const state = searchParams.get("state");
     const error = searchParams.get("error");
 
+    const provider = new TikTokProvider();
+    const customRedirectUri = provider.getRedirectUri();
     const origin = new URL(req.url).origin;
-    const customRedirectUri = `${origin}/api/auth/tiktok/callback`;
     const settingsUrl = `${origin}/dashboard/settings`;
 
     console.log("[TikTok Auth Callback] Received callback with params:", {
@@ -61,15 +62,11 @@ export async function GET(req: NextRequest) {
       return NextResponse.redirect(`${settingsUrl}?error=csrf_token_mismatch`);
     }
 
-    // 2. Clear state cookies
-    const response = NextResponse.redirect(
-      `${settingsUrl}?success=true&platform=tiktok`,
-    );
-    response.cookies.delete("tiktok_auth_state");
-    response.cookies.delete("tiktok_auth_verifier");
+    // 2. Clear state cookies - we'll create the final response at the end
+    // but we need to track that these cookies should be deleted.
+    const tiktokCookiesToRemove = ["tiktok_auth_state", "tiktok_auth_verifier"];
 
     // 3. Initialize Provider and exchange code
-    const provider = new TikTokProvider();
     console.log("[TikTok Auth Callback] Exchanging code for token...");
 
     // Pass the stored verifier for PKCE validation
@@ -142,7 +139,6 @@ export async function GET(req: NextRequest) {
     });
 
     // 5. Store in Supabase
-    // We assume the user is authenticated doing this from the dashboard...
     const supabase = await createClient();
     const {
       data: { user },
@@ -158,6 +154,13 @@ export async function GET(req: NextRequest) {
         `${origin}/auth/signin?redirect=/dashboard/settings`,
       );
     }
+
+    // Fetch existing profile to preserve other fields (like 'marketing')
+    const { data: existingProfile } = await supabase
+      .from("creator_profiles")
+      .select("tiktok_account")
+      .eq("id", user.id)
+      .single();
 
     console.log("[TikTok Auth Callback] User authenticated:", user.id);
 
@@ -178,6 +181,11 @@ export async function GET(req: NextRequest) {
       last_synced_at: new Date().toISOString(),
     };
 
+    const finalTikTokAccount = {
+      ...(existingProfile?.tiktok_account || {}),
+      ...connectionData,
+    };
+
     console.log("[TikTok Auth Callback] Updating creator_profiles:", {
       creator_id: user.id,
       username: connectionData.username,
@@ -186,7 +194,7 @@ export async function GET(req: NextRequest) {
     const { error: dbError } = await supabase
       .from("creator_profiles")
       .update({
-        tiktok_account: connectionData,
+        tiktok_account: finalTikTokAccount,
         updated_at: new Date().toISOString(),
       })
       .eq("id", user.id);
@@ -202,10 +210,27 @@ export async function GET(req: NextRequest) {
     }
 
     console.log("[TikTok Auth Callback] Connection stored successfully!");
-    console.log(
-      "[TikTok Auth Callback] Redirecting to settings with success...",
-    );
-    return response;
+    
+    // 6. Final Redirect: If marketing is not connected, go to marketing auth. 
+    // Otherwise go back to settings.
+    const hasMarketing = !!existingProfile?.tiktok_account?.marketing;
+    let finalRedirectUrl = `${settingsUrl}?success=true&platform=tiktok`;
+    
+    if (!hasMarketing) {
+      console.log("[TikTok Auth Callback] Marketing not connected, redirecting to Marketing Auth...");
+      finalRedirectUrl = `${origin}/api/auth/tiktok/marketing/authorize`;
+    } else {
+      console.log("[TikTok Auth Callback] Marketing already connected, redirecting to settings.");
+    }
+
+    const finalResponse = NextResponse.redirect(finalRedirectUrl);
+    
+    // Apply cookie deletions
+    tiktokCookiesToRemove.forEach(cookieName => {
+      finalResponse.cookies.delete(cookieName);
+    });
+
+    return finalResponse;
   } catch (error: any) {
     console.error("[TikTok Auth Callback] Unhandled Error:", error);
     console.error("[TikTok Auth Callback] Error stack:", error.stack);

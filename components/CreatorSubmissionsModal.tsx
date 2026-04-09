@@ -582,6 +582,9 @@ export function CreatorSubmissionsModal({
   const isInstagramContest =
     contest?.platform?.toLowerCase().includes("instagram") ?? false;
 
+  const isTikTokContest =
+    contest?.platform?.toLowerCase().includes("tiktok") ?? false;
+
   const getInsightsMeta = (
     status: Submission["insights_status"],
   ): { help: string; dotClass: string; pillClass: string } => {
@@ -1438,7 +1441,7 @@ export function CreatorSubmissionsModal({
                       >
                         Comments
                       </TableHead>
-                      {isInstagramContest && (
+                      {(isInstagramContest || isTikTokContest) && (
                         <>
                           <TableHead
                             className={cn(
@@ -1456,22 +1459,27 @@ export function CreatorSubmissionsModal({
                           >
                             Saves
                           </TableHead>
-                          <TableHead
-                            className={cn(
-                              "text-center",
-                              isDark ? "bg-[#391A6A] " : "bg-gray-50",
-                            )}
-                          >
-                            Reach
-                          </TableHead>
-                          <TableHead
-                            className={cn(
-                              "text-center",
-                              isDark ? "bg-[#391A6A] " : "bg-gray-50",
-                            )}
-                          >
-                            Interactions
-                          </TableHead>
+                          {/* Reach and Interactions commented out for TikTok per user request */}
+                          {!isTikTokContest && (
+                            <>
+                              <TableHead
+                                className={cn(
+                                  "text-center",
+                                  isDark ? "bg-[#391A6A] " : "bg-gray-50",
+                                )}
+                              >
+                                Reach
+                              </TableHead>
+                              <TableHead
+                                className={cn(
+                                  "text-center",
+                                  isDark ? "bg-[#391A6A] " : "bg-gray-50",
+                                )}
+                              >
+                                Interactions
+                              </TableHead>
+                            </>
+                          )}
                           <TableHead
                             className={cn(
                               "text-center",
@@ -1552,14 +1560,14 @@ export function CreatorSubmissionsModal({
                   >
                     Status
                   </TableHead>
-                  <TableHead
+                  {/* <TableHead
                     className={cn(
                       "min-w-[180px]",
                       isDark ? "bg-[#391A6A] " : "bg-gray-50"
                     )}
                   >
                     Rejection reason
-                  </TableHead>
+                  </TableHead> */}
                   <TableHead
                     className={cn(
                       "min-w-[180px]",
@@ -1595,7 +1603,7 @@ export function CreatorSubmissionsModal({
                           ? 18 // Checkbox, #, Tweet, Total Points, Base Points, Manual Points, Likes, Replies, Retweets, Quote Reposts, Impressions, Expected Reward, Reward Granted, Manual Points Reason, Status, Rejection reason, Submitted, Actions
                           : 3 + // Checkbox, #, Content
                           3 + // Views, Likes, Comments
-                          (isInstagramContest ? 6 : 0) + // Shares, Saves, Reach, Interactions, Avg Watch Time, Total Watch Time
+                          ((isInstagramContest || isTikTokContest) ? (isTikTokContest ? 4 : 6) : 0) + // Shares, Saves, Reach(hidden for TT), Interactions(hidden for TT), Avg Watch Time, Total Watch Time
                           2 + // Expected Reward, Reward Granted
                           (hasBonus ? 2 : 0) + // Bonus Expected, Bonus Granted
                           (isAdminView && isInstagramContest ? 1 : 0) + // Insights status (admin only)
@@ -2139,7 +2147,7 @@ export function CreatorSubmissionsModal({
                               {comments.toLocaleString()}
                             </TableCell>
                             {/* Instagram-specific metrics for non-Twitter submissions */}
-                            {isInstagramContest && (
+                            {(isInstagramContest || isTikTokContest) && (
                               <>
                                 <TableCell className="text-center font-mono">
                                   {formatMetricValue(shares)}
@@ -2147,12 +2155,17 @@ export function CreatorSubmissionsModal({
                                 <TableCell className="text-center font-mono">
                                   {formatMetricValue(saves)}
                                 </TableCell>
-                                <TableCell className="text-center font-mono">
-                                  {formatMetricValue(reach)}
-                                </TableCell>
-                                <TableCell className="text-center font-mono">
-                                  {formatMetricValue(totalInteractions)}
-                                </TableCell>
+                                {/* Reach and Interactions commented out for TikTok per user request */}
+                                {!isTikTokContest && (
+                                  <>
+                                    <TableCell className="text-center font-mono">
+                                      {formatMetricValue(reach)}
+                                    </TableCell>
+                                    <TableCell className="text-center font-mono">
+                                      {formatMetricValue(totalInteractions)}
+                                    </TableCell>
+                                  </>
+                                )}
                                 <TableCell className="text-center font-mono">
                                   <div className="flex flex-col items-center">
                                     <span className="font-bold">

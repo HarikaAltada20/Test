@@ -86,6 +86,7 @@ import PaymentModal from "@/components/PaymentModal";
 import ManualPointsModal from "@/components/ManualPointsModal";
 import { CreatorSubmissionsModal } from "@/components/CreatorSubmissionsModal";
 import { InstagramCreatorAnalyticsModal } from "@/components/contest/InstagramCreatorAnalyticsModal";
+import { TikTokCreatorAnalyticsModal } from "@/components/contest/TikTokCreatorAnalyticsModal";
 import { BudgetProgress } from "@/components/BudgetProgress";
 import { YouTubeAnalyticsPanel } from "@/components/youtube/YouTubeAnalyticsPanel";
 import { YT_ANALYTICS_DEFAULT_WINDOW_DAYS } from "@/lib/youtube-constants";
@@ -1101,6 +1102,16 @@ export default function ContestDetailClient({
     useState<string | null>(null);
   const clearIgAnalyticsButtonLoading = useCallback(() => {
     setIgAnalyticsLoadingCreatorId(null);
+  }, []);
+  const [tkAnalyticsOpen, setTkAnalyticsOpen] = useState(false);
+  const [tkAnalyticsCreatorId, setTkAnalyticsCreatorId] = useState<
+    string | null
+  >(null);
+  const [tkAnalyticsCreatorLabel, setTkAnalyticsCreatorLabel] = useState("");
+  const [tkAnalyticsLoadingCreatorId, setTkAnalyticsLoadingCreatorId] =
+    useState<string | null>(null);
+  const clearTkAnalyticsButtonLoading = useCallback(() => {
+    setTkAnalyticsLoadingCreatorId(null);
   }, []);
   // YouTube table: which columns are visible (admin/brand can customize)
   const [ytVisibleColumns, setYtVisibleColumns] = useState<string[]>(
@@ -15181,40 +15192,83 @@ export default function ContestDetailClient({
                                                   View All ({group.totalCount})
                                                 </Button>
                                                 {isAdminView &&
+                                                   currentContest.platform
+                                                     ?.toLowerCase()
+                                                     .includes("instagram") && (
+                                                     <Button
+                                                       size="sm"
+                                                       variant="outline"
+                                                       className={cn(
+                                                         "border min-w-[8.5rem] inline-flex items-center justify-center gap-1.5",
+                                                         isDark
+                                                           ? "bg-[#170337] border-purple-500/50 text-white"
+                                                           : "border-purple-300 bg-purple-50 text-purple-900",
+                                                       )}
+                                                       disabled={
+                                                         igAnalyticsLoadingCreatorId ===
+                                                         group.creator.id
+                                                       }
+                                                       onClick={() => {
+                                                         setIgAnalyticsCreatorId(
+                                                           group.creator.id,
+                                                         );
+                                                         setIgAnalyticsCreatorLabel(
+                                                           userTableUsername ||
+                                                             group.creator
+                                                               .username ||
+                                                             platformUsername ||
+                                                             group.creator.id,
+                                                         );
+                                                         setIgAnalyticsLoadingCreatorId(
+                                                           group.creator.id,
+                                                         );
+                                                         setIgAnalyticsOpen(true);
+                                                       }}
+                                                     >
+                                                       {igAnalyticsLoadingCreatorId ===
+                                                      group.creator.id ? (
+                                                        <>
+                                                          <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin" />
+                                                          Opening…
+                                                        </>
+                                                      ) : (
+                                                        "Show analytics"
+                                                      )}
+                                                    </Button>
+                                                  )}
+                                                {isAdminView &&
                                                   currentContest.platform
                                                     ?.toLowerCase()
-                                                    .includes("instagram") && (
+                                                    .includes("tiktok") && (
                                                     <Button
                                                       size="sm"
                                                       variant="outline"
                                                       className={cn(
                                                         "border min-w-[8.5rem] inline-flex items-center justify-center gap-1.5",
                                                         isDark
-                                                          ? "bg-[#170337] border-purple-500/50 text-white"
-                                                          : "border-purple-300 bg-purple-50 text-purple-900",
+                                                          ? "bg-[#170337] border-cyan-500/50 text-white"
+                                                          : "border-cyan-300 bg-cyan-50 text-cyan-900",
                                                       )}
                                                       disabled={
-                                                        igAnalyticsLoadingCreatorId ===
+                                                        tkAnalyticsLoadingCreatorId ===
                                                         group.creator.id
                                                       }
                                                       onClick={() => {
-                                                        setIgAnalyticsCreatorId(
+                                                        setTkAnalyticsCreatorId(
                                                           group.creator.id,
                                                         );
-                                                        setIgAnalyticsCreatorLabel(
-                                                          userTableUsername ||
-                                                            group.creator
-                                                              .username ||
-                                                            platformUsername ||
+                                                        setTkAnalyticsCreatorLabel(
+                                                          group.creator
+                                                            .username ||
                                                             group.creator.id,
                                                         );
-                                                        setIgAnalyticsLoadingCreatorId(
+                                                        setTkAnalyticsLoadingCreatorId(
                                                           group.creator.id,
                                                         );
-                                                        setIgAnalyticsOpen(true);
+                                                        setTkAnalyticsOpen(true);
                                                       }}
                                                     >
-                                                      {igAnalyticsLoadingCreatorId ===
+                                                      {tkAnalyticsLoadingCreatorId ===
                                                       group.creator.id ? (
                                                         <>
                                                           <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin" />
@@ -18806,6 +18860,23 @@ export default function ContestDetailClient({
           creatorLabel={igAnalyticsCreatorLabel}
           isDark={isDark}
           onFetchComplete={clearIgAnalyticsButtonLoading}
+        />
+      )}
+      {tkAnalyticsCreatorId && (
+        <TikTokCreatorAnalyticsModal
+          open={tkAnalyticsOpen}
+          onOpenChange={(o) => {
+            setTkAnalyticsOpen(o);
+            if (!o) {
+              setTkAnalyticsCreatorId(null);
+              setTkAnalyticsLoadingCreatorId(null);
+            }
+          }}
+          contestId={contestId}
+          creatorId={tkAnalyticsCreatorId}
+          creatorLabel={tkAnalyticsCreatorLabel}
+          isDark={isDark}
+          onFetchComplete={clearTkAnalyticsButtonLoading}
         />
       )}
     </div>
