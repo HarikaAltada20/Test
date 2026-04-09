@@ -42,7 +42,10 @@ export class TikTokApiClient {
     this.clientSecret = (process.env.TIKTOK_CLIENT_SECRET || "")
       .replace(/^["']|["']$/g, "")
       .trim();
-    this.redirectUri = `${(process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000").replace(/\/$/, "")}/api/auth/tiktok/callback`;
+    const appUrl = (process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000").replace(/\/$/, "");
+    this.redirectUri =
+      (process.env.TIKTOK_REDIRECT_URI || "").trim() ||
+      `${appUrl}/api/auth/tiktok/callback`;
 
     // Debug logging
     console.log(
