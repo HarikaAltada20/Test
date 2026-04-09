@@ -4707,7 +4707,34 @@ export default function ContestDetailClient({
         likes: tiktokStats.likes || tiktokStats.like_count || 0,
         comments: tiktokStats.comments || tiktokStats.comment_count || 0,
         shares: tiktokStats.shares || tiktokStats.share_count || 0,
+        saves: tiktokStats.saves || tiktokStats.save_count || tiktokStats.collect_count || 0,
+        favorites: tiktokStats.favorites || 0,
+        reach: tiktokStats.reach || tiktokStats.reach_count || tiktokStats.video_reach_count || 0,
+        impressions: tiktokStats.impressions || tiktokStats.impression_count || 0,
+        total_interactions:
+          tiktokStats.total_interactions ??
+          (Number(tiktokStats.likes || tiktokStats.like_count || 0) +
+            Number(tiktokStats.comments || tiktokStats.comment_count || 0) +
+            Number(tiktokStats.shares || tiktokStats.share_count || 0) +
+            Number(tiktokStats.saves || tiktokStats.save_count || 0)),
+        avg_watch_time_ms: tiktokStats.avg_watch_time_ms || 0,
+        total_watch_time_ms: tiktokStats.total_watch_time_ms || 0,
+        full_video_watched_rate:
+          tiktokStats.full_video_watched_rate ??
+          tiktokStats.fullVideoWatchedRate ??
+          0,
+        new_followers: tiktokStats.new_followers || 0,
+        profile_views: tiktokStats.profile_views || 0,
+        website_clicks: tiktokStats.website_clicks || 0,
+        impression_sources: tiktokStats.impression_sources || null,
+        audience_genders: tiktokStats.audience_genders || null,
+        audience_countries: tiktokStats.audience_countries || null,
+        audience_cities: tiktokStats.audience_cities || null,
+        audience_types: tiktokStats.audience_types || null,
+        video_view_retention: tiktokStats.video_view_retention || null,
+        engagement_likes: tiktokStats.engagement_likes || null,
         engagement_rate: tiktokStats.engagement_rate || 0,
+        last_updated: tiktokStats.last_updated || null,
       };
     } else if (platform?.includes("twitter")) {
       const twitterStats = stats.twitter || stats;

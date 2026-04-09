@@ -1,5 +1,9 @@
 import { TikTokProvider } from '../provider/TikTokProvider';
 import { createClient } from '@supabase/supabase-js';
+import { extractTikTokVideoIdFromLink } from '@/lib/tiktok/extract-video-id';
+import { normalizeTcmVideoReport } from '@/lib/tiktok/normalize-tcm-report';
+import { watchTimeToMsSeconds } from '@/lib/tiktok/watch-time-ms';
+import type { TikTokBusinessVideoRowMetrics } from '@/lib/tiktok/map-business-video-row';
 
 /**
  * TikTokSyncService orchestrates fetching videos from TikTok APIs and
@@ -119,10 +123,48 @@ export class TikTokSyncService {
             }
 
             if (videoIds.length > 0) {
+                // 3.5 Organic Business video list (richer metrics than Display API alone)
+                let organicByItemId = new Map<string, TikTokBusinessVideoRowMetrics>();
+                if (marketing?.access_token) {
+                    const businessKey =
+                        marketing.business_id ??
+                        marketing.creator_id ??
+                        connection.platform_user_id;
+                    if (businessKey) {
+                        try {
+                            organicByItemId =
+                                await this.provider.fetchBusinessOrganicVideoMetricsByItemId(
+                                    marketing.access_token,
+                                    String(businessKey),
+                                );
+                        } catch (orgErr: any) {
+                            console.warn(
+                                `[TikTokSync] business/video/list failed for ${creatorId} (falling back to Display + TCM):`,
+                                orgErr?.message ?? orgErr,
+                            );
+                        }
+                    } else {
+                        console.warn(
+                            `[TikTokSync] Marketing connected but no business_id/creator_id — skipping business/video/list`,
+                        );
+                    }
+                }
+
                 // 4. Fetch Metrics for these videos
                 const metrics = await this.provider.getVideoMetrics(access_token, videoIds);
 
                 console.log(`[TikTokSync] Successfully fetched metrics for ${videoIds.length} videos for ${creatorId}.`);
+
+                const totalStats = metrics.reduce(
+                    (acc: { views: number; likes: number; comments: number; shares: number; saves: number }, m: any) => {
+                        acc.views += m.viewCount;
+                        acc.likes += m.likeCount;
+                        acc.comments += m.commentCount;
+                        acc.shares += m.shareCount;
+                        return acc;
+                    },
+                    { views: 0, likes: 0, comments: 0, shares: 0, saves: 0 },
+                );
 
                 // 7. NEW: Update the submissions table as well
                 const { data: submissions, error: subError } = await this.supabase
@@ -133,51 +175,139 @@ export class TikTokSyncService {
 
                 if (!subError && submissions) {
                     for (const submission of submissions) {
-                        // Find the matching metric by URL or video ID
-                        const match = metrics.find((m: any) => 
-                            submission.content_link.includes(m.videoId)
-                        );
+                        const linkId = extractTikTokVideoIdFromLink(submission.content_link);
+                        const match = metrics.find((m: any) => {
+                            if (linkId && m.videoId === linkId) return true;
+                            if (!submission.content_link || !m.videoId) return false;
+                            return (
+                                submission.content_link.includes(m.videoId) ||
+                                (m.url && submission.content_link.split('?')[0] === String(m.url).split('?')[0])
+                            );
+                        });
 
                         if (match) {
-                            let detailedReport = null;
+                            const org = organicByItemId.get(match.videoId);
+                            const pick = (o: number, d: number) => (o > 0 ? o : d);
+
+                            let rawDetailed: unknown = null;
                             if (marketing && marketing.access_token) {
                                 try {
-                                    detailedReport = await this.provider.getDetailedMetrics(marketing.access_token, match.url);
-                                    if (detailedReport) {
-                                        console.log(`[TikTokSync] Business API Stats Success for ${match.videoId}: Reach=${detailedReport.reach}, Saves=${detailedReport.save_count}`);
-                                    } else {
-                                        console.warn(`[TikTokSync] Business API returned empty report for ${match.videoId}`);
+                                    rawDetailed = await this.provider.getDetailedMetrics(
+                                        marketing.access_token,
+                                        match.url,
+                                    );
+                                    const tcm = normalizeTcmVideoReport(rawDetailed);
+                                    if (tcm && (tcm.reach > 0 || tcm.save_count > 0)) {
+                                        console.log(
+                                            `[TikTokSync] Business API stats for ${match.videoId}: reach=${tcm.reach}, saves=${tcm.save_count}`,
+                                        );
+                                    } else if (rawDetailed) {
+                                        console.warn(
+                                            `[TikTokSync] Business API returned report with no normalized metrics for ${match.videoId}`,
+                                        );
                                     }
                                 } catch (e: any) {
-                                    console.error(`[TikTokSync] Business API Fetch Error for video ${match.videoId}. Check if the business key/token is still valid. Error:`, e.message);
+                                    console.error(
+                                        `[TikTokSync] Business API Fetch Error for video ${match.videoId}. Check if the business key/token is still valid. Error:`,
+                                        e.message,
+                                    );
                                 }
                             }
 
-                            const saves = detailedReport?.save_count || detailedReport?.saves || 0;
-                            const reach = detailedReport?.reach || detailedReport?.reach_count || detailedReport?.video_reach_count || 0;
-                            const avgWatchTime = detailedReport?.avg_watch_time || detailedReport?.average_time_watched || detailedReport?.avg_play_time || 0;
-                            const totalWatchTime = detailedReport?.total_watch_time || detailedReport?.total_time_watched || detailedReport?.total_play_time || 0;
+                            // TCM per-video report (best-effort) — supplements fields missing from business/video/list
+                            const tcmFlat = normalizeTcmVideoReport(rawDetailed);
+                            const tcmSaves = tcmFlat?.save_count ?? 0;
+                            const favCount = org?.favorites ?? 0;
+                            const saves =
+                                tcmSaves > 0 ? tcmSaves : favCount;
+
+                            const views = org
+                                ? pick(org.views, match.viewCount)
+                                : match.viewCount;
+                            const likes = org
+                                ? pick(org.likes, match.likeCount)
+                                : match.likeCount;
+                            const comments = org
+                                ? pick(org.comments, match.commentCount)
+                                : match.commentCount;
+                            const shares = org
+                                ? pick(org.shares, match.shareCount)
+                                : match.shareCount;
+
+                            const reachFromOrg = org?.reach ?? 0;
+                            const reach =
+                                reachFromOrg > 0
+                                    ? reachFromOrg
+                                    : (tcmFlat?.reach ?? 0);
+
+                            const avgFromOrg = org?.avgWatchTimeMs ?? 0;
+                            const totalFromOrg = org?.totalWatchTimeMs ?? 0;
+                            const avgWatchTimeMs =
+                                avgFromOrg > 0
+                                    ? avgFromOrg
+                                    : watchTimeToMsSeconds(
+                                          tcmFlat?.avg_watch_time_sec ?? 0,
+                                      );
+                            const totalWatchTimeMs =
+                                totalFromOrg > 0
+                                    ? totalFromOrg
+                                    : watchTimeToMsSeconds(
+                                          tcmFlat?.total_watch_time_sec ?? 0,
+                                      );
 
                             const tiktokStats = {
-                                views: match.viewCount,
-                                likes: match.likeCount,
-                                comments: match.commentCount,
-                                shares: match.shareCount,
-                                saves: saves,
-                                reach: reach,
-                                total_interactions: (match.likeCount + match.commentCount + match.shareCount + Number(saves)),
-                                avg_watch_time_ms: avgWatchTime * 1000,
-                                total_watch_time_ms: totalWatchTime * 1000,
-                                last_updated: new Date().toISOString()
+                                views,
+                                likes,
+                                comments,
+                                shares,
+                                saves,
+                                favorites: favCount,
+                                reach,
+                                media_type: org?.mediaType ?? null,
+                                caption: org?.caption ?? null,
+                                thumbnail_url: org?.thumbnailUrl ?? null,
+                                share_url: org?.shareUrl ?? null,
+                                embed_url: org?.embedUrl ?? null,
+                                create_time: org?.createTime ?? null,
+                                video_duration_sec: org?.videoDurationSec ?? 0,
+                                full_video_watched_rate:
+                                    org?.fullVideoWatchedRate ?? 0,
+                                new_followers: org?.newFollowers ?? 0,
+                                profile_views: org?.profileViews ?? 0,
+                                website_clicks: org?.websiteClicks ?? 0,
+                                phone_number_clicks: org?.phoneNumberClicks ?? 0,
+                                lead_submissions: org?.leadSubmissions ?? 0,
+                                app_download_clicks: org?.appDownloadClicks ?? 0,
+                                email_clicks: org?.emailClicks ?? 0,
+                                address_clicks: org?.addressClicks ?? 0,
+                                impression_sources: org?.impressionSources ?? null,
+                                audience_genders: org?.audienceGenders ?? null,
+                                audience_countries: org?.audienceCountries ?? null,
+                                audience_cities: org?.audienceCities ?? null,
+                                audience_types: org?.audienceTypes ?? null,
+                                video_view_retention: org?.videoViewRetention ?? null,
+                                engagement_likes: org?.engagementLikes ?? null,
+                                total_interactions:
+                                    likes +
+                                    comments +
+                                    shares +
+                                    Number(saves),
+                                avg_watch_time_ms: avgWatchTimeMs,
+                                total_watch_time_ms: totalWatchTimeMs,
+                                last_updated: new Date().toISOString(),
                             };
 
+                            totalStats.saves += saves;
+
                             console.log(`[TikTokSync] Updating Submission ${submission.id}:`, {
-                                views: match.viewCount,
-                                likes: match.likeCount,
-                                shares: match.shareCount,
-                                reach: reach,
-                                saves: saves,
-                                avgWatchTimeMs: avgWatchTime * 1000
+                                views,
+                                likes,
+                                shares,
+                                reach,
+                                saves,
+                                avgWatchTimeMs,
+                                totalWatchTimeMs,
+                                organicRow: Boolean(org),
                             });
 
                             const currentOtherStats = typeof submission.other_stats === 'string' 
@@ -187,7 +317,7 @@ export class TikTokSyncService {
                             await this.supabase
                                 .from('submissions')
                                 .update({
-                                    views: match.viewCount,
+                                    views,
                                     other_stats: { ...currentOtherStats, tiktok: tiktokStats },
                                     last_insights_update: new Date().toISOString(),
                                     insights_status: 'ok'
@@ -197,16 +327,7 @@ export class TikTokSyncService {
                     }
                 }
 
-                // 8. NEW: Summary Stats for 'tiktok_achieved' in creator_profiles
-                const totalStats = metrics.reduce((acc: any, m: any) => {
-                    acc.views += m.viewCount;
-                    acc.likes += m.likeCount;
-                    acc.comments += m.commentCount;
-                    acc.shares += m.shareCount;
-                    acc.saves += m.saveCount;
-                    return acc;
-                }, { views: 0, likes: 0, comments: 0, shares: 0, saves: 0 });
-
+                // 8. Summary stats for 'tiktok_achieved' (account-wide Display API + Business saves from matched submissions)
                 await this.supabase
                     .from('creator_profiles')
                     .update({

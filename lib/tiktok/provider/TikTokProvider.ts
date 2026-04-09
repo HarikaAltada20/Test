@@ -7,6 +7,10 @@ import {
 } from "../../core/interfaces/IPlatformProvider";
 import { TikTokApiClient } from "../api/TikTokApiClient";
 import { TikTokBusinessApiClient } from "../api/TikTokBusinessApiClient";
+import {
+  mapBusinessVideoListRow,
+  type TikTokBusinessVideoRowMetrics,
+} from "@/lib/tiktok/map-business-video-row";
 import crypto from "crypto";
 
 export class TikTokProvider implements IPlatformProvider {
@@ -148,6 +152,8 @@ export class TikTokProvider implements IPlatformProvider {
         like_count: v.like_count || 0,
         comment_count: v.comment_count || 0,
         share_count: v.share_count || 0,
+        save_count:
+          v.collect_count ?? v.save_count ?? v.favorite_count ?? 0,
       };
     });
 
@@ -194,6 +200,12 @@ export class TikTokProvider implements IPlatformProvider {
         likeCount: v.like_count || 0,
         commentCount: v.comment_count || 0,
         shareCount: v.share_count || 0,
+        // Video Object doc: no saves/collect field. Map only if API returns extras.
+        saveCount:
+          v.collect_count ??
+          v.save_count ??
+          v.favorite_count ??
+          0,
         duration: v.duration,
         cover_image_url: v.cover_image_url,
         publishedAt,
@@ -218,5 +230,29 @@ export class TikTokProvider implements IPlatformProvider {
     console.log(`[TikTokProvider] Fetching audience demographics for creator: ${creatorId}`);
     const data = await this.businessClient.getAudienceDemographics(marketingAccessToken, creatorId);
     return data.data;
+  }
+
+  /**
+   * GET /open_api/v1.3/business/video/list/ — organic videos + reach / watch metrics when available.
+   * @param businessId TikTok Business `business_id` (store on `marketing.business_id`; fallback to creator id).
+   */
+  async fetchBusinessOrganicVideoMetricsByItemId(
+    marketingAccessToken: string,
+    businessId: string,
+  ): Promise<Map<string, TikTokBusinessVideoRowMetrics>> {
+    const rows = await this.businessClient.listAllBusinessVideos(
+      marketingAccessToken,
+      businessId,
+      { maxPages: 25 },
+    );
+    const map = new Map<string, TikTokBusinessVideoRowMetrics>();
+    for (const row of rows) {
+      const m = mapBusinessVideoListRow(row);
+      if (m) map.set(m.itemId, m);
+    }
+    console.log(
+      `[TikTokProvider] business/video/list: ${map.size} videos for business_id=${businessId}`,
+    );
+    return map;
   }
 }

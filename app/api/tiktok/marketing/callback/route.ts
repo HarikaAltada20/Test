@@ -44,7 +44,19 @@ export async function GET(req: NextRequest) {
         throw new Error(tokenData.message || "Failed to exchange marketing token");
     }
 
-    const { access_token, advertiser_ids, creator_ids } = tokenData.data;
+    const {
+      access_token,
+      advertiser_ids,
+      creator_ids,
+      business_id,
+      core_user_id,
+    } = tokenData.data as {
+      access_token?: string;
+      advertiser_ids?: string[];
+      creator_ids?: string[];
+      business_id?: string;
+      core_user_id?: string;
+    };
     
     console.log("[TikTok Marketing Callback] Success! Received tokens for creators:", creator_ids);
 
@@ -66,8 +78,11 @@ export async function GET(req: NextRequest) {
 
     const marketingData = {
       access_token,
-      creator_id: creator_ids?.[0], // Assuming the first one is the main account
+      creator_id: creator_ids?.[0],
       advertiser_id: advertiser_ids?.[0],
+      /** Required for GET …/business/video/list/ — set from token when TikTok returns it. */
+      business_id:
+        business_id ?? core_user_id ?? creator_ids?.[0] ?? null,
       connected_at: new Date().toISOString(),
       last_synced_at: new Date().toISOString(),
     };
