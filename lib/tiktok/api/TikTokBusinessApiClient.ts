@@ -24,7 +24,9 @@ export class TikTokBusinessApiClient {
     this.appId = (process.env.TIKTOK_BUSINESS_APP_ID || "").trim();
     this.secret = (process.env.TIKTOK_BUS_SECRET || "").trim();
     const appUrl = (process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000").replace(/\/$/, "");
-    this.redirectUri = `${appUrl}/api/tiktok/marketing/callback`;
+    this.redirectUri =
+      (process.env.TIKTOK_BUSINESS_REDIRECT_URI || "").trim() ||
+      `${appUrl}/api/tiktok/marketing/callback`;
 
     console.log("[TikTokBusinessApiClient] Initialized with App ID:", this.appId || "MISSING");
   }

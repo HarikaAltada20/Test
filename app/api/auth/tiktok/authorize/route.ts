@@ -32,7 +32,7 @@ export async function GET(req: NextRequest) {
     codeVerifier.substring(0, 10),
   );
 
-  const customRedirectUri = `${origin}/api/auth/tiktok/callback`;
+  const customRedirectUri = provider.getRedirectUri();
 
   // 3. Create Authorization URL from Provider
   const authorizationUrl = provider.generateAuthUrl(
@@ -44,6 +44,7 @@ export async function GET(req: NextRequest) {
   console.log("[TikTok Auth] Initiating OAuth flow...");
   console.log("[TikTok Auth] Timezone:", tz);
   console.log("[TikTok Auth] Country:", country);
+  console.log("[TikTok Auth] Redirect URI:", customRedirectUri);
   console.log("[TikTok Auth] Auth URL:", authorizationUrl);
 
   // 4. Redirect with secure cookies for validation in Callback
