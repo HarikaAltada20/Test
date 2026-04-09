@@ -4,7 +4,8 @@ import { createClient } from "@/utils/supabase/server";
 
 export async function GET(req: NextRequest) {
   const searchParams = req.nextUrl.searchParams;
-  const authCode = searchParams.get("auth_code"); // TTO uses auth_code
+  const authCode =
+    searchParams.get("auth_code") ?? searchParams.get("code");
   const state = searchParams.get("state");
   const error = searchParams.get("error");
 

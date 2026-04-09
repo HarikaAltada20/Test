@@ -41,20 +41,17 @@ export class TikTokBusinessApiClient {
 
   /**
    * Exchanges authorization code for an access token.
-   * Endpoint: /oauth2/get/
+   * @see https://github.com/tiktok/tiktok-business-api-sdk/blob/main/js_sdk/docs/AuthenticationApi.md
    */
   async getAccessToken(code: string) {
-    const url = `${this.baseUrl}/oauth2/get/`;
-    
-    // TikTok Business API uses JSON body for token exchange in some versions, 
-    // but the unified V1.3 often uses application/json
+    const url = `${this.baseUrl}/oauth2/access_token/`;
     const body = {
       app_id: this.appId,
       secret: this.secret,
       auth_code: code,
     };
 
-    console.log("[TikTok Business API] POST /oauth2/get/ with app_id:", this.appId);
+    console.log("[TikTok Business API] POST /oauth2/access_token/ with app_id:", this.appId);
 
     const res = await fetch(url, {
       method: "POST",
@@ -64,7 +61,22 @@ export class TikTokBusinessApiClient {
       body: JSON.stringify(body),
     });
 
-    const data = await res.json();
+    const text = await res.text();
+    let data: any;
+    try {
+      data = JSON.parse(text);
+    } catch {
+      console.error("[TikTok Business API] Non-JSON token response:", {
+        status: res.status,
+        snippet: text.slice(0, 200),
+      });
+      throw new TikTokBusinessApiError(
+        `Token exchange failed (${res.status}): ${text.slice(0, 120).trim() || res.statusText}`,
+        res.status,
+        text,
+      );
+    }
+
     this.handleErrorResponse(res.status, data);
 
     return data;
