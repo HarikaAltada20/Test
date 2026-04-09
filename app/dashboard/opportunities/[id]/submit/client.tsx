@@ -73,13 +73,12 @@ async function bustLeaderboardCache(contestId: string) {
 //   - 1 week: SUBMISSION_WINDOW_VALUE = 1, SUBMISSION_WINDOW_UNIT = 'week'
 // Adjust the submission window value
 const SUBMISSION_WINDOW_VALUE: number = 2;
-const SUBMISSION_WINDOW_UNIT: dayjs.ManipulateType = "days";
+const SUBMISSION_WINDOW_UNIT: dayjs.ManipulateType = "years";
 
 // Auto-generate display text and handle singular/plural forms
 const IS_SUBMISSION_WINDOW_SINGULAR: boolean = SUBMISSION_WINDOW_VALUE === 1;
-const SUBMISSION_WINDOW_UNIT_DISPLAY = `${SUBMISSION_WINDOW_VALUE} ${SUBMISSION_WINDOW_UNIT}${
-  IS_SUBMISSION_WINDOW_SINGULAR ? "" : "s"
-}`;
+const SUBMISSION_WINDOW_UNIT_DISPLAY = `${SUBMISSION_WINDOW_VALUE} ${SUBMISSION_WINDOW_UNIT}${IS_SUBMISSION_WINDOW_SINGULAR ? "" : "s"
+  }`;
 // -----------------------------------
 
 interface YouTubeVideo {
@@ -536,7 +535,7 @@ export default function SubmitContentPage({
       console.log(
         "Is token expired?",
         instagramAccount.token_expiry &&
-          dayjs().isAfter(dayjs(instagramAccount.token_expiry)),
+        dayjs().isAfter(dayjs(instagramAccount.token_expiry)),
       );
 
       if (instagramAccount?.access_token) {
@@ -593,7 +592,7 @@ export default function SubmitContentPage({
           } else {
             setError(
               "Instagram account must be a Business or Creator account to fetch reels. Current type: " +
-                (instagramAccount.account_type || "Unknown"),
+              (instagramAccount.account_type || "Unknown"),
             );
             setIsLoadingReels(false);
           }
@@ -848,7 +847,7 @@ export default function SubmitContentPage({
       console.error("Error refreshing YouTube token:", err);
       setError(
         err.message ||
-          "Failed to refresh YouTube token. Please try reconnecting your account.",
+        "Failed to refresh YouTube token. Please try reconnecting your account.",
       );
       setIsTokenExpired(true);
       toast({
@@ -937,7 +936,7 @@ export default function SubmitContentPage({
       console.error("Error refreshing Instagram token:", err);
       setError(
         err.message ||
-          "Failed to refresh Instagram token. Please try reconnecting your account.",
+        "Failed to refresh Instagram token. Please try reconnecting your account.",
       );
       setIsInstagramTokenExpired(true);
       toast({
@@ -1006,7 +1005,7 @@ export default function SubmitContentPage({
         console.error("Error fetching YouTube videos:", err);
         setError(
           err.message ||
-            "Failed to load your YouTube videos. Please try again.",
+          "Failed to load your YouTube videos. Please try again.",
         );
         setUserVideos([]);
         setYoutubeCurrentPage(1);
@@ -1062,11 +1061,10 @@ export default function SubmitContentPage({
   const handleReconnectYouTube = () => {
     router.push(
       "/api/youtube/auth?returnTo=" +
-        encodeURIComponent(
-          `/dashboard/opportunities/${contestId}/submit?platform=${
-            contestPlatform || ""
-          }`,
-        ), // pass platform back
+      encodeURIComponent(
+        `/dashboard/opportunities/${contestId}/submit?platform=${contestPlatform || ""
+        }`,
+      ), // pass platform back
     );
   };
 
@@ -1269,7 +1267,7 @@ export default function SubmitContentPage({
       // This will catch errors from fetch itself (network error) or SyntaxError from response.json() if body is not valid JSON, or errors thrown above.
       setError(
         err.message ||
-          "An unexpected error occurred while fetching YouTube video.",
+        "An unexpected error occurred while fetching YouTube video.",
       );
       setVideoPreview(null);
       setSelectedVideo(null);
@@ -1392,7 +1390,7 @@ export default function SubmitContentPage({
       console.error("Error in handleFetchInstagramByLink:", err);
       setError(
         err.message ||
-          "An unexpected error occurred while fetching Instagram media.",
+        "An unexpected error occurred while fetching Instagram media.",
       );
       setInstagramMediaPreview(null);
       setSelectedReel(null);
@@ -1436,9 +1434,8 @@ export default function SubmitContentPage({
         const videoData: YouTubeVideo = responseData.videoInfo;
         if (videoData?.snippet?.publishedAt) {
           if (isContentTooOld(videoData.snippet.publishedAt)) {
-            const errorMessage = `Video ${
-              index + 1
-            } was published more than ${SUBMISSION_WINDOW_UNIT_DISPLAY} ago and cannot be submitted.`;
+            const errorMessage = `Video ${index + 1
+              } was published more than ${SUBMISSION_WINDOW_UNIT_DISPLAY} ago and cannot be submitted.`;
             setError(errorMessage);
             toast({
               title: "Content Too Old",
@@ -1452,9 +1449,8 @@ export default function SubmitContentPage({
             setError(null);
           }
         } else {
-          const errorMessage = `Could not determine publication date for video ${
-            index + 1
-          }.`;
+          const errorMessage = `Could not determine publication date for video ${index + 1
+            }.`;
           setError(errorMessage);
           toast({
             title: "Missing Publication Date",
@@ -1463,9 +1459,8 @@ export default function SubmitContentPage({
           });
         }
       } else {
-        let errorMessage = `YouTube video verification failed for video ${
-          index + 1
-        }.`;
+        let errorMessage = `YouTube video verification failed for video ${index + 1
+          }.`;
         if (responseData && typeof responseData.error === "string") {
           errorMessage = responseData.error;
         } else if (responseData && typeof responseData.message === "string") {
@@ -1476,7 +1471,7 @@ export default function SubmitContentPage({
     } catch (err: any) {
       setError(
         err.message ||
-          "An unexpected error occurred while fetching YouTube video.",
+        "An unexpected error occurred while fetching YouTube video.",
       );
     } finally {
       setIsFetchingVideo(false);
@@ -1530,9 +1525,8 @@ export default function SubmitContentPage({
         const mediaDetails: InstagramReel = responseData.mediaInfo;
         if (mediaDetails?.timestamp) {
           if (isContentTooOld(mediaDetails.timestamp)) {
-            const errorMessage = `Video ${
-              index + 1
-            } was published more than ${SUBMISSION_WINDOW_UNIT_DISPLAY} ago and cannot be submitted.`;
+            const errorMessage = `Video ${index + 1
+              } was published more than ${SUBMISSION_WINDOW_UNIT_DISPLAY} ago and cannot be submitted.`;
             setError(errorMessage);
             toast({
               title: "Content Too Old",
@@ -1546,9 +1540,8 @@ export default function SubmitContentPage({
             setError(null);
           }
         } else {
-          const errorMessage = `Could not determine publication date for video ${
-            index + 1
-          }.`;
+          const errorMessage = `Could not determine publication date for video ${index + 1
+            }.`;
           setError(errorMessage);
           toast({
             title: "Missing Publication Date",
@@ -1557,9 +1550,8 @@ export default function SubmitContentPage({
           });
         }
       } else {
-        let errorMessage = `Instagram video verification failed for video ${
-          index + 1
-        }.`;
+        let errorMessage = `Instagram video verification failed for video ${index + 1
+          }.`;
         if (responseData && typeof responseData.error === "string") {
           errorMessage = responseData.error;
         } else if (responseData && typeof responseData.message === "string") {
@@ -1570,7 +1562,7 @@ export default function SubmitContentPage({
     } catch (err: any) {
       setError(
         err.message ||
-          "An unexpected error occurred while fetching Instagram video.",
+        "An unexpected error occurred while fetching Instagram video.",
       );
     } finally {
       setIsFetchingVideo(false);
@@ -1657,7 +1649,7 @@ export default function SubmitContentPage({
         // For other errors (token expired, etc.), show the API error
         throw new Error(
           errorData?.error ||
-            `Failed to verify TikTok video for link ${index + 1}.`,
+          `Failed to verify TikTok video for link ${index + 1}.`,
         );
       }
 
@@ -1683,7 +1675,7 @@ export default function SubmitContentPage({
     } catch (err: any) {
       setError(
         err.message ||
-          "An unexpected error occurred while fetching TikTok video.",
+        "An unexpected error occurred while fetching TikTok video.",
       );
     } finally {
       setIsFetchingVideo(false);
@@ -1932,9 +1924,8 @@ export default function SubmitContentPage({
           if (isVideoAlreadySubmitted(reel.id, reel.permalink)) {
             toast({
               title: "Video Already Submitted",
-              description: `"${
-                reel.caption || "Instagram Reel"
-              }" has already been submitted to this contest`,
+              description: `"${reel.caption || "Instagram Reel"
+                }" has already been submitted to this contest`,
               variant: "destructive",
             });
             return;
@@ -2128,7 +2119,7 @@ export default function SubmitContentPage({
       }
       throw new Error(
         insightsData.error?.message ||
-          "Failed to fetch Instagram Reel insights.",
+        "Failed to fetch Instagram Reel insights.",
       );
     }
 
@@ -2268,14 +2259,13 @@ export default function SubmitContentPage({
         if (!insightsRes.ok || insightsData.error) {
           if (insightsData.error?.error_subcode === 2108006) {
             throw new Error(
-              `"${
-                reel.caption || "Instagram Reel"
+              `"${reel.caption || "Instagram Reel"
               }" was posted before your Instagram account was converted to a Business/Creator account, so its metrics cannot be fetched. Please select a different Reel.`,
             );
           }
           throw new Error(
             insightsData.error?.message ||
-              "Failed to fetch Instagram Reel insights.",
+            "Failed to fetch Instagram Reel insights.",
           );
         }
 
@@ -2408,8 +2398,7 @@ export default function SubmitContentPage({
 
     if (currentSubmitted + totalSubmissions > maxSubmissions) {
       throw new Error(
-        `You have already submitted ${currentSubmitted} videos. You can only submit ${
-          maxSubmissions - currentSubmitted
+        `You have already submitted ${currentSubmitted} videos. You can only submit ${maxSubmissions - currentSubmitted
         } more.`,
       );
     }
@@ -2581,7 +2570,7 @@ export default function SubmitContentPage({
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ contestId }),
         });
-      } catch {}
+      } catch { }
 
       // Success - This toast will be overridden by the specific messages in handleMultipleSubmissions
       // For single submissions, show this message
@@ -2635,8 +2624,7 @@ export default function SubmitContentPage({
 
     if (currentSubmitted + totalSubmissions > maxSubmissions) {
       throw new Error(
-        `You have already submitted ${currentSubmitted} videos. You can only submit ${
-          maxSubmissions - currentSubmitted
+        `You have already submitted ${currentSubmitted} videos. You can only submit ${maxSubmissions - currentSubmitted
         } more.`,
       );
     }
@@ -2681,7 +2669,7 @@ export default function SubmitContentPage({
         // Handle YouTube-specific errors
         throw new Error(
           youtubeError.message ||
-            "Failed to submit YouTube content. Please try again.",
+          "Failed to submit YouTube content. Please try again.",
         );
       }
     }
@@ -2696,7 +2684,7 @@ export default function SubmitContentPage({
         // Handle Instagram-specific errors (like account conversion errors)
         throw new Error(
           instagramError.message ||
-            "Failed to submit Instagram content. Please try again.",
+          "Failed to submit Instagram content. Please try again.",
         );
       }
     }
@@ -2829,7 +2817,7 @@ export default function SubmitContentPage({
 
             throw new Error(
               mediaData.error?.message ||
-                "Failed to fetch Instagram media IDs using Business Account ID",
+              "Failed to fetch Instagram media IDs using Business Account ID",
             );
           }
 
@@ -3065,20 +3053,20 @@ export default function SubmitContentPage({
                   isFetchingTiktokVideo ||
                   (contest?.multiple_submissions_enabled
                     ? selectedVideosFromTabs.length === 0 &&
-                      selectedReelsFromTabs.length === 0 &&
-                      selectedVideos.length === 0 &&
-                      selectedReels.length === 0 &&
-                      selectedTiktokVideosFromTabs.length === 0 &&
-                      selectedTiktokVideosFromLinks.length === 0
+                    selectedReelsFromTabs.length === 0 &&
+                    selectedVideos.length === 0 &&
+                    selectedReels.length === 0 &&
+                    selectedTiktokVideosFromTabs.length === 0 &&
+                    selectedTiktokVideosFromLinks.length === 0
                     : (contestPlatform === "youtube" &&
-                        !selectedVideo &&
-                        !videoPreview) ||
-                      (contestPlatform === "instagram" &&
-                        !selectedReel &&
-                        !instagramMediaPreview) ||
-                      (contestPlatform === "tiktok" &&
-                        !tiktokVideoPreview &&
-                        !selectedTiktokVideo))
+                      !selectedVideo &&
+                      !videoPreview) ||
+                    (contestPlatform === "instagram" &&
+                      !selectedReel &&
+                      !instagramMediaPreview) ||
+                    (contestPlatform === "tiktok" &&
+                      !tiktokVideoPreview &&
+                      !selectedTiktokVideo))
                 }
                 className="w-full sm:w-auto"
               >
@@ -3172,9 +3160,8 @@ export default function SubmitContentPage({
 
                 <Tabs defaultValue="youtube-library" className="w-full">
                   <TabsList
-                    className={`flex w-full p-1.5 rounded-full shadow-sm ${
-                      isDark ? "bg-gray-700" : "bg-[#E4E4E4]"
-                    }`}
+                    className={`flex w-full p-1.5 rounded-full shadow-sm ${isDark ? "bg-gray-700" : "bg-[#E4E4E4]"
+                      }`}
                   >
                     {["youtube-library", "youtube-link"].map(
                       (tab, index, arr) => {
@@ -3190,18 +3177,16 @@ export default function SubmitContentPage({
                           transition-all duration-200
                           data-[state=active]:bg-[#662EBD] data-[state=active]:text-white 
                           data-[state=active]:shadow-sm
-                          ${
-                            isDark
-                              ? "text-gray-300 hover:text-white hover:bg-gray-600"
-                              : "text-gray-700 hover:text-gray-800 hover:bg-gray-200"
-                          }
+                          ${isDark
+                                ? "text-gray-300 hover:text-white hover:bg-gray-600"
+                                : "text-gray-700 hover:text-gray-800 hover:bg-gray-200"
+                              }
                           ${isFirst ? "data-[state=active]:rounded-l-full" : ""}
                           ${isLast ? "data-[state=active]:rounded-r-full" : ""}
-                          ${
-                            arr.length === 1
-                              ? "data-[state=active]:rounded-full"
-                              : ""
-                          }
+                          ${arr.length === 1
+                                ? "data-[state=active]:rounded-full"
+                                : ""
+                              }
                         `}
                           >
                             {tab === "youtube-library" ? (
@@ -3273,9 +3258,8 @@ export default function SubmitContentPage({
                             disabled={isLoadingVideos}
                           >
                             <RefreshCw
-                              className={`h-4 w-4 ${
-                                isLoadingVideos ? "animate-spin" : ""
-                              }`}
+                              className={`h-4 w-4 ${isLoadingVideos ? "animate-spin" : ""
+                                }`}
                             />{" "}
                             Reload Videos
                           </Button>
@@ -3372,7 +3356,7 @@ export default function SubmitContentPage({
                                   {Math.max(
                                     0,
                                     (contest.max_submissions_per_creator || 1) -
-                                      submissionProgress.submitted,
+                                    submissionProgress.submitted,
                                   )}{" "}
                                   remaining videos
                                 </div>
@@ -3395,8 +3379,8 @@ export default function SubmitContentPage({
                               contest?.multiple_submissions_enabled;
                             const isSelected = isMultiSelect
                               ? selectedVideosFromTabs.some(
-                                  (v) => v.id.videoId === video.id.videoId,
-                                )
+                                (v) => v.id.videoId === video.id.videoId,
+                              )
                               : selectedVideo?.id.videoId === video.id.videoId;
 
                             const handleSelectionChange = (
@@ -3502,17 +3486,14 @@ export default function SubmitContentPage({
                             return (
                               <div
                                 key={video.id.videoId}
-                                className={`cursor-pointer max-w-[1200px] mx-auto ${
-                                  index === 0 ? "mt-4" : ""
-                                } ${
-                                  index === paginatedUserVideos.length - 1
+                                className={`cursor-pointer max-w-[1200px] mx-auto ${index === 0 ? "mt-4" : ""
+                                  } ${index === paginatedUserVideos.length - 1
                                     ? "mb-4"
                                     : ""
-                                } ${
-                                  isSelected
+                                  } ${isSelected
                                     ? "border-2 border-[#7F39EC] rounded-lg bg-purple-700/20"
                                     : "border-2 border-[#7F39EC] rounded-lg"
-                                }`}
+                                  }`}
                                 onClick={() =>
                                   handleSelectionChange(!isSelected)
                                 }
@@ -3742,11 +3723,10 @@ export default function SubmitContentPage({
 
                         return (
                           <Card
-                            className={`mt-6 cursor-pointer max-w-[1200px] mx-auto ${
-                              isSelected
+                            className={`mt-6 cursor-pointer max-w-[1200px] mx-auto ${isSelected
                                 ? "border-2 border-[#7F39EC] rounded-lg bg-[#D8C3FF75]"
                                 : "border-2 border-[#7F39EC] rounded-lg "
-                            }`}
+                              }`}
                             onClick={() => handleSelectionChange(!isSelected)}
                           >
                             <div className="p-3 md:p-4">
@@ -3947,9 +3927,8 @@ export default function SubmitContentPage({
                 //   </TabsList>
                 <Tabs defaultValue="instagram-library" className="w-full">
                   <TabsList
-                    className={`flex w-full p-1.5 rounded-full shadow-sm ${
-                      isDark ? "bg-black" : "bg-[#E4E4E4]"
-                    }`}
+                    className={`flex w-full p-1.5 rounded-full shadow-sm ${isDark ? "bg-black" : "bg-[#E4E4E4]"
+                      }`}
                   >
                     {["instagram-library", "instagram-link"].map(
                       (tab, index, arr) => {
@@ -3963,26 +3942,22 @@ export default function SubmitContentPage({
                             className={`
                          flex items-center justify-center px-4 sm:px-6 py-2 sm:py-3 text-md font-medium transition-all duration-200 
                             data-[state=active]:bg-[#662EBD] data-[state=active]:text-white 
-                            data-[state=active]:shadow-sm ${
-                              isDark
+                            data-[state=active]:shadow-sm ${isDark
                                 ? "text-gray-300 hover:text-white"
                                 : "text-gray-700 hover:text-gray-800 hover:bg-gray-200"
-                            }
-                              ${
-                                isFirst
-                                  ? "data-[state=active]:rounded-l-full"
-                                  : ""
                               }
-                               ${
-                                 isLast
-                                   ? "data-[state=active]:rounded-r-full"
-                                   : ""
-                               }
-                             ${
-                               arr.length === 1
-                                 ? "data-[state=active]:rounded-full"
-                                 : ""
-                             }
+                              ${isFirst
+                                ? "data-[state=active]:rounded-l-full"
+                                : ""
+                              }
+                               ${isLast
+                                ? "data-[state=active]:rounded-r-full"
+                                : ""
+                              }
+                             ${arr.length === 1
+                                ? "data-[state=active]:rounded-full"
+                                : ""
+                              }
                              `}
                           >
                             {tab === "instagram-library" ? (
@@ -4046,9 +4021,8 @@ export default function SubmitContentPage({
                             disabled={isLoadingReels}
                           >
                             <RefreshCw
-                              className={`h-4 w-4 mr-2 ${
-                                isLoadingReels ? "animate-spin" : ""
-                              }`}
+                              className={`h-4 w-4 mr-2 ${isLoadingReels ? "animate-spin" : ""
+                                }`}
                             />{" "}
                             Reload Reels
                           </Button>
@@ -4138,7 +4112,7 @@ export default function SubmitContentPage({
                                   {Math.max(
                                     0,
                                     (contest.max_submissions_per_creator || 1) -
-                                      submissionProgress.submitted,
+                                    submissionProgress.submitted,
                                   )}{" "}
                                   remaining videos
                                 </div>
@@ -4161,8 +4135,8 @@ export default function SubmitContentPage({
                               contest?.multiple_submissions_enabled;
                             const isSelected = isMultiSelect
                               ? selectedReelsFromTabs.some(
-                                  (r) => r.id === reel.id,
-                                )
+                                (r) => r.id === reel.id,
+                              )
                               : selectedReel?.id === reel.id;
 
                             const handleSelectionChange = (
@@ -4254,17 +4228,14 @@ export default function SubmitContentPage({
                             return (
                               <div
                                 key={reel.id}
-                                className={`cursor-pointer max-w-[1200px] mt-6 mx-auto ${
-                                  index === 0 ? "mt-4" : ""
-                                } ${
-                                  index === paginatedUserReels.length - 1
+                                className={`cursor-pointer max-w-[1200px] mt-6 mx-auto ${index === 0 ? "mt-4" : ""
+                                  } ${index === paginatedUserReels.length - 1
                                     ? "mb-4"
                                     : ""
-                                } ${
-                                  isSelected
+                                  } ${isSelected
                                     ? "border-2 border-[#7F39EC] rounded-lg bg-[#D8C3FF75]"
                                     : "border-2 border-[#7F39EC] rounded-lg "
-                                }`}
+                                  }`}
                                 onClick={() =>
                                   handleSelectionChange(!isSelected)
                                 }
@@ -4410,11 +4381,10 @@ export default function SubmitContentPage({
 
                         return (
                           <div
-                            className={`mt-6 cursor-pointer max-w-[1200px] mx-auto ${
-                              isSelected
+                            className={`mt-6 cursor-pointer max-w-[1200px] mx-auto ${isSelected
                                 ? "border-2 border-[#7F39EC] rounded-lg bg-[#D8C3FF75]"
                                 : "border-2 border-[#7F39EC] rounded-lg "
-                            }`}
+                              }`}
                             onClick={() => handleSelectionChange(!isSelected)}
                           >
                             <CardHeader>
@@ -4498,7 +4468,7 @@ export default function SubmitContentPage({
                                       <span className="inline-flex items-center px-2 py-1 rounded-full text-sm font-medium border border-gray-500">
                                         🎬{" "}
                                         {instagramMediaPreview.media_type ===
-                                        "REEL"
+                                          "REEL"
                                           ? "Instagram Reel"
                                           : "Video"}
                                       </span>
@@ -4555,9 +4525,8 @@ export default function SubmitContentPage({
               {tiktokAccount && !isTiktokTokenExpired && (
                 <Tabs defaultValue="tiktok-library" className="w-full">
                   <TabsList
-                    className={`flex w-full p-1.5 rounded-full shadow-sm ${
-                      isDark ? "bg-black" : "bg-[#E4E4E4]"
-                    }`}
+                    className={`flex w-full p-1.5 rounded-full shadow-sm ${isDark ? "bg-black" : "bg-[#E4E4E4]"
+                      }`}
                   >
                     {["tiktok-library", "tiktok-link"].map(
                       (tab, index, arr) => {
@@ -4571,26 +4540,22 @@ export default function SubmitContentPage({
                             className={`
                          flex items-center justify-center px-4 sm:px-6 py-2 sm:py-3 text-md font-medium transition-all duration-200 
                             data-[state=active]:bg-[#662EBD] data-[state=active]:text-white 
-                            data-[state=active]:shadow-sm ${
-                              isDark
+                            data-[state=active]:shadow-sm ${isDark
                                 ? "text-gray-300 hover:text-white"
                                 : "text-gray-700 hover:text-gray-800 hover:bg-gray-200"
-                            }
-                              ${
-                                isFirst
-                                  ? "data-[state=active]:rounded-l-full"
-                                  : ""
                               }
-                               ${
-                                 isLast
-                                   ? "data-[state=active]:rounded-r-full"
-                                   : ""
-                               }
-                             ${
-                               arr.length === 1
-                                 ? "data-[state=active]:rounded-full"
-                                 : ""
-                             }
+                              ${isFirst
+                                ? "data-[state=active]:rounded-l-full"
+                                : ""
+                              }
+                               ${isLast
+                                ? "data-[state=active]:rounded-r-full"
+                                : ""
+                              }
+                             ${arr.length === 1
+                                ? "data-[state=active]:rounded-full"
+                                : ""
+                              }
                              `}
                           >
                             {tab === "tiktok-library" ? (
@@ -4656,9 +4621,8 @@ export default function SubmitContentPage({
                             disabled={isLoadingTiktokVideos}
                           >
                             <RefreshCw
-                              className={`h-4 w-4 mr-2 ${
-                                isLoadingTiktokVideos ? "animate-spin" : ""
-                              }`}
+                              className={`h-4 w-4 mr-2 ${isLoadingTiktokVideos ? "animate-spin" : ""
+                                }`}
                             />{" "}
                             Reload Videos
                           </Button>
@@ -4742,7 +4706,7 @@ export default function SubmitContentPage({
                                   {Math.max(
                                     0,
                                     (contest.max_submissions_per_creator || 1) -
-                                      submissionProgress.submitted,
+                                    submissionProgress.submitted,
                                   )}{" "}
                                   remaining videos
                                 </div>
@@ -4765,8 +4729,8 @@ export default function SubmitContentPage({
                               contest?.multiple_submissions_enabled;
                             const isSelected = isMultiSelect
                               ? selectedTiktokVideosFromTabs.some(
-                                  (v: any) => v.id === video.id,
-                                )
+                                (v: any) => v.id === video.id,
+                              )
                               : selectedTiktokVideo?.id === video.id;
 
                             const handleTiktokSelectionChange = (
@@ -4836,24 +4800,21 @@ export default function SubmitContentPage({
 
                             const publishedDate = video.create_time
                               ? dayjs(
-                                  new Date(video.create_time * 1000),
-                                ).format("MMM D, YYYY [at] h:mm A")
+                                new Date(video.create_time * 1000),
+                              ).format("MMM D, YYYY [at] h:mm A")
                               : null;
 
                             return (
                               <div
                                 key={video.id}
-                                className={`cursor-pointer max-w-[1200px] mt-6 mx-auto ${
-                                  index === 0 ? "mt-4" : ""
-                                } ${
-                                  index === paginatedTiktokVideos.length - 1
+                                className={`cursor-pointer max-w-[1200px] mt-6 mx-auto ${index === 0 ? "mt-4" : ""
+                                  } ${index === paginatedTiktokVideos.length - 1
                                     ? "mb-4"
                                     : ""
-                                } ${
-                                  isSelected
+                                  } ${isSelected
                                     ? "border-2 border-[#7F39EC] rounded-lg bg-[#D8C3FF75]"
                                     : "border-2 border-[#7F39EC] rounded-lg "
-                                }`}
+                                  }`}
                                 onClick={() =>
                                   handleTiktokSelectionChange(!isSelected)
                                 }
@@ -5141,7 +5102,7 @@ export default function SubmitContentPage({
                                 }
                                 throw new Error(
                                   errorData?.error ||
-                                    "Failed to verify TikTok video.",
+                                  "Failed to verify TikTok video.",
                                 );
                               }
 
@@ -5196,11 +5157,10 @@ export default function SubmitContentPage({
 
                         return (
                           <div
-                            className={`mt-6 cursor-pointer max-w-[1200px] mx-auto ${
-                              isSelected
+                            className={`mt-6 cursor-pointer max-w-[1200px] mx-auto ${isSelected
                                 ? "border-2 border-[#7F39EC] rounded-lg bg-[#D8C3FF75]"
                                 : "border-2 border-[#7F39EC] rounded-lg "
-                            }`}
+                              }`}
                             onClick={() => handleSelectionChange(!isSelected)}
                           >
                             <CardHeader>
@@ -5284,7 +5244,7 @@ export default function SubmitContentPage({
                                         {dayjs(
                                           new Date(
                                             tiktokVideoPreview.create_time *
-                                              1000,
+                                            1000,
                                           ),
                                         ).format("MMM D, YYYY [at] h:mm A")}
                                       </p>
@@ -5406,7 +5366,7 @@ export default function SubmitContentPage({
                             {Math.max(
                               0,
                               (contest.max_submissions_per_creator || 1) -
-                                submissionProgress.submitted,
+                              submissionProgress.submitted,
                             )}{" "}
                             remaining submissions
                           </span>
@@ -5484,13 +5444,12 @@ export default function SubmitContentPage({
                                   ? "bg-[#180438] border border-gray-700 text-white"
                                   : "bg-white text-black",
                               )}
-                              placeholder={`Enter ${
-                                contestPlatform?.toLowerCase() === "youtube"
+                              placeholder={`Enter ${contestPlatform?.toLowerCase() === "youtube"
                                   ? "YouTube"
                                   : contestPlatform?.toLowerCase() === "tiktok"
                                     ? "TikTok"
                                     : "Instagram"
-                              } video URL ${index + 1}`}
+                                } video URL ${index + 1}`}
                               value={link}
                               onChange={(e) => {
                                 const newLinks = [...submissionLinks];
@@ -5582,189 +5541,40 @@ export default function SubmitContentPage({
                       {(fetchedVideos.length > 0 ||
                         fetchedReels.length > 0 ||
                         fetchedTiktokVideosFromLinks.length > 0) && (
-                        <div className="mt-6">
-                          <h4
-                            className={cn(
-                              "text-lg font-semibold",
-                              isDark ? "text-white" : "text-purple-800",
-                            )}
-                          >
-                            Fetched Videos - Select the ones you want to submit:
-                          </h4>
-                          <div className="space-y-3 max-h-96 overflow-y-auto">
-                            {/* YouTube Videos */}
-                            {fetchedVideos.map((video, index) => {
-                              if (!video) return null;
+                          <div className="mt-6">
+                            <h4
+                              className={cn(
+                                "text-lg font-semibold",
+                                isDark ? "text-white" : "text-purple-800",
+                              )}
+                            >
+                              Fetched Videos - Select the ones you want to submit:
+                            </h4>
+                            <div className="space-y-3 max-h-96 overflow-y-auto">
+                              {/* YouTube Videos */}
+                              {fetchedVideos.map((video, index) => {
+                                if (!video) return null;
 
-                              const thumbnailUrl =
-                                getYouTubeThumbnailUrl(
-                                  video.snippet.thumbnails,
-                                  video.id.videoId,
-                                ) ||
-                                `https://i.ytimg.com/vi/${video.id.videoId}/hqdefault.jpg`;
+                                const thumbnailUrl =
+                                  getYouTubeThumbnailUrl(
+                                    video.snippet.thumbnails,
+                                    video.id.videoId,
+                                  ) ||
+                                  `https://i.ytimg.com/vi/${video.id.videoId}/hqdefault.jpg`;
 
-                              return (
-                                <Card
-                                  key={`youtube-${index}`}
-                                  className={cn(
-                                    "cursor-pointer transition-all duration-200",
-                                    isVideoAlreadySubmitted(
-                                      video.id.videoId,
-                                      `https://www.youtube.com/watch?v=${video.id.videoId}`,
-                                    )
-                                      ? isDark
-                                        ? "border-2 border-red-500 bg-red-900/40 opacity-90"
-                                        : "border-2 border-red-300 bg-red-50 opacity-75"
-                                      : selectedVideoIndices.includes(index)
-                                        ? isDark
-                                          ? "border-2 border-purple-400 bg-[#2B184A]"
-                                          : "border-2 border-purple-500 bg-purple-50"
-                                        : isDark
-                                          ? "border border-gray-600 hover:border-purple-400 bg-[#180438]"
-                                          : "border border-gray-200 hover:border-purple-300 bg-white",
-                                  )}
-                                  onClick={() =>
-                                    handleVideoSelection(
-                                      index,
-                                      !selectedVideoIndices.includes(index),
-                                    )
-                                  }
-                                >
-                                  <CardContent className="p-4">
-                                    <div className="flex flex-col sm:flex-row items-start gap-4">
-                                      {/* Checkbox - First on mobile, right side on desktop */}
-                                      <div className="flex-shrink-0 sm:order-3 sm:ml-2 self-start">
-                                        <Checkbox
-                                          aria-label="Select video"
-                                          checked={selectedVideoIndices.includes(
-                                            index,
-                                          )}
-                                          onCheckedChange={(checked) =>
-                                            handleVideoSelection(
-                                              index,
-                                              Boolean(checked),
-                                            )
-                                          }
-                                          onClick={(event) =>
-                                            event.stopPropagation()
-                                          }
-                                          className={cn(
-                                            "h-5 w-5 border-2",
-                                            isDark
-                                              ? "border-gray-500 data-[state=checked]:border-purple-400 data-[state=checked]:bg-purple-500"
-                                              : "border-gray-300 data-[state=checked]:border-purple-600 data-[state=checked]:bg-purple-600",
-                                          )}
-                                        />
-                                      </div>
-                                      {/* Image - Second on mobile, first on desktop */}
-                                      <div className="flex-shrink-0 w-full sm:w-auto sm:order-1">
-                                        <Image
-                                          src={thumbnailUrl}
-                                          alt={video.snippet.title}
-                                          width={120}
-                                          height={68}
-                                          className="rounded-lg object-cover aspect-video w-full sm:w-auto"
-                                        />
-                                      </div>
-                                      {/* Content - Third on mobile, second on desktop */}
-                                      <div className="flex-1 min-w-0 w-full sm:w-auto sm:order-2">
-                                        <div className="flex flex-col items-start gap-2">
-                                          <div className="flex-1 min-w-0 w-full">
-                                            <div className="flex flex-col sm:flex-row items-start gap-2 mb-2">
-                                              <h5 className="font-medium text-sm line-clamp-2 flex-1 min-w-0">
-                                                {video.snippet.title}
-                                              </h5>
-                                              {isVideoAlreadySubmitted(
-                                                video.id.videoId,
-                                                `https://www.youtube.com/watch?v=${video.id.videoId}`,
-                                              ) && (
-                                                <div className="flex items-center gap-1 text-xs text-red-600 bg-red-100 px-2 py-1 rounded-full flex-shrink-0">
-                                                  <AlertTriangle className="h-3 w-3" />
-                                                  Already Submitted
-                                                </div>
-                                              )}
-                                            </div>
-                                            <div
-                                              className={cn(
-                                                "flex flex-wrap items-center gap-2 sm:gap-4 text-xs",
-                                                isDark
-                                                  ? "text-gray-300"
-                                                  : "text-gray-600",
-                                              )}
-                                            >
-                                              <div className="flex items-center gap-1">
-                                                <Eye
-                                                  className={cn(
-                                                    "h-4 w-4",
-                                                    isDark
-                                                      ? "text-gray-300"
-                                                      : "text-gray-600",
-                                                  )}
-                                                />
-                                                <span className="font-medium">
-                                                  {video.statistics
-                                                    ?.viewCount || 0}{" "}
-                                                </span>
-                                                <span>views</span>
-                                              </div>
-
-                                              <div className="flex items-center gap-1">
-                                                <ThumbsUp
-                                                  className={cn(
-                                                    "h-4 w-4",
-                                                    isDark
-                                                      ? "text-gray-300"
-                                                      : "text-gray-600",
-                                                  )}
-                                                />
-                                                <span>
-                                                  {video.statistics
-                                                    ?.likeCount || 0}{" "}
-                                                </span>
-                                                <span>likes</span>
-                                              </div>
-
-                                              <div className="flex items-center gap-1">
-                                                <MessageSquare
-                                                  className={cn(
-                                                    "h-4 w-4",
-                                                    isDark
-                                                      ? "text-gray-300"
-                                                      : "text-gray-600",
-                                                  )}
-                                                />
-                                                <span className="font-medium">
-                                                  {video.statistics
-                                                    ?.commentCount || 0}{" "}
-                                                </span>
-                                                <span>comments</span>
-                                              </div>
-                                            </div>
-                                          </div>
-                                        </div>
-                                      </div>
-                                    </div>
-                                  </CardContent>
-                                </Card>
-                              );
-                            })}
-
-                            {/* Instagram Reels */}
-                            {fetchedReels.map(
-                              (reel, index) =>
-                                reel && (
+                                return (
                                   <Card
-                                    key={`instagram-${index}`}
+                                    key={`youtube-${index}`}
                                     className={cn(
                                       "cursor-pointer transition-all duration-200",
                                       isVideoAlreadySubmitted(
-                                        reel.id,
-                                        reel.permalink,
+                                        video.id.videoId,
+                                        `https://www.youtube.com/watch?v=${video.id.videoId}`,
                                       )
                                         ? isDark
                                           ? "border-2 border-red-500 bg-red-900/40 opacity-90"
                                           : "border-2 border-red-300 bg-red-50 opacity-75"
-                                        : selectedReelIndices.includes(index)
+                                        : selectedVideoIndices.includes(index)
                                           ? isDark
                                             ? "border-2 border-purple-400 bg-[#2B184A]"
                                             : "border-2 border-purple-500 bg-purple-50"
@@ -5775,310 +5585,459 @@ export default function SubmitContentPage({
                                     onClick={() =>
                                       handleVideoSelection(
                                         index,
-                                        !selectedReelIndices.includes(index),
+                                        !selectedVideoIndices.includes(index),
                                       )
                                     }
                                   >
                                     <CardContent className="p-4">
-                                      <div className="flex items-start gap-4">
-                                        <div className="flex-shrink-0">
-                                          <Image
-                                            src={
-                                              reel.thumbnail_url ||
-                                              "/placeholder-reel.jpg"
+                                      <div className="flex flex-col sm:flex-row items-start gap-4">
+                                        {/* Checkbox - First on mobile, right side on desktop */}
+                                        <div className="flex-shrink-0 sm:order-3 sm:ml-2 self-start">
+                                          <Checkbox
+                                            aria-label="Select video"
+                                            checked={selectedVideoIndices.includes(
+                                              index,
+                                            )}
+                                            onCheckedChange={(checked) =>
+                                              handleVideoSelection(
+                                                index,
+                                                Boolean(checked),
+                                              )
                                             }
-                                            alt={
-                                              reel.caption || "Instagram Reel"
+                                            onClick={(event) =>
+                                              event.stopPropagation()
                                             }
-                                            width={120}
-                                            height={120}
-                                            className="rounded-lg object-cover aspect-square"
+                                            className={cn(
+                                              "h-5 w-5 border-2",
+                                              isDark
+                                                ? "border-gray-500 data-[state=checked]:border-purple-400 data-[state=checked]:bg-purple-500"
+                                                : "border-gray-300 data-[state=checked]:border-purple-600 data-[state=checked]:bg-purple-600",
+                                            )}
                                           />
                                         </div>
-                                        <div className="flex-1 min-w-0">
-                                          <div className="flex items-start justify-between">
-                                            <div className="flex-1">
-                                              <div className="flex items-start gap-2 mb-2">
-                                                <h5
-                                                  className={cn(
-                                                    "font-medium text-sm line-clamp-2 flex-1",
-                                                    isDark
-                                                      ? "text-white"
-                                                      : "text-gray-900",
-                                                  )}
-                                                >
-                                                  {reel.caption ||
-                                                    "Instagram Reel"}
+                                        {/* Image - Second on mobile, first on desktop */}
+                                        <div className="flex-shrink-0 w-full sm:w-auto sm:order-1">
+                                          <Image
+                                            src={thumbnailUrl}
+                                            alt={video.snippet.title}
+                                            width={120}
+                                            height={68}
+                                            className="rounded-lg object-cover aspect-video w-full sm:w-auto"
+                                          />
+                                        </div>
+                                        {/* Content - Third on mobile, second on desktop */}
+                                        <div className="flex-1 min-w-0 w-full sm:w-auto sm:order-2">
+                                          <div className="flex flex-col items-start gap-2">
+                                            <div className="flex-1 min-w-0 w-full">
+                                              <div className="flex flex-col sm:flex-row items-start gap-2 mb-2">
+                                                <h5 className="font-medium text-sm line-clamp-2 flex-1 min-w-0">
+                                                  {video.snippet.title}
                                                 </h5>
                                                 {isVideoAlreadySubmitted(
-                                                  reel.id,
-                                                  reel.permalink,
+                                                  video.id.videoId,
+                                                  `https://www.youtube.com/watch?v=${video.id.videoId}`,
                                                 ) && (
-                                                  <div
-                                                    className={cn(
-                                                      "flex items-center gap-1 text-xs px-2 py-1 rounded-full flex-shrink-0",
-                                                      isDark
-                                                        ? "text-red-300 bg-red-900/60 border border-red-500/40"
-                                                        : "text-red-600 bg-red-100",
-                                                    )}
-                                                  >
-                                                    <AlertTriangle className="h-3 w-3" />
-                                                    Already Submitted
-                                                  </div>
-                                                )}
+                                                    <div className="flex items-center gap-1 text-xs text-red-600 bg-red-100 px-2 py-1 rounded-full flex-shrink-0">
+                                                      <AlertTriangle className="h-3 w-3" />
+                                                      Already Submitted
+                                                    </div>
+                                                  )}
                                               </div>
                                               <div
                                                 className={cn(
-                                                  "flex items-center gap-4 text-xs",
+                                                  "flex flex-wrap items-center gap-2 sm:gap-4 text-xs",
                                                   isDark
                                                     ? "text-gray-300"
                                                     : "text-gray-600",
                                                 )}
                                               >
                                                 <div className="flex items-center gap-1">
-                                                  <CalendarDays className="h-4 w-4" />
-                                                  <span>
-                                                    {dayjs(
-                                                      reel.timestamp,
-                                                    ).format("MMM D, YYYY")}
+                                                  <Eye
+                                                    className={cn(
+                                                      "h-4 w-4",
+                                                      isDark
+                                                        ? "text-gray-300"
+                                                        : "text-gray-600",
+                                                    )}
+                                                  />
+                                                  <span className="font-medium">
+                                                    {video.statistics
+                                                      ?.viewCount || 0}{" "}
                                                   </span>
+                                                  <span>views</span>
                                                 </div>
+
                                                 <div className="flex items-center gap-1">
-                                                  <Film className="h-4 w-4" />
-                                                  <span>{reel.media_type}</span>
+                                                  <ThumbsUp
+                                                    className={cn(
+                                                      "h-4 w-4",
+                                                      isDark
+                                                        ? "text-gray-300"
+                                                        : "text-gray-600",
+                                                    )}
+                                                  />
+                                                  <span>
+                                                    {video.statistics
+                                                      ?.likeCount || 0}{" "}
+                                                  </span>
+                                                  <span>likes</span>
+                                                </div>
+
+                                                <div className="flex items-center gap-1">
+                                                  <MessageSquare
+                                                    className={cn(
+                                                      "h-4 w-4",
+                                                      isDark
+                                                        ? "text-gray-300"
+                                                        : "text-gray-600",
+                                                    )}
+                                                  />
+                                                  <span className="font-medium">
+                                                    {video.statistics
+                                                      ?.commentCount || 0}{" "}
+                                                  </span>
+                                                  <span>comments</span>
                                                 </div>
                                               </div>
-                                            </div>
-                                            <div className="flex-shrink-0 ml-2">
-                                              <Checkbox
-                                                aria-label="Select reel"
-                                                checked={selectedReelIndices.includes(
-                                                  index,
-                                                )}
-                                                onCheckedChange={(checked) =>
-                                                  handleVideoSelection(
-                                                    index,
-                                                    Boolean(checked),
-                                                  )
-                                                }
-                                                onClick={(event) =>
-                                                  event.stopPropagation()
-                                                }
-                                                className={cn(
-                                                  "h-5 w-5 border-2",
-                                                  isDark
-                                                    ? "border-gray-500 data-[state=checked]:border-purple-400 data-[state=checked]:bg-purple-500"
-                                                    : "border-gray-300 data-[state=checked]:border-purple-600 data-[state=checked]:bg-purple-600",
-                                                )}
-                                              />
                                             </div>
                                           </div>
                                         </div>
                                       </div>
                                     </CardContent>
                                   </Card>
-                                ),
-                            )}
+                                );
+                              })}
 
-                            {/* TikTok Videos from Links */}
-                            {fetchedTiktokVideosFromLinks.map(
-                              (video, index) =>
-                                video && (
-                                  <Card
-                                    key={`tiktok-link-${index}`}
-                                    className={cn(
-                                      "cursor-pointer transition-all duration-200",
-                                      isVideoAlreadySubmitted(
-                                        video.id,
-                                        video.share_url || "",
-                                      )
-                                        ? isDark
-                                          ? "border-2 border-red-500 bg-red-900/40 opacity-90"
-                                          : "border-2 border-red-300 bg-red-50 opacity-75"
-                                        : selectedTiktokVideoIndices.includes(
-                                              index,
-                                            )
+                              {/* Instagram Reels */}
+                              {fetchedReels.map(
+                                (reel, index) =>
+                                  reel && (
+                                    <Card
+                                      key={`instagram-${index}`}
+                                      className={cn(
+                                        "cursor-pointer transition-all duration-200",
+                                        isVideoAlreadySubmitted(
+                                          reel.id,
+                                          reel.permalink,
+                                        )
                                           ? isDark
-                                            ? "border-2 border-purple-400 bg-[#2B184A]"
-                                            : "border-2 border-purple-500 bg-purple-50"
-                                          : isDark
-                                            ? "border border-gray-600 hover:border-purple-400 bg-[#180438]"
-                                            : "border border-gray-200 hover:border-purple-300 bg-white",
-                                    )}
-                                    onClick={() =>
-                                      handleTiktokVideoSelection(
-                                        index,
-                                        !selectedTiktokVideoIndices.includes(
+                                            ? "border-2 border-red-500 bg-red-900/40 opacity-90"
+                                            : "border-2 border-red-300 bg-red-50 opacity-75"
+                                          : selectedReelIndices.includes(index)
+                                            ? isDark
+                                              ? "border-2 border-purple-400 bg-[#2B184A]"
+                                              : "border-2 border-purple-500 bg-purple-50"
+                                            : isDark
+                                              ? "border border-gray-600 hover:border-purple-400 bg-[#180438]"
+                                              : "border border-gray-200 hover:border-purple-300 bg-white",
+                                      )}
+                                      onClick={() =>
+                                        handleVideoSelection(
                                           index,
-                                        ),
-                                      )
-                                    }
-                                  >
-                                    <CardContent className="p-4">
-                                      <div className="flex items-start gap-4">
-                                        <div className="flex-shrink-0">
-                                          {video.cover_image_url ? (
-                                            <img
-                                              src={video.cover_image_url}
+                                          !selectedReelIndices.includes(index),
+                                        )
+                                      }
+                                    >
+                                      <CardContent className="p-4">
+                                        <div className="flex items-start gap-4">
+                                          <div className="flex-shrink-0">
+                                            <Image
+                                              src={
+                                                reel.thumbnail_url ||
+                                                "/placeholder-reel.jpg"
+                                              }
                                               alt={
-                                                video.title || "TikTok Video"
+                                                reel.caption || "Instagram Reel"
                                               }
                                               width={120}
                                               height={120}
                                               className="rounded-lg object-cover aspect-square"
                                             />
-                                          ) : (
-                                            <div className="w-[120px] h-[120px] bg-muted rounded-lg flex items-center justify-center text-xs text-muted-foreground border">
-                                              🎬 No thumbnail
-                                            </div>
-                                          )}
-                                        </div>
-                                        <div className="flex-1 min-w-0">
-                                          <div className="flex items-start justify-between">
-                                            <div className="flex-1">
-                                              <div className="flex items-start gap-2 mb-2">
-                                                <h5
-                                                  className={cn(
-                                                    "font-medium text-sm line-clamp-2 flex-1",
-                                                    isDark
-                                                      ? "text-white"
-                                                      : "text-gray-900",
-                                                  )}
-                                                >
-                                                  {video.title ||
-                                                    video.video_description ||
-                                                    "TikTok Video"}
-                                                </h5>
-                                                {isVideoAlreadySubmitted(
-                                                  video.id,
-                                                  video.share_url || "",
-                                                ) && (
-                                                  <div
+                                          </div>
+                                          <div className="flex-1 min-w-0">
+                                            <div className="flex items-start justify-between">
+                                              <div className="flex-1">
+                                                <div className="flex items-start gap-2 mb-2">
+                                                  <h5
                                                     className={cn(
-                                                      "flex items-center gap-1 text-xs px-2 py-1 rounded-full flex-shrink-0",
+                                                      "font-medium text-sm line-clamp-2 flex-1",
                                                       isDark
-                                                        ? "text-red-300 bg-red-900/60 border border-red-500/40"
-                                                        : "text-red-600 bg-red-100",
+                                                        ? "text-white"
+                                                        : "text-gray-900",
                                                     )}
                                                   >
-                                                    <AlertTriangle className="h-3 w-3" />
-                                                    Already Submitted
-                                                  </div>
-                                                )}
-                                              </div>
-                                              <div
-                                                className={cn(
-                                                  "flex flex-wrap items-center gap-4 text-xs",
-                                                  isDark
-                                                    ? "text-gray-300"
-                                                    : "text-gray-600",
-                                                )}
-                                              >
-                                                {video.create_time && (
+                                                    {reel.caption ||
+                                                      "Instagram Reel"}
+                                                  </h5>
+                                                  {isVideoAlreadySubmitted(
+                                                    reel.id,
+                                                    reel.permalink,
+                                                  ) && (
+                                                      <div
+                                                        className={cn(
+                                                          "flex items-center gap-1 text-xs px-2 py-1 rounded-full flex-shrink-0",
+                                                          isDark
+                                                            ? "text-red-300 bg-red-900/60 border border-red-500/40"
+                                                            : "text-red-600 bg-red-100",
+                                                        )}
+                                                      >
+                                                        <AlertTriangle className="h-3 w-3" />
+                                                        Already Submitted
+                                                      </div>
+                                                    )}
+                                                </div>
+                                                <div
+                                                  className={cn(
+                                                    "flex items-center gap-4 text-xs",
+                                                    isDark
+                                                      ? "text-gray-300"
+                                                      : "text-gray-600",
+                                                  )}
+                                                >
                                                   <div className="flex items-center gap-1">
                                                     <CalendarDays className="h-4 w-4" />
                                                     <span>
                                                       {dayjs(
-                                                        new Date(
-                                                          video.create_time *
-                                                            1000,
-                                                        ),
+                                                        reel.timestamp,
                                                       ).format("MMM D, YYYY")}
                                                     </span>
                                                   </div>
-                                                )}
-                                                <div className="flex items-center gap-1">
-                                                  <Eye className="h-4 w-4" />
-                                                  <span>
-                                                    {(
-                                                      video.view_count || 0
-                                                    ).toLocaleString()}{" "}
-                                                    views
-                                                  </span>
-                                                </div>
-                                                <div className="flex items-center gap-1">
-                                                  <ThumbsUp className="h-4 w-4" />
-                                                  <span>
-                                                    {(
-                                                      video.like_count || 0
-                                                    ).toLocaleString()}{" "}
-                                                    likes
-                                                  </span>
-                                                </div>
-                                                <div className="flex items-center gap-1">
-                                                  <MessageSquare className="h-4 w-4" />
-                                                  <span>
-                                                    {(
-                                                      video.comment_count || 0
-                                                    ).toLocaleString()}{" "}
-                                                    comments
-                                                  </span>
+                                                  <div className="flex items-center gap-1">
+                                                    <Film className="h-4 w-4" />
+                                                    <span>{reel.media_type}</span>
+                                                  </div>
                                                 </div>
                                               </div>
-                                            </div>
-                                            <div className="flex-shrink-0 ml-2">
-                                              <Checkbox
-                                                aria-label="Select TikTok video"
-                                                checked={selectedTiktokVideoIndices.includes(
-                                                  index,
-                                                )}
-                                                onCheckedChange={(checked) =>
-                                                  handleTiktokVideoSelection(
+                                              <div className="flex-shrink-0 ml-2">
+                                                <Checkbox
+                                                  aria-label="Select reel"
+                                                  checked={selectedReelIndices.includes(
                                                     index,
-                                                    Boolean(checked),
-                                                  )
-                                                }
-                                                onClick={(event) =>
-                                                  event.stopPropagation()
-                                                }
-                                                className={cn(
-                                                  "h-5 w-5 border-2",
-                                                  isDark
-                                                    ? "border-gray-500 data-[state=checked]:border-purple-400 data-[state=checked]:bg-purple-500"
-                                                    : "border-gray-300 data-[state=checked]:border-purple-600 data-[state=checked]:bg-purple-600",
-                                                )}
-                                              />
+                                                  )}
+                                                  onCheckedChange={(checked) =>
+                                                    handleVideoSelection(
+                                                      index,
+                                                      Boolean(checked),
+                                                    )
+                                                  }
+                                                  onClick={(event) =>
+                                                    event.stopPropagation()
+                                                  }
+                                                  className={cn(
+                                                    "h-5 w-5 border-2",
+                                                    isDark
+                                                      ? "border-gray-500 data-[state=checked]:border-purple-400 data-[state=checked]:bg-purple-500"
+                                                      : "border-gray-300 data-[state=checked]:border-purple-600 data-[state=checked]:bg-purple-600",
+                                                  )}
+                                                />
+                                              </div>
                                             </div>
                                           </div>
                                         </div>
-                                      </div>
-                                    </CardContent>
-                                  </Card>
-                                ),
-                            )}
+                                      </CardContent>
+                                    </Card>
+                                  ),
+                              )}
+
+                              {/* TikTok Videos from Links */}
+                              {fetchedTiktokVideosFromLinks.map(
+                                (video, index) =>
+                                  video && (
+                                    <Card
+                                      key={`tiktok-link-${index}`}
+                                      className={cn(
+                                        "cursor-pointer transition-all duration-200",
+                                        isVideoAlreadySubmitted(
+                                          video.id,
+                                          video.share_url || "",
+                                        )
+                                          ? isDark
+                                            ? "border-2 border-red-500 bg-red-900/40 opacity-90"
+                                            : "border-2 border-red-300 bg-red-50 opacity-75"
+                                          : selectedTiktokVideoIndices.includes(
+                                            index,
+                                          )
+                                            ? isDark
+                                              ? "border-2 border-purple-400 bg-[#2B184A]"
+                                              : "border-2 border-purple-500 bg-purple-50"
+                                            : isDark
+                                              ? "border border-gray-600 hover:border-purple-400 bg-[#180438]"
+                                              : "border border-gray-200 hover:border-purple-300 bg-white",
+                                      )}
+                                      onClick={() =>
+                                        handleTiktokVideoSelection(
+                                          index,
+                                          !selectedTiktokVideoIndices.includes(
+                                            index,
+                                          ),
+                                        )
+                                      }
+                                    >
+                                      <CardContent className="p-4">
+                                        <div className="flex items-start gap-4">
+                                          <div className="flex-shrink-0">
+                                            {video.cover_image_url ? (
+                                              <img
+                                                src={video.cover_image_url}
+                                                alt={
+                                                  video.title || "TikTok Video"
+                                                }
+                                                width={120}
+                                                height={120}
+                                                className="rounded-lg object-cover aspect-square"
+                                              />
+                                            ) : (
+                                              <div className="w-[120px] h-[120px] bg-muted rounded-lg flex items-center justify-center text-xs text-muted-foreground border">
+                                                🎬 No thumbnail
+                                              </div>
+                                            )}
+                                          </div>
+                                          <div className="flex-1 min-w-0">
+                                            <div className="flex items-start justify-between">
+                                              <div className="flex-1">
+                                                <div className="flex items-start gap-2 mb-2">
+                                                  <h5
+                                                    className={cn(
+                                                      "font-medium text-sm line-clamp-2 flex-1",
+                                                      isDark
+                                                        ? "text-white"
+                                                        : "text-gray-900",
+                                                    )}
+                                                  >
+                                                    {video.title ||
+                                                      video.video_description ||
+                                                      "TikTok Video"}
+                                                  </h5>
+                                                  {isVideoAlreadySubmitted(
+                                                    video.id,
+                                                    video.share_url || "",
+                                                  ) && (
+                                                      <div
+                                                        className={cn(
+                                                          "flex items-center gap-1 text-xs px-2 py-1 rounded-full flex-shrink-0",
+                                                          isDark
+                                                            ? "text-red-300 bg-red-900/60 border border-red-500/40"
+                                                            : "text-red-600 bg-red-100",
+                                                        )}
+                                                      >
+                                                        <AlertTriangle className="h-3 w-3" />
+                                                        Already Submitted
+                                                      </div>
+                                                    )}
+                                                </div>
+                                                <div
+                                                  className={cn(
+                                                    "flex flex-wrap items-center gap-4 text-xs",
+                                                    isDark
+                                                      ? "text-gray-300"
+                                                      : "text-gray-600",
+                                                  )}
+                                                >
+                                                  {video.create_time && (
+                                                    <div className="flex items-center gap-1">
+                                                      <CalendarDays className="h-4 w-4" />
+                                                      <span>
+                                                        {dayjs(
+                                                          new Date(
+                                                            video.create_time *
+                                                            1000,
+                                                          ),
+                                                        ).format("MMM D, YYYY")}
+                                                      </span>
+                                                    </div>
+                                                  )}
+                                                  <div className="flex items-center gap-1">
+                                                    <Eye className="h-4 w-4" />
+                                                    <span>
+                                                      {(
+                                                        video.view_count || 0
+                                                      ).toLocaleString()}{" "}
+                                                      views
+                                                    </span>
+                                                  </div>
+                                                  <div className="flex items-center gap-1">
+                                                    <ThumbsUp className="h-4 w-4" />
+                                                    <span>
+                                                      {(
+                                                        video.like_count || 0
+                                                      ).toLocaleString()}{" "}
+                                                      likes
+                                                    </span>
+                                                  </div>
+                                                  <div className="flex items-center gap-1">
+                                                    <MessageSquare className="h-4 w-4" />
+                                                    <span>
+                                                      {(
+                                                        video.comment_count || 0
+                                                      ).toLocaleString()}{" "}
+                                                      comments
+                                                    </span>
+                                                  </div>
+                                                </div>
+                                              </div>
+                                              <div className="flex-shrink-0 ml-2">
+                                                <Checkbox
+                                                  aria-label="Select TikTok video"
+                                                  checked={selectedTiktokVideoIndices.includes(
+                                                    index,
+                                                  )}
+                                                  onCheckedChange={(checked) =>
+                                                    handleTiktokVideoSelection(
+                                                      index,
+                                                      Boolean(checked),
+                                                    )
+                                                  }
+                                                  onClick={(event) =>
+                                                    event.stopPropagation()
+                                                  }
+                                                  className={cn(
+                                                    "h-5 w-5 border-2",
+                                                    isDark
+                                                      ? "border-gray-500 data-[state=checked]:border-purple-400 data-[state=checked]:bg-purple-500"
+                                                      : "border-gray-300 data-[state=checked]:border-purple-600 data-[state=checked]:bg-purple-600",
+                                                  )}
+                                                />
+                                              </div>
+                                            </div>
+                                          </div>
+                                        </div>
+                                      </CardContent>
+                                    </Card>
+                                  ),
+                              )}
+                            </div>
                           </div>
-                        </div>
-                      )}
+                        )}
 
                       {/* Earnings Cap Warning */}
                       {contest.contest_based_details?.cpm_contest
                         ?.max_earnings_per_creator && (
-                        <Alert
-                          className={cn(
-                            isDark
-                              ? "border-[#C9A7FF] bg-[#C9A7FF26]"
-                              : "border-amber-200 bg-amber-50",
-                          )}
-                        >
-                          <AlertTriangle
+                          <Alert
                             className={cn(
-                              isDark ? "text-purple-400" : "text-amber-600",
-                            )}
-                          />
-                          <AlertDescription
-                            className={cn(
-                              isDark ? "text-white" : "text-amber-800",
+                              isDark
+                                ? "border-[#C9A7FF] bg-[#C9A7FF26]"
+                                : "border-amber-200 bg-amber-50",
                             )}
                           >
-                            <strong>Earnings Cap:</strong> You can earn up to $
-                            {(
-                              contest.contest_based_details.cpm_contest
-                                .max_earnings_per_creator / 100
-                            ).toFixed(2)}{" "}
-                            total from this contest.
-                          </AlertDescription>
-                        </Alert>
-                      )}
+                            <AlertTriangle
+                              className={cn(
+                                isDark ? "text-purple-400" : "text-amber-600",
+                              )}
+                            />
+                            <AlertDescription
+                              className={cn(
+                                isDark ? "text-white" : "text-amber-800",
+                              )}
+                            >
+                              <strong>Earnings Cap:</strong> You can earn up to $
+                              {(
+                                contest.contest_based_details.cpm_contest
+                                  .max_earnings_per_creator / 100
+                              ).toFixed(2)}{" "}
+                              total from this contest.
+                            </AlertDescription>
+                          </Alert>
+                        )}
                     </div>
                   </CardContent>
                 </Card>
