@@ -85,13 +85,66 @@ export class TikTokBusinessApiClient {
   }
 
   /**
-   * Refreshes the access token.
-   * Note: Some Business API apps don't provide refresh tokens; they use long-lived tokens.
+   * Refreshes the creator/marketing access token (valid ~24h per TikTok; refresh token ~1y).
+   * POST /open_api/v1.3/oauth2/refresh_token/
    */
-  async refreshAccessToken(refreshToken: string) {
-    // TTO Refresh implementation if available
-    // For now, returning the same or throwing if not supported
-    throw new Error("Refresh token flow not implemented for Business API yet.");
+  async oauth2RefreshCreatorToken(refreshToken: string): Promise<Record<string, unknown>> {
+    const url = `${this.baseUrl}/oauth2/refresh_token/`;
+    const body = {
+      app_id: this.appId,
+      secret: this.secret,
+      refresh_token: refreshToken,
+    };
+
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+
+    const text = await res.text();
+    let data: Record<string, unknown>;
+    try {
+      data = JSON.parse(text) as Record<string, unknown>;
+    } catch {
+      console.error("[TikTok Business API] oauth2/refresh_token non-JSON:", {
+        status: res.status,
+        snippet: text.slice(0, 200),
+      });
+      throw new TikTokBusinessApiError(
+        `refresh_token invalid response (${res.status}): ${text.slice(0, 120).trim() || res.statusText}`,
+        res.status,
+        text,
+      );
+    }
+
+    this.handleErrorResponse(res.status, data);
+    return data;
+  }
+
+  /**
+   * @deprecated Use {@link oauth2RefreshCreatorToken}. Kept name avoids accidental use for Login Kit.
+   */
+  async refreshAccessToken(_refreshToken: string) {
+    throw new Error("Use oauth2RefreshCreatorToken for TikTok Business (Marketing) tokens.");
+  }
+
+  private async parseJsonBody(res: Response): Promise<Record<string, unknown>> {
+    const text = await res.text();
+    try {
+      return JSON.parse(text) as Record<string, unknown>;
+    } catch {
+      console.error("[TikTok Business API] Non-JSON body:", {
+        status: res.status,
+        url: res.url,
+        snippet: text.slice(0, 200),
+      });
+      throw new TikTokBusinessApiError(
+        `Expected JSON (${res.status}): ${text.slice(0, 120).trim() || "empty body"}`,
+        res.status,
+        text,
+      );
+    }
   }
 
   /**
@@ -108,7 +161,7 @@ export class TikTokBusinessApiClient {
       },
     });
 
-    const data = await res.json();
+    const data = await this.parseJsonBody(res);
     this.handleErrorResponse(res.status, data);
 
     return data;
@@ -122,14 +175,22 @@ export class TikTokBusinessApiClient {
    * Display API video fields (documented): https://developers.tiktok.com/doc/tiktok-api-v2-video-object
    *
    * @param videoUrl Typically `share_url` from Display API for that video.
+   * @param opts.ttoTcmAccountId Required by TikTok as `tto_tcm_account_id` on this endpoint.
    */
-  async getTcmReport(accessToken: string, videoUrl: string) {
+  async getTcmReport(
+    accessToken: string,
+    videoUrl: string,
+    opts?: { ttoTcmAccountId?: string | null },
+  ) {
     const url = `${this.baseUrl}/tto/tcm/report/`;
-    
-    // Query shape per integration; confirm in Business API docs for your app.
+
     const params = new URLSearchParams({
       video_url: videoUrl,
     });
+    const tto = opts?.ttoTcmAccountId?.trim();
+    if (tto) {
+      params.set("tto_tcm_account_id", tto);
+    }
 
     const res = await fetch(`${url}?${params.toString()}`, {
       method: "GET",
@@ -138,7 +199,7 @@ export class TikTokBusinessApiClient {
       },
     });
 
-    const data = await res.json();
+    const data = await this.parseJsonBody(res);
     this.handleErrorResponse(res.status, data);
 
     return data;
@@ -241,13 +302,26 @@ export class TikTokBusinessApiClient {
     return out;
   }
 
-  async getAudienceDemographics(accessToken: string, creatorId: string) {
+  async getAudienceDemographics(
+    accessToken: string,
+    creatorId: string,
+    opts?: { ttoTcmAccountId?: string | null },
+  ) {
     const url = `${this.baseUrl}/tto/tcm/creator/public/get/`;
-    
+
     const params = new URLSearchParams({
       creator_id: creatorId,
-      fields: JSON.stringify(["audience_age", "audience_gender", "audience_country", "audience_device"]),
+      fields: JSON.stringify([
+        "audience_age",
+        "audience_gender",
+        "audience_country",
+        "audience_device",
+      ]),
     });
+    const tto = opts?.ttoTcmAccountId?.trim();
+    if (tto) {
+      params.set("tto_tcm_account_id", tto);
+    }
 
     const res = await fetch(`${url}?${params.toString()}`, {
       method: "GET",
@@ -256,7 +330,7 @@ export class TikTokBusinessApiClient {
       },
     });
 
-    const data = await res.json();
+    const data = await this.parseJsonBody(res);
     this.handleErrorResponse(res.status, data);
 
     return data;
