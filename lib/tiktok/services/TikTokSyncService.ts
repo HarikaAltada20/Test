@@ -24,6 +24,65 @@ export class TikTokSyncService {
     }
 
     /**
+     * Business/Marketing access tokens expire in ~24h. Refresh using refresh_token when near expiry.
+     */
+    private async ensureMarketingAccessFresh(
+        connection: Record<string, any>,
+        creatorId: string,
+    ): Promise<Record<string, any>> {
+        const marketing = connection.marketing;
+        if (!marketing?.access_token || !marketing?.refresh_token) {
+            return connection;
+        }
+
+        const expMs = marketing.access_token_expires_at
+            ? new Date(marketing.access_token_expires_at).getTime()
+            : 0;
+        const bufferMs = 5 * 60 * 1000;
+        const needsRefresh =
+            !expMs ||
+            !Number.isFinite(expMs) ||
+            expMs <= Date.now() + bufferMs;
+
+        if (!needsRefresh) {
+            return connection;
+        }
+
+        try {
+            const fresh = await this.provider.refreshBusinessCreatorToken(
+                marketing.refresh_token,
+            );
+            const newMarketing = {
+                ...marketing,
+                access_token: fresh.accessToken,
+                refresh_token: fresh.refreshToken,
+                access_token_expires_at: new Date(
+                    Date.now() + fresh.expiresIn * 1000,
+                ).toISOString(),
+                last_token_refresh_at: new Date().toISOString(),
+            };
+            const next = { ...connection, marketing: newMarketing };
+            await this.supabase
+                .from("creator_profiles")
+                .update({
+                    tiktok_account: next,
+                    updated_at: new Date().toISOString(),
+                })
+                .eq("id", creatorId);
+            console.log(
+                `[TikTokSync] Refreshed Marketing access token for ${creatorId}`,
+            );
+            return next;
+        } catch (e: unknown) {
+            const msg = e instanceof Error ? e.message : String(e);
+            console.warn(
+                `[TikTokSync] Marketing token refresh failed (user may need to reconnect Marketing): ${msg}`,
+            );
+            return connection;
+        }
+    }
+
+    /**
      * Syncs one creator's metrics from TikTok to Supabase.
      */
     async syncCreatorMetrics(creatorId: string) {
@@ -86,12 +145,31 @@ export class TikTokSyncService {
             const videoIds = recentVideos.videos.map((v: any) => v.id);
 
             // 3.1. Handle Marketing/Business Data if connected
-            const marketing = connection.marketing;
+            connection = await this.ensureMarketingAccessFresh(connection, creatorId);
+            let marketing = connection.marketing;
             if (marketing && marketing.access_token) {
                 console.log(`[TikTokSync] Marketing account found for ${creatorId}, fetching advanced data...`);
+                const ttoForTcm =
+                    marketing.tto_tcm_account_id ??
+                    marketing.creator_id ??
+                    marketing.business_id ??
+                    null;
+                const demographicsCreatorId =
+                    marketing.creator_id ||
+                    marketing.business_id ||
+                    connection.platform_user_id;
                 try {
+                    if (!demographicsCreatorId) {
+                        console.warn(
+                            `[TikTokSync] Skip demographics: no creator_id / business_id / platform_user_id`,
+                        );
+                    } else {
                     // Fetch Demographics
-                    const demographics = await this.provider.getDemographics(marketing.access_token, marketing.creator_id || connection.platform_user_id);
+                    const demographics = await this.provider.getDemographics(
+                        marketing.access_token,
+                        demographicsCreatorId,
+                        { ttoTcmAccountId: ttoForTcm },
+                    );
                     
                     // Store demographics inside the tiktok_account object
                     const updatedConnection = {
@@ -115,6 +193,8 @@ export class TikTokSyncService {
                     
                     // Update connection for the rest of the function
                     connection = updatedConnection;
+                    marketing = connection.marketing;
+                    }
                 } catch (dmErr: any) {
                     console.warn(`[TikTokSync] Failed to sync demographics for ${creatorId}. This may be because the business key is invalid or permissions are missing. Error: ${dmErr.message}`);
                 }
@@ -123,6 +203,12 @@ export class TikTokSyncService {
             }
 
             if (videoIds.length > 0) {
+                marketing = connection.marketing;
+                const ttoForVideoReports =
+                    marketing?.tto_tcm_account_id ??
+                    marketing?.creator_id ??
+                    marketing?.business_id ??
+                    null;
                 // 3.5 Organic Business video list (richer metrics than Display API alone)
                 let organicByItemId = new Map<string, TikTokBusinessVideoRowMetrics>();
                 if (marketing?.access_token) {
@@ -190,11 +276,12 @@ export class TikTokSyncService {
                             const pick = (o: number, d: number) => (o > 0 ? o : d);
 
                             let rawDetailed: unknown = null;
-                            if (marketing && marketing.access_token) {
+                            if (marketing && marketing.access_token && ttoForVideoReports) {
                                 try {
                                     rawDetailed = await this.provider.getDetailedMetrics(
                                         marketing.access_token,
                                         match.url,
+                                        ttoForVideoReports,
                                     );
                                     const tcm = normalizeTcmVideoReport(rawDetailed);
                                     if (tcm && (tcm.reach > 0 || tcm.save_count > 0)) {
@@ -212,6 +299,13 @@ export class TikTokSyncService {
                                         e.message,
                                     );
                                 }
+                            } else if (
+                                marketing?.access_token &&
+                                !ttoForVideoReports
+                            ) {
+                                console.warn(
+                                    `[TikTokSync] Skip TCM report for ${match.videoId}: set tto_tcm_account_id (reconnect TikTok Marketing / Business)`,
+                                );
                             }
 
                             // TCM per-video report (best-effort) — supplements fields missing from business/video/list

@@ -217,19 +217,54 @@ export class TikTokProvider implements IPlatformProvider {
    * Fetches detailed metrics from TikTok Business API for a specific video.
    * This provides data like average watch time, completion rate, etc.
    */
-  async getDetailedMetrics(marketingAccessToken: string, videoUrl: string) {
+  async getDetailedMetrics(
+    marketingAccessToken: string,
+    videoUrl: string,
+    ttoTcmAccountId?: string | null,
+  ) {
     console.log(`[TikTokProvider] Fetching detailed metrics for video: ${videoUrl}`);
-    const data = await this.businessClient.getTcmReport(marketingAccessToken, videoUrl);
-    return data.data; // Return the detailed report
+    const data = await this.businessClient.getTcmReport(
+      marketingAccessToken,
+      videoUrl,
+      { ttoTcmAccountId: ttoTcmAccountId ?? undefined },
+    );
+    return data.data;
   }
 
   /**
    * Fetches audience demographics from TikTok Business API.
    */
-  async getDemographics(marketingAccessToken: string, creatorId: string) {
+  async getDemographics(
+    marketingAccessToken: string,
+    creatorId: string,
+    opts?: { ttoTcmAccountId?: string | null },
+  ) {
     console.log(`[TikTokProvider] Fetching audience demographics for creator: ${creatorId}`);
-    const data = await this.businessClient.getAudienceDemographics(marketingAccessToken, creatorId);
+    const data = await this.businessClient.getAudienceDemographics(
+      marketingAccessToken,
+      creatorId,
+      { ttoTcmAccountId: opts?.ttoTcmAccountId ?? undefined },
+    );
     return data.data;
+  }
+
+  /**
+   * Refreshes Marketing (Business API) access token using the stored refresh_token.
+   */
+  async refreshBusinessCreatorToken(refreshToken: string) {
+    const res = await this.businessClient.oauth2RefreshCreatorToken(refreshToken);
+    const data = res.data as Record<string, unknown> | undefined;
+    if (!data || typeof data !== "object") {
+      throw new Error("TikTok Business refresh_token response missing data");
+    }
+    return {
+      accessToken: String(data.access_token ?? ""),
+      refreshToken:
+        data.refresh_token != null
+          ? String(data.refresh_token)
+          : refreshToken,
+      expiresIn: Number(data.expires_in ?? data.expires ?? 86400),
+    };
   }
 
   /**

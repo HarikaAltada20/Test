@@ -44,21 +44,38 @@ export async function GET(req: NextRequest) {
         throw new Error(tokenData.message || "Failed to exchange marketing token");
     }
 
-    const {
-      access_token,
-      advertiser_ids,
-      creator_ids,
-      business_id,
-      core_user_id,
-    } = tokenData.data as {
-      access_token?: string;
-      advertiser_ids?: string[];
-      creator_ids?: string[];
-      business_id?: string;
-      core_user_id?: string;
+    const raw = tokenData.data as Record<string, unknown>;
+    const str = (v: unknown): string | undefined => {
+      if (v == null) return undefined;
+      const s = String(v);
+      return s.length ? s : undefined;
     };
-    
-    console.log("[TikTok Marketing Callback] Success! Received tokens for creators:", creator_ids);
+
+    const access_token = str(raw.access_token);
+    if (!access_token) {
+      throw new Error("Marketing token response missing access_token");
+    }
+
+    const refresh_token = str(raw.refresh_token);
+    const expiresIn = Number(raw.expires_in ?? raw.expires ?? 86400);
+    const access_token_expires_at = new Date(
+      Date.now() + (Number.isFinite(expiresIn) ? expiresIn : 86400) * 1000,
+    ).toISOString();
+
+    const creator_ids = Array.isArray(raw.creator_ids)
+      ? (raw.creator_ids as unknown[]).map((x) => String(x)).filter(Boolean)
+      : [];
+    const advertiser_ids = Array.isArray(raw.advertiser_ids)
+      ? (raw.advertiser_ids as unknown[]).map((x) => String(x)).filter(Boolean)
+      : [];
+
+    console.log("[TikTok Marketing Callback] Token response keys:", Object.keys(raw));
+    console.log(
+      "[TikTok Marketing Callback] creator_ids count:",
+      creator_ids.length,
+      "advertiser_ids count:",
+      advertiser_ids.length,
+    );
 
     // 4. Get User Profile to link
     const supabase = await createClient();
@@ -76,14 +93,51 @@ export async function GET(req: NextRequest) {
       .eq("id", user.id)
       .single();
 
+    const prev = (profile?.tiktok_account?.marketing ?? {}) as Record<
+      string,
+      unknown
+    >;
+
+    const business_id =
+      str(raw.business_id) ??
+      str(raw.core_user_id) ??
+      str(raw.open_id) ??
+      creator_ids[0] ??
+      str(prev.business_id) ??
+      null;
+
+    const creator_id =
+      creator_ids[0] ??
+      str(raw.creator_id) ??
+      str(prev.creator_id) ??
+      null;
+
+    /** TCM endpoints require tto_tcm_account_id; fall back to creator/business id from OAuth. */
+    const tto_tcm_account_id =
+      str(raw.tto_tcm_account_id) ??
+      str(raw.tto_tcm_account) ??
+      str(raw.tcm_account_id) ??
+      creator_id ??
+      business_id ??
+      str(prev.tto_tcm_account_id) ??
+      null;
+
+    const advertiser_id =
+      advertiser_ids[0] ??
+      str(raw.advertiser_id) ??
+      str(prev.advertiser_id) ??
+      null;
+
     const marketingData = {
+      ...prev,
       access_token,
-      creator_id: creator_ids?.[0],
-      advertiser_id: advertiser_ids?.[0],
-      /** Required for GET …/business/video/list/ — set from token when TikTok returns it. */
-      business_id:
-        business_id ?? core_user_id ?? creator_ids?.[0] ?? null,
-      connected_at: new Date().toISOString(),
+      refresh_token: refresh_token ?? str(prev.refresh_token) ?? null,
+      access_token_expires_at,
+      creator_id,
+      advertiser_id,
+      business_id,
+      tto_tcm_account_id,
+      connected_at: str(prev.connected_at) ?? new Date().toISOString(),
       last_synced_at: new Date().toISOString(),
     };
 
