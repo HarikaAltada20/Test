@@ -6,22 +6,14 @@ import {
   IPlatformProvider,
 } from "../../core/interfaces/IPlatformProvider";
 import { TikTokApiClient } from "../api/TikTokApiClient";
-import { TikTokBusinessApiClient } from "../api/TikTokBusinessApiClient";
-import {
-  mapBusinessVideoListRow,
-  type TikTokBusinessVideoRowMetrics,
-} from "@/lib/tiktok/map-business-video-row";
 import crypto from "crypto";
 
 export class TikTokProvider implements IPlatformProvider {
   readonly platformId = "tiktok";
   private client: TikTokApiClient;
-  private businessClient: TikTokBusinessApiClient;
 
-  constructor(client?: TikTokApiClient, businessClient?: TikTokBusinessApiClient) {
-    // Allows dependency injection for testing or fallback to default
+  constructor(client?: TikTokApiClient) {
     this.client = client || new TikTokApiClient();
-    this.businessClient = businessClient || new TikTokBusinessApiClient();
   }
 
   getRedirectUri(): string {
@@ -37,11 +29,6 @@ export class TikTokProvider implements IPlatformProvider {
     const clientKey = this.client.getClientKey();
     const redirectUri = customRedirectUri || this.client.getRedirectUri();
 
-    // Required scopes for TikTok API
-    // user.info.basic: open_id, union_id, avatar_url, display_name
-    // user.info.profile: username, bio_description, is_verified, profile_deep_link
-    // user.info.stats: follower_count, following_count, likes_count, video_count (requires approval)
-    // video.list: access to user's video list
     const scopes =
       "user.info.basic,user.info.profile,user.info.stats,video.list";
 
@@ -53,7 +40,6 @@ export class TikTokProvider implements IPlatformProvider {
     url.searchParams.append("state", state);
 
     if (codeVerifier) {
-      // TikTok uses HEX-encoded SHA256 for code_challenge (NOT base64url per RFC 7636)
       const codeChallenge = crypto
         .createHash("sha256")
         .update(codeVerifier)
@@ -120,7 +106,6 @@ export class TikTokProvider implements IPlatformProvider {
   }
 
   async getRecentVideos(accessToken: string, since?: Date): Promise<VideoList> {
-    // For simplicity, fetching page 1
     const response = await this.client.getVideoList(accessToken);
     const videos = response.data?.videos || [];
 
@@ -152,12 +137,9 @@ export class TikTokProvider implements IPlatformProvider {
         like_count: v.like_count || 0,
         comment_count: v.comment_count || 0,
         share_count: v.share_count || 0,
-        save_count:
-          v.collect_count ?? v.save_count ?? v.favorite_count ?? 0,
       };
     });
 
-    // Filter videos by date if since parameter is provided and valid
     if (since && !isNaN(since.getTime())) {
       const sinceTime = since.getTime();
       mapped = mapped.filter((video: any) => {
@@ -193,101 +175,18 @@ export class TikTokProvider implements IPlatformProvider {
       return {
         videoId: v.id,
         platform: this.platformId,
-        creatorId: "unknown", // will be injected by SyncService
+        creatorId: "unknown",
         url: v.share_url,
         title: v.title || v.video_description,
         viewCount: v.view_count || 0,
         likeCount: v.like_count || 0,
         commentCount: v.comment_count || 0,
         shareCount: v.share_count || 0,
-        // Video Object doc: no saves/collect field. Map only if API returns extras.
-        saveCount:
-          v.collect_count ??
-          v.save_count ??
-          v.favorite_count ??
-          0,
+        saveCount: 0,
         duration: v.duration,
         cover_image_url: v.cover_image_url,
         publishedAt,
       };
     });
-  }
-
-  /**
-   * Fetches detailed metrics from TikTok Business API for a specific video.
-   * This provides data like average watch time, completion rate, etc.
-   */
-  async getDetailedMetrics(
-    marketingAccessToken: string,
-    videoUrl: string,
-    ttoTcmAccountId?: string | null,
-  ) {
-    console.log(`[TikTokProvider] Fetching detailed metrics for video: ${videoUrl}`);
-    const data = await this.businessClient.getTcmReport(
-      marketingAccessToken,
-      videoUrl,
-      { ttoTcmAccountId: ttoTcmAccountId ?? undefined },
-    );
-    return data.data;
-  }
-
-  /**
-   * Fetches audience demographics from TikTok Business API.
-   */
-  async getDemographics(
-    marketingAccessToken: string,
-    creatorId: string,
-    opts?: { ttoTcmAccountId?: string | null },
-  ) {
-    console.log(`[TikTokProvider] Fetching audience demographics for creator: ${creatorId}`);
-    const data = await this.businessClient.getAudienceDemographics(
-      marketingAccessToken,
-      creatorId,
-      { ttoTcmAccountId: opts?.ttoTcmAccountId ?? undefined },
-    );
-    return data.data;
-  }
-
-  /**
-   * Refreshes Marketing (Business API) access token using the stored refresh_token.
-   */
-  async refreshBusinessCreatorToken(refreshToken: string) {
-    const res = await this.businessClient.oauth2RefreshCreatorToken(refreshToken);
-    const data = res.data as Record<string, unknown> | undefined;
-    if (!data || typeof data !== "object") {
-      throw new Error("TikTok Business refresh_token response missing data");
-    }
-    return {
-      accessToken: String(data.access_token ?? ""),
-      refreshToken:
-        data.refresh_token != null
-          ? String(data.refresh_token)
-          : refreshToken,
-      expiresIn: Number(data.expires_in ?? data.expires ?? 86400),
-    };
-  }
-
-  /**
-   * GET /open_api/v1.3/business/video/list/ — organic videos + reach / watch metrics when available.
-   * @param businessId TikTok Business `business_id` (store on `marketing.business_id`; fallback to creator id).
-   */
-  async fetchBusinessOrganicVideoMetricsByItemId(
-    marketingAccessToken: string,
-    businessId: string,
-  ): Promise<Map<string, TikTokBusinessVideoRowMetrics>> {
-    const rows = await this.businessClient.listAllBusinessVideos(
-      marketingAccessToken,
-      businessId,
-      { maxPages: 25 },
-    );
-    const map = new Map<string, TikTokBusinessVideoRowMetrics>();
-    for (const row of rows) {
-      const m = mapBusinessVideoListRow(row);
-      if (m) map.set(m.itemId, m);
-    }
-    console.log(
-      `[TikTokProvider] business/video/list: ${map.size} videos for business_id=${businessId}`,
-    );
-    return map;
   }
 }

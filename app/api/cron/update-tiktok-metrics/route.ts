@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient as createAdminSupabaseClient } from "@supabase/supabase-js";
-import { TikTokSyncService } from "@/lib/tiktok/services/TikTokSyncService";
+import { syncCreatorTikTokDisplayMetrics } from "@/lib/tiktok/sync-tiktok-display-metrics";
 
 // Extract TikTok video ID from a content link
 function extractTikTokVideoId(contentLink: string): string | null {
@@ -285,17 +285,24 @@ export async function GET(request: Request) {
 
     console.log(`[TikTok Cron] Processing ${creators.length} creators with connected TikTok accounts.`);
 
-    // Process each creator using TikTokSyncService for advanced metrics
-    const syncService = new TikTokSyncService();
     let totalSyncedSubmissions = 0;
 
     for (const creator of creators) {
-      console.log(`[TikTok Refresh] Manually triggering sync for creator: ${creator.id}`);
-      const result = await syncService.syncCreatorMetrics(creator.id);
-      
+      const subs = submissionsByCreator[creator.id] || [];
+      console.log(
+        `[TikTok Refresh] Display API sync for creator: ${creator.id} (${subs.length} submissions)`,
+      );
+      const result = await syncCreatorTikTokDisplayMetrics(
+        supabaseAdmin,
+        creator.id,
+        subs,
+      );
+
       if (result.success) {
         totalSyncedSubmissions += result.videosSynced || 0;
-        console.log(`[TikTok Refresh] Successfully synced ${result.videosSynced} videos for ${creator.id}`);
+        console.log(
+          `[TikTok Refresh] Synced ${result.videosSynced} submission(s) for ${creator.id}`,
+        );
       } else {
         console.error(`[TikTok Refresh] Sync failed for ${creator.id}:`, result.error);
       }
@@ -308,8 +315,10 @@ export async function GET(request: Request) {
     );
 
     return NextResponse.json({
-      message: `Updated total ${totalSyncedSubmissions} TikTok submissions using advanced sync service`,
-      details: isContestSpecific ? `Targeted contest ${contestId}` : `Global TikTok refresh`
+      message: `Updated ${totalSyncedSubmissions} TikTok submission(s) via Display API (Login Kit)`,
+      details: isContestSpecific
+        ? `Targeted contest ${contestId}`
+        : `Global TikTok refresh`,
     });
   } catch (error: any) {
     console.error("[TikTok Cron] Job failed:", error);

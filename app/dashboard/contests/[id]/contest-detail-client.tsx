@@ -86,7 +86,6 @@ import PaymentModal from "@/components/PaymentModal";
 import ManualPointsModal from "@/components/ManualPointsModal";
 import { CreatorSubmissionsModal } from "@/components/CreatorSubmissionsModal";
 import { InstagramCreatorAnalyticsModal } from "@/components/contest/InstagramCreatorAnalyticsModal";
-import { TikTokCreatorAnalyticsModal } from "@/components/contest/TikTokCreatorAnalyticsModal";
 import { BudgetProgress } from "@/components/BudgetProgress";
 import { YouTubeAnalyticsPanel } from "@/components/youtube/YouTubeAnalyticsPanel";
 import { YT_ANALYTICS_DEFAULT_WINDOW_DAYS } from "@/lib/youtube-constants";
@@ -1102,16 +1101,6 @@ export default function ContestDetailClient({
     useState<string | null>(null);
   const clearIgAnalyticsButtonLoading = useCallback(() => {
     setIgAnalyticsLoadingCreatorId(null);
-  }, []);
-  const [tkAnalyticsOpen, setTkAnalyticsOpen] = useState(false);
-  const [tkAnalyticsCreatorId, setTkAnalyticsCreatorId] = useState<
-    string | null
-  >(null);
-  const [tkAnalyticsCreatorLabel, setTkAnalyticsCreatorLabel] = useState("");
-  const [tkAnalyticsLoadingCreatorId, setTkAnalyticsLoadingCreatorId] =
-    useState<string | null>(null);
-  const clearTkAnalyticsButtonLoading = useCallback(() => {
-    setTkAnalyticsLoadingCreatorId(null);
   }, []);
   // YouTube table: which columns are visible (admin/brand can customize)
   const [ytVisibleColumns, setYtVisibleColumns] = useState<string[]>(
@@ -4701,40 +4690,24 @@ export default function ContestDetailClient({
         total_watch_time_ms: igStats.total_watch_time_ms || 0,
       };
     } else if (platform?.includes("tiktok")) {
-      const tiktokStats = stats.tiktok || stats;
+      const t = stats.tiktok ?? {};
+      const views = Number(t.view_count ?? 0);
+      const likes = Number(t.like_count ?? 0);
+      const comments = Number(t.comment_count ?? 0);
+      const shares = Number(t.share_count ?? 0);
+      const total_interactions = likes + comments + shares;
+      const engagement_rate =
+        views > 0
+          ? Math.round((total_interactions / views) * 10000) / 100
+          : 0;
       return {
-        views: baseViews,
-        likes: tiktokStats.likes || tiktokStats.like_count || 0,
-        comments: tiktokStats.comments || tiktokStats.comment_count || 0,
-        shares: tiktokStats.shares || tiktokStats.share_count || 0,
-        saves: tiktokStats.saves || tiktokStats.save_count || tiktokStats.collect_count || 0,
-        favorites: tiktokStats.favorites || 0,
-        reach: tiktokStats.reach || tiktokStats.reach_count || tiktokStats.video_reach_count || 0,
-        impressions: tiktokStats.impressions || tiktokStats.impression_count || 0,
-        total_interactions:
-          tiktokStats.total_interactions ??
-          (Number(tiktokStats.likes || tiktokStats.like_count || 0) +
-            Number(tiktokStats.comments || tiktokStats.comment_count || 0) +
-            Number(tiktokStats.shares || tiktokStats.share_count || 0) +
-            Number(tiktokStats.saves || tiktokStats.save_count || 0)),
-        avg_watch_time_ms: tiktokStats.avg_watch_time_ms || 0,
-        total_watch_time_ms: tiktokStats.total_watch_time_ms || 0,
-        full_video_watched_rate:
-          tiktokStats.full_video_watched_rate ??
-          tiktokStats.fullVideoWatchedRate ??
-          0,
-        new_followers: tiktokStats.new_followers || 0,
-        profile_views: tiktokStats.profile_views || 0,
-        website_clicks: tiktokStats.website_clicks || 0,
-        impression_sources: tiktokStats.impression_sources || null,
-        audience_genders: tiktokStats.audience_genders || null,
-        audience_countries: tiktokStats.audience_countries || null,
-        audience_cities: tiktokStats.audience_cities || null,
-        audience_types: tiktokStats.audience_types || null,
-        video_view_retention: tiktokStats.video_view_retention || null,
-        engagement_likes: tiktokStats.engagement_likes || null,
-        engagement_rate: tiktokStats.engagement_rate || 0,
-        last_updated: tiktokStats.last_updated || null,
+        views,
+        likes,
+        comments,
+        shares,
+        total_interactions,
+        engagement_rate,
+        last_updated: t.last_updated ?? null,
       };
     } else if (platform?.includes("twitter")) {
       const twitterStats = stats.twitter || stats;
@@ -11820,9 +11793,17 @@ export default function ContestDetailClient({
                               {currentContest.platform
                                 ?.toLowerCase()
                                 .includes("tiktok") && (
-                                <TableHead className="text-center">
-                                  Shares
-                                </TableHead>
+                                <>
+                                  <TableHead className="text-center">
+                                    Shares
+                                  </TableHead>
+                                  <TableHead className="text-center">
+                                    Total engagement
+                                  </TableHead>
+                                  <TableHead className="text-center">
+                                    Engagement rate
+                                  </TableHead>
+                                </>
                               )}
                               {currentContest.platform
                                 ?.toLowerCase()
@@ -12928,12 +12909,26 @@ export default function ContestDetailClient({
                                   {currentContest.platform
                                     ?.toLowerCase()
                                     .includes("tiktok") && (
-                                    <TableCell className="text-center font-mono text-sm">
-                                      <div className="flex items-center justify-center gap-1">
-                                        <Share2 className="h-3 w-3 text-purple-500" />
-                                        {formatMetricValue(metrics.shares)}
-                                      </div>
-                                    </TableCell>
+                                    <>
+                                      <TableCell className="text-center font-mono text-sm">
+                                        <div className="flex items-center justify-center gap-1">
+                                          <Share2 className="h-3 w-3 text-purple-500" />
+                                          {formatMetricValue(metrics.shares)}
+                                        </div>
+                                      </TableCell>
+                                      <TableCell className="text-center font-mono text-sm">
+                                        {formatMetricValue(
+                                          metrics.total_interactions ?? 0,
+                                        )}
+                                      </TableCell>
+                                      <TableCell className="text-center font-mono text-sm">
+                                        {metrics.views > 0
+                                          ? `${formatMetricValue(
+                                              metrics.engagement_rate ?? 0,
+                                            )}%`
+                                          : "—"}
+                                      </TableCell>
+                                    </>
                                   )}
                                   {currentContest.platform
                                     ?.toLowerCase()
@@ -14306,6 +14301,18 @@ export default function ContestDetailClient({
                                           Shares
                                         </TableHead>
                                       )}
+                                      {currentContest.platform
+                                        ?.toLowerCase()
+                                        .includes("tiktok") && (
+                                        <>
+                                          <TableHead className="text-center">
+                                            Total engagement
+                                          </TableHead>
+                                          <TableHead className="text-center">
+                                            Engagement rate
+                                          </TableHead>
+                                        </>
+                                      )}
                                       {/* Instagram-specific metrics */}
                                       {currentContest.platform
                                         ?.toLowerCase()
@@ -14438,7 +14445,14 @@ export default function ContestDetailClient({
                                 {paginatedCreatorGroups.length === 0 ? (
                                   <TableRow>
                                     <TableCell
-                                      colSpan={12}
+                                      colSpan={
+                                        12 +
+                                        (currentContest.platform
+                                          ?.toLowerCase()
+                                          .includes("tiktok")
+                                          ? 2
+                                          : 0)
+                                      }
                                       className="text-center py-8 text-gray-500"
                                     >
                                       No creators found for the selected status
@@ -14910,6 +14924,40 @@ export default function ContestDetailClient({
                                                   </div>
                                                 </TableCell>
                                               )}
+                                              {currentContest.platform
+                                                ?.toLowerCase()
+                                                .includes("tiktok") &&
+                                                (() => {
+                                                  const ttEng =
+                                                    (group.metrics.likes ||
+                                                      0) +
+                                                    (group.metrics.comments ||
+                                                      0) +
+                                                    (group.metrics.shares || 0);
+                                                  const ttViews =
+                                                    group.metrics.views || 0;
+                                                  const ttRate =
+                                                    ttViews > 0
+                                                      ? Math.round(
+                                                          (ttEng / ttViews) *
+                                                            10000,
+                                                        ) / 100
+                                                      : 0;
+                                                  return (
+                                                    <>
+                                                      <TableCell className="text-center font-mono text-sm">
+                                                        {formatMetricValue(
+                                                          ttEng,
+                                                        )}
+                                                      </TableCell>
+                                                      <TableCell className="text-center font-mono text-sm">
+                                                        {ttViews > 0
+                                                          ? `${formatMetricValue(ttRate)}%`
+                                                          : "—"}
+                                                      </TableCell>
+                                                    </>
+                                                  );
+                                                })()}
                                               {/* Instagram-specific metrics */}
                                               {currentContest.platform
                                                 ?.toLowerCase()
@@ -15253,49 +15301,6 @@ export default function ContestDetailClient({
                                                        }}
                                                      >
                                                        {igAnalyticsLoadingCreatorId ===
-                                                      group.creator.id ? (
-                                                        <>
-                                                          <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin" />
-                                                          Opening…
-                                                        </>
-                                                      ) : (
-                                                        "Show analytics"
-                                                      )}
-                                                    </Button>
-                                                  )}
-                                                {isAdminView &&
-                                                  currentContest.platform
-                                                    ?.toLowerCase()
-                                                    .includes("tiktok") && (
-                                                    <Button
-                                                      size="sm"
-                                                      variant="outline"
-                                                      className={cn(
-                                                        "border min-w-[8.5rem] inline-flex items-center justify-center gap-1.5",
-                                                        isDark
-                                                          ? "bg-[#170337] border-cyan-500/50 text-white"
-                                                          : "border-cyan-300 bg-cyan-50 text-cyan-900",
-                                                      )}
-                                                      disabled={
-                                                        tkAnalyticsLoadingCreatorId ===
-                                                        group.creator.id
-                                                      }
-                                                      onClick={() => {
-                                                        setTkAnalyticsCreatorId(
-                                                          group.creator.id,
-                                                        );
-                                                        setTkAnalyticsCreatorLabel(
-                                                          group.creator
-                                                            .username ||
-                                                            group.creator.id,
-                                                        );
-                                                        setTkAnalyticsLoadingCreatorId(
-                                                          group.creator.id,
-                                                        );
-                                                        setTkAnalyticsOpen(true);
-                                                      }}
-                                                    >
-                                                      {tkAnalyticsLoadingCreatorId ===
                                                       group.creator.id ? (
                                                         <>
                                                           <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin" />
@@ -18887,23 +18892,6 @@ export default function ContestDetailClient({
           creatorLabel={igAnalyticsCreatorLabel}
           isDark={isDark}
           onFetchComplete={clearIgAnalyticsButtonLoading}
-        />
-      )}
-      {tkAnalyticsCreatorId && (
-        <TikTokCreatorAnalyticsModal
-          open={tkAnalyticsOpen}
-          onOpenChange={(o) => {
-            setTkAnalyticsOpen(o);
-            if (!o) {
-              setTkAnalyticsCreatorId(null);
-              setTkAnalyticsLoadingCreatorId(null);
-            }
-          }}
-          contestId={contestId}
-          creatorId={tkAnalyticsCreatorId}
-          creatorLabel={tkAnalyticsCreatorLabel}
-          isDark={isDark}
-          onFetchComplete={clearTkAnalyticsButtonLoading}
         />
       )}
     </div>
