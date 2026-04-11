@@ -155,7 +155,6 @@ export async function GET(req: NextRequest) {
       );
     }
 
-    // Fetch existing profile to preserve other fields (like 'marketing')
     const { data: existingProfile } = await supabase
       .from("creator_profiles")
       .select("tiktok_account")
@@ -181,8 +180,12 @@ export async function GET(req: NextRequest) {
       last_synced_at: new Date().toISOString(),
     };
 
-    const finalTikTokAccount = {
+    const prev = {
       ...(existingProfile?.tiktok_account || {}),
+    } as Record<string, unknown>;
+    delete prev.marketing;
+    const finalTikTokAccount = {
+      ...prev,
       ...connectionData,
     };
 
@@ -210,19 +213,8 @@ export async function GET(req: NextRequest) {
     }
 
     console.log("[TikTok Auth Callback] Connection stored successfully!");
-    
-    // 6. Final Redirect: If marketing is not connected, go to marketing auth. 
-    // Otherwise go back to settings.
-    const hasMarketing = !!existingProfile?.tiktok_account?.marketing;
-    let finalRedirectUrl = `${settingsUrl}?success=true&platform=tiktok`;
-    
-    if (!hasMarketing) {
-      console.log("[TikTok Auth Callback] Marketing not connected, redirecting to Marketing Auth...");
-      finalRedirectUrl = `${origin}/api/auth/tiktok/marketing/authorize`;
-    } else {
-      console.log("[TikTok Auth Callback] Marketing already connected, redirecting to settings.");
-    }
 
+    const finalRedirectUrl = `${settingsUrl}?success=true&platform=tiktok`;
     const finalResponse = NextResponse.redirect(finalRedirectUrl);
     
     // Apply cookie deletions

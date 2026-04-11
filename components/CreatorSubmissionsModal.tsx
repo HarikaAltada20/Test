@@ -1451,14 +1451,17 @@ export function CreatorSubmissionsModal({
                           >
                             Shares
                           </TableHead>
-                          <TableHead
-                            className={cn(
-                              "text-center",
-                              isDark ? "bg-[#391A6A] " : "bg-gray-50",
-                            )}
-                          >
-                            Saves
-                          </TableHead>
+                          {/* Saves: Instagram only — not in TikTok Display API */}
+                          {!isTikTokContest && (
+                            <TableHead
+                              className={cn(
+                                "text-center",
+                                isDark ? "bg-[#391A6A] " : "bg-gray-50",
+                              )}
+                            >
+                              Saves
+                            </TableHead>
+                          )}
                           {/* Reach and Interactions commented out for TikTok per user request */}
                           {!isTikTokContest && (
                             <>
@@ -1480,22 +1483,45 @@ export function CreatorSubmissionsModal({
                               </TableHead>
                             </>
                           )}
-                          <TableHead
-                            className={cn(
-                              "text-center",
-                              isDark ? "bg-[#391A6A] " : "bg-gray-50",
-                            )}
-                          >
-                            Avg Watch Time
-                          </TableHead>
-                          <TableHead
-                            className={cn(
-                              "text-center",
-                              isDark ? "bg-[#391A6A] " : "bg-gray-50",
-                            )}
-                          >
-                            Total Watch Time
-                          </TableHead>
+                          {isTikTokContest ? (
+                            <>
+                              <TableHead
+                                className={cn(
+                                  "text-center",
+                                  isDark ? "bg-[#391A6A] " : "bg-gray-50",
+                                )}
+                              >
+                                Total engagement
+                              </TableHead>
+                              <TableHead
+                                className={cn(
+                                  "text-center",
+                                  isDark ? "bg-[#391A6A] " : "bg-gray-50",
+                                )}
+                              >
+                                Engagement rate
+                              </TableHead>
+                            </>
+                          ) : (
+                            <>
+                              <TableHead
+                                className={cn(
+                                  "text-center",
+                                  isDark ? "bg-[#391A6A] " : "bg-gray-50",
+                                )}
+                              >
+                                Avg Watch Time
+                              </TableHead>
+                              <TableHead
+                                className={cn(
+                                  "text-center",
+                                  isDark ? "bg-[#391A6A] " : "bg-gray-50",
+                                )}
+                              >
+                                Total Watch Time
+                              </TableHead>
+                            </>
+                          )}
                         </>
                       )}
                     </>
@@ -1603,7 +1629,7 @@ export function CreatorSubmissionsModal({
                           ? 18 // Checkbox, #, Tweet, Total Points, Base Points, Manual Points, Likes, Replies, Retweets, Quote Reposts, Impressions, Expected Reward, Reward Granted, Manual Points Reason, Status, Rejection reason, Submitted, Actions
                           : 3 + // Checkbox, #, Content
                           3 + // Views, Likes, Comments
-                          ((isInstagramContest || isTikTokContest) ? (isTikTokContest ? 4 : 6) : 0) + // Shares, Saves, Reach(hidden for TT), Interactions(hidden for TT), Avg Watch Time, Total Watch Time
+                          ((isInstagramContest || isTikTokContest) ? (isTikTokContest ? 3 : 6) : 0) + // TT: Shares + total engagement + engagement rate; IG: +Saves, Reach, Interactions, Avg/Total watch
                           2 + // Expected Reward, Reward Granted
                           (hasBonus ? 2 : 0) + // Bonus Expected, Bonus Granted
                           (isAdminView && isInstagramContest ? 1 : 0) + // Insights status (admin only)
@@ -1626,13 +1652,13 @@ export function CreatorSubmissionsModal({
                       ? submission.other_stats?.likes || 0
                       : submission.other_stats?.youtube?.likes ||
                         submission.other_stats?.instagram?.likes ||
-                        submission.other_stats?.tiktok?.likes ||
+                        submission.other_stats?.tiktok?.like_count ||
                         0;
                     const comments = isTwitterTweet
                       ? submission.other_stats?.replies || 0
                       : submission.other_stats?.youtube?.comments ||
                         submission.other_stats?.instagram?.comments ||
-                        submission.other_stats?.tiktok?.comments ||
+                        submission.other_stats?.tiktok?.comment_count ||
                         0;
                     const platformStats =
                       submission.other_stats?.instagram ||
@@ -1640,8 +1666,8 @@ export function CreatorSubmissionsModal({
                       submission.other_stats ||
                       {};
                     const shares =
-                      (platformStats as any)?.shares ||
                       (platformStats as any)?.share_count ||
+                      (platformStats as any)?.shares ||
                       0;
                     const saves =
                       (platformStats as any)?.saves ||
@@ -1654,6 +1680,25 @@ export function CreatorSubmissionsModal({
                       (platformStats as any)?.avg_watch_time_ms || 0;
                     const totalWatchTimeMs =
                       (platformStats as any)?.total_watch_time_ms || 0;
+
+                    const tiktokViewsForRate = Number(
+                      submission.other_stats?.tiktok?.view_count ??
+                        submission.views ??
+                        0,
+                    );
+                    const tiktokTotalEngagement =
+                      isTikTokContest && !isTwitterTweet
+                        ? Number(likes) + Number(comments) + Number(shares)
+                        : 0;
+                    const tiktokEngagementRatePct =
+                      isTikTokContest &&
+                      !isTwitterTweet &&
+                      tiktokViewsForRate > 0
+                        ? Math.round(
+                            (tiktokTotalEngagement / tiktokViewsForRate) *
+                              10000,
+                          ) / 100
+                        : 0;
 
                     // Twitter-specific metrics
                     const retweets = submission.other_stats?.retweets || 0;
@@ -2152,9 +2197,11 @@ export function CreatorSubmissionsModal({
                                 <TableCell className="text-center font-mono">
                                   {formatMetricValue(shares)}
                                 </TableCell>
-                                <TableCell className="text-center font-mono">
-                                  {formatMetricValue(saves)}
-                                </TableCell>
+                                {!isTikTokContest && (
+                                  <TableCell className="text-center font-mono">
+                                    {formatMetricValue(saves)}
+                                  </TableCell>
+                                )}
                                 {/* Reach and Interactions commented out for TikTok per user request */}
                                 {!isTikTokContest && (
                                   <>
@@ -2166,40 +2213,55 @@ export function CreatorSubmissionsModal({
                                     </TableCell>
                                   </>
                                 )}
-                                <TableCell className="text-center font-mono">
-                                  <div className="flex flex-col items-center">
-                                    <span className="font-bold">
-                                      {formatWatchTime(avgWatchTimeMs)}
-                                    </span>
-                                    <span
-                                      className={cn(
-                                        "text-xs",
-                                        isDark
-                                          ? "text-gray-400"
-                                          : "text-gray-500",
-                                      )}
-                                    >
-                                      avg
-                                    </span>
-                                  </div>
-                                </TableCell>
-                                <TableCell className="text-center font-mono">
-                                  <div className="flex flex-col items-center">
-                                    <span className="font-bold">
-                                      {formatWatchTime(totalWatchTimeMs)}
-                                    </span>
-                                    <span
-                                      className={cn(
-                                        "text-xs",
-                                        isDark
-                                          ? "text-gray-400"
-                                          : "text-gray-500",
-                                      )}
-                                    >
-                                      total
-                                    </span>
-                                  </div>
-                                </TableCell>
+                                {isTikTokContest ? (
+                                  <>
+                                    <TableCell className="text-center font-mono">
+                                      {formatMetricValue(tiktokTotalEngagement)}
+                                    </TableCell>
+                                    <TableCell className="text-center font-mono">
+                                      {tiktokViewsForRate > 0
+                                        ? `${formatMetricValue(tiktokEngagementRatePct)}%`
+                                        : "—"}
+                                    </TableCell>
+                                  </>
+                                ) : (
+                                  <>
+                                    <TableCell className="text-center font-mono">
+                                      <div className="flex flex-col items-center">
+                                        <span className="font-bold">
+                                          {formatWatchTime(avgWatchTimeMs)}
+                                        </span>
+                                        <span
+                                          className={cn(
+                                            "text-xs",
+                                            isDark
+                                              ? "text-gray-400"
+                                              : "text-gray-500",
+                                          )}
+                                        >
+                                          avg
+                                        </span>
+                                      </div>
+                                    </TableCell>
+                                    <TableCell className="text-center font-mono">
+                                      <div className="flex flex-col items-center">
+                                        <span className="font-bold">
+                                          {formatWatchTime(totalWatchTimeMs)}
+                                        </span>
+                                        <span
+                                          className={cn(
+                                            "text-xs",
+                                            isDark
+                                              ? "text-gray-400"
+                                              : "text-gray-500",
+                                          )}
+                                        >
+                                          total
+                                        </span>
+                                      </div>
+                                    </TableCell>
+                                  </>
+                                )}
                               </>
                             )}
                             {/* Expected Reward and Reward Granted (only for non-Twitter) */}

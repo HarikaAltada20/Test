@@ -2348,10 +2348,10 @@ export default function SubmitContentPage({
     setMessage("Preparing TikTok video submission...");
 
     const tiktokStats = {
-      views: videoToSubmit.view_count || 0,
-      likes: videoToSubmit.like_count || 0,
-      comments: videoToSubmit.comment_count || 0,
-      shares: videoToSubmit.share_count || 0,
+      view_count: videoToSubmit.view_count || 0,
+      like_count: videoToSubmit.like_count || 0,
+      comment_count: videoToSubmit.comment_count || 0,
+      share_count: videoToSubmit.share_count || 0,
     };
 
     const submissionPayload = {
@@ -2424,10 +2424,10 @@ export default function SubmitContentPage({
     const submissionPromises = tiktokVideos.map(async (video) => {
       try {
         const tiktokStats = {
-          views: video.view_count || 0,
-          likes: video.like_count || 0,
-          comments: video.comment_count || 0,
-          shares: video.share_count || 0,
+          view_count: video.view_count || 0,
+          like_count: video.like_count || 0,
+          comment_count: video.comment_count || 0,
+          share_count: video.share_count || 0,
         };
 
         return await supabase

@@ -29,6 +29,10 @@ export class InvalidTokenException extends TikTokApiError {
   }
 }
 
+/** Display API video/list & video/query fields — https://developers.tiktok.com/doc/tiktok-api-v2-video-object */
+export const TIKTOK_DISPLAY_VIDEO_FIELDS =
+  "id,create_time,cover_image_url,share_url,video_description,duration,title,view_count,like_count,comment_count,share_count";
+
 export class TikTokApiClient {
   private readonly baseUrl = "https://open.tiktokapis.com/v2";
   private readonly clientKey: string;
@@ -248,18 +252,17 @@ export class TikTokApiClient {
       cursor: cursor ? parseInt(cursor, 10) : undefined,
     };
 
-    // Fields must match the documented Video object:
-    // https://developers.tiktok.com/doc/tiktok-api-v2-video-object
-    const fields =
-      "id,create_time,cover_image_url,share_url,video_description,duration,title,view_count,like_count,comment_count,share_count";
-    const res = await fetch(`${this.baseUrl}/video/list/?fields=${fields}`, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        "Content-Type": "application/json",
+    const res = await fetch(
+      `${this.baseUrl}/video/list/?fields=${TIKTOK_DISPLAY_VIDEO_FIELDS}`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(body),
       },
-      body: JSON.stringify(body),
-    });
+    );
 
     let data;
     const text = await res.text();
@@ -289,17 +292,17 @@ export class TikTokApiClient {
       },
     };
 
-    // https://developers.tiktok.com/doc/tiktok-api-v2-video-object
-    const fields =
-      "id,create_time,cover_image_url,share_url,video_description,duration,title,view_count,like_count,comment_count,share_count";
-    const res = await fetch(`${this.baseUrl}/video/query/?fields=${fields}`, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        "Content-Type": "application/json",
+    const res = await fetch(
+      `${this.baseUrl}/video/query/?fields=${TIKTOK_DISPLAY_VIDEO_FIELDS}`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(body),
       },
-      body: JSON.stringify(body),
-    });
+    );
 
     let data;
     const text = await res.text();
