@@ -9,13 +9,8 @@ import {
   getDefaultAnalyticsStartDate,
 } from "@/lib/youtube-analytics";
 
-// Type definition for the youtube_account JSON object
-type YouTubeAccount = {
-  access_token: string;
-  refresh_token: string;
-  expires_at: string; // ISO String timestamp
-  // Include other fields if they exist, though not strictly needed here
-};
+// youtube_account JSON from creator_profiles (tokens + channel fields)
+type YouTubeAccountJson = Record<string, any>;
 
 type SubmissionUpdate = {
   id: string;
@@ -25,7 +20,7 @@ type SubmissionUpdate = {
 
 type TokenUpdate = {
   userId: string;
-  newAccountData: YouTubeAccount;
+  newAccountData: YouTubeAccountJson;
 };
 
 // Helper function to chunk array
@@ -193,7 +188,7 @@ async function handleTokenRefresh(
   creator: any,
   tokenUpdates: TokenUpdate[]
 ): Promise<string | null> {
-  const account = creator.youtube_account as YouTubeAccount;
+  const account = creator.youtube_account as YouTubeAccountJson;
   if (!account?.refresh_token || !isTokenExpired(account.expires_at)) {
     return account.access_token;
   }
@@ -205,12 +200,21 @@ async function handleTokenRefresh(
       access_token: newTokens.access_token,
       expires_at: newTokens.expires_at,
       refresh_token: newTokens.refresh_token || account.refresh_token,
+      needs_reconnect: false,
     };
 
     tokenUpdates.push({ userId: creator.id, newAccountData });
     return newTokens.access_token;
   } catch (error) {
     console.error(`Token refresh failed for creator ${creator.id}:`, error);
+    tokenUpdates.push({
+      userId: creator.id,
+      newAccountData: {
+        ...account,
+        needs_reconnect: true,
+        updated_at: new Date().toISOString(),
+      },
+    });
     return null;
   }
 }

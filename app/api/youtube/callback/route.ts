@@ -104,7 +104,8 @@ export async function GET(request: NextRequest) {
       token_type: tokens.token_type,
       expires_at: newExpiresAt,
       scopes: tokens.scope?.split(' '),
-      updated_at: new Date().toISOString()
+      updated_at: new Date().toISOString(),
+      needs_reconnect: false,
     };
 
     console.log('Updating creator profile for user:', user.id);

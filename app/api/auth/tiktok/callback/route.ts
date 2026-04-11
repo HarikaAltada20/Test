@@ -187,6 +187,7 @@ export async function GET(req: NextRequest) {
     const finalTikTokAccount = {
       ...prev,
       ...connectionData,
+      needs_reconnect: false,
     };
 
     console.log("[TikTok Auth Callback] Updating creator_profiles:", {

@@ -135,11 +135,23 @@ export async function POST(request: Request) {
               access_token: newTokens.access_token,
               expires_at: newTokens.expires_at,
               refresh_token: newTokens.refresh_token || account.refresh_token,
+              needs_reconnect: false,
             },
             updated_at: new Date().toISOString(),
           })
           .eq("id", creator.id);
       } catch {
+        await supabaseAdmin
+          .from("creator_profiles")
+          .update({
+            youtube_account: {
+              ...account,
+              needs_reconnect: true,
+              updated_at: new Date().toISOString(),
+            },
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", creator.id);
         needsReauthCreators.push(creator.id);
         continue;
       }
