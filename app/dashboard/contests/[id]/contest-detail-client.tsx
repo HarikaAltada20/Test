@@ -4690,11 +4690,13 @@ export default function ContestDetailClient({
         total_watch_time_ms: igStats.total_watch_time_ms || 0,
       };
     } else if (platform?.includes("tiktok")) {
-      const t = stats.tiktok ?? {};
-      const views = Number(t.view_count ?? 0);
-      const likes = Number(t.like_count ?? 0);
-      const comments = Number(t.comment_count ?? 0);
-      const shares = Number(t.share_count ?? 0);
+      const t = stats.tiktok ?? ({} as Record<string, unknown>);
+      const views = Number(
+        t.view_count ?? t.views ?? baseViews ?? 0,
+      );
+      const likes = Number(t.like_count ?? t.likes ?? 0);
+      const comments = Number(t.comment_count ?? t.comments ?? 0);
+      const shares = Number(t.share_count ?? t.shares ?? 0);
       const total_interactions = likes + comments + shares;
       const engagement_rate =
         views > 0
@@ -18823,11 +18825,21 @@ export default function ContestDetailClient({
             )?.creator || {}
           }
           submissions={
-            (currentSubmissions || []).filter(
-              (s: any) => s.creator_id === selectedCreatorForModal,
-            ) as React.ComponentProps<
-              typeof CreatorSubmissionsModal
-            >["submissions"]
+            (() => {
+              const g = (groupSubmissionsByCreator as any[]).find(
+                (row: any) => row.creator.id === selectedCreatorForModal,
+              );
+              if (g?.submissions?.length) {
+                return g.submissions as React.ComponentProps<
+                  typeof CreatorSubmissionsModal
+                >["submissions"];
+              }
+              return (currentSubmissions || []).filter(
+                (s: any) => s.creator_id === selectedCreatorForModal,
+              ) as React.ComponentProps<
+                typeof CreatorSubmissionsModal
+              >["submissions"];
+            })()
           }
           contest={currentContest}
           creatorRank={
