@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { TikTokProvider } from "@/lib/tiktok/provider/TikTokProvider";
 import { extractTikTokVideoIdFromLink } from "@/lib/tiktok/extract-video-id";
+import { ensureFreshTikTokToken } from "@/lib/tiktok/ensure-fresh-tiktok-token";
 
 export type TikTokSubmissionRow = {
   id: string;
@@ -21,57 +22,15 @@ export async function syncCreatorTikTokDisplayMetrics(
 ): Promise<{ success: boolean; error?: string; videosSynced: number }> {
   const provider = new TikTokProvider();
 
-  const { data: profile, error } = await supabase
-    .from("creator_profiles")
-    .select("tiktok_account")
-    .eq("id", creatorId)
-    .single();
-
-  if (error || !profile?.tiktok_account) {
+  const tokenResult = await ensureFreshTikTokToken(supabase, creatorId);
+  if (!tokenResult.ok) {
     return {
       success: false,
-      error: `TikTok connection not found: ${error?.message ?? "unknown"}`,
+      error: tokenResult.error,
       videosSynced: 0,
     };
   }
-
-  let connection = profile.tiktok_account as Record<string, unknown>;
-  let access_token = connection.access_token as string;
-  let refresh_token = connection.refresh_token as string;
-  let expires_at = connection.expires_at as string;
-
-  if (!access_token) {
-    return { success: false, error: "Missing TikTok access_token", videosSynced: 0 };
-  }
-
-  const expirationDate = new Date(expires_at);
-  if (expirationDate <= new Date() && refresh_token) {
-    try {
-      const newTokens = await provider.refreshAccessToken(refresh_token);
-      access_token = newTokens.accessToken;
-      refresh_token = newTokens.refreshToken || refresh_token;
-      expires_at = new Date(
-        Date.now() + (newTokens.expiresIn || 86400) * 1000,
-      ).toISOString();
-      connection = {
-        ...connection,
-        access_token,
-        refresh_token,
-        expires_at,
-        last_synced_at: new Date().toISOString(),
-      };
-      await supabase
-        .from("creator_profiles")
-        .update({
-          tiktok_account: connection,
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", creatorId);
-    } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : String(e);
-      return { success: false, error: `Token refresh failed: ${msg}`, videosSynced: 0 };
-    }
-  }
+  const access_token = tokenResult.accessToken;
 
   const rows: { sub: TikTokSubmissionRow; videoId: string }[] = [];
   for (const sub of submissions) {

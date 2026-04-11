@@ -50,6 +50,7 @@ async function handleVerification(request: NextRequest) {
     // Check if token needs refresh
     if (new Date(youtubeAccount.expires_at) <= new Date()) {
       console.log(`Verify API: Token for user ${user.id} needs refresh. Old expiry: ${youtubeAccount.expires_at}`);
+      const accountBeforeRefresh = { ...youtubeAccount };
       try {
         // Call the centralized refreshAccessToken function
         const newTokens = await refreshAccessToken(youtubeAccount.refresh_token);
@@ -68,6 +69,8 @@ async function handleVerification(request: NextRequest) {
         youtubeAccount.expires_at = newExpiresAt;
         youtubeAccount.updated_at = new Date().toISOString(); // Update the timestamp within the JSONB
 
+        youtubeAccount.needs_reconnect = false;
+
         // Update the tokens in the database
         const { error: updateError } = await supabase
           .from('creator_profiles')
@@ -85,6 +88,17 @@ async function handleVerification(request: NextRequest) {
 
       } catch (refreshError) {
         console.error(`Verify API: Error refreshing token for user ${user.id}:`, refreshError);
+        await supabase
+          .from('creator_profiles')
+          .update({
+            youtube_account: {
+              ...accountBeforeRefresh,
+              needs_reconnect: true,
+              updated_at: new Date().toISOString(),
+            },
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', user.id);
         return NextResponse.json({ error: 'Failed to refresh token' }, { status: 401 });
       }
     }

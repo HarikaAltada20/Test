@@ -1752,9 +1752,15 @@ export default function SettingsPage({
                           Connected as{" "}
                           {youtubeAccount?.channel_title ||
                             "your YouTube account"}
-                          <span className="ml-2 text-green-600 text-xs">
-                            ✓ Active
-                          </span>
+                          {youtubeAccount?.needs_reconnect ? (
+                            <span className="ml-2 text-amber-600 text-xs">
+                              Needs reconnect
+                            </span>
+                          ) : (
+                            <span className="ml-2 text-green-600 text-xs">
+                              ✓ Active
+                            </span>
+                          )}
                         </p>
                       </div>
                     ) : (
@@ -1765,16 +1771,32 @@ export default function SettingsPage({
                   </div>
                 </div>
                 {youtubeConnected ? (
-                  <Button
-                    className="bg-[#C90808] text-white"
-                    onClick={handleYouTubeDisconnect}
-                    disabled={isLoadingYouTubeDisconnect}
-                  >
-                    {isLoadingYouTubeDisconnect && (
-                      <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
-                    )}
-                    Disconnect
-                  </Button>
+                  <div className="flex flex-col gap-2">
+                    <div className="flex items-center gap-2">
+                      <Button
+                        className="bg-[#C90808] text-white"
+                        onClick={handleYouTubeDisconnect}
+                        disabled={isLoadingYouTubeDisconnect}
+                      >
+                        {isLoadingYouTubeDisconnect && (
+                          <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+                        )}
+                        Disconnect
+                      </Button>
+                      {youtubeAccount?.needs_reconnect && (
+                        <Button
+                          onClick={handleYouTubeConnect}
+                          disabled={isLoadingYouTube}
+                          variant="default"
+                        >
+                          {isLoadingYouTube && (
+                            <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+                          )}
+                          Reconnect
+                        </Button>
+                      )}
+                    </div>
+                  </div>
                 ) : (
                   <Button
                     onClick={handleYouTubeConnect}
@@ -1787,6 +1809,21 @@ export default function SettingsPage({
                   </Button>
                 )}
               </div>
+              {youtubeConnected && youtubeAccount?.needs_reconnect && (
+                <Alert
+                  variant="destructive"
+                  className="mt-2 border-amber-500/50 bg-amber-500/10"
+                >
+                  <AlertTriangle className="h-4 w-4" />
+                  <AlertDescription className="text-sm leading-relaxed">
+                    Your YouTube connection needs to be reconnected. We
+                    couldn&apos;t refresh your access (e.g. revoked or expired
+                    refresh token). Click <strong>Reconnect</strong> above to
+                    sign in with Google again and restore video selection and
+                    verification.
+                  </AlertDescription>
+                </Alert>
+              )}
               {/* YouTube Connection Information - Display if not connected */}
               {!youtubeConnected && (
                 <Alert

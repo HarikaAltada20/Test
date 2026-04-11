@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/utils/supabase/server";
 import { TikTokApiClient } from "@/lib/tiktok/api/TikTokApiClient";
+import { ensureFreshTikTokToken } from "@/lib/tiktok/ensure-fresh-tiktok-token";
 
 /**
  * GET /api/auth/tiktok/video-info?video_id=<id>
@@ -34,40 +35,14 @@ export async function GET(request: Request) {
       );
     }
 
-    // Fetch user's TikTok account from creator_profiles
-    const { data: profile, error: profileError } = await supabase
-      .from("creator_profiles")
-      .select("tiktok_account")
-      .eq("id", user.id)
-      .single();
-
-    if (profileError || !profile?.tiktok_account) {
+    const tokenResult = await ensureFreshTikTokToken(supabase, user.id);
+    if (!tokenResult.ok) {
       return NextResponse.json(
-        { error: "TikTok account not connected" },
-        { status: 400 },
+        { error: tokenResult.error, expired: tokenResult.expired ?? false },
+        { status: tokenResult.expired ? 401 : 400 },
       );
     }
-
-    const tiktokAccount = profile.tiktok_account as any;
-    const accessToken = tiktokAccount.access_token;
-
-    if (!accessToken) {
-      return NextResponse.json(
-        { error: "TikTok access token not found" },
-        { status: 400 },
-      );
-    }
-
-    // Check token expiry
-    if (
-      tiktokAccount.expires_at &&
-      new Date(tiktokAccount.expires_at) <= new Date()
-    ) {
-      return NextResponse.json(
-        { error: "TikTok token expired. Please reconnect your account." },
-        { status: 401 },
-      );
-    }
+    const accessToken = tokenResult.accessToken;
 
     // Fetch video info using TikTok API
     const apiClient = new TikTokApiClient();
