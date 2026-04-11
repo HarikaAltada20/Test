@@ -92,6 +92,25 @@ interface Submission {
   metadata?: any;
 }
 
+/** TikTok Display API uses *_count; older rows may only have views/likes/comments/shares. */
+function effectiveTikTokSubmissionViews(sub: Submission): number {
+  return Number(
+    (sub.other_stats?.tiktok as Record<string, unknown> | undefined)
+      ?.view_count ??
+      (sub.other_stats?.tiktok as Record<string, unknown> | undefined)
+        ?.views ??
+      sub.views ??
+      0,
+  );
+}
+
+function effectiveSubmissionViewsForSort(sub: Submission): number {
+  if ((sub.platform || "").toLowerCase().includes("tiktok")) {
+    return effectiveTikTokSubmissionViews(sub);
+  }
+  return Number(sub.views ?? 0);
+}
+
 interface CreatorSubmissionsModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -690,8 +709,10 @@ export function CreatorSubmissionsModal({
 
   // Sort submissions
   const sortedSubmissions = [...filteredSubmissions].sort((a, b) => {
-    if (sortBy === "views-desc") return (b.views || 0) - (a.views || 0);
-    if (sortBy === "views-asc") return (a.views || 0) - (b.views || 0);
+    if (sortBy === "views-desc")
+      return effectiveSubmissionViewsForSort(b) - effectiveSubmissionViewsForSort(a);
+    if (sortBy === "views-asc")
+      return effectiveSubmissionViewsForSort(a) - effectiveSubmissionViewsForSort(b);
     if (sortBy === "date-desc")
       return (
         new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
@@ -864,7 +885,7 @@ export function CreatorSubmissionsModal({
         <DialogTitle className="sr-only">
           {creator.username}'s Submissions
         </DialogTitle>
-        <div className="flex flex-col h-[98vh] overflow-hidden">
+        <div className="flex flex-col h-[98vh] min-h-0 overflow-hidden">
           {/* Header */}
           <div
             className={cn(
@@ -1267,7 +1288,7 @@ export function CreatorSubmissionsModal({
           )}
 
           {/* Scrollable Table */}
-          <div className="flex-1 overflow-auto px-6 py-4">
+          <div className="min-h-0 flex-1 overflow-auto px-6 py-4">
             <Table>
               <TableHeader
                 className={cn(
@@ -1648,27 +1669,40 @@ export function CreatorSubmissionsModal({
                     const isTwitterTweet = submission.is_twitter_tweet === true;
 
                     // For Twitter tweets, use Twitter metrics; for others, use platform-specific
+                    const tt = submission.other_stats?.tiktok as
+                      | Record<string, unknown>
+                      | undefined;
+                    const isTikTokRow =
+                      (submission.platform || "").toLowerCase().includes(
+                        "tiktok",
+                      );
+
                     const likes = isTwitterTweet
                       ? submission.other_stats?.likes || 0
                       : submission.other_stats?.youtube?.likes ||
                         submission.other_stats?.instagram?.likes ||
-                        submission.other_stats?.tiktok?.like_count ||
-                        0;
+                        (isTikTokRow
+                          ? Number(tt?.like_count ?? tt?.likes ?? 0)
+                          : 0);
                     const comments = isTwitterTweet
                       ? submission.other_stats?.replies || 0
                       : submission.other_stats?.youtube?.comments ||
                         submission.other_stats?.instagram?.comments ||
-                        submission.other_stats?.tiktok?.comment_count ||
-                        0;
+                        (isTikTokRow
+                          ? Number(tt?.comment_count ?? tt?.comments ?? 0)
+                          : 0);
                     const platformStats =
                       submission.other_stats?.instagram ||
                       submission.other_stats?.tiktok ||
                       submission.other_stats ||
                       {};
-                    const shares =
-                      (platformStats as any)?.share_count ||
-                      (platformStats as any)?.shares ||
-                      0;
+                    const shares = isTikTokRow
+                      ? Number(tt?.share_count ?? tt?.shares ?? 0)
+                      : Number(
+                          (platformStats as any)?.share_count ??
+                            (platformStats as any)?.shares ??
+                            0,
+                        );
                     const saves =
                       (platformStats as any)?.saves ||
                       (platformStats as any)?.saved ||
@@ -1681,11 +1715,10 @@ export function CreatorSubmissionsModal({
                     const totalWatchTimeMs =
                       (platformStats as any)?.total_watch_time_ms || 0;
 
-                    const tiktokViewsForRate = Number(
-                      submission.other_stats?.tiktok?.view_count ??
-                        submission.views ??
-                        0,
-                    );
+                    const tiktokViewsForRate =
+                      isTikTokContest && !isTwitterTweet
+                        ? effectiveTikTokSubmissionViews(submission)
+                        : 0;
                     const tiktokTotalEngagement =
                       isTikTokContest && !isTwitterTweet
                         ? Number(likes) + Number(comments) + Number(shares)
@@ -2183,7 +2216,10 @@ export function CreatorSubmissionsModal({
                             </TableCell>
                             {/* Views, Likes, Comments for non-Twitter submissions */}
                             <TableCell className="text-center font-mono">
-                              {submission.views?.toLocaleString() || 0}
+                              {(isTikTokContest && !isTwitterTweet
+                                ? effectiveTikTokSubmissionViews(submission)
+                                : Number(submission.views ?? 0)
+                              ).toLocaleString()}
                             </TableCell>
                             <TableCell className="text-center font-mono">
                               {likes.toLocaleString()}
