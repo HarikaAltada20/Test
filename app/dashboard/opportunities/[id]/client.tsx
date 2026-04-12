@@ -765,7 +765,7 @@ export function ContestClientPage({
           total_retweets: entry.total_retweets || 0,
           total_quote_reposts: entry.total_quote_reposts || 0,
           total_impressions: entry.total_impressions || 0,
-          paid: entry.paid,
+          paid: entry.moderation_status === "paid",
           paid_at: entry.paid_at,
         };
       });
@@ -7150,7 +7150,8 @@ export function ContestClientPage({
                                       displayEntry.status === "verified" ||
                                       displayEntry.status === "paid" ||
                                       (isTwitter &&
-                                        ((displayEntry as any).paid === true ||
+                                        ((displayEntry as any)
+                                          .moderation_status === "paid" ||
                                           contest?.post_contest_status ===
                                           "payouts_processed"));
                                     const earningsLabel = isEarned
@@ -7483,8 +7484,11 @@ export function ContestClientPage({
                                                       submission.status ===
                                                       "paid" ||
                                                       (isTwitter &&
-                                                        ((submission as any)
-                                                          .paid === true ||
+                                                        (((submission as any)
+                                                          .moderation_status ===
+                                                          "paid" ||
+                                                          (submission as any)
+                                                            .paid === true) ||
                                                           contest?.post_contest_status ===
                                                           "payouts_processed"));
                                                     const earningsLabel =
@@ -8682,7 +8686,7 @@ export function ContestClientPage({
                           const isTwitter =
                             contest?.platform === "twitter" ||
                             contest?.platform === "x";
-                          // Twitter: also check leaderboard paid field (twitter_campaign_leaderboard.paid)
+                          // Twitter: creator-wise row uses moderation_status === 'paid' (mapped to .paid above)
                           const twitterPaid =
                             isTwitter && (creatorGroup as any).paid === true;
                           const shouldShowActualEarnings =
@@ -9180,7 +9184,7 @@ export function ContestClientPage({
                               entry.status === "verified" ||
                               entry.status === "paid" ||
                               (isTwitter &&
-                                ((entry as any).paid === true ||
+                                ((entry as any).moderation_status === "paid" ||
                                   contest?.post_contest_status ===
                                   "payouts_processed"));
                             const earningsLabel = isEarned

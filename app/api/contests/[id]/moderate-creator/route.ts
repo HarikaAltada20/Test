@@ -88,7 +88,7 @@ export async function POST(
     const { data: currentLeaderboardEntry, error: fetchError } =
       await supabaseAdmin
         .from("twitter_campaign_leaderboard")
-        .select("paid, earnings")
+        .select("moderation_status, earnings")
         .eq("contest_id", contestId)
         .eq("creator_id", creatorId)
         .single();
@@ -106,7 +106,7 @@ export async function POST(
     }
 
     // Handle payment reversal if creator is currently paid and status is being changed away from paid
-    if (currentLeaderboardEntry?.paid) {
+    if (currentLeaderboardEntry?.moderation_status === "paid") {
       let mainReversalAmount = currentLeaderboardEntry.earnings || 0;
 
       if (!mainReversalAmount || mainReversalAmount <= 0) {
@@ -308,9 +308,8 @@ export async function POST(
       leaderboardUpdateData.rejection_reason = null;
     }
 
-    // Clear paid status and earnings if creator was paid (reversal handled above)
-    if (currentLeaderboardEntry?.paid) {
-      leaderboardUpdateData.paid = false;
+    // Clear payment metadata if creator was paid (reversal handled above; moderation_status becomes verified/rejected)
+    if (currentLeaderboardEntry?.moderation_status === "paid") {
       leaderboardUpdateData.paid_at = null;
       leaderboardUpdateData.earnings = null;
       leaderboardUpdateData.paid_rank = null;

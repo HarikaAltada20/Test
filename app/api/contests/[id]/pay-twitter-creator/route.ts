@@ -113,7 +113,7 @@ export async function POST(
       await supabaseAdmin
         .from("twitter_campaign_leaderboard")
         .select(
-          "id, creator_id, current_rank, total_points, paid, earnings, paid_rank, moderation_status"
+          "id, creator_id, current_rank, total_points, earnings, paid_rank, moderation_status"
         )
         .eq("contest_id", contestId)
         .eq("creator_id", creatorId)
@@ -138,7 +138,7 @@ export async function POST(
     }
 
     // Check if already paid (unless this is a re-payment with custom amount)
-    if (leaderboardEntry.paid && !isCustom) {
+    if (leaderboardEntry.moderation_status === "paid" && !isCustom) {
       return NextResponse.json(
         { error: "Creator has already been paid for this contest" },
         { status: 400 }
@@ -305,11 +305,10 @@ export async function POST(
 
     // Update leaderboard entry with payment information
     const updateData: any = {
-      paid: true,
       paid_at: new Date().toISOString(),
       earnings: rewardAmount,
       paid_rank: leaderboardEntry.current_rank, // Store rank at payment time for audit
-      moderation_status: "paid", // Update status to paid
+      moderation_status: "paid",
     };
 
     const { error: updateError } = await supabaseAdmin
