@@ -315,26 +315,39 @@ export function CreatorSubmissionsModal({
         new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
     );
 
-    // Twitter CPM/leaderboard tweets use per-tweet APIs (pay-twitter-tweet, pay-twitter-bonus);
-    // bulk-payment API only supports submissions table (YouTube/Instagram). Use individual onPayment for Twitter.
     const hasTwitterTweets = sortedSubs.some(
       (s) => (s as any).is_twitter_tweet === true
     );
-    const useBulkApi = isBulkTransaction && !hasTwitterTweets;
+    const isTwitterCpm =
+      contest.contest_type === "cpm" &&
+      (contest.platform?.toLowerCase() === "twitter" ||
+        contest.platform?.toLowerCase() === "x");
+    const useInstagramBulkApi = isBulkTransaction && !hasTwitterTweets;
+    const useTwitterCpmBulkApi =
+      isBulkTransaction && hasTwitterTweets && isTwitterCpm;
 
-    if (useBulkApi) {
-      // OPTION 2: Bulk Transaction (Single API call) - YouTube/Instagram only
+    if (useInstagramBulkApi || useTwitterCpmBulkApi) {
       try {
-        const response = await fetch("/api/admin/bulk-payment", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            submission_ids: sortedSubs.map((s) => s.id),
-            payment_type: type,
-            contest_id: contest.id,
-            creator_id: creator.id,
-          }),
-        });
+        const response = useTwitterCpmBulkApi
+          ? await fetch(`/api/contests/${contest.id}/bulk-pay-twitter-cpm`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                tweet_ids: sortedSubs.map((s) => s.id),
+                payment_type: type,
+                creator_id: creator.id,
+              }),
+            })
+          : await fetch("/api/admin/bulk-payment", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                submission_ids: sortedSubs.map((s) => s.id),
+                payment_type: type,
+                contest_id: contest.id,
+                creator_id: creator.id,
+              }),
+            });
 
         const result = await response.json();
 
@@ -345,13 +358,12 @@ export function CreatorSubmissionsModal({
 
         setSelectedSubmissions(new Set());
 
-        // Show detailed success message
         const { data } = result;
         const message = [
           `✓ Bulk Payment Successful!`,
           ``,
-          `Paid Submissions: ${data.paid_count}`,
-          `Skipped (already paid): ${data.skipped_count}`,
+          `Paid items: ${data.paid_count}`,
+          `Skipped: ${data.skipped_count}`,
           ``,
           `CPM Earnings: $${(data.total_cpm / 100).toFixed(2)}`,
           `Flat Fee Bonus: $${(data.total_bonus / 100).toFixed(2)}`,
@@ -367,7 +379,6 @@ export function CreatorSubmissionsModal({
 
         alert(message.join("\n"));
 
-        // Refresh the page to show updated data
         window.location.reload();
       } catch (error) {
         console.error("Bulk payment error:", error);

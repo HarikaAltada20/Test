@@ -274,7 +274,7 @@ export async function GET(request: NextRequest) {
                 const { data: lbPageData, error: lbError } = await supabase
                   .from("twitter_campaign_leaderboard")
                   .select(
-                    "creator_id, contest_id, earnings, total_impressions, moderation_status, paid, total_eligible_tweets",
+                    "creator_id, contest_id, earnings, total_impressions, moderation_status, total_eligible_tweets",
                   )
                   .in("contest_id", contestChunk)
                   .order("id", { ascending: true })
@@ -291,7 +291,7 @@ export async function GET(request: NextRequest) {
                   const moderationStatus = (
                     (row.moderation_status || "pending") as string
                   ).toLowerCase();
-                  const isPaid = row.paid === true;
+                  const isPaid = moderationStatus === "paid";
                   const isWinner = isPaid;
 
                   if (moderationStatus !== "rejected") {
@@ -635,7 +635,7 @@ export async function GET(request: NextRequest) {
                 const { data: lbPageData, error: lbError } = await supabase
                   .from("twitter_campaign_leaderboard")
                   .select(
-                    "creator_id, contest_id, total_eligible_tweets, moderation_status, paid, earnings",
+                    "creator_id, contest_id, total_eligible_tweets, moderation_status, earnings",
                   )
                   .in("contest_id", contestChunk)
                   .order("id", { ascending: true })
@@ -650,7 +650,7 @@ export async function GET(request: NextRequest) {
                   const moderationStatus = (
                     (row.moderation_status || "pending") as string
                   ).toLowerCase();
-                  const isPaid = row.paid === true;
+                  const isPaid = moderationStatus === "paid";
                   const earnings = Number(row.earnings) || 0;
 
                   if (moderationStatus !== "rejected") {
