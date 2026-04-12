@@ -892,11 +892,12 @@ export async function GET(request: NextRequest) {
       }),
     );
 
-    // Filter by platform (skip filter for referrals, total_coins, and affiliate_earnings as they're not platform-specific)
+    // Filter by platform (skip for metrics that are not tied to a single platform)
     const shouldSkipPlatformFilter =
       sortBy === "referrals" ||
       sortBy === "total_coins" ||
-      sortBy === "affiliate_earnings";
+      sortBy === "affiliate_earnings" ||
+      sortBy === "other_earnings";
 
     const filteredLeaders = shouldSkipPlatformFilter
       ? leaders
@@ -929,13 +930,17 @@ export async function GET(request: NextRequest) {
         return b.metrics.submissions_made - a.metrics.submissions_made;
       }
 
-      // Sort by combined affiliate_earnings + other_earnings
       if (sortBy === "affiliate_earnings") {
-        const aTotal =
-          (a.metrics.affiliate_earnings || 0) + (a.metrics.other_earnings || 0);
-        const bTotal =
-          (b.metrics.affiliate_earnings || 0) + (b.metrics.other_earnings || 0);
-        return bTotal - aTotal;
+        return (
+          (b.metrics.affiliate_earnings || 0) -
+          (a.metrics.affiliate_earnings || 0)
+        );
+      }
+
+      if (sortBy === "other_earnings") {
+        return (
+          (b.metrics.other_earnings || 0) - (a.metrics.other_earnings || 0)
+        );
       }
 
       // Custom tie-breakers when ranking by contests_won

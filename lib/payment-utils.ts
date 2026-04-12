@@ -693,7 +693,9 @@ export async function logTransaction(
   }
 }
 
-// 🆕 Creator balance helpers (withdrawable balance in cents)
+// Creator balance helpers (withdrawable balance in cents).
+// creditCreatorWithdrawableBalance: contest / opportunity payouts — updates
+// creator_profiles.withdrawable_balance AND total_money_won (not users.affiliate_earnings / other_earnings).
 export async function creditCreatorWithdrawableBalance(
   creatorId: string,
   amountInCents: number,
@@ -817,7 +819,8 @@ export async function debitCreatorWithdrawableBalance(
   }
 }
 
-// 🆕 Generic wallet credit for any user (creator or advertiser) without touching contest win totals
+// Wallet credit for non-contest affiliate income: updates profile withdrawable_balance,
+// increments users.affiliate_earnings, logs money_transactions. Does NOT touch total_money_won.
 export async function creditUserWithdrawableBalance(
   userId: string,
   amountInCents: number,
@@ -865,16 +868,28 @@ export async function creditUserWithdrawableBalance(
       return { success: false, error: updateErr.message };
     }
 
-    // Also increment users.affiliate_earnings for analytics/reporting (atomic)
-    const { error: incErr } = await supabase.rpc("increment_other_earnings", {
+    const { error: incErr } = await supabase.rpc("increment_affiliate_earnings", {
       p_user_id: userId,
       p_amount: amountInCents,
     });
     if (incErr) {
-      console.warn("increment_other_earnings RPC failed:", incErr.message);
+      console.error("increment_affiliate_earnings RPC failed:", incErr.message);
+      const { error: revertErr } = await supabase
+        .from(table)
+        .update({ withdrawable_balance: currentBalance })
+        .eq("id", userId);
+      if (revertErr) {
+        console.error(
+          "CRITICAL: withdrawable_balance revert failed after RPC error:",
+          revertErr.message
+        );
+      }
+      return {
+        success: false,
+        error: `Failed to increment affiliate_earnings (balance reverted): ${incErr.message}`,
+      };
     }
 
-    // Log as reward for now (category specified in metadata)
     const { error: insertErr } = await supabase
       .from("money_transactions")
       .insert({
@@ -889,6 +904,37 @@ export async function creditUserWithdrawableBalance(
         updated_at: new Date().toISOString(),
       });
     if (insertErr) {
+      const { error: revertBalErr } = await supabase
+        .from(table)
+        .update({ withdrawable_balance: currentBalance })
+        .eq("id", userId);
+      if (revertBalErr) {
+        console.error(
+          "CRITICAL: withdrawable_balance revert failed after money_transactions insert error:",
+          revertBalErr.message
+        );
+      }
+      const { data: affRow, error: affReadErr } = await supabase
+        .from("users")
+        .select("affiliate_earnings")
+        .eq("id", userId)
+        .single();
+      if (!affReadErr && affRow) {
+        const nextAff = Math.max(
+          0,
+          (Number(affRow.affiliate_earnings) || 0) - amountInCents
+        );
+        const { error: affRevErr } = await supabase
+          .from("users")
+          .update({ affiliate_earnings: nextAff })
+          .eq("id", userId);
+        if (affRevErr) {
+          console.error(
+            "CRITICAL: affiliate_earnings revert failed after money_transactions insert error:",
+            affRevErr.message
+          );
+        }
+      }
       return { success: false, error: insertErr.message };
     }
 
