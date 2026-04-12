@@ -4,6 +4,8 @@ import { createAdminClient } from "@/utils/supabase/admin";
 import { verifyAdminAccess } from "@/utils/admin-auth";
 import {
   creditCreatorWithdrawableBalance,
+  debitCreatorWithdrawableBalance,
+  logTransactionAsAdmin,
   REVERSAL_TRANSACTION_REMARK,
 } from "@/lib/payment-utils";
 import { applyPayoutAdjustment } from "@/lib/payout-adjustment";
@@ -441,6 +443,7 @@ export async function POST(
       );
     }
 
+    const cpmTweetIdsUpdated: string[] = [];
     for (const [tid, cents] of Object.entries(cpmBreakdown)) {
       const { error: upErr } = await supabaseAdmin
         .from("twitter_campaign_tweets")
@@ -449,7 +452,78 @@ export async function POST(
         .eq("contest_id", contestId);
       if (upErr) {
         console.error("[bulk-pay-twitter-cpm] Tweet update failed:", tid, upErr);
+
+        for (const rid of cpmTweetIdsUpdated) {
+          const { error: revErr } = await supabaseAdmin
+            .from("twitter_campaign_tweets")
+            .update({ moderation_status: "verified", earnings: null })
+            .eq("id", rid)
+            .eq("contest_id", contestId);
+          if (revErr) {
+            console.error(
+              "[bulk-pay-twitter-cpm] CRITICAL: Failed to revert tweet after pay failure:",
+              rid,
+              revErr
+            );
+          }
+        }
+
+        const debitRes = await debitCreatorWithdrawableBalance(
+          creatorId,
+          totalAmount
+        );
+        if (!debitRes.success) {
+          console.error(
+            "[bulk-pay-twitter-cpm] CRITICAL: Wallet rollback failed after tweet update error:",
+            debitRes.error
+          );
+          return NextResponse.json(
+            {
+              error:
+                "Tweet payment could not be saved and automatic wallet rollback failed. Contact support immediately.",
+              details: { tweet_id: tid, rollback_error: debitRes.error },
+            },
+            { status: 500 }
+          );
+        }
+
+        const contestTitle = contest.title || "Contest";
+        const logged = await logTransactionAsAdmin(
+          creatorId,
+          "refund",
+          totalAmount,
+          "success",
+          `Rollback: Twitter CPM bulk payment (DB update failed) — ${contestTitle}`,
+          {
+            remarks: REVERSAL_TRANSACTION_REMARK,
+            paymentMethod: "refund",
+            metadata: {
+              contest_id: contestId,
+              twitter_creator_id: creatorId,
+              payout_type: "twitter_cpm_bulk",
+              rollback_reason: "tweet_row_update_failed",
+              failed_tweet_id: tid,
+              original_reward_transaction_id: creditRes.transactionId,
+            },
+          }
+        );
+        if (!logged) {
+          console.error(
+            "[bulk-pay-twitter-cpm] CRITICAL: Wallet rolled back but refund row insert failed for creator:",
+            creatorId
+          );
+        }
+
+        return NextResponse.json(
+          {
+            error:
+              "Wallet credit was rolled back because tweet rows could not be updated. You can retry bulk pay.",
+            details: { tweet_id: tid, message: upErr.message },
+          },
+          { status: 500 }
+        );
       }
+      cpmTweetIdsUpdated.push(tid);
     }
 
     if (totalCpm > 0) {
