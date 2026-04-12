@@ -89,6 +89,8 @@ export default async function AdvertiserBillingServerPage({
         advertisers_referred: roleAndCoinsData.advertisers_referred || 0,
         creators_referred: roleAndCoinsData.creators_referred || 0,
         total_lifetime_coins_earned: roleAndCoinsData.total_lifetime_coins_earned || 0,
+        affiliate_earnings: 0,
+        other_earnings: 0,
     };
 
     // Fetch advertiser profile (money fields) - also with retry for checkout returns

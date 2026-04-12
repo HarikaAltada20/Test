@@ -2,6 +2,7 @@ import { User } from "@supabase/supabase-js";
 
 // Profile data, assuming money values are stored in CENTS in the DB
 export interface CreatorProfileData {
+  /** Contest / opportunity cash prizes only (creator_profiles) */
   total_money_won: number;
   total_contests_won: number;
   withdrawable_balance: number;
@@ -21,6 +22,10 @@ export interface UserData {
   advertisers_referred: number;
   creators_referred: number;
   total_lifetime_coins_earned: number; // From new column
+  /** Affiliate commission (referral program), cents */
+  affiliate_earnings: number;
+  /** Bonuses, coupons, Discord codes, survey rewards, etc. — not contests, not affiliate */
+  other_earnings: number;
 }
 
 // From your 'money_transactions' table, amount is in CENTS
