@@ -125,6 +125,11 @@ function getProcessInstagramInsightsQueueUrl(): string {
   return `${getBaseUrl()}/api/cron/process-instagram-insights-queue`;
 }
 
+/** Canonical URL for the TikTok metrics queue processor. */
+function getProcessTikTokMetricsQueueUrl(): string {
+  return `${getBaseUrl()}/api/cron/process-tiktok-metrics-queue`;
+}
+
 /**
  * Verify that the request is from QStash (Upstash-Signature).
  * Use with the raw body string; call before consuming the body.
@@ -215,6 +220,34 @@ export async function triggerProcessInstagramInsightsQueue(
 }
 
 /**
+ * Trigger the process-tiktok-metrics-queue endpoint via QStash.
+ */
+export async function triggerProcessTikTokMetricsQueue(
+  baseUrl?: string,
+): Promise<{ messageId?: string; error?: string }> {
+  const client = getQStashClient();
+  if (!client) return { error: "QStash not configured" };
+  const url = `${baseUrl ?? getBaseUrl()}/api/cron/process-tiktok-metrics-queue`;
+  if (isLoopbackUrl(url))
+    return { error: "Loopback URL; QStash cannot reach localhost" };
+  try {
+    const res = await client.publishJSON({
+      url,
+      body: {},
+      method: "POST",
+    });
+    return { messageId: (res as { messageId?: string }).messageId };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error(
+      "[qstash] triggerProcessTikTokMetricsQueue failed:",
+      message,
+    );
+    return { error: message };
+  }
+}
+
+/**
  * Verify QStash signature for the Instagram processor URL (for use when request is to that endpoint).
  */
 async function verifyQStashSignatureInstagram(
@@ -260,6 +293,59 @@ export async function authorizeProcessInstagramInsightsQueue(
 ): Promise<boolean> {
   if (request.headers.get("Upstash-Signature")) {
     return verifyQStashSignatureInstagram(request, rawBody);
+  }
+  const cronSecret = process.env.CRON_SECRET;
+  const auth = request.headers.get("Authorization");
+  if (cronSecret) return auth === `Bearer ${cronSecret}`;
+  return true;
+}
+
+/**
+ * Verify QStash signature for the TikTok processor URL.
+ */
+export async function verifyQStashSignatureTikTok(
+  request: Request,
+  rawBody: string,
+): Promise<boolean> {
+  const signature = request.headers.get("Upstash-Signature");
+  if (!signature || typeof signature !== "string") return false;
+  const currentKey = process.env.QSTASH_CURRENT_SIGNING_KEY?.trim();
+  const nextKey = process.env.QSTASH_NEXT_SIGNING_KEY?.trim();
+  if (!currentKey && !nextKey) return false;
+  try {
+    const receiver = new Receiver({
+      currentSigningKey: currentKey,
+      nextSigningKey: nextKey,
+    });
+    const forwardedOrigin = getForwardedOrigin(request);
+    const requestUrl = (() => {
+      try {
+        return new URL(request.url);
+      } catch {
+        return null;
+      }
+    })();
+    const candidates = uniqueStrings([
+      getProcessTikTokMetricsQueueUrl(),
+      forwardedOrigin ? `${forwardedOrigin}/api/cron/process-tiktok-metrics-queue` : null,
+      requestUrl ? `${requestUrl.origin}/api/cron/process-tiktok-metrics-queue` : null,
+      requestUrl?.toString() ?? null,
+    ]);
+    return verifyQStashAgainstUrls(receiver, signature, rawBody, candidates);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Authorize process-tiktok-metrics-queue: QStash signature (TikTok URL) or Bearer CRON_SECRET.
+ */
+export async function authorizeProcessTikTokMetricsQueue(
+  request: Request,
+  rawBody: string,
+): Promise<boolean> {
+  if (request.headers.get("Upstash-Signature")) {
+    return verifyQStashSignatureTikTok(request, rawBody);
   }
   const cronSecret = process.env.CRON_SECRET;
   const auth = request.headers.get("Authorization");

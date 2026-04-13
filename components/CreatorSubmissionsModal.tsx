@@ -616,8 +616,11 @@ export function CreatorSubmissionsModal({
 
   const getInsightsMeta = (
     status: Submission["insights_status"],
+    errorMsg?: string,
   ): { help: string; dotClass: string; pillClass: string } => {
     const isDark = mode === "dark";
+    const errorSuffix = errorMsg ? `\n\nDetails: ${errorMsg}` : "";
+
     if (status === "ok") {
       return {
         help: "Insights fetched successfully",
@@ -629,7 +632,7 @@ export function CreatorSubmissionsModal({
     }
     if (status === "temporary_failure") {
       return {
-        help: "Temporary error fetching insights\nWill retry later",
+        help: "Temporary error fetching insights\nWill retry later" + errorSuffix,
         dotClass: "bg-amber-400",
         pillClass: isDark
           ? "border-amber-700/60 bg-amber-950/35"
@@ -638,7 +641,7 @@ export function CreatorSubmissionsModal({
     }
     if (status === "permanent_failure") {
       return {
-        help: "Instagram insights cannot be fetched for this post",
+        help: "Insights cannot be fetched for this post" + errorSuffix,
         dotClass: "bg-rose-500",
         pillClass: isDark
           ? "border-rose-700/60 bg-rose-950/35"
@@ -1599,7 +1602,7 @@ export function CreatorSubmissionsModal({
                       </TableHead>
                     </>
                   )}
-                  {isAdminView && isInstagramContest && (
+                  {isAdminView && (isInstagramContest || isTikTokContest) && (
                     <TableHead
                       className={cn(
                         "text-center",
@@ -1663,7 +1666,7 @@ export function CreatorSubmissionsModal({
                           ((isInstagramContest || isTikTokContest) ? (isTikTokContest ? 3 : 6) : 0) + // TT: Shares + total engagement + engagement rate; IG: +Saves, Reach, Interactions, Avg/Total watch
                           2 + // Expected Reward, Reward Granted
                           (hasBonus ? 2 : 0) + // Bonus Expected, Bonus Granted
-                          (isAdminView && isInstagramContest ? 1 : 0) + // Insights status (admin only)
+                          (isAdminView && (isInstagramContest || isTikTokContest) ? 1 : 0) + // Insights status (admin only)
                           4 // Status, Rejection reason, Submitted, Actions
                       }
                       className={cn(
@@ -2357,11 +2360,13 @@ export function CreatorSubmissionsModal({
                             </TableCell>
                           </>
                         )}
-                        {isAdminView && isInstagramContest && (
+                        {isAdminView && (isInstagramContest || isTikTokContest) && (
                           <TableCell className="text-center">
                             {(() => {
                               const meta = getInsightsMeta(
                                 submission.insights_status ?? null,
+                                (submission.other_stats as any)?.tiktok_error ||
+                                  (submission.other_stats as any)?.instagram_error
                               );
                               return (
                                 <div className="flex items-center justify-center">

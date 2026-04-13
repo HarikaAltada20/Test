@@ -52,17 +52,17 @@ export class TikTokApiClient {
       `${appUrl}/api/auth/tiktok/callback`;
 
     // Debug logging
-    console.log(
-      "[TikTokApiClient] Client Key loaded:",
-      this.clientKey
-        ? "Yes (length: " + this.clientKey.length + ")"
-        : "NO - Check NEXT_PUBLIC_TIKTOK_CLIENT_ID env var",
-    );
-    console.log(
-      "[TikTokApiClient] Client Secret loaded:",
-      this.clientSecret ? "Yes" : "NO",
-    );
-    console.log("[TikTokApiClient] Redirect URI:", this.redirectUri);
+    // console.log(
+    //   "[TikTokApiClient] Client Key loaded:",
+    //   this.clientKey
+    //     ? "Yes (length: " + this.clientKey.length + ")"
+    //     : "NO - Check NEXT_PUBLIC_TIKTOK_CLIENT_ID env var",
+    // );
+    // console.log(
+    //   "[TikTokApiClient] Client Secret loaded:",
+    //   this.clientSecret ? "Yes" : "NO",
+    // );
+    // console.log("[TikTokApiClient] Redirect URI:", this.redirectUri);
   }
 
   getRedirectUri(): string {
@@ -334,10 +334,10 @@ export class TikTokApiClient {
       return;
     }
 
-    console.error("[TikTok API Client] Error Response:", {
-      status,
-      data: JSON.stringify(data),
-    });
+    // console.error("[TikTok API Client] Error Response:", {
+    //   status,
+    //   data: JSON.stringify(data),
+    // });
 
     // TikTok OAuth errors often use error_description
     // Other errors might use error.message or just message

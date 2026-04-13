@@ -7,6 +7,10 @@
      {
       "path": "/api/cron/trigger-instagram-refresh",
       "schedule": "0 2 * * *"
+    },
+    {
+      "path": "/api/cron/update-tiktok-metrics",
+      "schedule": "0 3 * * *"
     }
   ]
 }

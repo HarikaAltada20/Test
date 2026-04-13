@@ -10,6 +10,13 @@ export type TikTokSubmissionRow = {
   other_stats?: unknown;
 };
 
+export type TikTokSyncResult = {
+  success: boolean;
+  error?: string;
+  videosSynced: number;
+  videosFailed?: number;
+};
+
 const QUERY_CHUNK = 20;
 
 /**
@@ -19,7 +26,7 @@ export async function syncCreatorTikTokDisplayMetrics(
   supabase: SupabaseClient,
   creatorId: string,
   submissions: TikTokSubmissionRow[],
-): Promise<{ success: boolean; error?: string; videosSynced: number }> {
+): Promise<TikTokSyncResult> {
   const provider = new TikTokProvider();
 
   const tokenResult = await ensureFreshTikTokToken(supabase, creatorId);
@@ -33,11 +40,32 @@ export async function syncCreatorTikTokDisplayMetrics(
   const access_token = tokenResult.accessToken;
 
   const rows: { sub: TikTokSubmissionRow; videoId: string }[] = [];
+  const unrecognized: TikTokSubmissionRow[] = [];
+
   for (const sub of submissions) {
     const vid =
       (sub.video_id && String(sub.video_id)) ||
       extractTikTokVideoIdFromLink(sub.content_link);
-    if (vid) rows.push({ sub, videoId: vid });
+    if (vid) {
+      rows.push({ sub, videoId: vid });
+    } else {
+      unrecognized.push(sub);
+    }
+  }
+
+  // Handle unrecognized links (e.g. short links we can't parse without expansion)
+  for (const sub of unrecognized) {
+    await supabase
+      .from("submissions")
+      .update({
+        insights_status: "permanent_failure",
+        last_insights_update: new Date().toISOString(),
+        other_stats: {
+          ...(typeof sub.other_stats === "object" ? sub.other_stats : {}),
+          tiktok_error: "Could not extract Video ID from link. Please use a standard TikTok video URL.",
+        },
+      })
+      .eq("id", sub.id);
   }
 
   const uniqueIds = [...new Set(rows.map((r) => r.videoId))];
@@ -80,6 +108,7 @@ export async function syncCreatorTikTokDisplayMetrics(
   }
 
   let videosSynced = 0;
+  let videosFailed = 0;
   let sumViews = 0;
   let sumLikes = 0;
   let sumComments = 0;
@@ -87,7 +116,24 @@ export async function syncCreatorTikTokDisplayMetrics(
 
   for (const { sub, videoId } of rows) {
     const m = videoById.get(videoId);
-    if (!m) continue;
+
+    if (!m) {
+      // Video not found in TikTok's response but we have a valid token.
+      // Likely private, deleted, or unauthorized.
+      await supabase
+        .from("submissions")
+        .update({
+          insights_status: "permanent_failure",
+          last_insights_update: new Date().toISOString(),
+          other_stats: {
+            ...(typeof sub.other_stats === "object" ? (sub.other_stats as any) : {}),
+            tiktok_error: "Video not found or is private. Ensure video is set to Public.",
+          },
+        })
+        .eq("id", sub.id);
+      videosFailed++;
+      continue;
+    }
 
     const views = m.viewCount;
     const likes = m.likeCount;
@@ -117,7 +163,11 @@ export async function syncCreatorTikTokDisplayMetrics(
       .from("submissions")
       .update({
         views,
-        other_stats: { ...currentOtherStats, tiktok: tiktokStats },
+        other_stats: {
+          ...currentOtherStats,
+          tiktok: tiktokStats,
+          tiktok_error: null, // Clear any previous error
+        },
         last_insights_update: new Date().toISOString(),
         insights_status: "ok",
       })
@@ -126,6 +176,7 @@ export async function syncCreatorTikTokDisplayMetrics(
     videosSynced++;
   }
 
+  // Update creator profile aggregations
   await supabase
     .from("creator_profiles")
     .update({
@@ -139,5 +190,5 @@ export async function syncCreatorTikTokDisplayMetrics(
     })
     .eq("id", creatorId);
 
-  return { success: true, videosSynced };
+  return { success: true, videosSynced, videosFailed };
 }

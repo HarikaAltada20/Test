@@ -351,6 +351,24 @@ type TwitterMetricsRefreshRunSummary = {
   error_message?: string | null;
 };
 
+type TikTokMetricsRefreshRunSummary = {
+  id: string;
+  status: "pending" | "running" | "completed" | "failed" | "cancelled";
+  total_submissions: number;
+  processed_submissions: number;
+  success_count: number;
+  permanent_failure_count: number;
+  temporary_failure_count: number;
+  skipped_recent_count: number;
+  reviewed_count: number;
+  current_batch_index: number;
+  total_batches: number;
+  started_at: string;
+  last_batch_completed_at: string | null;
+  finished_at: string | null;
+  error_message?: string | null;
+};
+
 interface ContestDetailClientProps {
   contest: Contest;
   initialSubmissions: Submission[] | null;
@@ -756,10 +774,16 @@ export default function ContestDetailClient({
     useState<TwitterMetricsRefreshRunSummary | null>(null);
   const [showTwitterRunPopup, setShowTwitterRunPopup] = useState(false);
   const [twitterRunCompleted, setTwitterRunCompleted] = useState(false);
+  const [tiktokRun, setTiktokRun] =
+    useState<TikTokMetricsRefreshRunSummary | null>(null);
+  const [showTiktokRunPopup, setShowTiktokRunPopup] = useState(false);
+  const [tiktokRunCompleted, setTiktokRunCompleted] = useState(false);
   const [refreshElapsedSeconds, setRefreshElapsedSeconds] = useState<
     number | null
   >(null);
   const [twitterRefreshElapsedSeconds, setTwitterRefreshElapsedSeconds] =
+    useState<number | null>(null);
+  const [tiktokRefreshElapsedSeconds, setTiktokRefreshElapsedSeconds] =
     useState<number | null>(null);
 
   // Status update states
@@ -893,6 +917,38 @@ export default function ContestDetailClient({
     twitterRun?.started_at,
     twitterRun?.status,
     twitterRun?.finished_at,
+  ]);
+
+  useEffect(() => {
+    if (!tiktokRun?.started_at) {
+      setTiktokRefreshElapsedSeconds(null);
+      return;
+    }
+    const started = new Date(tiktokRun.started_at).getTime();
+    const isRunning = tiktokRun.status === "running";
+
+    if (isRunning) {
+      const tick = () =>
+        setTiktokRefreshElapsedSeconds(
+          Math.max(0, Math.floor((Date.now() - started) / 1000)),
+        );
+      tick();
+      const interval = setInterval(tick, 1000);
+      return () => clearInterval(interval);
+    }
+
+    const finished = tiktokRun.finished_at
+      ? new Date(tiktokRun.finished_at).getTime()
+      : Date.now();
+    setTiktokRefreshElapsedSeconds(
+      Math.max(0, Math.floor((finished - started) / 1000)),
+    );
+    return () => {};
+  }, [
+    tiktokRun?.id,
+    tiktokRun?.started_at,
+    tiktokRun?.status,
+    tiktokRun?.finished_at,
   ]);
 
   // Refresh metrics state
@@ -4382,6 +4438,45 @@ export default function ContestDetailClient({
                 }
                 return;
               }
+            } else if (currentContest.platform?.toLowerCase().includes("tiktok")) {
+              const res = await fetch(
+                `/api/contests/${contestId}/tiktok-metrics-refresh/status`,
+              );
+              if (!res.ok) return;
+              const data = await res.json();
+              const run = data?.run as TikTokMetricsRefreshRunSummary | null;
+              if (isAdminView && run) {
+                setTiktokRun(run);
+                setShowTiktokRunPopup(true);
+              }
+              const status = run?.status;
+              if (
+                status === "completed" ||
+                status === "failed" ||
+                status === "cancelled"
+              ) {
+                clearInterval(pollTimer);
+                setIsRefreshingMetrics(false);
+                if (isAdminView && run) {
+                  setTiktokRun(run);
+                  setTiktokRunCompleted(true);
+                  if (status === "completed") {
+                    toast({
+                      title: "TikTok metrics refresh completed",
+                      description: `Processed ${run.processed_submissions ?? 0} submissions. Success: ${run.success_count ?? 0}, Permanent failure: ${run.permanent_failure_count ?? 0}, Temporary failure: ${run.temporary_failure_count ?? 0}.`,
+                      duration: 10000,
+                      variant: "success",
+                    });
+                  }
+                  setTimeout(() => {
+                    setShowTiktokRunPopup(false);
+                    window.location.reload();
+                  }, 10000);
+                } else {
+                  window.location.reload();
+                }
+                return;
+              }
             } else {
               const res = await fetch(
                 `/api/contests/${contestId}/last-metrics-updated`,
@@ -4722,7 +4817,6 @@ export default function ContestDetailClient({
         engagement_rate: twitterStats.engagement_rate || 0,
       };
     } else {
-      // Generic platform metrics
       return {
         views: baseViews,
         likes: stats.likes || stats.like_count || 0,
@@ -4734,7 +4828,9 @@ export default function ContestDetailClient({
   }
 
   const getInsightsStatusMeta = useCallback(
-    (status: Submission["insights_status"]) => {
+    (status: Submission["insights_status"], errorMsg?: string | null) => {
+      const errorSuffix = errorMsg ? `\n\nDetails: ${errorMsg}` : "";
+
       switch (status) {
         case "ok":
           return {
@@ -4748,7 +4844,7 @@ export default function ContestDetailClient({
         case "temporary_failure":
           return {
             label: null,
-            help: "Temporary error fetching insights\nWill retry later",
+            help: "Temporary error fetching insights\nWill retry later" + errorSuffix,
             dotClass: "bg-amber-400",
             pillClass: isDark
               ? "border-amber-700/60 bg-amber-950/35 text-amber-200"
@@ -4757,7 +4853,7 @@ export default function ContestDetailClient({
         case "permanent_failure":
           return {
             label: null,
-            help: "Instagram insights cannot be fetched for this post",
+            help: "Insights cannot be fetched for this post" + errorSuffix,
             dotClass: "bg-rose-500",
             pillClass: isDark
               ? "border-rose-700/60 bg-rose-950/35 text-rose-200"
@@ -4776,11 +4872,9 @@ export default function ContestDetailClient({
         default:
           return {
             label: null,
-            help: "Unknown insights status",
+            help: "Status: " + status + errorSuffix,
             dotClass: "bg-slate-400",
-            pillClass: isDark
-              ? "border-slate-600 bg-slate-900/30 text-slate-300"
-              : "border-slate-200 bg-slate-50 text-slate-700",
+            pillClass: "border-slate-200 bg-slate-50 text-slate-700",
           };
       }
     },
@@ -5428,6 +5522,7 @@ export default function ContestDetailClient({
       [pendingManualPointsSubmission.id]: true,
     }));
 
+    const submissionId = pendingManualPointsSubmission.id;
     try {
       const response = await fetch(
         `/api/contests/${contestId}/adjust-manual-points`,
@@ -5493,10 +5588,12 @@ export default function ContestDetailClient({
         variant: "destructive",
       });
     } finally {
-      setIsLoadingSubmission((prev) => ({
-        ...prev,
-        [pendingManualPointsSubmission.id]: false,
-      }));
+      if (submissionId) {
+        setIsLoadingSubmission((prev) => ({
+          ...prev,
+          [submissionId]: false,
+        }));
+      }
     }
   };
 
@@ -10813,6 +10910,108 @@ export default function ContestDetailClient({
                               )}
                             </div>
                           )}
+                        {isAdminView &&
+                          currentContest.platform
+                            ?.toLowerCase()
+                            .includes("tiktok") &&
+                          showTiktokRunPopup &&
+                          tiktokRun && (
+                            <div className="ml-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white/90 dark:bg-slate-900/80 px-4 py-3 shadow-md flex flex-col gap-1 min-w-[220px]">
+                              <div className="flex items-center justify-between gap-2">
+                                <span className="text-xs font-semibold text-slate-800 dark:text-slate-100">
+                                  {tiktokRunCompleted
+                                    ? "TikTok refresh summary"
+                                    : "TikTok refresh in progress"}
+                                </span>
+                                <span className="text-[10px] text-slate-500 dark:text-slate-400">
+                                  Batch {tiktokRun.current_batch_index ?? 0}/
+                                  {tiktokRun.total_batches ?? 1}
+                                </span>
+                              </div>
+                              <div className="w-full h-1.5 rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden">
+                                {(() => {
+                                  const totalSubs =
+                                    tiktokRun.total_submissions ?? 0;
+                                  const reviewed = tiktokRun.reviewed_count ?? 0;
+                                  const totalBatches =
+                                    tiktokRun.total_batches ?? 1;
+                                  const batchIndex =
+                                    tiktokRun.current_batch_index ?? 0;
+
+                                  const byReviewed =
+                                    totalSubs > 0 && reviewed > 0
+                                      ? (reviewed / totalSubs) * 100
+                                      : 0;
+                                  const byBatches =
+                                    totalBatches > 0
+                                      ? (batchIndex / totalBatches) * 100
+                                      : 0;
+                                  const pct = Math.max(byReviewed, byBatches);
+
+                                  return (
+                                    <div
+                                      className="h-full bg-emerald-500 transition-all"
+                                      style={{
+                                        width: `${Math.min(
+                                          100,
+                                          Math.max(0, Math.round(pct)),
+                                        )}%`,
+                                      }}
+                                    />
+                                  );
+                                })()}
+                              </div>
+                              <div className="flex flex-wrap items-center justify-between gap-1 text-[11px] text-slate-600 dark:text-slate-300">
+                                <span>
+                                  Processed{" "}
+                                  <strong>
+                                    {tiktokRun.processed_submissions ?? 0}
+                                  </strong>{" "}
+                                  / {tiktokRun.total_submissions}
+                                </span>
+                                <span className="uppercase tracking-wide text-[10px]">
+                                  {tiktokRun.status}
+                                </span>
+                              </div>
+                              <div className="flex flex-col gap-0.5 text-[10px] text-slate-700 dark:text-slate-200 mt-1">
+                                <span>
+                                  Success:{" "}
+                                  <strong>{tiktokRun.success_count}</strong>
+                                </span>
+                                <span>
+                                  Permanent failure:{" "}
+                                  <strong>
+                                    {tiktokRun.permanent_failure_count}
+                                  </strong>
+                                </span>
+                                <span>
+                                  Temporary failure:{" "}
+                                  <strong>
+                                    {tiktokRun.temporary_failure_count}
+                                  </strong>
+                                </span>
+                              </div>
+                              {tiktokRefreshElapsedSeconds != null && (
+                                <>
+                                  <div className="my-1 border-t border-slate-200 dark:border-slate-600" />
+                                  <div className="flex items-center gap-1.5 text-[10px] text-slate-600 dark:text-slate-400">
+                                    <Clock className="h-3 w-3 shrink-0" />
+                                    <span>
+                                      {tiktokRun.status === "running"
+                                        ? "Elapsed"
+                                        : "Duration"}
+                                      :{" "}
+                                      <strong className="text-slate-700 dark:text-slate-300">
+                                        {formatDurationSeconds(
+                                          tiktokRefreshElapsedSeconds,
+                                        )}
+                                      </strong>
+                                    </span>
+                                  </div>
+                                </>
+                              )}
+                            </div>
+                          )}
                       </div>
                     </div>
                   </CardContent>
@@ -11804,6 +12003,11 @@ export default function ContestDetailClient({
                                   <TableHead className="text-center">
                                     Engagement rate
                                   </TableHead>
+                                  {isAdminView && (
+                                    <TableHead className="text-center">
+                                      Insights status
+                                    </TableHead>
+                                  )}
                                 </>
                               )}
                               {currentContest.platform
@@ -12929,6 +13133,40 @@ export default function ContestDetailClient({
                                             )}%`
                                           : "—"}
                                       </TableCell>
+                                      {isAdminView && (
+                                        <TableCell className="text-center">
+                                          {(() => {
+                                            const meta = getInsightsStatusMeta(
+                                              submission.insights_status ??
+                                                null,
+                                            );
+                                            return (
+                                              <div className="flex items-center justify-center">
+                                                <Tooltip>
+                                                  <TooltipTrigger asChild>
+                                                    <span
+                                                      className={cn(
+                                                        "inline-flex items-center justify-center rounded-full border px-2 py-1 text-xs font-medium",
+                                                        meta.pillClass,
+                                                      )}
+                                                    >
+                                                      <span
+                                                        className={cn(
+                                                          "h-2.5 w-2.5 rounded-full",
+                                                          meta.dotClass,
+                                                        )}
+                                                      />
+                                                    </span>
+                                                  </TooltipTrigger>
+                                                  <TooltipContent className="whitespace-pre-line">
+                                                    {meta.help}
+                                                  </TooltipContent>
+                                                </Tooltip>
+                                              </div>
+                                            );
+                                          })()}
+                                        </TableCell>
+                                      )}
                                     </>
                                   )}
                                   {currentContest.platform
@@ -14215,9 +14453,12 @@ export default function ContestDetailClient({
                                     </TableHead>
                                   )}
                                   {isAdminView &&
-                                    currentContest.platform
+                                    (currentContest.platform
                                       ?.toLowerCase()
-                                      .includes("instagram") && (
+                                      .includes("instagram") ||
+                                      currentContest.platform
+                                        ?.toLowerCase()
+                                        .includes("tiktok")) && (
                                       <TableHead className="text-center">
                                         Insights status
                                       </TableHead>
@@ -14636,9 +14877,12 @@ export default function ContestDetailClient({
                                             </TableCell>
                                           )}
                                           {isAdminView &&
-                                            currentContest.platform
+                                            (currentContest.platform
                                               ?.toLowerCase()
-                                              .includes("instagram") && (
+                                              .includes("instagram") ||
+                                              currentContest.platform
+                                                ?.toLowerCase()
+                                                .includes("tiktok")) && (
                                               <TableCell className="text-center">
                                                 {(() => {
                                                   const counts =
@@ -14700,8 +14944,7 @@ export default function ContestDetailClient({
                                                             </span>
                                                           </TooltipTrigger>
                                                           <TooltipContent>
-                                                            Instagram insights
-                                                            cannot be fetched
+                                                            Insights cannot be fetched
                                                             for this post
                                                           </TooltipContent>
                                                         </Tooltip>
