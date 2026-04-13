@@ -6,6 +6,7 @@ import { ReviewModal } from "@/components/ReviewModal";
 import { submitReview, ReviewData } from "@/lib/reviews";
 import { hasPublishedContests } from "@/lib/review-utils";
 import { hasSubmittedContent } from "@/lib/creator-review-utils";
+import { WITHDRAWAL_REVIEW_TRIGGER_EVENT } from "@/lib/review-events";
 import { useToast } from "@/hooks/use-toast";
 import type { UserResponse } from "@supabase/supabase-js";
 import React, { Suspense, useState, useEffect, useCallback } from "react";
@@ -325,83 +326,101 @@ function DashboardContent({
 
   const { toast } = useToast();
 
-  const handleReviewOpen = async () => {
-    if (!user) return;
+  const checkReviewActivityEligibility = useCallback(
+    async (showToasts: boolean): Promise<boolean> => {
+      if (!user?.id) return false;
 
-    try {
-      // Check contests for advertisers
-      const contestResult = await hasPublishedContests(user.id);
-      
-      if (!contestResult.success) {
+      const showErrorToast = (description: string) => {
+        if (!showToasts) return;
         toast({
           title: "Error",
-          description: "Failed to check your contest status. Please try again.",
+          description,
           variant: "destructive",
         });
-        return;
+      };
+
+      try {
+        // Check contests for advertisers
+        const contestResult = await hasPublishedContests(user.id);
+        if (!contestResult.success) {
+          showErrorToast("Failed to check your contest status. Please try again.");
+          return false;
+        }
+
+        // Check content submissions for creators
+        const contentResult = await hasSubmittedContent(user.id);
+        if (!contentResult.success) {
+          showErrorToast(
+            "Failed to check your content submission status. Please try again."
+          );
+          return false;
+        }
+
+        // Get user type to provide specific validation
+        const supabase = createClient();
+        const { data: userTypeData, error: userTypeError } = await supabase
+          .from("users")
+          .select("user_type")
+          .eq("id", user.id)
+          .single();
+
+        if (userTypeError) {
+          console.error("Error checking user type for review eligibility:", userTypeError);
+          showErrorToast("Failed to check your account type. Please try again.");
+          return false;
+        }
+
+        const userType = userTypeData?.user_type;
+
+        // Validate based on user type
+        if (userType === "creator" && !contentResult.hasSubmittedContent) {
+          if (showToasts) {
+            toast({
+              title: "Submit Content First",
+              description:
+                "You need to submit at least one content before leaving a review. Start by participating in a contest!",
+              variant: "destructive",
+            });
+          }
+          return false;
+        }
+
+        if (userType === "advertiser" && !contestResult.hasPublishedContests) {
+          if (showToasts) {
+            toast({
+              title: "Create a Contest First",
+              description:
+                "You need to create and publish at least one contest before leaving a review. Get started by launching your first campaign!",
+              variant: "destructive",
+            });
+          }
+          return false;
+        }
+
+        if (
+          !contestResult.hasPublishedContests &&
+          !contentResult.hasSubmittedContent
+        ) {
+          if (showToasts) {
+            toast({
+              title: "Activity Required",
+              description:
+                "You need to create and publish at least one contest as an advertiser, or submit at least one content as a creator before leaving a review.",
+              variant: "destructive",
+            });
+          }
+          return false;
+        }
+
+        return true;
+      } catch (error) {
+        console.error("Error checking review activity eligibility:", error);
+        showErrorToast("An unexpected error occurred. Please try again.");
+        return false;
       }
-
-      // Check content submissions for creators
-      const contentResult = await hasSubmittedContent(user.id);
-
-      if (!contentResult.success) {
-        toast({
-          title: "Error",
-          description: "Failed to check your content submission status. Please try again.",
-          variant: "destructive",
-        });
-        return;
-      }
-
-      // Get user type to provide specific validation
-      const supabase = createClient();
-      const { data: userData } = await supabase
-        .from("users")
-        .select("user_type")
-        .eq("id", user.id)
-        .single();
-
-      const userType = userData?.user_type;
-
-      // Validate based on user type
-      if (userType === "creator" && !contentResult.hasSubmittedContent) {
-        toast({
-          title: "Submit Content First",
-          description: "You need to submit at least one content before leaving a review. Start by participating in a contest!",
-          variant: "destructive",
-        });
-        return;
-      }
-
-      if (userType === "advertiser" && !contestResult.hasPublishedContests) {
-        toast({
-          title: "Create a Contest First",
-          description: "You need to create and publish at least one contest before leaving a review. Get started by launching your first campaign!",
-          variant: "destructive",
-        });
-        return;
-      }
-
-      if (!contestResult.hasPublishedContests && !contentResult.hasSubmittedContent) {
-        toast({
-          title: "Activity Required",
-          description: "You need to create and publish at least one contest as an advertiser, or submit at least one content as a creator before leaving a review.",
-          variant: "destructive",
-        });
-        return;
-      }
-
-      // User meets the requirements, open the review modal
-      setIsReviewModalOpen(true);
-    } catch (error) {
-      console.error("Error checking review eligibility:", error);
-      toast({
-        title: "Error",
-        description: "An unexpected error occurred. Please try again.",
-        variant: "destructive",
-      });
-    }
-  };
+    },
+    [toast, user?.id]
+  );
 
   const handleReviewSubmit = async (review: {
     rating: number;
@@ -451,60 +470,113 @@ function DashboardContent({
     }
   };
 
-  const shouldPromptReviewAfterWithdrawal = useCallback(async (): Promise<boolean> => {
-    if (!user?.id) return false;
+  const shouldPromptReviewAfterWithdrawal = useCallback(
+    async (): Promise<boolean> => {
+      if (!user?.id) return false;
 
-    const supabase = createClient();
-    const { data: latestReview, error } = await supabase
-      .from("user_reviews")
-      .select("created_at")
-      .eq("user_id", user.id)
-      .order("created_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
+      const supabase = createClient();
 
-    if (error) {
-      console.error("Error checking latest review for withdrawal prompt:", error);
-      return false;
-    }
+      // First, use the latest non-null timestamp to apply the 30-day rule.
+      const { data: latestDatedReview, error: latestReviewError } = await supabase
+        .from("user_reviews")
+        .select("created_at")
+        .eq("user_id", user.id)
+        .not("created_at", "is", null)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
 
-    // If user has never submitted any review, prompt immediately.
-    if (!latestReview?.created_at) {
+      if (latestReviewError) {
+        console.error(
+          "Error checking latest review timestamp for withdrawal prompt:",
+          latestReviewError
+        );
+        return false;
+      }
+
+      if (latestDatedReview?.created_at) {
+        const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
+        const latestReviewTime = new Date(latestDatedReview.created_at).getTime();
+        const now = Date.now();
+        return now - latestReviewTime >= THIRTY_DAYS_MS;
+      }
+
+      // If no dated review exists, verify whether any review exists at all.
+      const { data: anyReview, error: anyReviewError } = await supabase
+        .from("user_reviews")
+        .select("id")
+        .eq("user_id", user.id)
+        .limit(1)
+        .maybeSingle();
+
+      if (anyReviewError) {
+        console.error(
+          "Error checking review existence for withdrawal prompt:",
+          anyReviewError
+        );
+        return false;
+      }
+
+      // No review rows => prompt user. Any row with null created_at => avoid re-prompt spam.
+      return !anyReview;
+    },
+    [user?.id]
+  );
+
+  const openReviewModalIfEligible = useCallback(
+    async ({
+      enforceWithdrawalCooldown = false,
+      showEligibilityToasts = true,
+    }: {
+      enforceWithdrawalCooldown?: boolean;
+      showEligibilityToasts?: boolean;
+    }): Promise<boolean> => {
+      const hasRequiredActivity =
+        await checkReviewActivityEligibility(showEligibilityToasts);
+      if (!hasRequiredActivity) return false;
+
+      if (enforceWithdrawalCooldown) {
+        const shouldPrompt = await shouldPromptReviewAfterWithdrawal();
+        if (!shouldPrompt) return false;
+      }
+
+      setIsReviewModalOpen(true);
       return true;
-    }
+    },
+    [checkReviewActivityEligibility, shouldPromptReviewAfterWithdrawal]
+  );
 
-    const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
-    const latestReviewTime = new Date(latestReview.created_at).getTime();
-    const now = Date.now();
-
-    // Prompt only if the latest submitted review is older than 30 days.
-    return now - latestReviewTime >= THIRTY_DAYS_MS;
-  }, [user?.id]);
+  const handleReviewOpen = async () => {
+    await openReviewModalIfEligible({
+      enforceWithdrawalCooldown: false,
+      showEligibilityToasts: true,
+    });
+  };
 
   useEffect(() => {
     if (typeof window === "undefined") return;
 
     const handleWithdrawalReviewTrigger = () => {
       void (async () => {
-        const shouldPrompt = await shouldPromptReviewAfterWithdrawal();
-        if (shouldPrompt) {
-          setIsReviewModalOpen(true);
-        }
+        await openReviewModalIfEligible({
+          enforceWithdrawalCooldown: true,
+          showEligibilityToasts: false,
+        });
       })();
     };
 
     window.addEventListener(
-      "goviral:withdrawal-request-submitted",
+      WITHDRAWAL_REVIEW_TRIGGER_EVENT,
       handleWithdrawalReviewTrigger
     );
 
     return () => {
       window.removeEventListener(
-        "goviral:withdrawal-request-submitted",
+        WITHDRAWAL_REVIEW_TRIGGER_EVENT,
         handleWithdrawalReviewTrigger
       );
     };
-  }, [shouldPromptReviewAfterWithdrawal]);
+  }, [openReviewModalIfEligible]);
 
   useEffect(() => {
     setOpen(false);
