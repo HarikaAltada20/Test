@@ -868,6 +868,10 @@ export default function EarningsClientPage({
       setWithdrawAmountCoins(0);
       setSelectedWithdrawMethodId(null);
       setWithdrawalUserNotes("");
+
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(new CustomEvent("goviral:withdrawal-request-submitted"));
+      }
     } else {
       console.error(
         "Withdrawal request RPC returned unexpected data:",

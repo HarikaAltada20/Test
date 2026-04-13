@@ -451,6 +451,61 @@ function DashboardContent({
     }
   };
 
+  const shouldPromptReviewAfterWithdrawal = useCallback(async (): Promise<boolean> => {
+    if (!user?.id) return false;
+
+    const supabase = createClient();
+    const { data: latestReview, error } = await supabase
+      .from("user_reviews")
+      .select("created_at")
+      .eq("user_id", user.id)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (error) {
+      console.error("Error checking latest review for withdrawal prompt:", error);
+      return false;
+    }
+
+    // If user has never submitted any review, prompt immediately.
+    if (!latestReview?.created_at) {
+      return true;
+    }
+
+    const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
+    const latestReviewTime = new Date(latestReview.created_at).getTime();
+    const now = Date.now();
+
+    // Prompt only if the latest submitted review is older than 30 days.
+    return now - latestReviewTime >= THIRTY_DAYS_MS;
+  }, [user?.id]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const handleWithdrawalReviewTrigger = () => {
+      void (async () => {
+        const shouldPrompt = await shouldPromptReviewAfterWithdrawal();
+        if (shouldPrompt) {
+          setIsReviewModalOpen(true);
+        }
+      })();
+    };
+
+    window.addEventListener(
+      "goviral:withdrawal-request-submitted",
+      handleWithdrawalReviewTrigger
+    );
+
+    return () => {
+      window.removeEventListener(
+        "goviral:withdrawal-request-submitted",
+        handleWithdrawalReviewTrigger
+      );
+    };
+  }, [shouldPromptReviewAfterWithdrawal]);
+
   useEffect(() => {
     setOpen(false);
   }, [pathname]);
