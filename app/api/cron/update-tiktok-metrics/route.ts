@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient as createAdminSupabaseClient } from "@supabase/supabase-js";
 import { syncCreatorTikTokDisplayMetrics } from "@/lib/tiktok/sync-tiktok-display-metrics";
+import { isTikTokMetricsQueueEnabled } from "@/lib/queue/tiktok-metrics-queue";
 
 // Extract TikTok video ID from a content link
 function extractTikTokVideoId(contentLink: string): string | null {
@@ -11,6 +12,19 @@ function extractTikTokVideoId(contentLink: string): string | null {
   if (match) return match[1];
 
   return null;
+}
+
+function getBaseUrlFromRequest(request: Request): string {
+  try {
+    const xfHost = request.headers.get("x-forwarded-host")?.split(",")[0]?.trim();
+    const xfProto = request.headers.get("x-forwarded-proto")?.split(",")[0]?.trim();
+    if (xfHost && xfProto) return `${xfProto}://${xfHost}`;
+    const u = new URL(request.url);
+    return u.origin;
+  } catch {
+    const url = process.env.NEXT_PUBLIC_APP_URL?.trim() || "http://localhost:3000";
+    return url.replace(/\/$/, "");
+  }
 }
 
 
@@ -199,6 +213,40 @@ export async function GET(request: Request) {
           message: "No active TikTok contests to update",
         });
       }
+    }
+
+    // NEW: If queue is enabled, enqueue for each contest instead of monolithic update (Same as Instagram)
+    if (isTikTokMetricsQueueEnabled()) {
+      const baseUrl = getBaseUrlFromRequest(request);
+      const contestIdsToEnqueue = contestId ? [contestId] : (activeIds ?? []);
+      
+      console.log(`[TikTok Cron] Queue enabled. Enqueueing ${contestIdsToEnqueue.length} contest(s).`);
+      
+      const results: Array<{ id: string; runId?: string; alreadyActive?: boolean }> = [];
+      for (const cid of contestIdsToEnqueue) {
+        try {
+          const res = await fetch(
+            `${baseUrl.replace(/\/$/, "")}/api/contests/${cid}/tiktok-metrics-refresh/enqueue`,
+            {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                ...(process.env.CRON_SECRET ? { Authorization: `Bearer ${process.env.CRON_SECRET}` } : {}),
+              },
+            }
+          );
+          const data = await res.json().catch(() => ({}));
+          results.push({ id: cid, runId: data.runId, alreadyActive: data.alreadyActive });
+        } catch (e) {
+          console.warn(`[TikTok Cron] Enqueue for ${cid} failed:`, e);
+        }
+      }
+      
+      return NextResponse.json({
+        message: "TikTok metrics refresh enqueued for contest(s)",
+        queueEnabled: true,
+        results,
+      });
     }
 
     console.log("[TikTok Cron] Fetching TikTok submissions to update...");

@@ -62,11 +62,26 @@ export async function GET(
     const creatorLevelRefund = new Map<string, number>();
 
     (bonusRewards || []).forEach((r: any) => {
-      const rawTweetId = r.metadata?.tweet_id;
+      const m = r.metadata || {};
+      const at = r.created_at || "";
+      const bulkMap = m.twitter_bulk_bonus_breakdown;
+      if (bulkMap && typeof bulkMap === "object") {
+        for (const [tid, cents] of Object.entries(bulkMap)) {
+          const amt = Number(cents) || 0;
+          if (amt <= 0) continue;
+          const id = String(tid);
+          const cur = rewardSumByTweet.get(id);
+          rewardSumByTweet.set(id, {
+            sum: (cur?.sum ?? 0) + amt,
+            latestAt:
+              !cur || (at && at > (cur.latestAt || "")) ? at : cur.latestAt,
+          });
+        }
+      }
+      const rawTweetId = m.tweet_id;
       const tweetId = rawTweetId != null ? String(rawTweetId) : null;
       if (tweetId) {
         const amt = Number(r.amount) || 0;
-        const at = r.created_at || "";
         const cur = rewardSumByTweet.get(tweetId);
         rewardSumByTweet.set(tweetId, {
           sum: (cur?.sum ?? 0) + amt,

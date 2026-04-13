@@ -33,6 +33,7 @@ import { cn } from "@/lib/utils";
 type SortBy =
   | "winnings"
   | "affiliate_earnings"
+  | "other_earnings"
   | "contests_won"
   | "verified_views"
   | "submissions_won"
@@ -170,8 +171,13 @@ export default function LeaderboardClient({
     },
     {
       value: "affiliate_earnings",
-      label: "Affiliate & Additional Earnings",
+      label: "Affiliate earnings",
       icon: <TrendingUp className="w-4 h-4" />,
+    },
+    {
+      value: "other_earnings",
+      label: "Other earnings (bonuses, coupons)",
+      icon: <DollarSign className="w-4 h-4" />,
     },
     {
       value: "contests_won",
@@ -364,11 +370,9 @@ export default function LeaderboardClient({
       case "winnings":
         return formatMoney(entry.metrics.winnings);
       case "affiliate_earnings":
-        // Return combined value for sorting/display purposes
-        return formatMoney(
-          (entry.metrics.affiliate_earnings || 0) +
-            (entry.metrics.other_earnings || 0),
-        );
+        return formatMoney(entry.metrics.affiliate_earnings || 0);
+      case "other_earnings":
+        return formatMoney(entry.metrics.other_earnings || 0);
       case "contests_won":
         return entry.metrics.contests_won.toString();
       case "verified_views":
@@ -818,6 +822,7 @@ export default function LeaderboardClient({
             {sortBy !== "referrals" &&
               sortBy !== "total_coins" &&
               sortBy !== "affiliate_earnings" &&
+              sortBy !== "other_earnings" &&
               sortBy !== "verified_views" && (
                 <div className="flex items-center gap-1 sm:gap-2 flex-shrink-0">
                   <div
@@ -978,7 +983,8 @@ export default function LeaderboardClient({
                         sortBy === "contests_won" ||
                         sortBy === "submissions_won" ||
                         sortBy === "referrals" ||
-                        sortBy === "affiliate_earnings") && (
+                        sortBy === "affiliate_earnings" ||
+                        sortBy === "other_earnings") && (
                         <div className="mt-1.5 sm:mt-2 flex flex-wrap items-center justify-end gap-1 sm:gap-2.5">
                           {sortBy === "winnings" && (
                             <>
@@ -1001,11 +1007,9 @@ export default function LeaderboardClient({
                               <Skeleton className="h-6 sm:h-7 w-16 sm:w-20 rounded-md" />
                             </>
                           )}
-                          {sortBy === "affiliate_earnings" && (
-                            <>
-                              <Skeleton className="h-6 sm:h-7 w-16 sm:w-20 rounded-md" />
-                              <Skeleton className="h-6 sm:h-7 w-20 sm:w-24 rounded-md" />
-                            </>
+                          {(sortBy === "affiliate_earnings" ||
+                            sortBy === "other_earnings") && (
+                            <Skeleton className="h-6 sm:h-7 w-20 sm:w-24 rounded-md" />
                           )}
                         </div>
                       )}
@@ -1479,6 +1483,49 @@ export default function LeaderboardClient({
                               className={cn(
                                 "flex items-center gap-0.5 sm:gap-1.5 px-1.5 sm:px-2.5 py-0.5 sm:py-1.5 rounded-md sm:rounded-lg transition-colors",
                                 isDark
+                                  ? "bg-teal-400/10 border border-teal-400/30 hover:bg-teal-400/20"
+                                  : "bg-teal-50/80 border border-teal-200/60 hover:bg-teal-100/80",
+                              )}
+                            >
+                              <DollarSign
+                                className={cn(
+                                  "w-2.5 h-2.5 sm:w-3.5 sm:h-3.5 flex-shrink-0",
+                                  isDark ? "text-teal-300" : "text-teal-600",
+                                )}
+                              />
+                              <span
+                                className={cn(
+                                  "text-[10px] sm:text-xs font-bold",
+                                  isDark ? "text-teal-300" : "text-teal-700",
+                                )}
+                              >
+                                {formatMoney(entry.metrics.other_earnings || 0)}
+                              </span>
+                              <span
+                                className={cn(
+                                  "text-[10px] sm:text-xs font-medium hidden sm:inline",
+                                  isDark ? "text-teal-400" : "text-teal-600",
+                                )}
+                              >
+                                Other earnings
+                              </span>
+                              <span
+                                className={cn(
+                                  "text-[10px] font-medium sm:hidden",
+                                  isDark ? "text-teal-400" : "text-teal-600",
+                                )}
+                              >
+                                O
+                              </span>
+                            </div>
+                          </div>
+                        )}
+                        {sortBy === "other_earnings" && (
+                          <div className="mt-1.5 sm:mt-2 flex flex-wrap items-center justify-end gap-1 sm:gap-2.5">
+                            <div
+                              className={cn(
+                                "flex items-center gap-0.5 sm:gap-1.5 px-1.5 sm:px-2.5 py-0.5 sm:py-1.5 rounded-md sm:rounded-lg transition-colors",
+                                isDark
                                   ? "bg-green-400/10 border border-green-400/30 hover:bg-green-400/20"
                                   : "bg-green-50/80 border border-green-200/60 hover:bg-green-100/80",
                               )}
@@ -1514,45 +1561,6 @@ export default function LeaderboardClient({
                                 )}
                               >
                                 A
-                              </span>
-                            </div>
-                            <div
-                              className={cn(
-                                "flex items-center gap-0.5 sm:gap-1.5 px-1.5 sm:px-2.5 py-0.5 sm:py-1.5 rounded-md sm:rounded-lg transition-colors",
-                                isDark
-                                  ? "bg-teal-400/10 border border-teal-400/30 hover:bg-teal-400/20"
-                                  : "bg-teal-50/80 border border-teal-200/60 hover:bg-teal-100/80",
-                              )}
-                            >
-                              <DollarSign
-                                className={cn(
-                                  "w-2.5 h-2.5 sm:w-3.5 sm:h-3.5 flex-shrink-0",
-                                  isDark ? "text-teal-300" : "text-teal-600",
-                                )}
-                              />
-                              <span
-                                className={cn(
-                                  "text-[10px] sm:text-xs font-bold",
-                                  isDark ? "text-teal-300" : "text-teal-700",
-                                )}
-                              >
-                                {formatMoney(entry.metrics.other_earnings || 0)}
-                              </span>
-                              <span
-                                className={cn(
-                                  "text-[10px] sm:text-xs font-medium hidden sm:inline",
-                                  isDark ? "text-teal-400" : "text-teal-600",
-                                )}
-                              >
-                                Other Earnings
-                              </span>
-                              <span
-                                className={cn(
-                                  "text-[10px] font-medium sm:hidden",
-                                  isDark ? "text-teal-400" : "text-teal-600",
-                                )}
-                              >
-                                E
                               </span>
                             </div>
                           </div>

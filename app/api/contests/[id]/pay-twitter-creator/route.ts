@@ -7,6 +7,42 @@ import {
   REVERSAL_TRANSACTION_REMARK,
 } from "@/lib/payment-utils";
 
+/** Split total cents across rows by non-negative weights; remainder by largest fractional parts. Equal split when all weights are 0. */
+function distributeCentsByWeights(
+  weights: number[],
+  totalCents: number
+): number[] {
+  const n = weights.length;
+  if (n === 0) return [];
+  const amounts = new Array(n).fill(0);
+  if (totalCents <= 0) return amounts;
+
+  const totalW = weights.reduce((a, b) => a + b, 0);
+  if (totalW > 0) {
+    const rawFracs = weights.map((w) => (totalCents * w) / totalW);
+    let allocated = 0;
+    for (let i = 0; i < n; i++) {
+      amounts[i] = Math.floor(rawFracs[i]);
+      allocated += amounts[i];
+    }
+    let rem = totalCents - allocated;
+    const order = rawFracs
+      .map((r, i) => ({ i, f: r - amounts[i] }))
+      .sort((a, b) => b.f - a.f);
+    for (let k = 0; k < rem; k++) {
+      amounts[order[k % n].i] += 1;
+    }
+    return amounts;
+  }
+
+  const base = Math.floor(totalCents / n);
+  let rem = totalCents - base * n;
+  for (let i = 0; i < n; i++) {
+    amounts[i] = base + (i < rem ? 1 : 0);
+  }
+  return amounts;
+}
+
 /**
  * POST /api/contests/[id]/pay-twitter-creator
  *
@@ -113,7 +149,7 @@ export async function POST(
       await supabaseAdmin
         .from("twitter_campaign_leaderboard")
         .select(
-          "id, creator_id, current_rank, total_points, paid, earnings, paid_rank, moderation_status"
+          "id, creator_id, current_rank, total_points, earnings, paid_rank, moderation_status"
         )
         .eq("contest_id", contestId)
         .eq("creator_id", creatorId)
@@ -138,7 +174,7 @@ export async function POST(
     }
 
     // Check if already paid (unless this is a re-payment with custom amount)
-    if (leaderboardEntry.paid && !isCustom) {
+    if (leaderboardEntry.moderation_status === "paid" && !isCustom) {
       return NextResponse.json(
         { error: "Creator has already been paid for this contest" },
         { status: 400 }
@@ -305,11 +341,10 @@ export async function POST(
 
     // Update leaderboard entry with payment information
     const updateData: any = {
-      paid: true,
       paid_at: new Date().toISOString(),
       earnings: rewardAmount,
       paid_rank: leaderboardEntry.current_rank, // Store rank at payment time for audit
-      moderation_status: "paid", // Update status to paid
+      moderation_status: "paid",
     };
 
     const { error: updateError } = await supabaseAdmin
@@ -328,21 +363,64 @@ export async function POST(
       );
     }
 
-    // Update all tweets from this creator to 'paid' status (consistent with reject/verify flows)
-    const { error: tweetsUpdateError } = await supabaseAdmin
+    // Mark non-rejected tweets paid and set per-tweet earnings (DB + reversals; bulk CPM already does this).
+    const { data: tweetsToPay, error: tweetsFetchError } = await supabaseAdmin
       .from("twitter_campaign_tweets")
-      .update({ moderation_status: "paid" })
+      .select("id, points, manual_points_adjustment")
       .eq("contest_id", contestId)
       .eq("creator_id", creatorId)
-      .neq("moderation_status", "rejected"); // Don't update rejected tweets
+      .neq("moderation_status", "rejected")
+      .order("id", { ascending: true });
 
-    if (tweetsUpdateError) {
+    if (tweetsFetchError) {
       console.error(
-        "[pay-twitter-creator] Error updating tweets:",
-        tweetsUpdateError
+        "[pay-twitter-creator] Error fetching tweets for earnings split:",
+        tweetsFetchError
       );
-      // Don't fail the entire payment if tweet update fails, just log it
-      // The leaderboard is the source of truth for payment status
+    } else if (tweetsToPay?.length) {
+      const weights =
+        contest.contest_type === "cpm"
+          ? tweetsToPay.map((t) => {
+              const pts =
+                (t.points || 0) + (t.manual_points_adjustment || 0);
+              return Math.max(0, pts);
+            })
+          : tweetsToPay.map(() => 0);
+      const earningsPerTweet = distributeCentsByWeights(weights, rewardAmount);
+
+      const updateResults = await Promise.all(
+        tweetsToPay.map((t, i) =>
+          supabaseAdmin
+            .from("twitter_campaign_tweets")
+            .update({
+              moderation_status: "paid",
+              earnings: earningsPerTweet[i],
+            })
+            .eq("id", t.id)
+            .eq("contest_id", contestId)
+        )
+      );
+      const tweetUpdateErr = updateResults.find((r) => r.error)?.error;
+      if (tweetUpdateErr) {
+        console.error(
+          "[pay-twitter-creator] Error updating tweets with earnings:",
+          tweetUpdateErr
+        );
+      }
+    } else {
+      const { error: tweetsUpdateError } = await supabaseAdmin
+        .from("twitter_campaign_tweets")
+        .update({ moderation_status: "paid" })
+        .eq("contest_id", contestId)
+        .eq("creator_id", creatorId)
+        .neq("moderation_status", "rejected");
+
+      if (tweetsUpdateError) {
+        console.error(
+          "[pay-twitter-creator] Error updating tweets:",
+          tweetsUpdateError
+        );
+      }
     }
 
     return NextResponse.json({

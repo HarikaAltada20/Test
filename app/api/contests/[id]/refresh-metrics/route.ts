@@ -22,7 +22,11 @@ import {
   isQStashEnabled,
   triggerProcessMetricsQueue,
   triggerProcessInstagramInsightsQueue,
+  triggerProcessTikTokMetricsQueue,
 } from "@/lib/qstash";
+import {
+  isTikTokMetricsQueueEnabled,
+} from "@/lib/queue/tiktok-metrics-queue";
 
 export async function POST(
   request: Request,
@@ -172,11 +176,16 @@ export async function POST(
     // Twitter: use Upstash Redis; Instagram: use Instagram insights queue when enabled
     const queueEnabled = isMetricsQueueEnabled();
     const instagramQueueEnabled = isInstagramInsightsQueueEnabled();
+    const tiktokQueueEnabled = isTikTokMetricsQueueEnabled();
     const useQueue = isTwitter && queueEnabled;
     const useInstagramQueue =
       !isTwitter &&
       contest.platform?.toLowerCase() === "instagram" &&
       instagramQueueEnabled;
+    const useTikTokQueue =
+      !isTwitter &&
+      contest.platform?.toLowerCase() === "tiktok" &&
+      tiktokQueueEnabled;
 
     if (isTwitter) {
       const why = queueEnabled
@@ -253,6 +262,80 @@ export async function POST(
         queued: true,
         message:
           "Instagram refresh started in background. Metrics will update shortly.",
+        contestId,
+        contestTitle: contest.title,
+        platform: contest.platform,
+        runId: enqueueData.runId,
+        nextRefreshAvailable: new Date(
+          now.getTime() + cooldownMs,
+        ).toISOString(),
+      });
+    }
+
+    if (useTikTokQueue) {
+      const protocol = request.headers.get("x-forwarded-proto") || "http";
+      const host = request.headers.get("host");
+      const baseUrl = host
+        ? `${protocol}://${host}`
+        : process.env.NEXT_PUBLIC_APP_URL
+          ? `https://${process.env.NEXT_PUBLIC_APP_URL}`
+          : "";
+      const enqueueUrl = `${baseUrl.replace(/\/$/, "")}/api/contests/${contestId}/tiktok-metrics-refresh/enqueue`;
+      const cookieHeader = request.headers.get("cookie");
+      const enqueueRes = await fetch(enqueueUrl, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(cookieHeader ? { Cookie: cookieHeader } : {}),
+        },
+        credentials: "include",
+      });
+      const enqueueData = await enqueueRes.json().catch(() => ({}));
+      if (!enqueueRes.ok) {
+        return NextResponse.json(
+          { error: enqueueData?.error ?? "Failed to start TikTok refresh" },
+          { status: enqueueRes.status },
+        );
+      }
+      if (enqueueData.alreadyActive) {
+        return NextResponse.json({
+          success: true,
+          queued: true,
+          message: "Refresh already in progress.",
+          contestId,
+          runId: enqueueData.runId,
+          nextRefreshAvailable: new Date(
+            now.getTime() + cooldownMs,
+          ).toISOString(),
+        });
+      }
+      const processUrl = `${baseUrl}/api/cron/process-tiktok-metrics-queue`;
+      const doFetch = () =>
+        fetch(processUrl, {
+          method: "POST",
+          headers: process.env.CRON_SECRET
+            ? { Authorization: `Bearer ${process.env.CRON_SECRET}` }
+            : {},
+        }).catch((e) =>
+          console.warn(
+            "[refresh-metrics] Trigger TikTok processor failed:",
+            e,
+          ),
+        );
+      if (isQStashEnabled()) {
+        triggerProcessTikTokMetricsQueue(baseUrl)
+          .then((res) => {
+            if (res?.error) doFetch();
+          })
+          .catch(() => doFetch());
+      } else {
+        doFetch();
+      }
+      return NextResponse.json({
+        success: true,
+        queued: true,
+        message:
+          "TikTok refresh started in background. Metrics will update shortly.",
         contestId,
         contestTitle: contest.title,
         platform: contest.platform,

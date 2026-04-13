@@ -13,7 +13,7 @@ type CreditPayload = {
     rate_percent?: number; // optional override per row
   }>;
   default_rate_percent?: number; // optional uniform override
-  credit_type?: "wallet" | "external"; // wallet (default) credits withdrawable & logs txn; external only bumps affiliate_earnings
+  credit_type?: "wallet" | "external"; // wallet (default) credits withdrawable & logs txn; external only bumps users.affiliate_earnings via RPC
 };
 
 export async function POST(req: NextRequest) {
@@ -139,7 +139,7 @@ export async function POST(req: NextRequest) {
       } else {
         // External: only bump users.affiliate_earnings (no wallet credit)
         const { error: incErr } = await supabase.rpc(
-          "increment_other_earnings",
+          "increment_affiliate_earnings",
           { p_user_id: referrerId, p_amount: group.total }
         );
         if (incErr) {

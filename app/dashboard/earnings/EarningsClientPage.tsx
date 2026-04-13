@@ -41,6 +41,7 @@ import {
 import {
   ArrowDownToLine,
   DollarSign,
+  Info,
   Trophy,
   Coins,
   Gift,
@@ -85,6 +86,13 @@ import { TabContent, TabPanel } from "@/components/ui/tab-content";
 import { useTabState } from "@/components/ui/tab-utils";
 import { cn } from "@/lib/utils";
 import { PhantomPayoutForm } from "@/components/PhantomPayoutForm";
+import { WITHDRAWAL_REVIEW_TRIGGER_EVENT } from "@/lib/review-events";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 const formatCoins = (coins: number | bigint = 0): string => {
   return new Intl.NumberFormat().format(Number(coins));
@@ -861,6 +869,10 @@ export default function EarningsClientPage({
       setWithdrawAmountCoins(0);
       setSelectedWithdrawMethodId(null);
       setWithdrawalUserNotes("");
+
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(new CustomEvent(WITHDRAWAL_REVIEW_TRIGGER_EVENT));
+      }
     } else {
       console.error(
         "Withdrawal request RPC returned unexpected data:",
@@ -974,6 +986,12 @@ export default function EarningsClientPage({
   const totalReferrals =
     (userData.advertisers_referred || 0) + (userData.creators_referred || 0);
 
+  const contestCashCents = profile.total_money_won ?? 0;
+  const affiliateEarningsCents = userData.affiliate_earnings ?? 0;
+  const otherEarningsCents = userData.other_earnings ?? 0;
+  const totalCashEarnedCents =
+    contestCashCents + affiliateEarningsCents + otherEarningsCents;
+
   // Filter withdrawal requests for display
   const cashWithdrawalRequests = withdrawalRequests.filter(
     (req) => req.amount_type === "cash"
@@ -1023,9 +1041,55 @@ export default function EarningsClientPage({
                     isDark ? "text-white" : "text-black"
                   )}
                 >
-                  <p className="text-lg font-medium">Total Cash Won</p>
+                  <div className="flex items-center gap-1.5">
+                    <p className="text-lg font-medium">Total Cash Earned</p>
+                    <TooltipProvider delayDuration={200}>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <button
+                            type="button"
+                            className={cn(
+                              "inline-flex rounded-full p-0.5 outline-none focus-visible:ring-2 focus-visible:ring-offset-2",
+                              isDark
+                                ? "text-white/80 focus-visible:ring-white/40"
+                                : "text-muted-foreground focus-visible:ring-[#4A00BE]/30"
+                            )}
+                            aria-label="How total cash earned is calculated"
+                          >
+                            <Info className="h-4 w-4 shrink-0" />
+                          </button>
+                        </TooltipTrigger>
+                        <TooltipContent
+                          side="top"
+                          className="max-w-[280px] space-y-2 p-3 text-left"
+                        >
+                          <p className="text-xs leading-snug">
+                            <span className="font-medium">
+                              Contest & opportunity winnings
+                            </span>
+                            <span className="text-muted-foreground"> — </span>
+                            {formatCurrencyFromCents(contestCashCents)}
+                          </p>
+                          <p className="text-xs leading-snug">
+                            <span className="font-medium">
+                              Affiliate earnings
+                            </span>
+                            <span className="text-muted-foreground"> — </span>
+                            {formatCurrencyFromCents(affiliateEarningsCents)}
+                          </p>
+                          <p className="text-xs leading-snug">
+                            <span className="font-medium">
+                              Other earnings (bonuses, coupons, etc.)
+                            </span>
+                            <span className="text-muted-foreground"> — </span>
+                            {formatCurrencyFromCents(otherEarningsCents)}
+                          </p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                  </div>
                   <p className="text-xl font-bold">
-                    {formatCurrencyFromCents(profile.total_money_won)}
+                    {formatCurrencyFromCents(totalCashEarnedCents)}
                   </p>
                   <p className="text-md">Lifetime cash earnings</p>
                 </div>

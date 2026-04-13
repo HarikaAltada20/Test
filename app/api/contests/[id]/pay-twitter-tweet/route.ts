@@ -301,7 +301,7 @@ export async function POST(
 
     const { error: updateTweetErr } = await supabaseAdmin
       .from("twitter_campaign_tweets")
-      .update({ moderation_status: "paid" })
+      .update({ moderation_status: "paid", earnings: rewardAmount })
       .eq("id", tweetId)
       .eq("contest_id", contestId);
 
@@ -316,20 +316,27 @@ export async function POST(
       );
     }
 
-    // Update leaderboard earnings for this creator (sum of paid tweets; do not set paid/paid_at so only this tweet shows paid)
-    const { data: leaderboardEntry } = await supabaseAdmin
-      .from("twitter_campaign_leaderboard")
-      .select("id, earnings")
-      .eq("contest_id", contestId)
-      .eq("creator_id", creatorId)
-      .single();
-
-    if (leaderboardEntry) {
-      const currentEarnings = leaderboardEntry.earnings || 0;
-      await supabaseAdmin
-        .from("twitter_campaign_leaderboard")
-        .update({ earnings: currentEarnings + rewardAmount })
-        .eq("id", leaderboardEntry.id);
+    // CPM aggregate on leaderboard (atomic; safe for concurrent per-tweet pays)
+    const { error: rpcErr } = await supabaseAdmin.rpc(
+      "add_twitter_leaderboard_cpm_earnings_delta",
+      {
+        p_contest_id: contestId,
+        p_creator_id: creatorId,
+        p_delta_cents: rewardAmount,
+      }
+    );
+    if (rpcErr) {
+      console.error(
+        "[pay-twitter-tweet] Leaderboard earnings delta RPC failed:",
+        rpcErr
+      );
+      return NextResponse.json(
+        {
+          error:
+            "Tweet marked paid but leaderboard earnings could not be updated. Please contact support.",
+        },
+        { status: 500 }
+      );
     }
 
     return NextResponse.json({

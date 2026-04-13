@@ -333,26 +333,39 @@ export function CreatorSubmissionsModal({
           new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
       );
 
-      // Twitter CPM/leaderboard tweets use per-tweet APIs (pay-twitter-tweet, pay-twitter-bonus);
-      // bulk-payment API only supports submissions table (YouTube/Instagram). Use individual onPayment for Twitter.
-      const hasTwitterTweets = sortedSubs.some(
-        (s) => (s as any).is_twitter_tweet === true,
-      );
-      const useBulkApi = isBulkTransaction && !hasTwitterTweets;
+    const hasTwitterTweets = sortedSubs.some(
+      (s) => (s as any).is_twitter_tweet === true
+    );
+    const isTwitterCpm =
+      contest.contest_type === "cpm" &&
+      (contest.platform?.toLowerCase() === "twitter" ||
+        contest.platform?.toLowerCase() === "x");
+    const useInstagramBulkApi = isBulkTransaction && !hasTwitterTweets;
+    const useTwitterCpmBulkApi =
+      isBulkTransaction && hasTwitterTweets && isTwitterCpm;
 
-      if (useBulkApi) {
-        // OPTION 2: Bulk Transaction (Single API call) - YouTube/Instagram only
-        try {
-          const response = await fetch("/api/admin/bulk-payment", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              submission_ids: sortedSubs.map((s) => s.id),
-              payment_type: type,
-              contest_id: contest.id,
-              creator_id: creator.id,
-            }),
-          });
+    if (useInstagramBulkApi || useTwitterCpmBulkApi) {
+      try {
+        const response = useTwitterCpmBulkApi
+          ? await fetch(`/api/contests/${contest.id}/bulk-pay-twitter-cpm`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                tweet_ids: sortedSubs.map((s) => s.id),
+                payment_type: type,
+                creator_id: creator.id,
+              }),
+            })
+          : await fetch("/api/admin/bulk-payment", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                submission_ids: sortedSubs.map((s) => s.id),
+                payment_type: type,
+                contest_id: contest.id,
+                creator_id: creator.id,
+              }),
+            });
 
           const result = await response.json();
 
@@ -363,18 +376,17 @@ export function CreatorSubmissionsModal({
 
           setSelectedSubmissions(new Set());
 
-          // Show detailed success message
-          const { data } = result;
-          const message = [
-            `✓ Bulk Payment Successful!`,
-            ``,
-            `Paid Submissions: ${data.paid_count}`,
-            `Skipped (already paid): ${data.skipped_count}`,
-            ``,
-            `CPM Earnings: $${(data.total_cpm / 100).toFixed(2)}`,
-            `Flat Fee Bonus: $${(data.total_bonus / 100).toFixed(2)}`,
-            `Total Paid: $${(data.total_amount / 100).toFixed(2)}`,
-          ];
+        const { data } = result;
+        const message = [
+          `✓ Bulk Payment Successful!`,
+          ``,
+          `Paid items: ${data.paid_count}`,
+          `Skipped: ${data.skipped_count}`,
+          ``,
+          `CPM Earnings: $${(data.total_cpm / 100).toFixed(2)}`,
+          `Flat Fee Bonus: $${(data.total_bonus / 100).toFixed(2)}`,
+          `Total Paid: $${(data.total_amount / 100).toFixed(2)}`,
+        ];
 
           if (data.cap_reached) {
             message.push(``, `⚠️ Earnings cap reached!`);
@@ -385,20 +397,18 @@ export function CreatorSubmissionsModal({
 
           alert(message.join("\n"));
 
-          // Refresh the page to show updated data
-          window.location.reload();
-        } catch (error) {
-          console.error("Bulk payment error:", error);
-          alert(
-            `Bulk payment failed:\n${
-              error instanceof Error ? error.message : "Unknown error"
-            }`,
-          );
-        }
-      } else {
-        // OPTION 1: Individual Transactions (Multiple API calls)
-        let successCount = 0;
-        let failCount = 0;
+        window.location.reload();
+      } catch (error) {
+        console.error("Bulk payment error:", error);
+        alert(
+          `Bulk payment failed:\n${error instanceof Error ? error.message : "Unknown error"
+          }`
+        );
+      }
+    } else {
+      // OPTION 1: Individual Transactions (Multiple API calls)
+      let successCount = 0;
+      let failCount = 0;
 
         // Pay each submission in order (skipReload so parent doesn't reload after each)
         for (const sub of sortedSubs) {
@@ -606,8 +616,11 @@ export function CreatorSubmissionsModal({
 
   const getInsightsMeta = (
     status: Submission["insights_status"],
+    errorMsg?: string,
   ): { help: string; dotClass: string; pillClass: string } => {
     const isDark = mode === "dark";
+    const errorSuffix = errorMsg ? `\n\nDetails: ${errorMsg}` : "";
+
     if (status === "ok") {
       return {
         help: "Insights fetched successfully",
@@ -619,7 +632,7 @@ export function CreatorSubmissionsModal({
     }
     if (status === "temporary_failure") {
       return {
-        help: "Temporary error fetching insights\nWill retry later",
+        help: "Temporary error fetching insights\nWill retry later" + errorSuffix,
         dotClass: "bg-amber-400",
         pillClass: isDark
           ? "border-amber-700/60 bg-amber-950/35"
@@ -628,7 +641,7 @@ export function CreatorSubmissionsModal({
     }
     if (status === "permanent_failure") {
       return {
-        help: "Instagram insights cannot be fetched for this post",
+        help: "Insights cannot be fetched for this post" + errorSuffix,
         dotClass: "bg-rose-500",
         pillClass: isDark
           ? "border-rose-700/60 bg-rose-950/35"
@@ -1589,7 +1602,7 @@ export function CreatorSubmissionsModal({
                       </TableHead>
                     </>
                   )}
-                  {isAdminView && isInstagramContest && (
+                  {isAdminView && (isInstagramContest || isTikTokContest) && (
                     <TableHead
                       className={cn(
                         "text-center",
@@ -1653,7 +1666,7 @@ export function CreatorSubmissionsModal({
                           ((isInstagramContest || isTikTokContest) ? (isTikTokContest ? 3 : 6) : 0) + // TT: Shares + total engagement + engagement rate; IG: +Saves, Reach, Interactions, Avg/Total watch
                           2 + // Expected Reward, Reward Granted
                           (hasBonus ? 2 : 0) + // Bonus Expected, Bonus Granted
-                          (isAdminView && isInstagramContest ? 1 : 0) + // Insights status (admin only)
+                          (isAdminView && (isInstagramContest || isTikTokContest) ? 1 : 0) + // Insights status (admin only)
                           4 // Status, Rejection reason, Submitted, Actions
                       }
                       className={cn(
@@ -2347,11 +2360,13 @@ export function CreatorSubmissionsModal({
                             </TableCell>
                           </>
                         )}
-                        {isAdminView && isInstagramContest && (
+                        {isAdminView && (isInstagramContest || isTikTokContest) && (
                           <TableCell className="text-center">
                             {(() => {
                               const meta = getInsightsMeta(
                                 submission.insights_status ?? null,
+                                (submission.other_stats as any)?.tiktok_error ||
+                                  (submission.other_stats as any)?.instagram_error
                               );
                               return (
                                 <div className="flex items-center justify-center">
