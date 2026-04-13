@@ -216,6 +216,7 @@ export default async function ContestDetailPage({
         moderation_status,
         manual_points_adjustment,
         manual_points_reason,
+        earnings,
         deleted_at,
         excluded_by_submission_cap,
         first_fetched_at,
@@ -314,7 +315,6 @@ export default async function ContestDetailPage({
       total_quote_reposts?: number;
       total_impressions?: number;
       current_rank?: number;
-      paid?: boolean;
       paid_at?: string | null;
       earnings?: number;
       paid_rank?: number | null;
@@ -325,7 +325,7 @@ export default async function ContestDetailPage({
       const { data: leaderboardData, error: leaderboardError } = await supabase
         .from("twitter_campaign_leaderboard")
         .select(
-          "creator_id, moderation_status, rejection_reason, manual_points_adjustment, manual_points_reason, total_points, total_eligible_tweets, total_likes, total_replies, total_retweets, total_quote_reposts, total_impressions, current_rank, paid, paid_at, earnings, paid_rank"
+          "creator_id, moderation_status, rejection_reason, manual_points_adjustment, manual_points_reason, total_points, total_eligible_tweets, total_likes, total_replies, total_retweets, total_quote_reposts, total_impressions, current_rank, paid_at, earnings, paid_rank"
         )
         .eq("contest_id", contestId);
 
@@ -351,7 +351,6 @@ export default async function ContestDetailPage({
               total_quote_reposts: entry.total_quote_reposts || 0,
               total_impressions: entry.total_impressions || 0,
               current_rank: entry.current_rank || null,
-              paid: entry.paid || false,
               paid_at: entry.paid_at || null,
               earnings: entry.earnings || 0,
               paid_rank: entry.paid_rank || null,
@@ -718,17 +717,24 @@ export default async function ContestDetailPage({
       const creatorLeaderboard = actualCreatorProfileId
         ? creatorModerationData[actualCreatorProfileId]
         : undefined;
-      const creatorPaid = creatorLeaderboard?.paid ?? false;
+      const creatorPaid =
+        creatorLeaderboard?.moderation_status === "paid";
       const creatorEarnings = creatorLeaderboard?.earnings ?? null;
       const creatorPaidAt = creatorLeaderboard?.paid_at ?? null;
       const tweetPaid = moderationStatus === "paid";
       // Include manual_points_adjustment so Reward Granted matches expected reward
       const tweetTotalPoints =
         (tweet.points || 0) + (tweet.manual_points_adjustment || 0);
-      const tweetEarningsCents =
-        isCpm && tweetPaid && cpmRate > 0
-          ? Math.round(((tweetTotalPoints * cpmRate) / 1000) * 100)
+      const storedTweetEarnings =
+        typeof (tweet as any).earnings === "number" && (tweet as any).earnings > 0
+          ? (tweet as any).earnings
           : null;
+      const tweetEarningsCents =
+        storedTweetEarnings != null
+          ? storedTweetEarnings
+          : isCpm && tweetPaid && cpmRate > 0
+            ? Math.round(((tweetTotalPoints * cpmRate) / 1000) * 100)
+            : null;
       const paid = isCpm ? tweetPaid : creatorPaid;
       const earnings =
         isCpm && tweetPaid

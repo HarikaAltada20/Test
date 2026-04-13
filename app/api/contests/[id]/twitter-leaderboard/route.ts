@@ -111,7 +111,6 @@ export async function GET(
         total_retweets: 0,
         total_quote_reposts: 0,
         total_impressions: 0,
-        paid: false,
         paid_at: null,
         joined_at: p.joined_at ?? null,
         twitter_username: p.twitter_username ?? null,

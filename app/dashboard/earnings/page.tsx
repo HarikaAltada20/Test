@@ -23,7 +23,9 @@ export default async function CreatorEarningsServerPage() {
   // Fetch user role, coins, and referral data
   const { data: roleAndCoinsData, error: roleAndCoinsError } = await supabase
     .from("users")
-    .select("user_type, coins, advertisers_referred, creators_referred, total_lifetime_coins_earned")
+    .select(
+      "user_type, coins, advertisers_referred, creators_referred, total_lifetime_coins_earned, affiliate_earnings, other_earnings"
+    )
     .eq("id", authUser.id)
     .single();
 
@@ -37,6 +39,8 @@ export default async function CreatorEarningsServerPage() {
     advertisers_referred: roleAndCoinsData.advertisers_referred || 0,
     creators_referred: roleAndCoinsData.creators_referred || 0,
     total_lifetime_coins_earned: roleAndCoinsData.total_lifetime_coins_earned || 0,
+    affiliate_earnings: roleAndCoinsData.affiliate_earnings || 0,
+    other_earnings: roleAndCoinsData.other_earnings || 0,
   };
 
   // Fetch creator profile (money fields)

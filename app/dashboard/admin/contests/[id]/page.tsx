@@ -198,6 +198,7 @@ export default async function AdminContestDetailPage({
         moderation_status,
         manual_points_adjustment,
         manual_points_reason,
+        earnings,
         deleted_at,
         excluded_by_submission_cap,
         first_fetched_at,
@@ -294,7 +295,6 @@ export default async function AdminContestDetailPage({
         total_quote_reposts?: number;
         total_impressions?: number;
         current_rank?: number;
-        paid?: boolean;
         paid_at?: string | null;
         earnings?: number;
         paid_rank?: number | null;
@@ -306,7 +306,7 @@ export default async function AdminContestDetailPage({
           await supabase
             .from("twitter_campaign_leaderboard")
             .select(
-              "creator_id, moderation_status, rejection_reason, manual_points_adjustment, manual_points_reason, total_points, total_eligible_tweets, total_likes, total_replies, total_retweets, total_quote_reposts, total_impressions, current_rank, paid, paid_at, earnings, paid_rank"
+              "creator_id, moderation_status, rejection_reason, manual_points_adjustment, manual_points_reason, total_points, total_eligible_tweets, total_likes, total_replies, total_retweets, total_quote_reposts, total_impressions, current_rank, paid_at, earnings, paid_rank"
             )
             .eq("contest_id", contestId);
 
@@ -332,7 +332,6 @@ export default async function AdminContestDetailPage({
                 total_quote_reposts: entry.total_quote_reposts || 0,
                 total_impressions: entry.total_impressions || 0,
                 current_rank: entry.current_rank || null,
-                paid: entry.paid || false,
                 paid_at: entry.paid_at || null,
                 earnings: entry.earnings || 0,
                 paid_rank: entry.paid_rank || null,
@@ -549,6 +548,21 @@ export default async function AdminContestDetailPage({
         // Get moderation_status (default to "pending" if column doesn't exist)
         const moderationStatus =
           (tweet as any).moderation_status || "pending";
+        const tweetPaid = moderationStatus === "paid";
+        const storedEarnings =
+          typeof (tweet as any).earnings === "number" &&
+          (tweet as any).earnings > 0
+            ? (tweet as any).earnings
+            : null;
+        const isCpmTwitter = contestData.contest_type === "cpm";
+        const cpmRate =
+          (contestData.contest_based_details as any)?.cpm_contest
+            ?.cpm_rate_usd || 0;
+        const tweetTotalPoints = (tweet.points || 0) + manualAdjustment;
+        const computedEarningsCents =
+          isCpmTwitter && tweetPaid && cpmRate > 0
+            ? Math.round(((tweetTotalPoints * cpmRate) / 1000) * 100)
+            : null;
 
         return {
           id: tweet.id,
@@ -556,7 +570,9 @@ export default async function AdminContestDetailPage({
           content_link: tweet.tweet_url,
           status: moderationStatus, // Use moderation_status as status
           views: tweet.impressions || 0,
-          earnings: null, // Twitter campaigns don't use earnings
+          earnings: tweetPaid
+            ? storedEarnings ?? computedEarningsCents
+            : null,
           other_stats: {
             likes: tweet.likes || 0,
             replies: tweet.replies || 0,
@@ -573,7 +589,7 @@ export default async function AdminContestDetailPage({
           platform: "twitter",
           video_thumbnail_url: null,
           video_title: tweet.tweet_text?.substring(0, 100) || null,
-          paid: false,
+          paid: tweetPaid,
           paid_at: null,
           bonus_paid: false,
           bonus_paid_at: null,

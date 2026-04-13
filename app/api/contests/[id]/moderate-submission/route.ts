@@ -88,7 +88,7 @@ export async function POST(
     // Fetch current tweet state before any update (for per-tweet reversal)
     const { data: currentTweet, error: tweetFetchError } = await supabaseAdmin
       .from("twitter_campaign_tweets")
-      .select("id, creator_id, moderation_status")
+      .select("id, creator_id, moderation_status, earnings")
       .eq("id", tweetId)
       .eq("contest_id", contestId)
       .single();
@@ -161,6 +161,17 @@ export async function POST(
       );
       const tweetReversalAmount = Math.max(0, tweetRewardSum - tweetRefundSum);
 
+      // CPM to reverse: prefer net from money_transactions (per-tweet metadata).
+      // Fallback: stored twitter_campaign_tweets.earnings when payouts used bulk metadata
+      // without per-tweet tweet_id on the reward row (idempotent after first refund logs tweet_id).
+      const storedCpmCents = Math.round(
+        Number((currentTweet as any).earnings) || 0,
+      );
+      let cpmReversalCents = tweetReversalAmount;
+      if (cpmReversalCents <= 0 && storedCpmCents > 0) {
+        cpmReversalCents = storedCpmCents;
+      }
+
       // Flat fee bonus = rewards/refunds with bonus_type "flat_fee"
       const bonusRewardTxns = (rewardTxns || []).filter(
         (tx: any) =>
@@ -182,7 +193,7 @@ export async function POST(
       );
       const bonusReversalAmount = Math.max(0, bonusRewardSum - bonusRefundSum);
 
-      const totalReversalAmount = tweetReversalAmount + bonusReversalAmount;
+      const totalReversalAmount = cpmReversalCents + bonusReversalAmount;
 
       if (totalReversalAmount > 0) {
         const debitRes = await debitCreatorWithdrawableBalance(
@@ -199,11 +210,11 @@ export async function POST(
         const contestTitle = (contest as any)?.title || "Contest";
 
         // Log reward-granted reversal (CPM tweet reward) so cash transaction shows correct value
-        if (tweetReversalAmount > 0) {
+        if (cpmReversalCents > 0) {
           const logged = await logTransactionAsAdmin(
             creatorId,
             "refund",
-            tweetReversalAmount,
+            cpmReversalCents,
             "success",
             `Reversal of Twitter CPM tweet reward - ${contestTitle}`,
             {
@@ -222,7 +233,7 @@ export async function POST(
               "[moderate-submission] Failed to log tweet reward refund for tweet:",
               tweetId,
               "amount:",
-              tweetReversalAmount
+              cpmReversalCents
             );
             return NextResponse.json(
               {
@@ -270,22 +281,29 @@ export async function POST(
           }
         }
 
-        // Decrement leaderboard earnings for this creator by total reversed
-        const { data: leaderboardEntry } = await supabaseAdmin
-          .from("twitter_campaign_leaderboard")
-          .select("id, earnings")
-          .eq("contest_id", contestId)
-          .eq("creator_id", creatorId)
-          .single();
-
-        if (leaderboardEntry) {
-          const currentEarnings = leaderboardEntry.earnings ?? 0;
-          await supabaseAdmin
-            .from("twitter_campaign_leaderboard")
-            .update({
-              earnings: Math.max(0, currentEarnings - totalReversalAmount),
-            })
-            .eq("id", leaderboardEntry.id);
+        // Decrement leaderboard CPM aggregate only (atomic; safe for concurrent reversals)
+        if (cpmReversalCents > 0) {
+          const { error: rpcErr } = await supabaseAdmin.rpc(
+            "add_twitter_leaderboard_cpm_earnings_delta",
+            {
+              p_contest_id: contestId,
+              p_creator_id: creatorId,
+              p_delta_cents: -cpmReversalCents,
+            }
+          );
+          if (rpcErr) {
+            console.error(
+              "[moderate-submission] Leaderboard earnings delta RPC failed:",
+              rpcErr
+            );
+            return NextResponse.json(
+              {
+                error:
+                  "Reversal processed but failed to update leaderboard earnings. Please retry or contact support.",
+              },
+              { status: 500 }
+            );
+          }
         }
       }
     }
@@ -303,6 +321,15 @@ export async function POST(
     const updateData: any = {
       moderation_status: moderationStatus,
     };
+
+    // Leaving "paid": clear stored CPM cents so SSR/UI never show stale granted amounts
+    if (
+      isTwitterCpm &&
+      currentTweet.moderation_status === "paid" &&
+      action !== "paid"
+    ) {
+      updateData.earnings = null;
+    }
 
     if (action === "reject") {
       // Store rejection reason in manual_points_reason field

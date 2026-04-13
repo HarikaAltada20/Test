@@ -373,7 +373,6 @@ interface ContestDetailClientProps {
       total_quote_reposts?: number;
       total_impressions?: number;
       current_rank?: number;
-      paid?: boolean;
       paid_at?: string | null;
       earnings?: number;
       paid_rank?: number | null;
@@ -1530,7 +1529,7 @@ export default function ContestDetailClient({
           creator_rejection_reason: leaderboardData.rejection_reason || null,
           current_rank: leaderboardData.current_rank || null,
           paid:
-            leaderboardData.paid ||
+            leaderboardData.moderation_status === "paid" ||
             (currentContest?.contest_type === "cpm" &&
               creatorSubmissions.some(
                 (s: any) =>
@@ -1740,7 +1739,7 @@ export default function ContestDetailClient({
           creator_moderation_status:
             creatorModeration.moderation_status || "pending",
           creator_rejection_reason: creatorModeration.rejection_reason || null,
-          paid: creatorModeration.paid || false,
+          paid: creatorModeration.moderation_status === "paid",
           earnings_from_db: creatorModeration.earnings || 0,
         };
       }
@@ -5336,7 +5335,7 @@ export default function ContestDetailClient({
               throw new Error(err.error || "Failed to reject tweet");
             }
           }
-          // Update creator/leaderboard row so creator-wise view shows rejected (no extra reversal; CPM doesn't set leaderboard.paid)
+          // Update creator/leaderboard row so creator-wise view shows rejected (no extra reversal; CPM uses per-tweet paid, not creator-level moderation_status paid)
           const leaderboardRes = await fetch(
             `/api/contests/${contestId}/moderate-creator`,
             {
