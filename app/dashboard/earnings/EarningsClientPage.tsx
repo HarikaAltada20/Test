@@ -86,6 +86,7 @@ import { TabContent, TabPanel } from "@/components/ui/tab-content";
 import { useTabState } from "@/components/ui/tab-utils";
 import { cn } from "@/lib/utils";
 import { PhantomPayoutForm } from "@/components/PhantomPayoutForm";
+import { WITHDRAWAL_REVIEW_TRIGGER_EVENT } from "@/lib/review-events";
 import {
   Tooltip,
   TooltipContent,
@@ -868,6 +869,10 @@ export default function EarningsClientPage({
       setWithdrawAmountCoins(0);
       setSelectedWithdrawMethodId(null);
       setWithdrawalUserNotes("");
+
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(new CustomEvent(WITHDRAWAL_REVIEW_TRIGGER_EVENT));
+      }
     } else {
       console.error(
         "Withdrawal request RPC returned unexpected data:",
