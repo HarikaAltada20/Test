@@ -37,6 +37,7 @@ import {
   X,
   ArrowRight,
   CheckCircle2,
+  Users,
 } from "lucide-react";
 import { ButtonLoadingSpinner } from "@/components/loading/LoadingSpinner";
 import {
@@ -248,6 +249,13 @@ export default function SettingsPage({
   const [twitterProfile, setTwitterProfile] = useState<any | null>(null);
   const [isSavingTwitter, setIsSavingTwitter] = useState(false);
 
+  // Switch Account state
+  const [isSwitchAccountModalOpen, setIsSwitchAccountModalOpen] = useState(false);
+  const [switchEmail, setSwitchEmail] = useState("");
+  const [switchPassword, setSwitchPassword] = useState("");
+  const [isSwitching, setIsSwitching] = useState(false);
+  const [showSwitchPassword, setShowSwitchPassword] = useState(false);
+
   // Clear password fields when modal closes
   useEffect(() => {
     if (!isPasswordModalOpen) {
@@ -256,6 +264,15 @@ export default function SettingsPage({
       setConfirmPassword("");
     }
   }, [isPasswordModalOpen]);
+
+  // Clear switch account fields when modal closes
+  useEffect(() => {
+    if (!isSwitchAccountModalOpen) {
+      setSwitchEmail("");
+      setSwitchPassword("");
+      setShowSwitchPassword(false);
+    }
+  }, [isSwitchAccountModalOpen]);
 
   // Read mode from data attribute
   useEffect(() => {
@@ -477,7 +494,10 @@ export default function SettingsPage({
           .eq("id", user!.id)
           .single();
 
-        if (userError) throw userError;
+        if (userError) {
+          console.error("User table fetch error:", userError.message, userError.details);
+          throw userError;
+        }
         setUserType(userData.user_type);
 
         // Simple check: if user has email provider, they can manage passwords
@@ -499,7 +519,10 @@ export default function SettingsPage({
             .eq("id", user!.id)
             .single();
 
-          if (error) throw error;
+          if (error) {
+            console.error("Creator profile fetch error:", error.message, error.details);
+            throw error;
+          }
           setProfile(data);
           setCreatorProfileData(data);
 
@@ -527,7 +550,10 @@ export default function SettingsPage({
             .eq("id", user!.id)
             .single();
 
-          if (error) throw error;
+          if (error) {
+            console.error("Advertiser profile fetch error:", error.message, error.details);
+            throw error;
+          }
           setProfile(data);
         } else {
           console.error("Unknown user type:", userData.user_type);
@@ -538,10 +564,14 @@ export default function SettingsPage({
           });
         }
       } catch (err) {
-        console.error("Error loading profile:", err);
+        console.error("Error loading profile details:", err);
+        const errorMessage = typeof err === 'object' && err !== null && 'message' in err 
+          ? (err as any).message 
+          : "Unknown error";
+          
         toast({
-          title: "Error",
-          description: "Failed to load profile information.",
+          title: "Profile Loading Failed",
+          description: `Error: ${errorMessage}. Please try refreshing the page.`,
           variant: "destructive",
         });
       } finally {
@@ -716,6 +746,40 @@ export default function SettingsPage({
       return false;
     } finally {
       setPasswordChangeLoading(false);
+    }
+  };
+
+  const handleAccountSwitch = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!switchEmail || !switchPassword) return;
+
+    setIsSwitching(true);
+    try {
+      const { error } = await supabase.auth.signInWithPassword({
+        email: switchEmail.trim(),
+        password: switchPassword,
+      });
+
+      if (error) throw error;
+
+      toast({
+        title: "Account Switched",
+        description: `Successfully switched into ${switchEmail}`,
+      });
+
+      // Clear state and close modal
+      setIsSwitchAccountModalOpen(false);
+      
+      // Redirect to refresh the application state with the new session
+      window.location.href = "/dashboard";
+    } catch (err: any) {
+      toast({
+        title: "Switch Failed",
+        description: err.message || "Invalid credentials. Please check your email and password.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSwitching(false);
     }
   };
 
@@ -1555,6 +1619,14 @@ export default function SettingsPage({
       id: "referral",
       title: "Share Referral Links",
       icon: Gift,
+      isLink: false,
+      expandable: false,
+      isModal: true,
+    },
+    {
+      id: "switch-account",
+      title: "Switch Account",
+      icon: RefreshCw,
       isLink: false,
       expandable: false,
       isModal: true,
@@ -2640,6 +2712,8 @@ export default function SettingsPage({
                       } else if (item.id === "billing") {
                         setIsBillingModalOpen(true);
                         fetchBillingDetails();
+                      } else if (item.id === "switch-account") {
+                        setIsSwitchAccountModalOpen(true);
                       }
                     }}
                     className={cn(
@@ -4120,6 +4194,120 @@ export default function SettingsPage({
           </Button>
         </CardContent>
       </Card> */}
+ 
+      {/* Switch Account Modal */}
+      <Dialog
+        open={isSwitchAccountModalOpen}
+        onOpenChange={setIsSwitchAccountModalOpen}
+        isdark={isDark}
+      >
+        <DialogContent className="sm:max-w-[450px] w-[95vw] max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle
+              className={cn(isDark ? "text-white" : "text-gray-900", "flex items-center gap-2")}
+            >
+              <Users className="h-5 w-5 text-[#7F39EC]" />
+              Switch Account
+            </DialogTitle>
+            <DialogDescription
+              className={cn(isDark ? "text-gray-300" : "text-gray-600")}
+            >
+              Enter the credentials for the account you want to switch to.
+            </DialogDescription>
+          </DialogHeader>
+
+          <form
+            onSubmit={handleAccountSwitch}
+            className="space-y-4 pt-2"
+          >
+            <div className="space-y-2">
+              <Label
+                htmlFor="switch-email"
+                className={cn(isDark ? "text-white" : "text-gray-900")}
+              >
+                Email Address
+              </Label>
+              <Input
+                id="switch-email"
+                type="email"
+                placeholder="Enter email"
+                value={switchEmail}
+                onChange={(e) => setSwitchEmail(e.target.value)}
+                className={cn(
+                  isDark
+                    ? "bg-[#180438] border border-gray-600 text-white"
+                    : "bg-white text-gray-900 border-gray-300",
+                )}
+                required
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label
+                htmlFor="switch-password"
+                className={cn(isDark ? "text-white" : "text-gray-900")}
+              >
+                Password
+              </Label>
+              <div className="relative">
+                <Input
+                  id="switch-password"
+                  type={showSwitchPassword ? "text" : "password"}
+                  placeholder="Enter password"
+                  value={switchPassword}
+                  onChange={(e) => setSwitchPassword(e.target.value)}
+                  className={cn(
+                    "pr-10",
+                    isDark
+                      ? "bg-[#180438] border border-gray-600 text-white"
+                      : "bg-white text-gray-900 border-gray-300",
+                  )}
+                  required
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowSwitchPassword(!showSwitchPassword)}
+                  className="absolute right-3 top-1/2 transform -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors"
+                >
+                  {showSwitchPassword ? (
+                    <EyeOff className="h-4 w-4" />
+                  ) : (
+                    <Eye className="h-4 w-4" />
+                  )}
+                </button>
+              </div>
+            </div>
+
+            <div className="flex gap-2 pt-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setIsSwitchAccountModalOpen(false)}
+                className={cn(
+                  "flex-1",
+                  isDark ? "bg-[#180438] border-gray-600 text-white hover:bg-[#180438]/80" : "bg-white border-gray-300",
+                )}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="submit"
+                className="flex-1 bg-[#7F39EC] hover:bg-[#6c32c9] text-white"
+                disabled={isSwitching || !switchEmail || !switchPassword}
+              >
+                {isSwitching ? (
+                  <div className="flex items-center gap-2">
+                    <RefreshCw className="h-4 w-4 animate-spin" />
+                    <span>Switching...</span>
+                  </div>
+                ) : (
+                  "Switch Account"
+                )}
+              </Button>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

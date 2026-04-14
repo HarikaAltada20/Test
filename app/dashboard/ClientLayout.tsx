@@ -63,6 +63,7 @@ import goldLogoHorizontal from "@/public/images/gold_logo_horizontal.svg";
 import goldSquareLogo from "@/public/images/Group (4).png";
 import logo from "@/public/images/Primary Horizintal.svg";
 import squareLogo from "@/public/images/Group (2).avif";
+import { AccountSwitcher } from "@/components/dashboard/switcher/AccountSwitcher";
 
 // Color Theme Configurations
 const colorThemes = {
@@ -2296,6 +2297,16 @@ function DashboardContent({
                               {displayEmail}
                             </p>
                           </div>
+
+                          {/* Account Switcher - Instagram-like UI */}
+                          <div className="px-6 py-4 border-y border-slate-100 dark:border-slate-800/50">
+                            <AccountSwitcher
+                              currentUserId={user?.id || ""}
+                              currentUsername={displayName}
+                              isDark={currentMode === "dark"}
+                            />
+                          </div>
+
                           {/* Content - Unique Information Instead of Duplicate Navigation */}
                           <div className="px-4 md:pl-4 md:pr-0 py-6 space-y-6">
                             {/* Account Plan Section - Only for Advertisers */}
