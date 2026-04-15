@@ -235,28 +235,8 @@ export async function POST(
           ).toISOString(),
         });
       }
-      const processUrl = `${baseUrl}/api/cron/process-instagram-insights-queue`;
-      const doFetch = () =>
-        fetch(processUrl, {
-          method: "POST",
-          headers: process.env.CRON_SECRET
-            ? { Authorization: `Bearer ${process.env.CRON_SECRET}` }
-            : {},
-        }).catch((e) =>
-          console.warn(
-            "[refresh-metrics] Trigger Instagram processor failed:",
-            e,
-          ),
-        );
-      if (isQStashEnabled()) {
-        triggerProcessInstagramInsightsQueue(baseUrl)
-          .then((res) => {
-            if (res?.error) doFetch();
-          })
-          .catch(() => doFetch());
-      } else {
-        doFetch();
-      }
+      // Note: Triggering removed here because enqueue route already triggers the processor.
+
       return NextResponse.json({
         success: true,
         queued: true,
@@ -309,28 +289,8 @@ export async function POST(
           ).toISOString(),
         });
       }
-      const processUrl = `${baseUrl}/api/cron/process-tiktok-metrics-queue`;
-      const doFetch = () =>
-        fetch(processUrl, {
-          method: "POST",
-          headers: process.env.CRON_SECRET
-            ? { Authorization: `Bearer ${process.env.CRON_SECRET}` }
-            : {},
-        }).catch((e) =>
-          console.warn(
-            "[refresh-metrics] Trigger TikTok processor failed:",
-            e,
-          ),
-        );
-      if (isQStashEnabled()) {
-        triggerProcessTikTokMetricsQueue(baseUrl)
-          .then((res) => {
-            if (res?.error) doFetch();
-          })
-          .catch(() => doFetch());
-      } else {
-        doFetch();
-      }
+      // Note: Triggering removed here because enqueue route already triggers the processor.
+
       return NextResponse.json({
         success: true,
         queued: true,

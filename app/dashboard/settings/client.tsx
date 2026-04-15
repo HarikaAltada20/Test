@@ -37,6 +37,7 @@ import {
   X,
   ArrowRight,
   CheckCircle2,
+  Users,
 } from "lucide-react";
 import { ButtonLoadingSpinner } from "@/components/loading/LoadingSpinner";
 import {
@@ -46,7 +47,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
+import { AccountSwitcher } from "@/components/dashboard/switcher/AccountSwitcher";
 import { FaXTwitter } from "react-icons/fa6";
 import { FaDiscord, FaWhatsapp, FaLinkedin } from "react-icons/fa";
 import { SiInstagram, SiYoutube, SiTiktok } from "react-icons/si";
@@ -247,6 +249,10 @@ export default function SettingsPage({
   >("idle");
   const [twitterProfile, setTwitterProfile] = useState<any | null>(null);
   const [isSavingTwitter, setIsSavingTwitter] = useState(false);
+  
+  // Ref to trigger AccountSwitcher modal
+  const accountSwitcherRef = useRef<HTMLDivElement>(null);
+
 
   // Clear password fields when modal closes
   useEffect(() => {
@@ -256,6 +262,7 @@ export default function SettingsPage({
       setConfirmPassword("");
     }
   }, [isPasswordModalOpen]);
+
 
   // Read mode from data attribute
   useEffect(() => {
@@ -477,7 +484,10 @@ export default function SettingsPage({
           .eq("id", user!.id)
           .single();
 
-        if (userError) throw userError;
+        if (userError) {
+          console.error("User table fetch error:", userError.message, userError.details);
+          throw userError;
+        }
         setUserType(userData.user_type);
 
         // Simple check: if user has email provider, they can manage passwords
@@ -499,7 +509,10 @@ export default function SettingsPage({
             .eq("id", user!.id)
             .single();
 
-          if (error) throw error;
+          if (error) {
+            console.error("Creator profile fetch error:", error.message, error.details);
+            throw error;
+          }
           setProfile(data);
           setCreatorProfileData(data);
 
@@ -527,7 +540,10 @@ export default function SettingsPage({
             .eq("id", user!.id)
             .single();
 
-          if (error) throw error;
+          if (error) {
+            console.error("Advertiser profile fetch error:", error.message, error.details);
+            throw error;
+          }
           setProfile(data);
         } else {
           console.error("Unknown user type:", userData.user_type);
@@ -538,10 +554,14 @@ export default function SettingsPage({
           });
         }
       } catch (err) {
-        console.error("Error loading profile:", err);
+        console.error("Error loading profile details:", err);
+        const errorMessage = typeof err === 'object' && err !== null && 'message' in err 
+          ? (err as any).message 
+          : "Unknown error";
+          
         toast({
-          title: "Error",
-          description: "Failed to load profile information.",
+          title: "Profile Loading Failed",
+          description: `Error: ${errorMessage}. Please try refreshing the page.`,
           variant: "destructive",
         });
       } finally {
@@ -719,6 +739,7 @@ export default function SettingsPage({
     }
   };
 
+  
   const buildReferralLinks = () => {
     const base =
       typeof window !== "undefined"
@@ -1559,6 +1580,14 @@ export default function SettingsPage({
       expandable: false,
       isModal: true,
     },
+    {
+      id: "switch-account",
+      title: "Switch Account",
+      icon: RefreshCw,
+      isLink: false,
+      expandable: false,
+      isModal: true,
+    },
   ];
 
   return (
@@ -2344,6 +2373,10 @@ export default function SettingsPage({
             if (item.id === "billing" && userType !== "advertiser") {
               return false;
             }
+            // Only show switch account for creators
+            if (item.id === "switch-account" && userType !== "creator") {
+              return false;
+            }
             return true;
           })
           .map((item) => {
@@ -2640,6 +2673,12 @@ export default function SettingsPage({
                       } else if (item.id === "billing") {
                         setIsBillingModalOpen(true);
                         fetchBillingDetails();
+                      } else if (item.id === "switch-account") {
+                        // Trigger the AccountSwitcher modal by programmatically clicking its button
+                        const switchButton = accountSwitcherRef.current?.querySelector('button');
+                        if (switchButton) {
+                          switchButton.click();
+                        }
                       }
                     }}
                     className={cn(
@@ -4120,6 +4159,18 @@ export default function SettingsPage({
           </Button>
         </CardContent>
       </Card> */}
+ 
+      {/* Account Switcher Component - Hidden but functional - Only for Creators */}
+      {userType === "creator" && (
+        <div ref={accountSwitcherRef} className="hidden">
+          <AccountSwitcher
+            currentUserId={user?.id || ""}
+            currentUsername={username || user?.user_metadata?.username || user?.email?.split("@")[0] || "User"}
+            isDark={isDark}
+            userType={userType}
+          />
+        </div>
+      )}
     </div>
   );
 }

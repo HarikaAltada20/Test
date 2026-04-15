@@ -11,6 +11,10 @@
     {
       "path": "/api/cron/update-tiktok-metrics",
       "schedule": "0 3 * * *"
+    },
+    {
+      "path": "/api/cron/refresh-all-tokens",
+      "schedule": "0 0 * * *"
     }
   ]
 }
