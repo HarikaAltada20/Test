@@ -5,10 +5,31 @@ export async function GET() {
   try {
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
+    const { data: { session } } = await supabase.auth.getSession();
 
     if (!user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
+
+    // --- VAULT SYNC ---
+    // Every time we list accounts, we take the opportunity to update any 
+    // vault entries pointing TO the current user with the latest refresh token.
+    // This prevents "Refresh Token Not Found" errors caused by background rotations.
+    if (session?.refresh_token) {
+      const { encrypt } = await import("@/lib/encryption");
+      const { createAdminClient } = await import("@/utils/supabase/admin");
+      const adminClient = createAdminClient();
+      const encryptedToken = encrypt(session.refresh_token);
+
+      await adminClient
+        .from("user_sessions_vault")
+        .update({
+          encrypted_refresh_token: encryptedToken,
+          updated_at: new Date().toISOString()
+        })
+        .eq("target_user_id", user.id);
+    }
+    // ------------------
 
     // Fetch saved accounts from vault
     // Note: We use the explicit ID join first, then a fallback if relationship cache is stale
