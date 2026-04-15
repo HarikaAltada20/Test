@@ -63,10 +63,12 @@ export async function ensureFreshTikTokToken(
   }
 
   const expirationDate = expires_at ? new Date(expires_at) : null;
+  // Use a 1-hour buffer to refresh proactively before actual expiration
+  const BUFFER_MS = 3600 * 1000;
   const isExpired =
     !expirationDate ||
     Number.isNaN(expirationDate.getTime()) ||
-    expirationDate.getTime() <= Date.now();
+    expirationDate.getTime() <= Date.now() + BUFFER_MS;
 
   if (isExpired) {
     if (!refresh_token) {

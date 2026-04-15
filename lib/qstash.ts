@@ -130,6 +130,11 @@ function getProcessTikTokMetricsQueueUrl(): string {
   return `${getBaseUrl()}/api/cron/process-tiktok-metrics-queue`;
 }
 
+/** Canonical URL for the token refresh queue processor. */
+function getProcessTokenRefreshQueueUrl(): string {
+  return `${getBaseUrl()}/api/cron/process-token-refresh-queue`;
+}
+
 /**
  * Verify that the request is from QStash (Upstash-Signature).
  * Use with the raw body string; call before consuming the body.
@@ -248,6 +253,34 @@ export async function triggerProcessTikTokMetricsQueue(
 }
 
 /**
+ * Trigger the process-token-refresh-queue endpoint via QStash.
+ */
+export async function triggerProcessTokenRefreshQueue(
+  baseUrl?: string,
+): Promise<{ messageId?: string; error?: string }> {
+  const client = getQStashClient();
+  if (!client) return { error: "QStash not configured" };
+  const url = `${baseUrl ?? getBaseUrl()}/api/cron/process-token-refresh-queue`;
+  if (isLoopbackUrl(url))
+    return { error: "Loopback URL; QStash cannot reach localhost" };
+  try {
+    const res = await client.publishJSON({
+      url,
+      body: {},
+      method: "POST",
+    });
+    return { messageId: (res as { messageId?: string }).messageId };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error(
+      "[qstash] triggerProcessTokenRefreshQueue failed:",
+      message,
+    );
+    return { error: message };
+  }
+}
+
+/**
  * Verify QStash signature for the Instagram processor URL (for use when request is to that endpoint).
  */
 async function verifyQStashSignatureInstagram(
@@ -338,14 +371,40 @@ export async function verifyQStashSignatureTikTok(
 }
 
 /**
- * Authorize process-tiktok-metrics-queue: QStash signature (TikTok URL) or Bearer CRON_SECRET.
+ * Authorize process-token-refresh-queue: QStash signature or Bearer CRON_SECRET.
  */
-export async function authorizeProcessTikTokMetricsQueue(
+export async function authorizeProcessTokenRefreshQueue(
   request: Request,
   rawBody: string,
 ): Promise<boolean> {
-  if (request.headers.get("Upstash-Signature")) {
-    return verifyQStashSignatureTikTok(request, rawBody);
+  const signature = request.headers.get("Upstash-Signature");
+  if (signature) {
+    const currentKey = process.env.QSTASH_CURRENT_SIGNING_KEY?.trim();
+    const nextKey = process.env.QSTASH_NEXT_SIGNING_KEY?.trim();
+    if (!currentKey && !nextKey) return false;
+    try {
+      const receiver = new Receiver({
+        currentSigningKey: currentKey,
+        nextSigningKey: nextKey,
+      });
+      const forwardedOrigin = getForwardedOrigin(request);
+      const requestUrl = (() => {
+        try {
+          return new URL(request.url);
+        } catch {
+          return null;
+        }
+      })();
+      const candidates = uniqueStrings([
+        getProcessTokenRefreshQueueUrl(),
+        forwardedOrigin ? `${forwardedOrigin}/api/cron/process-token-refresh-queue` : null,
+        requestUrl ? `${requestUrl.origin}/api/cron/process-token-refresh-queue` : null,
+        requestUrl?.toString() ?? null,
+      ]);
+      return verifyQStashAgainstUrls(receiver, signature, rawBody, candidates);
+    } catch {
+      return false;
+    }
   }
   const cronSecret = process.env.CRON_SECRET;
   const auth = request.headers.get("Authorization");
