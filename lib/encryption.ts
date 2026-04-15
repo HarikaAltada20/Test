@@ -5,7 +5,7 @@ import crypto from 'crypto';
  * GCM provides both confidentiality and authenticity.
  */
 
-const ENCRYPTION_KEY = process.env.ENCRYPTION_SECRET || '';
+const ENCRYPTION_KEY ="hExSo8n3ZYC/8/aeYjocZ8ls+mH7nzKZzb3OSk7HVZM=";
 const ALGORITHM = 'aes-256-gcm';
 const IV_LENGTH = 12; // Standard for GCM
 

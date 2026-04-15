@@ -47,7 +47,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
+import { AccountSwitcher } from "@/components/dashboard/switcher/AccountSwitcher";
 import { FaXTwitter } from "react-icons/fa6";
 import { FaDiscord, FaWhatsapp, FaLinkedin } from "react-icons/fa";
 import { SiInstagram, SiYoutube, SiTiktok } from "react-icons/si";
@@ -248,13 +249,10 @@ export default function SettingsPage({
   >("idle");
   const [twitterProfile, setTwitterProfile] = useState<any | null>(null);
   const [isSavingTwitter, setIsSavingTwitter] = useState(false);
+  
+  // Ref to trigger AccountSwitcher modal
+  const accountSwitcherRef = useRef<HTMLDivElement>(null);
 
-  // Switch Account state
-  const [isSwitchAccountModalOpen, setIsSwitchAccountModalOpen] = useState(false);
-  const [switchEmail, setSwitchEmail] = useState("");
-  const [switchPassword, setSwitchPassword] = useState("");
-  const [isSwitching, setIsSwitching] = useState(false);
-  const [showSwitchPassword, setShowSwitchPassword] = useState(false);
 
   // Clear password fields when modal closes
   useEffect(() => {
@@ -265,14 +263,6 @@ export default function SettingsPage({
     }
   }, [isPasswordModalOpen]);
 
-  // Clear switch account fields when modal closes
-  useEffect(() => {
-    if (!isSwitchAccountModalOpen) {
-      setSwitchEmail("");
-      setSwitchPassword("");
-      setShowSwitchPassword(false);
-    }
-  }, [isSwitchAccountModalOpen]);
 
   // Read mode from data attribute
   useEffect(() => {
@@ -749,40 +739,7 @@ export default function SettingsPage({
     }
   };
 
-  const handleAccountSwitch = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!switchEmail || !switchPassword) return;
-
-    setIsSwitching(true);
-    try {
-      const { error } = await supabase.auth.signInWithPassword({
-        email: switchEmail.trim(),
-        password: switchPassword,
-      });
-
-      if (error) throw error;
-
-      toast({
-        title: "Account Switched",
-        description: `Successfully switched into ${switchEmail}`,
-      });
-
-      // Clear state and close modal
-      setIsSwitchAccountModalOpen(false);
-      
-      // Redirect to refresh the application state with the new session
-      window.location.href = "/dashboard";
-    } catch (err: any) {
-      toast({
-        title: "Switch Failed",
-        description: err.message || "Invalid credentials. Please check your email and password.",
-        variant: "destructive",
-      });
-    } finally {
-      setIsSwitching(false);
-    }
-  };
-
+  
   const buildReferralLinks = () => {
     const base =
       typeof window !== "undefined"
@@ -2416,6 +2373,10 @@ export default function SettingsPage({
             if (item.id === "billing" && userType !== "advertiser") {
               return false;
             }
+            // Only show switch account for creators
+            if (item.id === "switch-account" && userType !== "creator") {
+              return false;
+            }
             return true;
           })
           .map((item) => {
@@ -2713,7 +2674,11 @@ export default function SettingsPage({
                         setIsBillingModalOpen(true);
                         fetchBillingDetails();
                       } else if (item.id === "switch-account") {
-                        setIsSwitchAccountModalOpen(true);
+                        // Trigger the AccountSwitcher modal by programmatically clicking its button
+                        const switchButton = accountSwitcherRef.current?.querySelector('button');
+                        if (switchButton) {
+                          switchButton.click();
+                        }
                       }
                     }}
                     className={cn(
@@ -4195,119 +4160,17 @@ export default function SettingsPage({
         </CardContent>
       </Card> */}
  
-      {/* Switch Account Modal */}
-      <Dialog
-        open={isSwitchAccountModalOpen}
-        onOpenChange={setIsSwitchAccountModalOpen}
-        isdark={isDark}
-      >
-        <DialogContent className="sm:max-w-[450px] w-[95vw] max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle
-              className={cn(isDark ? "text-white" : "text-gray-900", "flex items-center gap-2")}
-            >
-              <Users className="h-5 w-5 text-[#7F39EC]" />
-              Switch Account
-            </DialogTitle>
-            <DialogDescription
-              className={cn(isDark ? "text-gray-300" : "text-gray-600")}
-            >
-              Enter the credentials for the account you want to switch to.
-            </DialogDescription>
-          </DialogHeader>
-
-          <form
-            onSubmit={handleAccountSwitch}
-            className="space-y-4 pt-2"
-          >
-            <div className="space-y-2">
-              <Label
-                htmlFor="switch-email"
-                className={cn(isDark ? "text-white" : "text-gray-900")}
-              >
-                Email Address
-              </Label>
-              <Input
-                id="switch-email"
-                type="email"
-                placeholder="Enter email"
-                value={switchEmail}
-                onChange={(e) => setSwitchEmail(e.target.value)}
-                className={cn(
-                  isDark
-                    ? "bg-[#180438] border border-gray-600 text-white"
-                    : "bg-white text-gray-900 border-gray-300",
-                )}
-                required
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label
-                htmlFor="switch-password"
-                className={cn(isDark ? "text-white" : "text-gray-900")}
-              >
-                Password
-              </Label>
-              <div className="relative">
-                <Input
-                  id="switch-password"
-                  type={showSwitchPassword ? "text" : "password"}
-                  placeholder="Enter password"
-                  value={switchPassword}
-                  onChange={(e) => setSwitchPassword(e.target.value)}
-                  className={cn(
-                    "pr-10",
-                    isDark
-                      ? "bg-[#180438] border border-gray-600 text-white"
-                      : "bg-white text-gray-900 border-gray-300",
-                  )}
-                  required
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowSwitchPassword(!showSwitchPassword)}
-                  className="absolute right-3 top-1/2 transform -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors"
-                >
-                  {showSwitchPassword ? (
-                    <EyeOff className="h-4 w-4" />
-                  ) : (
-                    <Eye className="h-4 w-4" />
-                  )}
-                </button>
-              </div>
-            </div>
-
-            <div className="flex gap-2 pt-2">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => setIsSwitchAccountModalOpen(false)}
-                className={cn(
-                  "flex-1",
-                  isDark ? "bg-[#180438] border-gray-600 text-white hover:bg-[#180438]/80" : "bg-white border-gray-300",
-                )}
-              >
-                Cancel
-              </Button>
-              <Button
-                type="submit"
-                className="flex-1 bg-[#7F39EC] hover:bg-[#6c32c9] text-white"
-                disabled={isSwitching || !switchEmail || !switchPassword}
-              >
-                {isSwitching ? (
-                  <div className="flex items-center gap-2">
-                    <RefreshCw className="h-4 w-4 animate-spin" />
-                    <span>Switching...</span>
-                  </div>
-                ) : (
-                  "Switch Account"
-                )}
-              </Button>
-            </div>
-          </form>
-        </DialogContent>
-      </Dialog>
+      {/* Account Switcher Component - Hidden but functional - Only for Creators */}
+      {userType === "creator" && (
+        <div ref={accountSwitcherRef} className="hidden">
+          <AccountSwitcher
+            currentUserId={user?.id || ""}
+            currentUsername={username || user?.user_metadata?.username || user?.email?.split("@")[0] || "User"}
+            isDark={isDark}
+            userType={userType}
+          />
+        </div>
+      )}
     </div>
   );
 }

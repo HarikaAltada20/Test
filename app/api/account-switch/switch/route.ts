@@ -15,10 +15,44 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
+    // Check if current user is a creator - only creators can switch accounts
+    const { data: currentUserData, error: currentUserError } = await supabase
+      .from("users")
+      .select("user_type")
+      .eq("id", currentUser.id)
+      .single();
+
+    if (currentUserError || currentUserData?.user_type !== "creator") {
+      return NextResponse.json({ 
+        error: "Only creator accounts can switch between accounts" 
+      }, { status: 403 });
+    }
+
     const { target_user_id } = await req.json();
 
     if (!target_user_id) {
       return NextResponse.json({ error: "Target user ID is required" }, { status: 400 });
+    }
+
+    // Check if target user is also a creator - only creators can be switched to
+    const { data: targetUserData, error: targetUserError } = await adminSupabase
+      .from("users")
+      .select("id, user_type, email")
+      .eq("id", target_user_id)
+      .single();
+
+    if (targetUserError) {
+      console.error("Target user lookup error:", targetUserError);
+      return NextResponse.json({ 
+        error: "Target account not found" 
+      }, { status: 404 });
+    }
+
+    if (targetUserData?.user_type !== "creator") {
+      console.log("Blocking switch to non-creator account:", targetUserData?.email, "Type:", targetUserData?.user_type);
+      return NextResponse.json({ 
+        error: "Only creator accounts can be switched to" 
+      }, { status: 403 });
     }
 
     // 1. Retrieve encrypted refresh token from vault

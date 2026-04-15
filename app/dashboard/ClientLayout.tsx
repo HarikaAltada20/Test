@@ -236,11 +236,13 @@ function DashboardContent({
     fullName: string;
     profilePictureUrl: string;
     isActive: boolean;
-    subscriptionPlan: string | null;
+    username: string;
+    subscriptionPlan?: string | null;
   }>({
     fullName: "",
     profilePictureUrl: "",
     isActive: true,
+    username: "",
     subscriptionPlan: null,
   });
   const [hasProcessedSuccess, setHasProcessedSuccess] = useState(false);
@@ -648,7 +650,7 @@ function DashboardContent({
       const supabase = createClient();
       const { data: profile } = await supabase
         .from("users")
-        .select("full_name, profile_picture_url, is_active, user_type")
+        .select("full_name, profile_picture_url, is_active, user_type, username")
         .eq("id", user.id)
         .single();
 
@@ -671,6 +673,7 @@ function DashboardContent({
           fullName: profile.full_name,
           profilePictureUrl: profile.profile_picture_url,
           isActive: profile.is_active ?? true,
+          username: profile.username,
           subscriptionPlan: subscriptionPlan,
         });
       }
@@ -811,6 +814,13 @@ function DashboardContent({
   const displayName =
     profileData.fullName ||
     user?.user_metadata?.full_name ||
+    user?.email?.split("@")[0] ||
+    "User";
+    
+  // Get username for AccountSwitcher
+  const username =
+    profileData.username ||
+    user?.user_metadata?.username ||
     user?.email?.split("@")[0] ||
     "User";
   const displayEmail = user?.email || "";
@@ -2298,14 +2308,17 @@ function DashboardContent({
                             </p>
                           </div>
 
-                          {/* Account Switcher - Instagram-like UI */}
-                          <div className="px-6 py-4 border-y border-slate-100 dark:border-slate-800/50">
-                            <AccountSwitcher
-                              currentUserId={user?.id || ""}
-                              currentUsername={displayName}
-                              isDark={currentMode === "dark"}
-                            />
-                          </div>
+                          {/* Account Switcher  - Only for Creators */}
+                          {userRole === "creator" && (
+                            <div className="pl-2 py-4 border-y border-slate-100 dark:border-slate-800/50">
+                              <AccountSwitcher
+                                currentUserId={user?.id || ""}
+                                currentUsername={username}
+                                isDark={currentMode === "dark"}
+                                userType={userRole}
+                              />
+                            </div>
+                          )}
 
                           {/* Content - Unique Information Instead of Duplicate Navigation */}
                           <div className="px-4 md:pl-4 md:pr-0 py-6 space-y-6">
