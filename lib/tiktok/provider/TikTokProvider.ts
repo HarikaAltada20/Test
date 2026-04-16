@@ -8,6 +8,14 @@ import {
 import { TikTokApiClient } from "../api/TikTokApiClient";
 import crypto from "crypto";
 
+function base64UrlEncode(buf: Buffer): string {
+  return buf
+    .toString("base64")
+    .replace(/=/g, "")
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_");
+}
+
 export class TikTokProvider implements IPlatformProvider {
   readonly platformId = "tiktok";
   private client: TikTokApiClient;
@@ -40,15 +48,9 @@ export class TikTokProvider implements IPlatformProvider {
     url.searchParams.append("state", state);
 
     if (codeVerifier) {
-      const codeChallenge = crypto
-        .createHash("sha256")
-        .update(codeVerifier)
-        .digest("hex");
-
-      console.log(
-        "[TikTok Provider] Generated code_challenge from verifier (first 10):",
-        codeChallenge.substring(0, 10),
-      );
+      // PKCE S256: BASE64URL-ENCODE(SHA256(code_verifier))
+      const digest = crypto.createHash("sha256").update(codeVerifier).digest();
+      const codeChallenge = base64UrlEncode(digest);
 
       url.searchParams.append("code_challenge", codeChallenge);
       url.searchParams.append("code_challenge_method", "S256");

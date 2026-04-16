@@ -48,18 +48,47 @@ export function extractTiktokId(url: string): string | null {
  * Resolves shortened TikTok URLs (vm.tiktok.com, vt.tiktok.com)
  */
 export async function resolveTiktokUrl(url: string): Promise<string> {
-    if (!url.includes('vm.tiktok.com') && !url.includes('vt.tiktok.com') && !url.includes('v.tiktok.com')) {
+    const trimmed = (url || "").trim();
+    if (!trimmed) return url;
+
+    // Strict allowlist to avoid SSRF: only resolve known TikTok short domains.
+    let parsed: URL;
+    try {
+        parsed = new URL(trimmed);
+    } catch {
         return url;
     }
 
+    const host = parsed.hostname.toLowerCase();
+    const allowedHosts = new Set(["vm.tiktok.com", "vt.tiktok.com", "v.tiktok.com"]);
+    if (!allowedHosts.has(host)) return url;
+
+    // Only allow http(s)
+    if (parsed.protocol !== "https:" && parsed.protocol !== "http:") return url;
+
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 3000);
+
     try {
-        const response = await fetch(url, {
-            method: 'HEAD',
-            redirect: 'follow'
+        const response = await fetch(parsed.toString(), {
+            method: "HEAD",
+            redirect: "follow",
+            signal: controller.signal,
         });
-        return response.url;
-    } catch (e) {
-        console.error('Error resolving TikTok URL:', e);
+
+        // Ensure the final URL is still a TikTok domain.
+        try {
+            const finalUrl = new URL(response.url);
+            const finalHost = finalUrl.hostname.toLowerCase();
+            if (finalHost.endsWith("tiktok.com")) return response.url;
+        } catch {
+            // ignore
+        }
         return url;
+    } catch (e) {
+        console.error("Error resolving TikTok URL:", e);
+        return url;
+    } finally {
+        clearTimeout(timeout);
     }
 }

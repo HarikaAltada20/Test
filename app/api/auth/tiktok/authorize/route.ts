@@ -27,11 +27,6 @@ export async function GET(req: NextRequest) {
   // 2. Generate PKCE values - required by TikTok app settings
   const codeVerifier = crypto.randomBytes(32).toString("base64url");
 
-  console.log(
-    "[TikTok Auth] Generated code_verifier (first 10):",
-    codeVerifier.substring(0, 10),
-  );
-
   const customRedirectUri = provider.getRedirectUri();
 
   // 3. Create Authorization URL from Provider
@@ -40,12 +35,8 @@ export async function GET(req: NextRequest) {
     codeVerifier,
     customRedirectUri,
   );
-
   console.log("[TikTok Auth] Initiating OAuth flow...");
-  console.log("[TikTok Auth] Timezone:", tz);
   console.log("[TikTok Auth] Country:", country);
-  console.log("[TikTok Auth] Redirect URI:", customRedirectUri);
-  console.log("[TikTok Auth] Auth URL:", authorizationUrl);
 
   // 4. Redirect with secure cookies for validation in Callback
   const response = NextResponse.redirect(authorizationUrl);

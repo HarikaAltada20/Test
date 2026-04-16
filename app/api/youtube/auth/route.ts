@@ -9,8 +9,6 @@ export async function GET(request: NextRequest) {
     // The mobile callback route will handle redirecting to the API callback
     const redirectUri = `${origin}/api/youtube/callback`;
     const oauth2Client = await createOAuthClient(redirectUri);
-    
-    console.log('YouTube auth: redirectUri:', redirectUri);
 
     // Generate a secure random state value
     const state = crypto.randomBytes(16).toString('hex');
@@ -21,9 +19,7 @@ export async function GET(request: NextRequest) {
       include_granted_scopes: false,
     });
     
-    // Log the generated URL for debugging
-    console.log('YouTube OAuth URL generated:', authUrl.substring(0, 200) + '...');
-    console.log('Contains prompt=consent:', authUrl.includes('prompt=consent'));
+    console.log("YouTube auth: initiating OAuth flow");
 
     // Create a response object to set the cookie
     const response = NextResponse.redirect(authUrl);

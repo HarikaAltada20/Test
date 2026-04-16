@@ -371,6 +371,22 @@ export async function verifyQStashSignatureTikTok(
 }
 
 /**
+ * Authorize process-tiktok-metrics-queue: QStash signature (TikTok URL) or Bearer CRON_SECRET.
+ */
+export async function authorizeProcessTikTokMetricsQueue(
+  request: Request,
+  rawBody: string,
+): Promise<boolean> {
+  if (request.headers.get("Upstash-Signature")) {
+    return verifyQStashSignatureTikTok(request, rawBody);
+  }
+  const cronSecret = process.env.CRON_SECRET;
+  const auth = request.headers.get("Authorization");
+  if (cronSecret) return auth === `Bearer ${cronSecret}`;
+  return true;
+}
+
+/**
  * Authorize process-token-refresh-queue: QStash signature or Bearer CRON_SECRET.
  */
 export async function authorizeProcessTokenRefreshQueue(

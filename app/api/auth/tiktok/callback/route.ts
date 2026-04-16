@@ -14,10 +14,10 @@ export async function GET(req: NextRequest) {
     const origin = new URL(req.url).origin;
     const settingsUrl = `${origin}/dashboard/settings`;
 
-    console.log("[TikTok Auth Callback] Received callback with params:", {
-      code: code ? "present" : "missing",
-      state: state ? "present" : "missing",
-      error: error || "none",
+    console.log("[TikTok Auth Callback] Received callback", {
+      hasCode: !!code,
+      hasState: !!state,
+      hasError: !!error,
     });
 
     if (error) {
@@ -41,24 +41,13 @@ export async function GET(req: NextRequest) {
     const storedState = req.cookies.get("tiktok_auth_state")?.value;
     const storedVerifier = req.cookies.get("tiktok_auth_verifier")?.value;
 
-    console.log(
-      "[TikTok Auth Callback] Stored code_verifier (first 10):",
-      storedVerifier ? storedVerifier.substring(0, 10) : "missing",
-    );
-
-    console.log(
-      "[TikTok Auth Callback] Stored state:",
-      storedState ? "present" : "missing",
-    );
-    console.log(
-      "[TikTok Auth Callback] Stored verifier:",
-      storedVerifier ? "present" : "missing",
-    );
+    console.log("[TikTok Auth Callback] Validating OAuth cookies", {
+      hasStoredState: !!storedState,
+      hasStoredVerifier: !!storedVerifier,
+    });
 
     if (!storedState || state !== storedState) {
       console.error("[TikTok Auth Callback] CSRF token mismatch or expired");
-      console.log("[TikTok Auth Callback] Received state:", state);
-      console.log("[TikTok Auth Callback] Stored state:", storedState);
       return NextResponse.redirect(`${settingsUrl}?error=csrf_token_mismatch`);
     }
 
@@ -88,9 +77,9 @@ export async function GET(req: NextRequest) {
       );
     }
 
-    console.log("[TikTok Auth Callback] Code exchanged successfully. Tokens:", {
-      accessToken: tokens.accessToken ? "present" : "missing",
-      refreshToken: tokens.refreshToken ? "present" : "missing",
+    console.log("[TikTok Auth Callback] Code exchanged successfully", {
+      hasAccessToken: !!tokens.accessToken,
+      hasRefreshToken: !!tokens.refreshToken,
       expiresIn: tokens.expiresIn,
     });
 

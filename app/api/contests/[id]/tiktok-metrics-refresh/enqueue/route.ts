@@ -6,6 +6,12 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/utils/supabase/server";
 import { createClient as createAdminSupabaseClient } from "@supabase/supabase-js";
+import { verifyAdminAccess } from "@/utils/admin-auth";
+import {
+  METRICS_REFRESH_COOLDOWN_MS_ADMIN,
+  METRICS_REFRESH_COOLDOWN_MS_BRAND,
+  METRICS_REFRESH_COOLDOWN_MS_OPPORTUNITIES,
+} from "@/lib/constants";
 import {
   isTikTokMetricsQueueEnabled,
   enqueueTikTokMetricsJob,
@@ -25,6 +31,7 @@ export async function POST(
   try {
     const cronAuth = request.headers.get("Authorization") === `Bearer ${process.env.CRON_SECRET}`;
     let user: { id: string } | null = null;
+    let isAdmin = false;
     if (!cronAuth) {
       const supabase = await createClient();
       const { data: { user: u } } = await supabase.auth.getUser();
@@ -32,6 +39,7 @@ export async function POST(
       if (!user) {
         return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
       }
+      ({ isAdmin } = await verifyAdminAccess());
     }
 
     const { id: contestId } = await params;
@@ -46,7 +54,7 @@ export async function POST(
 
     const { data: contest, error: contestError } = await supabaseAdmin
       .from("contests")
-      .select("id, platform, views_locked_at, post_contest_status")
+      .select("id, platform, advertiser_id, views_locked_at, post_contest_status, last_metrics_updated")
       .eq("id", contestId)
       .single();
 
@@ -75,6 +83,42 @@ export async function POST(
         { error: "Metrics are locked after contest review begins. No further refresh allowed." },
         { status: 400 }
       );
+    }
+
+    // Enforce the same cooldown as `refresh-metrics` to prevent bypassing rate limits by
+    // calling the enqueue endpoint directly.
+    if (!cronAuth) {
+      const isOwner = contest.advertiser_id === user?.id;
+      const isOpportunitiesRefresh = !isAdmin && !isOwner;
+      const cooldownMs = isOpportunitiesRefresh
+        ? METRICS_REFRESH_COOLDOWN_MS_OPPORTUNITIES
+        : isAdmin
+          ? METRICS_REFRESH_COOLDOWN_MS_ADMIN
+          : METRICS_REFRESH_COOLDOWN_MS_BRAND;
+
+      if (contest.last_metrics_updated) {
+        const now = Date.now();
+        const lastUpdateMs = new Date(contest.last_metrics_updated).getTime();
+        const timeSinceLastUpdate = now - lastUpdateMs;
+        if (!Number.isNaN(lastUpdateMs) && timeSinceLastUpdate < cooldownMs) {
+          const remainingMs = cooldownMs - timeSinceLastUpdate;
+          const remainingMinutes = Math.ceil(remainingMs / 1000 / 60);
+          return NextResponse.json(
+            {
+              error: `Metrics were updated ${Math.floor(
+                timeSinceLastUpdate / 1000 / 60,
+              )} minutes ago. Please wait ${remainingMinutes} more minutes before refreshing again.`,
+              nextRefreshAvailable: new Date(lastUpdateMs + cooldownMs).toISOString(),
+              userType: isOpportunitiesRefresh
+                ? "creators"
+                : isAdmin
+                  ? "admins"
+                  : "brands/owners",
+            },
+            { status: 429 },
+          );
+        }
+      }
     }
 
     if (!isTikTokMetricsQueueEnabled()) {

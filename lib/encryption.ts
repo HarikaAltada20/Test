@@ -5,18 +5,18 @@ import crypto from 'crypto';
  * GCM provides both confidentiality and authenticity.
  */
 
-const ENCRYPTION_KEY ="hExSo8n3ZYC/8/aeYjocZ8ls+mH7nzKZzb3OSk7HVZM=";
+const ENCRYPTION_SECRET = (process.env.ENCRYPTION_SECRET || "").trim();
 const ALGORITHM = 'aes-256-gcm';
 const IV_LENGTH = 12; // Standard for GCM
 
 export function encrypt(text: string): string {
-  if (!ENCRYPTION_KEY) {
-    throw new Error('ENCRYPTION_SECRET is not defined in environment variables');
+  if (!ENCRYPTION_SECRET) {
+    throw new Error('ENCRYPTION_SECRET is not defined');
   }
 
   const iv = crypto.randomBytes(IV_LENGTH);
   // Ensure the key is exactly 32 bytes for aes-256
-  const key = crypto.createHash('sha256').update(ENCRYPTION_KEY).digest();
+  const key = crypto.createHash('sha256').update(ENCRYPTION_SECRET).digest();
   
   const cipher = crypto.createCipheriv(ALGORITHM, key, iv);
   
@@ -30,8 +30,8 @@ export function encrypt(text: string): string {
 }
 
 export function decrypt(text: string): string {
-  if (!ENCRYPTION_KEY) {
-    throw new Error('ENCRYPTION_SECRET is not defined in environment variables');
+  if (!ENCRYPTION_SECRET) {
+    throw new Error('ENCRYPTION_SECRET is not defined');
   }
 
   const [ivHex, authTagHex, encryptedText] = text.split(':');
@@ -41,7 +41,7 @@ export function decrypt(text: string): string {
   
   const iv = Buffer.from(ivHex, 'hex');
   const authTag = Buffer.from(authTagHex, 'hex');
-  const key = crypto.createHash('sha256').update(ENCRYPTION_KEY).digest();
+  const key = crypto.createHash('sha256').update(ENCRYPTION_SECRET).digest();
 
   const decipher = crypto.createDecipheriv(ALGORITHM, key, iv);
   
