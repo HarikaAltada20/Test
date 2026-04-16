@@ -349,6 +349,20 @@ export default function SettingsPage({
       const newUrl = new URL(window.location.href);
       newUrl.searchParams.delete("error");
       router.replace(newUrl.pathname);
+    } else if (error === "duplicate_account") {
+      toast({
+        title: "Account Already Linked",
+        description: message
+          ? decodeURIComponent(message)
+          : "This social account is already linked to another profile.",
+        variant: "destructive",
+        duration: 10000,
+      });
+
+      const newUrl = new URL(window.location.href);
+      newUrl.searchParams.delete("error");
+      newUrl.searchParams.delete("message");
+      router.replace(newUrl.pathname);
     }
 
     // Handle success parameters

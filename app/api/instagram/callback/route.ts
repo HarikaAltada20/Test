@@ -126,6 +126,51 @@ export async function GET(request: NextRequest) {
         
         const globalInstagramUserID = profile.user_id || instagram_user_id_from_token_exchange;
 
+        // --- REFINED: Check for duplicate connection within the switcher group ---
+        const { data: vaultLinks } = await supabase
+            .from('user_sessions_vault')
+            .select('target_user_id')
+            .eq('owner_user_id', user.id);
+
+        const linkedAccountIds = vaultLinks?.map(link => link.target_user_id) || [];
+
+        const { data: duplicateAccount, error: duplicateCheckError } = await supabase
+            .from('creator_profiles')
+            .select('id')
+            .eq('instagram_account->>instagram_user_id', globalInstagramUserID)
+            .neq('id', user.id)
+            .maybeSingle();
+
+        if (duplicateCheckError) {
+            console.error('Error checking for duplicate Instagram account:', duplicateCheckError);
+            throw new Error(`Failed to verify account uniqueness: ${duplicateCheckError.message}`);
+        }
+
+        if (duplicateAccount && linkedAccountIds.includes(duplicateAccount.id)) {
+            console.warn(`Instagram account ${globalInstagramUserID} is already linked to user ${duplicateAccount.id} in the same switcher group`);
+            // Log the blocked attempt
+            try {
+                const adminSupabase = (await import('@/utils/supabase/admin')).createAdminClient();
+                await adminSupabase.rpc("log_action", { 
+                    p_action: "social_link_blocked", 
+                    p_metadata: { 
+                        platform: 'instagram',
+                        platform_user_id: globalInstagramUserID,
+                        existing_owner_id: duplicateAccount.id,
+                        reason: 'duplicate_within_switcher_group'
+                    },
+                    p_user_id: user.id
+                });
+            } catch (logErr) {
+                console.warn('Failed to log blocked connection attempt:', logErr);
+            }
+
+            baseRedirectUrl.searchParams.set('error', 'duplicate_account');
+            baseRedirectUrl.searchParams.set('message', 'This Instagram account is already linked to another Game of Creators account.');
+            return NextResponse.redirect(baseRedirectUrl);
+        }
+        // --- END REFINED ---
+
         // 4. Store in Supabase (`creator_profiles.instagram_account`)
         const instagramAccountData = {
             access_token: long_lived_access_token, // Use long-lived token

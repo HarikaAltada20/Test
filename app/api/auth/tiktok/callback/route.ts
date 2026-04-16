@@ -163,6 +163,53 @@ export async function GET(req: NextRequest) {
 
     console.log("[TikTok Auth Callback] User authenticated:", user.id);
 
+    // --- REFINED: Check for duplicate connection within the switcher group ---
+    if (profile.id) {
+      const { data: vaultLinks } = await supabase
+        .from('user_sessions_vault')
+        .select('target_user_id')
+        .eq('owner_user_id', user.id);
+
+      const linkedAccountIds = vaultLinks?.map(link => link.target_user_id) || [];
+
+      const { data: duplicateAccount, error: duplicateCheckError } = await supabase
+          .from('creator_profiles')
+          .select('id')
+          .eq('tiktok_account->>platform_user_id', profile.id)
+          .neq('id', user.id)
+          .maybeSingle();
+
+      if (duplicateCheckError) {
+          console.error('[TikTok Auth Callback] Error checking for duplicate TikTok account:', duplicateCheckError);
+          throw new Error(`Failed to verify account uniqueness: ${duplicateCheckError.message}`);
+      }
+
+      if (duplicateAccount && linkedAccountIds.includes(duplicateAccount.id)) {
+          console.warn(`[TikTok Auth Callback] TikTok account ${profile.id} is already linked to user ${duplicateAccount.id} in the same switcher group`);
+          // Log the blocked attempt
+          try {
+              const adminSupabase = (await import('@/utils/supabase/admin')).createAdminClient();
+              await adminSupabase.rpc("log_action", { 
+                  p_action: "social_link_blocked", 
+                  p_metadata: { 
+                      platform: 'tiktok',
+                      platform_user_id: profile.id,
+                      existing_owner_id: duplicateAccount.id,
+                      reason: 'duplicate_within_switcher_group'
+                  },
+                  p_user_id: user.id
+              });
+          } catch (logErr) {
+              console.warn('[TikTok Auth Callback] Failed to log blocked connection attempt:', logErr);
+          }
+
+          return NextResponse.redirect(
+              `${settingsUrl}?error=duplicate_account&message=${encodeURIComponent('This TikTok account is already linked to another Game of Creators account.')}`,
+          );
+      }
+    }
+    // --- END REFINED ---
+
     const connectionData = {
       platform_user_id: profile.id,
       username: profile.username,
