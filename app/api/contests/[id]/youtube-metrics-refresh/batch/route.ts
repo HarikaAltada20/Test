@@ -44,10 +44,16 @@ export async function POST(
 ) {
   try {
     const cronSecret = process.env.CRON_SECRET;
+    if (!cronSecret) {
+      return NextResponse.json(
+        { error: "YouTube queue auth misconfigured: CRON_SECRET missing" },
+        { status: 503 },
+      );
+    }
     const fromQueue =
       request.headers.get("X-From-Queue") === "1" || request.headers.get("x-from-queue") === "1";
     const auth = request.headers.get("Authorization");
-    if (!fromQueue || (cronSecret && auth !== `Bearer ${cronSecret}`)) {
+    if (!fromQueue || auth !== `Bearer ${cronSecret}`) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 

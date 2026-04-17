@@ -199,7 +199,7 @@ export async function POST(
       });
     }
 
-    const { count: eligibleCount } = await supabaseAdmin
+    const { count: eligibleCount, error: eligibleCountError } = await supabaseAdmin
       .from("submissions")
       .select("*", { count: "exact", head: true })
       .eq("contest_id", contestId)
@@ -207,6 +207,16 @@ export async function POST(
       .in("status", ["verified", "pending"])
       .not("content_link", "is", null)
       .or("insights_status.is.null,insights_status.neq.permanent_failure");
+    if (eligibleCountError) {
+      console.error(
+        "[youtube-metrics-refresh enqueue] eligible count failed:",
+        eligibleCountError,
+      );
+      return NextResponse.json(
+        { error: "Failed to count eligible submissions" },
+        { status: 500 },
+      );
+    }
 
     const totalEligible = eligibleCount ?? 0;
     const totalBatches = Math.max(1, Math.ceil(totalEligible / BATCH_SIZE));

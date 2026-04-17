@@ -183,7 +183,6 @@ export async function GET(request: NextRequest) {
     console.error('YouTube OAuth error:', error);
     const errorUrl = new URL('/dashboard/settings', request.url);
     errorUrl.searchParams.set('error', 'youtube_connection_failed');
-    errorUrl.searchParams.set('message', error instanceof Error ? error.message : 'Failed to connect YouTube account');
     response = NextResponse.redirect(errorUrl);
     response.cookies.set({ name: 'youtube_oauth_state', value: '', maxAge: 0, path: '/' });
     return response;

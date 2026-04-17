@@ -39,7 +39,6 @@ export async function GET(request: NextRequest) {
     console.error('Error initiating YouTube OAuth:', error);
     const errorUrl = new URL('/dashboard/settings', request.url);
     errorUrl.searchParams.set('error', 'youtube_auth_failed');
-    errorUrl.searchParams.set('message', error instanceof Error ? error.message : 'Failed to initiate YouTube authentication');
     // Don't set the cookie on error
     return NextResponse.redirect(errorUrl);
   }

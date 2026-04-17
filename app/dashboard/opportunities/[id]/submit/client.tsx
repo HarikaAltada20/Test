@@ -73,7 +73,7 @@ async function bustLeaderboardCache(contestId: string) {
 //   - 1 week: SUBMISSION_WINDOW_VALUE = 1, SUBMISSION_WINDOW_UNIT = 'week'
 // Adjust the submission window value
 const SUBMISSION_WINDOW_VALUE: number = 2;
-const SUBMISSION_WINDOW_UNIT: dayjs.ManipulateType = "years";
+const SUBMISSION_WINDOW_UNIT: dayjs.ManipulateType = "days";
 
 // Auto-generate display text and handle singular/plural forms
 const IS_SUBMISSION_WINDOW_SINGULAR: boolean = SUBMISSION_WINDOW_VALUE === 1;
@@ -3724,8 +3724,8 @@ export default function SubmitContentPage({
                         return (
                           <Card
                             className={`mt-6 cursor-pointer max-w-[1200px] mx-auto ${isSelected
-                                ? "border-2 border-[#7F39EC] rounded-lg bg-[#D8C3FF75]"
-                                : "border-2 border-[#7F39EC] rounded-lg "
+                              ? "border-2 border-[#7F39EC] rounded-lg bg-[#D8C3FF75]"
+                              : "border-2 border-[#7F39EC] rounded-lg "
                               }`}
                             onClick={() => handleSelectionChange(!isSelected)}
                           >
@@ -4382,8 +4382,8 @@ export default function SubmitContentPage({
                         return (
                           <div
                             className={`mt-6 cursor-pointer max-w-[1200px] mx-auto ${isSelected
-                                ? "border-2 border-[#7F39EC] rounded-lg bg-[#D8C3FF75]"
-                                : "border-2 border-[#7F39EC] rounded-lg "
+                              ? "border-2 border-[#7F39EC] rounded-lg bg-[#D8C3FF75]"
+                              : "border-2 border-[#7F39EC] rounded-lg "
                               }`}
                             onClick={() => handleSelectionChange(!isSelected)}
                           >
@@ -5158,8 +5158,8 @@ export default function SubmitContentPage({
                         return (
                           <div
                             className={`mt-6 cursor-pointer max-w-[1200px] mx-auto ${isSelected
-                                ? "border-2 border-[#7F39EC] rounded-lg bg-[#D8C3FF75]"
-                                : "border-2 border-[#7F39EC] rounded-lg "
+                              ? "border-2 border-[#7F39EC] rounded-lg bg-[#D8C3FF75]"
+                              : "border-2 border-[#7F39EC] rounded-lg "
                               }`}
                             onClick={() => handleSelectionChange(!isSelected)}
                           >
@@ -5445,10 +5445,10 @@ export default function SubmitContentPage({
                                   : "bg-white text-black",
                               )}
                               placeholder={`Enter ${contestPlatform?.toLowerCase() === "youtube"
-                                  ? "YouTube"
-                                  : contestPlatform?.toLowerCase() === "tiktok"
-                                    ? "TikTok"
-                                    : "Instagram"
+                                ? "YouTube"
+                                : contestPlatform?.toLowerCase() === "tiktok"
+                                  ? "TikTok"
+                                  : "Instagram"
                                 } video URL ${index + 1}`}
                               value={link}
                               onChange={(e) => {
