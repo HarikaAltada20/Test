@@ -173,8 +173,8 @@ export async function POST(
       });
     }
 
-    // Count eligible submissions (tiktok, has video_id or content_link, not rejected)
-    const { count: eligibleCount } = await supabaseAdmin
+    // Count eligible submissions in DB (Instagram-style) for better performance.
+    const { count: eligibleCount, error: eligibleCountError } = await supabaseAdmin
       .from("submissions")
       .select("*", { count: "exact", head: true })
       .eq("contest_id", contestId)
@@ -182,6 +182,12 @@ export async function POST(
       .neq("status", "rejected")
       .or("video_id.not.is.null,content_link.not.is.null")
       .or("insights_status.is.null,insights_status.neq.permanent_failure");
+    if (eligibleCountError) {
+      return NextResponse.json(
+        { error: "Failed to count eligible submissions" },
+        { status: 500 },
+      );
+    }
 
     const totalEligible = eligibleCount ?? 0;
     const totalBatches = Math.max(1, Math.ceil(totalEligible / BATCH_SIZE));

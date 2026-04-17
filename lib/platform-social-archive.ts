@@ -10,6 +10,7 @@ const SECRET_KEYS = new Set([
   "oauth_token",
   "oauth_token_secret",
 ]);
+const MAX_DISCONNECT_SNAPSHOTS = 5;
 
 export type SimplePlatformArchive = {
   version: 1;
@@ -171,7 +172,10 @@ export function appendDisconnectSnapshotSimple(
   };
   return {
     version: 1,
-    disconnect_snapshots: [...parsed.disconnect_snapshots, snapshot],
+    disconnect_snapshots: [
+      ...parsed.disconnect_snapshots,
+      snapshot,
+    ].slice(-MAX_DISCONNECT_SNAPSHOTS),
   };
 }
 
@@ -187,7 +191,10 @@ export function appendInstagramDisconnectAndClearAccount(
   };
   return {
     ...parsed,
-    disconnect_snapshots: [...(parsed.disconnect_snapshots ?? []), snapshot],
+    disconnect_snapshots: [
+      ...(parsed.disconnect_snapshots ?? []),
+      snapshot,
+    ].slice(-MAX_DISCONNECT_SNAPSHOTS),
   };
 }
 
