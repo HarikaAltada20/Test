@@ -80,6 +80,19 @@ async function handleRequest(baseUrl: string): Promise<NextResponse> {
     return NextResponse.json({ processed: 0, message: "Queue empty" });
   }
   const { job, raw: rawJobString } = popped;
+  const failRunAndClearProcessing = async (reason: string) => {
+    const now = new Date().toISOString();
+    await supabaseAdmin
+      .from("tiktok_metrics_refresh_runs")
+      .update({
+        status: "failed",
+        finished_at: now,
+        updated_at: now,
+        error_message: reason.slice(0, 2000),
+      })
+      .eq("id", job.runId);
+    await removeFromProcessing(rawJobString);
+  };
 
   const batchUrl = `${baseUrl}/api/contests/${job.contestId}/tiktok-metrics-refresh/batch`;
 
@@ -102,8 +115,11 @@ async function handleRequest(baseUrl: string): Promise<NextResponse> {
     });
   } catch (err) {
     console.error("[process-tiktok-metrics-queue] Batch fetch error:", err);
+    const message =
+      err instanceof Error ? err.message : "Batch request failed";
+    await failRunAndClearProcessing(`Batch fetch error: ${message}`);
     return NextResponse.json(
-      { processed: 1, error: err instanceof Error ? err.message : "Batch request failed" },
+      { processed: 1, error: message },
       { status: 500 }
     );
   }
@@ -112,6 +128,9 @@ async function handleRequest(baseUrl: string): Promise<NextResponse> {
 
   if (!batchRes.ok) {
     console.error("[process-tiktok-metrics-queue] Batch failed:", batchRes.status, batchData);
+    await failRunAndClearProcessing(
+      `Batch worker failed with status ${batchRes.status}`,
+    );
     return NextResponse.json(
       { processed: 1, error: "Batch failed", details: batchData },
       { status: 500 }
