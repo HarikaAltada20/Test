@@ -167,6 +167,7 @@ const YT_TABLE_COLUMNS = [
   { id: "bot_score", label: "Bot Score" },
   { id: "analytics", label: "Analytics" },
   { id: "top_traffic_source", label: "Top Traffic Source" },
+  { id: "insights_status", label: "Insights status" },
   { id: "expected_reward", label: "Expected Reward" },
   { id: "reward_granted", label: "Reward Granted" },
   { id: "status", label: "Status" },
@@ -354,6 +355,25 @@ type TwitterMetricsRefreshRunSummary = {
 type TikTokMetricsRefreshRunSummary = {
   id: string;
   status: "pending" | "running" | "completed" | "failed" | "cancelled";
+  total_submissions: number;
+  processed_submissions: number;
+  success_count: number;
+  permanent_failure_count: number;
+  temporary_failure_count: number;
+  skipped_recent_count: number;
+  reviewed_count: number;
+  current_batch_index: number;
+  total_batches: number;
+  started_at: string;
+  last_batch_completed_at: string | null;
+  finished_at: string | null;
+  error_message?: string | null;
+};
+
+type YouTubeMetricsRefreshRunSummary = {
+  id: string;
+  status: "pending" | "running" | "completed" | "failed" | "cancelled";
+  scope: string;
   total_submissions: number;
   processed_submissions: number;
   success_count: number;
@@ -778,12 +798,19 @@ export default function ContestDetailClient({
     useState<TikTokMetricsRefreshRunSummary | null>(null);
   const [showTiktokRunPopup, setShowTiktokRunPopup] = useState(false);
   const [tiktokRunCompleted, setTiktokRunCompleted] = useState(false);
+  const [youtubeRun, setYoutubeRun] =
+    useState<YouTubeMetricsRefreshRunSummary | null>(null);
+  const [showYoutubeRunPopup, setShowYoutubeRunPopup] = useState(false);
+  const [youtubeRunCompleted, setYoutubeRunCompleted] = useState(false);
+  const notifiedYoutubeRunIds = useRef<Set<string>>(new Set());
   const [refreshElapsedSeconds, setRefreshElapsedSeconds] = useState<
     number | null
   >(null);
   const [twitterRefreshElapsedSeconds, setTwitterRefreshElapsedSeconds] =
     useState<number | null>(null);
   const [tiktokRefreshElapsedSeconds, setTiktokRefreshElapsedSeconds] =
+    useState<number | null>(null);
+  const [youtubeRefreshElapsedSeconds, setYoutubeRefreshElapsedSeconds] =
     useState<number | null>(null);
 
   // Status update states
@@ -884,8 +911,13 @@ export default function ContestDetailClient({
     setRefreshElapsedSeconds(
       Math.max(0, Math.floor((finished - started) / 1000)),
     );
-    return () => { };
-  }, [instagramRun?.id, instagramRun?.started_at, instagramRun?.status, instagramRun?.finished_at]);
+    return () => {};
+  }, [
+    instagramRun?.id,
+    instagramRun?.started_at,
+    instagramRun?.status,
+    instagramRun?.finished_at,
+  ]);
 
   useEffect(() => {
     if (!twitterRun?.started_at) {
@@ -951,6 +983,38 @@ export default function ContestDetailClient({
     tiktokRun?.finished_at,
   ]);
 
+  useEffect(() => {
+    if (!youtubeRun?.started_at) {
+      setYoutubeRefreshElapsedSeconds(null);
+      return;
+    }
+    const started = new Date(youtubeRun.started_at).getTime();
+    const isRunning = youtubeRun.status === "running";
+
+    if (isRunning) {
+      const tick = () =>
+        setYoutubeRefreshElapsedSeconds(
+          Math.max(0, Math.floor((Date.now() - started) / 1000)),
+        );
+      tick();
+      const interval = setInterval(tick, 1000);
+      return () => clearInterval(interval);
+    }
+
+    const finished = youtubeRun.finished_at
+      ? new Date(youtubeRun.finished_at).getTime()
+      : Date.now();
+    setYoutubeRefreshElapsedSeconds(
+      Math.max(0, Math.floor((finished - started) / 1000)),
+    );
+    return () => {};
+  }, [
+    youtubeRun?.id,
+    youtubeRun?.started_at,
+    youtubeRun?.status,
+    youtubeRun?.finished_at,
+  ]);
+
   // Refresh metrics state
   const [isRefreshingMetrics, setIsRefreshingMetrics] = useState(false);
 
@@ -993,7 +1057,7 @@ export default function ContestDetailClient({
 
   // Track per-submission loading state for detailed analytics
   const [loadingDetailedAnalytics, setLoadingDetailedAnalytics] = useState<
-    Record<string, "core" | "traffic" | "demographics" | "both" | "all" | null>
+    Record<string, "core" | "traffic" | "demographics" | "all" | null>
   >({});
 
   // Twitter campaign metrics state
@@ -2526,7 +2590,12 @@ export default function ContestDetailClient({
     }
 
     return filtered;
-  }, [sortedCreatorGroups, activeEligibilityTab, currentContest, currentSubmissions]);
+  }, [
+    sortedCreatorGroups,
+    activeEligibilityTab,
+    currentContest,
+    currentSubmissions,
+  ]);
 
   // Pagination calculations for creator-wise view
   const creatorWiseTotalPages = filteredCreatorGroups
@@ -3473,7 +3542,6 @@ export default function ContestDetailClient({
     }
   };
 
- 
   const handleBulkUpdateSubmissionStatus = async (
     submissionIds: string[],
     action: "approve" | "verified" | "reject" | "rejected" | "pending" | "paid",
@@ -3497,7 +3565,7 @@ export default function ContestDetailClient({
     // Set loading state for all
     setIsLoadingSubmission((prev) => {
       const newLoadingState = { ...prev };
-      submissionIds.forEach(id => newLoadingState[id] = true);
+      submissionIds.forEach((id) => (newLoadingState[id] = true));
       return newLoadingState;
     });
 
@@ -3506,30 +3574,48 @@ export default function ContestDetailClient({
 
       if (normalIds.length > 0) {
         // Map action for normal submissions
-        const normalAction = action === "approve" ? "verified" : action === "reject" ? "rejected" : action;
+        const normalAction =
+          action === "approve"
+            ? "verified"
+            : action === "reject"
+              ? "rejected"
+              : action;
         promises.push(
           fetch("/api/admin/bulk-verify-submissions", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ submissionIds: normalIds, action: normalAction, reason }),
-          }).then(res => res.json())
+            body: JSON.stringify({
+              submissionIds: normalIds,
+              action: normalAction,
+              reason,
+            }),
+          }).then((res) => res.json()),
         );
       }
 
       if (twitterIds.length > 0) {
         // Map action for Twitter submissions
-        const twitterAction = action === "verified" || action === "approve" ? "approve" : action === "rejected" || action === "reject" ? "reject" : action;
+        const twitterAction =
+          action === "verified" || action === "approve"
+            ? "approve"
+            : action === "rejected" || action === "reject"
+              ? "reject"
+              : action;
         promises.push(
           fetch(`/api/contests/${contestId}/bulk-moderate-submissions`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ tweetIds: twitterIds, action: twitterAction, reason }),
-          }).then(res => res.json())
+            body: JSON.stringify({
+              tweetIds: twitterIds,
+              action: twitterAction,
+              reason,
+            }),
+          }).then((res) => res.json()),
         );
       }
 
       const results = await Promise.all(promises);
-      
+
       let hasError = false;
       let errorMessage = "";
       let totalProcessed = 0;
@@ -3543,26 +3629,41 @@ export default function ContestDetailClient({
           errorMessage = result.error || "Bulk API failed";
           continue;
         }
-        
+
         if (result.results && Array.isArray(result.results)) {
           result.results.forEach((item: any) => {
             const data = item.data;
             if (data?.submission) {
-               updatedSubmissionsMap.set(item.id, data.submission);
-               totalProcessed++;
+              updatedSubmissionsMap.set(item.id, data.submission);
+              totalProcessed++;
             } else if (data?.success) {
-               // Update twitter statuses based on action
-               const twitterAction = action === "verified" || action === "approve" ? "approve" : action === "rejected" || action === "reject" ? "reject" : action;
-               const moderationStatus = twitterAction === "approve" ? "verified" : twitterAction === "reject" ? "rejected" : twitterAction;
-               updatedSubmissionsMap.set(item.id, { moderation_status: moderationStatus, ...(twitterAction === 'reject' ? { manual_points_reason: reason } : {}) });
-               totalProcessed++;
+              // Update twitter statuses based on action
+              const twitterAction =
+                action === "verified" || action === "approve"
+                  ? "approve"
+                  : action === "rejected" || action === "reject"
+                    ? "reject"
+                    : action;
+              const moderationStatus =
+                twitterAction === "approve"
+                  ? "verified"
+                  : twitterAction === "reject"
+                    ? "rejected"
+                    : twitterAction;
+              updatedSubmissionsMap.set(item.id, {
+                moderation_status: moderationStatus,
+                ...(twitterAction === "reject"
+                  ? { manual_points_reason: reason }
+                  : {}),
+              });
+              totalProcessed++;
             }
           });
         }
         if (result.errors && result.errors.length > 0) {
-           hasError = true;
-           errorMessage = "Some updates failed. Check console for details.";
-           console.error("Bulk update errors:", result.errors);
+          hasError = true;
+          errorMessage = "Some updates failed. Check console for details.";
+          console.error("Bulk update errors:", result.errors);
         }
       }
 
@@ -3586,12 +3687,17 @@ export default function ContestDetailClient({
           variant: "destructive",
         });
       } else {
-        const actionText = action === "verified" || action === "approve" ? "Verified" : action === "rejected" || action === "reject" ? "Rejected" : action === "pending" ? "Set to Pending" : "Updated";
-        const isRejectBulk =
-          action === "rejected" || action === "reject";
+        const actionText =
+          action === "verified" || action === "approve"
+            ? "Verified"
+            : action === "rejected" || action === "reject"
+              ? "Rejected"
+              : action === "pending"
+                ? "Set to Pending"
+                : "Updated";
+        const isRejectBulk = action === "rejected" || action === "reject";
         const isPendingBulk = action === "pending";
-        const isVerifiedBulk =
-          action === "verified" || action === "approve";
+        const isVerifiedBulk = action === "verified" || action === "approve";
         const isPaidBulk = action === "paid";
         const bulkVariant = isRejectBulk
           ? "destructive"
@@ -3612,10 +3718,12 @@ export default function ContestDetailClient({
           variant: bulkVariant,
         });
       }
-      
-      // Refresh UI to sync database states completely
-      setTimeout(() => window.dispatchEvent(new Event("contests:refresh")), 1000);
 
+      // Refresh UI to sync database states completely
+      setTimeout(
+        () => window.dispatchEvent(new Event("contests:refresh")),
+        1000,
+      );
     } catch (error: any) {
       console.error("Bulk update failed:", error);
       toast({
@@ -3626,7 +3734,9 @@ export default function ContestDetailClient({
     } finally {
       setIsLoadingSubmission((prev) => {
         const resetState = { ...prev };
-        submissionIds.forEach(id => { delete resetState[id]; });
+        submissionIds.forEach((id) => {
+          delete resetState[id];
+        });
         return resetState;
       });
     }
@@ -4292,8 +4402,9 @@ export default function ContestDetailClient({
     if (!cooldownInfo.canRefresh) {
       toast({
         title: "Please Wait",
-        description: `You can refresh again in ${cooldownInfo.remainingMinutes
-          } minute${cooldownInfo.remainingMinutes !== 1 ? "s" : ""}`,
+        description: `You can refresh again in ${
+          cooldownInfo.remainingMinutes
+        } minute${cooldownInfo.remainingMinutes !== 1 ? "s" : ""}`,
         variant: "destructive",
       });
       return;
@@ -4337,10 +4448,14 @@ export default function ContestDetailClient({
           platformLower === "twitter" || platformLower === "x";
         const isInstagramAdmin = isInstagram && isAdminView;
         const isTwitterAdmin = isTwitterPlatform && isAdminView;
+        const isYoutubePlatform =
+          currentContest.platform?.toLowerCase().includes("youtube") ?? false;
         const previousUpdated = currentContest.last_metrics_updated ?? null;
         const pollIntervalMs = 3000;
         const pollMaxMs =
-          isInstagramAdmin || isTwitterAdmin ? 600000 : 120000;
+          isInstagramAdmin || isTwitterAdmin || isYoutubePlatform
+            ? 600000
+            : 120000;
         const startedAt = Date.now();
         const pollTimer = setInterval(async () => {
           if (Date.now() - startedAt > pollMaxMs) {
@@ -4438,7 +4553,9 @@ export default function ContestDetailClient({
                 }
                 return;
               }
-            } else if (currentContest.platform?.toLowerCase().includes("tiktok")) {
+            } else if (
+              currentContest.platform?.toLowerCase().includes("tiktok")
+            ) {
               const res = await fetch(
                 `/api/contests/${contestId}/tiktok-metrics-refresh/status`,
               );
@@ -4477,6 +4594,57 @@ export default function ContestDetailClient({
                 }
                 return;
               }
+            } else if (isYoutubePlatform) {
+              const res = await fetch(
+                `/api/contests/${contestId}/youtube-metrics-refresh/status`,
+              );
+              if (!res.ok) return;
+              const data = await res.json();
+              const run = data?.run as YouTubeMetricsRefreshRunSummary | null;
+              if (isAdminView && run) {
+                setYoutubeRun(run);
+                setShowYoutubeRunPopup(true);
+              }
+              const status = run?.status;
+              if (
+                status === "completed" ||
+                status === "failed" ||
+                status === "cancelled"
+              ) {
+                clearInterval(pollTimer);
+                setIsRefreshingMetrics(false);
+                if (isAdminView && run) {
+                  setYoutubeRun(run);
+                  setYoutubeRunCompleted(true);
+                  if (run.id && !notifiedYoutubeRunIds.current.has(run.id)) {
+                    notifiedYoutubeRunIds.current.add(run.id);
+                    if (status === "completed") {
+                      toast({
+                        title: "YouTube refresh completed",
+                        description: `Scope: ${run.scope} · Success ${run.success_count ?? 0} · Temporary Failure ${run.temporary_failure_count ?? 0} · Permanent Failure ${run.permanent_failure_count ?? 0} · Skipped ${run.skipped_recent_count ?? 0}`,
+                        duration: 10000,
+                        variant: "success",
+                      });
+                    } else if (status === "failed") {
+                      toast({
+                        title: "YouTube refresh failed",
+                        description:
+                          run.error_message?.slice(0, 500) ??
+                          "The refresh run ended with an error.",
+                        duration: 12000,
+                        variant: "destructive",
+                      });
+                    }
+                  }
+                  setTimeout(() => {
+                    setShowYoutubeRunPopup(false);
+                    window.location.reload();
+                  }, 10000);
+                } else {
+                  window.location.reload();
+                }
+                return;
+              }
             } else {
               const res = await fetch(
                 `/api/contests/${contestId}/last-metrics-updated`,
@@ -4498,8 +4666,9 @@ export default function ContestDetailClient({
       } else {
         toast({
           title: "Success! 🎉",
-          description: `${result?.message ?? "Budget and leaderboard updated!"
-            }`,
+          description: `${
+            result?.message ?? "Budget and leaderboard updated!"
+          }`,
           variant: "success",
         });
         if (currentContest.platform?.toLowerCase() === "twitter") {
@@ -4535,7 +4704,7 @@ export default function ContestDetailClient({
 
   // Handler: refresh core analytics, traffic sources, demographics, or all (on-demand YouTube analytics)
   const handleRefreshDetailedAnalytics = async (
-    type: "core" | "traffic" | "demographics" | "both" | "all",
+    type: "core" | "traffic" | "demographics" | "all",
     opts?: { submissionId?: string; creatorId?: string },
   ) => {
     const isContestLevel = !opts?.submissionId && !opts?.creatorId;
@@ -4543,15 +4712,112 @@ export default function ContestDetailClient({
 
     if (isContestLevel) {
       if (type === "core" || type === "all") setIsRefreshingCore(true);
-      if (type === "traffic" || type === "both" || type === "all")
+      if (type === "traffic" || type === "all")
         setIsRefreshingTraffic(true);
-      if (type === "demographics" || type === "both" || type === "all")
+      if (type === "demographics" || type === "all")
         setIsRefreshingDemographics(true);
     } else {
       setLoadingDetailedAnalytics((prev) => ({ ...prev, [key]: type }));
     }
 
+    let queuedYoutubeContest = false;
     try {
+      const isYoutubeContest =
+        isContestLevel &&
+        (currentContest.platform?.toLowerCase().includes("youtube") ?? false);
+
+      if (isYoutubeContest) {
+        const eres = await fetch(
+          `/api/contests/${contestId}/youtube-metrics-refresh/enqueue`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ scope: type }),
+          },
+        );
+        const ej = await eres.json().catch(() => ({}));
+        if (eres.ok) {
+          queuedYoutubeContest = true;
+          setShowYoutubeRunPopup(true);
+          const pollMs = 3000;
+          const maxMs = 600000;
+          const started = Date.now();
+          void fetch(
+            `/api/contests/${contestId}/youtube-metrics-refresh/status`,
+          )
+            .then((r) => r.json())
+            .then((sj) => {
+              const run = sj?.run as YouTubeMetricsRefreshRunSummary | null;
+              if (run) setYoutubeRun(run);
+            })
+            .catch(() => {});
+          const pollTimer = setInterval(async () => {
+            if (Date.now() - started > maxMs) {
+              clearInterval(pollTimer);
+              setIsRefreshingCore(false);
+              setIsRefreshingTraffic(false);
+              setIsRefreshingDemographics(false);
+              toast({
+                title: "Still processing",
+                description:
+                  "Refresh is taking longer than expected. Reload the page to check results.",
+                variant: "destructive",
+              });
+              return;
+            }
+            try {
+              const sres = await fetch(
+                `/api/contests/${contestId}/youtube-metrics-refresh/status`,
+              );
+              if (!sres.ok) return;
+              const sj = await sres.json();
+              const run = sj?.run as YouTubeMetricsRefreshRunSummary | null;
+              if (run) setYoutubeRun(run);
+              const st = run?.status;
+              if (st === "completed" || st === "failed" || st === "cancelled") {
+                clearInterval(pollTimer);
+                if (run) setYoutubeRun(run);
+                setYoutubeRunCompleted(true);
+                setIsRefreshingCore(false);
+                setIsRefreshingTraffic(false);
+                setIsRefreshingDemographics(false);
+                if (run?.id && !notifiedYoutubeRunIds.current.has(run.id)) {
+                  notifiedYoutubeRunIds.current.add(run.id);
+                  if (st === "completed") {
+                    toast({
+                      title: "YouTube analytics completed",
+                      description: `Scope: ${run?.scope ?? type} · Success ${run?.success_count ?? 0} · Temporary Failure ${run?.temporary_failure_count ?? 0} · Permanent Failure ${run?.permanent_failure_count ?? 0} · Skipped ${run?.skipped_recent_count ?? 0}`,
+                      duration: 10000,
+                      variant: "success",
+                    });
+                  } else if (st === "failed") {
+                    toast({
+                      title: "YouTube analytics failed",
+                      description:
+                        run?.error_message?.slice(0, 400) ??
+                        "Run ended with an error.",
+                      variant: "destructive",
+                    });
+                  }
+                }
+                setTimeout(() => {
+                  setShowYoutubeRunPopup(false);
+                  window.location.reload();
+                }, 9000);
+              }
+            } catch {
+              // ignore
+            }
+          }, pollMs);
+          return;
+        }
+        if (eres.status !== 503) {
+          throw new Error(
+            ej.error || "Failed to start YouTube analytics refresh",
+          );
+        }
+      }
+
       const body: Record<string, string> = { type };
       if (opts?.submissionId) body.submissionId = opts.submissionId;
       else if (opts?.creatorId) {
@@ -4598,11 +4864,11 @@ export default function ContestDetailClient({
         variant: "destructive",
       });
     } finally {
-      if (isContestLevel) {
+      if (isContestLevel && !queuedYoutubeContest) {
         setIsRefreshingCore(false);
         setIsRefreshingTraffic(false);
         setIsRefreshingDemographics(false);
-      } else {
+      } else if (!isContestLevel) {
         setLoadingDetailedAnalytics((prev) => ({ ...prev, [key]: null }));
       }
     }
@@ -4620,7 +4886,84 @@ export default function ContestDetailClient({
     )
       return;
     setIsRefreshingAll(true);
+    let queuedYoutubeFull = false;
     try {
+      const eres = await fetch(
+        `/api/contests/${contestId}/youtube-metrics-refresh/enqueue`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ scope: "all" }),
+        },
+      );
+      const ej = await eres.json().catch(() => ({}));
+      if (eres.ok) {
+        queuedYoutubeFull = true;
+        setShowYoutubeRunPopup(true);
+        const pollMs = 3000;
+        const maxMs = 600000;
+        const started = Date.now();
+        void fetch(`/api/contests/${contestId}/youtube-metrics-refresh/status`)
+          .then((r) => r.json())
+          .then((sj) => {
+            const run = sj?.run as YouTubeMetricsRefreshRunSummary | null;
+            if (run) setYoutubeRun(run);
+          })
+          .catch(() => {});
+        const pollTimer = setInterval(async () => {
+          if (Date.now() - started > maxMs) {
+            clearInterval(pollTimer);
+            setIsRefreshingAll(false);
+            return;
+          }
+          try {
+            const sres = await fetch(
+              `/api/contests/${contestId}/youtube-metrics-refresh/status`,
+            );
+            if (!sres.ok) return;
+            const sj = await sres.json();
+            const run = sj?.run as YouTubeMetricsRefreshRunSummary | null;
+            if (run) setYoutubeRun(run);
+            const st = run?.status;
+            if (st === "completed" || st === "failed" || st === "cancelled") {
+              clearInterval(pollTimer);
+              if (run) setYoutubeRun(run);
+              setYoutubeRunCompleted(true);
+              setIsRefreshingAll(false);
+              if (run?.id && !notifiedYoutubeRunIds.current.has(run.id)) {
+                notifiedYoutubeRunIds.current.add(run.id);
+                if (st === "completed") {
+                  toast({
+                    title: "All metrics updated",
+                    description: `Scope: ${run?.scope ?? "all"} · Success ${run?.success_count ?? 0} · Temporary Failure ${run?.temporary_failure_count ?? 0} · Permanent Failure ${run?.permanent_failure_count ?? 0} · Skipped ${run?.skipped_recent_count ?? 0}`,
+                    duration: 10000,
+                    variant: "success",
+                  });
+                } else if (st === "failed") {
+                  toast({
+                    title: "Full refresh failed",
+                    description:
+                      run?.error_message?.slice(0, 400) ??
+                      "The refresh run ended with an error.",
+                    variant: "destructive",
+                  });
+                }
+              }
+              setTimeout(() => {
+                setShowYoutubeRunPopup(false);
+                window.location.reload();
+              }, 9000);
+            }
+          } catch {
+            // ignore
+          }
+        }, pollMs);
+        return;
+      }
+      if (eres.status !== 503) {
+        throw new Error(ej.error || "Failed to queue full YouTube refresh");
+      }
+
       const res1 = await fetch(`/api/contests/${contestId}/refresh-metrics`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -4648,7 +4991,9 @@ export default function ContestDetailClient({
         variant: "destructive",
       });
     } finally {
-      setIsRefreshingAll(false);
+      if (!queuedYoutubeFull) {
+        setIsRefreshingAll(false);
+      }
     }
   };
 
@@ -4785,17 +5130,13 @@ export default function ContestDetailClient({
       };
     } else if (platform?.includes("tiktok")) {
       const t = stats.tiktok ?? ({} as Record<string, unknown>);
-      const views = Number(
-        t.view_count ?? t.views ?? baseViews ?? 0,
-      );
+      const views = Number(t.view_count ?? t.views ?? baseViews ?? 0);
       const likes = Number(t.like_count ?? t.likes ?? 0);
       const comments = Number(t.comment_count ?? t.comments ?? 0);
       const shares = Number(t.share_count ?? t.shares ?? 0);
       const total_interactions = likes + comments + shares;
       const engagement_rate =
-        views > 0
-          ? Math.round((total_interactions / views) * 10000) / 100
-          : 0;
+        views > 0 ? Math.round((total_interactions / views) * 10000) / 100 : 0;
       return {
         views,
         likes,
@@ -4844,7 +5185,9 @@ export default function ContestDetailClient({
         case "temporary_failure":
           return {
             label: null,
-            help: "Temporary error fetching insights\nWill retry later" + errorSuffix,
+            help:
+              "Temporary error fetching insights\nWill retry later" +
+              errorSuffix,
             dotClass: "bg-amber-400",
             pillClass: isDark
               ? "border-amber-700/60 bg-amber-950/35 text-amber-200"
@@ -5172,14 +5515,15 @@ export default function ContestDetailClient({
             : "Success";
       toast({
         title: tweetModerationTitle,
-        description: `Tweet ${action === "approve"
-          ? "approved"
-          : action === "reject"
-            ? "rejected"
-            : action === "paid"
-              ? "marked as paid"
-              : "set to pending"
-          } successfully`,
+        description: `Tweet ${
+          action === "approve"
+            ? "approved"
+            : action === "reject"
+              ? "rejected"
+              : action === "paid"
+                ? "marked as paid"
+                : "set to pending"
+        } successfully`,
         variant: tweetModerationVariant,
       });
 
@@ -5326,8 +5670,9 @@ export default function ContestDetailClient({
         }
         toast({
           title: "Success",
-          description: `Creator ${action === "approve" ? "approved" : "rejected"
-            } and payment reversed successfully`,
+          description: `Creator ${
+            action === "approve" ? "approved" : "rejected"
+          } and payment reversed successfully`,
         });
       } else {
         const response = await fetch(
@@ -5353,8 +5698,9 @@ export default function ContestDetailClient({
 
         toast({
           title: "Success",
-          description: `Creator ${action === "approve" ? "approved" : "rejected"
-            } and payment reversed successfully`,
+          description: `Creator ${
+            action === "approve" ? "approved" : "rejected"
+          } and payment reversed successfully`,
         });
       }
 
@@ -5448,8 +5794,9 @@ export default function ContestDetailClient({
           }
           toast({
             title: "Success",
-            description: `Creator @${pendingTwitterRejection.creatorUsername || "creator"
-              } and all tweets have been rejected (payments reversed where applicable).`,
+            description: `Creator @${
+              pendingTwitterRejection.creatorUsername || "creator"
+            } and all tweets have been rejected (payments reversed where applicable).`,
           });
         } else {
           // Leaderboard: use creator-level moderation API
@@ -5473,8 +5820,9 @@ export default function ContestDetailClient({
 
           toast({
             title: "Success",
-            description: `Creator @${pendingTwitterRejection.creatorUsername || "creator"
-              } has been rejected`,
+            description: `Creator @${
+              pendingTwitterRejection.creatorUsername || "creator"
+            } has been rejected`,
           });
         }
 
@@ -5695,220 +6043,220 @@ export default function ContestDetailClient({
               </div>
             </div>
           </div>
-        {/* Quick Actions Bar */}
-        <div className="flex flex-wrap gap-2 items-center lg:justify-end shrink-0 w-full lg:w-auto pl-0 sm:pl-12 lg:pl-0 lg:max-w-[min(100%,28rem)]">
-          {/* Contest Status Update Button */}
-          {canUpdateContestStatus() && (
-            <Dialog
-              open={statusUpdateDialog}
-              onOpenChange={setStatusUpdateDialog}
-              isdark={isDark}
-            >
-              <DialogTrigger asChild>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className={cn(
-                    "rounded-xl",
-                    isDark
-                      ? "border-purple-400/60 text-purple-300 hover:bg-white/5"
-                      : "border-purple-400/50 text-purple-700 hover:bg-purple-50",
-                  )}
-                >
-                  <Settings className="h-4 w-4 shrink-0" />
-                  Update Status
-                </Button>
-              </DialogTrigger>
-              <DialogContent className="sm:max-w-[425px]">
-                <DialogHeader>
-                  <DialogTitle
-                    className={cn(isDark ? "text-white" : "text-gray-900")}
-                  >
-                    Update Contest Status
-                  </DialogTitle>
-                  <DialogDescription>
-                    Change the post-contest status to reflect the current stage
-                    of verification and payouts. Current status:{" "}
-                    <strong>
-                      {currentContest.post_contest_status || "Not set"}
-                    </strong>
-                  </DialogDescription>
-                </DialogHeader>
-                <div className="grid gap-4 py-4">
-                  <div className="space-y-2">
-                    <label
-                      htmlFor="status"
-                      className={cn(
-                        "text-sm font-medium",
-                        isDark ? "text-white" : "text-gray-900",
-                      )}
-                    >
-                      New Status
-                    </label>
-                    <Select
-                      value={selectedStatus}
-                      onValueChange={setSelectedStatus}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select new status" />
-                      </SelectTrigger>
-                      <SelectContent isDark={isDark}>
-                        {getAvailableStatusOptions().map((option) => (
-                          <SelectItem
-                            key={option.value}
-                            value={option.value}
-                            isDark={isDark}
-                          >
-                            <div className="flex flex-col">
-                              <span className="font-medium">
-                                {option.label}
-                              </span>
-                              <span className="text-xs text-muted-foreground">
-                                {option.description}
-                              </span>
-                            </div>
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-2">
-                    <label
-                      htmlFor="reason"
-                      className={cn(
-                        "text-sm font-medium",
-                        isDark ? "text-white" : "text-gray-900",
-                      )}
-                    >
-                      Reason (Optional)
-                    </label>
-                    <Textarea
-                      id="reason"
-                      placeholder="Add a note about this status change..."
-                      value={statusUpdateReason}
-                      onChange={(e) => setStatusUpdateReason(e.target.value)}
-                      className="resize-none"
-                    />
-                  </div>
-                </div>
-                <DialogFooter>
-                  <button
-                    onClick={handleUpdateContestStatus}
-                    disabled={isUpdatingStatus || !selectedStatus}
-                    className={cn(
-                      "w-full text-md rounded-full flex items-center justify-center",
-                      isDark
-                        ? "bg-[#7F39EC] py-3 text-white"
-                        : " bg-[#D9C0FF61] py-3 text-[#7F39EC] ",
-                    )}
-                  >
-                    {isUpdatingStatus ? (
-                      <>
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                        Updating...
-                      </>
-                    ) : (
-                      "Update Status"
-                    )}
-                  </button>
-                  {!isUpdatingStatus && (
-                    <button
-                      onClick={() => setStatusUpdateDialog(false)}
-                      className={cn(
-                        "w-full text-md rounded-full",
-                        isDark
-                          ? "py-3 border border-[#FF5353] text-[#FF5353]"
-                          : "bg-[#FF323224] text-[#E50000] py-3",
-                      )}
-                    >
-                      Cancel
-                    </button>
-                  )}
-                </DialogFooter>
-              </DialogContent>
-            </Dialog>
-          )}
-
-          {contest.moderation_status === "approved" && (
-            <Button
-              size="sm"
-              className="inline-flex items-center gap-2 text-sm font-semibold rounded-xl bg-[#4A00BE] hover:bg-[#4A00BE]/90 text-white shadow-sm"
-              onClick={async (e) => {
-                e.stopPropagation();
-                try {
-                  const response = await fetch(
-                    `/api/contests/${contestId}/publish`,
-                    {
-                      method: "POST",
-                    },
-                  );
-                  if (response.ok) {
-                    window.location.reload();
-                  } else {
-                    const error = await response.json();
-                    alert(error.error || "Failed to publish contest");
-                  }
-                } catch (error) {
-                  alert("Failed to publish contest");
-                }
-              }}
-            >
-              <PlayCircle className="h-4 w-4" />
-              Publish
-            </Button>
-          )}
-          {currentContest.moderation_status === "published" && (
-            <Button
-              variant="outline"
-              size="sm"
-              className={cn(
-                "inline-flex items-center gap-2 rounded-xl font-medium transition-colors",
-                isDark
-                  ? "border-white/20 bg-transparent text-white hover:bg-white/10"
-                  : "border-[#4A00BE]/35 bg-white text-[#4A00BE] hover:bg-[#4A00BE]/[0.06]",
-              )}
-              onClick={handleShare}
-            >
-              <Share2 className="h-4 w-4 shrink-0" />
-              <span className="hidden sm:inline">Share</span>
-            </Button>
-          )}
-
-          {isContestEditable && (
-            <Button
-              size="sm"
-              variant="outline"
-              className={cn(
-                "inline-flex items-center gap-2 rounded-xl font-medium transition-colors",
-                isDark
-                  ? "border-white/20 bg-transparent text-white hover:bg-white/10"
-                  : "border-gray-300 bg-white text-gray-900 hover:bg-gray-50",
-              )}
-              asChild
-            >
-              <Link
-                href={
-                  isAdminView
-                    ? `/dashboard/admin/contests/${contestId}/edit`
-                    : `/dashboard/contests/${contestId}/edit`
-                }
-                className="flex items-center gap-2"
+          {/* Quick Actions Bar */}
+          <div className="flex flex-wrap gap-2 items-center lg:justify-end shrink-0 w-full lg:w-auto pl-0 sm:pl-12 lg:pl-0 lg:max-w-[min(100%,28rem)]">
+            {/* Contest Status Update Button */}
+            {canUpdateContestStatus() && (
+              <Dialog
+                open={statusUpdateDialog}
+                onOpenChange={setStatusUpdateDialog}
+                isdark={isDark}
               >
-                <Edit className="h-4 w-4" />
-                <span className="hidden sm:inline font-medium">Edit</span>
-              </Link>
-            </Button>
-          )}
+                <DialogTrigger asChild>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className={cn(
+                      "rounded-xl",
+                      isDark
+                        ? "border-purple-400/60 text-purple-300 hover:bg-white/5"
+                        : "border-purple-400/50 text-purple-700 hover:bg-purple-50",
+                    )}
+                  >
+                    <Settings className="h-4 w-4 shrink-0" />
+                    Update Status
+                  </Button>
+                </DialogTrigger>
+                <DialogContent className="sm:max-w-[425px]">
+                  <DialogHeader>
+                    <DialogTitle
+                      className={cn(isDark ? "text-white" : "text-gray-900")}
+                    >
+                      Update Contest Status
+                    </DialogTitle>
+                    <DialogDescription>
+                      Change the post-contest status to reflect the current
+                      stage of verification and payouts. Current status:{" "}
+                      <strong>
+                        {currentContest.post_contest_status || "Not set"}
+                      </strong>
+                    </DialogDescription>
+                  </DialogHeader>
+                  <div className="grid gap-4 py-4">
+                    <div className="space-y-2">
+                      <label
+                        htmlFor="status"
+                        className={cn(
+                          "text-sm font-medium",
+                          isDark ? "text-white" : "text-gray-900",
+                        )}
+                      >
+                        New Status
+                      </label>
+                      <Select
+                        value={selectedStatus}
+                        onValueChange={setSelectedStatus}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select new status" />
+                        </SelectTrigger>
+                        <SelectContent isDark={isDark}>
+                          {getAvailableStatusOptions().map((option) => (
+                            <SelectItem
+                              key={option.value}
+                              value={option.value}
+                              isDark={isDark}
+                            >
+                              <div className="flex flex-col">
+                                <span className="font-medium">
+                                  {option.label}
+                                </span>
+                                <span className="text-xs text-muted-foreground">
+                                  {option.description}
+                                </span>
+                              </div>
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <label
+                        htmlFor="reason"
+                        className={cn(
+                          "text-sm font-medium",
+                          isDark ? "text-white" : "text-gray-900",
+                        )}
+                      >
+                        Reason (Optional)
+                      </label>
+                      <Textarea
+                        id="reason"
+                        placeholder="Add a note about this status change..."
+                        value={statusUpdateReason}
+                        onChange={(e) => setStatusUpdateReason(e.target.value)}
+                        className="resize-none"
+                      />
+                    </div>
+                  </div>
+                  <DialogFooter>
+                    <button
+                      onClick={handleUpdateContestStatus}
+                      disabled={isUpdatingStatus || !selectedStatus}
+                      className={cn(
+                        "w-full text-md rounded-full flex items-center justify-center",
+                        isDark
+                          ? "bg-[#7F39EC] py-3 text-white"
+                          : " bg-[#D9C0FF61] py-3 text-[#7F39EC] ",
+                      )}
+                    >
+                      {isUpdatingStatus ? (
+                        <>
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          Updating...
+                        </>
+                      ) : (
+                        "Update Status"
+                      )}
+                    </button>
+                    {!isUpdatingStatus && (
+                      <button
+                        onClick={() => setStatusUpdateDialog(false)}
+                        className={cn(
+                          "w-full text-md rounded-full",
+                          isDark
+                            ? "py-3 border border-[#FF5353] text-[#FF5353]"
+                            : "bg-[#FF323224] text-[#E50000] py-3",
+                        )}
+                      >
+                        Cancel
+                      </button>
+                    )}
+                  </DialogFooter>
+                </DialogContent>
+              </Dialog>
+            )}
 
-          {isContestDeletable && (
-            <DeleteContestButton
-              contestId={contestId}
-              contestTitle={currentContest.title || "this contest"}
-              isDeletable={isContestDeletable}
-              isdark={isDark}
-            />
-          )}
-        </div>
+            {contest.moderation_status === "approved" && (
+              <Button
+                size="sm"
+                className="inline-flex items-center gap-2 text-sm font-semibold rounded-xl bg-[#4A00BE] hover:bg-[#4A00BE]/90 text-white shadow-sm"
+                onClick={async (e) => {
+                  e.stopPropagation();
+                  try {
+                    const response = await fetch(
+                      `/api/contests/${contestId}/publish`,
+                      {
+                        method: "POST",
+                      },
+                    );
+                    if (response.ok) {
+                      window.location.reload();
+                    } else {
+                      const error = await response.json();
+                      alert(error.error || "Failed to publish contest");
+                    }
+                  } catch (error) {
+                    alert("Failed to publish contest");
+                  }
+                }}
+              >
+                <PlayCircle className="h-4 w-4" />
+                Publish
+              </Button>
+            )}
+            {currentContest.moderation_status === "published" && (
+              <Button
+                variant="outline"
+                size="sm"
+                className={cn(
+                  "inline-flex items-center gap-2 rounded-xl font-medium transition-colors",
+                  isDark
+                    ? "border-white/20 bg-transparent text-white hover:bg-white/10"
+                    : "border-[#4A00BE]/35 bg-white text-[#4A00BE] hover:bg-[#4A00BE]/[0.06]",
+                )}
+                onClick={handleShare}
+              >
+                <Share2 className="h-4 w-4 shrink-0" />
+                <span className="hidden sm:inline">Share</span>
+              </Button>
+            )}
+
+            {isContestEditable && (
+              <Button
+                size="sm"
+                variant="outline"
+                className={cn(
+                  "inline-flex items-center gap-2 rounded-xl font-medium transition-colors",
+                  isDark
+                    ? "border-white/20 bg-transparent text-white hover:bg-white/10"
+                    : "border-gray-300 bg-white text-gray-900 hover:bg-gray-50",
+                )}
+                asChild
+              >
+                <Link
+                  href={
+                    isAdminView
+                      ? `/dashboard/admin/contests/${contestId}/edit`
+                      : `/dashboard/contests/${contestId}/edit`
+                  }
+                  className="flex items-center gap-2"
+                >
+                  <Edit className="h-4 w-4" />
+                  <span className="hidden sm:inline font-medium">Edit</span>
+                </Link>
+              </Button>
+            )}
+
+            {isContestDeletable && (
+              <DeleteContestButton
+                contestId={contestId}
+                contestTitle={currentContest.title || "this contest"}
+                isDeletable={isContestDeletable}
+                isdark={isDark}
+              />
+            )}
+          </div>
         </div>
       </header>
 
@@ -10830,7 +11178,9 @@ export default function ContestDetailClient({
                                 </span>
                               </div>
                               <div className="text-[10px] text-slate-500 dark:text-slate-400">
-                                {twitterRun.is_raid ? "Raid campaign" : "Awareness"}{" "}
+                                {twitterRun.is_raid
+                                  ? "Raid campaign"
+                                  : "Awareness"}{" "}
                                 · Participants in scope:{" "}
                                 {twitterRun.total_participants ?? 0}
                               </div>
@@ -10932,7 +11282,8 @@ export default function ContestDetailClient({
                                 {(() => {
                                   const totalSubs =
                                     tiktokRun.total_submissions ?? 0;
-                                  const reviewed = tiktokRun.reviewed_count ?? 0;
+                                  const reviewed =
+                                    tiktokRun.reviewed_count ?? 0;
                                   const totalBatches =
                                     tiktokRun.total_batches ?? 1;
                                   const batchIndex =
@@ -11004,6 +11355,99 @@ export default function ContestDetailClient({
                                       <strong className="text-slate-700 dark:text-slate-300">
                                         {formatDurationSeconds(
                                           tiktokRefreshElapsedSeconds,
+                                        )}
+                                      </strong>
+                                    </span>
+                                  </div>
+                                </>
+                              )}
+                            </div>
+                          )}
+                        {isAdminView &&
+                          currentContest.platform
+                            ?.toLowerCase()
+                            .includes("youtube") &&
+                          showYoutubeRunPopup &&
+                          youtubeRun && (
+                            <div className="ml-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white/90 dark:bg-slate-900/80 px-4 py-3 shadow-md flex flex-col gap-1 min-w-[220px]">
+                              <div className="flex items-center justify-between gap-2">
+                                <span className="text-xs font-semibold text-slate-800 dark:text-slate-100">
+                                  {youtubeRunCompleted
+                                    ? "YouTube refresh summary"
+                                    : "YouTube refresh in progress"}
+                                </span>
+                                <span className="text-[10px] text-slate-500 dark:text-slate-400">
+                                  Batch {youtubeRun.current_batch_index ?? 0}/
+                                  {youtubeRun.total_batches ?? 1}
+                                </span>
+                              </div>
+                              <div className="text-[10px] uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                                Scope:{" "}
+                                <span className="font-semibold text-slate-700 dark:text-slate-200">
+                                  {youtubeRun.scope}
+                                </span>
+                              </div>
+                              <div className="w-full h-1.5 rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden">
+                                {(() => {
+                                  const totalSubs =
+                                    youtubeRun.total_submissions ?? 0;
+                                  const reviewed =
+                                    youtubeRun.reviewed_count ?? 0;
+                                  const totalBatches =
+                                    youtubeRun.total_batches ?? 1;
+                                  const batchIndex =
+                                    youtubeRun.current_batch_index ?? 0;
+
+                                  const byReviewed =
+                                    totalSubs > 0 && reviewed > 0
+                                      ? (reviewed / totalSubs) * 100
+                                      : 0;
+                                  const byBatches =
+                                    totalBatches > 0
+                                      ? (batchIndex / totalBatches) * 100
+                                      : 0;
+                                  const pct = Math.max(byReviewed, byBatches);
+
+                                  return (
+                                    <div
+                                      className="h-full bg-[#6C43D0] transition-all"
+                                      style={{
+                                        width: `${Math.min(
+                                          100,
+                                          Math.max(0, Math.round(pct)),
+                                        )}%`,
+                                      }}
+                                    />
+                                  );
+                                })()}
+                              </div>
+                              <div className="flex flex-wrap items-center justify-between gap-1 text-[11px] text-slate-600 dark:text-slate-300">
+                                <span>       
+                                  Processed <b>{youtubeRun.processed_submissions ?? 0}</b> / {youtubeRun.total_submissions}
+                                </span>
+                                <span className="uppercase tracking-wide text-[10px]">
+                                  {youtubeRun.status}
+                                </span>
+                              </div>
+                              <div className="flex flex-col gap-0.5 text-[10px] text-slate-700 dark:text-slate-200 mt-1">
+                                <span>Success: <b>{youtubeRun.success_count}</b></span>
+                                <span>Temporary failure: <b>{youtubeRun.temporary_failure_count}</b></span>
+                                <span>Permanent failure: <b>{youtubeRun.permanent_failure_count}</b></span>
+                                <span>Skipped: <b>{youtubeRun.skipped_recent_count}</b></span>
+                              </div>
+                              {youtubeRefreshElapsedSeconds != null && (
+                                <>
+                                  <div className="my-1 border-t border-slate-200 dark:border-slate-600" />
+                                  <div className="flex items-center gap-1.5 text-[10px] text-slate-600 dark:text-slate-400">
+                                    <Clock className="h-3 w-3 shrink-0" />
+                                    <span>
+                                      {youtubeRun.status === "running"
+                                        ? "Elapsed"
+                                        : "Duration"}
+                                      :{" "}
+                                      <strong className="text-slate-700 dark:text-slate-300">
+                                        {formatDurationSeconds(
+                                          youtubeRefreshElapsedSeconds,
                                         )}
                                       </strong>
                                     </span>
@@ -11224,9 +11668,11 @@ export default function ContestDetailClient({
                                   : "text-[#7F39EC] bg-purple-200",
                               )}
                             >
-                              {currentSubmissions.filter(
-                                (s) => getStatus(s) !== "rejected",
-                              ).length}
+                              {
+                                currentSubmissions.filter(
+                                  (s) => getStatus(s) !== "rejected",
+                                ).length
+                              }
                             </Badge>
                           </TabsTrigger>
                           <TabsTrigger
@@ -12105,6 +12551,14 @@ export default function ContestDetailClient({
                                     ) && (
                                       <TableHead className="text-center">
                                         Top Traffic Source
+                                      </TableHead>
+                                    )}
+                                  {isAdminView &&
+                                    ytVisibleColumns.includes(
+                                      "insights_status",
+                                    ) && (
+                                      <TableHead className="text-center">
+                                        Insights status
                                       </TableHead>
                                     )}
                                 </>
@@ -13723,6 +14177,43 @@ export default function ContestDetailClient({
                                             </TableCell>
                                           );
                                         })()}
+                                      {isAdminView &&
+                                        ytVisibleColumns.includes(
+                                          "insights_status",
+                                        ) && (
+                                          <TableCell className="text-center">
+                                            {(() => {
+                                              const meta = getInsightsStatusMeta(
+                                                submission.insights_status ??
+                                                  null,
+                                              );
+                                              return (
+                                                <div className="flex items-center justify-center">
+                                                  <Tooltip>
+                                                    <TooltipTrigger asChild>
+                                                      <span
+                                                        className={cn(
+                                                          "inline-flex items-center justify-center rounded-full border px-2 py-1 text-xs font-medium",
+                                                          meta.pillClass,
+                                                        )}
+                                                      >
+                                                        <span
+                                                          className={cn(
+                                                            "h-2.5 w-2.5 rounded-full",
+                                                            meta.dotClass,
+                                                          )}
+                                                        />
+                                                      </span>
+                                                    </TooltipTrigger>
+                                                    <TooltipContent className="whitespace-pre-line">
+                                                      {meta.help}
+                                                    </TooltipContent>
+                                                  </Tooltip>
+                                                </div>
+                                              );
+                                            })()}
+                                          </TableCell>
+                                        )}
                                     </>
                                   )}
                                   {/* Show reward cells for leaderboard and CPM contests, hide for Twitter CPM campaigns */}
@@ -14415,7 +14906,7 @@ export default function ContestDetailClient({
                       {viewMode === "creator-wise" &&
                         groupSubmissionsByCreator && (
                           <>
-                              {/* Creator-wise: compact status filters (Twitter); large top row hidden for Twitter */}
+                            {/* Creator-wise: compact status filters (Twitter); large top row hidden for Twitter */}
                             {isTwitterTextImageContest && (
                               <TwitterContestSubmissionStatusTabs
                                 activeStatusTab={activeStatusTab}
@@ -14459,6 +14950,17 @@ export default function ContestDetailClient({
                                       currentContest.platform
                                         ?.toLowerCase()
                                         .includes("tiktok")) && (
+                                      <TableHead className="text-center">
+                                        Insights status
+                                      </TableHead>
+                                    )}
+                                  {isAdminView &&
+                                    currentContest.platform
+                                      ?.toLowerCase()
+                                      .includes("youtube") &&
+                                    ytVisibleColumns.includes(
+                                      "insights_status",
+                                    ) && (
                                       <TableHead className="text-center">
                                         Insights status
                                       </TableHead>
@@ -14791,37 +15293,37 @@ export default function ContestDetailClient({
                                                 "status",
                                               )
                                             : true) && (
-                                              <TableCell>
-                                                <div className="flex flex-col items-center gap-1">
-                                                  {(currentContest.platform?.toLowerCase() ===
-                                                    "twitter" ||
-                                                    currentContest.platform?.toLowerCase() ===
+                                            <TableCell>
+                                              <div className="flex flex-col items-center gap-1">
+                                                {(currentContest.platform?.toLowerCase() ===
+                                                  "twitter" ||
+                                                  currentContest.platform?.toLowerCase() ===
                                                     "x") &&
-                                                  currentContest.contest_format ===
-                                                    "text_image" ? (
-                                                    <>
-                                                      <TwitterCreatorRowStatusPills
-                                                        submissions={
-                                                          group.submissions || []
+                                                currentContest.contest_format ===
+                                                  "text_image" ? (
+                                                  <>
+                                                    <TwitterCreatorRowStatusPills
+                                                      submissions={
+                                                        group.submissions || []
+                                                      }
+                                                      getStatus={getStatus}
+                                                    />
+                                                    {group.creator_rejection_reason && (
+                                                      <span
+                                                        className={cn(
+                                                          "text-xs italic truncate max-w-[150px] text-center",
+                                                          isDark
+                                                            ? "text-red-400"
+                                                            : "text-red-600",
+                                                        )}
+                                                        title={
+                                                          group.creator_rejection_reason
                                                         }
-                                                        getStatus={getStatus}
-                                                      />
-                                                      {group.creator_rejection_reason && (
-                                                        <span
-                                                          className={cn(
-                                                            "text-xs italic truncate max-w-[150px] text-center",
-                                                            isDark
-                                                              ? "text-red-400"
-                                                              : "text-red-600",
-                                                          )}
-                                                          title={
-                                                            group.creator_rejection_reason
-                                                          }
-                                                        >
-                                                          {group
-                                                            .creator_rejection_reason
-                                                            .length > 20
-                                                            ? group.creator_rejection_reason.substring(
+                                                      >
+                                                        {group
+                                                          .creator_rejection_reason
+                                                          .length > 20
+                                                          ? group.creator_rejection_reason.substring(
                                                               0,
                                                               20,
                                                             ) + "..."
@@ -14944,8 +15446,106 @@ export default function ContestDetailClient({
                                                             </span>
                                                           </TooltipTrigger>
                                                           <TooltipContent>
-                                                            Insights cannot be fetched
-                                                            for this post
+                                                            Insights cannot be
+                                                            fetched for this
+                                                            post
+                                                          </TooltipContent>
+                                                        </Tooltip>
+                                                      )}
+                                                      {okCount === 0 &&
+                                                        tempCount === 0 &&
+                                                        permCount === 0 && (
+                                                          <Tooltip>
+                                                            <TooltipTrigger
+                                                              asChild
+                                                            >
+                                                              <span className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[11px] font-medium text-slate-600">
+                                                                <span className="h-2 w-2 rounded-full bg-slate-400" />
+                                                                {neverCount}
+                                                              </span>
+                                                            </TooltipTrigger>
+                                                            <TooltipContent>
+                                                              Never refreshed
+                                                              yet
+                                                            </TooltipContent>
+                                                          </Tooltip>
+                                                        )}
+                                                    </div>
+                                                  );
+                                                })()}
+                                              </TableCell>
+                                            )}
+                                          {isAdminView &&
+                                            currentContest.platform
+                                              ?.toLowerCase()
+                                              .includes("youtube") &&
+                                            ytVisibleColumns.includes(
+                                              "insights_status",
+                                            ) && (
+                                              <TableCell className="text-center">
+                                                {(() => {
+                                                  const counts =
+                                                    group.insightsCounts || {};
+                                                  const okCount =
+                                                    counts.ok || 0;
+                                                  const tempCount =
+                                                    counts.temporary_failure ||
+                                                    0;
+                                                  const permCount =
+                                                    counts.permanent_failure ||
+                                                    0;
+                                                  const neverCount =
+                                                    counts.never || 0;
+                                                  return (
+                                                    <div className="flex flex-wrap items-center justify-center gap-1">
+                                                      {okCount > 0 && (
+                                                        <Tooltip>
+                                                          <TooltipTrigger
+                                                            asChild
+                                                          >
+                                                            <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-800">
+                                                              <span className="h-2 w-2 rounded-full bg-emerald-500" />
+                                                              {okCount}
+                                                            </span>
+                                                          </TooltipTrigger>
+                                                          <TooltipContent>
+                                                            Insights fetched
+                                                            successfully
+                                                          </TooltipContent>
+                                                        </Tooltip>
+                                                      )}
+                                                      {tempCount > 0 && (
+                                                        <Tooltip>
+                                                          <TooltipTrigger
+                                                            asChild
+                                                          >
+                                                            <span className="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-900">
+                                                              <span className="h-2 w-2 rounded-full bg-amber-400" />
+                                                              {tempCount}
+                                                            </span>
+                                                          </TooltipTrigger>
+                                                          <TooltipContent className="whitespace-pre-line">
+                                                            Temporary error
+                                                            fetching insights
+                                                            {"\n"}Will retry
+                                                            later
+                                                          </TooltipContent>
+                                                        </Tooltip>
+                                                      )}
+                                                      {permCount > 0 && (
+                                                        <Tooltip>
+                                                          <TooltipTrigger
+                                                            asChild
+                                                          >
+                                                            <span className="inline-flex items-center gap-1 rounded-full border border-rose-200 bg-rose-50 px-2 py-0.5 text-[11px] font-medium text-rose-900">
+                                                              <span className="h-2 w-2 rounded-full bg-rose-500" />
+                                                              {permCount}
+                                                            </span>
+                                                          </TooltipTrigger>
+                                                          <TooltipContent>
+                                                            Insights cannot be
+                                                            fetched for this
+                                                            post
                                                           </TooltipContent>
                                                         </Tooltip>
                                                       )}
@@ -15173,8 +15773,7 @@ export default function ContestDetailClient({
                                                 .includes("tiktok") &&
                                                 (() => {
                                                   const ttEng =
-                                                    (group.metrics.likes ||
-                                                      0) +
+                                                    (group.metrics.likes || 0) +
                                                     (group.metrics.comments ||
                                                       0) +
                                                     (group.metrics.shares || 0);
@@ -15511,40 +16110,42 @@ export default function ContestDetailClient({
                                                   View All ({group.totalCount})
                                                 </Button>
                                                 {isAdminView &&
-                                                   currentContest.platform
-                                                     ?.toLowerCase()
-                                                     .includes("instagram") && (
-                                                     <Button
-                                                       size="sm"
-                                                       variant="outline"
-                                                       className={cn(
-                                                         "border min-w-[8.5rem] inline-flex items-center justify-center gap-1.5",
-                                                         isDark
-                                                           ? "bg-[#170337] border-purple-500/50 text-white"
-                                                           : "border-purple-300 bg-purple-50 text-purple-900",
-                                                       )}
-                                                       disabled={
-                                                         igAnalyticsLoadingCreatorId ===
-                                                         group.creator.id
-                                                       }
-                                                       onClick={() => {
-                                                         setIgAnalyticsCreatorId(
-                                                           group.creator.id,
-                                                         );
-                                                         setIgAnalyticsCreatorLabel(
-                                                           userTableUsername ||
-                                                             group.creator
-                                                               .username ||
-                                                             platformUsername ||
-                                                             group.creator.id,
-                                                         );
-                                                         setIgAnalyticsLoadingCreatorId(
-                                                           group.creator.id,
-                                                         );
-                                                         setIgAnalyticsOpen(true);
-                                                       }}
-                                                     >
-                                                       {igAnalyticsLoadingCreatorId ===
+                                                  currentContest.platform
+                                                    ?.toLowerCase()
+                                                    .includes("instagram") && (
+                                                    <Button
+                                                      size="sm"
+                                                      variant="outline"
+                                                      className={cn(
+                                                        "border min-w-[8.5rem] inline-flex items-center justify-center gap-1.5",
+                                                        isDark
+                                                          ? "bg-[#170337] border-purple-500/50 text-white"
+                                                          : "border-purple-300 bg-purple-50 text-purple-900",
+                                                      )}
+                                                      disabled={
+                                                        igAnalyticsLoadingCreatorId ===
+                                                        group.creator.id
+                                                      }
+                                                      onClick={() => {
+                                                        setIgAnalyticsCreatorId(
+                                                          group.creator.id,
+                                                        );
+                                                        setIgAnalyticsCreatorLabel(
+                                                          userTableUsername ||
+                                                            group.creator
+                                                              .username ||
+                                                            platformUsername ||
+                                                            group.creator.id,
+                                                        );
+                                                        setIgAnalyticsLoadingCreatorId(
+                                                          group.creator.id,
+                                                        );
+                                                        setIgAnalyticsOpen(
+                                                          true,
+                                                        );
+                                                      }}
+                                                    >
+                                                      {igAnalyticsLoadingCreatorId ===
                                                       group.creator.id ? (
                                                         <>
                                                           <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin" />
@@ -15646,27 +16247,7 @@ export default function ContestDetailClient({
                                                           <Users className="h-4 w-4 mr-2" />
                                                           Refresh Demographics
                                                         </DropdownMenuItem>
-                                                        <DropdownMenuItem
-                                                          disabled={
-                                                            ytPostContestLocked ||
-                                                            !!loadingDetailedAnalytics[
-                                                              group.creator.id
-                                                            ]
-                                                          }
-                                                          onClick={() =>
-                                                            handleRefreshDetailedAnalytics(
-                                                              "both",
-                                                              {
-                                                                creatorId:
-                                                                  group.creator
-                                                                    .id,
-                                                              },
-                                                            )
-                                                          }
-                                                        >
-                                                          <RefreshCw className="h-4 w-4 mr-2" />
-                                                          Refresh Traffic + Demo
-                                                        </DropdownMenuItem>
+
                                                         <DropdownMenuItem
                                                           disabled={
                                                             ytPostContestLocked ||
@@ -15686,7 +16267,7 @@ export default function ContestDetailClient({
                                                           }
                                                         >
                                                           <RefreshCw className="h-4 w-4 mr-2 text-purple-500" />
-                                                          Refresh All Analytics
+                                                          Refresh All Metrics
                                                         </DropdownMenuItem>
                                                       </DropdownMenuContent>
                                                     </DropdownMenu>
@@ -19066,23 +19647,21 @@ export default function ContestDetailClient({
               (g: any) => g.creator.id === selectedCreatorForModal,
             )?.creator || {}
           }
-          submissions={
-            (() => {
-              const g = (groupSubmissionsByCreator as any[]).find(
-                (row: any) => row.creator.id === selectedCreatorForModal,
-              );
-              if (g?.submissions?.length) {
-                return g.submissions as React.ComponentProps<
-                  typeof CreatorSubmissionsModal
-                >["submissions"];
-              }
-              return (currentSubmissions || []).filter(
-                (s: any) => s.creator_id === selectedCreatorForModal,
-              ) as React.ComponentProps<
+          submissions={(() => {
+            const g = (groupSubmissionsByCreator as any[]).find(
+              (row: any) => row.creator.id === selectedCreatorForModal,
+            );
+            if (g?.submissions?.length) {
+              return g.submissions as React.ComponentProps<
                 typeof CreatorSubmissionsModal
               >["submissions"];
-            })()
-          }
+            }
+            return (currentSubmissions || []).filter(
+              (s: any) => s.creator_id === selectedCreatorForModal,
+            ) as React.ComponentProps<
+              typeof CreatorSubmissionsModal
+            >["submissions"];
+          })()}
           contest={currentContest}
           creatorRank={
             creatorRankingMap.get(selectedCreatorForModal) ?? undefined

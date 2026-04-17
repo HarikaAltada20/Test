@@ -2,6 +2,7 @@ import { createClient } from "@/utils/supabase/server";
 import { createAdminClient } from "@/utils/supabase/admin";
 import { encrypt } from "@/lib/encryption";
 import { NextResponse } from "next/server";
+import { createServerClient } from "@supabase/ssr";
 
 export async function POST(req: Request) {
   try {
@@ -72,8 +73,23 @@ export async function POST(req: Request) {
       }, { status: 403 });
     }
 
-    // 2. Authenticate the NEW account (now we know it's a creator)
-    const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+    // 2. Authenticate the NEW account using an isolated/no-op cookie client.
+    // This prevents mutating the currently logged-in user's session cookies.
+    const isolatedAuthClient = createServerClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      {
+        cookies: {
+          get() {
+            return undefined;
+          },
+          set() {},
+          remove() {},
+        },
+      },
+    );
+    const { data: authData, error: authError } =
+      await isolatedAuthClient.auth.signInWithPassword({
       email,
       password,
     });
@@ -109,6 +125,59 @@ export async function POST(req: Request) {
     const encryptedCurrentToken = encrypt(currentSession.refresh_token);
     const encryptedTargetToken = encrypt(targetRefreshToken);
 
+    // Read existing reciprocal links so we can rollback safely on partial failure.
+    const [{ data: existingForward }, { data: existingReverse }] =
+      await Promise.all([
+        adminSupabase
+          .from("user_sessions_vault")
+          .select("owner_user_id, target_user_id, encrypted_refresh_token, updated_at")
+          .eq("owner_user_id", currentUser.id)
+          .eq("target_user_id", targetUserId)
+          .maybeSingle(),
+        adminSupabase
+          .from("user_sessions_vault")
+          .select("owner_user_id, target_user_id, encrypted_refresh_token, updated_at")
+          .eq("owner_user_id", targetUserId)
+          .eq("target_user_id", currentUser.id)
+          .maybeSingle(),
+      ]);
+
+    const rollbackVaultPair = async () => {
+      const restoreOne = async (
+        ownerUserId: string,
+        targetUserIdToRestore: string,
+        previous:
+          | {
+              owner_user_id: string;
+              target_user_id: string;
+              encrypted_refresh_token: string;
+              updated_at: string | null;
+            }
+          | null,
+      ) => {
+        if (previous) {
+          await adminSupabase.from("user_sessions_vault").upsert(
+            {
+              owner_user_id: previous.owner_user_id,
+              target_user_id: previous.target_user_id,
+              encrypted_refresh_token: previous.encrypted_refresh_token,
+              updated_at: previous.updated_at ?? new Date().toISOString(),
+            },
+            { onConflict: "owner_user_id,target_user_id" },
+          );
+          return;
+        }
+        await adminSupabase
+          .from("user_sessions_vault")
+          .delete()
+          .eq("owner_user_id", ownerUserId)
+          .eq("target_user_id", targetUserIdToRestore);
+      };
+
+      await restoreOne(currentUser.id, targetUserId, existingForward ?? null);
+      await restoreOne(targetUserId, currentUser.id, existingReverse ?? null);
+    };
+
     // 3. Store targeted account in current user's vault
     // Note: onConflict is essential to avoid duplicate key errors
     const { error: vaultError1 } = await adminSupabase
@@ -119,6 +188,16 @@ export async function POST(req: Request) {
         encrypted_refresh_token: encryptedTargetToken,
         updated_at: new Date().toISOString(),
       }, { onConflict: 'owner_user_id,target_user_id' });
+    if (vaultError1) {
+      console.error("Vault forward link error:", vaultError1);
+      await rollbackVaultPair().catch((rollbackErr) =>
+        console.error("Rollback failed after forward link error:", rollbackErr),
+      );
+      return NextResponse.json(
+        { error: "Failed to store session link" },
+        { status: 500 },
+      );
+    }
 
     // 4. Store current account in targeted user's vault (cross-link)
     const { error: vaultError2 } = await adminSupabase
@@ -130,9 +209,15 @@ export async function POST(req: Request) {
         updated_at: new Date().toISOString(),
       }, { onConflict: 'owner_user_id,target_user_id' });
 
-    if (vaultError1 || vaultError2) {
-      console.error("Vault Error:", vaultError1 || vaultError2);
-      return NextResponse.json({ error: "Failed to store session link" }, { status: 500 });
+    if (vaultError2) {
+      console.error("Vault reverse link error:", vaultError2);
+      await rollbackVaultPair().catch((rollbackErr) =>
+        console.error("Rollback failed after reverse link error:", rollbackErr),
+      );
+      return NextResponse.json(
+        { error: "Failed to store session link" },
+        { status: 500 },
+      );
     }
 
     // Audit Log

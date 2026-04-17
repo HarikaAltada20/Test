@@ -614,6 +614,9 @@ export function CreatorSubmissionsModal({
   const isTikTokContest =
     contest?.platform?.toLowerCase().includes("tiktok") ?? false;
 
+  const isYouTubeContest =
+    contest?.platform?.toLowerCase().includes("youtube") ?? false;
+
   const getInsightsMeta = (
     status: Submission["insights_status"],
     errorMsg?: string,
@@ -1602,7 +1605,7 @@ export function CreatorSubmissionsModal({
                       </TableHead>
                     </>
                   )}
-                  {isAdminView && (isInstagramContest || isTikTokContest) && (
+                  {isAdminView && (isInstagramContest || isTikTokContest || isYouTubeContest) && (
                     <TableHead
                       className={cn(
                         "text-center",
@@ -1666,7 +1669,7 @@ export function CreatorSubmissionsModal({
                           ((isInstagramContest || isTikTokContest) ? (isTikTokContest ? 3 : 6) : 0) + // TT: Shares + total engagement + engagement rate; IG: +Saves, Reach, Interactions, Avg/Total watch
                           2 + // Expected Reward, Reward Granted
                           (hasBonus ? 2 : 0) + // Bonus Expected, Bonus Granted
-                          (isAdminView && (isInstagramContest || isTikTokContest) ? 1 : 0) + // Insights status (admin only)
+                          (isAdminView && (isInstagramContest || isTikTokContest || isYouTubeContest) ? 1 : 0) + // Insights status (admin only)
                           4 // Status, Rejection reason, Submitted, Actions
                       }
                       className={cn(
@@ -2360,13 +2363,14 @@ export function CreatorSubmissionsModal({
                             </TableCell>
                           </>
                         )}
-                        {isAdminView && (isInstagramContest || isTikTokContest) && (
+                        {isAdminView && (isInstagramContest || isTikTokContest || isYouTubeContest) && (
                           <TableCell className="text-center">
                             {(() => {
                               const meta = getInsightsMeta(
                                 submission.insights_status ?? null,
                                 (submission.other_stats as any)?.tiktok_error ||
-                                  (submission.other_stats as any)?.instagram_error
+                                  (submission.other_stats as any)?.instagram_error ||
+                                  (submission.other_stats as any)?.youtube?.insights_error
                               );
                               return (
                                 <div className="flex items-center justify-center">

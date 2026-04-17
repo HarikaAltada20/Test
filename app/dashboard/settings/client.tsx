@@ -349,6 +349,20 @@ export default function SettingsPage({
       const newUrl = new URL(window.location.href);
       newUrl.searchParams.delete("error");
       router.replace(newUrl.pathname);
+    } else if (error === "duplicate_account") {
+      toast({
+        title: "Account Already Linked",
+        description: message
+          ? decodeURIComponent(message)
+          : "This social account is already linked to another profile.",
+        variant: "destructive",
+        duration: 10000,
+      });
+
+      const newUrl = new URL(window.location.href);
+      newUrl.searchParams.delete("error");
+      newUrl.searchParams.delete("message");
+      router.replace(newUrl.pathname);
     }
 
     // Handle success parameters
@@ -977,15 +991,26 @@ export default function SettingsPage({
     if (!user) return;
     setIsLoadingTiktokDisconnect(true);
     try {
-      const { error } = await supabase
-        .from("creator_profiles")
-        .update({
-          tiktok_account: null,
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", user.id);
+      const timeoutId = setTimeout(() => {
+        setIsLoadingTiktokDisconnect(false);
+        toast({
+          title: "Error",
+          description: "Disconnection timed out. Please try again.",
+          variant: "destructive",
+        });
+      }, API_TIMEOUT_SHORT);
 
-      if (error) throw error;
+      const response = await fetch("/api/creator/social-disconnect", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ platform: "tiktok" }),
+      });
+
+      clearTimeout(timeoutId);
+      if (!response.ok) {
+        const result = await response.json().catch(() => null);
+        throw new Error(result?.error || "Failed to disconnect TikTok.");
+      }
 
       setTiktokAccount(null);
       setTiktokConnected(false);
@@ -998,7 +1023,7 @@ export default function SettingsPage({
     } catch (err: any) {
       toast({
         title: "Error",
-        description: err?.message || "Failed to disconnect TikTok account.",
+        description: err?.message || "Failed to disconnect TikTok.",
         variant: "destructive",
       });
     } finally {

@@ -1,6 +1,6 @@
 /**
- * POST: Enqueue a TikTok metrics refresh for a contest.
- * Creates a run (or returns existing active run), pushes first job to Redis, triggers processor.
+ * POST: Enqueue a YouTube metrics/analytics refresh for a contest (batched via Redis + processor).
+
  */
 
 import { NextResponse } from "next/server";
@@ -13,16 +13,26 @@ import {
   METRICS_REFRESH_COOLDOWN_MS_OPPORTUNITIES,
 } from "@/lib/constants";
 import {
-  isTikTokMetricsQueueEnabled,
-  enqueueTikTokMetricsJob,
-  type TikTokMetricsJob,
-} from "@/lib/queue/tiktok-metrics-queue";
-import {
-  isQStashEnabled,
-  triggerProcessTikTokMetricsQueue,
-} from "@/lib/qstash";
+  isYouTubeMetricsQueueEnabled,
+  enqueueYouTubeMetricsJob,
+  type YouTubeMetricsJob,
+  type YouTubeRefreshScope,
+} from "@/lib/queue/youtube-metrics-queue";
+import { isQStashEnabled, triggerProcessYouTubeMetricsQueue } from "@/lib/qstash";
 
-const BATCH_SIZE = 50;
+const BATCH_SIZE = 25;
+
+const SCOPES: YouTubeRefreshScope[] = [
+  "basic",
+  "core",
+  "traffic",
+  "demographics",
+  "all",
+];
+
+function isAnalyticsScope(scope: YouTubeRefreshScope): boolean {
+  return scope !== "basic";
+}
 
 export async function POST(
   request: Request,
@@ -34,12 +44,33 @@ export async function POST(
     let isAdmin = false;
     if (!cronAuth) {
       const supabase = await createClient();
-      const { data: { user: u } } = await supabase.auth.getUser();
+      const {
+        data: { user: u },
+      } = await supabase.auth.getUser();
       user = u;
       if (!user) {
         return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
       }
       ({ isAdmin } = await verifyAdminAccess());
+    }
+
+    const body = await request.json().catch(() => ({}));
+    const scope = body.scope as YouTubeRefreshScope | undefined;
+    if (!scope || !SCOPES.includes(scope)) {
+      return NextResponse.json(
+        {
+          error:
+            "scope is required and must be one of: basic, core, traffic, demographics, all",
+        },
+        { status: 400 }
+      );
+    }
+
+    if (!cronAuth && isAnalyticsScope(scope) && !isAdmin) {
+      return NextResponse.json(
+        { error: "Admin access required for this analytics scope" },
+        { status: 403 }
+      );
     }
 
     const { id: contestId } = await params;
@@ -61,11 +92,9 @@ export async function POST(
     if (contestError || !contest) {
       return NextResponse.json({ error: "Contest not found" }, { status: 404 });
     }
-    if ((contest.platform ?? "").toString().toLowerCase() !== "tiktok") {
-      return NextResponse.json(
-        { error: "Contest is not a TikTok contest" },
-        { status: 400 }
-      );
+    const platformLower = (contest.platform ?? "").toString().toLowerCase();
+    if (!platformLower.includes("youtube")) {
+      return NextResponse.json({ error: "Contest is not a YouTube contest" }, { status: 400 });
     }
     if (contest.views_locked_at) {
       return NextResponse.json(
@@ -73,7 +102,6 @@ export async function POST(
         { status: 400 }
       );
     }
-    
     if (
       contest.post_contest_status === "in_review" ||
       contest.post_contest_status === "verification_complete" ||
@@ -85,9 +113,31 @@ export async function POST(
       );
     }
 
-    // Enforce the same cooldown as `refresh-metrics` to prevent bypassing rate limits by
-    // calling the enqueue endpoint directly.
-    if (!cronAuth) {
+    if (!isYouTubeMetricsQueueEnabled()) {
+      return NextResponse.json(
+        { error: "YouTube metrics queue not configured (Redis env missing)" },
+        { status: 503 }
+      );
+    }
+
+    const baseUrl =
+      request.headers.get("x-forwarded-proto") && request.headers.get("host")
+        ? `${request.headers.get("x-forwarded-proto")}://${request.headers.get("host")}`
+        : process.env.NEXT_PUBLIC_APP_URL
+          ? process.env.NEXT_PUBLIC_APP_URL.startsWith("http")
+            ? process.env.NEXT_PUBLIC_APP_URL
+            : `https://${process.env.NEXT_PUBLIC_APP_URL}`
+          : "http://localhost:3000";
+
+    const doFetch = () =>
+      fetch(`${baseUrl.replace(/\/$/, "")}/api/cron/process-youtube-metrics-queue`, {
+        method: "POST",
+        headers: process.env.CRON_SECRET
+          ? { Authorization: `Bearer ${process.env.CRON_SECRET}` }
+          : {},
+      }).catch((e) => console.warn("[youtube-metrics-refresh] Trigger processor failed:", e));
+
+    if (!cronAuth && scope === "basic") {
       const isOwner = contest.advertiser_id === user?.id;
       const isOpportunitiesRefresh = !isAdmin && !isOwner;
       const cooldownMs = isOpportunitiesRefresh
@@ -106,7 +156,7 @@ export async function POST(
           return NextResponse.json(
             {
               error: `Metrics were updated ${Math.floor(
-                timeSinceLastUpdate / 1000 / 60,
+                timeSinceLastUpdate / 1000 / 60
               )} minutes ago. Please wait ${remainingMinutes} more minutes before refreshing again.`,
               nextRefreshAvailable: new Date(lastUpdateMs + cooldownMs).toISOString(),
               userType: isOpportunitiesRefresh
@@ -115,57 +165,33 @@ export async function POST(
                   ? "admins"
                   : "brands/owners",
             },
-            { status: 429 },
+            { status: 429 }
           );
         }
       }
     }
 
-    if (!isTikTokMetricsQueueEnabled()) {
-      return NextResponse.json(
-        { error: "TikTok metrics queue not configured (Redis env missing)" },
-        { status: 503 }
-      );
-    }
-
-    const baseUrl =
-      request.headers.get("x-forwarded-proto") && request.headers.get("host")
-        ? `${request.headers.get("x-forwarded-proto")}://${request.headers.get("host")}`
-        : process.env.NEXT_PUBLIC_APP_URL
-          ? process.env.NEXT_PUBLIC_APP_URL.startsWith("http")
-            ? process.env.NEXT_PUBLIC_APP_URL
-            : `https://${process.env.NEXT_PUBLIC_APP_URL}`
-          : "http://localhost:3000";
-
-    const doFetch = () =>
-      fetch(`${baseUrl.replace(/\/$/, "")}/api/cron/process-tiktok-metrics-queue`, {
-        method: "POST",
-        headers: process.env.CRON_SECRET
-          ? { Authorization: `Bearer ${process.env.CRON_SECRET}` }
-          : {},
-      }).catch((e) =>
-        console.warn("[tiktok-metrics-refresh] Trigger processor failed:", e)
-      );
-
-    // Check for existing active run
     const { data: existingRun } = await supabaseAdmin
-      .from("tiktok_metrics_refresh_runs")
-      .select("id, status, total_submissions, total_batches")
+      .from("youtube_metrics_refresh_runs")
+      .select("id, status, total_submissions, total_batches, scope")
       .eq("contest_id", contestId)
       .in("status", ["pending", "running"])
       .maybeSingle();
 
     if (existingRun) {
       if (isQStashEnabled()) {
-        triggerProcessTikTokMetricsQueue(baseUrl).then((res) => {
-          if (res?.error) doFetch();
-        }).catch(() => doFetch());
+        triggerProcessYouTubeMetricsQueue(baseUrl)
+          .then((res) => {
+            if (res?.error) doFetch();
+          })
+          .catch(() => doFetch());
       } else {
         doFetch();
       }
       return NextResponse.json({
         runId: existingRun.id,
         status: existingRun.status,
+        scope: existingRun.scope,
         alreadyActive: true,
         total_submissions: existingRun.total_submissions,
         total_batches: existingRun.total_batches,
@@ -173,16 +199,19 @@ export async function POST(
       });
     }
 
-    // Count eligible submissions in DB (Instagram-style) for better performance.
     const { count: eligibleCount, error: eligibleCountError } = await supabaseAdmin
       .from("submissions")
       .select("*", { count: "exact", head: true })
       .eq("contest_id", contestId)
-      .eq("platform", "tiktok")
-      .neq("status", "rejected")
-      .or("video_id.not.is.null,content_link.not.is.null")
+      .ilike("platform", "%youtube%")
+      .in("status", ["verified", "pending"])
+      .not("content_link", "is", null)
       .or("insights_status.is.null,insights_status.neq.permanent_failure");
     if (eligibleCountError) {
+      console.error(
+        "[youtube-metrics-refresh enqueue] eligible count failed:",
+        eligibleCountError,
+      );
       return NextResponse.json(
         { error: "Failed to count eligible submissions" },
         { status: 500 },
@@ -194,16 +223,18 @@ export async function POST(
     const runStartedAt = new Date().toISOString();
 
     const { data: newRun, error: insertError } = await supabaseAdmin
-      .from("tiktok_metrics_refresh_runs")
+      .from("youtube_metrics_refresh_runs")
       .insert({
         contest_id: contestId,
         status: "running",
+        scope,
         total_submissions: totalEligible,
         processed_submissions: 0,
         success_count: 0,
         permanent_failure_count: 0,
         temporary_failure_count: 0,
         skipped_recent_count: 0,
+        reviewed_count: 0,
         current_batch_index: 0,
         total_batches: totalBatches,
         started_at: runStartedAt,
@@ -214,40 +245,52 @@ export async function POST(
     if (insertError) {
       if (insertError.code === "23505") {
         const { data: again } = await supabaseAdmin
-          .from("tiktok_metrics_refresh_runs")
+          .from("youtube_metrics_refresh_runs")
           .select("id, status")
           .eq("contest_id", contestId)
           .in("status", ["pending", "running"])
           .maybeSingle();
         if (again) {
+          if (isQStashEnabled()) {
+            triggerProcessYouTubeMetricsQueue(baseUrl)
+              .then((res) => {
+                if (res?.error) doFetch();
+              })
+              .catch(() => doFetch());
+          } else {
+            doFetch();
+          }
           return NextResponse.json({
             runId: again.id,
             status: again.status,
             alreadyActive: true,
+            processorTriggered: true,
           });
         }
       }
-      console.error("[tiktok-metrics-refresh enqueue] insert run failed:", insertError);
-      return NextResponse.json(
-        { error: "Failed to create run" },
-        { status: 500 }
-      );
+      console.error("[youtube-metrics-refresh enqueue] insert run failed:", insertError);
+      return NextResponse.json({ error: "Failed to create run" }, { status: 500 });
     }
 
     const runId = newRun.id;
-    const firstJob: TikTokMetricsJob = {
+    const firstJob: YouTubeMetricsJob = {
       contestId,
       runId,
+      scope,
       batchIndex: 0,
       batchSize: BATCH_SIZE,
       totalBatches: totalBatches,
     };
 
-    const enqueueResult = await enqueueTikTokMetricsJob(firstJob);
+    const enqueueResult = await enqueueYouTubeMetricsJob(firstJob);
     if (enqueueResult.error) {
       await supabaseAdmin
-        .from("tiktok_metrics_refresh_runs")
-        .update({ status: "failed", error_message: enqueueResult.error, updated_at: new Date().toISOString() })
+        .from("youtube_metrics_refresh_runs")
+        .update({
+          status: "failed",
+          error_message: enqueueResult.error,
+          updated_at: new Date().toISOString(),
+        })
         .eq("id", runId);
       return NextResponse.json(
         { error: `Failed to enqueue: ${enqueueResult.error}` },
@@ -256,9 +299,11 @@ export async function POST(
     }
 
     if (isQStashEnabled()) {
-      triggerProcessTikTokMetricsQueue(baseUrl).then((res) => {
-        if (res?.error) doFetch();
-      }).catch(() => doFetch());
+      triggerProcessYouTubeMetricsQueue(baseUrl)
+        .then((res) => {
+          if (res?.error) doFetch();
+        })
+        .catch(() => doFetch());
     } else {
       doFetch();
     }
@@ -266,11 +311,12 @@ export async function POST(
     return NextResponse.json({
       runId,
       status: "running",
+      scope,
       total_submissions: totalEligible,
       total_batches: totalBatches,
     });
   } catch (e) {
-    console.error("[tiktok-metrics-refresh enqueue]", e);
+    console.error("[youtube-metrics-refresh enqueue]", e);
     return NextResponse.json(
       { error: e instanceof Error ? e.message : "Server error" },
       { status: 500 }

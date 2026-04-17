@@ -27,6 +27,7 @@ import {
 import {
   isTikTokMetricsQueueEnabled,
 } from "@/lib/queue/tiktok-metrics-queue";
+import { isYouTubeMetricsQueueEnabled } from "@/lib/queue/youtube-metrics-queue";
 
 export async function POST(
   request: Request,
@@ -177,6 +178,7 @@ export async function POST(
     const queueEnabled = isMetricsQueueEnabled();
     const instagramQueueEnabled = isInstagramInsightsQueueEnabled();
     const tiktokQueueEnabled = isTikTokMetricsQueueEnabled();
+    const youtubeQueueEnabled = isYouTubeMetricsQueueEnabled();
     const useQueue = isTwitter && queueEnabled;
     const useInstagramQueue =
       !isTwitter &&
@@ -186,6 +188,10 @@ export async function POST(
       !isTwitter &&
       contest.platform?.toLowerCase() === "tiktok" &&
       tiktokQueueEnabled;
+    const useYouTubeQueue =
+      !isTwitter &&
+      (contest.platform?.toLowerCase().includes("youtube") ?? false) &&
+      youtubeQueueEnabled;
 
     if (isTwitter) {
       const why = queueEnabled
@@ -242,6 +248,59 @@ export async function POST(
         queued: true,
         message:
           "Instagram refresh started in background. Metrics will update shortly.",
+        contestId,
+        contestTitle: contest.title,
+        platform: contest.platform,
+        runId: enqueueData.runId,
+        nextRefreshAvailable: new Date(
+          now.getTime() + cooldownMs,
+        ).toISOString(),
+      });
+    }
+
+    if (useYouTubeQueue) {
+      const protocol = request.headers.get("x-forwarded-proto") || "http";
+      const host = request.headers.get("host");
+      const baseUrl = host
+        ? `${protocol}://${host}`
+        : process.env.NEXT_PUBLIC_APP_URL
+          ? `https://${process.env.NEXT_PUBLIC_APP_URL}`
+          : "";
+      const enqueueUrl = `${baseUrl.replace(/\/$/, "")}/api/contests/${contestId}/youtube-metrics-refresh/enqueue`;
+      const cookieHeader = request.headers.get("cookie");
+      const enqueueRes = await fetch(enqueueUrl, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(cookieHeader ? { Cookie: cookieHeader } : {}),
+        },
+        credentials: "include",
+        body: JSON.stringify({ scope: "basic" }),
+      });
+      const enqueueData = await enqueueRes.json().catch(() => ({}));
+      if (!enqueueRes.ok) {
+        return NextResponse.json(
+          { error: enqueueData?.error ?? "Failed to start YouTube refresh" },
+          { status: enqueueRes.status },
+        );
+      }
+      if (enqueueData.alreadyActive) {
+        return NextResponse.json({
+          success: true,
+          queued: true,
+          message: "Refresh already in progress.",
+          contestId,
+          runId: enqueueData.runId,
+          nextRefreshAvailable: new Date(
+            now.getTime() + cooldownMs,
+          ).toISOString(),
+        });
+      }
+      return NextResponse.json({
+        success: true,
+        queued: true,
+        message:
+          "YouTube refresh started in background. Metrics will update shortly.",
         contestId,
         contestTitle: contest.title,
         platform: contest.platform,

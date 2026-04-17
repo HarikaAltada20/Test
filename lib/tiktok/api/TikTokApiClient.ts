@@ -91,18 +91,7 @@ export class TikTokApiClient {
       params.append("code_verifier", codeVerifier);
     }
 
-    console.log(
-      "[TikTok API Client] POST /oauth/token with params (secret redacted):",
-      {
-        client_key: this.clientKey,
-        code: code ? code.substring(0, 10) + "..." : "missing",
-        grant_type: "authorization_code",
-        redirect_uri: customRedirectUri || this.redirectUri,
-        code_verifier: codeVerifier
-          ? codeVerifier.substring(0, 10) + "..."
-          : "missing",
-      },
-    );
+    // Avoid logging OAuth secrets (code, verifier, full redirect URI) in production logs.
 
     const res = await fetch(`https://open.tiktokapis.com/v2/oauth/token/`, {
       method: "POST",
