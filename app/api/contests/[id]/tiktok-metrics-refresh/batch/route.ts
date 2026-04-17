@@ -5,7 +5,6 @@
 import { NextResponse } from "next/server";
 import { createClient as createAdminSupabaseClient } from "@supabase/supabase-js";
 import { syncCreatorTikTokDisplayMetrics } from "@/lib/tiktok/sync-tiktok-display-metrics";
-import { isEligibleSubmissionForRun } from "@/lib/tiktok/refresh-eligibility";
 
 type SubmissionCandidate = {
   id: string;
@@ -86,73 +85,43 @@ export async function POST(
     }
 
     const runStartedAt = run.started_at;
-    const FETCH_PAGE_SIZE = Math.max(batchSize * 4, batchSize + 1);
-    const MAX_SCAN_LOOPS = 12;
-    let scanCursor = cursor;
-    const eligibleRows: SubmissionCandidate[] = [];
-    let hasMore = false;
-    let nextCursor:
-      | {
-          last_insights_update: string | null;
-          id: string;
-        }
-      | undefined;
+    let query = supabaseAdmin
+      .from("submissions")
+      .select(
+        "id, creator_id, content_link, video_id, views, other_stats, last_insights_update, insights_status",
+      )
+      .eq("contest_id", contestId)
+      .eq("platform", "tiktok")
+      .neq("status", "rejected")
+      .or("video_id.not.is.null,content_link.not.is.null")
+      .or("insights_status.is.null,insights_status.neq.permanent_failure")
+      .or(`last_insights_update.is.null,last_insights_update.lt.${runStartedAt}`)
+      .order("last_insights_update", { ascending: true, nullsFirst: true })
+      .order("id", { ascending: true })
+      .limit(batchSize + 1);
 
-    for (let i = 0; i < MAX_SCAN_LOOPS && eligibleRows.length < batchSize + 1; i++) {
-      let query = supabaseAdmin
-        .from("submissions")
-        .select(
-          "id, creator_id, content_link, video_id, views, other_stats, last_insights_update, insights_status",
-        )
-        .eq("contest_id", contestId)
-        .eq("platform", "tiktok")
-        .neq("status", "rejected")
-        .order("last_insights_update", { ascending: true, nullsFirst: true })
-        .order("id", { ascending: true })
-        .limit(FETCH_PAGE_SIZE);
-
-      if (scanCursor && scanCursor.id) {
-        if (scanCursor.last_insights_update == null) {
-          query = query.or(
-            `and(last_insights_update.is.null,id.gt.${scanCursor.id}),last_insights_update.not.is.null`,
-          );
-        } else {
-          query = query.or(
-            `last_insights_update.gt.${scanCursor.last_insights_update},and(last_insights_update.eq.${scanCursor.last_insights_update},id.gt.${scanCursor.id})`,
-          );
-        }
+    if (cursor && cursor.id) {
+      if (cursor.last_insights_update == null) {
+        query = query.or(
+          `and(last_insights_update.is.null,id.gt.${cursor.id}),last_insights_update.not.is.null`,
+        );
+      } else {
+        query = query.or(
+          `last_insights_update.gt.${cursor.last_insights_update},and(last_insights_update.eq.${cursor.last_insights_update},id.gt.${cursor.id})`,
+        );
       }
-
-      const { data: rows, error: selectError } = await query;
-      if (selectError) {
-        console.error("[tiktok-metrics-refresh batch] select error:", selectError);
-        return NextResponse.json({ error: "Batch select failed" }, { status: 500 });
-      }
-
-      const pageRows = (rows ?? []) as SubmissionCandidate[];
-      if (pageRows.length === 0) break;
-
-      for (const row of pageRows) {
-        if (isEligibleSubmissionForRun(row, runStartedAt)) {
-          eligibleRows.push(row);
-          if (eligibleRows.length >= batchSize + 1) break;
-        }
-      }
-
-      const lastScannedRow = pageRows[pageRows.length - 1];
-      scanCursor = {
-        last_insights_update: lastScannedRow.last_insights_update ?? null,
-        id: lastScannedRow.id,
-      };
-
-      // If this page was shorter than limit, there are no more rows to scan.
-      if (pageRows.length < FETCH_PAGE_SIZE) break;
     }
 
-    const batch = eligibleRows.slice(0, batchSize);
-    hasMore = eligibleRows.length > batchSize;
+    const { data: rows, error: selectError } = await query;
+    if (selectError) {
+      console.error("[tiktok-metrics-refresh batch] select error:", selectError);
+      return NextResponse.json({ error: "Batch select failed" }, { status: 500 });
+    }
+
+    const batch = ((rows ?? []).slice(0, batchSize) as SubmissionCandidate[]);
+    const hasMore = (rows?.length ?? 0) > batchSize;
     const lastRow = batch[batch.length - 1];
-    nextCursor =
+    const nextCursor =
       lastRow && hasMore
         ? {
             last_insights_update: lastRow.last_insights_update ?? null,
@@ -162,8 +131,8 @@ export async function POST(
 
     if (batch.length === 0) {
       return NextResponse.json({
-        hasMore: false,
-        nextCursor: undefined,
+        hasMore,
+        nextCursor,
         reviewedCount: 0,
         processedCount: 0,
         successCount: 0,

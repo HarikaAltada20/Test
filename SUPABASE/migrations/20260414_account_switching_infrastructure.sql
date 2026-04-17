@@ -29,11 +29,35 @@ ALTER TABLE public.audit_logs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.user_sessions_vault ENABLE ROW LEVEL SECURITY;
 
 -- Policies
-CREATE POLICY "Users can view their own audit logs" ON public.audit_logs
-    FOR SELECT USING (auth.uid() = user_id);
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1
+        FROM pg_policies
+        WHERE schemaname = 'public'
+          AND tablename = 'audit_logs'
+          AND policyname = 'Users can view their own audit logs'
+    ) THEN
+        CREATE POLICY "Users can view their own audit logs" ON public.audit_logs
+            FOR SELECT USING (auth.uid() = user_id);
+    END IF;
+END
+$$;
 
-CREATE POLICY "Owners can manage their session vault" ON public.user_sessions_vault
-    FOR ALL USING (auth.uid() = owner_user_id);
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1
+        FROM pg_policies
+        WHERE schemaname = 'public'
+          AND tablename = 'user_sessions_vault'
+          AND policyname = 'Owners can manage their session vault'
+    ) THEN
+        CREATE POLICY "Owners can manage their session vault" ON public.user_sessions_vault
+            FOR ALL USING (auth.uid() = owner_user_id);
+    END IF;
+END
+$$;
 
 -- Helper function for audit logging
 -- Now accepts an optional user_id for calls made via Admin client
