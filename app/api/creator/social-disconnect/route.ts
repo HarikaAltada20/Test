@@ -7,7 +7,7 @@ import {
 
 export const dynamic = "force-dynamic";
 
-type Platform = "instagram" | "youtube" | "twitter";
+type Platform = "instagram" | "youtube" | "twitter" | "tiktok";
 
 export async function POST(request: Request) {
   try {
@@ -24,9 +24,9 @@ export async function POST(request: Request) {
     const body = await request.json().catch(() => ({}));
     const platform = body.platform as Platform | undefined;
 
-    if (!platform || !["instagram", "youtube", "twitter"].includes(platform)) {
+    if (!platform || !["instagram", "youtube", "twitter", "tiktok"].includes(platform)) {
       return NextResponse.json(
-        { error: "Invalid platform. Use instagram, youtube, or twitter." },
+        { error: "Invalid platform. Use instagram, youtube, twitter, or tiktok." },
         { status: 400 }
       );
     }
@@ -34,7 +34,7 @@ export async function POST(request: Request) {
     const { data: profile, error: profileError } = await supabase
       .from("creator_profiles")
       .select(
-        "instagram_account, youtube_account, twitter_account, instagram_archive, youtube_archive, twitter_archive"
+        "instagram_account, youtube_account, twitter_account, tiktok_account, instagram_archive, youtube_archive, twitter_archive, tiktok_archive"
       )
       .eq("id", user.id)
       .single();
@@ -92,6 +92,31 @@ export async function POST(request: Request) {
         console.error("[social-disconnect] youtube update error:", upErr);
         return NextResponse.json(
           { error: "Failed to disconnect YouTube" },
+          { status: 500 }
+        );
+      }
+      return NextResponse.json({ success: true });
+    }
+
+    if (platform === "tiktok") {
+      const live = profile.tiktok_account as Record<string, unknown> | null;
+      const mergedArchive = appendDisconnectSnapshotSimple(
+        profile.tiktok_archive,
+        live ?? undefined
+      );
+      const { error: upErr } = await supabase
+        .from("creator_profiles")
+        .update({
+          tiktok_account: null,
+          tiktok_archive: mergedArchive as unknown as Record<string, unknown>,
+          updated_at: now,
+        })
+        .eq("id", user.id);
+
+      if (upErr) {
+        console.error("[social-disconnect] tiktok update error:", upErr);
+        return NextResponse.json(
+          { error: "Failed to disconnect TikTok" },
           { status: 500 }
         );
       }
