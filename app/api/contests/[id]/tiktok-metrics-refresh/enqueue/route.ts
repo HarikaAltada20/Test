@@ -21,6 +21,7 @@ import {
   isQStashEnabled,
   triggerProcessTikTokMetricsQueue,
 } from "@/lib/qstash";
+import { isEligibleForTikTokRefresh } from "@/lib/tiktok/refresh-eligibility";
 
 const BATCH_SIZE = 50;
 
@@ -173,17 +174,30 @@ export async function POST(
       });
     }
 
-    // Count eligible submissions (tiktok, has video_id or content_link, not rejected)
-    const { count: eligibleCount } = await supabaseAdmin
+    // Count eligible submissions explicitly in code to avoid ambiguous chained .or semantics.
+    const { data: eligibleRows, error: eligibleRowsError } = await supabaseAdmin
       .from("submissions")
-      .select("*", { count: "exact", head: true })
+      .select("id, video_id, content_link, insights_status")
       .eq("contest_id", contestId)
       .eq("platform", "tiktok")
-      .neq("status", "rejected")
-      .or("video_id.not.is.null,content_link.not.is.null")
-      .or("insights_status.is.null,insights_status.neq.permanent_failure");
+      .neq("status", "rejected");
+    if (eligibleRowsError) {
+      return NextResponse.json(
+        { error: "Failed to load eligible submissions" },
+        { status: 500 },
+      );
+    }
 
-    const totalEligible = eligibleCount ?? 0;
+    const totalEligible =
+      (eligibleRows as
+        | Array<{
+            id: string;
+            video_id: string | null;
+            content_link: string | null;
+            insights_status: string | null;
+          }>
+        | null)?.filter(isEligibleForTikTokRefresh)
+        .length ?? 0;
     const totalBatches = Math.max(1, Math.ceil(totalEligible / BATCH_SIZE));
     const runStartedAt = new Date().toISOString();
 

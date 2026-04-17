@@ -57,6 +57,10 @@ export async function POST(request: Request) {
 
 async function handleRequest(baseUrl: string): Promise<NextResponse> {
   const cronSecret = process.env.CRON_SECRET;
+  const supabaseAdmin = createAdminSupabaseClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+  );
 
   if (!isTikTokMetricsQueueEnabled()) {
     return NextResponse.json(
@@ -135,7 +139,29 @@ async function handleRequest(baseUrl: string): Promise<NextResponse> {
       totalBatches: job.totalBatches,
       cursor: batchData.nextCursor,
     };
-    await enqueueTikTokMetricsJob(nextJob);
+    const enqueueResult = await enqueueTikTokMetricsJob(nextJob);
+    if (enqueueResult.error) {
+      const now = new Date().toISOString();
+      await supabaseAdmin
+        .from("tiktok_metrics_refresh_runs")
+        .update({
+          status: "failed",
+          finished_at: now,
+          updated_at: now,
+          error_message: `Failed to enqueue next batch: ${enqueueResult.error}`,
+        })
+        .eq("id", job.runId);
+      return NextResponse.json(
+        {
+          processed: 1,
+          contestId: job.contestId,
+          runId: job.runId,
+          error: "Failed to enqueue next TikTok metrics batch",
+          details: enqueueResult.error,
+        },
+        { status: 500 },
+      );
+    }
     
     const doFetch = () =>
       fetch(`${baseUrl}/api/cron/process-tiktok-metrics-queue`, {
@@ -162,10 +188,6 @@ async function handleRequest(baseUrl: string): Promise<NextResponse> {
   }
 
   if (!hasMore) {
-    const supabaseAdmin = createAdminSupabaseClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!
-    );
     const now = new Date().toISOString();
     await supabaseAdmin
       .from("tiktok_metrics_refresh_runs")

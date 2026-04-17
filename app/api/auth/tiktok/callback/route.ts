@@ -73,7 +73,7 @@ export async function GET(req: NextRequest) {
         tokenError,
       );
       return NextResponse.redirect(
-        `${settingsUrl}?error=tiktok_token_exchange_failed&details=${encodeURIComponent(tokenError.message)}`,
+        `${settingsUrl}?error=tiktok_token_exchange_failed`,
       );
     }
 
@@ -245,7 +245,7 @@ export async function GET(req: NextRequest) {
         dbError,
       );
       return NextResponse.redirect(
-        `${settingsUrl}?error=tiktok_db_error&details=${encodeURIComponent(dbError.message)}`,
+        `${settingsUrl}?error=tiktok_db_error`,
       );
     }
 
@@ -266,7 +266,7 @@ export async function GET(req: NextRequest) {
 
     const origin = new URL(req.url).origin;
     return NextResponse.redirect(
-      `${origin}/dashboard/settings?error=tiktok_oauth_failed&details=${encodeURIComponent(error.message)}`,
+      `${origin}/dashboard/settings?error=tiktok_oauth_failed`,
     );
   }
 }

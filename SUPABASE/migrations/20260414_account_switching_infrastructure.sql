@@ -46,4 +46,4 @@ BEGIN
     INSERT INTO public.audit_logs (user_id, action, metadata)
     VALUES (COALESCE(p_user_id, auth.uid()), p_action, p_metadata);
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, auth;
