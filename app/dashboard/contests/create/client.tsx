@@ -144,7 +144,7 @@ const REGIONS_AND_COUNTRIES: Record<string, string[]> =
 // Helper function to build region JSONB object from selected regions and countries
 const buildRegionData = (
   selectedRegions: string[],
-  selectedCountries: string[]
+  selectedCountries: string[],
 ): Record<string, string[]> | null => {
   if (selectedRegions.length === 0 && selectedCountries.length === 0) {
     return null;
@@ -162,7 +162,7 @@ const buildRegionData = (
 
     // Filter to only include countries that are actually selected
     const selectedCountriesInRegion = countriesArray.filter((country) =>
-      selectedCountries.includes(country)
+      selectedCountries.includes(country),
     );
 
     // Only add region if it has selected countries
@@ -210,7 +210,7 @@ const buildRegionData = (
 
 // Helper function to extract regions and countries from region JSONB data
 const extractRegionsAndCountries = (
-  regionData: Record<string, string[]> | null
+  regionData: Record<string, string[]> | null,
 ): { regions: string[]; countries: string[] } => {
   if (!regionData || typeof regionData !== "object") {
     return { regions: [], countries: [] };
@@ -309,7 +309,7 @@ export default function CreateContestPage({
 
   // Contest Type and CPM-specific state
   const [contestType, setContestType] = useState<"leaderboard" | "cpm">(
-    "leaderboard"
+    "leaderboard",
   );
   const [cpmRate, setCpmRate] = useState<number | string>("");
   const [minViews, setMinViews] = useState<number | string>("");
@@ -477,7 +477,7 @@ export default function CreateContestPage({
   const [newResourceUrl, setNewResourceUrl] = useState("");
   const [resourceFile, setResourceFile] = useState<File | null>(null);
   const [resourceFilePreview, setResourceFilePreview] = useState<string | null>(
-    null
+    null,
   );
   const [resourceDescription, setResourceDescription] = useState("");
   const [externalResourceDescription, setExternalResourceDescription] =
@@ -495,7 +495,7 @@ export default function CreateContestPage({
 
   const [winnerCount, setWinnerCount] = useState<number>(3);
   const [winnerAmounts, setWinnerAmounts] = useState<number[]>(
-    DEFAULT_WINNER_AMOUNTS
+    DEFAULT_WINNER_AMOUNTS,
   );
   const [isLoading, setIsLoading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -505,7 +505,7 @@ export default function CreateContestPage({
   const supabase = createClient();
   const [userPlan, setUserPlan] = useState<string | null>(null);
   const [totalPrizePool, setTotalPrizePool] = useState<number>(
-    DEFAULT_TOTAL_PRIZE_POOL
+    DEFAULT_TOTAL_PRIZE_POOL,
   ); // Default total prize pool
 
   // New state for contest duration
@@ -584,7 +584,7 @@ export default function CreateContestPage({
       window.removeEventListener("storage", handleStorageChange);
       window.removeEventListener(
         "theme-change",
-        handleThemeChange as EventListener
+        handleThemeChange as EventListener,
       );
     };
   }, [mode]);
@@ -672,10 +672,10 @@ export default function CreateContestPage({
 
   // Add this to the state declarations
   const [resourceFiles, setResourceFiles] = useState<{ [key: string]: File }>(
-    {}
+    {},
   );
   const [contestFormat, setContestFormat] = useState<"text_image" | "video">(
-    "video"
+    "video",
   );
   const [platform, setPlatform] = useState<string>("youtube"); // Default platform
   const [category, setCategory] = useState<string>("technology");
@@ -699,13 +699,13 @@ export default function CreateContestPage({
     "error" | "success" | null
   >(null);
   const [toastErrorMessage, setToastErrorMessage] = useState<string | null>(
-    null
+    null,
   );
 
   // Section-specific error states for Assets step
   const [assetUploadError, setAssetUploadError] = useState<string | null>(null);
   const [externalLinkError, setExternalLinkError] = useState<string | null>(
-    null
+    null,
   );
   const [isUploadingAsset, setIsUploadingAsset] = useState(false);
   const [contestId, setContestId] = useState<string | null>(null);
@@ -775,7 +775,7 @@ export default function CreateContestPage({
         "', trim().length=",
         textContent.trim().length,
         ", returning",
-        isEmpty
+        isEmpty,
       );
       return isEmpty;
     }
@@ -793,7 +793,7 @@ export default function CreateContestPage({
       const content = richTextEditorRef.current.getContent();
       console.log(
         "Captured brief content:",
-        content ? content.html.substring(0, 100) + "..." : content
+        content ? content.html.substring(0, 100) + "..." : content,
       );
       setBriefHtml(content.html);
       setBriefJson(content.json);
@@ -808,7 +808,7 @@ export default function CreateContestPage({
       const content = rulesRichTextEditorRef.current.getContent();
       console.log(
         "Captured rules content:",
-        content ? content.html.substring(0, 100) + "..." : content
+        content ? content.html.substring(0, 100) + "..." : content,
       );
       setRulesHtml(content.html);
       setRulesJson(content.json);
@@ -823,7 +823,7 @@ export default function CreateContestPage({
       const content = bonusRichTextEditorRef.current.getContent();
       console.log(
         "Captured bonus content:",
-        content ? content.html.substring(0, 100) + "..." : content
+        content ? content.html.substring(0, 100) + "..." : content,
       );
       setBonusHtml(content.html);
       setBonusJson(content.json);
@@ -884,7 +884,9 @@ export default function CreateContestPage({
       // Remove region and all its countries
       setSelectedRegions(selectedRegions.filter((r) => r !== region));
       setSelectedCountries(
-        selectedCountries.filter((country) => !countriesArray.includes(country))
+        selectedCountries.filter(
+          (country) => !countriesArray.includes(country),
+        ),
       );
     }
   };
@@ -906,7 +908,7 @@ export default function CreateContestPage({
           : [];
         if (countriesArray.includes(country)) {
           const remainingCountries = countriesArray.filter(
-            (c) => c !== country && selectedCountries.includes(c)
+            (c) => c !== country && selectedCountries.includes(c),
           );
           if (remainingCountries.length === 0) {
             setSelectedRegions(selectedRegions.filter((r) => r !== region));
@@ -927,7 +929,7 @@ export default function CreateContestPage({
     // Remove all countries from this region from selectedCountries
     // Keep the region selected so users can manually select specific countries
     setSelectedCountries(
-      selectedCountries.filter((country) => !countriesArray.includes(country))
+      selectedCountries.filter((country) => !countriesArray.includes(country)),
     );
   };
 
@@ -938,7 +940,7 @@ export default function CreateContestPage({
       const url = new URL(thumbnailUrl);
       const pathSegments = url.pathname.split("/");
       const bucketIndex = pathSegments.findIndex(
-        (segment) => segment === "contest-assets"
+        (segment) => segment === "contest-assets",
       );
 
       if (bucketIndex !== -1 && bucketIndex < pathSegments.length - 1) {
@@ -951,7 +953,7 @@ export default function CreateContestPage({
         if (deleteError) {
           console.error(
             "Failed to delete thumbnail from storage:",
-            deleteError
+            deleteError,
           );
         }
       }
@@ -991,14 +993,14 @@ export default function CreateContestPage({
                   },
                 }
               : contestType === "cpm"
-              ? {
-                  cpm_contest: {
-                    cpm_rate_usd: 0,
-                    total_budget: 0,
-                    terms_conditions: "",
-                  },
-                }
-              : null,
+                ? {
+                    cpm_contest: {
+                      cpm_rate_usd: 0,
+                      total_budget: 0,
+                      terms_conditions: "",
+                    },
+                  }
+                : null,
           // Categories, subcategories, and interests
           categories: contestCategories.length > 0 ? contestCategories : null,
           subcategories: (() => {
@@ -1061,7 +1063,7 @@ export default function CreateContestPage({
       subcategories?: Array<{ category: string; subcategory: string }> | null;
       interests?: string[] | null;
       contest_format?: "text_image" | "video";
-    }>
+    }>,
   ) => {
     const currentContestId = contestId || draftId;
     if (!user?.id || !currentContestId) return;
@@ -1088,7 +1090,7 @@ export default function CreateContestPage({
   };
 
   const handleThumbnailChange = async (
-    e: React.ChangeEvent<HTMLInputElement>
+    e: React.ChangeEvent<HTMLInputElement>,
   ) => {
     if (e.target.files && e.target.files[0]) {
       const file = e.target.files[0];
@@ -1154,7 +1156,7 @@ export default function CreateContestPage({
           .list("contest_thumbnails");
         if (existingFiles) {
           const matching = existingFiles.filter((f) =>
-            f.name.startsWith(`${currentContestId}_`)
+            f.name.startsWith(`${currentContestId}_`),
           );
           if (matching.length > 0) {
             const paths = matching.map((f) => `contest_thumbnails/${f.name}`);
@@ -1280,14 +1282,14 @@ export default function CreateContestPage({
     }
     if (!resourceDescription.trim()) {
       setAssetUploadError(
-        "Asset description is required for the uploaded file."
+        "Asset description is required for the uploaded file.",
       );
       return;
     }
     const maxSize = 20 * 1024 * 1024; // 20MB
     if (resourceFile.size > maxSize) {
       setAssetUploadError(
-        "File must be 20MB or smaller. Please choose a smaller file."
+        "File must be 20MB or smaller. Please choose a smaller file.",
       );
       return;
     }
@@ -1295,7 +1297,7 @@ export default function CreateContestPage({
       const isStorageAvailable = await checkStorageAvailability();
       if (!isStorageAvailable) {
         setAssetUploadError(
-          "Storage is not available. Please try again later."
+          "Storage is not available. Please try again later.",
         );
         return;
       }
@@ -1316,7 +1318,7 @@ export default function CreateContestPage({
       // Use per-contest folder
       const fileName = `contest_resources/${currentContestId}/${resourceFile.name.replace(
         /\s+/g,
-        "_"
+        "_",
       )}`;
       const { data: uploadData, error: uploadError } = await supabase.storage
         .from("contest-assets")
@@ -1432,7 +1434,7 @@ export default function CreateContestPage({
    */
   const validateContestForPayment = async (
     userId: string,
-    planFeatures: any
+    planFeatures: any,
   ): Promise<{ isValid: boolean; error?: string }> => {
     try {
       // 1. Basic field validation
@@ -1506,11 +1508,11 @@ export default function CreateContestPage({
         const todayOnly = new Date(
           now.getFullYear(),
           now.getMonth(),
-          now.getDate()
+          now.getDate(),
         );
         const daysUntilStart = Math.floor(
           (startDateOnly.getTime() - todayOnly.getTime()) /
-            (1000 * 60 * 60 * 24)
+            (1000 * 60 * 60 * 24),
         );
 
         // CRITICAL: Use exact same logic as getMinDateTime for consistency
@@ -1565,7 +1567,7 @@ export default function CreateContestPage({
               error: `Prize for Winner ${
                 i + 1
               } must be at least ${formatCurrencyFromCents(
-                MIN_PRIZE_PER_WINNER
+                MIN_PRIZE_PER_WINNER,
               )}`,
             };
           }
@@ -1577,7 +1579,7 @@ export default function CreateContestPage({
               error: `Prize for Winner ${
                 i + 1
               } cannot exceed ${formatCurrencyFromCents(
-                MAX_PRIZE_PER_WINNER
+                MAX_PRIZE_PER_WINNER,
               )}. Please reduce the prize amount.`,
             };
           }
@@ -1588,7 +1590,7 @@ export default function CreateContestPage({
           return {
             isValid: false,
             error: `The minimum prize pool for your plan is ${formatCurrencyFromCents(
-              planFeatures.minContestBudget
+              planFeatures.minContestBudget,
             )}. Please increase your prize amounts.`,
           };
         }
@@ -1713,7 +1715,7 @@ export default function CreateContestPage({
               ];
 
               const hasEmptyCommentMultiplier = requiredCommentFields.some(
-                (v) => v?.toString().trim() === ""
+                (v) => v?.toString().trim() === "",
               );
 
               if (hasEmptyCommentMultiplier) {
@@ -1735,7 +1737,7 @@ export default function CreateContestPage({
               ];
 
               const hasEmptyRetweetMultiplier = requiredRetweetFields.some(
-                (v) => v?.toString().trim() === ""
+                (v) => v?.toString().trim() === "",
               );
 
               if (hasEmptyRetweetMultiplier) {
@@ -1757,7 +1759,7 @@ export default function CreateContestPage({
               ];
 
               const hasEmptyQuoteMultiplier = requiredQuoteFields.some(
-                (v) => v?.toString().trim() === ""
+                (v) => v?.toString().trim() === "",
               );
 
               if (hasEmptyQuoteMultiplier) {
@@ -1814,7 +1816,7 @@ export default function CreateContestPage({
           return {
             isValid: false,
             error: `The minimum contest budget for your plan is ${formatCurrencyFromCents(
-              planFeatures.minContestBudget
+              planFeatures.minContestBudget,
             )}. Please increase your total budget.`,
           };
         }
@@ -1999,7 +2001,7 @@ export default function CreateContestPage({
       const userId = user?.id;
       if (!isDraft && !userId) {
         setFormFeedback(
-          "User information not available. Please refresh the page and try again."
+          "User information not available. Please refresh the page and try again.",
         ); // Footer feedback
         setFormFeedbackType("error");
         setIsLoading(false);
@@ -2012,7 +2014,7 @@ export default function CreateContestPage({
         const planFeatures = getPlanFeatures(userPlan);
         const validationResult = await validateContestForPayment(
           userId!,
-          planFeatures
+          planFeatures,
         );
 
         if (!validationResult.isValid) {
@@ -2034,8 +2036,8 @@ export default function CreateContestPage({
               `Prize for Winner ${
                 i + 1
               } must be at least ${formatCurrencyFromCents(
-                MIN_PRIZE_PER_WINNER
-              )}`
+                MIN_PRIZE_PER_WINNER,
+              )}`,
             ); // Footer feedback
             setFormFeedbackType("error");
             setIsLoading(false);
@@ -2058,7 +2060,7 @@ export default function CreateContestPage({
           (!totalBudget || parseFloat(totalBudget.toString()) <= 0)
         ) {
           setFormFeedback(
-            "Total Budget is required when Flat Fee Bonus is enabled. Please enter a budget amount."
+            "Total Budget is required when Flat Fee Bonus is enabled. Please enter a budget amount.",
           );
           setFormFeedbackType("error");
           setIsLoading(false);
@@ -2093,7 +2095,7 @@ export default function CreateContestPage({
           const cpmRateValue = parseFloat(cpmRate.toString());
           if (cpmRateValue < MIN_CPM_RATE) {
             setFormFeedback(
-              `CPM Rate must be at least $${MIN_CPM_RATE} per 1000 views.`
+              `CPM Rate must be at least $${MIN_CPM_RATE} per 1000 views.`,
             ); // Footer feedback
             setFormFeedbackType("error");
             setIsLoading(false);
@@ -2103,7 +2105,7 @@ export default function CreateContestPage({
 
           if (cpmRateValue > MAX_CPM_RATE) {
             setFormFeedback(
-              `CPM Rate cannot exceed $${MAX_CPM_RATE} per 1000 views.`
+              `CPM Rate cannot exceed $${MAX_CPM_RATE} per 1000 views.`,
             ); // Footer feedback
             setFormFeedbackType("error");
             setIsLoading(false);
@@ -2113,7 +2115,7 @@ export default function CreateContestPage({
 
           if (!totalBudget || parseFloat(totalBudget.toString()) <= 0) {
             setFormFeedback(
-              "Total Budget must be a positive number for CPM contests."
+              "Total Budget must be a positive number for CPM contests.",
             ); // Footer feedback
             setFormFeedbackType("error");
             setIsLoading(false);
@@ -2122,7 +2124,7 @@ export default function CreateContestPage({
           }
           if (!termsConditions) {
             setFormFeedback(
-              "Terms & Conditions are required for CPM contests."
+              "Terms & Conditions are required for CPM contests.",
             ); // Footer feedback
             setFormFeedbackType("error");
             setIsLoading(false);
@@ -2258,19 +2260,19 @@ export default function CreateContestPage({
           if (showCommentMultipliers) {
             // Checkbox is checked - use user values if provided, otherwise use defaults
             const commentLikes = getMultiplierValue(
-              cpmPointsConfig.comment_likes_multiplier
+              cpmPointsConfig.comment_likes_multiplier,
             );
             const commentReplies = getMultiplierValue(
-              cpmPointsConfig.comment_replies_multiplier
+              cpmPointsConfig.comment_replies_multiplier,
             );
             const commentImpressions = getMultiplierValue(
-              cpmPointsConfig.comment_impressions_multiplier
+              cpmPointsConfig.comment_impressions_multiplier,
             );
             const commentRetweets = getMultiplierValue(
-              cpmPointsConfig.comment_retweets_multiplier
+              cpmPointsConfig.comment_retweets_multiplier,
             );
             const commentQuoteReposts = getMultiplierValue(
-              cpmPointsConfig.comment_quote_reposts_multiplier
+              cpmPointsConfig.comment_quote_reposts_multiplier,
             );
 
             commentMultipliers.likes_multiplier =
@@ -2304,19 +2306,19 @@ export default function CreateContestPage({
           if (showRetweetMultipliers) {
             // Checkbox is checked - use user values if provided, otherwise use defaults
             const retweetLikes = getMultiplierValue(
-              cpmPointsConfig.retweet_likes_multiplier
+              cpmPointsConfig.retweet_likes_multiplier,
             );
             const retweetReplies = getMultiplierValue(
-              cpmPointsConfig.retweet_replies_multiplier
+              cpmPointsConfig.retweet_replies_multiplier,
             );
             const retweetImpressions = getMultiplierValue(
-              cpmPointsConfig.retweet_impressions_multiplier
+              cpmPointsConfig.retweet_impressions_multiplier,
             );
             const retweetRetweets = getMultiplierValue(
-              cpmPointsConfig.retweet_retweets_multiplier
+              cpmPointsConfig.retweet_retweets_multiplier,
             );
             const retweetQuoteReposts = getMultiplierValue(
-              cpmPointsConfig.retweet_quote_reposts_multiplier
+              cpmPointsConfig.retweet_quote_reposts_multiplier,
             );
 
             retweetMultipliers.likes_multiplier =
@@ -2350,19 +2352,19 @@ export default function CreateContestPage({
           if (showQuoteRepostMultipliers) {
             // Checkbox is checked - use user values if provided, otherwise use defaults
             const quoteRepostLikes = getMultiplierValue(
-              cpmPointsConfig.quote_repost_likes_multiplier
+              cpmPointsConfig.quote_repost_likes_multiplier,
             );
             const quoteRepostReplies = getMultiplierValue(
-              cpmPointsConfig.quote_repost_replies_multiplier
+              cpmPointsConfig.quote_repost_replies_multiplier,
             );
             const quoteRepostImpressions = getMultiplierValue(
-              cpmPointsConfig.quote_repost_impressions_multiplier
+              cpmPointsConfig.quote_repost_impressions_multiplier,
             );
             const quoteRepostRetweets = getMultiplierValue(
-              cpmPointsConfig.quote_repost_retweets_multiplier
+              cpmPointsConfig.quote_repost_retweets_multiplier,
             );
             const quoteRepostQuoteReposts = getMultiplierValue(
-              cpmPointsConfig.quote_repost_quote_reposts_multiplier
+              cpmPointsConfig.quote_repost_quote_reposts_multiplier,
             );
 
             quoteRepostMultipliers.likes_multiplier =
@@ -2457,7 +2459,7 @@ export default function CreateContestPage({
             planFeatures.contestTypes.includes("cpm");
           if (!hasCpmAccess) {
             setFormFeedback(
-              "CPM-based contests are only available with paid plans. Please upgrade your subscription or change to a Leaderboard contest."
+              "CPM-based contests are only available with paid plans. Please upgrade your subscription or change to a Leaderboard contest.",
             );
             setFormFeedbackType("error");
             setIsLoading(false);
@@ -2471,8 +2473,8 @@ export default function CreateContestPage({
           if (totalPrizePool < planFeatures.minContestBudget) {
             setFormFeedback(
               `The minimum prize pool for your plan is ${formatCurrencyFromCents(
-                planFeatures.minContestBudget
-              )}. Please increase your prize amounts.`
+                planFeatures.minContestBudget,
+              )}. Please increase your prize amounts.`,
             );
             setFormFeedbackType("error");
             setIsLoading(false);
@@ -2483,7 +2485,7 @@ export default function CreateContestPage({
           // Validate maximum winners
           if (winnerCount > planFeatures.maxWinnersPerContest) {
             setFormFeedback(
-              `Your plan allows a maximum of ${planFeatures.maxWinnersPerContest} winners. Please reduce the number of winners.`
+              `Your plan allows a maximum of ${planFeatures.maxWinnersPerContest} winners. Please reduce the number of winners.`,
             );
             setFormFeedbackType("error");
             setIsLoading(false);
@@ -2495,8 +2497,8 @@ export default function CreateContestPage({
           if (budgetInCents < planFeatures.minContestBudget) {
             setFormFeedback(
               `The minimum contest budget for your plan is ${formatCurrencyFromCents(
-                planFeatures.minContestBudget
-              )}. Please increase your total budget.`
+                planFeatures.minContestBudget,
+              )}. Please increase your total budget.`,
             );
             setFormFeedbackType("error");
             setIsLoading(false);
@@ -2548,7 +2550,7 @@ export default function CreateContestPage({
 
         if (!hasUploadedAssets && !hasExternalLinks) {
           setFormFeedback(
-            "At least one resource is required for submission - upload an asset OR add an external resource link"
+            "At least one resource is required for submission - upload an asset OR add an external resource link",
           );
           setFormFeedbackType("error");
           setIsLoading(false);
@@ -2558,7 +2560,7 @@ export default function CreateContestPage({
 
         if (!startDate || !startTime || !endDate || !endTime) {
           setFormFeedback(
-            "Contest start and end dates/times are required for submission"
+            "Contest start and end dates/times are required for submission",
           );
           setFormFeedbackType("error");
           setIsLoading(false);
@@ -2573,7 +2575,7 @@ export default function CreateContestPage({
 
           if (isNaN(startDateTime.getTime()) || isNaN(endDateTime.getTime())) {
             setFormFeedback(
-              "Invalid date or time format. Please check your entries."
+              "Invalid date or time format. Please check your entries.",
             );
             setFormFeedbackType("error");
             setIsLoading(false);
@@ -2604,7 +2606,7 @@ export default function CreateContestPage({
 
           if (durationDays < MIN_CONTEST_DURATION_DAYS) {
             setFormFeedback(
-              `Contest duration must be at least ${MIN_CONTEST_DURATION_DAYS} days`
+              `Contest duration must be at least ${MIN_CONTEST_DURATION_DAYS} days`,
             );
             setFormFeedbackType("error");
             setIsLoading(false);
@@ -2614,7 +2616,7 @@ export default function CreateContestPage({
 
           if (durationDays > MAX_CONTEST_DURATION_DAYS) {
             setFormFeedback(
-              `Contest duration cannot exceed ${MAX_CONTEST_DURATION_DAYS} days`
+              `Contest duration cannot exceed ${MAX_CONTEST_DURATION_DAYS} days`,
             );
             setFormFeedbackType("error");
             setIsLoading(false);
@@ -2624,7 +2626,7 @@ export default function CreateContestPage({
         } catch (error) {
           console.error("Date validation error:", error);
           setFormFeedback(
-            "There was an error with the date/time format. Please check your entries."
+            "There was an error with the date/time format. Please check your entries.",
           );
           setFormFeedbackType("error");
           setIsLoading(false);
@@ -2639,7 +2641,7 @@ export default function CreateContestPage({
       if (thumbnail) {
         // A new file has been selected by the user
         setUploadProgress(
-          isDraft ? "Uploading thumbnail..." : "Uploading thumbnail (1/2)..."
+          isDraft ? "Uploading thumbnail..." : "Uploading thumbnail (1/2)...",
         );
         try {
           const isStorageAvailable = await checkStorageAvailability();
@@ -2654,7 +2656,7 @@ export default function CreateContestPage({
             } else {
               // For drafts, we might allow saving without re-uploading if storage is temporarily down, relying on existing URL if present
               console.warn(
-                "Storage not available for draft thumbnail upload. If a previous URL exists, it will be used."
+                "Storage not available for draft thumbnail upload. If a previous URL exists, it will be used.",
               );
               if (!thumbnailPreview || thumbnailPreview.startsWith("data:")) {
                 thumbnailUrl = ""; // No existing valid URL to reuse
@@ -2665,7 +2667,7 @@ export default function CreateContestPage({
             // New upload logic
             const fileName = `contest_thumbnails/${userId}_${Date.now()}_${thumbnail.name.replace(
               /\s+/g,
-              "_"
+              "_",
             )}`;
             const { data: uploadData, error: uploadError } =
               await supabase.storage
@@ -2673,7 +2675,7 @@ export default function CreateContestPage({
                 .upload(fileName, thumbnail);
             if (uploadError)
               throw new Error(
-                `Failed to upload thumbnail: ${uploadError.message}`
+                `Failed to upload thumbnail: ${uploadError.message}`,
               );
             const { data: publicUrlData } = supabase.storage
               .from("contest-assets")
@@ -2729,7 +2731,7 @@ export default function CreateContestPage({
         console.error("Error formatting dates for submission:", error);
         if (!isDraft) {
           setFormFeedback(
-            "There was a problem with the date format. Please check the start and end dates."
+            "There was a problem with the date format. Please check the start and end dates.",
           );
           setFormFeedbackType("error");
           setIsLoading(false);
@@ -2742,13 +2744,13 @@ export default function CreateContestPage({
         isDraft
           ? "Finalizing draft..."
           : contestId
-          ? "Updating contest..."
-          : "Creating contest..."
+            ? "Updating contest..."
+            : "Creating contest...",
       );
 
       // Helper function to process and group subcategories by category
       const processSubcategories = (
-        subcategories: Array<{ category: string; subcategory: string }>
+        subcategories: Array<{ category: string; subcategory: string }>,
       ) => {
         if (!subcategories || subcategories.length === 0) return null;
 
@@ -2798,18 +2800,16 @@ export default function CreateContestPage({
         subscription_info_of_user: await (async () => {
           try {
             // Get user's subscription info using new system
-            const { getUserSubscription } = await import(
-              "@/lib/subscription-utils-client"
-            );
+            const { getUserSubscription } =
+              await import("@/lib/subscription-utils-client");
             const subscription = await getUserSubscription(user?.id || "");
 
             if (subscription && subscription.subscription_info) {
               return subscription.subscription_info;
             } else {
               // Fallback: create subscription info from current plan
-              const { subscriptionPlans } = await import(
-                "@/constants/subscriptionPlans"
-              );
+              const { subscriptionPlans } =
+                await import("@/constants/subscriptionPlans");
               const plan =
                 subscriptionPlans.find((p) => p.id === userPlan) ||
                 subscriptionPlans[0];
@@ -2868,7 +2868,7 @@ export default function CreateContestPage({
         // Use contestId from instant DB sync if available, otherwise fall back to draftId
         const existingContestId = contestId || draftId;
         console.log(
-          `Updating existing contest: ${existingContestId} (contestId: ${contestId}, draftId: ${draftId})`
+          `Updating existing contest: ${existingContestId} (contestId: ${contestId}, draftId: ${draftId})`,
         );
         const response = await supabase
           .from("contests")
@@ -2880,7 +2880,7 @@ export default function CreateContestPage({
         console.log("Update response:", responseData);
       } else {
         console.log(
-          "Creating new contest (no existing contestId or draftId found)"
+          "Creating new contest (no existing contestId or draftId found)",
         );
         const response = await supabase
           .from("contests")
@@ -2991,7 +2991,7 @@ export default function CreateContestPage({
     const submitForApproval = async (retries = 3, delay = 2000) => {
       try {
         console.log(
-          `Attempting to submit contest for approval. Retries left: ${retries}`
+          `Attempting to submit contest for approval. Retries left: ${retries}`,
         );
         const response = await fetch(`/api/contests/${contestId}/moderation`, {
           method: "POST",
@@ -3014,14 +3014,14 @@ export default function CreateContestPage({
             console.warn(
               `Submission failed (payment pending), retrying in ${
                 delay / 1000
-              }s...`
+              }s...`,
             );
             await new Promise((res) => setTimeout(res, delay));
             return submitForApproval(retries - 1, delay);
           }
           // For other errors, throw immediately.
           throw new Error(
-            result.error || "Failed to submit contest for approval"
+            result.error || "Failed to submit contest for approval",
           );
         }
 
@@ -3092,7 +3092,7 @@ export default function CreateContestPage({
     }
     if (!externalResourceDescription.trim()) {
       setExternalLinkError(
-        "Resource description cannot be empty for external link."
+        "Resource description cannot be empty for external link.",
       );
       toast({
         title: "Missing Description",
@@ -3107,11 +3107,11 @@ export default function CreateContestPage({
         (r) =>
           r.type === "external" &&
           r.url === newResourceUrl &&
-          r.description === externalResourceDescription
+          r.description === externalResourceDescription,
       )
     ) {
       setExternalLinkError(
-        "This external link and description have already been added. Please use a different link or description."
+        "This external link and description have already been added. Please use a different link or description.",
       );
       toast({
         title: "Duplicate Link & Description",
@@ -3126,7 +3126,7 @@ export default function CreateContestPage({
       resources.some((r) => r.type === "external" && r.url === newResourceUrl)
     ) {
       setExternalLinkError(
-        "This external link has already been added. Please use a different link."
+        "This external link has already been added. Please use a different link.",
       );
       toast({
         title: "Duplicate Link",
@@ -3236,7 +3236,7 @@ export default function CreateContestPage({
           description: `Prize amount for Winner ${
             index + 1
           } cannot be less than ${formatCurrencyFromCents(
-            MIN_PRIZE_PER_WINNER
+            MIN_PRIZE_PER_WINNER,
           )}`,
           variant: "destructive",
         });
@@ -3285,7 +3285,7 @@ export default function CreateContestPage({
         newAmounts.push(
           DEFAULT_PRIZE_ALLOCATIONS[
             position as keyof typeof DEFAULT_PRIZE_ALLOCATIONS
-          ] || MIN_PRIZE_PER_WINNER
+          ] || MIN_PRIZE_PER_WINNER,
         );
       }
       setWinnerAmounts(newAmounts);
@@ -3375,19 +3375,19 @@ export default function CreateContestPage({
           if (showCommentMultipliers) {
             // Checkbox is checked - use user values if provided, otherwise use defaults
             const commentLikes = getMultiplierValue(
-              cpmPointsConfig.comment_likes_multiplier
+              cpmPointsConfig.comment_likes_multiplier,
             );
             const commentReplies = getMultiplierValue(
-              cpmPointsConfig.comment_replies_multiplier
+              cpmPointsConfig.comment_replies_multiplier,
             );
             const commentImpressions = getMultiplierValue(
-              cpmPointsConfig.comment_impressions_multiplier
+              cpmPointsConfig.comment_impressions_multiplier,
             );
             const commentRetweets = getMultiplierValue(
-              cpmPointsConfig.comment_retweets_multiplier
+              cpmPointsConfig.comment_retweets_multiplier,
             );
             const commentQuoteReposts = getMultiplierValue(
-              cpmPointsConfig.comment_quote_reposts_multiplier
+              cpmPointsConfig.comment_quote_reposts_multiplier,
             );
 
             commentMultipliers.likes_multiplier =
@@ -3421,19 +3421,19 @@ export default function CreateContestPage({
           if (showRetweetMultipliers) {
             // Checkbox is checked - use user values if provided, otherwise use defaults
             const retweetLikes = getMultiplierValue(
-              cpmPointsConfig.retweet_likes_multiplier
+              cpmPointsConfig.retweet_likes_multiplier,
             );
             const retweetReplies = getMultiplierValue(
-              cpmPointsConfig.retweet_replies_multiplier
+              cpmPointsConfig.retweet_replies_multiplier,
             );
             const retweetImpressions = getMultiplierValue(
-              cpmPointsConfig.retweet_impressions_multiplier
+              cpmPointsConfig.retweet_impressions_multiplier,
             );
             const retweetRetweets = getMultiplierValue(
-              cpmPointsConfig.retweet_retweets_multiplier
+              cpmPointsConfig.retweet_retweets_multiplier,
             );
             const retweetQuoteReposts = getMultiplierValue(
-              cpmPointsConfig.retweet_quote_reposts_multiplier
+              cpmPointsConfig.retweet_quote_reposts_multiplier,
             );
 
             retweetMultipliers.likes_multiplier =
@@ -3467,19 +3467,19 @@ export default function CreateContestPage({
           if (showQuoteRepostMultipliers) {
             // Checkbox is checked - use user values if provided, otherwise use defaults
             const quoteRepostLikes = getMultiplierValue(
-              cpmPointsConfig.quote_repost_likes_multiplier
+              cpmPointsConfig.quote_repost_likes_multiplier,
             );
             const quoteRepostReplies = getMultiplierValue(
-              cpmPointsConfig.quote_repost_replies_multiplier
+              cpmPointsConfig.quote_repost_replies_multiplier,
             );
             const quoteRepostImpressions = getMultiplierValue(
-              cpmPointsConfig.quote_repost_impressions_multiplier
+              cpmPointsConfig.quote_repost_impressions_multiplier,
             );
             const quoteRepostRetweets = getMultiplierValue(
-              cpmPointsConfig.quote_repost_retweets_multiplier
+              cpmPointsConfig.quote_repost_retweets_multiplier,
             );
             const quoteRepostQuoteReposts = getMultiplierValue(
-              cpmPointsConfig.quote_repost_quote_reposts_multiplier
+              cpmPointsConfig.quote_repost_quote_reposts_multiplier,
             );
 
             quoteRepostMultipliers.likes_multiplier =
@@ -3706,19 +3706,19 @@ export default function CreateContestPage({
         if (showCommentMultipliers) {
           // Checkbox is checked - use user values if provided, otherwise use defaults
           const commentLikes = getMultiplierValue(
-            cpmPointsConfig.comment_likes_multiplier
+            cpmPointsConfig.comment_likes_multiplier,
           );
           const commentReplies = getMultiplierValue(
-            cpmPointsConfig.comment_replies_multiplier
+            cpmPointsConfig.comment_replies_multiplier,
           );
           const commentImpressions = getMultiplierValue(
-            cpmPointsConfig.comment_impressions_multiplier
+            cpmPointsConfig.comment_impressions_multiplier,
           );
           const commentRetweets = getMultiplierValue(
-            cpmPointsConfig.comment_retweets_multiplier
+            cpmPointsConfig.comment_retweets_multiplier,
           );
           const commentQuoteReposts = getMultiplierValue(
-            cpmPointsConfig.comment_quote_reposts_multiplier
+            cpmPointsConfig.comment_quote_reposts_multiplier,
           );
 
           commentMultipliers.likes_multiplier =
@@ -3752,19 +3752,19 @@ export default function CreateContestPage({
         if (showRetweetMultipliers) {
           // Checkbox is checked - use user values if provided, otherwise use defaults
           const retweetLikes = getMultiplierValue(
-            cpmPointsConfig.retweet_likes_multiplier
+            cpmPointsConfig.retweet_likes_multiplier,
           );
           const retweetReplies = getMultiplierValue(
-            cpmPointsConfig.retweet_replies_multiplier
+            cpmPointsConfig.retweet_replies_multiplier,
           );
           const retweetImpressions = getMultiplierValue(
-            cpmPointsConfig.retweet_impressions_multiplier
+            cpmPointsConfig.retweet_impressions_multiplier,
           );
           const retweetRetweets = getMultiplierValue(
-            cpmPointsConfig.retweet_retweets_multiplier
+            cpmPointsConfig.retweet_retweets_multiplier,
           );
           const retweetQuoteReposts = getMultiplierValue(
-            cpmPointsConfig.retweet_quote_reposts_multiplier
+            cpmPointsConfig.retweet_quote_reposts_multiplier,
           );
 
           retweetMultipliers.likes_multiplier =
@@ -3798,19 +3798,19 @@ export default function CreateContestPage({
         if (showQuoteRepostMultipliers) {
           // Checkbox is checked - use user values if provided, otherwise use defaults
           const quoteRepostLikes = getMultiplierValue(
-            cpmPointsConfig.quote_repost_likes_multiplier
+            cpmPointsConfig.quote_repost_likes_multiplier,
           );
           const quoteRepostReplies = getMultiplierValue(
-            cpmPointsConfig.quote_repost_replies_multiplier
+            cpmPointsConfig.quote_repost_replies_multiplier,
           );
           const quoteRepostImpressions = getMultiplierValue(
-            cpmPointsConfig.quote_repost_impressions_multiplier
+            cpmPointsConfig.quote_repost_impressions_multiplier,
           );
           const quoteRepostRetweets = getMultiplierValue(
-            cpmPointsConfig.quote_repost_retweets_multiplier
+            cpmPointsConfig.quote_repost_retweets_multiplier,
           );
           const quoteRepostQuoteReposts = getMultiplierValue(
-            cpmPointsConfig.quote_repost_quote_reposts_multiplier
+            cpmPointsConfig.quote_repost_quote_reposts_multiplier,
           );
 
           quoteRepostMultipliers.likes_multiplier =
@@ -3876,134 +3876,134 @@ export default function CreateContestPage({
   // Update nextStep to auto-save basics as draft before moving to brief
   const nextStep = async () => {
     setIsLoading(true);
-    
+
     try {
-    // Helper function to set error for UI display (for steps other than basics)
-    const setError = (message: string) => {
-      setFormFeedback(message);
-      setFormFeedbackType("error");
-      setToastErrorMessage(message);
-      toast({ title: "Error", description: message, variant: "destructive" });
-    };
+      // Helper function to set error for UI display (for steps other than basics)
+      const setError = (message: string) => {
+        setFormFeedback(message);
+        setFormFeedbackType("error");
+        setToastErrorMessage(message);
+        toast({ title: "Error", description: message, variant: "destructive" });
+      };
 
-    // Helper function to show only toast (for basics step)
-    const setToastError = (message: string) => {
-      toast({
-        title: "Validation Error",
-        description: message,
-        variant: "destructive",
-        duration: 5000,
-      });
-    };
+      // Helper function to show only toast (for basics step)
+      const setToastError = (message: string) => {
+        toast({
+          title: "Validation Error",
+          description: message,
+          variant: "destructive",
+          duration: 5000,
+        });
+      };
 
-    // Validate only what's needed for the current step
-    if (step === "basics") {
-      // Collect all missing required fields
-      const missingFields: string[] = [];
+      // Validate only what's needed for the current step
+      if (step === "basics") {
+        // Collect all missing required fields
+        const missingFields: string[] = [];
 
-      if (!title || !title.trim()) {
-        missingFields.push("Contest Title");
-      }
-      if (!platform || platform.trim() === "") {
-        missingFields.push("Platform");
-      }
-      if (!category || category.trim() === "") {
-        missingFields.push("Category");
-      }
-      if (!thumbnail && !thumbnailPreview) {
-        missingFields.push("Thumbnail");
-      }
+        if (!title || !title.trim()) {
+          missingFields.push("Contest Title");
+        }
+        if (!platform || platform.trim() === "") {
+          missingFields.push("Platform");
+        }
+        if (!category || category.trim() === "") {
+          missingFields.push("Category");
+        }
+        if (!thumbnail && !thumbnailPreview) {
+          missingFields.push("Thumbnail");
+        }
 
-      // Validate contest type access
-      if (contestType === "cpm") {
-        const planFeatures = getPlanFeatures(userPlan);
-        const hasCpmAccess =
-          planFeatures.contestTypes &&
-          planFeatures.contestTypes.includes("cpm");
+        // Validate contest type access
+        if (contestType === "cpm") {
+          const planFeatures = getPlanFeatures(userPlan);
+          const hasCpmAccess =
+            planFeatures.contestTypes &&
+            planFeatures.contestTypes.includes("cpm");
 
-        if (!hasCpmAccess) {
-          setToastError(
-            "CPM-based contests are only available with paid plans. Please upgrade your subscription or select Leaderboard contest type."
+          if (!hasCpmAccess) {
+            setToastError(
+              "CPM-based contests are only available with paid plans. Please upgrade your subscription or select Leaderboard contest type.",
+            );
+            setIsLoading(false);
+            return;
+          }
+        }
+
+        // Show comprehensive error if any fields are missing
+        if (missingFields.length > 0) {
+          const errorMessage =
+            missingFields.length === 1
+              ? `Please fill in the following required field: ${missingFields[0]}`
+              : `Please fill in the following required fields: ${missingFields.join(
+                  ", ",
+                )}`;
+          // Use toast-only error for basics step (no CardFooter alert)
+          setToastError(errorMessage);
+          setIsLoading(false);
+          return;
+        }
+
+        // Auto-save basics as draft before moving to next step
+        await saveBasicsAsDraft();
+        setStep("brief");
+      } else if (step === "brief") {
+        // Small delay to ensure state is updated from editor
+        await new Promise((resolve) => setTimeout(resolve, 100));
+
+        // Capture content from rich text editor before validation
+        const currentBrief = captureBriefContent();
+        const currentRules = captureRulesContent();
+
+        // Capture bonus content if enabled
+        if (bonusEnabled) {
+          captureBonusContent();
+        }
+
+        // Also check the current brief state as a fallback
+        const briefToCheck = currentBrief || briefHtml;
+        const rulesToCheck = currentRules || rulesHtml;
+
+        console.log(
+          "Brief validation - currentBrief:",
+          currentBrief?.substring(0, 50),
+        );
+        console.log(
+          "Brief validation - briefHtml state:",
+          briefHtml?.substring(0, 50),
+        );
+
+        if (isQuillEmpty(briefToCheck)) {
+          setError("Please enter a brief description for your contest");
+          setIsLoading(false);
+          return;
+        }
+        if (isQuillEmpty(rulesToCheck)) {
+          setError("Please provide rules for your contest");
+          setIsLoading(false);
+          return;
+        }
+        setStep("resources");
+      } else if (step === "resources") {
+        // Validate that at least one resource is provided (either uploaded asset or external link)
+        const hasUploadedAssets = resources.some((r) => r.type === "internal");
+        const hasExternalLinks = resources.some((r) => r.type === "external");
+        if (!hasUploadedAssets && !hasExternalLinks) {
+          setError(
+            "Please provide at least one resource - either upload an asset OR add an external resource link to help creators understand your requirements",
           );
           setIsLoading(false);
           return;
         }
+        if (inspirationLinks.length === 0) {
+          setError(
+            "Please add at least one inspiration link to help creators understand your vision",
+          );
+          setIsLoading(false);
+          return;
+        }
+        setStep("prize");
       }
-
-      // Show comprehensive error if any fields are missing
-      if (missingFields.length > 0) {
-        const errorMessage =
-          missingFields.length === 1
-            ? `Please fill in the following required field: ${missingFields[0]}`
-            : `Please fill in the following required fields: ${missingFields.join(
-                ", "
-              )}`;
-        // Use toast-only error for basics step (no CardFooter alert)
-        setToastError(errorMessage);
-        setIsLoading(false);
-        return;
-      }
-
-      // Auto-save basics as draft before moving to next step
-      await saveBasicsAsDraft();
-      setStep("brief");
-    } else if (step === "brief") {
-      // Small delay to ensure state is updated from editor
-      await new Promise((resolve) => setTimeout(resolve, 100));
-
-      // Capture content from rich text editor before validation
-      const currentBrief = captureBriefContent();
-      const currentRules = captureRulesContent();
-
-      // Capture bonus content if enabled
-      if (bonusEnabled) {
-        captureBonusContent();
-      }
-
-      // Also check the current brief state as a fallback
-      const briefToCheck = currentBrief || briefHtml;
-      const rulesToCheck = currentRules || rulesHtml;
-
-      console.log(
-        "Brief validation - currentBrief:",
-        currentBrief?.substring(0, 50)
-      );
-      console.log(
-        "Brief validation - briefHtml state:",
-        briefHtml?.substring(0, 50)
-      );
-
-      if (isQuillEmpty(briefToCheck)) {
-        setError("Please enter a brief description for your contest");
-        setIsLoading(false);
-        return;
-      }
-      if (isQuillEmpty(rulesToCheck)) {
-        setError("Please provide rules for your contest");
-        setIsLoading(false);
-        return;
-      }
-      setStep("resources");
-    } else if (step === "resources") {
-      // Validate that at least one resource is provided (either uploaded asset or external link)
-      const hasUploadedAssets = resources.some((r) => r.type === "internal");
-      const hasExternalLinks = resources.some((r) => r.type === "external");
-      if (!hasUploadedAssets && !hasExternalLinks) {
-        setError(
-          "Please provide at least one resource - either upload an asset OR add an external resource link to help creators understand your requirements"
-        );
-        setIsLoading(false);
-        return;
-      }
-      if (inspirationLinks.length === 0) {
-        setError(
-          "Please add at least one inspiration link to help creators understand your vision"
-        );
-        setIsLoading(false);
-        return;
-      }
-      setStep("prize");
-    }
     } finally {
       setIsLoading(false);
     }
@@ -4079,18 +4079,16 @@ export default function CreateContestPage({
 
       // Use new subscription utilities to get user's subscription
       try {
-        const { getUserSubscription } = await import(
-          "@/lib/subscription-utils-client"
-        );
+        const { getUserSubscription } =
+          await import("@/lib/subscription-utils-client");
         const subscription = await getUserSubscription(userId);
 
         if (subscription && subscription.product_id) {
           // Map real Stripe product ID to plan name for UI compatibility
-          const { subscriptionPlans } = await import(
-            "@/constants/subscriptionPlans"
-          );
+          const { subscriptionPlans } =
+            await import("@/constants/subscriptionPlans");
           const plan = subscriptionPlans.find(
-            (p) => p.id === subscription.product_id
+            (p) => p.id === subscription.product_id,
           );
 
           if (plan) {
@@ -4127,22 +4125,22 @@ export default function CreateContestPage({
     if (!planId || dbSubscriptionPlans.length === 0) {
       // Return defaults if no planId or DB fetch failed/returned empty
       console.log(
-        "No planId or failed to fetch plans, using default features."
+        "No planId or failed to fetch plans, using default features.",
       );
       return defaultFreePlanFeatures;
     }
 
     const plan = dbSubscriptionPlans.find(
-      (p: SubscriptionPlan) => p.id === planId
+      (p: SubscriptionPlan) => p.id === planId,
     );
 
     if (!plan) {
       console.warn(
-        `Plan with ID ${planId} not found in fetched plans. Using default features.`
+        `Plan with ID ${planId} not found in fetched plans. Using default features.`,
       );
       // Attempt to find the 'explorer' plan by name if ID fails, or use the first available plan, or default
       const explorerPlan = dbSubscriptionPlans.find(
-        (p) => p.name.toLowerCase() === "EXPLORER"
+        (p) => p.name.toLowerCase() === "EXPLORER",
       );
       return (
         explorerPlan?.features ||
@@ -4170,10 +4168,13 @@ export default function CreateContestPage({
 
       // Allow pre-selecting contest type from URL.
       const urlParams = new URLSearchParams(window.location.search);
-      const selectedTypeParam =
-        (urlParams.get("contestType") || urlParams.get("type") || "")
-          .trim()
-          .toLowerCase();
+      const selectedTypeParam = (
+        urlParams.get("contestType") ||
+        urlParams.get("type") ||
+        ""
+      )
+        .trim()
+        .toLowerCase();
       if (selectedTypeParam === "leaderboard" || selectedTypeParam === "cpm") {
         setContestType(selectedTypeParam);
       }
@@ -4245,7 +4246,7 @@ export default function CreateContestPage({
     console.log("Draft content_type:", draft.content_type);
     console.log(
       "Draft twitter_campaign:",
-      draft.contest_based_details?.twitter_campaign
+      draft.contest_based_details?.twitter_campaign,
     );
 
     // Set draft/contest IDs first
@@ -4454,7 +4455,7 @@ export default function CreateContestPage({
       }
       if (Array.isArray(lc.prizes)) {
         const amounts = lc.prizes.map(
-          (prize: { amount?: number }) => prize.amount || 0
+          (prize: { amount?: number }) => prize.amount || 0,
         );
         setWinnerAmounts(amounts);
         updateTotalPrizePool(amounts);
@@ -4544,22 +4545,22 @@ export default function CreateContestPage({
           pc.comments_weight.base_weight !== undefined
             ? pc.comments_weight.base_weight
             : typeof pc.comments_weight === "number"
-            ? pc.comments_weight
-            : 0;
+              ? pc.comments_weight
+              : 0;
         const savedRetweetsWeight =
           typeof pc.retweets_weight === "object" &&
           pc.retweets_weight.base_weight !== undefined
             ? pc.retweets_weight.base_weight
             : typeof pc.retweets_weight === "number"
-            ? pc.retweets_weight
-            : 0;
+              ? pc.retweets_weight
+              : 0;
         const savedQuoteRepostsWeight =
           typeof pc.quote_reposts_weight === "object" &&
           pc.quote_reposts_weight.base_weight !== undefined
             ? pc.quote_reposts_weight.base_weight
             : typeof pc.quote_reposts_weight === "number"
-            ? pc.quote_reposts_weight
-            : 0;
+              ? pc.quote_reposts_weight
+              : 0;
 
         setCpmPointsConfig({
           comment_base_points:
@@ -4575,119 +4576,119 @@ export default function CreateContestPage({
             commentsWeightObj.likes_multiplier !== null
               ? commentsWeightObj.likes_multiplier.toString()
               : commentWeightIsObject
-              ? ""
-              : "0.1", // Empty if checkbox checked but no value, default if checkbox unchecked
+                ? ""
+                : "0.1", // Empty if checkbox checked but no value, default if checkbox unchecked
           comment_replies_multiplier:
             commentsWeightObj.replies_multiplier !== undefined &&
             commentsWeightObj.replies_multiplier !== null
               ? commentsWeightObj.replies_multiplier.toString()
               : commentWeightIsObject
-              ? ""
-              : "1",
+                ? ""
+                : "1",
           comment_impressions_multiplier:
             commentsWeightObj.impressions_multiplier !== undefined &&
             commentsWeightObj.impressions_multiplier !== null
               ? commentsWeightObj.impressions_multiplier.toString()
               : commentWeightIsObject
-              ? ""
-              : "0.001",
+                ? ""
+                : "0.001",
           comment_retweets_multiplier:
             commentsWeightObj.retweets_multiplier !== undefined &&
             commentsWeightObj.retweets_multiplier !== null
               ? commentsWeightObj.retweets_multiplier.toString()
               : commentWeightIsObject
-              ? ""
-              : "0",
+                ? ""
+                : "0",
           comment_quote_reposts_multiplier:
             commentsWeightObj.quote_reposts_multiplier !== undefined &&
             commentsWeightObj.quote_reposts_multiplier !== null
               ? commentsWeightObj.quote_reposts_multiplier.toString()
               : commentWeightIsObject
-              ? ""
-              : "0",
+                ? ""
+                : "0",
           retweet_likes_multiplier:
             retweetsWeightObj.likes_multiplier !== undefined &&
             retweetsWeightObj.likes_multiplier !== null
               ? retweetsWeightObj.likes_multiplier.toString()
               : retweetWeightIsObject
-              ? ""
-              : "0.05",
+                ? ""
+                : "0.05",
           retweet_replies_multiplier:
             retweetsWeightObj.replies_multiplier !== undefined &&
             retweetsWeightObj.replies_multiplier !== null
               ? retweetsWeightObj.replies_multiplier.toString()
               : retweetWeightIsObject
-              ? ""
-              : "0.05",
+                ? ""
+                : "0.05",
           retweet_impressions_multiplier:
             retweetsWeightObj.impressions_multiplier !== undefined &&
             retweetsWeightObj.impressions_multiplier !== null
               ? retweetsWeightObj.impressions_multiplier.toString()
               : retweetWeightIsObject
-              ? ""
-              : "0.001",
+                ? ""
+                : "0.001",
           retweet_retweets_multiplier:
             retweetsWeightObj.retweets_multiplier !== undefined &&
             retweetsWeightObj.retweets_multiplier !== null
               ? retweetsWeightObj.retweets_multiplier.toString()
               : retweetWeightIsObject
-              ? ""
-              : "0.05",
+                ? ""
+                : "0.05",
           retweet_quote_reposts_multiplier:
             retweetsWeightObj.quote_reposts_multiplier !== undefined &&
             retweetsWeightObj.quote_reposts_multiplier !== null
               ? retweetsWeightObj.quote_reposts_multiplier.toString()
               : retweetWeightIsObject
-              ? ""
-              : "0",
+                ? ""
+                : "0",
           quote_repost_likes_multiplier:
             quoteRepostsWeightObj.likes_multiplier !== undefined &&
             quoteRepostsWeightObj.likes_multiplier !== null
               ? quoteRepostsWeightObj.likes_multiplier.toString()
               : quoteRepostWeightIsObject
-              ? ""
-              : "0.1",
+                ? ""
+                : "0.1",
           quote_repost_replies_multiplier:
             quoteRepostsWeightObj.replies_multiplier !== undefined &&
             quoteRepostsWeightObj.replies_multiplier !== null
               ? quoteRepostsWeightObj.replies_multiplier.toString()
               : quoteRepostWeightIsObject
-              ? ""
-              : "0.1",
+                ? ""
+                : "0.1",
           quote_repost_impressions_multiplier:
             quoteRepostsWeightObj.impressions_multiplier !== undefined &&
             quoteRepostsWeightObj.impressions_multiplier !== null
               ? quoteRepostsWeightObj.impressions_multiplier.toString()
               : quoteRepostWeightIsObject
-              ? ""
-              : "0.001",
+                ? ""
+                : "0.001",
           quote_repost_retweets_multiplier:
             quoteRepostsWeightObj.retweets_multiplier !== undefined &&
             quoteRepostsWeightObj.retweets_multiplier !== null
               ? quoteRepostsWeightObj.retweets_multiplier.toString()
               : quoteRepostWeightIsObject
-              ? ""
-              : "0.1",
+                ? ""
+                : "0.1",
           quote_repost_quote_reposts_multiplier:
             quoteRepostsWeightObj.quote_reposts_multiplier !== undefined &&
             quoteRepostsWeightObj.quote_reposts_multiplier !== null
               ? quoteRepostsWeightObj.quote_reposts_multiplier.toString()
               : quoteRepostWeightIsObject
-              ? ""
-              : "0.1",
+                ? ""
+                : "0.1",
         });
 
         // Set checkbox states from saved flag
         // We save _showMultipliers flag to track checkbox state
         setShowCommentMultipliers(
-          commentWeightIsObject && commentsWeightObj._showMultipliers === true
+          commentWeightIsObject && commentsWeightObj._showMultipliers === true,
         );
         setShowRetweetMultipliers(
-          retweetWeightIsObject && retweetsWeightObj._showMultipliers === true
+          retweetWeightIsObject && retweetsWeightObj._showMultipliers === true,
         );
         setShowQuoteRepostMultipliers(
           quoteRepostWeightIsObject &&
-            quoteRepostsWeightObj._showMultipliers === true
+            quoteRepostsWeightObj._showMultipliers === true,
         );
       }
 
@@ -4713,7 +4714,7 @@ export default function CreateContestPage({
     // Dates (convert from UTC to local)
     if (draft.start_date) {
       const { dateString, timeString } = toLocalDateTimeStrings(
-        draft.start_date
+        draft.start_date,
       );
       setStartDate(dateString);
       setStartTime(timeString);
@@ -4752,7 +4753,7 @@ export default function CreateContestPage({
     // Regions / countries
     if (draft.region && typeof draft.region === "object") {
       const { regions, countries } = extractRegionsAndCountries(
-        draft.region as Record<string, string[]>
+        draft.region as Record<string, string[]>,
       );
       setSelectedRegions(regions);
       setSelectedCountries(countries);
@@ -4768,9 +4769,8 @@ export default function CreateContestPage({
       setIsPlansLoading(true);
       try {
         // Import plans from constants (new subscription system)
-        const { subscriptionPlans } = await import(
-          "@/constants/subscriptionPlans"
-        );
+        const { subscriptionPlans } =
+          await import("@/constants/subscriptionPlans");
 
         // Convert to the format expected by the UI
         const mappedPlans: SubscriptionPlan[] = subscriptionPlans.map(
@@ -4788,7 +4788,7 @@ export default function CreateContestPage({
               support: plan.features.support,
               description: plan.features.description,
             },
-          })
+          }),
         );
 
         setDbSubscriptionPlans(mappedPlans);
@@ -4841,14 +4841,14 @@ export default function CreateContestPage({
     const msUntilStart = startDateTime.getTime() - now.getTime();
     const daysUntilStart = Math.floor(msUntilStart / (1000 * 60 * 60 * 24));
     const hoursUntilStart = Math.floor(
-      (msUntilStart % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60)
+      (msUntilStart % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60),
     );
 
     // Calculate contest duration
     const msDuration = endDateTime.getTime() - startDateTime.getTime();
     const durationDays = Math.floor(msDuration / (1000 * 60 * 60 * 24));
     const durationHours = Math.floor(
-      (msDuration % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60)
+      (msDuration % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60),
     );
 
     let startMessage = "";
@@ -4915,7 +4915,7 @@ export default function CreateContestPage({
     startDateObj.setDate(startDateObj.getDate() + MIN_CONTEST_DURATION_DAYS);
 
     return `${startDateObj.getFullYear()}-${String(
-      startDateObj.getMonth() + 1
+      startDateObj.getMonth() + 1,
     ).padStart(2, "0")}-${String(startDateObj.getDate()).padStart(2, "0")}`;
   };
 
@@ -4948,7 +4948,7 @@ export default function CreateContestPage({
       const endDateTime = new Date(`${endDate}T${endTime}`);
       const minEndDateTime = new Date(startDateTime);
       minEndDateTime.setDate(
-        minEndDateTime.getDate() + MIN_CONTEST_DURATION_DAYS
+        minEndDateTime.getDate() + MIN_CONTEST_DURATION_DAYS,
       );
 
       if (endDateTime < minEndDateTime) {
@@ -4992,7 +4992,7 @@ export default function CreateContestPage({
     const startOfToday = new Date(
       today.getFullYear(),
       today.getMonth(),
-      today.getDate()
+      today.getDate(),
     );
     const minStartDate = new Date(startOfToday);
     minStartDate.setDate(minStartDate.getDate() + MIN_DAYS_UNTIL_START);
@@ -5012,9 +5012,9 @@ export default function CreateContestPage({
           disallowed[disallowed.length - 1];
 
     return `For example, if today is ${formatDateWithOrdinal(
-      startOfToday
+      startOfToday,
     )}, you can create contests starting from ${formatDateWithOrdinal(
-      minStartDate
+      minStartDate,
     )} (00:00 onwards). ${disallowedText} ${
       disallowed.length > 1 ? "are" : "is"
     } not allowed.`;
@@ -5123,7 +5123,7 @@ export default function CreateContestPage({
                   "px-6 pt-6 pb-5 border-b rounded-tl-xl rounded-tr-xl shadow-xl space-y-6",
                   isDark
                     ? "bg-[#180438] border-gray-600 text-white"
-                    : " border-[#D0D0D0] bg-white text-purple-600"
+                    : " border-[#D0D0D0] bg-white text-purple-600",
                 )}
               >
                 <h2 className="font-semibold text-xl">Rewards & Timeline</h2>
@@ -5133,7 +5133,7 @@ export default function CreateContestPage({
                   "max-w-[1100px] mx-auto shadow-md px-6 pt-3",
                   isDark
                     ? "bg-[#180438] text-white"
-                    : "bg-white text-purple-600"
+                    : "bg-white text-purple-600",
                 )}
               >
                 <h3 className="text-lg font-bold mb-4">Your Plan Details</h3>
@@ -5144,7 +5144,7 @@ export default function CreateContestPage({
                         "rounded-full p-3.5",
                         isDark
                           ? "bg-[#FFFFFF36] text-white"
-                          : "text-[#4A00BE] bg-[#D8C3FF]"
+                          : "text-[#4A00BE] bg-[#D8C3FF]",
                       )}
                     >
                       <Trophy className="h-8 w-8" />
@@ -5153,7 +5153,7 @@ export default function CreateContestPage({
                       <h3
                         className={cn(
                           "text-xl md:text-2xl font-bold ",
-                          isDark ? "text-white" : "text-gray-900"
+                          isDark ? "text-white" : "text-gray-900",
                         )}
                       >
                         Your Current Subscription Plan
@@ -5161,7 +5161,7 @@ export default function CreateContestPage({
                       <p
                         className={cn(
                           "text-gray-600 text-md leading-relaxed",
-                          isDark ? "text-white" : "text-gray-600"
+                          isDark ? "text-white" : "text-gray-600",
                         )}
                       >
                         {currentPlan && currentPlan.price === 0 ? (
@@ -5197,7 +5197,7 @@ export default function CreateContestPage({
                   <div
                     className={cn(
                       "rounded-bl-xl rounded-br-xl px-6 pt-6 pb-8 shadow-lg",
-                      isDark ? "bg-[#180438]" : "bg-white"
+                      isDark ? "bg-[#180438]" : "bg-white",
                     )}
                     // className={`backdrop-blur-sm rounded-bl-xl rounded-br-xl px-6 pt-6 pb-8 shadow-lg ${
                     //   currentPlan.price === 0
@@ -5210,7 +5210,7 @@ export default function CreateContestPage({
                     <div
                       className={cn(
                         "flex flex-col  lg:flex-row items-start lg:items-center border rounded-xl p-4 sm:p-6 justify-between gap-6",
-                        isDark ? "border-gray-500" : "border-gray-300"
+                        isDark ? "border-gray-500" : "border-gray-300",
                       )}
                     >
                       <div className="flex items-center gap-4 sm:gap-6">
@@ -5219,7 +5219,7 @@ export default function CreateContestPage({
                             "rounded-full p-3",
                             isDark
                               ? "bg-[#FFFFFF36] text-white"
-                              : "text-[#4A00BE] bg-[#D8C3FF]"
+                              : "text-[#4A00BE] bg-[#D8C3FF]",
                           )}
                           // className={`w-16 h-16 rounded-full flex items-center justify-center ${
                           //   userPlan === subscriptionPlans[0].id
@@ -5243,7 +5243,7 @@ export default function CreateContestPage({
                           <h4
                             className={cn(
                               "text-lg sm:text-xl font-bold mb-1",
-                              isDark ? "text-white" : "text-gray-900"
+                              isDark ? "text-white" : "text-gray-900",
                             )}
                           >
                             {currentPlan.name || "FREE"} Plan
@@ -5276,7 +5276,7 @@ export default function CreateContestPage({
                             <div
                               className={cn(
                                 "px-5 py-2.5 rounded-xl bg-[#4A00BE] text-white text-sm md:text-[13px] ",
-                                isDark ? "bg-[#7F39EC]" : "bg-[#4A00BE]"
+                                isDark ? "bg-[#7F39EC]" : "bg-[#4A00BE]",
                               )}
                             >
                               Active Subscription
@@ -5284,7 +5284,7 @@ export default function CreateContestPage({
                             <p
                               className={cn(
                                 "text-xs",
-                                isDark ? "text-white" : "text-gray-500"
+                                isDark ? "text-white" : "text-gray-500",
                               )}
                             >
                               Billed monthly
@@ -5310,7 +5310,7 @@ export default function CreateContestPage({
                         "px-6 pt-6 pb-4 border-b rounded-t-xl shadow-xl space-y-6",
                         isDark
                           ? "bg-[#180438] text-white border-gray-600"
-                          : "bg-white border-[#D0D0D0] text-black"
+                          : "bg-white border-[#D0D0D0] text-black",
                       )}
                     >
                       <h2 className="font-semibold text-2xl">Plan Features</h2>
@@ -5318,7 +5318,7 @@ export default function CreateContestPage({
                     <div
                       className={cn(
                         "max-w-[1100px] mx-auto rounded-b-xl shadow-lg roundex-xl px-6 pt-6 pb-8",
-                        isDark ? "bg-[#180438]" : "bg-white"
+                        isDark ? "bg-[#180438]" : "bg-white",
                       )}
                     >
                       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -5327,7 +5327,7 @@ export default function CreateContestPage({
                           <div
                             className={cn(
                               "border rounded-xl p-4 flex flex-col justify-between shadow-sm",
-                              isDark ? "border-gray-500" : "border-gray-300"
+                              isDark ? "border-gray-500" : "border-gray-300",
                             )}
                             // className={`backdrop-blur-sm border rounded-2xl p-6 shadow-lg hover:shadow-xl transition-all duration-300 ${
                             //   planFeatures.maxWinnersPerContest <= 3
@@ -5352,7 +5352,7 @@ export default function CreateContestPage({
                                   <h5
                                     className={cn(
                                       "text-lg font-semibold mb-2",
-                                      isDark ? "text-white" : "text-gray-900"
+                                      isDark ? "text-white" : "text-gray-900",
                                     )}
                                   >
                                     Maximum Winners
@@ -5374,7 +5374,7 @@ export default function CreateContestPage({
                                 <p
                                   className={cn(
                                     "text-sm leading-relaxed mb-4",
-                                    isDark ? "text-white" : "text-gray-600"
+                                    isDark ? "text-white" : "text-gray-600",
                                   )}
                                 >
                                   The maximum number of creators you can reward
@@ -5387,7 +5387,7 @@ export default function CreateContestPage({
                                     "rounded-lg px-3 py-2 text-center border text-sm font-medium",
                                     isDark
                                       ? "border-gray-600"
-                                      : "bg-[#F0E7FD] border-purple-500 text-purple-600"
+                                      : "bg-[#F0E7FD] border-purple-500 text-purple-600",
                                   )}
                                   // className={`mt-3 text-sm font-medium ${
                                   //   planFeatures.maxWinnersPerContest <= 3
@@ -5409,7 +5409,7 @@ export default function CreateContestPage({
                           <div
                             className={cn(
                               "border rounded-xl p-4 flex flex-col justify-between shadow-sm",
-                              isDark ? "border-gray-500" : "border-gray-300"
+                              isDark ? "border-gray-500" : "border-gray-300",
                             )}
                           >
                             <div className="flex items-start gap-4">
@@ -5423,7 +5423,7 @@ export default function CreateContestPage({
                                   <h5
                                     className={cn(
                                       "text-lg font-semibold",
-                                      isDark ? "text-white" : "text-gray-900"
+                                      isDark ? "text-white" : "text-gray-900",
                                     )}
                                   >
                                     Total Winners
@@ -5437,7 +5437,7 @@ export default function CreateContestPage({
                                 <p
                                   className={cn(
                                     "text-sm leading-relaxed",
-                                    isDark ? "text-white" : "text-gray-600"
+                                    isDark ? "text-white" : "text-gray-600",
                                   )}
                                 >
                                   In CPM contests, there's no limit on winners.
@@ -5450,7 +5450,7 @@ export default function CreateContestPage({
                                     "mt-5 text-sm font-medium border text-center rounded-lg px-3 py-2",
                                     isDark
                                       ? "border-gray-600"
-                                      : "bg-[#F0E7FD] border-purple-500 text-purple-600"
+                                      : "bg-[#F0E7FD] border-purple-500 text-purple-600",
                                   )}
                                 >
                                   Pay for performance - reward creators based on
@@ -5465,7 +5465,7 @@ export default function CreateContestPage({
                         <div
                           className={cn(
                             "backdrop-blur-sm border rounded-2xl p-6 transition-all duration-300",
-                            isDark ? "border-gray-500" : "border-gray-300"
+                            isDark ? "border-gray-500" : "border-gray-300",
                           )}
 
                           // className={`backdrop-blur-sm border rounded-2xl p-6 transition-all duration-300 ${
@@ -5493,7 +5493,7 @@ export default function CreateContestPage({
                                 <h5
                                   className={cn(
                                     "text-lg font-semibold",
-                                    isDark ? "text-white" : "text-gray-900"
+                                    isDark ? "text-white" : "text-gray-900",
                                   )}
                                 >
                                   Minimum Budget
@@ -5508,7 +5508,7 @@ export default function CreateContestPage({
                                     }`}
                                   >
                                     {formatCurrencyFromCents(
-                                      planFeatures.minContestBudget
+                                      planFeatures.minContestBudget,
                                     )}
                                   </span>
                                   {planFeatures.minContestBudget >=
@@ -5522,7 +5522,7 @@ export default function CreateContestPage({
                               <p
                                 className={cn(
                                   "text-sm leading-relaxed",
-                                  isDark ? "text-white" : "text-gray-600"
+                                  isDark ? "text-white" : "text-gray-600",
                                 )}
                               >
                                 The minimum total prize pool required to create
@@ -5534,7 +5534,7 @@ export default function CreateContestPage({
                                   "mt-4 rounded-lg px-3 py-2 text-center border text-sm font-medium",
                                   isDark
                                     ? "border-gray-600"
-                                    : "bg-[#F0E7FD] border-purple-500 text-purple-600"
+                                    : "bg-[#F0E7FD] border-purple-500 text-purple-600",
                                 )}
                                 // className={`mt-4 text-sm font-medium ${
                                 //   planFeatures.minContestBudget >=
@@ -5556,7 +5556,7 @@ export default function CreateContestPage({
                         <div
                           className={cn(
                             "backdrop-blur-sm border rounded-2xl p-6 transition-all duration-300",
-                            isDark ? "border-gray-500" : "border-gray-300"
+                            isDark ? "border-gray-500" : "border-gray-300",
                           )}
 
                           // className={`backdrop-blur-sm border rounded-2xl p-6 shadow-lg hover:shadow-xl transition-all duration-300 ${
@@ -5586,7 +5586,7 @@ export default function CreateContestPage({
                                 <h5
                                   className={cn(
                                     "text-lg font-semibold",
-                                    isDark ? "text-white" : "text-gray-900"
+                                    isDark ? "text-white" : "text-gray-900",
                                   )}
                                 >
                                   Active Contests
@@ -5597,8 +5597,8 @@ export default function CreateContestPage({
                                       planFeatures.maxActiveContests <= 1
                                         ? "text-green-600 border border-green-600 rounded-full px-6"
                                         : planFeatures.maxActiveContests <= 5
-                                        ? "text-green-600 border border-green-600 rounded-full px-6"
-                                        : "text-green-600 border border-green-600 rounded-full px-6"
+                                          ? "text-green-600 border border-green-600 rounded-full px-6"
+                                          : "text-green-600 border border-green-600 rounded-full px-6"
                                     }`}
                                   >
                                     {planFeatures.maxActiveContests === Infinity
@@ -5621,7 +5621,7 @@ export default function CreateContestPage({
                               <p
                                 className={cn(
                                   "text-sm leading-relaxed",
-                                  isDark ? "text-white" : "text-gray-900"
+                                  isDark ? "text-white" : "text-gray-900",
                                 )}
                               >
                                 How many contests you can run simultaneously.
@@ -5633,7 +5633,7 @@ export default function CreateContestPage({
                                   "mt-4 rounded-lg px-3 py-2 text-center border text-sm font-medium",
                                   isDark
                                     ? "border-gray-600"
-                                    : "bg-[#F0E7FD] border-purple-500 text-purple-600"
+                                    : "bg-[#F0E7FD] border-purple-500 text-purple-600",
                                 )}
                                 // className={`mt-4 text-sm font-medium ${
                                 //   planFeatures.maxActiveContests <= 1
@@ -5646,8 +5646,8 @@ export default function CreateContestPage({
                                 {planFeatures.maxActiveContests <= 1
                                   ? "Only 1 contest allowed - upgrade now!"
                                   : planFeatures.maxActiveContests <= 5
-                                  ? "Upgrade for more simultaneous campaigns!"
-                                  : "Tip: Run parallel campaigns for different products"}
+                                    ? "Upgrade for more simultaneous campaigns!"
+                                    : "Tip: Run parallel campaigns for different products"}
                               </div>
                             </div>
                           </div>
@@ -5657,7 +5657,7 @@ export default function CreateContestPage({
                         <div
                           className={cn(
                             "backdrop-blur-sm border rounded-2xl p-6 transition-all duration-300",
-                            isDark ? "border-gray-500" : "border-gray-300"
+                            isDark ? "border-gray-500" : "border-gray-300",
                           )}
 
                           // className={`backdrop-blur-sm border rounded-2xl p-6 shadow-lg hover:shadow-xl transition-all duration-300 ${
@@ -5687,7 +5687,7 @@ export default function CreateContestPage({
                                 <h5
                                   className={cn(
                                     "text-lg font-semibold",
-                                    isDark ? "text-white" : "text-gray-900"
+                                    isDark ? "text-white" : "text-gray-900",
                                   )}
                                 >
                                   Platform Commission
@@ -5698,9 +5698,9 @@ export default function CreateContestPage({
                                       planFeatures.commissionPercentage >= 40
                                         ? "text-green-600 border border-green-600 rounded-full px-6"
                                         : planFeatures.commissionPercentage >=
-                                          20
-                                        ? "text-green-600 border border-green-600 rounded-full px-6"
-                                        : "text-green-600 border border-green-600 rounded-full px-6"
+                                            20
+                                          ? "text-green-600 border border-green-600 rounded-full px-6"
+                                          : "text-green-600 border border-green-600 rounded-full px-6"
                                     }`}
                                   >
                                     {planFeatures.commissionPercentage}%
@@ -5721,7 +5721,7 @@ export default function CreateContestPage({
                               <p
                                 className={cn(
                                   "text-sm leading-relaxed",
-                                  isDark ? "text-white" : "text-gray-600 "
+                                  isDark ? "text-white" : "text-gray-600 ",
                                 )}
                               >
                                 Our service fee taken from your total prize
@@ -5733,7 +5733,7 @@ export default function CreateContestPage({
                                   "mt-4 rounded-lg px-3 py-2 text-center border text-sm font-medium",
                                   isDark
                                     ? "border-gray-600"
-                                    : "bg-[#F0E7FD] border-purple-500 text-purple-600"
+                                    : "bg-[#F0E7FD] border-purple-500 text-purple-600",
                                 )}
                                 // className={`mt-4 text-sm font-medium ${
                                 //   planFeatures.commissionPercentage >= 40
@@ -5746,8 +5746,8 @@ export default function CreateContestPage({
                                 {planFeatures.maxActiveContests <= 1
                                   ? "Only 1 contest allowed - upgrade now!"
                                   : planFeatures.maxActiveContests <= 5
-                                  ? "Upgrade for more simultaneous campaigns!"
-                                  : "Tip: Run parallel campaigns for different products"}
+                                    ? "Upgrade for more simultaneous campaigns!"
+                                    : "Tip: Run parallel campaigns for different products"}
                               </div>
                             </div>
                           </div>
@@ -5759,7 +5759,9 @@ export default function CreateContestPage({
                   <div
                     className={cn(
                       "rounded-xl p-8 text-black shadow-lg relative overflow-hidden",
-                      isDark ? "bg-[#180438] text-white" : "bg-white text-black"
+                      isDark
+                        ? "bg-[#180438] text-white"
+                        : "bg-white text-black",
                     )}
                     // className={`rounded-xl p-8 text-black shadow-lg relative overflow-hidden ${
                     //   currentPlan.price === 0
@@ -5783,7 +5785,7 @@ export default function CreateContestPage({
                             "rounded-full p-3.5",
                             isDark
                               ? "bg-[#FFFFFF36] text-white"
-                              : "text-[#4A00BE] bg-[#D8C3FF]"
+                              : "text-[#4A00BE] bg-[#D8C3FF]",
                           )}
                         >
                           <Trophy className="h-6 w-6" />
@@ -5806,7 +5808,7 @@ export default function CreateContestPage({
                       <div
                         className={cn(
                           "border py-4 rounded-xl grid grid-cols-1 md:grid-cols-2 gap-2 mb-2",
-                          isDark ? "border-gray-600" : "border-gray-300"
+                          isDark ? "border-gray-600" : "border-gray-300",
                         )}
                       >
                         <div className="flex items-start gap-3 group">
@@ -5862,7 +5864,7 @@ export default function CreateContestPage({
                             <span className="text-md font-medium">
                               Start campaigns from just{" "}
                               {formatCurrencyFromCents(
-                                planFeatures.minContestBudget
+                                planFeatures.minContestBudget,
                               )}
                             </span>
                           </div>
@@ -5944,7 +5946,7 @@ export default function CreateContestPage({
           <div
             className={cn(
               "space-y-6 max-w-[1100px] mx-auto bg-white shadow-xl p-6 rounded-xl",
-              isDark ? "bg-[#180438] text-white" : "bg-white text-black"
+              isDark ? "bg-[#180438] text-white" : "bg-white text-black",
             )}
           >
             <h3 className="text-xl font-semibold">Contest Duration</h3>
@@ -5963,7 +5965,7 @@ export default function CreateContestPage({
                     "w-full",
                     isDark
                       ? "bg-[#180438] border border-gray-600 [&::-webkit-calendar-picker-indicator]:invert"
-                      : "bg-white [&::-webkit-calendar-picker-indicator]:filter-none"
+                      : "bg-white [&::-webkit-calendar-picker-indicator]:filter-none",
                   )}
                 />
               </div>
@@ -5978,7 +5980,7 @@ export default function CreateContestPage({
                     "w-full",
                     isDark
                       ? "bg-[#180438] border border-gray-600 [&::-webkit-calendar-picker-indicator]:invert"
-                      : "bg-white [&::-webkit-calendar-picker-indicator]:filter-none"
+                      : "bg-white [&::-webkit-calendar-picker-indicator]:filter-none",
                   )}
                 />
               </div>
@@ -6000,7 +6002,7 @@ export default function CreateContestPage({
                     "w-full",
                     isDark
                       ? "bg-[#180438] border border-gray-600 [&::-webkit-calendar-picker-indicator]:invert"
-                      : "bg-white [&::-webkit-calendar-picker-indicator]:filter-none"
+                      : "bg-white [&::-webkit-calendar-picker-indicator]:filter-none",
                   )}
                   disabled={!startDate || !startTime}
                 />
@@ -6019,7 +6021,7 @@ export default function CreateContestPage({
                     "w-full",
                     isDark
                       ? "bg-[#180438] border border-gray-600 [&::-webkit-calendar-picker-indicator]:invert"
-                      : "bg-white [&::-webkit-calendar-picker-indicator]:filter-none"
+                      : "bg-white [&::-webkit-calendar-picker-indicator]:filter-none",
                   )}
                   disabled={!startDate || !startTime || !endDate}
                 />
@@ -6031,7 +6033,7 @@ export default function CreateContestPage({
                   "mt-2 border",
                   isDark
                     ? "bg-[#C9A7FF26] border border-[#C9A7FF]"
-                    : "bg-green-50 border-green-200 text-green-700"
+                    : "bg-green-50 border-green-200 text-green-700",
                 )}
               >
                 <AlertDescription>{getContestDuration()}</AlertDescription>
@@ -6040,7 +6042,7 @@ export default function CreateContestPage({
             <p
               className={cn(
                 "text-sm mt-1",
-                isDark ? "text-white" : "text-gray-600"
+                isDark ? "text-white" : "text-gray-600",
               )}
             >
               <strong>Start Date Rule:</strong> Contest must start at least{" "}
@@ -6067,7 +6069,7 @@ export default function CreateContestPage({
                         "flex items-center gap-2  px-4 py-2 rounded-full",
                         isDark
                           ? "bg-[#180438] text-purple-400"
-                          : "bg-gray-100 text-black"
+                          : "bg-gray-100 text-black",
                       )}
                     >
                       <span className="text-md font-medium">
@@ -6082,7 +6084,7 @@ export default function CreateContestPage({
                     className={cn(
                       isDark
                         ? "bg-[#180438]p-2 sm:p-4"
-                        : "bg-gray-50 p-2 sm:p-4 rounded-lg"
+                        : "bg-gray-50 p-2 sm:p-4 rounded-lg",
                     )}
                   >
                     <div className="flex items-center gap-4 mb-4">
@@ -6124,7 +6126,7 @@ export default function CreateContestPage({
                       <div
                         className={cn(
                           "text-sm",
-                          isDark ? "text-white" : "text-gray-600"
+                          isDark ? "text-white" : "text-gray-600",
                         )}
                       >
                         <span>
@@ -6156,13 +6158,13 @@ export default function CreateContestPage({
                               "w-full sm:w-40 md:w-48",
                               isDark
                                 ? "bg-[#180438] border border-gray-600 [&::-webkit-calendar-picker-indicator]:invert"
-                                : "bg-white [&::-webkit-calendar-picker-indicator]:filter-none"
+                                : "bg-white [&::-webkit-calendar-picker-indicator]:filter-none",
                             )}
                           />
                           <div
                             className={cn(
                               "text-sm",
-                              isDark ? "text-white" : "text-gray-600"
+                              isDark ? "text-white" : "text-gray-600",
                             )}
                           >
                             <span>
@@ -6171,7 +6173,7 @@ export default function CreateContestPage({
                             </span>
                           </div>
                         </div>
-                      )
+                      ),
                     )}
                   </div>
                 </div>
@@ -6181,7 +6183,7 @@ export default function CreateContestPage({
                       "mt-2",
                       isDark
                         ? "bg-[#C9A7FF26] border-[#C9A7FF] text-white"
-                        : "bg-[#D9C0FF26] border-[#7F39EC] text-gray-900"
+                        : "bg-[#D9C0FF26] border-[#7F39EC] text-gray-900",
                     )}
                   >
                     <AlertDescription>
@@ -6247,7 +6249,7 @@ export default function CreateContestPage({
                       className={cn(
                         isDark
                           ? "bg-[#180438] border border-gray-600 text-white"
-                          : "bg-white"
+                          : "bg-white",
                       )}
                       min={MIN_CPM_RATE}
                       max={MAX_CPM_RATE}
@@ -6291,7 +6293,7 @@ export default function CreateContestPage({
                                 className={cn(
                                   isDark
                                     ? "bg-[#180438] border border-gray-600 text-white"
-                                    : "bg-white"
+                                    : "bg-white",
                                 )}
                               />
                             </div>
@@ -6319,7 +6321,7 @@ export default function CreateContestPage({
                                 className={cn(
                                   isDark
                                     ? "bg-[#180438] border border-gray-600 text-white"
-                                    : "bg-white"
+                                    : "bg-white",
                                 )}
                               />
                             </div>
@@ -6370,7 +6372,7 @@ export default function CreateContestPage({
                                     className={cn(
                                       isDark
                                         ? "bg-[#180438] border border-gray-600 text-white"
-                                        : "bg-white"
+                                        : "bg-white",
                                     )}
                                   />
                                 </div>
@@ -6396,7 +6398,7 @@ export default function CreateContestPage({
                                     className={cn(
                                       isDark
                                         ? "bg-[#180438] border border-gray-600 text-white"
-                                        : "bg-white"
+                                        : "bg-white",
                                     )}
                                   />
                                 </div>
@@ -6422,7 +6424,7 @@ export default function CreateContestPage({
                                     className={cn(
                                       isDark
                                         ? "bg-[#180438] border border-gray-600 text-white"
-                                        : "bg-white"
+                                        : "bg-white",
                                     )}
                                   />
                                 </div>
@@ -6448,7 +6450,7 @@ export default function CreateContestPage({
                                     className={cn(
                                       isDark
                                         ? "bg-[#180438] border border-gray-600 text-white"
-                                        : "bg-white"
+                                        : "bg-white",
                                     )}
                                   />
                                 </div>
@@ -6474,7 +6476,7 @@ export default function CreateContestPage({
                                     className={cn(
                                       isDark
                                         ? "bg-[#180438] border border-gray-600 text-white"
-                                        : "bg-white"
+                                        : "bg-white",
                                     )}
                                   />
                                 </div>
@@ -6504,7 +6506,7 @@ export default function CreateContestPage({
                                 className={cn(
                                   isDark
                                     ? "bg-[#180438] border border-gray-600 text-white"
-                                    : "bg-white"
+                                    : "bg-white",
                                 )}
                               />
                             </div>
@@ -6555,7 +6557,7 @@ export default function CreateContestPage({
                                     className={cn(
                                       isDark
                                         ? "bg-[#180438] border border-gray-600 text-white"
-                                        : "bg-white"
+                                        : "bg-white",
                                     )}
                                   />
                                 </div>
@@ -6581,7 +6583,7 @@ export default function CreateContestPage({
                                     className={cn(
                                       isDark
                                         ? "bg-[#180438] border border-gray-600 text-white"
-                                        : "bg-white"
+                                        : "bg-white",
                                     )}
                                   />
                                 </div>
@@ -6607,7 +6609,7 @@ export default function CreateContestPage({
                                     className={cn(
                                       isDark
                                         ? "bg-[#180438] border border-gray-600 text-white"
-                                        : "bg-white"
+                                        : "bg-white",
                                     )}
                                   />
                                 </div>
@@ -6633,7 +6635,7 @@ export default function CreateContestPage({
                                     className={cn(
                                       isDark
                                         ? "bg-[#180438] border border-gray-600 text-white"
-                                        : "bg-white"
+                                        : "bg-white",
                                     )}
                                   />
                                 </div>
@@ -6659,7 +6661,7 @@ export default function CreateContestPage({
                                     className={cn(
                                       isDark
                                         ? "bg-[#180438] border border-gray-600 text-white"
-                                        : "bg-white"
+                                        : "bg-white",
                                     )}
                                   />
                                 </div>
@@ -6689,7 +6691,7 @@ export default function CreateContestPage({
                                 className={cn(
                                   isDark
                                     ? "bg-[#180438] border border-gray-600 text-white"
-                                    : "bg-white"
+                                    : "bg-white",
                                 )}
                               />
                             </div>
@@ -6740,7 +6742,7 @@ export default function CreateContestPage({
                                     className={cn(
                                       isDark
                                         ? "bg-[#180438] border border-gray-600 text-white"
-                                        : "bg-white"
+                                        : "bg-white",
                                     )}
                                   />
                                 </div>
@@ -6766,7 +6768,7 @@ export default function CreateContestPage({
                                     className={cn(
                                       isDark
                                         ? "bg-[#180438] border border-gray-600 text-white"
-                                        : "bg-white"
+                                        : "bg-white",
                                     )}
                                   />
                                 </div>
@@ -6792,7 +6794,7 @@ export default function CreateContestPage({
                                     className={cn(
                                       isDark
                                         ? "bg-[#180438] border border-gray-600 text-white"
-                                        : "bg-white"
+                                        : "bg-white",
                                     )}
                                   />
                                 </div>
@@ -6818,7 +6820,7 @@ export default function CreateContestPage({
                                     className={cn(
                                       isDark
                                         ? "bg-[#180438] border border-gray-600 text-white"
-                                        : "bg-white"
+                                        : "bg-white",
                                     )}
                                   />
                                 </div>
@@ -6844,7 +6846,7 @@ export default function CreateContestPage({
                                     className={cn(
                                       isDark
                                         ? "bg-[#180438] border border-gray-600 text-white"
-                                        : "bg-white"
+                                        : "bg-white",
                                     )}
                                   />
                                 </div>
@@ -6874,7 +6876,7 @@ export default function CreateContestPage({
                                 className={cn(
                                   isDark
                                     ? "bg-[#180438] border border-gray-600 text-white"
-                                    : "bg-white"
+                                    : "bg-white",
                                 )}
                               />
                             </div>
@@ -6889,7 +6891,7 @@ export default function CreateContestPage({
                         "border",
                         isDark
                           ? "bg-[#C9A7FF26] border-[#C9A7FF] text-white"
-                          : "bg-[#F0E7FD] border-[#4A00BE] text-purple-700"
+                          : "bg-[#F0E7FD] border-[#4A00BE] text-purple-700",
                       )}
                     >
                       <AlertDescription>
@@ -6911,7 +6913,7 @@ export default function CreateContestPage({
                           className={cn(
                             isDark
                               ? "bg-[#180438] border border-gray-600 text-white"
-                              : "bg-white"
+                              : "bg-white",
                           )}
                           value={minViews}
                           onChange={(e) => {
@@ -6960,7 +6962,7 @@ export default function CreateContestPage({
                           className={cn(
                             isDark
                               ? "bg-[#180438] border border-gray-600 text-white"
-                              : "bg-white"
+                              : "bg-white",
                           )}
                           onChange={(e) => {
                             const value = e.target.value;
@@ -7010,7 +7012,7 @@ export default function CreateContestPage({
                       className={cn(
                         isDark
                           ? "bg-[#180438] border border-gray-600 text-white"
-                          : "bg-white"
+                          : "bg-white",
                       )}
                       value={totalBudget} // This is a string from state, input type handles conversion
                       onChange={(e) => {
@@ -7036,7 +7038,7 @@ export default function CreateContestPage({
                       className={cn(
                         isDark
                           ? "bg-[#180438] border border-gray-600 text-white"
-                          : "bg-white"
+                          : "bg-white",
                       )}
                       placeholder="Enter or paste your contest terms and conditions for CPM participants. This will be shown to them before they can submit."
                       rows={6}
@@ -7056,7 +7058,7 @@ export default function CreateContestPage({
                         "border",
                         isDark
                           ? "bg-[#C9A7FF26] border-[#C9A7FF] text-white"
-                          : "bg-[#F0E7FD] border-[#4A00BE] text-purple-700"
+                          : "bg-[#F0E7FD] border-[#4A00BE] text-purple-700",
                       )}
                     >
                       <AlertDescription>
@@ -7076,7 +7078,7 @@ export default function CreateContestPage({
                 <h3
                   className={cn(
                     "text-xl font-semibold mb-4",
-                    isDark ? "text-white" : "text-purple-600"
+                    isDark ? "text-white" : "text-purple-600",
                   )}
                 >
                   💰 Creator Earning Opportunities
@@ -7115,7 +7117,7 @@ export default function CreateContestPage({
                   className={cn(
                     isDark
                       ? "bg-green-950/40 border border-gray-600 text-white"
-                      : "bg-white"
+                      : "bg-white",
                   )}
                 />
                 <p className="text-sm text-muted-foreground">
@@ -7129,7 +7131,7 @@ export default function CreateContestPage({
                       "border",
                       isDark
                         ? "bg-[#C9A7FF26] border-[#C9A7FF] text-white"
-                        : "bg-[#F0E7FD] border-[#4A00BE] text-green-800"
+                        : "bg-[#F0E7FD] border-[#4A00BE] text-green-800",
                     )}
                   >
                     <AlertDescription>
@@ -7152,7 +7154,7 @@ export default function CreateContestPage({
                       "space-y-3 p-4 border rounded-lg",
                       isDark
                         ? "bg-purple-950/40 border-purple-800"
-                        : "bg-gradient-to-r from-purple-50 to-violet-50 border-purple-200"
+                        : "bg-gradient-to-r from-purple-50 to-violet-50 border-purple-200",
                     )}
                   >
                     <div className="flex items-center gap-2">
@@ -7177,7 +7179,7 @@ export default function CreateContestPage({
                       className={cn(
                         isDark
                           ? "bg-[#180438] border border-gray-600 text-white"
-                          : "bg-white text-black"
+                          : "bg-white text-black",
                       )}
                     />
                     <p className="text-sm text-muted-foreground">
@@ -7192,7 +7194,7 @@ export default function CreateContestPage({
                           className={cn(
                             isDark
                               ? "bg-purple-900/30 border-purple-900"
-                              : "bg-purple-100 border-purple-300"
+                              : "bg-purple-100 border-purple-300",
                           )}
                         >
                           <AlertDescription>
@@ -7200,7 +7202,7 @@ export default function CreateContestPage({
                             <strong>
                               $
                               {parseFloat(flatFeeBonusCap.toString()).toFixed(
-                                2
+                                2,
                               )}
                             </strong>
                             . Once this amount is distributed, no more flat fee
@@ -7220,7 +7222,7 @@ export default function CreateContestPage({
                       "space-y-3 p-4 border rounded-lg",
                       isDark
                         ? "bg-blue-950/50 border-blue-800"
-                        : "bg-gradient-to-r from-blue-50 to-indigo-50 border-blue-200"
+                        : "bg-gradient-to-r from-blue-50 to-indigo-50 border-blue-200",
                     )}
                   >
                     <div className="flex items-center gap-2">
@@ -7245,7 +7247,7 @@ export default function CreateContestPage({
                       className={cn(
                         isDark
                           ? "bg-[#180438] border border-gray-600 text-white"
-                          : "bg-white text-black"
+                          : "bg-white text-black",
                       )}
                     />
                     <p className="text-sm text-muted-foreground">
@@ -7266,12 +7268,12 @@ export default function CreateContestPage({
                         className={cn(
                           isDark
                             ? "bg-blue-900/30 border-blue-900"
-                            : "bg-blue-100 border-blue-300"
+                            : "bg-blue-100 border-blue-300",
                         )}
                       >
                         <AlertDescription
                           className={cn(
-                            isDark ? "text-blue-200" : "text-blue-800"
+                            isDark ? "text-blue-200" : "text-blue-800",
                           )}
                         >
                           ✓ Budget set to{" "}
@@ -7292,7 +7294,7 @@ export default function CreateContestPage({
                     "space-y-3 p-4 border rounded-lg",
                     isDark
                       ? "bg-blue-950/50 border-blue-800"
-                      : "bg-blue-50 border-blue-200"
+                      : "bg-blue-50 border-blue-200",
                   )}
                 >
                   <div className="flex items-center gap-2">
@@ -7313,7 +7315,7 @@ export default function CreateContestPage({
                     className={cn(
                       isDark
                         ? "bg-[#180438] border border-gray-600 text-white"
-                        : "bg-white text-black"
+                        : "bg-white text-black",
                     )}
                     onChange={(e) => setMaxEarningsPerCreator(e.target.value)}
                     placeholder="e.g., 500 for $500 max per creator"
@@ -7332,19 +7334,19 @@ export default function CreateContestPage({
                         className={cn(
                           isDark
                             ? "bg-blue-900/30 border-blue-900"
-                            : "bg-blue-100 border-blue-300"
+                            : "bg-blue-100 border-blue-300",
                         )}
                       >
                         <AlertDescription
                           className={cn(
-                            isDark ? "text-blue-200" : "text-blue-800"
+                            isDark ? "text-blue-200" : "text-blue-800",
                           )}
                         >
                           ℹ️ Each creator can earn up to{" "}
                           <strong>
                             $
                             {parseFloat(
-                              maxEarningsPerCreator.toString()
+                              maxEarningsPerCreator.toString(),
                             ).toFixed(2)}
                           </strong>{" "}
                           from this contest.
@@ -7360,7 +7362,7 @@ export default function CreateContestPage({
                   "space-y-3 p-4 border rounded-lg",
                   isDark
                     ? "bg-purple-950/50 border-purple-800"
-                    : "bg-purple-50 border-purple-200"
+                    : "bg-purple-50 border-purple-200",
                 )}
               >
                 <div className="flex items-center justify-between">
@@ -7408,7 +7410,7 @@ export default function CreateContestPage({
                           "prose max-w-none p-4 border rounded-lg min-h-[200px]",
                           isDark
                             ? "bg-[#180438] border-gray-600 text-white"
-                            : "bg-white"
+                            : "bg-white",
                         )}
                       >
                         <div dangerouslySetInnerHTML={{ __html: bonusHtml }} />
@@ -7471,9 +7473,9 @@ export default function CreateContestPage({
                         "sm:mr-auto border font-semibold px-4 py-2 rounded-lg text-md",
                         isDark
                           ? "text-white bg-[#170337] border-gray-400"
-                          : "border-[#4A00BE] bg-white text-[#4A00BE]"
+                          : "border-[#4A00BE] bg-white text-[#4A00BE]",
                       )
-                    : ""
+                    : "",
                 )}
               >
                 Back
@@ -7490,7 +7492,7 @@ export default function CreateContestPage({
                     "border font-semibold px-4 py-2 rounded-lg text-md t w-full sm:w-auto",
                     isDark
                       ? "text-white border-gray-400"
-                      : "border-[#4A00BE] bg-white text-[#4A00BE]"
+                      : "border-[#4A00BE] bg-white text-[#4A00BE]",
                   )}
                   onClick={handleSaveDraft}
                   disabled={isLoading || !title.trim()}
@@ -7522,7 +7524,7 @@ export default function CreateContestPage({
                   }
                   className={cn(
                     "px-5 py-4 rounded-lg transition w-full sm:w-auto",
-                    isDark ? "bg-[#7F39EC]" : "bg-[#4A00BE]"
+                    isDark ? "bg-[#7F39EC]" : "bg-[#4A00BE]",
                   )}
                 >
                   {isLoading &&
@@ -7536,16 +7538,16 @@ export default function CreateContestPage({
                           uploadProgress.includes("Preparing")
                             ? 15
                             : uploadProgress.includes("Validating")
-                            ? 25
-                            : uploadProgress.includes("1/2")
-                            ? 40
-                            : uploadProgress.includes("2/2")
-                            ? 60
-                            : uploadProgress.includes("Creating")
-                            ? 80
-                            : uploadProgress.includes("submitted")
-                            ? 100
-                            : 10
+                              ? 25
+                              : uploadProgress.includes("1/2")
+                                ? 40
+                                : uploadProgress.includes("2/2")
+                                  ? 60
+                                  : uploadProgress.includes("Creating")
+                                    ? 80
+                                    : uploadProgress.includes("submitted")
+                                      ? 100
+                                      : 10
                         }
                         className="w-10 h-2"
                       />
@@ -7576,7 +7578,7 @@ export default function CreateContestPage({
           console.error("Error listing resource files:", resourceError);
         } else if (resourceFiles && resourceFiles.length > 0) {
           const resourceFilePaths = resourceFiles.map(
-            (file) => `contest_resources/${contestId}/${file.name}`
+            (file) => `contest_resources/${contestId}/${file.name}`,
           );
           await supabase.storage
             .from("contest-assets")
@@ -7595,11 +7597,11 @@ export default function CreateContestPage({
           console.error("Error listing thumbnail files:", thumbnailError);
         } else if (thumbnailFiles && thumbnailFiles.length > 0) {
           const matching = thumbnailFiles.filter((f) =>
-            f.name.startsWith(`${contestId}_`)
+            f.name.startsWith(`${contestId}_`),
           );
           if (matching.length > 0) {
             const thumbnailFilePaths = matching.map(
-              (f) => `contest_thumbnails/${f.name}`
+              (f) => `contest_thumbnails/${f.name}`,
             );
             await supabase.storage
               .from("contest-assets")
@@ -7684,11 +7686,11 @@ export default function CreateContestPage({
       inspirationLinks.some(
         (link) =>
           link.url === newInspirationUrl &&
-          link.description === newInspirationDescription
+          link.description === newInspirationDescription,
       )
     ) {
       setInspirationError(
-        "This inspiration link and description have already been added. Please use a different link or description."
+        "This inspiration link and description have already been added. Please use a different link or description.",
       );
       toast({
         title: "Duplicate Inspiration Link & Description",
@@ -7701,7 +7703,7 @@ export default function CreateContestPage({
     // Duplicate check: same URL
     if (inspirationLinks.some((link) => link.url === newInspirationUrl)) {
       setInspirationError(
-        "This inspiration link has already been added. Please use a different link."
+        "This inspiration link has already been added. Please use a different link.",
       );
       toast({
         title: "Duplicate Inspiration Link",
@@ -7734,7 +7736,7 @@ export default function CreateContestPage({
       const maxSize = 20 * 1024 * 1024; // 20MB
       if (file.size > maxSize) {
         setAssetUploadError(
-          "File must be 20MB or smaller. Please choose a smaller file."
+          "File must be 20MB or smaller. Please choose a smaller file.",
         );
         return;
       }
@@ -7745,7 +7747,7 @@ export default function CreateContestPage({
       }
       if (resources.some((r) => r.description === description.trim())) {
         setAssetUploadError(
-          `A resource with the description \"${description.trim()}\" already exists. Please use a unique description.`
+          `A resource with the description \"${description.trim()}\" already exists. Please use a unique description.`,
         );
         return;
       }
@@ -7767,7 +7769,7 @@ export default function CreateContestPage({
         // Use per-contest folder
         const fileName = `contest_resources/${currentContestId}/${file.name.replace(
           /\s+/g,
-          "_"
+          "_",
         )}`;
         const { error: uploadError } = await supabase.storage
           .from("contest-assets")
@@ -7819,7 +7821,7 @@ export default function CreateContestPage({
     window.history.pushState(
       null,
       "",
-      `${window.location.pathname}${window.location.search}`
+      `${window.location.pathname}${window.location.search}`,
     );
 
     const handlePopState = (e: PopStateEvent) => {
@@ -7829,7 +7831,7 @@ export default function CreateContestPage({
       window.history.pushState(
         null,
         "",
-        `${window.location.pathname}${window.location.search}`
+        `${window.location.pathname}${window.location.search}`,
       );
     };
 
@@ -7921,13 +7923,13 @@ export default function CreateContestPage({
     <div
       className={cn(
         "fixed inset-0 bg-opacity-65 flex items-center justify-center z-50",
-        isDark ? "bg-[#100A33]" : "bg-black"
+        isDark ? "bg-[#100A33]" : "bg-black",
       )}
     >
       <div
         className={cn(
           "rounded-lg p-6 max-w-md w-full shadow-xl",
-          isDark ? "bg-[#06021D]  border border-gray-800" : "bg-white"
+          isDark ? "bg-[#06021D]  border border-gray-800" : "bg-white",
         )}
       >
         <h2 className="text-xl font-bold mb-4">Leave Contest Creation?</h2>
@@ -7964,7 +7966,7 @@ export default function CreateContestPage({
     <div
       className={cn(
         "fixed inset-0 bg-opacity-65 flex items-center justify-center z-50",
-        isDark ? "bg-[#100A33]" : "bg-black"
+        isDark ? "bg-[#100A33]" : "bg-black",
       )}
     >
       <div
@@ -7972,7 +7974,7 @@ export default function CreateContestPage({
           "rounded-lg p-6 max-w-lg w-full shadow-xl",
           isDark
             ? "bg-[#06021D] border border-gray-800 text-white"
-            : "bg-white text-black"
+            : "bg-white text-black",
         )}
       >
         <div className="flex items-center gap-3 mb-4">
@@ -7981,7 +7983,7 @@ export default function CreateContestPage({
               "w-10 h-10 rounded-full flex items-center justify-center",
               isDark
                 ? "bg-[#FFFFFF36] text-white"
-                : "bg-purple-200 text-purple-600"
+                : "bg-purple-200 text-purple-600",
             )}
           >
             <Trophy className="h-5 w-5" />
@@ -7999,7 +8001,7 @@ export default function CreateContestPage({
               "w-full text-md rounded-full font-semibold",
               isDark
                 ? "bg-[#7F39EC] py-3 text-white"
-                : " bg-[#D9C0FF61] py-4 text-[#7F39EC] "
+                : " bg-[#D9C0FF61] py-4 text-[#7F39EC] ",
             )}
           >
             Save Draft & Upgrade
@@ -8011,7 +8013,7 @@ export default function CreateContestPage({
               "w-full border text-md py-3 rounded-full",
               isDark
                 ? "border-gray-400 text-gray-300"
-                : "border-[#7F39EC] text-[#7F39EC]"
+                : "border-[#7F39EC] text-[#7F39EC]",
             )}
           >
             Upgrade without saving draft
@@ -8023,7 +8025,7 @@ export default function CreateContestPage({
               "w-full rounded-full text-md",
               isDark
                 ? "border-[#FF5353] text-[#FF5353]"
-                : "border-[#FF323224] bg-[#FF323224] text-[#E50000]"
+                : "border-[#FF323224] bg-[#FF323224] text-[#E50000]",
             )}
           >
             Cancel
@@ -8038,7 +8040,7 @@ export default function CreateContestPage({
     <div
       className={cn(
         "fixed inset-0 bg-opacity-65 flex items-center justify-center z-50",
-        isDark ? "bg-[#100A33]" : "bg-black"
+        isDark ? "bg-[#100A33]" : "bg-black",
       )}
     >
       <div
@@ -8046,7 +8048,7 @@ export default function CreateContestPage({
           "rounded-lg p-6 max-w-md w-full shadow-xl",
           isDark
             ? "bg-[#06021D] border border-gray-800 text-white"
-            : "bg-white text-black"
+            : "bg-white text-black",
         )}
       >
         <div className="flex items-center gap-3 mb-4">
@@ -8066,7 +8068,7 @@ export default function CreateContestPage({
               "w-full text-md rounded-full font-semibold",
               isDark
                 ? "bg-[#7F39EC] py-3 text-white"
-                : " bg-[#D9C0FF61] py-4 text-[#7F39EC] "
+                : " bg-[#D9C0FF61] py-4 text-[#7F39EC] ",
             )}
           >
             Save Draft
@@ -8078,7 +8080,7 @@ export default function CreateContestPage({
               "w-full border text-md py-3 rounded-full",
               isDark
                 ? "border-gray-400 text-gray-300"
-                : "border-[#7F39EC] text-[#7F39EC]"
+                : "border-[#7F39EC] text-[#7F39EC]",
             )}
           >
             Refresh Anyway
@@ -8090,7 +8092,7 @@ export default function CreateContestPage({
               "w-full rounded-full text-md",
               isDark
                 ? "border-[#FF5353] text-[#FF5353]"
-                : "border-[#FF323224] bg-[#FF323224] text-[#E50000]"
+                : "border-[#FF323224] bg-[#FF323224] text-[#E50000]",
             )}
           >
             Cancel
@@ -8193,10 +8195,10 @@ export default function CreateContestPage({
                       step === "basics"
                         ? "8%"
                         : step === "brief"
-                        ? "35%"
-                        : step === "resources"
-                        ? "70%"
-                        : "100%",
+                          ? "35%"
+                          : step === "resources"
+                            ? "70%"
+                            : "100%",
                     // background:
                     //   "linear-gradient(270deg, #E9E9E9 60%, #7F39EC 100%)",
                   }}
@@ -8259,10 +8261,10 @@ export default function CreateContestPage({
                             isActive
                               ? "bg-[#7F39EC] border-[#7F39EC] text-white"
                               : isCompleted
-                              ? "bg-[#7F39EC] border-[#7F39EC] text-white"
-                              : isDark
-                              ? "bg-white border-white text-slate-500 shadow-md"
-                              : "bg-white border-slate-200 text-slate-400 shadow-md"
+                                ? "bg-[#7F39EC] border-[#7F39EC] text-white"
+                                : isDark
+                                  ? "bg-white border-white text-slate-500 shadow-md"
+                                  : "bg-white border-slate-200 text-slate-400 shadow-md"
                           }`}
                         >
                           {isCompleted ? (
@@ -8296,12 +8298,12 @@ export default function CreateContestPage({
                                 ? "text-white"
                                 : "text-black"
                               : isCompleted
-                              ? isDark
-                                ? "text-white"
-                                : "text-black"
-                              : isDark
-                              ? "text-slate-400 text-md"
-                              : "text-slate-500 text-md"
+                                ? isDark
+                                  ? "text-white"
+                                  : "text-black"
+                                : isDark
+                                  ? "text-slate-400 text-md"
+                                  : "text-slate-500 text-md"
                           }`}
                         >
                           {stepItem.title}
@@ -8313,12 +8315,12 @@ export default function CreateContestPage({
                                 ? "text-white"
                                 : "text-black"
                               : isCompleted
-                              ? isDark
-                                ? "text-white"
-                                : "text-black"
-                              : isDark
-                              ? "text-slate-400"
-                              : "text-slate-400"
+                                ? isDark
+                                  ? "text-white"
+                                  : "text-black"
+                                : isDark
+                                  ? "text-slate-400"
+                                  : "text-slate-400"
                           }`}
                         >
                           {stepItem.description}
@@ -8338,7 +8340,7 @@ export default function CreateContestPage({
                 "rounded-xl p-4 shadow-lg border transition-colors duration-300",
                 isDark
                   ? "bg-[#180438] border-[#3A2C63]"
-                  : "bg-white border-slate-200"
+                  : "bg-white border-slate-200",
               )}
             >
               <div className="flex items-center justify-between mb-3">
@@ -8347,30 +8349,30 @@ export default function CreateContestPage({
                     {step === "basics"
                       ? "1"
                       : step === "brief"
-                      ? "2"
-                      : step === "resources"
-                      ? "3"
-                      : "4"}
+                        ? "2"
+                        : step === "resources"
+                          ? "3"
+                          : "4"}
                   </div>
                   <div>
                     <h3 className="font-semibold text-foreground">
                       {step === "basics"
                         ? "Get Started"
                         : step === "brief"
-                        ? "Create Brief"
-                        : step === "resources"
-                        ? "Resources"
-                        : "Prize"}
+                          ? "Create Brief"
+                          : step === "resources"
+                            ? "Resources"
+                            : "Prize"}
                     </h3>
                     <p className="text-xs text-muted-foreground">
                       Step{" "}
                       {step === "basics"
                         ? "1"
                         : step === "brief"
-                        ? "2"
-                        : step === "resources"
-                        ? "3"
-                        : "4"}{" "}
+                          ? "2"
+                          : step === "resources"
+                            ? "3"
+                            : "4"}{" "}
                       of 4
                     </p>
                   </div>
@@ -8381,13 +8383,13 @@ export default function CreateContestPage({
               <div
                 className={cn(
                   "h-2 rounded-full overflow-hidden transition-colors duration-300",
-                  isDark ? "bg-[#2D1B55]" : "bg-slate-200"
+                  isDark ? "bg-[#2D1B55]" : "bg-slate-200",
                 )}
               >
                 <div
                   className={cn(
                     "h-full rounded-full transition-all duration-500",
-                    isDark ? "bg-[#9C7BFF]" : "bg-[#7F39EC]"
+                    isDark ? "bg-[#9C7BFF]" : "bg-[#7F39EC]",
                   )}
                   style={{ width: `${mobileProgressPercent}%` }}
                 />
@@ -8408,13 +8410,13 @@ export default function CreateContestPage({
                 "p-6 border-b rounded-tl-xl rounded-tr-xl shadow-xl space-y-6",
                 isDark
                   ? "bg-[#180438] border-gray-600"
-                  : "bg-white border-[#D0D0D0]"
+                  : "bg-white border-[#D0D0D0]",
               )}
             >
               <h2
                 className={cn(
                   "font-semibold text-2xl ",
-                  isDark ? "text-white" : "text-purple-600"
+                  isDark ? "text-white" : "text-purple-600",
                 )}
               >
                 Customize your Contest
@@ -8423,7 +8425,7 @@ export default function CreateContestPage({
             <div
               className={cn(
                 "space-y-6 p-6 rounded-bl-xl rounded-br-xl shadow-xl",
-                isDark ? "bg-[#180438]" : "bg-white"
+                isDark ? "bg-[#180438]" : "bg-white",
               )}
             >
               {/* Removed general validationError Alert from CardContent */}
@@ -8440,7 +8442,7 @@ export default function CreateContestPage({
                     className={cn(
                       "flex-1 justify-center",
                       contestFormat === "text_image" &&
-                        "bg-[#7F39EC] text-white"
+                        "bg-[#7F39EC] text-white",
                     )}
                     onClick={() => {
                       setContestFormat("text_image");
@@ -8459,7 +8461,7 @@ export default function CreateContestPage({
                     variant={contestFormat === "video" ? "default" : "outline"}
                     className={cn(
                       "flex-1 justify-center",
-                      contestFormat === "video" && "bg-[#7F39EC] text-white"
+                      contestFormat === "video" && "bg-[#7F39EC] text-white",
                     )}
                     onClick={() => {
                       setContestFormat("video");
@@ -8522,7 +8524,7 @@ export default function CreateContestPage({
                       planFeatures.contestTypes &&
                       planFeatures.contestTypes.includes("cpm");
                     const currentPlan = dbSubscriptionPlans.find(
-                      (p) => p.id === userPlan
+                      (p) => p.id === userPlan,
                     );
                     const isFreePlan = !currentPlan || currentPlan.price === 0;
 
@@ -8572,7 +8574,7 @@ export default function CreateContestPage({
                               <button
                                 className={cn(
                                   "text-white text-md px-3 rounded-full py-1 h-8",
-                                  isDark ? "bg-[#7F39EC]" : "bg-[#4A00BE]"
+                                  isDark ? "bg-[#7F39EC]" : "bg-[#4A00BE]",
                                 )}
                               >
                                 Coming Soon
@@ -8580,7 +8582,7 @@ export default function CreateContestPage({
                               <p
                                 className={cn(
                                   "text-sm font-medium",
-                                  isDark ? "text-white" : "text-black"
+                                  isDark ? "text-white" : "text-black",
                                 )}
                               >
                                 Not available for text/image contests
@@ -8593,7 +8595,7 @@ export default function CreateContestPage({
                                 <button
                                   className={cn(
                                     "text-white text-md px-3 rounded-full py-1 h-8",
-                                    isDark ? "bg-[#7F39EC]" : "bg-[#4A00BE]"
+                                    isDark ? "bg-[#7F39EC]" : "bg-[#4A00BE]",
                                   )}
                                 >
                                   <Link href="/dashboard/billing?tab=subscription">
@@ -8604,7 +8606,7 @@ export default function CreateContestPage({
                               <p
                                 className={cn(
                                   "text-sm font-medium",
-                                  isDark ? "text-white" : "text-black"
+                                  isDark ? "text-white" : "text-black",
                                 )}
                               >
                                 Available in paid plans only
@@ -8631,7 +8633,7 @@ export default function CreateContestPage({
                   id="title"
                   value={title}
                   className={cn(
-                    isDark ? "bg-[#180438] border border-gray-600" : "bg-white"
+                    isDark ? "bg-[#180438] border border-gray-600" : "bg-white",
                   )}
                   onChange={(e) => {
                     setTitle(e.target.value);
@@ -8663,7 +8665,7 @@ export default function CreateContestPage({
                     className={cn(
                       isDark
                         ? "bg-[#180438] border border-gray-600"
-                        : "bg-white"
+                        : "bg-white",
                     )}
                   >
                     <SelectValue placeholder="Select contest platform" />
@@ -8680,6 +8682,9 @@ export default function CreateContestPage({
                         </SelectItem>
                         <SelectItem isDark={isDark} value="instagram">
                           Instagram
+                        </SelectItem>
+                        <SelectItem isDark={isDark} value="tiktok">
+                          TikTok
                         </SelectItem>
                       </>
                     )}
@@ -8700,7 +8705,7 @@ export default function CreateContestPage({
                   <SelectTrigger
                     id="contentType"
                     className={cn(
-                      isDark ? "border-gray-600" : "border-gray-300"
+                      isDark ? "border-gray-600" : "border-gray-300",
                     )}
                   >
                     <SelectValue placeholder="Select content type (optional)" />
@@ -8742,7 +8747,7 @@ export default function CreateContestPage({
                   "space-y-4 p-4 border rounded-lg",
                   isDark
                     ? "bg-[#C9A7FF26] border border-[#C9A7FF]"
-                    : "bg-gray-50"
+                    : "bg-gray-50",
                 )}
               >
                 <div className="flex items-center justify-between">
@@ -8756,7 +8761,7 @@ export default function CreateContestPage({
                     <p
                       className={cn(
                         "text-sm mt-1",
-                        isDark ? "text-gray-300" : "text-gray-600"
+                        isDark ? "text-gray-300" : "text-gray-600",
                       )}
                     >
                       Allow creators to submit multiple entries to this contest
@@ -8776,7 +8781,7 @@ export default function CreateContestPage({
                       }}
                       className={cn(
                         "border h-5 w-5",
-                        isDark ? "border-gray-300" : "border-gray-500"
+                        isDark ? "border-gray-300" : "border-gray-500",
                       )}
                     />
                   </div>
@@ -8802,7 +8807,7 @@ export default function CreateContestPage({
                       className={cn(
                         isDark
                           ? "bg-[#C9A7FF26] border border-gray-400 text-white"
-                          : "bg-white text-black"
+                          : "bg-white text-black",
                       )}
                       placeholder="Enter number between 2-100"
                     />
@@ -8825,7 +8830,7 @@ export default function CreateContestPage({
                     className={cn(
                       isDark
                         ? "bg-[#180438] border border-gray-600"
-                        : "bg-white"
+                        : "bg-white",
                     )}
                   >
                     <SelectValue placeholder="Select category" />
@@ -8915,14 +8920,14 @@ export default function CreateContestPage({
                     className={cn(
                       isDark
                         ? "border-gray-400 data-[state=checked]:bg-purple-600 data-[state=checked]:text-white"
-                        : "border-gray-400 data-[state=checked]:bg-purple-600"
+                        : "border-gray-400 data-[state=checked]:bg-purple-600",
                     )}
                   />
                   <label
                     htmlFor="show-targeting-sections"
                     className={cn(
                       "text-sm font-medium cursor-pointer",
-                      isDark ? "text-gray-300" : "text-gray-700"
+                      isDark ? "text-gray-300" : "text-gray-700",
                     )}
                   >
                     Target specific creators by selecting categories,
@@ -8944,14 +8949,14 @@ export default function CreateContestPage({
                         "rounded-lg border",
                         isDark
                           ? "bg-[#180438] border-gray-300"
-                          : "bg-white border-gray-300"
+                          : "bg-white border-gray-300",
                       )}
                     >
                       <div className="relative">
                         <CollapsibleTrigger
                           className={cn(
                             "w-full flex items-center justify-between p-4 pr-12 hover:bg-opacity-80 transition-colors",
-                            isDark ? "" : "hover:bg-gray-50"
+                            isDark ? "" : "hover:bg-gray-50",
                           )}
                         >
                           <div className="flex items-center gap-2">
@@ -8967,7 +8972,7 @@ export default function CreateContestPage({
                                   "text-xs px-2 py-0.5 rounded-full",
                                   isDark
                                     ? "bg-purple-600 text-white"
-                                    : "bg-purple-100 text-purple-700"
+                                    : "bg-purple-100 text-purple-700",
                                 )}
                               >
                                 {contestCategories.length} selected
@@ -8988,7 +8993,7 @@ export default function CreateContestPage({
                             className={cn(
                               isDark
                                 ? "border-gray-400 data-[state=checked]:bg-purple-600 data-[state=checked]:text-white"
-                                : "border-gray-400 data-[state=checked]:bg-purple-600"
+                                : "border-gray-400 data-[state=checked]:bg-purple-600",
                             )}
                           />
                         </div>
@@ -8997,7 +9002,7 @@ export default function CreateContestPage({
                         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                           {CONTENT_TYPE_CATEGORIES.map((cat) => {
                             const isChecked = contestCategories.includes(
-                              cat.id
+                              cat.id,
                             );
                             return (
                               <div
@@ -9020,21 +9025,21 @@ export default function CreateContestPage({
                                           (subcategory) => ({
                                             category: cat.id,
                                             subcategory: subcategory,
-                                          })
+                                          }),
                                         );
                                       // Add subcategories that aren't already in the list
                                       setContestSubcategories((prev) => {
                                         const existing = new Set(
                                           prev.map(
                                             (item) =>
-                                              `${item.category}:${item.subcategory}`
-                                          )
+                                              `${item.category}:${item.subcategory}`,
+                                          ),
                                         );
                                         const toAdd = newSubcategories.filter(
                                           (item) =>
                                             !existing.has(
-                                              `${item.category}:${item.subcategory}`
-                                            )
+                                              `${item.category}:${item.subcategory}`,
+                                            ),
                                         );
                                         return [...prev, ...toAdd];
                                       });
@@ -9042,27 +9047,27 @@ export default function CreateContestPage({
                                       // Remove category and all its subcategories
                                       setContestCategories(
                                         contestCategories.filter(
-                                          (id) => id !== cat.id
-                                        )
+                                          (id) => id !== cat.id,
+                                        ),
                                       );
                                       setContestSubcategories(
                                         contestSubcategories.filter(
-                                          (item) => item.category !== cat.id
-                                        )
+                                          (item) => item.category !== cat.id,
+                                        ),
                                       );
                                     }
                                   }}
                                   className={cn(
                                     isDark
                                       ? "border-gray-400 data-[state=checked]:bg-purple-600 data-[state=checked]:text-white"
-                                      : "border-gray-400 data-[state=checked]:bg-purple-600"
+                                      : "border-gray-400 data-[state=checked]:bg-purple-600",
                                   )}
                                 />
                                 <label
                                   htmlFor={`contest-category-${cat.id}`}
                                   className={cn(
                                     "text-sm font-normal cursor-pointer",
-                                    isDark ? "text-gray-300" : "text-gray-700"
+                                    isDark ? "text-gray-300" : "text-gray-700",
                                   )}
                                 >
                                   {cat.name}
@@ -9094,7 +9099,7 @@ export default function CreateContestPage({
                                 "h-7 px-2 text-xs",
                                 isDark
                                   ? "border-gray-400 text-gray-300"
-                                  : "border-gray-400 text-gray-700 hover:bg-gray-100"
+                                  : "border-gray-400 text-gray-700 hover:bg-gray-100",
                               )}
                             >
                               <RotateCcw className="h-3 w-3" />
@@ -9120,14 +9125,14 @@ export default function CreateContestPage({
                         "rounded-lg border",
                         isDark
                           ? "bg-[#180438] border-gray-300"
-                          : "bg-white border-gray-300"
+                          : "bg-white border-gray-300",
                       )}
                     >
                       <div className="relative">
                         <CollapsibleTrigger
                           className={cn(
                             "w-full flex items-center justify-between p-4 pr-12 hover:bg-opacity-80 transition-colors",
-                            isDark ? "" : "hover:bg-gray-50"
+                            isDark ? "" : "hover:bg-gray-50",
                           )}
                         >
                           <div className="flex items-center gap-2">
@@ -9140,7 +9145,7 @@ export default function CreateContestPage({
                                   "text-xs px-2 py-0.5 rounded-full",
                                   isDark
                                     ? "bg-purple-600 text-white"
-                                    : "bg-purple-100 text-purple-700"
+                                    : "bg-purple-100 text-purple-700",
                                 )}
                               >
                                 {contestSubcategories.length} selected
@@ -9161,7 +9166,7 @@ export default function CreateContestPage({
                             className={cn(
                               isDark
                                 ? "border-gray-400 data-[state=checked]:bg-purple-600 data-[state=checked]:text-white"
-                                : "border-gray-400 data-[state=checked]:bg-purple-600"
+                                : "border-gray-400 data-[state=checked]:bg-purple-600",
                             )}
                           />
                         </div>
@@ -9172,7 +9177,7 @@ export default function CreateContestPage({
                             // Get selected subcategories for this category
                             const selectedSubcategoriesForCategory =
                               contestSubcategories.filter(
-                                (item) => item.category === category.id
+                                (item) => item.category === category.id,
                               );
                             const selectedCount =
                               selectedSubcategoriesForCategory.length;
@@ -9186,7 +9191,7 @@ export default function CreateContestPage({
                                 <AccordionTrigger
                                   className={cn(
                                     "text-sm font-medium hover:no-underline py-3",
-                                    isDark ? "text-gray-300" : "text-gray-700"
+                                    isDark ? "text-gray-300" : "text-gray-700",
                                   )}
                                 >
                                   <div className="flex items-center gap-2">
@@ -9197,7 +9202,7 @@ export default function CreateContestPage({
                                           "text-xs px-2 py-0.5 rounded-full",
                                           isDark
                                             ? "bg-purple-600 text-white"
-                                            : "bg-purple-100 text-purple-700"
+                                            : "bg-purple-100 text-purple-700",
                                         )}
                                       >
                                         {selectedCount} selected
@@ -9213,7 +9218,7 @@ export default function CreateContestPage({
                                           contestSubcategories.some(
                                             (item) =>
                                               item.category === category.id &&
-                                              item.subcategory === subcategory
+                                              item.subcategory === subcategory,
                                           );
                                         return (
                                           <div
@@ -9242,15 +9247,15 @@ export default function CreateContestPage({
                                                             category.id &&
                                                           item.subcategory ===
                                                             subcategory
-                                                        )
-                                                    )
+                                                        ),
+                                                    ),
                                                   );
                                                 }
                                               }}
                                               className={cn(
                                                 isDark
                                                   ? "border-gray-400 data-[state=checked]:bg-purple-600 data-[state=checked]:text-white"
-                                                  : "border-gray-400 data-[state=checked]:bg-purple-600"
+                                                  : "border-gray-400 data-[state=checked]:bg-purple-600",
                                               )}
                                             />
                                             <label
@@ -9259,14 +9264,14 @@ export default function CreateContestPage({
                                                 "text-sm font-normal cursor-pointer",
                                                 isDark
                                                   ? "text-gray-300"
-                                                  : "text-gray-700"
+                                                  : "text-gray-700",
                                               )}
                                             >
                                               {subcategory}
                                             </label>
                                           </div>
                                         );
-                                      }
+                                      },
                                     )}
                                   </div>
                                 </AccordionContent>
@@ -9295,7 +9300,7 @@ export default function CreateContestPage({
                                 "h-7 px-2 text-xs",
                                 isDark
                                   ? "border-gray-400 text-gray-300"
-                                  : "border-gray-400 text-gray-700 hover:bg-gray-100"
+                                  : "border-gray-400 text-gray-700 hover:bg-gray-100",
                               )}
                             >
                               <RotateCcw className="h-3 w-3" />
@@ -9321,14 +9326,14 @@ export default function CreateContestPage({
                         "rounded-lg border",
                         isDark
                           ? "bg-[#180438] border-gray-300"
-                          : "bg-white border-gray-300"
+                          : "bg-white border-gray-300",
                       )}
                     >
                       <div className="relative">
                         <CollapsibleTrigger
                           className={cn(
                             "w-full flex items-center justify-between p-4 pr-12 hover:bg-opacity-80 transition-colors",
-                            isDark ? "" : "hover:bg-gray-50"
+                            isDark ? "" : "hover:bg-gray-50",
                           )}
                         >
                           <div className="flex items-center gap-2">
@@ -9341,7 +9346,7 @@ export default function CreateContestPage({
                                   "text-xs px-2 py-0.5 rounded-full",
                                   isDark
                                     ? "bg-purple-600 text-white"
-                                    : "bg-purple-100 text-purple-700"
+                                    : "bg-purple-100 text-purple-700",
                                 )}
                               >
                                 {contestInterests.length} selected
@@ -9362,7 +9367,7 @@ export default function CreateContestPage({
                             className={cn(
                               isDark
                                 ? "border-gray-400 data-[state=checked]:bg-purple-600 data-[state=checked]:text-white"
-                                : "border-gray-400 data-[state=checked]:bg-purple-600"
+                                : "border-gray-400 data-[state=checked]:bg-purple-600",
                             )}
                           />
                         </div>
@@ -9390,22 +9395,22 @@ export default function CreateContestPage({
                                     } else {
                                       setContestInterests(
                                         contestInterests.filter(
-                                          (item) => item !== interest
-                                        )
+                                          (item) => item !== interest,
+                                        ),
                                       );
                                     }
                                   }}
                                   className={cn(
                                     isDark
                                       ? "border-gray-400 data-[state=checked]:bg-purple-600 data-[state=checked]:text-white"
-                                      : "border-gray-400 data-[state=checked]:bg-purple-600"
+                                      : "border-gray-400 data-[state=checked]:bg-purple-600",
                                   )}
                                 />
                                 <label
                                   htmlFor={`contest-interest-${interest}`}
                                   className={cn(
                                     "text-sm font-normal cursor-pointer",
-                                    isDark ? "text-gray-300" : "text-gray-700"
+                                    isDark ? "text-gray-300" : "text-gray-700",
                                   )}
                                 >
                                   {interest}
@@ -9434,7 +9439,7 @@ export default function CreateContestPage({
                                 "h-7 px-2 text-xs",
                                 isDark
                                   ? "border-gray-400 text-gray-300"
-                                  : "border-gray-400 text-gray-700 hover:bg-gray-100"
+                                  : "border-gray-400 text-gray-700 hover:bg-gray-100",
                               )}
                             >
                               <RotateCcw className="h-3 w-3" />
@@ -9457,14 +9462,14 @@ export default function CreateContestPage({
                         "rounded-lg border",
                         isDark
                           ? "bg-[#180438] border-gray-300"
-                          : "bg-white border-gray-300"
+                          : "bg-white border-gray-300",
                       )}
                     >
                       <div className="relative">
                         <CollapsibleTrigger
                           className={cn(
                             "w-full flex items-center justify-between p-4 pr-12 hover:bg-opacity-80 transition-colors",
-                            isDark ? "" : "hover:bg-gray-50"
+                            isDark ? "" : "hover:bg-gray-50",
                           )}
                         >
                           <div className="flex items-center gap-2">
@@ -9489,7 +9494,7 @@ export default function CreateContestPage({
                                   "text-xs px-2 py-0.5 rounded-full",
                                   isDark
                                     ? "bg-purple-600 text-white"
-                                    : "bg-purple-100 text-purple-700"
+                                    : "bg-purple-100 text-purple-700",
                                 )}
                               >
                                 {selectedCountries.length} selected
@@ -9510,7 +9515,7 @@ export default function CreateContestPage({
                             className={cn(
                               isDark
                                 ? "border-gray-400 data-[state=checked]:bg-purple-600 data-[state=checked]:text-white"
-                                : "border-gray-400 data-[state=checked]:bg-purple-600"
+                                : "border-gray-400 data-[state=checked]:bg-purple-600",
                             )}
                           />
                         </div>
@@ -9524,7 +9529,7 @@ export default function CreateContestPage({
                               REGIONS_AND_COUNTRIES[regionKey];
                             if (!regionCountries) return null;
                             const countriesArray: string[] = Array.isArray(
-                              regionCountries
+                              regionCountries,
                             )
                               ? regionCountries.map((c) => String(c))
                               : [];
@@ -9532,7 +9537,7 @@ export default function CreateContestPage({
                               selectedRegions.includes(region);
                             const selectedCountriesInRegion =
                               countriesArray.filter((country) =>
-                                selectedCountries.includes(country)
+                                selectedCountries.includes(country),
                               );
                             const isPartiallySelected =
                               selectedCountriesInRegion.length > 0 &&
@@ -9552,13 +9557,13 @@ export default function CreateContestPage({
                                       onCheckedChange={(checked) => {
                                         handleRegionToggle(
                                           region,
-                                          checked as boolean
+                                          checked as boolean,
                                         );
                                       }}
                                       className={cn(
                                         isDark
                                           ? "border-gray-400 data-[state=checked]:bg-purple-600 data-[state=checked]:text-white"
-                                          : "border-gray-400 data-[state=checked]:bg-purple-600"
+                                          : "border-gray-400 data-[state=checked]:bg-purple-600",
                                       )}
                                     />
                                     <label
@@ -9567,7 +9572,7 @@ export default function CreateContestPage({
                                         "text-sm font-semibold cursor-pointer flex items-center gap-2",
                                         isDark
                                           ? "text-gray-300"
-                                          : "text-gray-700"
+                                          : "text-gray-700",
                                       )}
                                     >
                                       <span>{region}</span>
@@ -9577,7 +9582,7 @@ export default function CreateContestPage({
                                             "text-xs px-2 py-0.5 rounded-full",
                                             isDark
                                               ? "bg-purple-600 text-white"
-                                              : "bg-purple-100 text-purple-700"
+                                              : "bg-purple-100 text-purple-700",
                                           )}
                                         >
                                           {selectedCountriesInRegion.length}{" "}
@@ -9594,7 +9599,7 @@ export default function CreateContestPage({
                                       onClick={(e) => {
                                         e.stopPropagation();
                                         handleUncheckAllCountriesInRegion(
-                                          region
+                                          region,
                                         );
                                       }}
                                       disabled={isLoading}
@@ -9602,7 +9607,7 @@ export default function CreateContestPage({
                                         "h-7 px-2 text-xs",
                                         isDark
                                           ? "text-gray-400 hover:text-gray-300 hover:bg-gray-800"
-                                          : "text-gray-600 hover:text-gray-900 hover:bg-gray-100"
+                                          : "text-gray-600 hover:text-gray-900 hover:bg-gray-100",
                                       )}
                                     >
                                       Uncheck all
@@ -9626,13 +9631,13 @@ export default function CreateContestPage({
                                             onCheckedChange={(checked) => {
                                               handleCountryToggle(
                                                 country,
-                                                checked as boolean
+                                                checked as boolean,
                                               );
                                             }}
                                             className={cn(
                                               isDark
                                                 ? "border-gray-400 data-[state=checked]:bg-purple-600 data-[state=checked]:text-white"
-                                                : "border-gray-400 data-[state=checked]:bg-purple-600"
+                                                : "border-gray-400 data-[state=checked]:bg-purple-600",
                                             )}
                                           />
                                           <label
@@ -9641,7 +9646,7 @@ export default function CreateContestPage({
                                               "text-sm font-normal cursor-pointer",
                                               isDark
                                                 ? "text-gray-300"
-                                                : "text-gray-700"
+                                                : "text-gray-700",
                                             )}
                                           >
                                             {country}
@@ -9670,7 +9675,7 @@ export default function CreateContestPage({
                                 "h-7 px-2 text-xs",
                                 isDark
                                   ? "border-gray-400 text-gray-300"
-                                  : "border-gray-400 text-gray-700 hover:bg-gray-100"
+                                  : "border-gray-400 text-gray-700 hover:bg-gray-100",
                               )}
                             >
                               <RotateCcw className="h-3 w-3" />
@@ -9691,8 +9696,8 @@ export default function CreateContestPage({
                     isDragActive
                       ? "border-rose-500 bg-rose-50 dark:bg-rose-900/20"
                       : isDark
-                      ? "border-slate-600 bg-[#170337]"
-                      : "border-gray-300 bg-white"
+                        ? "border-slate-600 bg-[#170337]"
+                        : "border-gray-300 bg-white"
                   }`}
                   onClick={() => fileInputRef.current?.click()}
                   onDragOver={handleDragOver}
@@ -9708,7 +9713,7 @@ export default function CreateContestPage({
                         <div
                           className={cn(
                             "flex flex-col items-center justify-center h-64 rounded",
-                            isDark ? "bg-[#180438]" : "bg-gray-50"
+                            isDark ? "bg-[#180438]" : "bg-gray-50",
                           )}
                         >
                           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-rose-500 mb-2"></div>
@@ -9730,7 +9735,7 @@ export default function CreateContestPage({
                             : thumbnail?.name || "Saved thumbnail"}
                           {thumbnail?.size
                             ? ` · ${(thumbnail.size / (1024 * 1024)).toFixed(
-                                2
+                                2,
                               )}MB`
                             : ""}
                         </p>
@@ -9761,7 +9766,7 @@ export default function CreateContestPage({
                           "px-4 py-4 rounded-lg text-sm hover:text-white",
                           isDark
                             ? "bg-[#7F39EC] text-white"
-                            : "bg-[#4A00BE] text-white"
+                            : "bg-[#4A00BE] text-white",
                         )}
                         variant="outline"
                         size="sm"
@@ -9816,7 +9821,7 @@ export default function CreateContestPage({
                       "border font-semibold px-4 py-2 rounded-lg text-md",
                       isDark
                         ? "border-gray-300 text-gray-300"
-                        : "border-[#4A00BE] text-[#4A00BE]"
+                        : "border-[#4A00BE] text-[#4A00BE]",
                     )}
                     onClick={handleSaveDraft}
                     disabled={isLoading || !title.trim()}
@@ -9841,7 +9846,7 @@ export default function CreateContestPage({
                       isDark
                         ? "bg-[#7F39EC] text-white hover:bg-[#6B2FD6]"
                         : "bg-[#4A00BE] text-white hover:bg-[#3A00A0]",
-                      isLoading && "opacity-50 cursor-not-allowed"
+                      isLoading && "opacity-50 cursor-not-allowed",
                     )}
                     type="button"
                     onClick={nextStep}
@@ -9869,13 +9874,13 @@ export default function CreateContestPage({
                 "p-6 border-b rounded-t-xl shadow-xl space-y-6",
                 isDark
                   ? "bg-[#180438] border-gray-600"
-                  : "border-[#D0D0D0] bg-white"
+                  : "border-[#D0D0D0] bg-white",
               )}
             >
               <h2
                 className={cn(
                   "font-semibold text-2xl ",
-                  isDark ? "text-white" : "text-purple-600"
+                  isDark ? "text-white" : "text-purple-600",
                 )}
               >
                 Project Overview
@@ -9884,7 +9889,7 @@ export default function CreateContestPage({
             <CardContent
               className={cn(
                 "space-y-6 p-6 rounded-bl-xl rounded-br-xl shadow-xl",
-                isDark ? "bg-[#180438]" : "bg-white"
+                isDark ? "bg-[#180438]" : "bg-white",
               )}
             >
               {/* formFeedback display removed from CardContent for brief step, it's in the CardFooter */}
@@ -9915,7 +9920,7 @@ export default function CreateContestPage({
                 <p
                   className={cn(
                     "text-md",
-                    isDark ? "text-white" : "text-gray-600 dark:text-gray-400"
+                    isDark ? "text-white" : "text-gray-600 dark:text-gray-400",
                   )}
                 >
                   {platform === "twitter"
@@ -9927,13 +9932,13 @@ export default function CreateContestPage({
                   <div
                     className={cn(
                       "border rounded-lg p-4 min-h-[300px]",
-                      isDark ? "border-gray-600" : "border-gray-400"
+                      isDark ? "border-gray-600" : "border-gray-400",
                     )}
                   >
                     <h4
                       className={cn(
                         "text-sm font-medium mb-2",
-                        isDark ? "text-white" : "text-gray-600"
+                        isDark ? "text-white" : "text-gray-600",
                       )}
                     >
                       Preview:
@@ -9941,7 +9946,7 @@ export default function CreateContestPage({
                     <div
                       className={cn(
                         "prose prose-lg dark:prose-invert prose-headings:font-title font-default max-w-none",
-                        isDark ? "text-white" : "text-gray-600"
+                        isDark ? "text-white" : "text-gray-600",
                       )}
                       style={{
                         padding: "12px 15px",
@@ -9966,7 +9971,7 @@ export default function CreateContestPage({
                       onChange={(html: string, json: any) => {
                         console.log(
                           "Novel editor onChange - html:",
-                          html?.substring(0, 50)
+                          html?.substring(0, 50),
                         );
                         console.log("Novel editor onChange - json:", json);
                         setBrief(html); // Keep for backward compatibility
@@ -9990,7 +9995,7 @@ export default function CreateContestPage({
                       <p
                         className={cn(
                           "text-xs",
-                          isDark ? "text-gray-300" : "text-gray-500"
+                          isDark ? "text-gray-300" : "text-gray-500",
                         )}
                       >
                         Add search keywords and hashtags (e.g. product name,
@@ -10015,7 +10020,7 @@ export default function CreateContestPage({
                             className={cn(
                               isDark
                                 ? "bg-[#180438] border border-gray-600"
-                                : "bg-white"
+                                : "bg-white",
                             )}
                           />
                           {keywords.length > 1 && (
@@ -10025,7 +10030,7 @@ export default function CreateContestPage({
                               size="icon"
                               onClick={() => {
                                 const next = keywords.filter(
-                                  (_, i) => i !== index
+                                  (_, i) => i !== index,
                                 );
                                 setKeywords(next.length ? next : [""]);
                               }}
@@ -10045,7 +10050,7 @@ export default function CreateContestPage({
                         "mt-1 border-dashed",
                         isDark
                           ? "border-gray-500 text-gray-200"
-                          : "border-gray-400 text-gray-700"
+                          : "border-gray-400 text-gray-700",
                       )}
                       onClick={() => setKeywords([...keywords, ""])}
                     >
@@ -10057,7 +10062,7 @@ export default function CreateContestPage({
                       <p
                         className={cn(
                           "text-xs font-medium",
-                          isDark ? "text-gray-200" : "text-gray-700"
+                          isDark ? "text-gray-200" : "text-gray-700",
                         )}
                       >
                         How strict should keywords be?
@@ -10074,7 +10079,7 @@ export default function CreateContestPage({
                           <span
                             className={cn(
                               "leading-snug",
-                              isDark ? "text-gray-200" : "text-gray-700"
+                              isDark ? "text-gray-200" : "text-gray-700",
                             )}
                           >
                             All are mandatory
@@ -10085,7 +10090,7 @@ export default function CreateContestPage({
                           <span
                             className={cn(
                               "leading-snug",
-                              isDark ? "text-gray-200" : "text-gray-700"
+                              isDark ? "text-gray-200" : "text-gray-700",
                             )}
                           >
                             Any is acceptable
@@ -10104,7 +10109,7 @@ export default function CreateContestPage({
                       <p
                         className={cn(
                           "text-xs",
-                          isDark ? "text-gray-300" : "text-gray-500"
+                          isDark ? "text-gray-300" : "text-gray-500",
                         )}
                       >
                         Add up to 3 @mentions to track (e.g. @brandname,
@@ -10126,7 +10131,7 @@ export default function CreateContestPage({
                             className={cn(
                               isDark
                                 ? "bg-[#180438] border border-gray-600"
-                                : "bg-white"
+                                : "bg-white",
                             )}
                           />
                           {mentions.length > 1 && (
@@ -10136,7 +10141,7 @@ export default function CreateContestPage({
                               size="icon"
                               onClick={() => {
                                 const next = mentions.filter(
-                                  (_, i) => i !== index
+                                  (_, i) => i !== index,
                                 );
                                 setMentions(next.length ? next : [""]);
                               }}
@@ -10157,7 +10162,7 @@ export default function CreateContestPage({
                         mentions.length >= 3 && "opacity-50 cursor-not-allowed",
                         isDark
                           ? "border-gray-500 text-gray-200"
-                          : "border-gray-400 text-gray-700"
+                          : "border-gray-400 text-gray-700",
                       )}
                       disabled={mentions.length >= 3}
                       onClick={() => {
@@ -10174,7 +10179,7 @@ export default function CreateContestPage({
                       <p
                         className={cn(
                           "text-xs font-medium",
-                          isDark ? "text-gray-200" : "text-gray-700"
+                          isDark ? "text-gray-200" : "text-gray-700",
                         )}
                       >
                         How strict should mentions be?
@@ -10191,7 +10196,7 @@ export default function CreateContestPage({
                           <span
                             className={cn(
                               "leading-snug",
-                              isDark ? "text-gray-200" : "text-gray-700"
+                              isDark ? "text-gray-200" : "text-gray-700",
                             )}
                           >
                             All are mandatory
@@ -10202,7 +10207,7 @@ export default function CreateContestPage({
                           <span
                             className={cn(
                               "leading-snug",
-                              isDark ? "text-gray-200" : "text-gray-700"
+                              isDark ? "text-gray-200" : "text-gray-700",
                             )}
                           >
                             Any is acceptable
@@ -10223,7 +10228,7 @@ export default function CreateContestPage({
                       <p
                         className={cn(
                           "text-xs",
-                          isDark ? "text-gray-300" : "text-gray-500"
+                          isDark ? "text-gray-300" : "text-gray-500",
                         )}
                       >
                         Optional: Limit the maximum number of participants for
@@ -10237,14 +10242,14 @@ export default function CreateContestPage({
                       onChange={(e) => {
                         const value = e.target.value;
                         setMaxParticipants(
-                          value === "" ? "" : parseInt(value, 10)
+                          value === "" ? "" : parseInt(value, 10),
                         );
                       }}
                       placeholder="No limit (leave empty)"
                       className={cn(
                         isDark
                           ? "bg-[#180438] border border-gray-600"
-                          : "bg-white"
+                          : "bg-white",
                       )}
                     />
                   </div>
@@ -10275,7 +10280,7 @@ export default function CreateContestPage({
                 <p
                   className={cn(
                     "text-md",
-                    isDark ? "text-white" : "text-gray-600 dark:text-gray-400"
+                    isDark ? "text-white" : "text-gray-600 dark:text-gray-400",
                   )}
                 >
                   Define clear rules and guidelines for participants to follow
@@ -10286,13 +10291,13 @@ export default function CreateContestPage({
                   <div
                     className={cn(
                       "border rounded-lg p-4 min-h-[300px]",
-                      isDark ? "border-gray-600" : "border-gray-400"
+                      isDark ? "border-gray-600" : "border-gray-400",
                     )}
                   >
                     <h4
                       className={cn(
                         "text-sm font-medium mb-2",
-                        isDark ? "text-white" : "text-gray-600"
+                        isDark ? "text-white" : "text-gray-600",
                       )}
                     >
                       Preview:
@@ -10300,7 +10305,7 @@ export default function CreateContestPage({
                     <div
                       className={cn(
                         "prose prose-lg dark:prose-invert prose-headings:font-title font-default max-w-none",
-                        isDark ? "text-white" : "text-gray-600"
+                        isDark ? "text-white" : "text-gray-600",
                       )}
                       style={{
                         padding: "12px 15px",
@@ -10325,7 +10330,7 @@ export default function CreateContestPage({
                       onChange={(html: string, json: any) => {
                         console.log(
                           "Rules editor onChange - html:",
-                          html?.substring(0, 50)
+                          html?.substring(0, 50),
                         );
                         console.log("Rules editor onChange - json:", json);
                         setRulesHtml(html);
@@ -10362,7 +10367,7 @@ export default function CreateContestPage({
                     !(formFeedback && formFeedbackType === "error") &&
                       (isDark
                         ? "border-gray-300 text-gray-300"
-                        : "border-[#4A00BE] text-[#4A00BE]")
+                        : "border-[#4A00BE] text-[#4A00BE]"),
                   )}
                 >
                   Back
@@ -10379,7 +10384,7 @@ export default function CreateContestPage({
                       "mr-auto border font-semibold px-4 py-2 rounded-lg text-md",
                       isDark
                         ? "border-gray-300 text-gray-300"
-                        : "border-[#4A00BE] text-[#4A00BE]"
+                        : "border-[#4A00BE] text-[#4A00BE]",
                     )}
                     onClick={handleSaveDraft}
                     disabled={isLoading || !title.trim()}
@@ -10403,7 +10408,7 @@ export default function CreateContestPage({
                       "cursor-pointer px-8 py-2 rounded-lg text-md ",
                       isDark
                         ? "bg-[#7F39EC] text-white"
-                        : "bg-[#4A00BE] text-white"
+                        : "bg-[#4A00BE] text-white",
                     )}
                     type="button"
                     onClick={nextStep}
@@ -10433,13 +10438,13 @@ export default function CreateContestPage({
                   "px-6 py-4 border-b rounded-tl-xl rounded-tr-xl bg-white shadow-xl space-y-6",
                   isDark
                     ? "bg-[#180438] border-gray-600"
-                    : "bg-white border-[#D0D0D0]"
+                    : "bg-white border-[#D0D0D0]",
                 )}
               >
                 <h2
                   className={cn(
                     "font-semibold text-2xl ",
-                    isDark ? "text-white" : "text-purple-600"
+                    isDark ? "text-white" : "text-purple-600",
                   )}
                 >
                   Add Resources
@@ -10448,7 +10453,7 @@ export default function CreateContestPage({
               <div
                 className={cn(
                   "space-y-6 px-1 rounded-b-xl pb-5 shadow-xl",
-                  isDark ? "bg-[#180438]" : "bg-white"
+                  isDark ? "bg-[#180438]" : "bg-white",
                 )}
               >
                 <div className="px-6 pt-6">
@@ -10474,8 +10479,8 @@ export default function CreateContestPage({
                         isDragActive
                           ? "border-rose-500 bg-rose-50 dark:bg-rose-900/20"
                           : isDark
-                          ? "border-slate-600 bg-[#170337]"
-                          : "border-gray-300 bg-white"
+                            ? "border-slate-600 bg-[#170337]"
+                            : "border-gray-300 bg-white"
                       }`}
                       onClick={() => resourceFileRef.current?.click()}
                       onDragOver={handleDragOver}
@@ -10529,7 +10534,7 @@ export default function CreateContestPage({
                               </svg>
                             </span>
                           ) : /\.(mp4|mov|avi|webm)$/i.test(
-                              resourceFile.name
+                              resourceFile.name,
                             ) ? (
                             <span className="inline-block mr-2 align-middle">
                               <svg
@@ -10630,7 +10635,7 @@ export default function CreateContestPage({
                             <div className="text-xs text-gray-500">
                               {resourceFile.size >= 1024 * 1024
                                 ? (resourceFile.size / (1024 * 1024)).toFixed(
-                                    2
+                                    2,
                                   ) + " MB"
                                 : (resourceFile.size / 1024).toFixed(2) + " KB"}
                             </div>
@@ -10664,7 +10669,7 @@ export default function CreateContestPage({
                               "px-4 py-2 rounded-lg text-md",
                               isDark
                                 ? "bg-[#7F39EC] text-white"
-                                : "bg-[#4A00BE] text-white"
+                                : "bg-[#4A00BE] text-white",
                             )}
                             variant="outline"
                             size="sm"
@@ -10697,7 +10702,7 @@ export default function CreateContestPage({
                             className={cn(
                               isDark
                                 ? "bg-[#180438] border border-gray-600"
-                                : "bg-white"
+                                : "bg-white",
                             )}
                             value={resourceDescription}
                             onChange={(e) =>
@@ -10747,7 +10752,7 @@ export default function CreateContestPage({
                         className={cn(
                           isDark
                             ? "bg-[#180438] border border-gray-600"
-                            : "bg-white"
+                            : "bg-white",
                         )}
                       />
                     </div>
@@ -10765,7 +10770,7 @@ export default function CreateContestPage({
                         className={cn(
                           isDark
                             ? "bg-[#180438] border border-gray-600"
-                            : "bg-white"
+                            : "bg-white",
                         )}
                       />
                     </div>
@@ -10796,18 +10801,18 @@ export default function CreateContestPage({
                     <ul className="space-y-3">
                       {resources.map((resource, idx) => {
                         const isSupabaseUrl = resource.url.includes(
-                          "supabase.co/storage"
+                          "supabase.co/storage",
                         );
                         const isInternal = resource.type === "internal";
 
                         // File type detection using URL extension
                         const isImage =
                           /\.(jpg|jpeg|png|gif|jfif|webp)(\?|$)/i.test(
-                            resource.url
+                            resource.url,
                           );
                         const isPdf = /\.pdf(\?|$)/i.test(resource.url);
                         const isVideo = /\.(mp4|mov|avi|webm)(\?|$)/i.test(
-                          resource.url
+                          resource.url,
                         );
 
                         return (
@@ -10817,7 +10822,7 @@ export default function CreateContestPage({
                               "flex items-center gap-3 border rounded-lg p-4",
                               isDark
                                 ? "bg-[#180438] border border-gray-600"
-                                : " bg-white border-gray-300"
+                                : " bg-white border-gray-300",
                             )}
                           >
                             {isInternal && isImage && !isPdf && (
@@ -10965,7 +10970,7 @@ export default function CreateContestPage({
                                   "rounded-full flex items-center justify-center w-12 h-12",
                                   isDark
                                     ? "bg-[#FFFFFF36] text-white"
-                                    : "text-[#4A00BE] bg-[#D8C3FF]"
+                                    : "text-[#4A00BE] bg-[#D8C3FF]",
                                 )}
                               >
                                 <ExternalLink className="w-6 h-6" />
@@ -10978,7 +10983,7 @@ export default function CreateContestPage({
                               <div
                                 className={cn(
                                   "text-xs mt-1",
-                                  isDark ? "text-white" : "text-gray-700"
+                                  isDark ? "text-white" : "text-gray-700",
                                 )}
                               >
                                 {resource.type === "internal"
@@ -10992,7 +10997,9 @@ export default function CreateContestPage({
                                   rel="noopener noreferrer"
                                   className={cn(
                                     "text-sm hover:underline break-all",
-                                    isDark ? "text-purple-400" : "text-blue-600"
+                                    isDark
+                                      ? "text-purple-400"
+                                      : "text-blue-600",
                                   )}
                                 >
                                   {resource.url}
@@ -11035,7 +11042,7 @@ export default function CreateContestPage({
                                 "p-3 rounded-full flex-shrink-0 self-end sm:self-auto mr-2",
                                 isDark
                                   ? "bg-[#FFFFFF36] text-white"
-                                  : "text-[#4A00BE] bg-[#D8C3FF]"
+                                  : "text-[#4A00BE] bg-[#D8C3FF]",
                               )}
                             >
                               <Trash className="h-4 w-4" />
@@ -11075,7 +11082,7 @@ export default function CreateContestPage({
                             className={cn(
                               isDark
                                 ? "bg-[#180438] border border-gray-600"
-                                : "bg-white"
+                                : "bg-white",
                             )}
                             onChange={(e) => {
                               const url = e.target.value;
@@ -11105,7 +11112,7 @@ export default function CreateContestPage({
                             className={cn(
                               isDark
                                 ? "bg-[#180438] border border-gray-600"
-                                : "bg-white"
+                                : "bg-white",
                             )}
                             onChange={(e) => {
                               const description = e.target.value;
@@ -11146,7 +11153,7 @@ export default function CreateContestPage({
                               "mb-3",
                               isDark
                                 ? "bg-[#180438] border border-gray-600"
-                                : "bg-white"
+                                : "bg-white",
                             )}
                             onChange={(e) =>
                               setNewInspirationUrl(e.target.value)
@@ -11167,7 +11174,7 @@ export default function CreateContestPage({
                               "mb-4",
                               isDark
                                 ? "bg-[#180438] border border-gray-600"
-                                : "bg-white"
+                                : "bg-white",
                             )}
                             onChange={(e) =>
                               setNewInspirationDescription(e.target.value)
@@ -11179,7 +11186,7 @@ export default function CreateContestPage({
                               "w-full py-6 text-md",
                               isDark
                                 ? "bg-[#6C43D0] hover:bg-[#6C43D0]"
-                                : "bg-[#4A00BE] hover:bg-[#4A00BE]"
+                                : "bg-[#4A00BE] hover:bg-[#4A00BE]",
                             )}
                             onClick={addInspiration}
                             disabled={
@@ -11203,7 +11210,7 @@ export default function CreateContestPage({
                                   "flex items-center gap-3 border rounded-lg p-4",
                                   isDark
                                     ? "bg-[#180438] border border-gray-600"
-                                    : " bg-white border-gray-300"
+                                    : " bg-white border-gray-300",
                                 )}
                               >
                                 <div
@@ -11211,7 +11218,7 @@ export default function CreateContestPage({
                                     "rounded-full flex items-center justify-center w-12 h-12",
                                     isDark
                                       ? "bg-[#FFFFFF36] text-white"
-                                      : "text-[#4A00BE] bg-[#D8C3FF]"
+                                      : "text-[#4A00BE] bg-[#D8C3FF]",
                                   )}
                                 >
                                   <ExternalLink className="w-6 h-6" />
@@ -11226,7 +11233,7 @@ export default function CreateContestPage({
                                       "font-medium hover:underline break-all",
                                       isDark
                                         ? "text-purple-400"
-                                        : "text-blue-600"
+                                        : "text-blue-600",
                                     )}
                                   >
                                     {item.url}
@@ -11241,7 +11248,7 @@ export default function CreateContestPage({
                                     "p-3 rounded-full flex-shrink-0 self-end sm:self-auto mr-2",
                                     isDark
                                       ? "bg-[#FFFFFF36] text-white"
-                                      : "text-[#4A00BE] bg-[#D8C3FF]"
+                                      : "text-[#4A00BE] bg-[#D8C3FF]",
                                   )}
                                 >
                                   <Trash className="h-4 w-4" />
@@ -11262,7 +11269,7 @@ export default function CreateContestPage({
                       <p
                         className={cn(
                           "text-sm",
-                          isDark ? "text-gray-300" : "text-gray-500"
+                          isDark ? "text-gray-300" : "text-gray-500",
                         )}
                       >
                         Set soft targets for engagement on the target tweet.
@@ -11278,7 +11285,7 @@ export default function CreateContestPage({
                             onChange={(e) => {
                               const v = e.target.value;
                               setTargetLikes(
-                                v === "" ? "" : Math.max(0, Number(v) || 0)
+                                v === "" ? "" : Math.max(0, Number(v) || 0),
                               );
                             }}
                             placeholder="e.g. 500"
@@ -11286,7 +11293,7 @@ export default function CreateContestPage({
                               "text-sm",
                               isDark
                                 ? "bg-[#180438] border border-gray-600"
-                                : "bg-white"
+                                : "bg-white",
                             )}
                           />
                         </div>
@@ -11300,7 +11307,7 @@ export default function CreateContestPage({
                             onChange={(e) => {
                               const v = e.target.value;
                               setTargetReplies(
-                                v === "" ? "" : Math.max(0, Number(v) || 0)
+                                v === "" ? "" : Math.max(0, Number(v) || 0),
                               );
                             }}
                             placeholder="e.g. 100"
@@ -11308,7 +11315,7 @@ export default function CreateContestPage({
                               "text-sm",
                               isDark
                                 ? "bg-[#180438] border border-gray-600"
-                                : "bg-white"
+                                : "bg-white",
                             )}
                           />
                         </div>
@@ -11324,7 +11331,7 @@ export default function CreateContestPage({
                             onChange={(e) => {
                               const v = e.target.value;
                               setTargetRetweets(
-                                v === "" ? "" : Math.max(0, Number(v) || 0)
+                                v === "" ? "" : Math.max(0, Number(v) || 0),
                               );
                             }}
                             placeholder="e.g. 200"
@@ -11332,7 +11339,7 @@ export default function CreateContestPage({
                               "text-sm",
                               isDark
                                 ? "bg-[#180438] border border-gray-600"
-                                : "bg-white"
+                                : "bg-white",
                             )}
                           />
                         </div>
@@ -11348,7 +11355,7 @@ export default function CreateContestPage({
                             onChange={(e) => {
                               const v = e.target.value;
                               setTargetQuoteReposts(
-                                v === "" ? "" : Math.max(0, Number(v) || 0)
+                                v === "" ? "" : Math.max(0, Number(v) || 0),
                               );
                             }}
                             placeholder="e.g. 50"
@@ -11356,7 +11363,7 @@ export default function CreateContestPage({
                               "text-sm",
                               isDark
                                 ? "bg-[#180438] border border-gray-600"
-                                : "bg-white"
+                                : "bg-white",
                             )}
                           />
                         </div>
@@ -11376,14 +11383,14 @@ export default function CreateContestPage({
                             "w-full text-left flex items-center justify-between rounded-lg border px-4 py-3 text-md font-semibold transition",
                             isDark
                               ? "border-gray-500"
-                              : "border-gray-400 hover:bg-accent/50"
+                              : "border-gray-400 hover:bg-accent/50",
                           )}
                         >
                           <span>Tracking Links</span>
                           <span
                             className={cn(
                               "text-sm font-normal",
-                              isDark ? "text-gray-300" : "text-gray-600"
+                              isDark ? "text-gray-300" : "text-gray-600",
                             )}
                           >
                             {trackingLinksOpen ? "Hide" : "Show"}
@@ -11410,7 +11417,7 @@ export default function CreateContestPage({
                               className={cn(
                                 isDark
                                   ? "bg-[#180438] border border-gray-600 text-white"
-                                  : "bg-white text-black"
+                                  : "bg-white text-black",
                               )}
                             />
                           </div>
@@ -11428,7 +11435,7 @@ export default function CreateContestPage({
                               className={cn(
                                 isDark
                                   ? "bg-[#180438] border border-gray-600 text-white"
-                                  : "bg-white text-black"
+                                  : "bg-white text-black",
                               )}
                             />
                           </div>
@@ -11442,7 +11449,7 @@ export default function CreateContestPage({
                               "w-full py-6 text-md",
                               isDark
                                 ? "bg-[#6C43D0] hover:bg-[#6C43D0]"
-                                : "bg-[#4A00BE] hover:bg-[#4A00BE]"
+                                : "bg-[#4A00BE] hover:bg-[#4A00BE]",
                             )}
                           >
                             Add Tracking Link
@@ -11456,7 +11463,7 @@ export default function CreateContestPage({
                                     "flex items-center gap-3 rounded-lg p-4 border shadow-sm",
                                     isDark
                                       ? "border-gray-600"
-                                      : "border-gray-300"
+                                      : "border-gray-300",
                                   )}
                                 >
                                   <div
@@ -11464,7 +11471,7 @@ export default function CreateContestPage({
                                       "rounded-full flex items-center justify-center w-12 h-12 mr-2",
                                       isDark
                                         ? "bg-[#FFFFFF36] text-white"
-                                        : "text-[#4A00BE] bg-[#D8C3FF]"
+                                        : "text-[#4A00BE] bg-[#D8C3FF]",
                                     )}
                                   >
                                     <ExternalLink className="w-6 h-6" />
@@ -11476,8 +11483,8 @@ export default function CreateContestPage({
                                           ? item.url.replace(
                                               /\[creator\]/gi,
                                               encodeURIComponent(
-                                                currentUserFirstName
-                                              )
+                                                currentUserFirstName,
+                                              ),
                                             )
                                           : item.url
                                       }
@@ -11487,20 +11494,20 @@ export default function CreateContestPage({
                                         "font-medium hover:underline break-all",
                                         isDark
                                           ? "text-purple-400"
-                                          : "text-blue-600"
+                                          : "text-blue-600",
                                       )}
                                     >
                                       {item.url.includes("[creator]")
                                         ? item.url.replace(
                                             /\[creator\]/gi,
-                                            currentUserFirstName
+                                            currentUserFirstName,
                                           )
                                         : item.url}
                                     </a>
                                     <div
                                       className={cn(
                                         "text-xs mt-1",
-                                        isDark ? "text-white" : "text-gray-600"
+                                        isDark ? "text-white" : "text-gray-600",
                                       )}
                                     >
                                       {item.description}
@@ -11512,7 +11519,7 @@ export default function CreateContestPage({
                                       "p-3 rounded-full flex-shrink-0 self-end sm:self-auto mr-2",
                                       isDark
                                         ? "bg-[#FFFFFF36] text-white"
-                                        : "text-[#4A00BE] bg-[#D8C3FF]"
+                                        : "text-[#4A00BE] bg-[#D8C3FF]",
                                     )}
                                   >
                                     <Trash className="h-4 w-4" />
@@ -11532,7 +11539,7 @@ export default function CreateContestPage({
                       "mr-auto border font-semibold px-4 py-2 rounded-lg text-md",
                       isDark
                         ? "text-white border-gray-400"
-                        : "border-[#4A00BE] text-[#4A00BE]"
+                        : "border-[#4A00BE] text-[#4A00BE]",
                     )}
                     type="button"
                     onClick={prevStep}
@@ -11547,7 +11554,7 @@ export default function CreateContestPage({
                           "mr-auto border font-semibold px-4 py-2 rounded-lg text-md",
                           isDark
                             ? "text-white border-gray-400"
-                            : "border-[#4A00BE] text-[#4A00BE]"
+                            : "border-[#4A00BE] text-[#4A00BE]",
                         )}
                         onClick={handleSaveDraft}
                         disabled={isLoading || !title.trim()}
@@ -11568,7 +11575,7 @@ export default function CreateContestPage({
                           "cursor-pointer px-8 py-2 rounded-lg text-md",
                           isDark
                             ? "bg-[#7F39EC] text-white"
-                            : "bg-[#4A00BE] text-white"
+                            : "bg-[#4A00BE] text-white",
                         )}
                         type="button"
                         onClick={nextStep}
@@ -11614,7 +11621,7 @@ export default function CreateContestPage({
         <div
           className={cn(
             "fixed inset-0 bg-black bg-opacity-65 flex items-center justify-center p-2 sm:p-4 z-50",
-            isDark ? "bg-[#100A33]" : "bg-black"
+            isDark ? "bg-[#100A33]" : "bg-black",
           )}
         >
           <div
@@ -11622,7 +11629,7 @@ export default function CreateContestPage({
               "rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto",
               isDark
                 ? "bg-[#06021D] border border-gray-800 text-white"
-                : "bg-white text-gray-900 "
+                : "bg-white text-gray-900 ",
             )}
           >
             <div className="p-6">
@@ -11687,7 +11694,7 @@ export default function CreateContestPage({
                     "w-full text-md rounded-full",
                     isDark
                       ? "py-3 border bg-[#06021D] border-[#FF5353] text-[#FF5353]"
-                      : "bg-[#FF323224] text-[#E50000] py-4"
+                      : "bg-[#FF323224] text-[#E50000] py-4",
                   )}
                   onClick={() => setShowPayment(false)}
                   disabled={isLoading}

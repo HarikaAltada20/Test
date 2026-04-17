@@ -507,41 +507,41 @@ export default function RatingsPage() {
 
 
       {/* Rating Overview Component */}
-      <div className="bg-white rounded-lg shadow-lg p-4 sm:p-6">
+      <div className={`${isDark ? "bg-[#170337]" : "bg-white"} rounded-lg shadow-lg p-4 sm:p-6`}>
         <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
 
           <div className="flex flex-col sm:flex-row sm:items-center gap-6">
             <div className="text-center">
               {statsLoading ? (
                 <div className="animate-pulse">
-                  <div className="text-6xl font-bold text-gray-300">0.0</div>
+                  <div className={`text-6xl font-bold ${isDark ? "text-gray-600" : "text-gray-300"}`}>0.0</div>
                   <div className="flex items-center justify-center mt-1">
                     {[1, 2, 3, 4, 5].map((star) => (
                       <Star
                         key={star}
-                        className="h-5 w-5 text-gray-300"
+                        className={`h-5 w-5 ${isDark ? "text-gray-600" : "text-gray-300"}`}
                       />
                     ))}
                   </div>
-                  <div className="text-sm text-gray-400 mt-1">Loading...</div>
+                  <div className={`text-sm ${isDark ? "text-gray-500" : "text-gray-400"} mt-1`}>Loading...</div>
                 </div>
               ) : ratingStats ? (
                 <>
-                  <div className="text-6xl font-bold text-gray-900">{ratingStats.averageRating}</div>
+                  <div className={`text-6xl font-bold ${isDark ? "text-white" : "text-gray-900"}`}>{ratingStats.averageRating}</div>
                   <div className="flex items-center justify-center mt-1">
                     {[1, 2, 3, 4, 5].map((star) => (
                       <Star
                         key={star}
                         className={`h-5 w-5 ${star <= Math.floor(ratingStats.averageRating) ? 'fill-green-500 text-green-500' :
-                          star === Math.ceil(ratingStats.averageRating) && ratingStats.averageRating % 1 !== 0 ? 'fill-green-500 text-green-500' : 'text-gray-300'
+                          star === Math.ceil(ratingStats.averageRating) && ratingStats.averageRating % 1 !== 0 ? 'fill-green-500 text-green-500' : (isDark ? 'text-gray-600' : 'text-gray-300')
                           }`}
                       />
                     ))}
                   </div>
-                  <div className="text-sm text-gray-600 mt-1">{ratingStats.totalReviews.toLocaleString()} reviews</div>
+                  <div className={`text-sm ${isDark ? "text-gray-400" : "text-gray-600"} mt-1`}>{ratingStats.totalReviews.toLocaleString()} reviews</div>
                 </>
               ) : (
-                <div className="text-6xl font-bold text-gray-900">0.0</div>
+                <div className={`text-6xl font-bold ${isDark ? "text-white" : "text-gray-900"}`}>0.0</div>
               )}
             </div>
 
@@ -550,9 +550,9 @@ export default function RatingsPage() {
               {statsLoading ? (
                 [5, 4, 3, 2, 1].map((rating) => (
                   <div key={rating} className="flex items-center space-x-2 animate-pulse">
-                    <span className="text-sm text-gray-600 w-6">{rating}</span>
-                    <div className="w-[clamp(160px,52vw,500px)] bg-gray-200 rounded-full h-2">
-                      <div className="bg-gray-300 h-2 rounded-full w-0" />
+                    <span className={`text-sm ${isDark ? "text-gray-400" : "text-gray-600"} w-6`}>{rating}</span>
+                    <div className={`w-[clamp(160px,52vw,500px)] ${isDark ? "bg-gray-700" : "bg-gray-200"} rounded-full h-2`}>
+                      <div className={`${isDark ? "bg-gray-600" : "bg-gray-300"} h-2 rounded-full w-0`} />
                     </div>
                   </div>
                 ))
@@ -561,14 +561,14 @@ export default function RatingsPage() {
                   const percentage = ratingStats.ratingPercentages[rating as keyof typeof ratingStats.ratingPercentages] || 0;
                   return (
                     <div key={rating} className="flex items-center space-x-2">
-                      <span className="text-sm text-gray-600 w-6">{rating}</span>
-                      <div className="w-[clamp(160px,52vw,500px)] bg-gray-200 rounded-full h-2">
+                      <span className={`text-sm ${isDark ? "text-gray-400" : "text-gray-600"} w-6`}>{rating}</span>
+                      <div className={`w-[clamp(160px,52vw,500px)] ${isDark ? "bg-gray-700" : "bg-gray-200"} rounded-full h-2`}>
                         <div
                           className="bg-green-500 h-2 rounded-full transition-all duration-500"
                           style={{ width: `${percentage}%` }}
                         />
                       </div>
-                      <span className="text-sm text-gray-500 w-12 text-right">
+                      <span className={`text-sm ${isDark ? "text-gray-500" : "text-gray-500"} w-12 text-right`}>
                         {percentage.toFixed(1)}%
                       </span>
                     </div>
@@ -577,8 +577,8 @@ export default function RatingsPage() {
               ) : (
                 [5, 4, 3, 2, 1].map((rating) => (
                   <div key={rating} className="flex items-center space-x-2">
-                    <span className="text-sm text-gray-600 w-6">{rating}</span>
-                    <div className="w-[clamp(160px,52vw,500px)] bg-gray-200 rounded-full h-2">
+                    <span className={`text-sm ${isDark ? "text-gray-400" : "text-gray-600"} w-6`}>{rating}</span>
+                    <div className={`w-[clamp(160px,52vw,500px)] ${isDark ? "bg-gray-700" : "bg-gray-200"} rounded-full h-2`}>
                       <div className="bg-green-500 h-2 rounded-full" style={{ width: '0%' }} />
                     </div>
                   </div>

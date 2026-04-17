@@ -8,24 +8,21 @@ import {
   isYouTubeShort,
   getDefaultAnalyticsStartDate,
 } from "@/lib/youtube-analytics";
+import { updateYouTubeCpmContestBudgets } from "@/lib/youtube-cpm-contest-budgets";
 
-// Type definition for the youtube_account JSON object
-type YouTubeAccount = {
-  access_token: string;
-  refresh_token: string;
-  expires_at: string; // ISO String timestamp
-  // Include other fields if they exist, though not strictly needed here
-};
+// youtube_account JSON from creator_profiles (tokens + channel fields)
+type YouTubeAccountJson = Record<string, any>;
 
 type SubmissionUpdate = {
   id: string;
   views: number;
   newOtherStats: any;
+  insightsStatus: "ok";
 };
 
 type TokenUpdate = {
   userId: string;
-  newAccountData: YouTubeAccount;
+  newAccountData: YouTubeAccountJson;
 };
 
 // Helper function to chunk array
@@ -37,163 +34,12 @@ const chunkArray = <T>(array: T[], size: number): T[][] =>
 const isTokenExpired = (expiresAt: string): boolean =>
   new Date(expiresAt) <= new Date();
 
-// Function to update budget spent for CPM contests
-async function updateCpmContestBudgets(
-  supabaseAdmin: any,
-  contestId?: string
-): Promise<void> {
-  try {
-    let contestsQuery = supabaseAdmin
-      .from("contests")
-      .select("id, contest_based_details, views_locked_at")
-      .eq("contest_type", "cpm")
-      .not("contest_based_details", "is", null)
-      .is("views_locked_at", null); // Only update contests that haven't been finalized
-
-    // If contest-specific, filter by contest ID
-    if (contestId) {
-      contestsQuery = contestsQuery.eq("id", contestId);
-    }
-
-    const { data: contests, error } = await contestsQuery;
-
-    if (error || !contests?.length) {
-      console.log("No CPM contests to update");
-      return;
-    }
-
-    for (const contest of contests) {
-      const cpmConfig = contest.contest_based_details?.cpm_contest;
-      if (!cpmConfig?.cpm_rate_usd) continue;
-
-      // Fetch contest details for cap
-      const { data: contestDetails } = await supabaseAdmin
-        .from("contests")
-        .select("max_earnings_per_creator")
-        .eq("id", contest.id)
-        .single();
-
-      const maxEarningsPerCreator =
-        contestDetails?.max_earnings_per_creator || null;
-
-      // Get submissions with payment status
-      const { data: submissions } = await supabaseAdmin
-        .from("submissions")
-        .select(
-          "views, creator_id, created_at, paid, bonus_paid, earnings, bonus_amount"
-        )
-        .eq("contest_id", contest.id)
-        .in("status", ["verified", "paid"])
-        .order("created_at", { ascending: true });
-
-      if (!submissions?.length) continue;
-
-      // Group by creator to respect earnings cap
-      const creatorEarnings = new Map<
-        string,
-        { cpmTotal: number; bonusTotal: number }
-      >();
-      const flatFeeBonus = cpmConfig.flat_fee_bonus || 0;
-      const flatFeeBonusCap = cpmConfig.flat_fee_bonus_cap || null;
-
-      // Track total bonus spending to apply cap (first-come-first-served)
-      let totalBonusSpentSoFar = 0;
-      const capInDollars = flatFeeBonusCap ? flatFeeBonusCap / 100 : null;
-
-      for (const sub of submissions) {
-        const creatorId = sub.creator_id;
-        if (!creatorEarnings.has(creatorId)) {
-          creatorEarnings.set(creatorId, { cpmTotal: 0, bonusTotal: 0 });
-        }
-
-        const creatorData = creatorEarnings.get(creatorId)!;
-
-        // Use actual paid earnings if paid, otherwise calculate expected
-        if (sub.paid && sub.earnings != null) {
-          // Use actual paid amount from database
-          creatorData.cpmTotal += sub.earnings / 100; // Convert cents to dollars
-        } else {
-          // Calculate expected CPM earnings for verified but unpaid submissions
-          let views = sub.views || 0;
-          if (cpmConfig.min_views && views < cpmConfig.min_views) views = 0;
-          if (cpmConfig.max_views && views > cpmConfig.max_views)
-            views = cpmConfig.max_views;
-
-          const submissionEarnings = (views * cpmConfig.cpm_rate_usd) / 1000;
-
-          // Apply creator cap if exists
-          if (maxEarningsPerCreator) {
-            const maxEarningsInDollars = maxEarningsPerCreator / 100;
-            const remainingCap = maxEarningsInDollars - creatorData.cpmTotal;
-            if (remainingCap > 0) {
-              creatorData.cpmTotal += Math.min(
-                submissionEarnings,
-                remainingCap
-              );
-            }
-          } else {
-            creatorData.cpmTotal += submissionEarnings;
-          }
-        }
-
-        // Use actual bonus amount if bonus_paid, otherwise calculate expected
-        // Apply cap during calculation (first-come-first-served)
-        if (sub.bonus_paid && sub.bonus_amount != null) {
-          // Use actual bonus amount from database
-          const actualBonus = sub.bonus_amount / 100;
-          creatorData.bonusTotal += actualBonus;
-          totalBonusSpentSoFar += actualBonus;
-        } else if (flatFeeBonus > 0) {
-          const bonusAmount = flatFeeBonus / 100;
-          // Check if adding this bonus would exceed the cap
-          if (
-            capInDollars === null ||
-            totalBonusSpentSoFar + bonusAmount <= capInDollars
-          ) {
-            creatorData.bonusTotal += bonusAmount;
-            totalBonusSpentSoFar += bonusAmount;
-          }
-          // If cap would be exceeded, this submission gets $0 bonus (cap reached)
-        }
-      }
-
-      // Sum up all creator earnings
-      let totalCPM = 0;
-      let totalBonus = 0;
-      for (const [_, earnings] of creatorEarnings) {
-        totalCPM += earnings.cpmTotal;
-        totalBonus += earnings.bonusTotal;
-      }
-
-      const totalSpent = totalCPM + totalBonus;
-
-      const now = new Date().toISOString();
-      await supabaseAdmin
-        .from("contests")
-        .update({
-          contest_based_details: {
-            ...contest.contest_based_details,
-            cpm_contest: {
-              ...cpmConfig,
-              budget_spent: Math.round(totalSpent * 100),
-            },
-          },
-          last_metrics_updated: now,
-          updated_at: now,
-        })
-        .eq("id", contest.id);
-    }
-  } catch (error) {
-    console.error("CPM budget update failed:", error);
-  }
-}
-
 // Refresh YouTube token if needed
 async function handleTokenRefresh(
   creator: any,
   tokenUpdates: TokenUpdate[]
 ): Promise<string | null> {
-  const account = creator.youtube_account as YouTubeAccount;
+  const account = creator.youtube_account as YouTubeAccountJson;
   if (!account?.refresh_token || !isTokenExpired(account.expires_at)) {
     return account.access_token;
   }
@@ -205,12 +51,21 @@ async function handleTokenRefresh(
       access_token: newTokens.access_token,
       expires_at: newTokens.expires_at,
       refresh_token: newTokens.refresh_token || account.refresh_token,
+      needs_reconnect: false,
     };
 
     tokenUpdates.push({ userId: creator.id, newAccountData });
     return newTokens.access_token;
   } catch (error) {
     console.error(`Token refresh failed for creator ${creator.id}:`, error);
+    tokenUpdates.push({
+      userId: creator.id,
+      newAccountData: {
+        ...account,
+        needs_reconnect: true,
+        updated_at: new Date().toISOString(),
+      },
+    });
     return null;
   }
 }
@@ -294,6 +149,7 @@ async function fetchYouTubeStats(
             id: sub.id,
             views: rawViews,
             newOtherStats: { youtube: cleanMetrics },
+            insightsStatus: "ok",
           });
         }
       }
@@ -324,6 +180,7 @@ async function batchUpdateDatabase(
       .update({
         views: update.views,
         other_stats: update.newOtherStats,
+        insights_status: update.insightsStatus,
         last_insights_update: now,
         updated_at: now,
       })
@@ -433,7 +290,7 @@ export async function GET(request: Request) {
 
     const creatorIds = Object.keys(submissionsByCreator);
     if (!creatorIds.length) {
-      await updateCpmContestBudgets(supabaseAdmin);
+      await updateYouTubeCpmContestBudgets(supabaseAdmin);
       return NextResponse.json({ message: "No valid video IDs found" });
     }
 
@@ -447,7 +304,7 @@ export async function GET(request: Request) {
     if (creatorsError)
       throw new Error(`Creator fetch failed: ${creatorsError.message}`);
     if (!creators?.length) {
-      await updateCpmContestBudgets(supabaseAdmin);
+      await updateYouTubeCpmContestBudgets(supabaseAdmin);
       return NextResponse.json({
         message: "No connected YouTube accounts found",
       });
@@ -475,7 +332,7 @@ export async function GET(request: Request) {
     await batchUpdateDatabase(supabaseAdmin, allUpdates, tokenUpdates);
 
     // Update CPM contest budgets
-    await updateCpmContestBudgets(
+    await updateYouTubeCpmContestBudgets(
       supabaseAdmin,
       isContestSpecific ? contestId : undefined
     );

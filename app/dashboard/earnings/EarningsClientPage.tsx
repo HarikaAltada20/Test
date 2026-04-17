@@ -1010,7 +1010,7 @@ export default function EarningsClientPage({
         tabs={tabs}
         activeTab={activeTab}
         onTabChange={setActiveTab}
-        className="md:mx-16 mt-10 mb-10"
+        className="mt-10 mb-10"
         isDark={isDark}
         light={!isDark}
       />

@@ -92,6 +92,25 @@ interface Submission {
   metadata?: any;
 }
 
+/** TikTok Display API uses *_count; older rows may only have views/likes/comments/shares. */
+function effectiveTikTokSubmissionViews(sub: Submission): number {
+  return Number(
+    (sub.other_stats?.tiktok as Record<string, unknown> | undefined)
+      ?.view_count ??
+      (sub.other_stats?.tiktok as Record<string, unknown> | undefined)
+        ?.views ??
+      sub.views ??
+      0,
+  );
+}
+
+function effectiveSubmissionViewsForSort(sub: Submission): number {
+  if ((sub.platform || "").toLowerCase().includes("tiktok")) {
+    return effectiveTikTokSubmissionViews(sub);
+  }
+  return Number(sub.views ?? 0);
+}
+
 interface CreatorSubmissionsModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -104,7 +123,7 @@ interface CreatorSubmissionsModalProps {
   onPayment: (
     submissionId: string,
     type: "standard" | "bonus" | "both",
-    options?: { skipReload?: boolean }
+    options?: { skipReload?: boolean },
   ) => void | Promise<void>;
   onCustomPayment: (submissionId: string) => void;
   isAdminView?: boolean;
@@ -127,7 +146,7 @@ export function CreatorSubmissionsModal({
   creatorRank,
 }: CreatorSubmissionsModalProps) {
   const [selectedSubmissions, setSelectedSubmissions] = useState<Set<string>>(
-    new Set()
+    new Set(),
   );
   const [statusFilter, setStatusFilter] = useState<
     "all" | "verified_or_paid" | "pending" | "verified" | "rejected" | "paid"
@@ -196,7 +215,7 @@ export function CreatorSubmissionsModal({
 
     try {
       const response = await fetch(
-        `/api/admin/download-reel?submissionId=${submissionId}`
+        `/api/admin/download-reel?submissionId=${submissionId}`,
       );
 
       const contentType = response.headers.get("content-type");
@@ -284,7 +303,7 @@ export function CreatorSubmissionsModal({
 
   const handleBulkPayment = async (
     type: "standard" | "bonus" | "both",
-    isBulkTransaction: boolean
+    isBulkTransaction: boolean,
   ) => {
     const selectedIds = Array.from(selectedSubmissions);
 
@@ -301,19 +320,18 @@ export function CreatorSubmissionsModal({
 
     if (verifiedSubs.length === 0) {
       alert(
-        "No verified submissions selected. Only verified submissions can be paid."
+        "No verified submissions selected. Only verified submissions can be paid.",
       );
       return;
     }
 
     setBulkPaymentLoading(true);
     try {
-
-    // Sort by submission time (earliest first)
-    const sortedSubs = [...verifiedSubs].sort(
-      (a, b) =>
-        new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
-    );
+      // Sort by submission time (earliest first)
+      const sortedSubs = [...verifiedSubs].sort(
+        (a, b) =>
+          new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
+      );
 
     const hasTwitterTweets = sortedSubs.some(
       (s) => (s as any).is_twitter_tweet === true
@@ -349,14 +367,14 @@ export function CreatorSubmissionsModal({
               }),
             });
 
-        const result = await response.json();
+          const result = await response.json();
 
-        if (!response.ok) {
-          alert(`Bulk payment failed:\n${result.error || "Unknown error"}`);
-          return;
-        }
+          if (!response.ok) {
+            alert(`Bulk payment failed:\n${result.error || "Unknown error"}`);
+            return;
+          }
 
-        setSelectedSubmissions(new Set());
+          setSelectedSubmissions(new Set());
 
         const { data } = result;
         const message = [
@@ -370,14 +388,14 @@ export function CreatorSubmissionsModal({
           `Total Paid: $${(data.total_amount / 100).toFixed(2)}`,
         ];
 
-        if (data.cap_reached) {
-          message.push(``, `⚠️ Earnings cap reached!`);
-          message.push(
-            `Remaining cap: $${(data.remaining_cap / 100).toFixed(2)}`
-          );
-        }
+          if (data.cap_reached) {
+            message.push(``, `⚠️ Earnings cap reached!`);
+            message.push(
+              `Remaining cap: $${(data.remaining_cap / 100).toFixed(2)}`,
+            );
+          }
 
-        alert(message.join("\n"));
+          alert(message.join("\n"));
 
         window.location.reload();
       } catch (error) {
@@ -392,35 +410,35 @@ export function CreatorSubmissionsModal({
       let successCount = 0;
       let failCount = 0;
 
-      // Pay each submission in order (skipReload so parent doesn't reload after each)
-      for (const sub of sortedSubs) {
-        try {
-          await onPayment(sub.id, type, { skipReload: true });
-          successCount++;
-        } catch (error) {
-          console.error(`Failed to pay submission ${sub.id}:`, error);
-          failCount++;
-          // Continue with next submission even if one fails
+        // Pay each submission in order (skipReload so parent doesn't reload after each)
+        for (const sub of sortedSubs) {
+          try {
+            await onPayment(sub.id, type, { skipReload: true });
+            successCount++;
+          } catch (error) {
+            console.error(`Failed to pay submission ${sub.id}:`, error);
+            failCount++;
+            // Continue with next submission even if one fails
+          }
         }
-      }
 
-      // Show summary and reload once so data is fresh
-      if (failCount > 0) {
-        toast({
-          title: "Payment completed with errors",
-          description: `✓ ${successCount} paid, ✗ ${failCount} failed`,
-          variant: "destructive",
-        });
-      } else {
-        toast({
-          title: "Success",
-          description: `Successfully paid ${successCount} submission(s).`,
-          variant: "default",
-        });
-        setSelectedSubmissions(new Set());
+        // Show summary and reload once so data is fresh
+        if (failCount > 0) {
+          toast({
+            title: "Payment completed with errors",
+            description: `✓ ${successCount} paid, ✗ ${failCount} failed`,
+            variant: "destructive",
+          });
+        } else {
+          toast({
+            title: "Success",
+            description: `Successfully paid ${successCount} submission(s).`,
+            variant: "default",
+          });
+          setSelectedSubmissions(new Set());
+        }
+        window.location.reload();
       }
-      window.location.reload();
-    }
     } finally {
       setBulkPaymentLoading(false);
     }
@@ -484,7 +502,7 @@ export function CreatorSubmissionsModal({
       const prizes = leaderboardContest?.prizes;
       if (Array.isArray(prizes)) {
         const prizeForRank = prizes.find(
-          (p: any) => p.position === creatorRank
+          (p: any) => p.position === creatorRank,
         );
         if (prizeForRank?.amount != null) {
           // Prize amounts are stored in cents; modal uses cents for formatCurrency
@@ -556,8 +574,11 @@ export function CreatorSubmissionsModal({
   const payoutAdjustmentPercentage = Number(
     (contest as any)?.payout_adjustment_percentage ?? 0,
   );
-  const payoutAdjustmentMode = (contest as any)
-    ?.payout_adjustment_mode as ("cpm_only" | "bonus_only" | "combined" | null);
+  const payoutAdjustmentMode = (contest as any)?.payout_adjustment_mode as
+    | "cpm_only"
+    | "bonus_only"
+    | "combined"
+    | null;
   const hasPayoutAdjustment =
     payoutAdjustmentPercentage > 0 && !!payoutAdjustmentMode;
   const shouldAdjustReward =
@@ -590,10 +611,19 @@ export function CreatorSubmissionsModal({
   const isInstagramContest =
     contest?.platform?.toLowerCase().includes("instagram") ?? false;
 
+  const isTikTokContest =
+    contest?.platform?.toLowerCase().includes("tiktok") ?? false;
+
+  const isYouTubeContest =
+    contest?.platform?.toLowerCase().includes("youtube") ?? false;
+
   const getInsightsMeta = (
     status: Submission["insights_status"],
+    errorMsg?: string,
   ): { help: string; dotClass: string; pillClass: string } => {
     const isDark = mode === "dark";
+    const errorSuffix = errorMsg ? `\n\nDetails: ${errorMsg}` : "";
+
     if (status === "ok") {
       return {
         help: "Insights fetched successfully",
@@ -605,7 +635,7 @@ export function CreatorSubmissionsModal({
     }
     if (status === "temporary_failure") {
       return {
-        help: "Temporary error fetching insights\nWill retry later",
+        help: "Temporary error fetching insights\nWill retry later" + errorSuffix,
         dotClass: "bg-amber-400",
         pillClass: isDark
           ? "border-amber-700/60 bg-amber-950/35"
@@ -614,7 +644,7 @@ export function CreatorSubmissionsModal({
     }
     if (status === "permanent_failure") {
       return {
-        help: "Instagram insights cannot be fetched for this post",
+        help: "Insights cannot be fetched for this post" + errorSuffix,
         dotClass: "bg-rose-500",
         pillClass: isDark
           ? "border-rose-700/60 bg-rose-950/35"
@@ -624,7 +654,9 @@ export function CreatorSubmissionsModal({
     return {
       help: "Never refreshed yet",
       dotClass: "bg-slate-400",
-      pillClass: isDark ? "border-slate-600 bg-slate-900/30" : "border-slate-200 bg-slate-50",
+      pillClass: isDark
+        ? "border-slate-600 bg-slate-900/30"
+        : "border-slate-200 bg-slate-50",
     };
   };
 
@@ -693,8 +725,10 @@ export function CreatorSubmissionsModal({
 
   // Sort submissions
   const sortedSubmissions = [...filteredSubmissions].sort((a, b) => {
-    if (sortBy === "views-desc") return (b.views || 0) - (a.views || 0);
-    if (sortBy === "views-asc") return (a.views || 0) - (b.views || 0);
+    if (sortBy === "views-desc")
+      return effectiveSubmissionViewsForSort(b) - effectiveSubmissionViewsForSort(a);
+    if (sortBy === "views-asc")
+      return effectiveSubmissionViewsForSort(a) - effectiveSubmissionViewsForSort(b);
     if (sortBy === "date-desc")
       return (
         new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
@@ -719,14 +753,14 @@ export function CreatorSubmissionsModal({
     const totalBudget =
       contest?.contest_type === "cpm"
         ? (contest?.contest_based_details as any)?.cpm_contest?.total_budget ||
-        0
+          0
         : (contest?.contest_based_details as any)?.leaderboard_contest
-          ?.total_budget || 0;
+            ?.total_budget || 0;
 
     const bonusBudget =
       contest?.contest_type === "cpm"
         ? (contest?.contest_based_details as any)?.cpm_contest
-          ?.flat_fee_bonus_cap || totalBudget
+            ?.flat_fee_bonus_cap || totalBudget
         : totalBudget;
 
     // Sort submissions by created_at to process in order
@@ -802,7 +836,7 @@ export function CreatorSubmissionsModal({
       expectedRewardsMap.set(sub.id, cappedExpectedReward);
       const amountApplied = Math.min(
         baseExpectedReward,
-        Math.max(0, remainingCap)
+        Math.max(0, remainingCap),
       );
       runningTotal += amountApplied;
 
@@ -867,14 +901,14 @@ export function CreatorSubmissionsModal({
         <DialogTitle className="sr-only">
           {creator.username}'s Submissions
         </DialogTitle>
-        <div className="flex flex-col h-[98vh] overflow-hidden">
+        <div className="flex flex-col h-[98vh] min-h-0 overflow-hidden">
           {/* Header */}
           <div
             className={cn(
               "flex items-center justify-between p-6 border-b flex-shrink-0",
               isDark
                 ? "bg-[#170337] "
-                : "bg-gradient-to-r from-purple-50 to-blue-50"
+                : "bg-gradient-to-r from-purple-50 to-blue-50",
             )}
           >
             <div className="flex items-center gap-4">
@@ -888,7 +922,7 @@ export function CreatorSubmissionsModal({
                 <h2
                   className={cn(
                     "text-2xl font-bold text-gray-900 dark:text-white",
-                    isDark ? "text-white" : "text-gray-900"
+                    isDark ? "text-white" : "text-gray-900",
                   )}
                 >
                   {creator.username}'s Submissions
@@ -896,7 +930,7 @@ export function CreatorSubmissionsModal({
                 <p
                   className={cn(
                     "text-sm",
-                    isDark ? "text-gray-400" : "text-gray-600"
+                    isDark ? "text-gray-400" : "text-gray-600",
                   )}
                 >
                   {submissions.length} total{" "}
@@ -909,7 +943,7 @@ export function CreatorSubmissionsModal({
               size="icon"
               onClick={onClose}
               className={cn(
-                isDark ? "text-white" : "text-gray-600 hover:bg-white/50"
+                isDark ? "text-white" : "text-gray-600 hover:bg-white/50",
               )}
             >
               <X className="h-6 w-6" />
@@ -920,7 +954,7 @@ export function CreatorSubmissionsModal({
           <div
             className={cn(
               "flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between px-4 sm:px-6 py-3 border-b flex-shrink-0",
-              isDark ? "bg-[#06021D] " : "bg-white"
+              isDark ? "bg-[#06021D] " : "bg-white",
             )}
           >
             <div className="flex items-center gap-2 flex-wrap w-full sm:w-auto">
@@ -936,7 +970,7 @@ export function CreatorSubmissionsModal({
                     ? "text-white border-gray-600"
                     : statusFilter === "all"
                       ? "text-white"
-                      : "text-gray-600"
+                      : "text-gray-600",
                 )}
               >
                 All{" "}
@@ -958,7 +992,7 @@ export function CreatorSubmissionsModal({
                     ? "text-white border-gray-600"
                     : statusFilter === "verified_or_paid"
                       ? "text-white"
-                      : "text-gray-600"
+                      : "text-gray-600",
                 )}
               >
                 Verified + Paid{" "}
@@ -978,7 +1012,7 @@ export function CreatorSubmissionsModal({
                     ? "text-white border-gray-600"
                     : statusFilter === "pending"
                       ? "text-white"
-                      : "text-gray-600"
+                      : "text-gray-600",
                 )}
               >
                 Pending{" "}
@@ -998,7 +1032,7 @@ export function CreatorSubmissionsModal({
                     ? "text-white border-gray-600"
                     : statusFilter === "verified"
                       ? "text-white"
-                      : "text-gray-600"
+                      : "text-gray-600",
                 )}
               >
                 Verified{" "}
@@ -1018,7 +1052,7 @@ export function CreatorSubmissionsModal({
                     ? "text-white border-gray-600"
                     : statusFilter === "rejected"
                       ? "text-white"
-                      : "text-gray-600"
+                      : "text-gray-600",
                 )}
               >
                 Rejected{" "}
@@ -1038,7 +1072,7 @@ export function CreatorSubmissionsModal({
                     ? "text-white border-gray-600"
                     : statusFilter === "paid"
                       ? "text-white"
-                      : "text-gray-600"
+                      : "text-gray-600",
                 )}
               >
                 Paid{" "}
@@ -1051,7 +1085,7 @@ export function CreatorSubmissionsModal({
               <span
                 className={cn(
                   "text-sm",
-                  isDark ? "text-gray-400" : "text-gray-600"
+                  isDark ? "text-gray-400" : "text-gray-600",
                 )}
               >
                 Sort by
@@ -1064,7 +1098,7 @@ export function CreatorSubmissionsModal({
                   <SelectTrigger
                     className={cn(
                       "w-full sm:w-[180px]",
-                      isDark ? "text-white border-gray-600" : "text-gray-600"
+                      isDark ? "text-white border-gray-600" : "text-gray-600",
                     )}
                   >
                     <SelectValue />
@@ -1093,14 +1127,14 @@ export function CreatorSubmissionsModal({
             <div
               className={cn(
                 "p-4 border-b",
-                isDark ? "bg-blue-900/20" : "bg-blue-50"
+                isDark ? "bg-blue-900/20" : "bg-blue-50",
               )}
             >
               <div className="flex items-center gap-3 mb-3">
                 <span
                   className={cn(
                     "font-medium",
-                    isDark ? "text-blue-300" : "text-blue-900"
+                    isDark ? "text-blue-300" : "text-blue-900",
                   )}
                 >
                   {selectedSubmissions.size} selected
@@ -1111,7 +1145,7 @@ export function CreatorSubmissionsModal({
                   onClick={() => setSelectedSubmissions(new Set())}
                   className={cn(
                     "text-sm",
-                    isDark ? "text-white" : "text-gray-600"
+                    isDark ? "text-white" : "text-gray-600",
                   )}
                 >
                   Clear
@@ -1131,7 +1165,7 @@ export function CreatorSubmissionsModal({
                             "whitespace-nowrap rounded-md",
                             isDark
                               ? "border bg-green-900/30 text-green-400 border-green-500"
-                              : "bg-green-600 text-white hover:bg-green-700 "
+                              : "bg-green-600 text-white hover:bg-green-700 ",
                           )}
                         >
                           <CheckCircle className="h-4 w-4 mr-1" />
@@ -1144,7 +1178,7 @@ export function CreatorSubmissionsModal({
                             "whitespace-nowrap rounded-md",
                             isDark
                               ? "border bg-red-900/30 text-red-400 border-red-500"
-                              : "bg-red-600 text-white hover:bg-red-700 "
+                              : "bg-red-600 text-white hover:bg-red-700 ",
                           )}
                         >
                           <XCircle className="h-4 w-4 mr-1" />
@@ -1157,7 +1191,7 @@ export function CreatorSubmissionsModal({
                             "whitespace-nowrap rounded-md",
                             isDark
                               ? "border bg-yellow-900/30 text-yellow-400 border-yellow-500"
-                              : "bg-yellow-600 text-white hover:bg-yellow-700 "
+                              : "bg-yellow-600 text-white hover:bg-yellow-700 ",
                           )}
                         >
                           <Clock className="h-4 w-4 mr-1" />
@@ -1270,26 +1304,26 @@ export function CreatorSubmissionsModal({
           )}
 
           {/* Scrollable Table */}
-          <div className="flex-1 overflow-auto px-6 py-4">
+          <div className="min-h-0 flex-1 overflow-auto px-6 py-4">
             <Table>
               <TableHeader
                 className={cn(
                   "sticky top-0 z-20 shadow-sm",
-                  isDark ? "bg-[#391A6A] text-white" : "bg-white text-gray-600"
+                  isDark ? "bg-[#391A6A] text-white" : "bg-white text-gray-600",
                 )}
               >
                 <TableRow className="border-b-2">
                   <TableHead
                     className={cn(
                       "w-12",
-                      isDark ? "bg-[#391A6A] " : "bg-gray-50"
+                      isDark ? "bg-[#391A6A] " : "bg-gray-50",
                     )}
                   >
                     <Checkbox
                       checked={
                         filteredSubmissions.length > 0 &&
                         filteredSubmissions.every((s) =>
-                          selectedSubmissions.has(s.id)
+                          selectedSubmissions.has(s.id),
                         )
                       }
                       onCheckedChange={() =>
@@ -1301,7 +1335,7 @@ export function CreatorSubmissionsModal({
                   <TableHead
                     className={cn(
                       "w-12",
-                      isDark ? "bg-[#391A6A] " : "bg-gray-50"
+                      isDark ? "bg-[#391A6A] " : "bg-gray-50",
                     )}
                   >
                     #
@@ -1311,7 +1345,7 @@ export function CreatorSubmissionsModal({
                     <TableHead
                       className={cn(
                         "min-w-[200px]",
-                        isDark ? "bg-[#391A6A] " : "bg-gray-50"
+                        isDark ? "bg-[#391A6A] " : "bg-gray-50",
                       )}
                     >
                       Tweet
@@ -1320,7 +1354,7 @@ export function CreatorSubmissionsModal({
                     <TableHead
                       className={cn(
                         "min-w-[200px]",
-                        isDark ? "bg-[#391A6A] " : "bg-gray-50"
+                        isDark ? "bg-[#391A6A] " : "bg-gray-50",
                       )}
                     >
                       Content
@@ -1332,7 +1366,7 @@ export function CreatorSubmissionsModal({
                       <TableHead
                         className={cn(
                           "text-center",
-                          isDark ? "bg-[#391A6A] " : "bg-gray-50"
+                          isDark ? "bg-[#391A6A] " : "bg-gray-50",
                         )}
                       >
                         Total Points
@@ -1340,7 +1374,7 @@ export function CreatorSubmissionsModal({
                       <TableHead
                         className={cn(
                           "text-center",
-                          isDark ? "bg-[#391A6A] " : "bg-gray-50"
+                          isDark ? "bg-[#391A6A] " : "bg-gray-50",
                         )}
                       >
                         Base Points
@@ -1348,7 +1382,7 @@ export function CreatorSubmissionsModal({
                       <TableHead
                         className={cn(
                           "text-center",
-                          isDark ? "bg-[#391A6A] " : "bg-gray-50"
+                          isDark ? "bg-[#391A6A] " : "bg-gray-50",
                         )}
                       >
                         Manual Points
@@ -1356,7 +1390,7 @@ export function CreatorSubmissionsModal({
                       <TableHead
                         className={cn(
                           "text-center",
-                          isDark ? "bg-[#391A6A] " : "bg-gray-50"
+                          isDark ? "bg-[#391A6A] " : "bg-gray-50",
                         )}
                       >
                         Likes
@@ -1364,7 +1398,7 @@ export function CreatorSubmissionsModal({
                       <TableHead
                         className={cn(
                           "text-center",
-                          isDark ? "bg-[#391A6A] " : "bg-gray-50"
+                          isDark ? "bg-[#391A6A] " : "bg-gray-50",
                         )}
                       >
                         Replies
@@ -1372,7 +1406,7 @@ export function CreatorSubmissionsModal({
                       <TableHead
                         className={cn(
                           "text-center",
-                          isDark ? "bg-[#391A6A] " : "bg-gray-50"
+                          isDark ? "bg-[#391A6A] " : "bg-gray-50",
                         )}
                       >
                         Retweets
@@ -1380,7 +1414,7 @@ export function CreatorSubmissionsModal({
                       <TableHead
                         className={cn(
                           "text-center",
-                          isDark ? "bg-[#391A6A] " : "bg-gray-50"
+                          isDark ? "bg-[#391A6A] " : "bg-gray-50",
                         )}
                       >
                         Quote Reposts
@@ -1388,7 +1422,7 @@ export function CreatorSubmissionsModal({
                       <TableHead
                         className={cn(
                           "text-center",
-                          isDark ? "bg-[#391A6A] " : "bg-gray-50"
+                          isDark ? "bg-[#391A6A] " : "bg-gray-50",
                         )}
                       >
                         Impressions
@@ -1396,7 +1430,7 @@ export function CreatorSubmissionsModal({
                       <TableHead
                         className={cn(
                           "text-center",
-                          isDark ? "bg-[#391A6A] " : "bg-gray-50"
+                          isDark ? "bg-[#391A6A] " : "bg-gray-50",
                         )}
                       >
                         Expected Reward
@@ -1404,7 +1438,7 @@ export function CreatorSubmissionsModal({
                       <TableHead
                         className={cn(
                           "text-center",
-                          isDark ? "bg-[#391A6A] " : "bg-gray-50"
+                          isDark ? "bg-[#391A6A] " : "bg-gray-50",
                         )}
                       >
                         Reward Granted
@@ -1412,7 +1446,7 @@ export function CreatorSubmissionsModal({
                       <TableHead
                         className={cn(
                           "text-center",
-                          isDark ? "bg-[#391A6A] " : "bg-gray-50"
+                          isDark ? "bg-[#391A6A] " : "bg-gray-50",
                         )}
                       >
                         Manual Points Reason
@@ -1423,7 +1457,7 @@ export function CreatorSubmissionsModal({
                       <TableHead
                         className={cn(
                           "text-center",
-                          isDark ? "bg-[#391A6A] " : "bg-gray-50"
+                          isDark ? "bg-[#391A6A] " : "bg-gray-50",
                         )}
                       >
                         Views
@@ -1431,7 +1465,7 @@ export function CreatorSubmissionsModal({
                       <TableHead
                         className={cn(
                           "text-center",
-                          isDark ? "bg-[#391A6A] " : "bg-gray-50"
+                          isDark ? "bg-[#391A6A] " : "bg-gray-50",
                         )}
                       >
                         Likes
@@ -1439,61 +1473,92 @@ export function CreatorSubmissionsModal({
                       <TableHead
                         className={cn(
                           "text-center",
-                          isDark ? "bg-[#391A6A] " : "bg-gray-50"
+                          isDark ? "bg-[#391A6A] " : "bg-gray-50",
                         )}
                       >
                         Comments
                       </TableHead>
-                      {isInstagramContest && (
+                      {(isInstagramContest || isTikTokContest) && (
                         <>
                           <TableHead
                             className={cn(
                               "text-center",
-                              isDark ? "bg-[#391A6A] " : "bg-gray-50"
+                              isDark ? "bg-[#391A6A] " : "bg-gray-50",
                             )}
                           >
                             Shares
                           </TableHead>
-                          <TableHead
-                            className={cn(
-                              "text-center",
-                              isDark ? "bg-[#391A6A] " : "bg-gray-50"
-                            )}
-                          >
-                            Saves
-                          </TableHead>
-                          <TableHead
-                            className={cn(
-                              "text-center",
-                              isDark ? "bg-[#391A6A] " : "bg-gray-50"
-                            )}
-                          >
-                            Reach
-                          </TableHead>
-                          <TableHead
-                            className={cn(
-                              "text-center",
-                              isDark ? "bg-[#391A6A] " : "bg-gray-50"
-                            )}
-                          >
-                            Interactions
-                          </TableHead>
-                          <TableHead
-                            className={cn(
-                              "text-center",
-                              isDark ? "bg-[#391A6A] " : "bg-gray-50"
-                            )}
-                          >
-                            Avg Watch Time
-                          </TableHead>
-                          <TableHead
-                            className={cn(
-                              "text-center",
-                              isDark ? "bg-[#391A6A] " : "bg-gray-50"
-                            )}
-                          >
-                            Total Watch Time
-                          </TableHead>
+                          {/* Saves: Instagram only — not in TikTok Display API */}
+                          {!isTikTokContest && (
+                            <TableHead
+                              className={cn(
+                                "text-center",
+                                isDark ? "bg-[#391A6A] " : "bg-gray-50",
+                              )}
+                            >
+                              Saves
+                            </TableHead>
+                          )}
+                          {/* Reach and Interactions commented out for TikTok per user request */}
+                          {!isTikTokContest && (
+                            <>
+                              <TableHead
+                                className={cn(
+                                  "text-center",
+                                  isDark ? "bg-[#391A6A] " : "bg-gray-50",
+                                )}
+                              >
+                                Reach
+                              </TableHead>
+                              <TableHead
+                                className={cn(
+                                  "text-center",
+                                  isDark ? "bg-[#391A6A] " : "bg-gray-50",
+                                )}
+                              >
+                                Interactions
+                              </TableHead>
+                            </>
+                          )}
+                          {isTikTokContest ? (
+                            <>
+                              <TableHead
+                                className={cn(
+                                  "text-center",
+                                  isDark ? "bg-[#391A6A] " : "bg-gray-50",
+                                )}
+                              >
+                                Total engagement
+                              </TableHead>
+                              <TableHead
+                                className={cn(
+                                  "text-center",
+                                  isDark ? "bg-[#391A6A] " : "bg-gray-50",
+                                )}
+                              >
+                                Engagement rate
+                              </TableHead>
+                            </>
+                          ) : (
+                            <>
+                              <TableHead
+                                className={cn(
+                                  "text-center",
+                                  isDark ? "bg-[#391A6A] " : "bg-gray-50",
+                                )}
+                              >
+                                Avg Watch Time
+                              </TableHead>
+                              <TableHead
+                                className={cn(
+                                  "text-center",
+                                  isDark ? "bg-[#391A6A] " : "bg-gray-50",
+                                )}
+                              >
+                                Total Watch Time
+                              </TableHead>
+                            </>
+                          )}
                         </>
                       )}
                     </>
@@ -1504,7 +1569,7 @@ export function CreatorSubmissionsModal({
                       <TableHead
                         className={cn(
                           "text-center",
-                          isDark ? "bg-[#391A6A] " : "bg-gray-50"
+                          isDark ? "bg-[#391A6A] " : "bg-gray-50",
                         )}
                       >
                         Expected Reward
@@ -1512,7 +1577,7 @@ export function CreatorSubmissionsModal({
                       <TableHead
                         className={cn(
                           "text-center",
-                          isDark ? "bg-[#391A6A] " : "bg-gray-50"
+                          isDark ? "bg-[#391A6A] " : "bg-gray-50",
                         )}
                       >
                         Reward Granted
@@ -1525,7 +1590,7 @@ export function CreatorSubmissionsModal({
                       <TableHead
                         className={cn(
                           "text-center",
-                          isDark ? "bg-[#391A6A] " : "bg-gray-50"
+                          isDark ? "bg-[#391A6A] " : "bg-gray-50",
                         )}
                       >
                         Bonus Expected
@@ -1533,14 +1598,14 @@ export function CreatorSubmissionsModal({
                       <TableHead
                         className={cn(
                           "text-center",
-                          isDark ? "bg-[#391A6A] " : "bg-gray-50"
+                          isDark ? "bg-[#391A6A] " : "bg-gray-50",
                         )}
                       >
                         Bonus Granted
                       </TableHead>
                     </>
                   )}
-                  {isAdminView && isInstagramContest && (
+                  {isAdminView && (isInstagramContest || isTikTokContest || isYouTubeContest) && (
                     <TableHead
                       className={cn(
                         "text-center",
@@ -1553,11 +1618,19 @@ export function CreatorSubmissionsModal({
                   <TableHead
                     className={cn(
                       "text-center",
-                      isDark ? "bg-[#391A6A] " : "bg-gray-50"
+                      isDark ? "bg-[#391A6A] " : "bg-gray-50",
                     )}
                   >
                     Status
                   </TableHead>
+                  {/* <TableHead
+                    className={cn(
+                      "min-w-[180px]",
+                      isDark ? "bg-[#391A6A] " : "bg-gray-50"
+                    )}
+                  >
+                    Rejection reason
+                  </TableHead> */}
                   <TableHead
                     className={cn(
                       "min-w-[180px]",
@@ -1569,7 +1642,7 @@ export function CreatorSubmissionsModal({
                   <TableHead
                     className={cn(
                       "min-w-[180px]",
-                      isDark ? "bg-[#391A6A] " : "bg-gray-50"
+                      isDark ? "bg-[#391A6A] " : "bg-gray-50",
                     )}
                   >
                     Submitted
@@ -1577,7 +1650,7 @@ export function CreatorSubmissionsModal({
                   <TableHead
                     className={cn(
                       "text-center",
-                      isDark ? "bg-[#391A6A] " : "bg-gray-50"
+                      isDark ? "bg-[#391A6A] " : "bg-gray-50",
                     )}
                   >
                     Actions
@@ -1593,15 +1666,15 @@ export function CreatorSubmissionsModal({
                           ? 18 // Checkbox, #, Tweet, Total Points, Base Points, Manual Points, Likes, Replies, Retweets, Quote Reposts, Impressions, Expected Reward, Reward Granted, Manual Points Reason, Status, Rejection reason, Submitted, Actions
                           : 3 + // Checkbox, #, Content
                           3 + // Views, Likes, Comments
-                          (isInstagramContest ? 6 : 0) + // Shares, Saves, Reach, Interactions, Avg Watch Time, Total Watch Time
+                          ((isInstagramContest || isTikTokContest) ? (isTikTokContest ? 3 : 6) : 0) + // TT: Shares + total engagement + engagement rate; IG: +Saves, Reach, Interactions, Avg/Total watch
                           2 + // Expected Reward, Reward Granted
                           (hasBonus ? 2 : 0) + // Bonus Expected, Bonus Granted
-                          (isAdminView && isInstagramContest ? 1 : 0) + // Insights status (admin only)
+                          (isAdminView && (isInstagramContest || isTikTokContest || isYouTubeContest) ? 1 : 0) + // Insights status (admin only)
                           4 // Status, Rejection reason, Submitted, Actions
                       }
                       className={cn(
                         "text-center py-8",
-                        isDark ? "text-gray-400" : "text-gray-600"
+                        isDark ? "text-gray-400" : "text-gray-600",
                       )}
                     >
                       No submissions found for this filter.
@@ -1612,35 +1685,69 @@ export function CreatorSubmissionsModal({
                     const isTwitterTweet = submission.is_twitter_tweet === true;
 
                     // For Twitter tweets, use Twitter metrics; for others, use platform-specific
+                    const tt = submission.other_stats?.tiktok as
+                      | Record<string, unknown>
+                      | undefined;
+                    const isTikTokRow =
+                      (submission.platform || "").toLowerCase().includes(
+                        "tiktok",
+                      );
+
                     const likes = isTwitterTweet
                       ? submission.other_stats?.likes || 0
                       : submission.other_stats?.youtube?.likes ||
-                      submission.other_stats?.instagram?.likes ||
-                      0;
+                        submission.other_stats?.instagram?.likes ||
+                        (isTikTokRow
+                          ? Number(tt?.like_count ?? tt?.likes ?? 0)
+                          : 0);
                     const comments = isTwitterTweet
                       ? submission.other_stats?.replies || 0
                       : submission.other_stats?.youtube?.comments ||
-                      submission.other_stats?.instagram?.comments ||
-                      0;
-                    const instagramStats =
+                        submission.other_stats?.instagram?.comments ||
+                        (isTikTokRow
+                          ? Number(tt?.comment_count ?? tt?.comments ?? 0)
+                          : 0);
+                    const platformStats =
                       submission.other_stats?.instagram ||
+                      submission.other_stats?.tiktok ||
                       submission.other_stats ||
                       {};
-                    const shares =
-                      (instagramStats as any)?.shares ||
-                      (instagramStats as any)?.share_count ||
-                      0;
+                    const shares = isTikTokRow
+                      ? Number(tt?.share_count ?? tt?.shares ?? 0)
+                      : Number(
+                          (platformStats as any)?.share_count ??
+                            (platformStats as any)?.shares ??
+                            0,
+                        );
                     const saves =
-                      (instagramStats as any)?.saves ||
-                      (instagramStats as any)?.saved ||
+                      (platformStats as any)?.saves ||
+                      (platformStats as any)?.saved ||
                       0;
-                    const reach = (instagramStats as any)?.reach || 0;
+                    const reach = (platformStats as any)?.reach || 0;
                     const totalInteractions =
-                      (instagramStats as any)?.total_interactions || 0;
+                      (platformStats as any)?.total_interactions || 0;
                     const avgWatchTimeMs =
-                      (instagramStats as any)?.avg_watch_time_ms || 0;
+                      (platformStats as any)?.avg_watch_time_ms || 0;
                     const totalWatchTimeMs =
-                      (instagramStats as any)?.total_watch_time_ms || 0;
+                      (platformStats as any)?.total_watch_time_ms || 0;
+
+                    const tiktokViewsForRate =
+                      isTikTokContest && !isTwitterTweet
+                        ? effectiveTikTokSubmissionViews(submission)
+                        : 0;
+                    const tiktokTotalEngagement =
+                      isTikTokContest && !isTwitterTweet
+                        ? Number(likes) + Number(comments) + Number(shares)
+                        : 0;
+                    const tiktokEngagementRatePct =
+                      isTikTokContest &&
+                      !isTwitterTweet &&
+                      tiktokViewsForRate > 0
+                        ? Math.round(
+                            (tiktokTotalEngagement / tiktokViewsForRate) *
+                              10000,
+                          ) / 100
+                        : 0;
 
                     // Twitter-specific metrics
                     const retweets = submission.other_stats?.retweets || 0;
@@ -1726,7 +1833,7 @@ export function CreatorSubmissionsModal({
                         key={submission.id}
                         className={cn(
                           isDark ? "text-white" : "text-gray-700",
-                          isDeletedTweet && "opacity-60"
+                          isDeletedTweet && "opacity-60",
                         )}
                       >
                         <TableCell>
@@ -1735,7 +1842,7 @@ export function CreatorSubmissionsModal({
                             onCheckedChange={(checked) =>
                               handleCheckboxChange(
                                 submission.id,
-                                checked as boolean
+                                checked as boolean,
                               )
                             }
                             aria-label={`Select submission ${index + 1}`}
@@ -1744,7 +1851,7 @@ export function CreatorSubmissionsModal({
                         <TableCell
                           className={cn(
                             "font-medium",
-                            isDark ? "text-white" : "text-gray-700"
+                            isDark ? "text-white" : "text-gray-700",
                           )}
                         >
                           {index + 1}
@@ -1764,21 +1871,21 @@ export function CreatorSubmissionsModal({
                                       submission.other_stats?.tweet_type ===
                                         "reply" ||
                                         submission.other_stats?.tweet_type ===
-                                        "quote" ||
+                                          "quote" ||
                                         submission.other_stats?.tweet_type ===
-                                        "retweet"
+                                          "retweet"
                                         ? "bg-purple-100 text-purple-700 border-purple-300"
-                                        : "bg-blue-100 text-blue-700 border-blue-300"
+                                        : "bg-blue-100 text-blue-700 border-blue-300",
                                     )}
                                   >
                                     {submission.other_stats?.tweet_type ===
-                                      "reply"
+                                    "reply"
                                       ? "REPLY"
                                       : submission.other_stats?.tweet_type ===
-                                        "quote"
+                                          "quote"
                                         ? "QUOTE"
                                         : submission.other_stats?.tweet_type ===
-                                          "retweet"
+                                            "retweet"
                                           ? "RETWEET"
                                           : "TWEET"}
                                   </Badge>
@@ -1793,7 +1900,9 @@ export function CreatorSubmissionsModal({
                                   <span
                                     className={cn(
                                       "text-xs",
-                                      isDark ? "text-gray-400" : "text-gray-500"
+                                      isDark
+                                        ? "text-gray-400"
+                                        : "text-gray-500",
                                     )}
                                   >
                                     from @{creator.username}
@@ -1803,7 +1912,7 @@ export function CreatorSubmissionsModal({
                                 <p
                                   className={cn(
                                     "text-sm line-clamp-3",
-                                    isDark ? "text-white" : "text-gray-900"
+                                    isDark ? "text-white" : "text-gray-900",
                                   )}
                                   title={
                                     submission.other_stats?.tweet_text ||
@@ -1825,7 +1934,7 @@ export function CreatorSubmissionsModal({
                                       "text-xs flex items-center gap-1 hover:underline w-fit",
                                       isDark
                                         ? "text-purple-400"
-                                        : "text-purple-600"
+                                        : "text-purple-600",
                                     )}
                                   >
                                     Click to view tweet
@@ -1840,7 +1949,7 @@ export function CreatorSubmissionsModal({
                                 <span
                                   className={cn(
                                     "font-bold text-sm",
-                                    isDark ? "text-white" : "text-gray-900"
+                                    isDark ? "text-white" : "text-gray-900",
                                   )}
                                 >
                                   {totalPoints}
@@ -1848,7 +1957,7 @@ export function CreatorSubmissionsModal({
                                 <span
                                   className={cn(
                                     "text-xs",
-                                    isDark ? "text-gray-400" : "text-gray-500"
+                                    isDark ? "text-gray-400" : "text-gray-500",
                                   )}
                                 >
                                   total
@@ -1861,7 +1970,7 @@ export function CreatorSubmissionsModal({
                                 <span
                                   className={cn(
                                     "font-bold text-sm",
-                                    isDark ? "text-white" : "text-gray-900"
+                                    isDark ? "text-white" : "text-gray-900",
                                   )}
                                 >
                                   {basePoints}
@@ -1869,7 +1978,7 @@ export function CreatorSubmissionsModal({
                                 <span
                                   className={cn(
                                     "text-xs",
-                                    isDark ? "text-gray-400" : "text-gray-500"
+                                    isDark ? "text-gray-400" : "text-gray-500",
                                   )}
                                 >
                                   base
@@ -1888,7 +1997,7 @@ export function CreatorSubmissionsModal({
                                         ? "text-red-600"
                                         : isDark
                                           ? "text-white"
-                                          : "text-gray-900"
+                                          : "text-gray-900",
                                   )}
                                 >
                                   {manualPointsAdjustment > 0 ? "+" : ""}
@@ -1897,7 +2006,7 @@ export function CreatorSubmissionsModal({
                                 <span
                                   className={cn(
                                     "text-xs",
-                                    isDark ? "text-gray-400" : "text-gray-500"
+                                    isDark ? "text-gray-400" : "text-gray-500",
                                   )}
                                 >
                                   manual
@@ -1912,7 +2021,7 @@ export function CreatorSubmissionsModal({
                                   <span
                                     className={cn(
                                       "font-bold text-sm",
-                                      isDark ? "text-white" : "text-gray-900"
+                                      isDark ? "text-white" : "text-gray-900",
                                     )}
                                   >
                                     {likes.toLocaleString()}
@@ -1921,7 +2030,7 @@ export function CreatorSubmissionsModal({
                                 <span
                                   className={cn(
                                     "text-xs",
-                                    isDark ? "text-gray-400" : "text-gray-500"
+                                    isDark ? "text-gray-400" : "text-gray-500",
                                   )}
                                 >
                                   likes
@@ -1936,7 +2045,7 @@ export function CreatorSubmissionsModal({
                                   <span
                                     className={cn(
                                       "font-bold text-sm",
-                                      isDark ? "text-white" : "text-gray-900"
+                                      isDark ? "text-white" : "text-gray-900",
                                     )}
                                   >
                                     {comments.toLocaleString()}
@@ -1945,7 +2054,7 @@ export function CreatorSubmissionsModal({
                                 <span
                                   className={cn(
                                     "text-xs",
-                                    isDark ? "text-gray-400" : "text-gray-500"
+                                    isDark ? "text-gray-400" : "text-gray-500",
                                   )}
                                 >
                                   replies
@@ -1958,7 +2067,7 @@ export function CreatorSubmissionsModal({
                                 <span
                                   className={cn(
                                     "font-bold text-sm",
-                                    isDark ? "text-white" : "text-gray-900"
+                                    isDark ? "text-white" : "text-gray-900",
                                   )}
                                 >
                                   {retweets.toLocaleString()}
@@ -1966,7 +2075,7 @@ export function CreatorSubmissionsModal({
                                 <span
                                   className={cn(
                                     "text-xs",
-                                    isDark ? "text-gray-400" : "text-gray-500"
+                                    isDark ? "text-gray-400" : "text-gray-500",
                                   )}
                                 >
                                   retweets
@@ -1979,7 +2088,7 @@ export function CreatorSubmissionsModal({
                                 <span
                                   className={cn(
                                     "font-bold text-sm",
-                                    isDark ? "text-white" : "text-gray-900"
+                                    isDark ? "text-white" : "text-gray-900",
                                   )}
                                 >
                                   {quoteReposts.toLocaleString()}
@@ -1987,7 +2096,7 @@ export function CreatorSubmissionsModal({
                                 <span
                                   className={cn(
                                     "text-xs",
-                                    isDark ? "text-gray-400" : "text-gray-500"
+                                    isDark ? "text-gray-400" : "text-gray-500",
                                   )}
                                 >
                                   quote reposts
@@ -2002,7 +2111,7 @@ export function CreatorSubmissionsModal({
                                   <span
                                     className={cn(
                                       "font-bold text-sm",
-                                      isDark ? "text-white" : "text-gray-900"
+                                      isDark ? "text-white" : "text-gray-900",
                                     )}
                                   >
                                     {impressions.toLocaleString()}
@@ -2011,7 +2120,7 @@ export function CreatorSubmissionsModal({
                                 <span
                                   className={cn(
                                     "text-xs",
-                                    isDark ? "text-gray-400" : "text-gray-500"
+                                    isDark ? "text-gray-400" : "text-gray-500",
                                   )}
                                 >
                                   impressions
@@ -2032,22 +2141,22 @@ export function CreatorSubmissionsModal({
                                 <span
                                   className={cn(
                                     "text-xs italic truncate max-w-[150px] block",
-                                    isDark ? "text-gray-400" : "text-gray-600"
+                                    isDark ? "text-gray-400" : "text-gray-600",
                                   )}
                                   title={submission.manual_points_reason}
                                 >
                                   {submission.manual_points_reason.length > 20
                                     ? submission.manual_points_reason.substring(
-                                      0,
-                                      20
-                                    ) + "..."
+                                        0,
+                                        20,
+                                      ) + "..."
                                     : submission.manual_points_reason}
                                 </span>
                               ) : (
                                 <span
                                   className={cn(
                                     "text-xs",
-                                    isDark ? "text-gray-500" : "text-gray-400"
+                                    isDark ? "text-gray-500" : "text-gray-400",
                                   )}
                                 >
                                   —
@@ -2097,13 +2206,13 @@ export function CreatorSubmissionsModal({
                                           className={cn(
                                             "text-xs text-blue-600 hover:underline flex items-center gap-1",
                                             downloadingSubmissionId ===
-                                            submission.id &&
-                                            "opacity-50 cursor-not-allowed"
+                                              submission.id &&
+                                              "opacity-50 cursor-not-allowed",
                                           )}
                                           title="Download Reel/Short"
                                         >
                                           {downloadingSubmissionId ===
-                                            submission.id ? (
+                                          submission.id ? (
                                             <>
                                               <Loader2 className="h-3 w-3 animate-spin" />
                                               Downloading...
@@ -2123,7 +2232,10 @@ export function CreatorSubmissionsModal({
                             </TableCell>
                             {/* Views, Likes, Comments for non-Twitter submissions */}
                             <TableCell className="text-center font-mono">
-                              {submission.views?.toLocaleString() || 0}
+                              {(isTikTokContest && !isTwitterTweet
+                                ? effectiveTikTokSubmissionViews(submission)
+                                : Number(submission.views ?? 0)
+                              ).toLocaleString()}
                             </TableCell>
                             <TableCell className="text-center font-mono">
                               {likes.toLocaleString()}
@@ -2132,54 +2244,76 @@ export function CreatorSubmissionsModal({
                               {comments.toLocaleString()}
                             </TableCell>
                             {/* Instagram-specific metrics for non-Twitter submissions */}
-                            {isInstagramContest && (
+                            {(isInstagramContest || isTikTokContest) && (
                               <>
                                 <TableCell className="text-center font-mono">
                                   {formatMetricValue(shares)}
                                 </TableCell>
-                                <TableCell className="text-center font-mono">
-                                  {formatMetricValue(saves)}
-                                </TableCell>
-                                <TableCell className="text-center font-mono">
-                                  {formatMetricValue(reach)}
-                                </TableCell>
-                                <TableCell className="text-center font-mono">
-                                  {formatMetricValue(totalInteractions)}
-                                </TableCell>
-                                <TableCell className="text-center font-mono">
-                                  <div className="flex flex-col items-center">
-                                    <span className="font-bold">
-                                      {formatWatchTime(avgWatchTimeMs)}
-                                    </span>
-                                    <span
-                                      className={cn(
-                                        "text-xs",
-                                        isDark
-                                          ? "text-gray-400"
-                                          : "text-gray-500"
-                                      )}
-                                    >
-                                      avg
-                                    </span>
-                                  </div>
-                                </TableCell>
-                                <TableCell className="text-center font-mono">
-                                  <div className="flex flex-col items-center">
-                                    <span className="font-bold">
-                                      {formatWatchTime(totalWatchTimeMs)}
-                                    </span>
-                                    <span
-                                      className={cn(
-                                        "text-xs",
-                                        isDark
-                                          ? "text-gray-400"
-                                          : "text-gray-500"
-                                      )}
-                                    >
-                                      total
-                                    </span>
-                                  </div>
-                                </TableCell>
+                                {!isTikTokContest && (
+                                  <TableCell className="text-center font-mono">
+                                    {formatMetricValue(saves)}
+                                  </TableCell>
+                                )}
+                                {/* Reach and Interactions commented out for TikTok per user request */}
+                                {!isTikTokContest && (
+                                  <>
+                                    <TableCell className="text-center font-mono">
+                                      {formatMetricValue(reach)}
+                                    </TableCell>
+                                    <TableCell className="text-center font-mono">
+                                      {formatMetricValue(totalInteractions)}
+                                    </TableCell>
+                                  </>
+                                )}
+                                {isTikTokContest ? (
+                                  <>
+                                    <TableCell className="text-center font-mono">
+                                      {formatMetricValue(tiktokTotalEngagement)}
+                                    </TableCell>
+                                    <TableCell className="text-center font-mono">
+                                      {tiktokViewsForRate > 0
+                                        ? `${formatMetricValue(tiktokEngagementRatePct)}%`
+                                        : "—"}
+                                    </TableCell>
+                                  </>
+                                ) : (
+                                  <>
+                                    <TableCell className="text-center font-mono">
+                                      <div className="flex flex-col items-center">
+                                        <span className="font-bold">
+                                          {formatWatchTime(avgWatchTimeMs)}
+                                        </span>
+                                        <span
+                                          className={cn(
+                                            "text-xs",
+                                            isDark
+                                              ? "text-gray-400"
+                                              : "text-gray-500",
+                                          )}
+                                        >
+                                          avg
+                                        </span>
+                                      </div>
+                                    </TableCell>
+                                    <TableCell className="text-center font-mono">
+                                      <div className="flex flex-col items-center">
+                                        <span className="font-bold">
+                                          {formatWatchTime(totalWatchTimeMs)}
+                                        </span>
+                                        <span
+                                          className={cn(
+                                            "text-xs",
+                                            isDark
+                                              ? "text-gray-400"
+                                              : "text-gray-500",
+                                          )}
+                                        >
+                                          total
+                                        </span>
+                                      </div>
+                                    </TableCell>
+                                  </>
+                                )}
                               </>
                             )}
                             {/* Expected Reward and Reward Granted (only for non-Twitter) */}
@@ -2188,10 +2322,10 @@ export function CreatorSubmissionsModal({
                                 <TableCell className="text-center font-medium">
                                   {hasPayoutAdjustment && shouldAdjustReward
                                     ? `${formatCurrency(
-                                      expectedReward,
-                                    )} → ${formatCurrency(
-                                      adjustedExpectedReward,
-                                    )}`
+                                        expectedReward,
+                                      )} → ${formatCurrency(
+                                        adjustedExpectedReward,
+                                      )}`
                                     : formatCurrency(expectedReward)}
                                 </TableCell>
                                 <TableCell className="text-center font-medium text-green-600">
@@ -2210,17 +2344,17 @@ export function CreatorSubmissionsModal({
                               {expectedBonus > 0
                                 ? hasPayoutAdjustment && shouldAdjustBonus
                                   ? `${formatCurrency(
-                                    expectedBonus,
-                                  )} → ${formatCurrency(
-                                    adjustedExpectedBonus,
-                                  )}`
+                                      expectedBonus,
+                                    )} → ${formatCurrency(
+                                      adjustedExpectedBonus,
+                                    )}`
                                   : formatCurrency(expectedBonus)
                                 : "-"}
                             </TableCell>
                             <TableCell
                               className={cn(
                                 "text-center font-medium",
-                                isDark ? "text-green-400" : "text-green-600"
+                                isDark ? "text-green-400" : "text-green-600",
                               )}
                             >
                               {grantedBonus > 0
@@ -2229,11 +2363,14 @@ export function CreatorSubmissionsModal({
                             </TableCell>
                           </>
                         )}
-                        {isAdminView && isInstagramContest && (
+                        {isAdminView && (isInstagramContest || isTikTokContest || isYouTubeContest) && (
                           <TableCell className="text-center">
                             {(() => {
                               const meta = getInsightsMeta(
                                 submission.insights_status ?? null,
+                                (submission.other_stats as any)?.tiktok_error ||
+                                  (submission.other_stats as any)?.instagram_error ||
+                                  (submission.other_stats as any)?.youtube?.insights_error
                               );
                               return (
                                 <div className="flex items-center justify-center">
@@ -2324,7 +2461,7 @@ export function CreatorSubmissionsModal({
                         <TableCell
                           className={cn(
                             "text-sm",
-                            isDark ? "text-gray-400" : "text-gray-600"
+                            isDark ? "text-gray-400" : "text-gray-600",
                           )}
                         >
                           {formatDate(submission.created_at)}
@@ -2340,7 +2477,7 @@ export function CreatorSubmissionsModal({
                               {contest?.post_contest_status !==
                                 "verification_complete" &&
                                 contest?.post_contest_status !==
-                                "payments_processed" && (
+                                  "payments_processed" && (
                                   <>
                                     {/* For Twitter tweets, check moderation_status; for others, check status */}
                                     {!isSubmissionVerified && (
@@ -2380,7 +2517,7 @@ export function CreatorSubmissionsModal({
                               {contest?.post_contest_status ===
                                 "verification_complete" &&
                                 getNormalizedSubmissionStatus(submission) ===
-                                "verified" &&
+                                  "verified" &&
                                 !submission.paid &&
                                 isAdminView &&
                                 !isTwitterLeaderboardContest && (
@@ -2435,7 +2572,7 @@ export function CreatorSubmissionsModal({
                               {contest?.post_contest_status ===
                                 "verification_complete" &&
                                 contest?.post_contest_status !==
-                                "payments_processed" &&
+                                  "payments_processed" &&
                                 isAdminView && (
                                   <>
                                     <DropdownMenuSeparator />
@@ -2465,9 +2602,9 @@ export function CreatorSubmissionsModal({
                                   </DropdownMenuItem>
                                   {isAdminView &&
                                     contest?.platform?.toLowerCase() !==
-                                    "twitter" &&
+                                      "twitter" &&
                                     contest?.platform?.toLowerCase() !==
-                                    "x" && (
+                                      "x" && (
                                       <DropdownMenuItem
                                         onClick={() =>
                                           handleDownloadReel(submission.id)
@@ -2478,13 +2615,13 @@ export function CreatorSubmissionsModal({
                                         }
                                         className={
                                           downloadingSubmissionId ===
-                                            submission.id
+                                          submission.id
                                             ? "opacity-50 cursor-not-allowed"
                                             : ""
                                         }
                                       >
                                         {downloadingSubmissionId ===
-                                          submission.id ? (
+                                        submission.id ? (
                                           <>
                                             <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                                             Downloading...

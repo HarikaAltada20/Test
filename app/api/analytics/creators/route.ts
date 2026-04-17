@@ -14,6 +14,7 @@ export async function GET(request: NextRequest) {
 
     const { searchParams } = new URL(request.url);
     const submissionStatus = searchParams.get("status");
+    const notRejected = searchParams.get("notRejected") === "true";
     const creatorId = searchParams.get("creatorId");
     const limit = parseInt(searchParams.get("limit") || "20");
     const offset = parseInt(searchParams.get("offset") || "0");
@@ -25,7 +26,9 @@ export async function GET(request: NextRequest) {
       .toLowerCase() as "video" | "text_image";
     const videoPlatform = (searchParams.get("videoPlatform") ?? "all")
       .trim()
-      .toLowerCase() as "video" | "all" | "youtube" | "instagram";
+      .toLowerCase();
+    const tiktokParam = searchParams.get("tiktok");
+    const tiktokAnalytics = tiktokParam === "true" || tiktokParam === "1";
     const twitterParam = searchParams.get("twitter");
     const twitterAnalytics = twitterParam === "true" || twitterParam === "1";
 
@@ -79,7 +82,9 @@ export async function GET(request: NextRequest) {
           .select("id")
           .eq("advertiser_id", user.id)
           .eq("contest_type", contestTypeFilter);
-        contestIdsForFilter = (typeContests || []).map((c: { id: string }) => c.id);
+        contestIdsForFilter = (typeContests || []).map(
+          (c: { id: string }) => c.id,
+        );
         if (contestIdsForFilter.length === 0) {
           contestIdsForFilter = [];
         }
@@ -110,14 +115,19 @@ export async function GET(request: NextRequest) {
         .eq("contests.advertiser_id", user.id);
 
       if (contestIdsForFilter && contestIdsForFilter.length > 0) {
-        submissionsQuery = submissionsQuery.in("contest_id", contestIdsForFilter);
+        submissionsQuery = submissionsQuery.in(
+          "contest_id",
+          contestIdsForFilter,
+        );
       } else if (contestTypeFilter && contestTypeFilter !== "all") {
         // No contests of this type — return empty
         submissionsQuery = submissionsQuery.in("contest_id", []);
       }
 
       // Apply status filter if provided
-      if (submissionStatus && submissionStatus !== "all") {
+      if (notRejected) {
+        submissionsQuery = submissionsQuery.neq("status", "rejected");
+      } else if (submissionStatus && submissionStatus !== "all") {
         if (submissionStatus === "verifiedPaid") {
           submissionsQuery = submissionsQuery.in("status", [
             "verified",
@@ -238,6 +248,8 @@ export async function GET(request: NextRequest) {
       const normalizePlatform = (c: any) => {
         const p = (c?.platform ?? "").toString().trim().toLowerCase();
         if (p === "x" || p === "twitter") return "twitter";
+        if (p === "tiktok" || p === "tik_tok" || p === "tik-tok")
+          return "tiktok";
         const d = c?.contest_based_details as
           | { twitter_campaign?: unknown }
           | undefined;
@@ -245,28 +257,51 @@ export async function GET(request: NextRequest) {
         return p || "unknown";
       };
       const allowedPlatforms = ((): string[] => {
-        const videoPlatforms =
-          contentType === "video"
-            ? videoPlatform === "youtube"
-              ? ["youtube"]
-              : videoPlatform === "instagram"
-                ? ["instagram"]
-                : ["youtube", "instagram"]
-            : [];
-        const twitterPlatform = twitterAnalytics ? ["twitter"] : [];
-        if (videoPlatforms.length > 0 && twitterPlatform.length > 0) {
-          return [...videoPlatforms, ...twitterPlatform];
+        const platforms: string[] = [];
+
+        if (contentType === "video") {
+          // Parse videoPlatform to determine which video platforms are selected
+          if (videoPlatform === "all") {
+            // "all" means all three video platforms selected
+            platforms.push("youtube", "instagram", "tiktok");
+          } else if (videoPlatform === "youtube_instagram") {
+            platforms.push("youtube", "instagram");
+          } else if (videoPlatform === "youtube_tiktok") {
+            platforms.push("youtube", "tiktok");
+          } else if (videoPlatform === "instagram_tiktok") {
+            platforms.push("instagram", "tiktok");
+          } else if (videoPlatform === "youtube") {
+            platforms.push("youtube");
+          } else if (videoPlatform === "instagram") {
+            platforms.push("instagram");
+          } else if (videoPlatform === "tiktok") {
+            platforms.push("tiktok");
+          } else {
+            // Fallback: check individual flags
+            platforms.push("youtube", "instagram");
+            if (tiktokAnalytics) platforms.push("tiktok");
+          }
         }
-        if (contentType === "text_image") return twitterPlatform;
-        if (videoPlatforms.length > 0) return videoPlatforms;
-        return ["youtube", "instagram", "twitter"];
+
+        // Add twitter if selected
+        if (twitterAnalytics) {
+          platforms.push("twitter");
+        }
+
+        // If no platforms selected, default to all
+        if (platforms.length === 0) {
+          return ["youtube", "instagram", "tiktok", "twitter"];
+        }
+
+        return platforms;
       })();
       let contestsFiltered = (advertiserContests || []).filter((c: any) =>
         allowedPlatforms.includes(normalizePlatform(c)),
       );
       if (contestTypeFilter && contestTypeFilter !== "all") {
         contestsFiltered = contestsFiltered.filter(
-          (c: any) => (c.contest_type || "").toLowerCase() === contestTypeFilter,
+          (c: any) =>
+            (c.contest_type || "").toLowerCase() === contestTypeFilter,
         );
       }
       const videoContestIds = contestsFiltered
@@ -320,7 +355,9 @@ export async function GET(request: NextRequest) {
       if (videoContestIds.length > 0) {
         submissionsQuery = submissionsQuery.in("contest_id", videoContestIds);
       }
-      if (statusNorm && statusNorm !== "all") {
+      if (notRejected) {
+        submissionsQuery = submissionsQuery.neq("status", "rejected");
+      } else if (statusNorm && statusNorm !== "all") {
         if (statusNorm === "verifiedpaid") {
           submissionsQuery = submissionsQuery.in("status", [
             "verified",
@@ -331,11 +368,14 @@ export async function GET(request: NextRequest) {
         }
       }
 
-      const { data: submissionsRaw } = await submissionsQuery.order("created_at", {
-        ascending: false,
-      });
+      const { data: submissionsRaw } = await submissionsQuery.order(
+        "created_at",
+        {
+          ascending: false,
+        },
+      );
       const submissions =
-        videoContestIds.length > 0 ? submissionsRaw ?? [] : [];
+        videoContestIds.length > 0 ? (submissionsRaw ?? []) : [];
 
       if (!submissions) {
         return NextResponse.json(
@@ -360,7 +400,9 @@ export async function GET(request: NextRequest) {
           .from("twitter_campaign_tweets")
           .select("creator_id, contest_id, impressions, tweet_created_at")
           .in("contest_id", twitterContestIds);
-        if (statusNorm && statusNorm !== "all") {
+        if (notRejected) {
+          tweetsQuery = tweetsQuery.neq("moderation_status", "rejected");
+        } else if (statusNorm && statusNorm !== "all") {
           if (statusNorm === "verifiedpaid") {
             tweetsQuery = tweetsQuery.in("moderation_status", [
               "verified",
@@ -370,6 +412,7 @@ export async function GET(request: NextRequest) {
             tweetsQuery = tweetsQuery.eq("moderation_status", statusNorm);
           }
         }
+        // ...existing code...
         const { data: tweets } = await tweetsQuery;
         (tweets || []).forEach((row: any) => {
           const cid = row.creator_id;

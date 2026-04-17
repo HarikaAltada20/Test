@@ -72,7 +72,12 @@ import {
 
 // Define types for filters and sorting
 type StatusFilterType = "all" | "live" | "upcoming" | "ended";
-type PlatformFilterType = "all" | "youtube" | "instagram" | "twitter"; // Scalable: add more platforms as needed
+type PlatformFilterType =
+  | "all"
+  | "youtube"
+  | "instagram"
+  | "twitter"
+  | "tiktok"; // Scalable: add more platforms as needed
 type ContestTypeFilterType = "all" | "leaderboard" | "cpm";
 type SortOptionType =
   | "relevance_desc"
@@ -220,13 +225,17 @@ export default function OpportunitiesPage({
   }>({});
 
   // Helper functions for loading states
-  const setButtonLoading = (contestId: string, action: 'view', isLoading: boolean) => {
-    setLoadingButtons(prev => ({
+  const setButtonLoading = (
+    contestId: string,
+    action: "view",
+    isLoading: boolean,
+  ) => {
+    setLoadingButtons((prev) => ({
       ...prev,
       [contestId]: {
         ...prev[contestId],
-        [action]: isLoading
-      }
+        [action]: isLoading,
+      },
     }));
   };
   const [mode, setMode] = useState<"light" | "dark">(() => {
@@ -1227,7 +1236,7 @@ export default function OpportunitiesPage({
   );
 
   const handleViewDetails = (id: string) => {
-    setButtonLoading(id, 'view', true);
+    setButtonLoading(id, "view", true);
     router.push(`/dashboard/opportunities/${id}`);
   };
   const resetFilters = () => {
@@ -2112,6 +2121,9 @@ export default function OpportunitiesPage({
                 <SelectItem value="instagram" isDark={isDark}>
                   Instagram
                 </SelectItem>
+                <SelectItem value="tiktok" isDark={isDark}>
+                  TikTok
+                </SelectItem>
                 <SelectItem value="twitter" isDark={isDark}>
                   Twitter
                 </SelectItem>
@@ -2124,6 +2136,9 @@ export default function OpportunitiesPage({
                 </SelectItem>
                 <SelectItem value="instagram" isDark={isDark}>
                   Instagram
+                </SelectItem>
+                <SelectItem value="tiktok" isDark={isDark}>
+                  TikTok
                 </SelectItem>
               </>
             )}

@@ -147,7 +147,7 @@ function extractYoutubeId(url: string) {
 // Helper to choose the highest quality available YouTube thumbnail
 function getYouTubeThumbnailUrl(
   thumbnails?: YouTubeVideo["snippet"]["thumbnails"],
-  videoId?: string
+  videoId?: string,
 ) {
   if (!thumbnails) {
     return videoId ? `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg` : null;
@@ -183,13 +183,13 @@ export default function SubmitContentPage({
   const [fetchedVideos, setFetchedVideos] = useState<YouTubeVideo[]>([]);
   const [fetchedReels, setFetchedReels] = useState<InstagramReel[]>([]);
   const [selectedVideoIndices, setSelectedVideoIndices] = useState<number[]>(
-    []
+    [],
   );
   const [selectedReelIndices, setSelectedReelIndices] = useState<number[]>([]);
 
   // Track which links have been fetched
   const [fetchedLinkIndices, setFetchedLinkIndices] = useState<Set<number>>(
-    new Set()
+    new Set(),
   );
   const [linkFetchStatus, setLinkFetchStatus] = useState<{
     [key: number]: "idle" | "fetching" | "success" | "error";
@@ -197,7 +197,7 @@ export default function SubmitContentPage({
 
   // Track submitted videos and progress
   const [submittedVideos, setSubmittedVideos] = useState<Set<string>>(
-    new Set()
+    new Set(),
   );
   const [submissionProgress, setSubmissionProgress] = useState<{
     submitted: number;
@@ -215,7 +215,9 @@ export default function SubmitContentPage({
   const [userVideos, setUserVideos] = useState<YouTubeVideo[]>([]);
   const [isLoadingVideos, setIsLoadingVideos] = useState(false);
   const [isLoadingMoreVideos, setIsLoadingMoreVideos] = useState(false);
-  const [youtubeNextPageToken, setYoutubeNextPageToken] = useState<string | null>(null);
+  const [youtubeNextPageToken, setYoutubeNextPageToken] = useState<
+    string | null
+  >(null);
 
   // Instagram specific state
   const [instagramAccount, setInstagramAccount] = useState<any>(null); // Holds creator_profiles.instagram_account
@@ -223,6 +225,34 @@ export default function SubmitContentPage({
   const [selectedReel, setSelectedReel] = useState<InstagramReel | null>(null);
   const [isLoadingReels, setIsLoadingReels] = useState(false);
   const [instagramLink, setInstagramLink] = useState(""); // If we want to allow manual IG link input
+
+  // TikTok specific state
+  const [tiktokAccount, setTiktokAccount] = useState<any>(null); // Holds creator_profiles.tiktok_account
+  const [tiktokVideoLink, setTiktokVideoLink] = useState("");
+  const [tiktokVideoPreview, setTiktokVideoPreview] = useState<any>(null);
+  const [isFetchingTiktokVideo, setIsFetchingTiktokVideo] = useState(false);
+  const [isTiktokTokenExpired, setIsTiktokTokenExpired] = useState(false);
+  const [userTiktokVideos, setUserTiktokVideos] = useState<any[]>([]);
+  const [isLoadingTiktokVideos, setIsLoadingTiktokVideos] = useState(false);
+  const [isLoadingMoreTiktokVideos, setIsLoadingMoreTiktokVideos] =
+    useState(false);
+  const [tiktokNextCursor, setTiktokNextCursor] = useState<string | null>(null);
+  const [tiktokCurrentPage, setTiktokCurrentPage] = useState(1);
+  const [selectedTiktokVideo, setSelectedTiktokVideo] = useState<any>(null);
+  const [selectedTiktokVideosFromTabs, setSelectedTiktokVideosFromTabs] =
+    useState<any[]>([]);
+  const [tiktokLibraryMessage, setTiktokLibraryMessage] = useState<
+    string | null
+  >(null);
+
+  // TikTok multiple link submissions state
+  const [fetchedTiktokVideosFromLinks, setFetchedTiktokVideosFromLinks] =
+    useState<any[]>([]);
+  const [selectedTiktokVideoIndices, setSelectedTiktokVideoIndices] = useState<
+    number[]
+  >([]);
+  const [selectedTiktokVideosFromLinks, setSelectedTiktokVideosFromLinks] =
+    useState<any[]>([]);
 
   // Pagination state
   const ITEMS_PER_PAGE = 10; // Number of items to display per page
@@ -269,22 +299,29 @@ export default function SubmitContentPage({
   // Derived state for paginated YouTube videos - Reinstated for client-side pagination
   const paginatedUserVideos = userVideos.slice(
     (youtubeCurrentPage - 1) * ITEMS_PER_PAGE,
-    youtubeCurrentPage * ITEMS_PER_PAGE
+    youtubeCurrentPage * ITEMS_PER_PAGE,
   );
   const totalYoutubePages = Math.ceil(userVideos.length / ITEMS_PER_PAGE);
 
   // Derived state for paginated Instagram reels (client-side)
   const paginatedUserReels = userReels.slice(
     (instagramCurrentPage - 1) * ITEMS_PER_PAGE,
-    instagramCurrentPage * ITEMS_PER_PAGE
+    instagramCurrentPage * ITEMS_PER_PAGE,
   );
   const totalInstagramPages = Math.ceil(userReels.length / ITEMS_PER_PAGE);
+
+  // Derived state for paginated TikTok videos (client-side)
+  const paginatedTiktokVideos = userTiktokVideos.slice(
+    (tiktokCurrentPage - 1) * ITEMS_PER_PAGE,
+    tiktokCurrentPage * ITEMS_PER_PAGE,
+  );
+  const totalTiktokPages = Math.ceil(userTiktokVideos.length / ITEMS_PER_PAGE);
 
   // Helper function for 2-hour validation
   const isContentTooOld = (publishedAt: string): boolean => {
     const windowAgo = dayjs().subtract(
       SUBMISSION_WINDOW_VALUE,
-      SUBMISSION_WINDOW_UNIT
+      SUBMISSION_WINDOW_UNIT,
     );
     return dayjs(publishedAt).isBefore(windowAgo);
   };
@@ -348,7 +385,7 @@ export default function SubmitContentPage({
       if (
         submissionTimingError?.includes("This video was published") ||
         submissionTimingError?.startsWith(
-          "The selected video's publication date is missing"
+          "The selected video's publication date is missing",
         )
       ) {
         setSubmissionTimingError(null);
@@ -384,7 +421,7 @@ export default function SubmitContentPage({
       if (
         submissionTimingError?.includes("This Reel was published") ||
         submissionTimingError?.startsWith(
-          "The selected Reel's publication date is missing"
+          "The selected Reel's publication date is missing",
         )
       ) {
         setSubmissionTimingError(null);
@@ -425,7 +462,7 @@ export default function SubmitContentPage({
       console.log("Current time:", new Date());
       console.log(
         "Is token expired?",
-        new Date(youtubeAccount.expires_at) <= new Date()
+        new Date(youtubeAccount.expires_at) <= new Date(),
       );
 
       if (new Date(youtubeAccount.expires_at) <= new Date()) {
@@ -438,10 +475,10 @@ export default function SubmitContentPage({
               console.log("Automatic refresh failed, setting error state");
               setIsTokenExpired(true);
               setError(
-                "Your YouTube connection has expired. Please re-connect your YouTube account."
+                "Your YouTube connection has expired. Please re-connect your YouTube account.",
               );
             }
-          }
+          },
         );
       } else {
         console.log("Token is not expired, fetching videos normally");
@@ -498,7 +535,7 @@ export default function SubmitContentPage({
       console.log(
         "Is token expired?",
         instagramAccount.token_expiry &&
-        dayjs().isAfter(dayjs(instagramAccount.token_expiry))
+        dayjs().isAfter(dayjs(instagramAccount.token_expiry)),
       );
 
       if (instagramAccount?.access_token) {
@@ -507,25 +544,25 @@ export default function SubmitContentPage({
           dayjs().isAfter(dayjs(instagramAccount.token_expiry))
         ) {
           console.log(
-            "Instagram token is expired, attempting automatic refresh..."
+            "Instagram token is expired, attempting automatic refresh...",
           );
           // Automatically attempt to refresh the token
           autoRefreshInstagramTokenAndRetry(async () => {
             if (instagramAccount.app_scoped_user_id) {
               await fetchInstagramReels(
                 instagramAccount.access_token,
-                instagramAccount.app_scoped_user_id
+                instagramAccount.app_scoped_user_id,
               );
             }
           }).then((refreshSuccess) => {
             console.log("Instagram automatic refresh result:", refreshSuccess);
             if (!refreshSuccess) {
               console.log(
-                "Instagram automatic refresh failed, setting error state"
+                "Instagram automatic refresh failed, setting error state",
               );
               setIsInstagramTokenExpired(true);
               setError(
-                "Your Instagram connection has expired. Please re-connect your Instagram account in settings."
+                "Your Instagram connection has expired. Please re-connect your Instagram account in settings.",
               );
               setIsLoadingReels(false);
             }
@@ -539,7 +576,7 @@ export default function SubmitContentPage({
             instagramAccount.app_scoped_user_id
           ) {
             setCurrentInstagramBusinessAccountID(
-              instagramAccount.app_scoped_user_id
+              instagramAccount.app_scoped_user_id,
             );
             // The useEffect listening to currentInstagramBusinessAccountID will now trigger fetchInstagramReels
             setIsLoadingReels(true); // Set loading true, fetchInstagramReels will set it false in its finally block
@@ -549,13 +586,13 @@ export default function SubmitContentPage({
               instagramAccount.account_type === "MEDIA_CREATOR")
           ) {
             setError(
-              "Connected Instagram account is Business/Creator but missing the required ID (app_scoped_user_id). Please try reconnecting the account."
+              "Connected Instagram account is Business/Creator but missing the required ID (app_scoped_user_id). Please try reconnecting the account.",
             );
             setIsLoadingReels(false);
           } else {
             setError(
               "Instagram account must be a Business or Creator account to fetch reels. Current type: " +
-              (instagramAccount.account_type || "Unknown")
+              (instagramAccount.account_type || "Unknown"),
             );
             setIsLoadingReels(false);
           }
@@ -583,7 +620,7 @@ export default function SubmitContentPage({
       ) {
         fetchInstagramReels(
           instagramAccount.access_token,
-          currentInstagramBusinessAccountID
+          currentInstagramBusinessAccountID,
         );
       }
     }
@@ -594,9 +631,152 @@ export default function SubmitContentPage({
     contestPlatform,
   ]);
 
+  // Check if user has connected TikTok account
+  useEffect(() => {
+    async function checkTikTokConnection() {
+      if (!user || !supabase || contestPlatform !== "tiktok") {
+        if (contestPlatform === "tiktok") setTiktokAccount(null);
+        return;
+      }
+
+      try {
+        const { data: profile } = await supabase
+          .from("creator_profiles")
+          .select("tiktok_account")
+          .eq("id", user.id)
+          .single();
+
+        if (!profile || !profile.tiktok_account) {
+          setTiktokAccount(null);
+          return;
+        }
+
+        const tkAccount = profile.tiktok_account as any;
+        setTiktokAccount(tkAccount);
+
+        // Check token expiry
+        if (
+          tkAccount.expires_at &&
+          new Date(tkAccount.expires_at) <= new Date()
+        ) {
+          setIsTiktokTokenExpired(true);
+          setError(
+            "Your TikTok connection has expired. Please re-connect your TikTok account in settings.",
+          );
+        }
+      } catch (err) {
+        console.error("Error fetching TikTok account:", err);
+        setError("Failed to fetch TikTok account information");
+      }
+    }
+
+    checkTikTokConnection();
+  }, [user, supabase, contestPlatform]);
+
+  // Auto-fetch TikTok videos when account is connected
+  useEffect(() => {
+    if (
+      tiktokAccount &&
+      !isTiktokTokenExpired &&
+      contestPlatform === "tiktok"
+    ) {
+      fetchTikTokVideos();
+    }
+  }, [tiktokAccount, isTiktokTokenExpired, contestPlatform]);
+
+  // Fetch TikTok videos from user's library
+  const fetchTikTokVideos = async () => {
+    if (contestPlatform !== "tiktok") return;
+    setIsLoadingTiktokVideos(true);
+    setError(null);
+    setTiktokLibraryMessage(null);
+    setTiktokNextCursor(null);
+
+    try {
+      const response = await fetch("/api/auth/tiktok/videos");
+      const data = await response.json();
+
+      if (!response.ok) {
+        if (response.status === 401 && data.expired) {
+          setIsTiktokTokenExpired(true);
+          setError(
+            "Your TikTok connection has expired. Please reconnect your account.",
+          );
+          return;
+        }
+        throw new Error(data.error || "Failed to fetch TikTok videos");
+      }
+
+      const allVideos: any[] = data.videos || [];
+      // Filter by submission window
+      const filteredVideos = allVideos.filter((video: any) => {
+        if (!video.create_time) return true; // include if no timestamp
+        const publishedAt = new Date(video.create_time * 1000).toISOString();
+        return !isContentTooOld(publishedAt);
+      });
+      setUserTiktokVideos(filteredVideos);
+      setTiktokCurrentPage(1);
+      setTiktokNextCursor(data.hasMore ? data.nextCursor : null);
+
+      if (allVideos.length > 0 && filteredVideos.length === 0) {
+        setTiktokLibraryMessage(
+          `All your TikTok videos are older than ${SUBMISSION_WINDOW_UNIT_DISPLAY}. Only recent content is eligible.`,
+        );
+      }
+    } catch (err: any) {
+      console.error("Error fetching TikTok videos:", err);
+      setError(
+        err.message || "Failed to load your TikTok videos. Please try again.",
+      );
+      setUserTiktokVideos([]);
+      setTiktokCurrentPage(1);
+    } finally {
+      setIsLoadingTiktokVideos(false);
+    }
+  };
+
+  // Load more TikTok videos
+  const loadMoreTiktokVideos = async () => {
+    if (!tiktokNextCursor || isLoadingMoreTiktokVideos) return;
+    setIsLoadingMoreTiktokVideos(true);
+
+    try {
+      const response = await fetch(
+        `/api/auth/tiktok/videos?cursor=${encodeURIComponent(tiktokNextCursor)}`,
+      );
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || "Failed to load more videos");
+      }
+
+      const newVideos: any[] = (data.videos || []).filter((video: any) => {
+        if (!video.create_time) return true;
+        const publishedAt = new Date(video.create_time * 1000).toISOString();
+        return !isContentTooOld(publishedAt);
+      });
+
+      setUserTiktokVideos((prev) => {
+        const existingIds = new Set(prev.map((v) => v.id));
+        const unique = newVideos.filter((v) => !existingIds.has(v.id));
+        return [...prev, ...unique];
+      });
+      setTiktokNextCursor(data.hasMore ? data.nextCursor : null);
+    } catch (err: any) {
+      console.error("Error loading more TikTok videos:", err);
+      toast({
+        title: "Failed to load more videos",
+        description: err.message || "Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoadingMoreTiktokVideos(false);
+    }
+  };
+
   // Automatic token refresh with retry functionality
   const autoRefreshYouTubeTokenAndRetry = async (
-    originalOperation: () => Promise<void>
+    originalOperation: () => Promise<void>,
   ) => {
     console.log("autoRefreshYouTubeTokenAndRetry called");
     console.log("User:", user?.id);
@@ -667,7 +847,7 @@ export default function SubmitContentPage({
       console.error("Error refreshing YouTube token:", err);
       setError(
         err.message ||
-        "Failed to refresh YouTube token. Please try reconnecting your account."
+        "Failed to refresh YouTube token. Please try reconnecting your account.",
       );
       setIsTokenExpired(true);
       toast({
@@ -685,7 +865,7 @@ export default function SubmitContentPage({
 
   // Automatic Instagram token refresh with retry functionality
   const autoRefreshInstagramTokenAndRetry = async (
-    originalOperation: () => Promise<void>
+    originalOperation: () => Promise<void>,
   ) => {
     console.log("autoRefreshInstagramTokenAndRetry called");
     console.log("User:", user?.id);
@@ -756,7 +936,7 @@ export default function SubmitContentPage({
       console.error("Error refreshing Instagram token:", err);
       setError(
         err.message ||
-        "Failed to refresh Instagram token. Please try reconnecting your account."
+        "Failed to refresh Instagram token. Please try reconnecting your account.",
       );
       setIsInstagramTokenExpired(true);
       toast({
@@ -786,13 +966,12 @@ export default function SubmitContentPage({
 
         if (!response.ok) {
           if (response.status === 401) {
-            const refreshSuccess = await autoRefreshYouTubeTokenAndRetry(
-              performFetch
-            );
+            const refreshSuccess =
+              await autoRefreshYouTubeTokenAndRetry(performFetch);
             if (!refreshSuccess) {
               setIsTokenExpired(true);
               setError(
-                "Your YouTube connection has expired. Please re-connect your YouTube account."
+                "Your YouTube connection has expired. Please re-connect your YouTube account.",
               );
               setUserVideos([]);
               setYoutubeCurrentPage(1);
@@ -807,7 +986,7 @@ export default function SubmitContentPage({
         const filteredVideos = allFetchedVideos.filter(
           (video: YouTubeVideo) =>
             video.snippet?.publishedAt &&
-            !isContentTooOld(video.snippet.publishedAt)
+            !isContentTooOld(video.snippet.publishedAt),
         );
         setUserVideos(filteredVideos);
         setYoutubeCurrentPage(1);
@@ -819,13 +998,14 @@ export default function SubmitContentPage({
           filteredVideos.length === 0
         ) {
           setLibraryMessage(
-            `No videos found in your YouTube channel that were published in the last ${SUBMISSION_WINDOW_UNIT_DISPLAY}. You can still fetch an older video by pasting its link directly, but it must have been published within the last ${SUBMISSION_WINDOW_UNIT_DISPLAY} to be eligible for the submission/ contest.`
+            `No videos found in your YouTube channel that were published in the last ${SUBMISSION_WINDOW_UNIT_DISPLAY}. You can still fetch an older video by pasting its link directly, but it must have been published within the last ${SUBMISSION_WINDOW_UNIT_DISPLAY} to be eligible for the submission/ contest.`,
           );
         }
       } catch (err: any) {
         console.error("Error fetching YouTube videos:", err);
         setError(
-          err.message || "Failed to load your YouTube videos. Please try again."
+          err.message ||
+          "Failed to load your YouTube videos. Please try again.",
         );
         setUserVideos([]);
         setYoutubeCurrentPage(1);
@@ -844,7 +1024,7 @@ export default function SubmitContentPage({
 
     try {
       const response = await fetch(
-        `/api/youtube/videos?pageToken=${encodeURIComponent(youtubeNextPageToken)}`
+        `/api/youtube/videos?pageToken=${encodeURIComponent(youtubeNextPageToken)}`,
       );
       const data = await response.json();
 
@@ -855,7 +1035,7 @@ export default function SubmitContentPage({
       const newVideos: YouTubeVideo[] = (data.videos || []).filter(
         (video: YouTubeVideo) =>
           video.snippet?.publishedAt &&
-          !isContentTooOld(video.snippet.publishedAt)
+          !isContentTooOld(video.snippet.publishedAt),
       );
 
       setUserVideos((prev) => {
@@ -883,8 +1063,8 @@ export default function SubmitContentPage({
       "/api/youtube/auth?returnTo=" +
       encodeURIComponent(
         `/dashboard/opportunities/${contestId}/submit?platform=${contestPlatform || ""
-        }`
-      ) // pass platform back
+        }`,
+      ), // pass platform back
     );
   };
 
@@ -902,7 +1082,7 @@ export default function SubmitContentPage({
       ) {
         await fetchInstagramReels(
           instagramAccount.access_token,
-          instagramAccount.app_scoped_user_id
+          instagramAccount.app_scoped_user_id,
         );
       }
     });
@@ -920,7 +1100,7 @@ export default function SubmitContentPage({
       const { data: contestData, error: contestError } = await supabase
         .from("contests")
         .select(
-          "id, title, platform, contest_type, multiple_submissions_enabled, max_submissions_per_creator, content_type, bonus_details, contest_based_details"
+          "id, title, platform, contest_type, multiple_submissions_enabled, max_submissions_per_creator, content_type, bonus_details, contest_based_details",
         ) // Include new feature fields
         .eq("id", contestId)
         .single();
@@ -928,7 +1108,7 @@ export default function SubmitContentPage({
       if (contestError || !contestData) {
         console.error("Error fetching contest:", contestError);
         setError(
-          "Failed to load contest details. The contest might not exist or an error occurred."
+          "Failed to load contest details. The contest might not exist or an error occurred.",
         );
         setContestPlatform(null);
         setContest(null);
@@ -951,7 +1131,7 @@ export default function SubmitContentPage({
       if (existingSubmissions && existingSubmissions.length > 0) {
         // Track submitted videos and progress
         const videoIds = existingSubmissions.map(
-          (sub: any) => sub.video_id || sub.content_link
+          (sub: any) => sub.video_id || sub.content_link,
         );
         setSubmittedVideos(new Set(videoIds));
         setSubmissionProgress({
@@ -965,7 +1145,7 @@ export default function SubmitContentPage({
         // Only redirect if max submissions reached
         if (existingSubmissions.length >= maxSubmissions) {
           redirect(
-            `/dashboard/opportunities/${contestId}?error=already_submitted`
+            `/dashboard/opportunities/${contestId}?error=already_submitted`,
           );
           return;
         }
@@ -975,7 +1155,7 @@ export default function SubmitContentPage({
         setContestPlatform(contestData.platform.toLowerCase());
       } else {
         setError(
-          "This contest does not have a specified platform (e.g., YouTube or Instagram)."
+          "This contest does not have a specified platform (e.g., YouTube or Instagram).",
         );
         setContestPlatform(null);
       }
@@ -1087,7 +1267,7 @@ export default function SubmitContentPage({
       // This will catch errors from fetch itself (network error) or SyntaxError from response.json() if body is not valid JSON, or errors thrown above.
       setError(
         err.message ||
-        "An unexpected error occurred while fetching YouTube video."
+        "An unexpected error occurred while fetching YouTube video.",
       );
       setVideoPreview(null);
       setSelectedVideo(null);
@@ -1210,7 +1390,7 @@ export default function SubmitContentPage({
       console.error("Error in handleFetchInstagramByLink:", err);
       setError(
         err.message ||
-        "An unexpected error occurred while fetching Instagram media."
+        "An unexpected error occurred while fetching Instagram media.",
       );
       setInstagramMediaPreview(null);
       setSelectedReel(null);
@@ -1291,7 +1471,7 @@ export default function SubmitContentPage({
     } catch (err: any) {
       setError(
         err.message ||
-        "An unexpected error occurred while fetching YouTube video."
+        "An unexpected error occurred while fetching YouTube video.",
       );
     } finally {
       setIsFetchingVideo(false);
@@ -1300,7 +1480,7 @@ export default function SubmitContentPage({
 
   const handleFetchInstagramVideoMultiple = async (
     link: string,
-    index: number
+    index: number,
   ) => {
     if (!link.trim()) {
       setError("Please enter an Instagram video URL");
@@ -1382,7 +1562,120 @@ export default function SubmitContentPage({
     } catch (err: any) {
       setError(
         err.message ||
-        "An unexpected error occurred while fetching Instagram video."
+        "An unexpected error occurred while fetching Instagram video.",
+      );
+    } finally {
+      setIsFetchingVideo(false);
+    }
+  };
+
+  const handleFetchTiktokVideoMultiple = async (
+    link: string,
+    index: number,
+  ) => {
+    if (!link.trim()) {
+      setError("Please enter a TikTok video URL");
+      return;
+    }
+
+    setIsFetchingVideo(true);
+    setError(null);
+
+    try {
+      // Extract video ID from TikTok URL
+      const tiktokUrlPattern = /tiktok\.com\/@[\w.-]+\/video\/(\d+)/i;
+      const match = link.match(tiktokUrlPattern);
+      const videoId = match ? match[1] : null;
+
+      if (!videoId) {
+        throw new Error(
+          `Could not extract video ID from TikTok URL for link ${index + 1}. Please use a direct TikTok video link (e.g., https://www.tiktok.com/@username/video/1234567890).`,
+        );
+      }
+
+      // Validate ownership: extract @username from URL and compare with connected account
+      const usernameMatch = link.match(/tiktok\.com\/@([\w.-]+)\//i);
+      const urlUsername = usernameMatch ? usernameMatch[1].toLowerCase() : null;
+      const connectedUsername = tiktokAccount?.username?.toLowerCase();
+
+      if (
+        urlUsername &&
+        connectedUsername &&
+        urlUsername !== connectedUsername
+      ) {
+        const errorMessage = `Link ${index + 1}: This video belongs to @${usernameMatch![1]}, not your connected TikTok account (@${tiktokAccount.username}). You can only submit your own content.`;
+        setError(errorMessage);
+        toast({
+          title: "Not Your Content",
+          description: errorMessage,
+          variant: "destructive",
+        });
+        return;
+      }
+
+      const response = await fetch(
+        `/api/auth/tiktok/video-info?video_id=${videoId}`,
+        {
+          headers: { "Content-Type": "application/json" },
+        },
+      );
+
+      let videoData: any;
+      if (response.ok) {
+        const data = await response.json();
+        videoData = data.video || {
+          id: videoId,
+          share_url: link,
+          title: "TikTok Video",
+          view_count: 0,
+          like_count: 0,
+          comment_count: 0,
+          share_count: 0,
+        };
+      } else {
+        // API returned an error – likely the video doesn't belong to this user
+        const errorData = await response.json().catch(() => ({}));
+        const is404 = response.status === 404;
+        if (is404) {
+          const errorMessage = `Link ${index + 1}: This video was not found in your connected TikTok account. You can only submit your own TikTok videos.`;
+          setError(errorMessage);
+          toast({
+            title: "Not Your Content",
+            description: errorMessage,
+            variant: "destructive",
+          });
+          return;
+        }
+        // For other errors (token expired, etc.), show the API error
+        throw new Error(
+          errorData?.error ||
+          `Failed to verify TikTok video for link ${index + 1}.`,
+        );
+      }
+
+      // Check content age if create_time is available
+      if (videoData.create_time) {
+        const videoDate = new Date(videoData.create_time * 1000).toISOString();
+        if (isContentTooOld(videoDate)) {
+          const errorMessage = `Video ${index + 1} was published more than ${SUBMISSION_WINDOW_UNIT_DISPLAY} ago and cannot be submitted.`;
+          setError(errorMessage);
+          toast({
+            title: "Content Too Old",
+            description: errorMessage,
+            variant: "destructive",
+          });
+          return;
+        }
+      }
+
+      const newFetchedTiktokVideos = [...fetchedTiktokVideosFromLinks];
+      newFetchedTiktokVideos[index] = videoData;
+      setFetchedTiktokVideosFromLinks(newFetchedTiktokVideos);
+      setError(null);
+    } catch (err: any) {
+      setError(
+        err.message ||
+        "An unexpected error occurred while fetching TikTok video.",
       );
     } finally {
       setIsFetchingVideo(false);
@@ -1393,7 +1686,7 @@ export default function SubmitContentPage({
     const unfetchedLinks = submissionLinks
       .map((link, index) => ({ link, index }))
       .filter(
-        ({ link, index }) => link.trim() && !fetchedLinkIndices.has(index)
+        ({ link, index }) => link.trim() && !fetchedLinkIndices.has(index),
       );
 
     if (unfetchedLinks.length === 0) {
@@ -1412,6 +1705,8 @@ export default function SubmitContentPage({
       const promises = unfetchedLinks.map(({ link, index }) => {
         if (contestPlatform?.toLowerCase() === "youtube") {
           return handleFetchVideoMultiple(link, index);
+        } else if (contestPlatform?.toLowerCase() === "tiktok") {
+          return handleFetchTiktokVideoMultiple(link, index);
         } else {
           return handleFetchInstagramVideoMultiple(link, index);
         }
@@ -1449,13 +1744,13 @@ export default function SubmitContentPage({
 
     try {
       const response = await fetch(
-        `/api/leaderboard/${contestId}/my-submission`
+        `/api/leaderboard/${contestId}/my-submission`,
       );
       if (response.ok) {
         const data = await response.json();
         if (data && data.submissions) {
           const videoIds = data.submissions.map(
-            (sub: any) => sub.video_id || sub.content_link
+            (sub: any) => sub.video_id || sub.content_link,
           );
           setSubmittedVideos(new Set(videoIds));
           setSubmissionProgress({
@@ -1472,12 +1767,17 @@ export default function SubmitContentPage({
   // Helper function to check if a video is already selected
   const isVideoAlreadySelected = (
     videoId: string,
-    platform: "youtube" | "instagram"
+    platform: "youtube" | "instagram" | "tiktok",
   ) => {
     if (platform === "youtube") {
       return (
         selectedVideosFromTabs.some((v) => v.id.videoId === videoId) ||
         selectedVideos.some((v) => v.id.videoId === videoId)
+      );
+    } else if (platform === "tiktok") {
+      return (
+        selectedTiktokVideosFromTabs.some((v: any) => v.id === videoId) ||
+        selectedTiktokVideosFromLinks.some((v: any) => v.id === videoId)
       );
     } else {
       return (
@@ -1508,6 +1808,8 @@ export default function SubmitContentPage({
     try {
       if (contestPlatform?.toLowerCase() === "youtube") {
         await handleFetchVideoMultiple(link, index);
+      } else if (contestPlatform?.toLowerCase() === "tiktok") {
+        await handleFetchTiktokVideoMultiple(link, index);
       } else {
         await handleFetchInstagramVideoMultiple(link, index);
       }
@@ -1540,6 +1842,10 @@ export default function SubmitContentPage({
     // Remove from fetched videos/reels if it was fetched
     if (contestPlatform?.toLowerCase() === "youtube") {
       setFetchedVideos((prev) => prev.filter((_, i) => i !== index));
+    } else if (contestPlatform?.toLowerCase() === "tiktok") {
+      setFetchedTiktokVideosFromLinks((prev) =>
+        prev.filter((_, i) => i !== index),
+      );
     } else {
       setFetchedReels((prev) => prev.filter((_, i) => i !== index));
     }
@@ -1562,7 +1868,7 @@ export default function SubmitContentPage({
           if (
             isVideoAlreadySubmitted(
               video.id.videoId,
-              `https://www.youtube.com/watch?v=${video.id.videoId}`
+              `https://www.youtube.com/watch?v=${video.id.videoId}`,
             )
           ) {
             toast({
@@ -1604,10 +1910,10 @@ export default function SubmitContentPage({
         }
       } else {
         setSelectedVideoIndices(
-          selectedVideoIndices.filter((i) => i !== index)
+          selectedVideoIndices.filter((i) => i !== index),
         );
         setSelectedVideos(
-          selectedVideos.filter((_, i) => selectedVideoIndices[i] !== index)
+          selectedVideos.filter((_, i) => selectedVideoIndices[i] !== index),
         );
       }
     } else {
@@ -1657,9 +1963,68 @@ export default function SubmitContentPage({
       } else {
         setSelectedReelIndices(selectedReelIndices.filter((i) => i !== index));
         setSelectedReels(
-          selectedReels.filter((_, i) => selectedReelIndices[i] !== index)
+          selectedReels.filter((_, i) => selectedReelIndices[i] !== index),
         );
       }
+    }
+  };
+
+  // Handle TikTok video selection for multiple submissions (from link inputs)
+  const handleTiktokVideoSelection = (index: number, isSelected: boolean) => {
+    if (isSelected) {
+      const video = fetchedTiktokVideosFromLinks[index];
+      if (video) {
+        // Check if video is already submitted
+        if (isVideoAlreadySubmitted(video.id, video.share_url || "")) {
+          toast({
+            title: "Video Already Submitted",
+            description: `This TikTok video has already been submitted to this contest`,
+            variant: "destructive",
+          });
+          return;
+        }
+
+        // Check if video is already selected elsewhere
+        if (isVideoAlreadySelected(video.id, "tiktok")) {
+          toast({
+            title: "Video Already Selected",
+            description: "This video is already selected from another source",
+            variant: "destructive",
+          });
+          return;
+        }
+
+        // Check limit
+        const maxSubmissions = contest?.max_submissions_per_creator || 1;
+        const remainingSubmissions =
+          maxSubmissions - submissionProgress.submitted;
+        const totalSelected =
+          selectedTiktokVideosFromTabs.length +
+          selectedTiktokVideosFromLinks.length;
+        if (totalSelected >= remainingSubmissions) {
+          toast({
+            title: "Selection Limit Reached",
+            description: `You can only select up to ${remainingSubmissions} more videos for this contest (${submissionProgress.submitted} already submitted)`,
+            variant: "destructive",
+          });
+          return;
+        }
+
+        setSelectedTiktokVideoIndices([...selectedTiktokVideoIndices, index]);
+        setSelectedTiktokVideosFromLinks([
+          ...selectedTiktokVideosFromLinks,
+          video,
+        ]);
+      }
+    } else {
+      setSelectedTiktokVideoIndices(
+        selectedTiktokVideoIndices.filter((i) => i !== index),
+      );
+      setSelectedTiktokVideosFromLinks(
+        selectedTiktokVideosFromLinks.filter(
+          (_, i) => selectedTiktokVideoIndices[i] !== index,
+        ),
+      );
     }
   };
 
@@ -1673,7 +2038,7 @@ export default function SubmitContentPage({
   const handleSingleYoutubeSubmission = async () => {
     if (!youtubeAccount) {
       throw new Error(
-        "YouTube account not connected. Please connect your YouTube account in settings."
+        "YouTube account not connected. Please connect your YouTube account in settings.",
       );
     }
 
@@ -1696,7 +2061,7 @@ export default function SubmitContentPage({
     const youtubeThumbnailUrl =
       getYouTubeThumbnailUrl(
         videoToSubmit.snippet.thumbnails,
-        videoToSubmit.id.videoId
+        videoToSubmit.id.videoId,
       ) || `https://i.ytimg.com/vi/${videoToSubmit.id.videoId}/hqdefault.jpg`;
 
     const submissionPayload = {
@@ -1731,7 +2096,7 @@ export default function SubmitContentPage({
   const handleSingleInstagramSubmission = async () => {
     if (!instagramAccount?.access_token) {
       throw new Error(
-        "Instagram account not connected. Please connect your Instagram account in settings."
+        "Instagram account not connected. Please connect your Instagram account in settings.",
       );
     }
 
@@ -1742,19 +2107,19 @@ export default function SubmitContentPage({
     setMessage("Fetching Instagram Reel insights...");
 
     const insightsRes = await fetch(
-      `https://graph.instagram.com/${selectedReel.id}/insights?metric=reach,likes,comments,shares,saved,total_interactions,views&access_token=${instagramAccount.access_token}`
+      `https://graph.instagram.com/${selectedReel.id}/insights?metric=reach,likes,comments,shares,saved,total_interactions,views&access_token=${instagramAccount.access_token}`,
     );
     const insightsData = await insightsRes.json();
 
     if (!insightsRes.ok || insightsData.error) {
       if (insightsData.error?.error_subcode === 2108006) {
         throw new Error(
-          "This Reel was posted before your Instagram account was converted to a Business/Creator account, so its metrics cannot be fetched. Please select a different Reel."
+          "This Reel was posted before your Instagram account was converted to a Business/Creator account, so its metrics cannot be fetched. Please select a different Reel.",
         );
       }
       throw new Error(
         insightsData.error?.message ||
-        "Failed to fetch Instagram Reel insights."
+        "Failed to fetch Instagram Reel insights.",
       );
     }
 
@@ -1769,7 +2134,7 @@ export default function SubmitContentPage({
           if (metric.name === "views") {
             primaryViews = value;
           }
-        }
+        },
       );
     }
 
@@ -1819,7 +2184,7 @@ export default function SubmitContentPage({
   const handleMultipleYoutubeSubmission = async (videos: YouTubeVideo[]) => {
     if (!youtubeAccount) {
       throw new Error(
-        "YouTube account not connected. Please connect your YouTube account in settings."
+        "YouTube account not connected. Please connect your YouTube account in settings.",
       );
     }
 
@@ -1860,7 +2225,7 @@ export default function SubmitContentPage({
       } catch (error) {
         console.error(
           `Error submitting YouTube video ${video.id.videoId}:`,
-          error
+          error,
         );
         // Re-throw the error so it can be properly handled by the calling function
         throw error;
@@ -1878,7 +2243,7 @@ export default function SubmitContentPage({
   const handleMultipleInstagramSubmission = async (reels: InstagramReel[]) => {
     if (!instagramAccount?.access_token) {
       throw new Error(
-        "Instagram account not connected. Please connect your Instagram account in settings."
+        "Instagram account not connected. Please connect your Instagram account in settings.",
       );
     }
 
@@ -1886,7 +2251,7 @@ export default function SubmitContentPage({
       try {
         // Fetch insights for each reel
         const insightsRes = await fetch(
-          `https://graph.instagram.com/${reel.id}/insights?metric=reach,likes,comments,shares,saved,total_interactions,views&access_token=${instagramAccount.access_token}`
+          `https://graph.instagram.com/${reel.id}/insights?metric=reach,likes,comments,shares,saved,total_interactions,views&access_token=${instagramAccount.access_token}`,
         );
         const insightsData = await insightsRes.json();
 
@@ -1895,12 +2260,12 @@ export default function SubmitContentPage({
           if (insightsData.error?.error_subcode === 2108006) {
             throw new Error(
               `"${reel.caption || "Instagram Reel"
-              }" was posted before your Instagram account was converted to a Business/Creator account, so its metrics cannot be fetched. Please select a different Reel.`
+              }" was posted before your Instagram account was converted to a Business/Creator account, so its metrics cannot be fetched. Please select a different Reel.`,
             );
           }
           throw new Error(
             insightsData.error?.message ||
-            "Failed to fetch Instagram Reel insights."
+            "Failed to fetch Instagram Reel insights.",
           );
         }
 
@@ -1915,7 +2280,7 @@ export default function SubmitContentPage({
               if (metric.name === "views") {
                 primaryViews = value;
               }
-            }
+            },
           );
 
           if (primaryViews === 0 && instagramApiMetrics.reach > 0) {
@@ -1964,6 +2329,180 @@ export default function SubmitContentPage({
   };
 
   /**
+   * Handle single TikTok video submission via link
+   */
+  const handleSingleTiktokSubmission = async () => {
+    if (!tiktokAccount) {
+      throw new Error(
+        "TikTok account not connected. Please connect your TikTok account in settings.",
+      );
+    }
+
+    // Use tiktokVideoPreview or fall back to selectedTiktokVideo (from library)
+    const videoToSubmit = tiktokVideoPreview || selectedTiktokVideo;
+
+    if (!videoToSubmit) {
+      throw new Error("No TikTok video selected for submission.");
+    }
+
+    setMessage("Preparing TikTok video submission...");
+
+    const tiktokStats = {
+      view_count: videoToSubmit.view_count || 0,
+      like_count: videoToSubmit.like_count || 0,
+      comment_count: videoToSubmit.comment_count || 0,
+      share_count: videoToSubmit.share_count || 0,
+    };
+
+    const submissionPayload = {
+      contest_id: contestId,
+      creator_id: user!.id,
+      status: "pending",
+      platform: "tiktok",
+      views: videoToSubmit.view_count || 0,
+      content_link: videoToSubmit.share_url || tiktokVideoLink,
+      video_id: videoToSubmit.id,
+      video_title: videoToSubmit.title || "TikTok Video",
+      video_thumbnail_url: videoToSubmit.cover_image_url || null,
+      other_stats: { tiktok: tiktokStats },
+    };
+
+    const { error: submissionError } = await supabase
+      .from("submissions")
+      .insert([submissionPayload])
+      .select();
+
+    if (submissionError) {
+      throw submissionError;
+    }
+    await bustLeaderboardCache(contestId);
+  };
+
+  /**
+   * Handle multiple TikTok video submissions
+   */
+  const handleMultipleTiktokSubmission = async (tiktokVideos: any[]) => {
+    if (!tiktokAccount) {
+      throw new Error(
+        "TikTok account not connected. Please connect your TikTok account in settings.",
+      );
+    }
+
+    const totalSubmissions = tiktokVideos.length;
+    const maxSubmissions = contest?.max_submissions_per_creator || 1;
+    const currentSubmitted = submissionProgress.submitted;
+
+    if (totalSubmissions === 0) {
+      throw new Error("Please select at least one video to submit");
+    }
+
+    if (currentSubmitted + totalSubmissions > maxSubmissions) {
+      throw new Error(
+        `You have already submitted ${currentSubmitted} videos. You can only submit ${maxSubmissions - currentSubmitted
+        } more.`,
+      );
+    }
+
+    // Check for duplicates
+    const duplicates: string[] = [];
+    tiktokVideos.forEach((video) => {
+      if (isVideoAlreadySubmitted(video.id, video.share_url || "")) {
+        duplicates.push(video.title || "TikTok Video");
+      }
+    });
+
+    if (duplicates.length > 0) {
+      throw new Error(
+        `The following videos have already been submitted: ${duplicates
+          .slice(0, 3)
+          .join(", ")}${duplicates.length > 3 ? "..." : ""}`,
+      );
+    }
+
+    setMessage(`Submitting ${totalSubmissions} TikTok videos...`);
+
+    const submissionPromises = tiktokVideos.map(async (video) => {
+      try {
+        const tiktokStats = {
+          view_count: video.view_count || 0,
+          like_count: video.like_count || 0,
+          comment_count: video.comment_count || 0,
+          share_count: video.share_count || 0,
+        };
+
+        return await supabase
+          .from("submissions")
+          .insert([
+            {
+              contest_id: contestId,
+              creator_id: user!.id,
+              status: "pending",
+              platform: "tiktok",
+              views: video.view_count || 0,
+              content_link: video.share_url || "",
+              video_id: video.id,
+              video_title: video.title || "TikTok Video",
+              video_thumbnail_url: video.cover_image_url || null,
+              other_stats: { tiktok: tiktokStats },
+            },
+          ])
+          .select();
+      } catch (error) {
+        console.error(`Error submitting TikTok video ${video.id}:`, error);
+        throw error;
+      }
+    });
+
+    const results = await Promise.all(submissionPromises);
+
+    // Check for errors
+    const errors = results.filter((result) => result?.error);
+    if (errors.length > 0) {
+      throw new Error(
+        `Failed to submit ${errors.length} videos. Please try again.`,
+      );
+    }
+
+    await bustLeaderboardCache(contestId);
+
+    // Update state
+    const newSubmittedCount = currentSubmitted + totalSubmissions;
+    setSubmissionProgress((prev) => ({
+      ...prev,
+      submitted: newSubmittedCount,
+    }));
+
+    const newSubmittedVideos = new Set(submittedVideos);
+    tiktokVideos.forEach((video) => {
+      newSubmittedVideos.add(video.id);
+      if (video.share_url) newSubmittedVideos.add(video.share_url);
+    });
+    setSubmittedVideos(newSubmittedVideos);
+
+    // Clear selections
+    setSelectedTiktokVideosFromTabs([]);
+    setSelectedTiktokVideo(null);
+    setTiktokVideoPreview(null);
+    setTiktokVideoLink("");
+
+    const remainingSubmissions = maxSubmissions - newSubmittedCount;
+
+    if (newSubmittedCount >= maxSubmissions) {
+      toast({
+        title: "🎉 All Submissions Complete!",
+        description: `You have successfully submitted all ${maxSubmissions} videos for this contest.`,
+        duration: 4000,
+      });
+    } else {
+      toast({
+        title: "🎉 Videos Submitted Successfully!",
+        description: `Submitted ${totalSubmissions} videos. You have ${remainingSubmissions} submissions remaining.`,
+        duration: 4000,
+      });
+    }
+  };
+
+  /**
    * Main submission handler - routes to appropriate function
    */
   const handleSubmit = async (e?: React.FormEvent) => {
@@ -1995,6 +2534,10 @@ export default function SubmitContentPage({
       const isMultipleMode = contest?.multiple_submissions_enabled;
       const allYoutubeVideos = [...selectedVideosFromTabs, ...selectedVideos];
       const allInstagramReels = [...selectedReelsFromTabs, ...selectedReels];
+      const allTiktokVideos = [
+        ...selectedTiktokVideosFromTabs,
+        ...selectedTiktokVideosFromLinks,
+      ];
 
       // Determine which handler to call
       if (
@@ -2002,6 +2545,8 @@ export default function SubmitContentPage({
         (allYoutubeVideos.length > 0 || allInstagramReels.length > 0)
       ) {
         await handleMultipleSubmissions(allYoutubeVideos, allInstagramReels);
+      } else if (isMultipleMode && allTiktokVideos.length > 0) {
+        await handleMultipleTiktokSubmission(allTiktokVideos);
       } else if (
         contestPlatform === "youtube" &&
         (selectedVideo || videoPreview)
@@ -2009,6 +2554,11 @@ export default function SubmitContentPage({
         await handleSingleYoutubeSubmission();
       } else if (contestPlatform === "instagram" && selectedReel) {
         await handleSingleInstagramSubmission();
+      } else if (
+        contestPlatform === "tiktok" &&
+        (tiktokVideoPreview || selectedTiktokVideo)
+      ) {
+        await handleSingleTiktokSubmission();
       } else {
         throw new Error("Please select content to submit.");
       }
@@ -2026,7 +2576,9 @@ export default function SubmitContentPage({
       // For single submissions, show this message
       if (
         !isMultipleMode ||
-        (allYoutubeVideos.length === 0 && allInstagramReels.length === 0)
+        (allYoutubeVideos.length === 0 &&
+          allInstagramReels.length === 0 &&
+          allTiktokVideos.length === 0)
       ) {
         toast({
           title: "🎉 Content Submitted!",
@@ -2037,7 +2589,7 @@ export default function SubmitContentPage({
       }
 
       router.push(
-        `/dashboard/opportunities/${contestId}?success=content_submitted`
+        `/dashboard/opportunities/${contestId}?success=content_submitted`,
       );
     } catch (err: any) {
       console.error("Error during submission:", err);
@@ -2060,7 +2612,7 @@ export default function SubmitContentPage({
    */
   const handleMultipleSubmissions = async (
     youtubeVideos: YouTubeVideo[],
-    instagramReels: InstagramReel[]
+    instagramReels: InstagramReel[],
   ) => {
     const totalSubmissions = youtubeVideos.length + instagramReels.length;
     const maxSubmissions = contest?.max_submissions_per_creator || 1;
@@ -2073,7 +2625,7 @@ export default function SubmitContentPage({
     if (currentSubmitted + totalSubmissions > maxSubmissions) {
       throw new Error(
         `You have already submitted ${currentSubmitted} videos. You can only submit ${maxSubmissions - currentSubmitted
-        } more.`
+        } more.`,
       );
     }
 
@@ -2083,7 +2635,7 @@ export default function SubmitContentPage({
       if (
         isVideoAlreadySubmitted(
           video.id.videoId,
-          `https://www.youtube.com/watch?v=${video.id.videoId}`
+          `https://www.youtube.com/watch?v=${video.id.videoId}`,
         )
       ) {
         duplicates.push(video.snippet.title);
@@ -2099,7 +2651,7 @@ export default function SubmitContentPage({
       throw new Error(
         `The following videos have already been submitted: ${duplicates
           .slice(0, 3)
-          .join(", ")}${duplicates.length > 3 ? "..." : ""}`
+          .join(", ")}${duplicates.length > 3 ? "..." : ""}`,
       );
     }
 
@@ -2110,15 +2662,14 @@ export default function SubmitContentPage({
     // Submit YouTube videos
     if (youtubeVideos.length > 0) {
       try {
-        const youtubeResults = await handleMultipleYoutubeSubmission(
-          youtubeVideos
-        );
+        const youtubeResults =
+          await handleMultipleYoutubeSubmission(youtubeVideos);
         results.push(...youtubeResults);
       } catch (youtubeError: any) {
         // Handle YouTube-specific errors
         throw new Error(
           youtubeError.message ||
-          "Failed to submit YouTube content. Please try again."
+          "Failed to submit YouTube content. Please try again.",
         );
       }
     }
@@ -2126,15 +2677,14 @@ export default function SubmitContentPage({
     // Submit Instagram reels
     if (instagramReels.length > 0) {
       try {
-        const instagramResults = await handleMultipleInstagramSubmission(
-          instagramReels
-        );
+        const instagramResults =
+          await handleMultipleInstagramSubmission(instagramReels);
         results.push(...instagramResults);
       } catch (instagramError: any) {
         // Handle Instagram-specific errors (like account conversion errors)
         throw new Error(
           instagramError.message ||
-          "Failed to submit Instagram content. Please try again."
+          "Failed to submit Instagram content. Please try again.",
         );
       }
     }
@@ -2143,7 +2693,7 @@ export default function SubmitContentPage({
     const errors = results.filter((result) => result?.error);
     if (errors.length > 0) {
       throw new Error(
-        `Failed to submit ${errors.length} videos. Please try again.`
+        `Failed to submit ${errors.length} videos. Please try again.`,
       );
     }
 
@@ -2158,7 +2708,7 @@ export default function SubmitContentPage({
     youtubeVideos.forEach((video) => {
       newSubmittedVideos.add(video.id.videoId);
       newSubmittedVideos.add(
-        `https://www.youtube.com/watch?v=${video.id.videoId}`
+        `https://www.youtube.com/watch?v=${video.id.videoId}`,
       );
     });
     instagramReels.forEach((reel) => {
@@ -2195,7 +2745,7 @@ export default function SubmitContentPage({
 
   const fetchInstagramReels = async (
     accessToken: string,
-    igBusinessAccountID: string
+    igBusinessAccountID: string,
   ) => {
     if (
       contestPlatform !== "instagram" ||
@@ -2203,7 +2753,7 @@ export default function SubmitContentPage({
       !igBusinessAccountID
     ) {
       setError(
-        "Instagram access token or Business Account ID not found for fetching reels."
+        "Instagram access token or Business Account ID not found for fetching reels.",
       );
       setIsLoadingReels(false); // Ensure loading is stopped
       return;
@@ -2223,17 +2773,18 @@ export default function SubmitContentPage({
         // Instagram /media returns ~25 items per page; paginate to fetch ALL reels (no archiving workaround needed)
         const fields =
           "id,media_type,media_product_type,video_title,caption,permalink,thumbnail_url,timestamp";
-        let nextUrl: string | null = `https://graph.instagram.com/${igBusinessAccountID}/media?fields=${fields}&access_token=${accessToken}&limit=50`;
+        let nextUrl: string | null =
+          `https://graph.instagram.com/${igBusinessAccountID}/media?fields=${fields}&access_token=${accessToken}&limit=50`;
         const allMediaItems: any[] = [];
 
         while (nextUrl) {
           const mediaRes = await fetch(nextUrl);
-          const mediaData = await mediaRes.json();
+          const mediaData: any = await mediaRes.json();
 
           if (!mediaRes.ok || mediaData.error) {
             console.error(
               "[fetchInstagramReels] API Error response:",
-              mediaData.error
+              mediaData.error,
             );
 
             if (
@@ -2250,15 +2801,15 @@ export default function SubmitContentPage({
                   ) {
                     await fetchInstagramReels(
                       instagramAccount.access_token,
-                      instagramAccount.app_scoped_user_id
+                      instagramAccount.app_scoped_user_id,
                     );
                   }
-                }
+                },
               );
               if (!refreshSuccess) {
                 setIsInstagramTokenExpired(true);
                 setError(
-                  "Your Instagram connection has expired. Please re-connect your Instagram account."
+                  "Your Instagram connection has expired. Please re-connect your Instagram account.",
                 );
               }
               return;
@@ -2266,7 +2817,7 @@ export default function SubmitContentPage({
 
             throw new Error(
               mediaData.error?.message ||
-              "Failed to fetch Instagram media IDs using Business Account ID"
+              "Failed to fetch Instagram media IDs using Business Account ID",
             );
           }
 
@@ -2308,18 +2859,18 @@ export default function SubmitContentPage({
 
         // Client-side filter based on submission window
         const filteredReels = allFetchedReels.filter(
-          (reel) => reel.timestamp && !isContentTooOld(reel.timestamp)
+          (reel) => reel.timestamp && !isContentTooOld(reel.timestamp),
         );
         setUserReels(
           filteredReels.sort(
             (a, b) =>
-              dayjs(b.timestamp).valueOf() - dayjs(a.timestamp).valueOf()
-          )
+              dayjs(b.timestamp).valueOf() - dayjs(a.timestamp).valueOf(),
+          ),
         );
 
         if (allFetchedReels.length > 0 && filteredReels.length === 0) {
           setLibraryMessage(
-            `No Reels or Videos found on your Instagram account that were posted in the last ${SUBMISSION_WINDOW_UNIT_DISPLAY}. You can still fetch older content by pasting its link directly, but it must have been posted within the last ${SUBMISSION_WINDOW_UNIT_DISPLAY} to be eligible.`
+            `No Reels or Videos found on your Instagram account that were posted in the last ${SUBMISSION_WINDOW_UNIT_DISPLAY}. You can still fetch older content by pasting its link directly, but it must have been posted within the last ${SUBMISSION_WINDOW_UNIT_DISPLAY} to be eligible.`,
           );
         }
       } catch (err: any) {
@@ -2353,18 +2904,28 @@ export default function SubmitContentPage({
   }
 
   // Handle Twitter contests - they use join-campaign flow, not submission
-  if (contestPlatform === "twitter" || (contest?.contest_format === "text_image" && contest?.platform === "twitter")) {
+  if (
+    contestPlatform === "twitter" ||
+    (contest?.contest_format === "text_image" &&
+      contest?.platform === "twitter")
+  ) {
     return (
       <div className="container mx-auto px-4 py-8">
         <div className="flex items-center mb-6 gap-2">
-          <Button variant="ghost" size="icon" onClick={() => router.push(`/dashboard/opportunities/${contestId}`)}>
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => router.push(`/dashboard/opportunities/${contestId}`)}
+          >
             <ArrowLeft className="h-5 w-5" />
           </Button>
           <h1 className="text-2xl font-bold ml-2">Twitter Campaign</h1>
         </div>
         <Alert className="mb-4">
           <AlertDescription>
-            Twitter (X) campaigns work differently from video contests. Instead of submitting content manually, you need to join the campaign and your tweets will be automatically tracked.
+            Twitter (X) campaigns work differently from video contests. Instead
+            of submitting content manually, you need to join the campaign and
+            your tweets will be automatically tracked.
           </AlertDescription>
         </Alert>
         <Card className="mb-4">
@@ -2374,13 +2935,19 @@ export default function SubmitContentPage({
               <ol className="list-decimal list-inside space-y-2 mt-2">
                 <li>Connect your Twitter (X) account in Settings</li>
                 <li>Join the campaign from the opportunity page</li>
-                <li>Post tweets that match the campaign keywords and mentions or campaign requirements</li>
+                <li>
+                  Post tweets that match the campaign keywords and mentions or
+                  campaign requirements
+                </li>
                 <li>Your tweets will be automatically tracked and scored</li>
               </ol>
             </CardDescription>
           </CardHeader>
         </Card>
-        <Button onClick={() => router.push(`/dashboard/opportunities/${contestId}`)} className="w-full sm:w-auto">
+        <Button
+          onClick={() => router.push(`/dashboard/opportunities/${contestId}`)}
+          className="w-full sm:w-auto"
+        >
           Go to Campaign Page
         </Button>
       </div>
@@ -2399,7 +2966,7 @@ export default function SubmitContentPage({
         <Alert variant="destructive">
           <AlertDescription>
             {error ||
-              "This contest does not specify a platform (e.g., YouTube or Instagram) or the contest details could not be loaded. Please check the contest setup or go back."}
+              "This contest does not specify a platform (e.g., YouTube, Instagram, or TikTok) or the contest details could not be loaded. Please check the contest setup or go back."}
           </AlertDescription>
         </Alert>
         <Button onClick={() => router.back()} className="mt-4">
@@ -2426,16 +2993,18 @@ export default function SubmitContentPage({
             ? "YouTube"
             : contestPlatform === "instagram"
               ? "Instagram"
-              : contestPlatform === "twitter"
-                ? "Twitter"
-                : contestPlatform}
+              : contestPlatform === "tiktok"
+                ? "TikTok"
+                : contestPlatform === "twitter"
+                  ? "Twitter"
+                  : contestPlatform}
         </h1>
       </div>
 
       <div
         className={cn(
           "max-w-[1200px] rounded-xl shadow-lg mx-auto p-2 md:p-4 overflow-hidden",
-          isDark ? "bg-[#180438]" : "bg-white"
+          isDark ? "bg-[#180438]" : "bg-white",
         )}
       >
         <CardContent className="overflow-x-hidden">
@@ -2460,7 +3029,9 @@ export default function SubmitContentPage({
                   ? "YouTube video/short"
                   : contestPlatform === "instagram"
                     ? "Instagram Reel/video"
-                    : "content"}{" "}
+                    : contestPlatform === "tiktok"
+                      ? "TikTok video"
+                      : "content"}{" "}
                 for this contest.
               </CardDescription>
             </div>
@@ -2479,17 +3050,23 @@ export default function SubmitContentPage({
                   isLoading ||
                   isFetchingVideo ||
                   isFetchingInstagramMedia ||
+                  isFetchingTiktokVideo ||
                   (contest?.multiple_submissions_enabled
                     ? selectedVideosFromTabs.length === 0 &&
                     selectedReelsFromTabs.length === 0 &&
                     selectedVideos.length === 0 &&
-                    selectedReels.length === 0
+                    selectedReels.length === 0 &&
+                    selectedTiktokVideosFromTabs.length === 0 &&
+                    selectedTiktokVideosFromLinks.length === 0
                     : (contestPlatform === "youtube" &&
                       !selectedVideo &&
                       !videoPreview) ||
                     (contestPlatform === "instagram" &&
                       !selectedReel &&
-                      !instagramMediaPreview))
+                      !instagramMediaPreview) ||
+                    (contestPlatform === "tiktok" &&
+                      !tiktokVideoPreview &&
+                      !selectedTiktokVideo))
                 }
                 className="w-full sm:w-auto"
               >
@@ -2627,7 +3204,7 @@ export default function SubmitContentPage({
                             )}
                           </TabsTrigger>
                         );
-                      }
+                      },
                     )}
                   </TabsList>
 
@@ -2636,7 +3213,7 @@ export default function SubmitContentPage({
                     <p
                       className={cn(
                         "text-md text-center",
-                        isDark ? "text-white" : "text-[#7F39EC]"
+                        isDark ? "text-white" : "text-[#7F39EC]",
                       )}
                     >
                       💡 <strong>Tip for creators:</strong> You can fetch videos
@@ -2659,7 +3236,7 @@ export default function SubmitContentPage({
                             "text-center border border-[#7F39EC] bg-[#D9C0FF26]",
                             isDark
                               ? "bg-[#C9A7FF26] border-[#C9A7FF] text-white"
-                              : "bg-[#D9C0FF26] border-[#7F39EC] texxt-black"
+                              : "bg-[#D9C0FF26] border-[#7F39EC] texxt-black",
                           )}
                         >
                           <AlertDescription>{libraryMessage}</AlertDescription>
@@ -2669,7 +3246,7 @@ export default function SubmitContentPage({
                           <p
                             className={cn(
                               "text-md",
-                              isDark ? "text-white" : "text-black"
+                              isDark ? "text-white" : "text-black",
                             )}
                           >
                             No videos found in your YouTube channel.
@@ -2699,7 +3276,7 @@ export default function SubmitContentPage({
                               className="w-full sm:w-auto px-4 sm:px-6 py-2 font-medium text-sm sm:text-base hover:bg-primary hover:text-primary-foreground transition-all duration-200 shadow-sm hover:shadow-md"
                               onClick={() =>
                                 setYoutubeCurrentPage((prev) =>
-                                  Math.max(1, prev - 1)
+                                  Math.max(1, prev - 1),
                                 )
                               }
                               disabled={
@@ -2718,7 +3295,7 @@ export default function SubmitContentPage({
                               className="w-full sm:w-auto px-4 sm:px-6 py-2 font-medium text-sm sm:text-base hover:bg-primary hover:text-primary-foreground transition-all duration-200 shadow-sm hover:shadow-md"
                               onClick={() =>
                                 setYoutubeCurrentPage((prev) =>
-                                  Math.min(totalYoutubePages, prev + 1)
+                                  Math.min(totalYoutubePages, prev + 1),
                                 )
                               }
                               disabled={
@@ -2740,7 +3317,7 @@ export default function SubmitContentPage({
                                 "mt-4 p-3 border rounded-lg",
                                 isDark
                                   ? "bg-[#C9A7FF26] border-[#C9A7FF]"
-                                  : "bg-purple-50 border-purple-200"
+                                  : "bg-purple-50 border-purple-200",
                               )}
                             >
                               <div className="flex items-center justify-between">
@@ -2750,13 +3327,13 @@ export default function SubmitContentPage({
                                       "h-4 w-4",
                                       isDark
                                         ? "text-purple-400"
-                                        : "text-purple-600"
+                                        : "text-purple-600",
                                     )}
                                   />
                                   <span
                                     className={cn(
                                       "text-sm font-medium",
-                                      isDark ? "text-white" : "text-purple-800"
+                                      isDark ? "text-white" : "text-purple-800",
                                     )}
                                   >
                                     Multiple Submissions Enabled
@@ -2765,7 +3342,9 @@ export default function SubmitContentPage({
                                 <div
                                   className={cn(
                                     "text-sm font-semibold",
-                                    isDark ? "text-gray-300" : "text-purple-800"
+                                    isDark
+                                      ? "text-gray-300"
+                                      : "text-purple-800",
                                   )}
                                 >
                                   Selected:{" "}
@@ -2777,7 +3356,7 @@ export default function SubmitContentPage({
                                   {Math.max(
                                     0,
                                     (contest.max_submissions_per_creator || 1) -
-                                    submissionProgress.submitted
+                                    submissionProgress.submitted,
                                   )}{" "}
                                   remaining videos
                                 </div>
@@ -2785,7 +3364,7 @@ export default function SubmitContentPage({
                               <p
                                 className={cn(
                                   "text-xs mt-1",
-                                  isDark ? "text-gray-300" : "text-purple-600"
+                                  isDark ? "text-gray-300" : "text-purple-600",
                                 )}
                               >
                                 Click on videos below to select them. You can
@@ -2800,17 +3379,17 @@ export default function SubmitContentPage({
                               contest?.multiple_submissions_enabled;
                             const isSelected = isMultiSelect
                               ? selectedVideosFromTabs.some(
-                                (v) => v.id.videoId === video.id.videoId
+                                (v) => v.id.videoId === video.id.videoId,
                               )
                               : selectedVideo?.id.videoId === video.id.videoId;
 
                             const handleSelectionChange = (
-                              shouldSelect: boolean
+                              shouldSelect: boolean,
                             ) => {
                               if (isMultiSelect) {
                                 const isAlreadySelected =
                                   selectedVideosFromTabs.some(
-                                    (v) => v.id.videoId === video.id.videoId
+                                    (v) => v.id.videoId === video.id.videoId,
                                   );
 
                                 if (shouldSelect) {
@@ -2821,7 +3400,7 @@ export default function SubmitContentPage({
                                   if (
                                     isVideoAlreadySelected(
                                       video.id.videoId,
-                                      "youtube"
+                                      "youtube",
                                     )
                                   ) {
                                     toast({
@@ -2836,7 +3415,7 @@ export default function SubmitContentPage({
                                   if (
                                     isVideoAlreadySubmitted(
                                       video.id.videoId,
-                                      `https://www.youtube.com/watch?v=${video.id.videoId}`
+                                      `https://www.youtube.com/watch?v=${video.id.videoId}`,
                                     )
                                   ) {
                                     toast({
@@ -2874,8 +3453,8 @@ export default function SubmitContentPage({
                                 } else if (isAlreadySelected) {
                                   setSelectedVideosFromTabs((prev) =>
                                     prev.filter(
-                                      (v) => v.id.videoId !== video.id.videoId
-                                    )
+                                      (v) => v.id.videoId !== video.id.videoId,
+                                    ),
                                   );
                                 }
                               } else {
@@ -2886,7 +3465,7 @@ export default function SubmitContentPage({
                                   setInstagramLink("");
                                   setSubmissionType("youtube");
                                   setContentLink(
-                                    `https://www.youtube.com/watch?v=${video.id.videoId}`
+                                    `https://www.youtube.com/watch?v=${video.id.videoId}`,
                                   );
                                   setVideoPreview(null);
                                 } else {
@@ -2900,7 +3479,7 @@ export default function SubmitContentPage({
                             const thumbnailUrl =
                               getYouTubeThumbnailUrl(
                                 video.snippet.thumbnails,
-                                video.id.videoId
+                                video.id.videoId,
                               ) ||
                               `https://i.ytimg.com/vi/${video.id.videoId}/hqdefault.jpg`;
 
@@ -2931,7 +3510,7 @@ export default function SubmitContentPage({
                                       "absolute top-3 right-3 h-5 w-5 border-2 shadow-sm",
                                       isDark
                                         ? "border-gray-500 data-[state=checked]:border-purple-400 data-[state=checked]:bg-purple-500"
-                                        : "border-gray-300 data-[state=checked]:border-purple-600 data-[state=checked]:bg-purple-600"
+                                        : "border-gray-300 data-[state=checked]:border-purple-600 data-[state=checked]:bg-purple-600",
                                     )}
                                   />
                                   <div className="flex flex-col sm:flex-row sm:items-start space-y-3 sm:space-y-0 sm:space-x-4 lg:space-x-6">
@@ -2955,7 +3534,7 @@ export default function SubmitContentPage({
                                             "font-medium text-lg leading-5 text-center sm:text-left line-clamp-2",
                                             isDark
                                               ? "text-white"
-                                              : "text-gray-900"
+                                              : "text-gray-900",
                                           )}
                                           title={video.snippet.title}
                                         >
@@ -2970,7 +3549,7 @@ export default function SubmitContentPage({
                                               "inline-flex items-center text-sm hover:underline",
                                               isDark
                                                 ? "text-purple-400"
-                                                : "text-[#4A00BE]"
+                                                : "text-[#4A00BE]",
                                             )}
                                             onClick={(e) => e.stopPropagation()}
                                           >
@@ -2986,12 +3565,12 @@ export default function SubmitContentPage({
                                           "text-md text-center sm:text-left",
                                           isDark
                                             ? "text-white"
-                                            : "text-gray-600"
+                                            : "text-gray-600",
                                         )}
                                       >
                                         Published:{" "}
                                         {dayjs(
-                                          video.snippet.publishedAt
+                                          video.snippet.publishedAt,
                                         ).format("MMM D, YYYY [at] h:mm A")}
                                       </p>
 
@@ -3002,7 +3581,7 @@ export default function SubmitContentPage({
                                             "flex flex-wrap justify-center sm:justify-start gap-x-3 gap-y-1 text-md",
                                             isDark
                                               ? "text-white"
-                                              : "text-gray-600"
+                                              : "text-gray-600",
                                           )}
                                         >
                                           {video.statistics.viewCount && (
@@ -3010,7 +3589,7 @@ export default function SubmitContentPage({
                                               <Eye className="h-4 w-4" />
                                               <span className="font-medium">
                                                 {parseInt(
-                                                  video.statistics.viewCount.toString()
+                                                  video.statistics.viewCount.toString(),
                                                 ).toLocaleString()}
                                               </span>
                                               <span>views</span>
@@ -3021,7 +3600,7 @@ export default function SubmitContentPage({
                                               <ThumbsUp className="h-4 w-4" />
                                               <span className="font-medium">
                                                 {parseInt(
-                                                  video.statistics.likeCount.toString()
+                                                  video.statistics.likeCount.toString(),
                                                 ).toLocaleString()}
                                               </span>
                                               <span>likes</span>
@@ -3033,7 +3612,7 @@ export default function SubmitContentPage({
                                               <span className="font-medium">
                                                 {" "}
                                                 {parseInt(
-                                                  video.statistics.commentCount.toString()
+                                                  video.statistics.commentCount.toString(),
                                                 ).toLocaleString()}
                                               </span>
                                               <span className="ml-1">
@@ -3052,33 +3631,34 @@ export default function SubmitContentPage({
                         </div>
 
                         {/* Load More button — only on last page, fetches next 50 from YouTube API */}
-                        {youtubeNextPageToken && youtubeCurrentPage === totalYoutubePages && (
-                          <div className="flex justify-center mt-4 pb-2">
-                            <Button
-                              variant="outline"
-                              onClick={loadMoreYouTubeVideos}
-                              disabled={isLoadingMoreVideos}
-                              className={cn(
-                                "px-6 py-2 font-medium border-2",
-                                isDark
-                                  ? "border-[#C9A7FF] text-[#C9A7FF] hover:bg-[#C9A7FF] hover:text-black"
-                                  : "border-[#7F39EC] text-[#7F39EC] hover:bg-[#7F39EC] hover:text-white"
-                              )}
-                            >
-                              {isLoadingMoreVideos ? (
-                                <>
-                                  <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
-                                  Loading...
-                                </>
-                              ) : (
-                                <>
-                                  <Plus className="h-4 w-4 mr-2" />
-                                  Load More Videos
-                                </>
-                              )}
-                            </Button>
-                          </div>
-                        )}
+                        {youtubeNextPageToken &&
+                          youtubeCurrentPage === totalYoutubePages && (
+                            <div className="flex justify-center mt-4 pb-2">
+                              <Button
+                                variant="outline"
+                                onClick={loadMoreYouTubeVideos}
+                                disabled={isLoadingMoreVideos}
+                                className={cn(
+                                  "px-6 py-2 font-medium border-2",
+                                  isDark
+                                    ? "border-[#C9A7FF] text-[#C9A7FF] hover:bg-[#C9A7FF] hover:text-black"
+                                    : "border-[#7F39EC] text-[#7F39EC] hover:bg-[#7F39EC] hover:text-white",
+                                )}
+                              >
+                                {isLoadingMoreVideos ? (
+                                  <>
+                                    <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                                    Loading...
+                                  </>
+                                ) : (
+                                  <>
+                                    <Plus className="h-4 w-4 mr-2" />
+                                    Load More Videos
+                                  </>
+                                )}
+                              </Button>
+                            </div>
+                          )}
                       </>
                     )}
                   </TabsContent>
@@ -3094,7 +3674,7 @@ export default function SubmitContentPage({
                             "flex-1 text-base font-medium border",
                             isDark
                               ? "bg-[#180438] border border-gray-600"
-                              : "bg-white focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all duration-200"
+                              : "bg-white focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all duration-200",
                           )}
                         />
                         <Button
@@ -3116,7 +3696,7 @@ export default function SubmitContentPage({
                           selectedVideo?.id.videoId === videoPreview.id.videoId;
 
                         const handleSelectionChange = (
-                          shouldSelect: boolean
+                          shouldSelect: boolean,
                         ) => {
                           if (shouldSelect) {
                             setSelectedVideo(videoPreview);
@@ -3125,7 +3705,7 @@ export default function SubmitContentPage({
                             setInstagramLink("");
                             setSubmissionType("youtube");
                             setContentLink(
-                              `https://www.youtube.com/watch?v=${videoPreview.id.videoId}`
+                              `https://www.youtube.com/watch?v=${videoPreview.id.videoId}`,
                             );
                           } else {
                             setSelectedVideo(null);
@@ -3137,7 +3717,7 @@ export default function SubmitContentPage({
                         const previewThumbnailUrl =
                           getYouTubeThumbnailUrl(
                             videoPreview.snippet.thumbnails,
-                            videoPreview.id.videoId
+                            videoPreview.id.videoId,
                           ) ||
                           `https://i.ytimg.com/vi/${videoPreview.id.videoId}/hqdefault.jpg`;
 
@@ -3166,7 +3746,7 @@ export default function SubmitContentPage({
                                   "absolute top-3 right-3 h-5 w-5 border-2 shadow-sm",
                                   isDark
                                     ? "border-gray-500 data-[state=checked]:border-purple-400 data-[state=checked]:bg-purple-500"
-                                    : "border-gray-300 data-[state=checked]:border-purple-600 data-[state=checked]:bg-purple-600"
+                                    : "border-gray-300 data-[state=checked]:border-purple-600 data-[state=checked]:bg-purple-600",
                                 )}
                               />
                               <div className="flex flex-col sm:flex-row sm:items-start space-y-3 sm:space-y-0 sm:space-x-4 lg:space-x-6">
@@ -3188,7 +3768,7 @@ export default function SubmitContentPage({
                                     <h3
                                       className={cn(
                                         "font-medium text-lg leading-5 text-center sm:text-left line-clamp-2",
-                                        isDark ? "text-white" : "text-gray-900"
+                                        isDark ? "text-white" : "text-gray-900",
                                       )}
                                       title={videoPreview.snippet.title}
                                     >
@@ -3203,7 +3783,7 @@ export default function SubmitContentPage({
                                           "inline-flex items-center text-sm hover:underline",
                                           isDark
                                             ? "text-purple-400"
-                                            : "text-purple-600"
+                                            : "text-purple-600",
                                         )}
                                         onClick={(e) => e.stopPropagation()}
                                       >
@@ -3217,7 +3797,7 @@ export default function SubmitContentPage({
                                   <p className="text-md text-muted-foreground text-center sm:text-left">
                                     Published:{" "}
                                     {dayjs(
-                                      videoPreview.snippet.publishedAt
+                                      videoPreview.snippet.publishedAt,
                                     ).format("MMM D, YYYY [at] h:mm A")}
                                   </p>
 
@@ -3230,7 +3810,7 @@ export default function SubmitContentPage({
                                           <span className="font-medium">
                                             {" "}
                                             {parseInt(
-                                              videoPreview.statistics.viewCount.toString()
+                                              videoPreview.statistics.viewCount.toString(),
                                             ).toLocaleString()}
                                           </span>
                                           <span>views</span>
@@ -3241,7 +3821,7 @@ export default function SubmitContentPage({
                                           <ThumbsUp className="h-4 w-4" />
                                           <span className="font-medium">
                                             {parseInt(
-                                              videoPreview.statistics.likeCount.toString()
+                                              videoPreview.statistics.likeCount.toString(),
                                             ).toLocaleString()}
                                           </span>
                                           <span>likes</span>
@@ -3252,7 +3832,7 @@ export default function SubmitContentPage({
                                           <MessageSquare className="h-4 w-4" />
                                           <span className="font-medium">
                                             {parseInt(
-                                              videoPreview.statistics.commentCount.toString()
+                                              videoPreview.statistics.commentCount.toString(),
                                             ).toLocaleString()}
                                           </span>
                                           <span>comments</span>
@@ -3395,7 +3975,7 @@ export default function SubmitContentPage({
                             )}
                           </TabsTrigger>
                         );
-                      }
+                      },
                     )}
                   </TabsList>
 
@@ -3404,7 +3984,7 @@ export default function SubmitContentPage({
                     <p
                       className={cn(
                         "text-md text-center",
-                        isDark ? "text-white" : "text-[#7F39EC]"
+                        isDark ? "text-white" : "text-[#7F39EC]",
                       )}
                     >
                       💡 <strong>Tip for creators:</strong> You can fetch reels
@@ -3435,7 +4015,7 @@ export default function SubmitContentPage({
                             onClick={() =>
                               fetchInstagramReels(
                                 instagramAccount.access_token,
-                                currentInstagramBusinessAccountID || ""
+                                currentInstagramBusinessAccountID || "",
                               )
                             }
                             disabled={isLoadingReels}
@@ -3459,7 +4039,7 @@ export default function SubmitContentPage({
                               className="w-full sm:w-auto px-4 sm:px-6 py-2 font-medium text-sm sm:text-base hover:bg-primary hover:text-primary-foreground transition-all duration-200 shadow-sm hover:shadow-md"
                               onClick={() =>
                                 setInstagramCurrentPage((prev) =>
-                                  Math.max(1, prev - 1)
+                                  Math.max(1, prev - 1),
                                 )
                               }
                               disabled={
@@ -3480,7 +4060,7 @@ export default function SubmitContentPage({
                               className="w-full sm:w-auto px-4 sm:px-6 py-2 font-medium text-sm sm:text-base hover:bg-primary hover:text-primary-foreground transition-all duration-200 shadow-sm hover:shadow-md"
                               onClick={() =>
                                 setInstagramCurrentPage((prev) =>
-                                  Math.min(totalInstagramPages, prev + 1)
+                                  Math.min(totalInstagramPages, prev + 1),
                                 )
                               }
                               disabled={
@@ -3502,7 +4082,7 @@ export default function SubmitContentPage({
                                 "mt-4 p-3 border rounded-lg",
                                 isDark
                                   ? "bg-[#C9A7FF26] border-[#C9A7FF]"
-                                  : "bg-purple-50 border-purple-200"
+                                  : "bg-purple-50 border-purple-200",
                               )}
                             >
                               <div className="flex items-center justify-between">
@@ -3511,7 +4091,7 @@ export default function SubmitContentPage({
                                   <span
                                     className={cn(
                                       "text-sm font-medium",
-                                      isDark ? "text-white" : "text-purple-800"
+                                      isDark ? "text-white" : "text-purple-800",
                                     )}
                                   >
                                     Multiple Submissions Enabled
@@ -3520,7 +4100,7 @@ export default function SubmitContentPage({
                                 <div
                                   className={cn(
                                     "text-sm font-semibold",
-                                    isDark ? "text-white" : "text-purple-800"
+                                    isDark ? "text-white" : "text-purple-800",
                                   )}
                                 >
                                   Selected:{" "}
@@ -3532,7 +4112,7 @@ export default function SubmitContentPage({
                                   {Math.max(
                                     0,
                                     (contest.max_submissions_per_creator || 1) -
-                                    submissionProgress.submitted
+                                    submissionProgress.submitted,
                                   )}{" "}
                                   remaining videos
                                 </div>
@@ -3540,7 +4120,7 @@ export default function SubmitContentPage({
                               <p
                                 className={cn(
                                   "text-xs mt-1",
-                                  isDark ? "text-gray-300" : "text-purple-600"
+                                  isDark ? "text-gray-300" : "text-purple-600",
                                 )}
                               >
                                 Click on videos below to select them. You can
@@ -3555,17 +4135,17 @@ export default function SubmitContentPage({
                               contest?.multiple_submissions_enabled;
                             const isSelected = isMultiSelect
                               ? selectedReelsFromTabs.some(
-                                (r) => r.id === reel.id
+                                (r) => r.id === reel.id,
                               )
                               : selectedReel?.id === reel.id;
 
                             const handleSelectionChange = (
-                              shouldSelect: boolean
+                              shouldSelect: boolean,
                             ) => {
                               if (isMultiSelect) {
                                 const isAlreadySelected =
                                   selectedReelsFromTabs.some(
-                                    (r) => r.id === reel.id
+                                    (r) => r.id === reel.id,
                                   );
 
                                 if (shouldSelect) {
@@ -3588,7 +4168,7 @@ export default function SubmitContentPage({
                                   if (
                                     isVideoAlreadySubmitted(
                                       reel.id,
-                                      reel.permalink
+                                      reel.permalink,
                                     )
                                   ) {
                                     toast({
@@ -3625,7 +4205,7 @@ export default function SubmitContentPage({
                                   }
                                 } else if (isAlreadySelected) {
                                   setSelectedReelsFromTabs((prev) =>
-                                    prev.filter((r) => r.id !== reel.id)
+                                    prev.filter((r) => r.id !== reel.id),
                                   );
                                 }
                               } else {
@@ -3672,7 +4252,7 @@ export default function SubmitContentPage({
                                       "absolute top-3 right-3 h-5 w-5 border-2 shadow-sm",
                                       isDark
                                         ? "border-gray-500 data-[state=checked]:border-purple-400 data-[state=checked]:bg-purple-500"
-                                        : "border-gray-300 data-[state=checked]:border-purple-600 data-[state=checked]:bg-purple-600"
+                                        : "border-gray-300 data-[state=checked]:border-purple-600 data-[state=checked]:bg-purple-600",
                                     )}
                                   />
                                   <div className="flex flex-col sm:flex-row sm:items-start space-y-3 sm:space-y-0 sm:space-x-4 lg:space-x-6">
@@ -3727,7 +4307,7 @@ export default function SubmitContentPage({
                                         <p className="text-sm text-muted-foreground text-center sm:text-left">
                                           Posted:{" "}
                                           {dayjs(reel.timestamp).format(
-                                            "MMM D, YYYY [at] h:mm A"
+                                            "MMM D, YYYY [at] h:mm A",
                                           )}
                                         </p>
                                         <div className="flex justify-center sm:justify-start">
@@ -3761,7 +4341,7 @@ export default function SubmitContentPage({
                             "flex-1 text-base font-medium border",
                             isDark
                               ? "bg-[#180438] border border-gray-600"
-                              : "bg-white"
+                              : "bg-white",
                           )}
                         />
                         <Button
@@ -3783,7 +4363,7 @@ export default function SubmitContentPage({
                           selectedReel?.id === instagramMediaPreview.id;
 
                         const handleSelectionChange = (
-                          shouldSelect: boolean
+                          shouldSelect: boolean,
                         ) => {
                           if (shouldSelect) {
                             setSelectedReel(instagramMediaPreview);
@@ -3824,7 +4404,7 @@ export default function SubmitContentPage({
                                   "absolute top-3 right-3 h-5 w-5 border-2 shadow-sm",
                                   isDark
                                     ? "border-gray-500 data-[state=checked]:border-purple-400 data-[state=checked]:bg-purple-500"
-                                    : "border-gray-300 data-[state=checked]:border-purple-600 data-[state=checked]:bg-purple-600"
+                                    : "border-gray-300 data-[state=checked]:border-purple-600 data-[state=checked]:bg-purple-600",
                                 )}
                               />
                               <div className="flex flex-col sm:flex-row sm:items-start space-y-3 sm:space-y-0 sm:space-x-4 lg:space-x-6">
@@ -3881,7 +4461,7 @@ export default function SubmitContentPage({
                                     <p className="text-sm text-muted-foreground text-center sm:text-left">
                                       Posted:{" "}
                                       {dayjs(
-                                        instagramMediaPreview.timestamp
+                                        instagramMediaPreview.timestamp,
                                       ).format("MMM D, YYYY [at] h:mm A")}
                                     </p>
                                     <div className="flex justify-center sm:justify-start">
@@ -3906,25 +4486,842 @@ export default function SubmitContentPage({
             </>
           )}
 
+          {/* TIKTOK UI BLOCK */}
+          {contestPlatform === "tiktok" && (
+            <>
+              {isTiktokTokenExpired && (
+                <Alert variant="destructive" className="mb-4 text-center">
+                  <AlertDescription>
+                    Your TikTok connection has expired.
+                  </AlertDescription>
+                  <div className="flex flex-col sm:flex-row gap-2 justify-center mt-2">
+                    <Link href="/dashboard/settings">
+                      <Button
+                        variant="link"
+                        className="text-destructive dark:text-red-400"
+                      >
+                        Reconnect Account
+                      </Button>
+                    </Link>
+                  </div>
+                </Alert>
+              )}
+              {!tiktokAccount && !isTiktokTokenExpired && (
+                <Alert
+                  variant="default"
+                  className="mb-4 border border-[#7F39EC] bg-[#D9C0FF26] text-center"
+                >
+                  <AlertDescription className="text-md">
+                    Connect your TikTok account to submit content.
+                  </AlertDescription>
+                  <Link href="/dashboard/settings">
+                    <Button variant="link" className="mt-1 text-[#7F39EC]">
+                      Connect TikTok in Settings
+                    </Button>
+                  </Link>
+                </Alert>
+              )}
+
+              {tiktokAccount && !isTiktokTokenExpired && (
+                <Tabs defaultValue="tiktok-library" className="w-full">
+                  <TabsList
+                    className={`flex w-full p-1.5 rounded-full shadow-sm ${isDark ? "bg-black" : "bg-[#E4E4E4]"
+                      }`}
+                  >
+                    {["tiktok-library", "tiktok-link"].map(
+                      (tab, index, arr) => {
+                        const isFirst = index === 0;
+                        const isLast = index === arr.length - 1;
+
+                        return (
+                          <TabsTrigger
+                            key={tab}
+                            value={tab}
+                            className={`
+                         flex items-center justify-center px-4 sm:px-6 py-2 sm:py-3 text-md font-medium transition-all duration-200 
+                            data-[state=active]:bg-[#662EBD] data-[state=active]:text-white 
+                            data-[state=active]:shadow-sm ${isDark
+                                ? "text-gray-300 hover:text-white"
+                                : "text-gray-700 hover:text-gray-800 hover:bg-gray-200"
+                              }
+                              ${isFirst
+                                ? "data-[state=active]:rounded-l-full"
+                                : ""
+                              }
+                               ${isLast
+                                ? "data-[state=active]:rounded-r-full"
+                                : ""
+                              }
+                             ${arr.length === 1
+                                ? "data-[state=active]:rounded-full"
+                                : ""
+                              }
+                             `}
+                          >
+                            {tab === "tiktok-library" ? (
+                              <>
+                                <span className="hidden sm:inline">
+                                  Your Videos
+                                </span>
+                                <span className="sm:hidden">Library</span>
+                              </>
+                            ) : (
+                              <>
+                                <span className="hidden sm:inline">Link</span>
+                                <span className="sm:hidden">Link</span>
+                              </>
+                            )}
+                          </TabsTrigger>
+                        );
+                      },
+                    )}
+                  </TabsList>
+
+                  {/* Informational text for creators */}
+                  <div className="mt-6 p-3 bg-[#D9C0FF26] border border-[#7F39EC] rounded-lg">
+                    <p
+                      className={cn(
+                        "text-md text-center",
+                        isDark ? "text-white" : "text-[#7F39EC]",
+                      )}
+                    >
+                      💡 <strong>Tip for creators:</strong> You can fetch videos
+                      from your TikTok account by entering their URL in the
+                      &quot;Link&quot; tab.
+                    </p>
+                  </div>
+
+                  <TabsContent value="tiktok-library" className="mt-4">
+                    {isLoadingTiktokVideos ? (
+                      <div className="text-center py-4">
+                        <PageLoadingSpinner mode="light" />
+                        Loading TikTok videos...
+                      </div>
+                    ) : userTiktokVideos.length === 0 ? (
+                      tiktokLibraryMessage ? (
+                        <Alert variant="default" className="text-center">
+                          <AlertDescription>
+                            {tiktokLibraryMessage}
+                          </AlertDescription>
+                        </Alert>
+                      ) : (
+                        <div className="text-center py-4">
+                          <p
+                            className={cn(
+                              "text-md",
+                              isDark ? "text-white" : "text-black",
+                            )}
+                          >
+                            No videos found on your TikTok account.
+                          </p>
+                          <Button
+                            variant="outline"
+                            className="mt-3 bg-[#4A00BE] text-white"
+                            onClick={() => fetchTikTokVideos()}
+                            disabled={isLoadingTiktokVideos}
+                          >
+                            <RefreshCw
+                              className={`h-4 w-4 mr-2 ${isLoadingTiktokVideos ? "animate-spin" : ""
+                                }`}
+                            />{" "}
+                            Reload Videos
+                          </Button>
+                        </div>
+                      )
+                    ) : (
+                      <>
+                        {/* TikTok Pagination Controls */}
+                        {totalTiktokPages > 1 && (
+                          <div className="flex flex-col sm:flex-row justify-between items-center mb-4 p-3 sm:p-4 bg-muted/30 rounded-lg border space-y-2 sm:space-y-0">
+                            <Button
+                              variant="outline"
+                              size="default"
+                              className="w-full sm:w-auto px-4 sm:px-6 py-2 font-medium text-sm sm:text-base hover:bg-primary hover:text-primary-foreground transition-all duration-200 shadow-sm hover:shadow-md"
+                              onClick={() =>
+                                setTiktokCurrentPage((prev) =>
+                                  Math.max(1, prev - 1),
+                                )
+                              }
+                              disabled={
+                                tiktokCurrentPage === 1 || isLoadingTiktokVideos
+                              }
+                            >
+                              ← Previous
+                            </Button>
+                            <span className="text-sm sm:text-base font-medium text-foreground bg-background px-3 sm:px-4 py-2 rounded-md border shadow-sm">
+                              Page {tiktokCurrentPage} of{" "}
+                              {totalTiktokPages > 0 ? totalTiktokPages : 1}
+                            </span>
+                            <Button
+                              variant="outline"
+                              size="default"
+                              className="w-full sm:w-auto px-4 sm:px-6 py-2 font-medium text-sm sm:text-base hover:bg-primary hover:text-primary-foreground transition-all duration-200 shadow-sm hover:shadow-md"
+                              onClick={() =>
+                                setTiktokCurrentPage((prev) =>
+                                  Math.min(totalTiktokPages, prev + 1),
+                                )
+                              }
+                              disabled={
+                                tiktokCurrentPage === totalTiktokPages ||
+                                totalTiktokPages === 0 ||
+                                isLoadingTiktokVideos
+                              }
+                            >
+                              Next →
+                            </Button>
+                          </div>
+                        )}
+
+                        {/* Multiple Submissions Counter - TikTok */}
+                        {contest?.multiple_submissions_enabled &&
+                          contestPlatform === "tiktok" && (
+                            <div
+                              className={cn(
+                                "mt-4 p-3 border rounded-lg",
+                                isDark
+                                  ? "bg-[#C9A7FF26] border-[#C9A7FF]"
+                                  : "bg-purple-50 border-purple-200",
+                              )}
+                            >
+                              <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-2">
+                                  <CheckCheck className="h-4 w-4 text-purple-600" />
+                                  <span
+                                    className={cn(
+                                      "text-sm font-medium",
+                                      isDark ? "text-white" : "text-purple-800",
+                                    )}
+                                  >
+                                    Multiple Submissions Enabled
+                                  </span>
+                                </div>
+                                <div
+                                  className={cn(
+                                    "text-sm font-semibold",
+                                    isDark ? "text-white" : "text-purple-800",
+                                  )}
+                                >
+                                  Selected:{" "}
+                                  {selectedTiktokVideosFromTabs.length} /{" "}
+                                  {Math.max(
+                                    0,
+                                    (contest.max_submissions_per_creator || 1) -
+                                    submissionProgress.submitted,
+                                  )}{" "}
+                                  remaining videos
+                                </div>
+                              </div>
+                              <p
+                                className={cn(
+                                  "text-xs mt-1",
+                                  isDark ? "text-gray-300" : "text-purple-600",
+                                )}
+                              >
+                                Click on videos below to select them. You can
+                                mix videos from your library and custom links.
+                              </p>
+                            </div>
+                          )}
+
+                        <div className="space-y-4 max-h-96 overflow-y-auto overflow-x-hidden scrollbar-thin scrollbar-thumb-gray-400 scrollbar-track-gray-100 dark:scrollbar-thumb-gray-600 dark:scrollbar-track-gray-800 px-2 pb-4">
+                          {paginatedTiktokVideos.map((video, index) => {
+                            const isMultiSelect =
+                              contest?.multiple_submissions_enabled;
+                            const isSelected = isMultiSelect
+                              ? selectedTiktokVideosFromTabs.some(
+                                (v: any) => v.id === video.id,
+                              )
+                              : selectedTiktokVideo?.id === video.id;
+
+                            const handleTiktokSelectionChange = (
+                              shouldSelect: boolean,
+                            ) => {
+                              if (isMultiSelect) {
+                                const isAlreadySelected =
+                                  selectedTiktokVideosFromTabs.some(
+                                    (v: any) => v.id === video.id,
+                                  );
+
+                                if (shouldSelect) {
+                                  if (isAlreadySelected) return;
+
+                                  if (
+                                    isVideoAlreadySubmitted(
+                                      video.id,
+                                      video.share_url || "",
+                                    )
+                                  ) {
+                                    toast({
+                                      title: "Video Already Submitted",
+                                      description:
+                                        "This video has already been submitted for this contest",
+                                      variant: "destructive",
+                                    });
+                                    return;
+                                  }
+
+                                  const maxSubmissions =
+                                    contest?.max_submissions_per_creator || 1;
+                                  const remainingSubmissions =
+                                    maxSubmissions -
+                                    submissionProgress.submitted;
+                                  const totalSelected =
+                                    selectedTiktokVideosFromTabs.length;
+
+                                  if (totalSelected < remainingSubmissions) {
+                                    setSelectedTiktokVideosFromTabs((prev) => [
+                                      ...prev,
+                                      video,
+                                    ]);
+                                  } else {
+                                    toast({
+                                      title: "Selection Limit Reached",
+                                      description: `You can only select up to ${remainingSubmissions} more videos for this contest (${submissionProgress.submitted} already submitted)`,
+                                      variant: "destructive",
+                                    });
+                                  }
+                                } else if (isAlreadySelected) {
+                                  setSelectedTiktokVideosFromTabs((prev) =>
+                                    prev.filter((v: any) => v.id !== video.id),
+                                  );
+                                }
+                              } else {
+                                if (shouldSelect) {
+                                  setSelectedTiktokVideo(video);
+                                  setTiktokVideoPreview(video);
+                                  setTiktokVideoLink(video.share_url || "");
+                                } else {
+                                  setSelectedTiktokVideo(null);
+                                  setTiktokVideoPreview(null);
+                                  setTiktokVideoLink("");
+                                }
+                              }
+                            };
+
+                            const publishedDate = video.create_time
+                              ? dayjs(
+                                new Date(video.create_time * 1000),
+                              ).format("MMM D, YYYY [at] h:mm A")
+                              : null;
+
+                            return (
+                              <div
+                                key={video.id}
+                                className={`cursor-pointer max-w-[1200px] mt-6 mx-auto ${index === 0 ? "mt-4" : ""
+                                  } ${index === paginatedTiktokVideos.length - 1
+                                    ? "mb-4"
+                                    : ""
+                                  } ${isSelected
+                                    ? "border-2 border-[#7F39EC] rounded-lg bg-[#D8C3FF75]"
+                                    : "border-2 border-[#7F39EC] rounded-lg "
+                                  }`}
+                                onClick={() =>
+                                  handleTiktokSelectionChange(!isSelected)
+                                }
+                              >
+                                <CardContent className="p-4 sm:p-6 relative">
+                                  <Checkbox
+                                    aria-label="Select TikTok video"
+                                    checked={isSelected}
+                                    onCheckedChange={(checked) =>
+                                      handleTiktokSelectionChange(
+                                        Boolean(checked),
+                                      )
+                                    }
+                                    onClick={(event) => event.stopPropagation()}
+                                    className={cn(
+                                      "absolute top-3 right-3 h-5 w-5 border-2 shadow-sm",
+                                      isDark
+                                        ? "border-gray-500 data-[state=checked]:border-purple-400 data-[state=checked]:bg-purple-500"
+                                        : "border-gray-300 data-[state=checked]:border-purple-600 data-[state=checked]:bg-purple-600",
+                                    )}
+                                  />
+                                  <div className="flex flex-col sm:flex-row sm:items-start space-y-3 sm:space-y-0 sm:space-x-4 lg:space-x-6">
+                                    {/* Thumbnail */}
+                                    <div className="flex-shrink-0 mx-auto sm:mx-0">
+                                      {video.cover_image_url ? (
+                                        <img
+                                          src={video.cover_image_url}
+                                          alt={video.title || "TikTok video"}
+                                          width={120}
+                                          height={120}
+                                          className="rounded-lg object-cover aspect-square shadow-sm w-full max-w-[120px]"
+                                        />
+                                      ) : (
+                                        <div className="w-[120px] h-[120px] bg-muted rounded-lg flex items-center justify-center text-xs text-muted-foreground border">
+                                          🎬 No thumbnail
+                                        </div>
+                                      )}
+                                    </div>
+
+                                    {/* Content */}
+                                    <div className="flex-1 min-w-0 space-y-2 sm:space-y-4">
+                                      {/* Title */}
+                                      <div className="space-y-1">
+                                        <h3
+                                          className="font-medium text-md leading-5 text-center sm:text-left line-clamp-3"
+                                          title={video.title || "TikTok video"}
+                                        >
+                                          {video.title ||
+                                            video.video_description ||
+                                            "No title available"}
+                                        </h3>
+                                        <div className="flex justify-center sm:justify-start">
+                                          <a
+                                            href={video.share_url}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className="inline-flex items-center text-sm text-purple-600 hover:text-purple-800 hover:underline"
+                                            onClick={(e) => e.stopPropagation()}
+                                          >
+                                            <ExternalLink className="h-3 w-3 mr-1" />
+                                            Open on TikTok
+                                          </a>
+                                        </div>
+                                      </div>
+
+                                      {/* Date, Type, and Metrics */}
+                                      <div className="space-y-3">
+                                        {publishedDate && (
+                                          <p className="text-sm text-muted-foreground text-center sm:text-left">
+                                            Posted: {publishedDate}
+                                          </p>
+                                        )}
+                                        <div className="flex flex-wrap items-center justify-center sm:justify-start gap-3">
+                                          <span className="inline-flex items-center px-2 py-1 rounded-full text-sm font-medium border border-gray-500">
+                                            🎬 TikTok Video
+                                          </span>
+                                          <div
+                                            className={cn(
+                                              "flex items-center gap-3 text-xs",
+                                              isDark
+                                                ? "text-gray-300"
+                                                : "text-gray-600",
+                                            )}
+                                          >
+                                            <div className="flex items-center gap-1">
+                                              <Eye className="h-3 w-3" />
+                                              <span>
+                                                {(
+                                                  video.view_count || 0
+                                                ).toLocaleString()}
+                                              </span>
+                                            </div>
+                                            <div className="flex items-center gap-1">
+                                              <ThumbsUp className="h-3 w-3" />
+                                              <span>
+                                                {(
+                                                  video.like_count || 0
+                                                ).toLocaleString()}
+                                              </span>
+                                            </div>
+                                            <div className="flex items-center gap-1">
+                                              <MessageSquare className="h-3 w-3" />
+                                              <span>
+                                                {(
+                                                  video.comment_count || 0
+                                                ).toLocaleString()}
+                                              </span>
+                                            </div>
+                                          </div>
+                                        </div>
+                                      </div>
+                                    </div>
+                                  </div>
+                                </CardContent>
+                              </div>
+                            );
+                          })}
+                        </div>
+
+                        {/* Load More button */}
+                        {tiktokNextCursor &&
+                          tiktokCurrentPage === totalTiktokPages && (
+                            <div className="flex justify-center mt-4 pb-2">
+                              <Button
+                                variant="outline"
+                                onClick={loadMoreTiktokVideos}
+                                disabled={isLoadingMoreTiktokVideos}
+                                className={cn(
+                                  "px-6 py-2 font-medium border-2",
+                                  isDark
+                                    ? "border-[#C9A7FF] text-[#C9A7FF] hover:bg-[#C9A7FF] hover:text-black"
+                                    : "border-[#7F39EC] text-[#7F39EC] hover:bg-[#7F39EC] hover:text-white",
+                                )}
+                              >
+                                {isLoadingMoreTiktokVideos ? (
+                                  <>
+                                    <RefreshCw className="animate-spin mr-2 h-4 w-4" />
+                                    Loading...
+                                  </>
+                                ) : (
+                                  "Load More Videos"
+                                )}
+                              </Button>
+                            </div>
+                          )}
+                      </>
+                    )}
+                  </TabsContent>
+
+                  <TabsContent value="tiktok-link" className="mt-4">
+                    {!contest?.multiple_submissions_enabled && (
+                      <div className="flex flex-col sm:flex-row items-center space-y-3 sm:space-y-0 sm:space-x-3 p-4">
+                        <Input
+                          type="text"
+                          placeholder="Enter TikTok video URL (e.g., https://www.tiktok.com/@username/video/1234567890)"
+                          value={tiktokVideoLink}
+                          onChange={(e) => setTiktokVideoLink(e.target.value)}
+                          className={cn(
+                            "flex-1 text-base font-medium border",
+                            isDark
+                              ? "bg-[#180438] border border-gray-600"
+                              : "bg-white",
+                          )}
+                        />
+                        <Button
+                          onClick={async () => {
+                            if (!tiktokVideoLink.trim()) {
+                              toast({
+                                title: "Error",
+                                description:
+                                  "Please paste a TikTok video link.",
+                                variant: "destructive",
+                              });
+                              return;
+                            }
+
+                            // Basic TikTok URL validation
+                            const tiktokUrlPattern =
+                              /tiktok\.com\/@[\w.-]+\/video\/(\d+)/i;
+                            const vmPattern = /vm\.tiktok\.com\/[\w]+/i;
+                            if (
+                              !tiktokUrlPattern.test(tiktokVideoLink) &&
+                              !vmPattern.test(tiktokVideoLink)
+                            ) {
+                              toast({
+                                title: "Invalid URL",
+                                description:
+                                  "Please enter a valid TikTok video URL (e.g., https://www.tiktok.com/@username/video/1234567890)",
+                                variant: "destructive",
+                              });
+                              return;
+                            }
+
+                            setIsFetchingTiktokVideo(true);
+                            setError(null);
+
+                            try {
+                              const match =
+                                tiktokVideoLink.match(/video\/(\d+)/);
+                              const videoId = match ? match[1] : null;
+
+                              if (!videoId) {
+                                throw new Error(
+                                  "Could not extract video ID from the URL. Please ensure it's a direct TikTok video link.",
+                                );
+                              }
+
+                              if (submittedVideos.has(videoId)) {
+                                toast({
+                                  title: "Already Submitted",
+                                  description:
+                                    "This TikTok video has already been submitted to this contest.",
+                                  variant: "destructive",
+                                });
+                                setIsFetchingTiktokVideo(false);
+                                return;
+                              }
+
+                              // Validate ownership: extract @username from URL and compare with connected account
+                              const usernameMatch = tiktokVideoLink.match(
+                                /tiktok\.com\/@([\w.-]+)\//i,
+                              );
+                              const urlUsername = usernameMatch
+                                ? usernameMatch[1].toLowerCase()
+                                : null;
+                              const connectedUsername =
+                                tiktokAccount?.username?.toLowerCase();
+
+                              if (
+                                urlUsername &&
+                                connectedUsername &&
+                                urlUsername !== connectedUsername
+                              ) {
+                                toast({
+                                  title: "Not Your Content",
+                                  description: `This video belongs to @${usernameMatch![1]}, not your connected TikTok account (@${tiktokAccount.username}). You can only submit your own content.`,
+                                  variant: "destructive",
+                                });
+                                setError(
+                                  `This video belongs to @${usernameMatch![1]}, not your connected TikTok account (@${tiktokAccount.username}). You can only submit your own content.`,
+                                );
+                                setIsFetchingTiktokVideo(false);
+                                return;
+                              }
+
+                              const response = await fetch(
+                                `/api/auth/tiktok/video-info?video_id=${videoId}`,
+                                {
+                                  headers: {
+                                    "Content-Type": "application/json",
+                                  },
+                                },
+                              );
+
+                              if (response.ok) {
+                                const data = await response.json();
+                                setTiktokVideoPreview(
+                                  data.video || {
+                                    id: videoId,
+                                    share_url: tiktokVideoLink,
+                                    title: "TikTok Video",
+                                    view_count: 0,
+                                    like_count: 0,
+                                    comment_count: 0,
+                                    share_count: 0,
+                                  },
+                                );
+                              } else {
+                                // API failed – video likely doesn't belong to user
+                                const errorData = await response
+                                  .json()
+                                  .catch(() => ({}));
+                                if (response.status === 404) {
+                                  toast({
+                                    title: "Not Your Content",
+                                    description:
+                                      "This video was not found in your connected TikTok account. You can only submit your own TikTok videos.",
+                                    variant: "destructive",
+                                  });
+                                  setError(
+                                    "This video was not found in your connected TikTok account. You can only submit your own TikTok videos.",
+                                  );
+                                  setIsFetchingTiktokVideo(false);
+                                  return;
+                                }
+                                throw new Error(
+                                  errorData?.error ||
+                                  "Failed to verify TikTok video.",
+                                );
+                              }
+
+                              toast({
+                                title: "Video Loaded",
+                                description:
+                                  "TikTok video is ready for submission.",
+                                variant: "default",
+                              });
+                            } catch (err: any) {
+                              console.error(
+                                "Error fetching TikTok video:",
+                                err,
+                              );
+                              setError(
+                                err.message || "Failed to load TikTok video.",
+                              );
+                            } finally {
+                              setIsFetchingTiktokVideo(false);
+                            }
+                          }}
+                          disabled={
+                            isFetchingTiktokVideo || !tiktokVideoLink.trim()
+                          }
+                          size="default"
+                          className="px-4 sm:px-6 py-2 font-medium text-sm sm:text-base shadow-sm w-full sm:w-auto"
+                        >
+                          {isFetchingTiktokVideo ? (
+                            <RefreshCw className="animate-spin mr-2 h-4 w-4" />
+                          ) : null}
+                          Fetch Video
+                        </Button>
+                      </div>
+                    )}
+                    {tiktokVideoPreview &&
+                      (() => {
+                        const isSelected =
+                          selectedTiktokVideo?.id === tiktokVideoPreview.id ||
+                          tiktokVideoPreview !== null;
+
+                        const handleSelectionChange = (
+                          shouldSelect: boolean,
+                        ) => {
+                          if (shouldSelect) {
+                            setSelectedTiktokVideo(tiktokVideoPreview);
+                          } else {
+                            setSelectedTiktokVideo(null);
+                            setTiktokVideoPreview(null);
+                            setTiktokVideoLink("");
+                          }
+                        };
+
+                        return (
+                          <div
+                            className={`mt-6 cursor-pointer max-w-[1200px] mx-auto ${isSelected
+                              ? "border-2 border-[#7F39EC] rounded-lg bg-[#D8C3FF75]"
+                              : "border-2 border-[#7F39EC] rounded-lg "
+                              }`}
+                            onClick={() => handleSelectionChange(!isSelected)}
+                          >
+                            <CardHeader>
+                              <CardTitle className="text-base">
+                                Video Preview
+                              </CardTitle>
+                            </CardHeader>
+                            <CardContent className="relative">
+                              <Checkbox
+                                aria-label="Select TikTok preview video"
+                                checked={isSelected}
+                                onCheckedChange={(checked) =>
+                                  handleSelectionChange(Boolean(checked))
+                                }
+                                onClick={(event) => event.stopPropagation()}
+                                className={cn(
+                                  "absolute top-3 right-3 h-5 w-5 border-2 shadow-sm",
+                                  isDark
+                                    ? "border-gray-500 data-[state=checked]:border-purple-400 data-[state=checked]:bg-purple-500"
+                                    : "border-gray-300 data-[state=checked]:border-purple-600 data-[state=checked]:bg-purple-600",
+                                )}
+                              />
+                              <div className="flex flex-col sm:flex-row sm:items-start space-y-3 sm:space-y-0 sm:space-x-4 lg:space-x-6">
+                                {/* Thumbnail */}
+                                <div className="flex-shrink-0 mx-auto sm:mx-0">
+                                  {tiktokVideoPreview.cover_image_url ? (
+                                    <img
+                                      src={tiktokVideoPreview.cover_image_url}
+                                      alt={
+                                        tiktokVideoPreview.title ||
+                                        "TikTok video"
+                                      }
+                                      width={120}
+                                      height={120}
+                                      className="rounded-lg object-cover aspect-square shadow-sm w-full max-w-[120px]"
+                                    />
+                                  ) : (
+                                    <div className="w-[120px] h-[120px] bg-muted rounded-lg flex items-center justify-center text-xs text-muted-foreground border">
+                                      🎬 No thumbnail
+                                    </div>
+                                  )}
+                                </div>
+
+                                {/* Content */}
+                                <div className="flex-1 min-w-0 space-y-2 sm:space-y-4">
+                                  {/* Title */}
+                                  <div className="space-y-1">
+                                    <h3
+                                      className="font-medium text-md leading-5 text-center sm:text-left line-clamp-3"
+                                      title={
+                                        tiktokVideoPreview.title ||
+                                        "TikTok video"
+                                      }
+                                    >
+                                      {tiktokVideoPreview.title ||
+                                        tiktokVideoPreview.video_description ||
+                                        "No title available"}
+                                    </h3>
+                                    <div className="flex justify-center sm:justify-start">
+                                      <a
+                                        href={
+                                          tiktokVideoPreview.share_url ||
+                                          tiktokVideoLink
+                                        }
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="inline-flex items-center text-sm text-purple-600 hover:text-purple-800 hover:underline"
+                                        onClick={(e) => e.stopPropagation()}
+                                      >
+                                        <ExternalLink className="h-3 w-3 mr-1" />
+                                        Open on TikTok
+                                      </a>
+                                    </div>
+                                  </div>
+
+                                  {/* Metrics */}
+                                  <div className="space-y-2">
+                                    {tiktokVideoPreview.create_time && (
+                                      <p className="text-sm text-muted-foreground text-center sm:text-left">
+                                        Posted:{" "}
+                                        {dayjs(
+                                          new Date(
+                                            tiktokVideoPreview.create_time *
+                                            1000,
+                                          ),
+                                        ).format("MMM D, YYYY [at] h:mm A")}
+                                      </p>
+                                    )}
+                                    <div className="flex flex-wrap items-center justify-center sm:justify-start gap-3">
+                                      <span className="inline-flex items-center px-2 py-1 rounded-full text-sm font-medium border border-gray-500">
+                                        🎬 TikTok Video
+                                      </span>
+                                      <div
+                                        className={cn(
+                                          "flex items-center gap-3 text-xs",
+                                          isDark
+                                            ? "text-gray-300"
+                                            : "text-gray-600",
+                                        )}
+                                      >
+                                        <div className="flex items-center gap-1">
+                                          <Eye className="h-3 w-3" />
+                                          <span>
+                                            {(
+                                              tiktokVideoPreview.view_count || 0
+                                            ).toLocaleString()}
+                                          </span>
+                                        </div>
+                                        <div className="flex items-center gap-1">
+                                          <ThumbsUp className="h-3 w-3" />
+                                          <span>
+                                            {(
+                                              tiktokVideoPreview.like_count || 0
+                                            ).toLocaleString()}
+                                          </span>
+                                        </div>
+                                        <div className="flex items-center gap-1">
+                                          <MessageSquare className="h-3 w-3" />
+                                          <span>
+                                            {(
+                                              tiktokVideoPreview.comment_count ||
+                                              0
+                                            ).toLocaleString()}
+                                          </span>
+                                        </div>
+                                      </div>
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+                            </CardContent>
+                          </div>
+                        );
+                      })()}
+                  </TabsContent>
+                </Tabs>
+              )}
+            </>
+          )}
+
           {/* Multiple Submissions UI - Only show if contest allows multiple submissions and account is connected */}
           {contest?.multiple_submissions_enabled &&
             (contestPlatform === "youtube"
               ? youtubeAccount
-              : instagramAccount?.access_token) && (
+              : contestPlatform === "tiktok"
+                ? tiktokAccount
+                : instagramAccount?.access_token) && (
               <div className="mt-8">
                 <Card
                   className={cn(
                     "border",
                     isDark
                       ? "bg-[#C9A7FF26] border-[#C9A7FF]"
-                      : "border-purple-200 bg-purple-50/50"
+                      : "border-purple-200 bg-purple-50/50",
                   )}
                 >
                   <CardHeader>
                     <CardTitle
                       className={cn(
                         "flex items-center gap-2",
-                        isDark ? "text-white" : "text-purple-800"
+                        isDark ? "text-white" : "text-purple-800",
                       )}
                     >
                       <CheckCheck className="h-5 w-5" />
@@ -3933,7 +5330,7 @@ export default function SubmitContentPage({
                     <CardDescription
                       className={cn(
                         "text-purple-700",
-                        isDark ? "text-gray-300" : "text-purple-700"
+                        isDark ? "text-gray-300" : "text-purple-700",
                       )}
                     >
                       You can submit up to{" "}
@@ -3948,26 +5345,28 @@ export default function SubmitContentPage({
                       <div
                         className={cn(
                           "flex items-center justify-between p-3 rounded-lg",
-                          isDark ? "bg-[#C9A7FF26]" : "bg-purple-100"
+                          isDark ? "bg-[#C9A7FF26]" : "bg-purple-100",
                         )}
                       >
                         <div>
                           <span
                             className={cn(
                               "text-sm font-medium",
-                              isDark ? "text-white" : "text-purple-800"
+                              isDark ? "text-white" : "text-purple-800",
                             )}
                           >
                             Selected:{" "}
                             {selectedVideosFromTabs.length +
                               selectedReelsFromTabs.length +
                               selectedVideos.length +
-                              selectedReels.length}{" "}
+                              selectedReels.length +
+                              selectedTiktokVideosFromTabs.length +
+                              selectedTiktokVideosFromLinks.length}{" "}
                             /{" "}
                             {Math.max(
                               0,
                               (contest.max_submissions_per_creator || 1) -
-                              submissionProgress.submitted
+                              submissionProgress.submitted,
                             )}{" "}
                             remaining submissions
                           </span>
@@ -3975,7 +5374,7 @@ export default function SubmitContentPage({
                             <div
                               className={cn(
                                 "text-xs",
-                                isDark ? "text-gray-300" : "text-purple-600"
+                                isDark ? "text-gray-300" : "text-purple-600",
                               )}
                             >
                               Already submitted: {submissionProgress.submitted}{" "}
@@ -4002,7 +5401,7 @@ export default function SubmitContentPage({
                             className={cn(
                               isDark
                                 ? "bg-[#7F39EC] border-[#7F39EC] text-white"
-                                : "border text-purple-700 border-purple-300 hover:bg-purple-100"
+                                : "border text-purple-700 border-purple-300 hover:bg-purple-100",
                             )}
                           >
                             <Plus className="h-4 w-4 mr-1" />
@@ -4020,7 +5419,7 @@ export default function SubmitContentPage({
                               className={cn(
                                 isDark
                                   ? "bg-[#7F39EC] border-[#7F39EC] text-white"
-                                  : "border text-purple-700 border-purple-300 hover:bg-purple-100"
+                                  : "border text-purple-700 border-purple-300 hover:bg-purple-100",
                               )}
                             >
                               <Minus className="h-4 w-4 mr-1" />
@@ -4043,11 +5442,13 @@ export default function SubmitContentPage({
                                 "flex-1",
                                 isDark
                                   ? "bg-[#180438] border border-gray-700 text-white"
-                                  : "bg-white text-black"
+                                  : "bg-white text-black",
                               )}
                               placeholder={`Enter ${contestPlatform?.toLowerCase() === "youtube"
                                 ? "YouTube"
-                                : "Instagram"
+                                : contestPlatform?.toLowerCase() === "tiktok"
+                                  ? "TikTok"
+                                  : "Instagram"
                                 } video URL ${index + 1}`}
                               value={link}
                               onChange={(e) => {
@@ -4093,7 +5494,7 @@ export default function SubmitContentPage({
                               className={cn(
                                 isDark
                                   ? "text-red-400 border-red-500 hover:bg-red-900"
-                                  : "text-red-600 border-red-300 hover:bg-red-50"
+                                  : "text-red-600 border-red-300 hover:bg-red-50",
                               )}
                             >
                               <Minus className="h-4 w-4" />
@@ -4126,7 +5527,7 @@ export default function SubmitContentPage({
                                   submissionLinks.filter(
                                     (link, index) =>
                                       link.trim() &&
-                                      !fetchedLinkIndices.has(index)
+                                      !fetchedLinkIndices.has(index),
                                   ).length
                                 }
                                 )
@@ -4138,12 +5539,13 @@ export default function SubmitContentPage({
 
                       {/* Fetched Videos Display */}
                       {(fetchedVideos.length > 0 ||
-                        fetchedReels.length > 0) && (
+                        fetchedReels.length > 0 ||
+                        fetchedTiktokVideosFromLinks.length > 0) && (
                           <div className="mt-6">
                             <h4
                               className={cn(
                                 "text-lg font-semibold",
-                                isDark ? "text-white" : "text-purple-800"
+                                isDark ? "text-white" : "text-purple-800",
                               )}
                             >
                               Fetched Videos - Select the ones you want to submit:
@@ -4156,7 +5558,7 @@ export default function SubmitContentPage({
                                 const thumbnailUrl =
                                   getYouTubeThumbnailUrl(
                                     video.snippet.thumbnails,
-                                    video.id.videoId
+                                    video.id.videoId,
                                   ) ||
                                   `https://i.ytimg.com/vi/${video.id.videoId}/hqdefault.jpg`;
 
@@ -4167,7 +5569,7 @@ export default function SubmitContentPage({
                                       "cursor-pointer transition-all duration-200",
                                       isVideoAlreadySubmitted(
                                         video.id.videoId,
-                                        `https://www.youtube.com/watch?v=${video.id.videoId}`
+                                        `https://www.youtube.com/watch?v=${video.id.videoId}`,
                                       )
                                         ? isDark
                                           ? "border-2 border-red-500 bg-red-900/40 opacity-90"
@@ -4178,12 +5580,12 @@ export default function SubmitContentPage({
                                             : "border-2 border-purple-500 bg-purple-50"
                                           : isDark
                                             ? "border border-gray-600 hover:border-purple-400 bg-[#180438]"
-                                            : "border border-gray-200 hover:border-purple-300 bg-white"
+                                            : "border border-gray-200 hover:border-purple-300 bg-white",
                                     )}
                                     onClick={() =>
                                       handleVideoSelection(
                                         index,
-                                        !selectedVideoIndices.includes(index)
+                                        !selectedVideoIndices.includes(index),
                                       )
                                     }
                                   >
@@ -4194,12 +5596,12 @@ export default function SubmitContentPage({
                                           <Checkbox
                                             aria-label="Select video"
                                             checked={selectedVideoIndices.includes(
-                                              index
+                                              index,
                                             )}
                                             onCheckedChange={(checked) =>
                                               handleVideoSelection(
                                                 index,
-                                                Boolean(checked)
+                                                Boolean(checked),
                                               )
                                             }
                                             onClick={(event) =>
@@ -4209,7 +5611,7 @@ export default function SubmitContentPage({
                                               "h-5 w-5 border-2",
                                               isDark
                                                 ? "border-gray-500 data-[state=checked]:border-purple-400 data-[state=checked]:bg-purple-500"
-                                                : "border-gray-300 data-[state=checked]:border-purple-600 data-[state=checked]:bg-purple-600"
+                                                : "border-gray-300 data-[state=checked]:border-purple-600 data-[state=checked]:bg-purple-600",
                                             )}
                                           />
                                         </div>
@@ -4233,7 +5635,7 @@ export default function SubmitContentPage({
                                                 </h5>
                                                 {isVideoAlreadySubmitted(
                                                   video.id.videoId,
-                                                  `https://www.youtube.com/watch?v=${video.id.videoId}`
+                                                  `https://www.youtube.com/watch?v=${video.id.videoId}`,
                                                 ) && (
                                                     <div className="flex items-center gap-1 text-xs text-red-600 bg-red-100 px-2 py-1 rounded-full flex-shrink-0">
                                                       <AlertTriangle className="h-3 w-3" />
@@ -4246,7 +5648,7 @@ export default function SubmitContentPage({
                                                   "flex flex-wrap items-center gap-2 sm:gap-4 text-xs",
                                                   isDark
                                                     ? "text-gray-300"
-                                                    : "text-gray-600"
+                                                    : "text-gray-600",
                                                 )}
                                               >
                                                 <div className="flex items-center gap-1">
@@ -4255,7 +5657,7 @@ export default function SubmitContentPage({
                                                       "h-4 w-4",
                                                       isDark
                                                         ? "text-gray-300"
-                                                        : "text-gray-600"
+                                                        : "text-gray-600",
                                                     )}
                                                   />
                                                   <span className="font-medium">
@@ -4271,7 +5673,7 @@ export default function SubmitContentPage({
                                                       "h-4 w-4",
                                                       isDark
                                                         ? "text-gray-300"
-                                                        : "text-gray-600"
+                                                        : "text-gray-600",
                                                     )}
                                                   />
                                                   <span>
@@ -4287,7 +5689,7 @@ export default function SubmitContentPage({
                                                       "h-4 w-4",
                                                       isDark
                                                         ? "text-gray-300"
-                                                        : "text-gray-600"
+                                                        : "text-gray-600",
                                                     )}
                                                   />
                                                   <span className="font-medium">
@@ -4316,7 +5718,7 @@ export default function SubmitContentPage({
                                         "cursor-pointer transition-all duration-200",
                                         isVideoAlreadySubmitted(
                                           reel.id,
-                                          reel.permalink
+                                          reel.permalink,
                                         )
                                           ? isDark
                                             ? "border-2 border-red-500 bg-red-900/40 opacity-90"
@@ -4327,12 +5729,12 @@ export default function SubmitContentPage({
                                               : "border-2 border-purple-500 bg-purple-50"
                                             : isDark
                                               ? "border border-gray-600 hover:border-purple-400 bg-[#180438]"
-                                              : "border border-gray-200 hover:border-purple-300 bg-white"
+                                              : "border border-gray-200 hover:border-purple-300 bg-white",
                                       )}
                                       onClick={() =>
                                         handleVideoSelection(
                                           index,
-                                          !selectedReelIndices.includes(index)
+                                          !selectedReelIndices.includes(index),
                                         )
                                       }
                                     >
@@ -4361,7 +5763,7 @@ export default function SubmitContentPage({
                                                       "font-medium text-sm line-clamp-2 flex-1",
                                                       isDark
                                                         ? "text-white"
-                                                        : "text-gray-900"
+                                                        : "text-gray-900",
                                                     )}
                                                   >
                                                     {reel.caption ||
@@ -4369,14 +5771,14 @@ export default function SubmitContentPage({
                                                   </h5>
                                                   {isVideoAlreadySubmitted(
                                                     reel.id,
-                                                    reel.permalink
+                                                    reel.permalink,
                                                   ) && (
                                                       <div
                                                         className={cn(
                                                           "flex items-center gap-1 text-xs px-2 py-1 rounded-full flex-shrink-0",
                                                           isDark
                                                             ? "text-red-300 bg-red-900/60 border border-red-500/40"
-                                                            : "text-red-600 bg-red-100"
+                                                            : "text-red-600 bg-red-100",
                                                         )}
                                                       >
                                                         <AlertTriangle className="h-3 w-3" />
@@ -4389,14 +5791,14 @@ export default function SubmitContentPage({
                                                     "flex items-center gap-4 text-xs",
                                                     isDark
                                                       ? "text-gray-300"
-                                                      : "text-gray-600"
+                                                      : "text-gray-600",
                                                   )}
                                                 >
                                                   <div className="flex items-center gap-1">
                                                     <CalendarDays className="h-4 w-4" />
                                                     <span>
                                                       {dayjs(
-                                                        reel.timestamp
+                                                        reel.timestamp,
                                                       ).format("MMM D, YYYY")}
                                                     </span>
                                                   </div>
@@ -4410,12 +5812,12 @@ export default function SubmitContentPage({
                                                 <Checkbox
                                                   aria-label="Select reel"
                                                   checked={selectedReelIndices.includes(
-                                                    index
+                                                    index,
                                                   )}
                                                   onCheckedChange={(checked) =>
                                                     handleVideoSelection(
                                                       index,
-                                                      Boolean(checked)
+                                                      Boolean(checked),
                                                     )
                                                   }
                                                   onClick={(event) =>
@@ -4425,7 +5827,7 @@ export default function SubmitContentPage({
                                                     "h-5 w-5 border-2",
                                                     isDark
                                                       ? "border-gray-500 data-[state=checked]:border-purple-400 data-[state=checked]:bg-purple-500"
-                                                      : "border-gray-300 data-[state=checked]:border-purple-600 data-[state=checked]:bg-purple-600"
+                                                      : "border-gray-300 data-[state=checked]:border-purple-600 data-[state=checked]:bg-purple-600",
                                                   )}
                                                 />
                                               </div>
@@ -4434,7 +5836,174 @@ export default function SubmitContentPage({
                                         </div>
                                       </CardContent>
                                     </Card>
-                                  )
+                                  ),
+                              )}
+
+                              {/* TikTok Videos from Links */}
+                              {fetchedTiktokVideosFromLinks.map(
+                                (video, index) =>
+                                  video && (
+                                    <Card
+                                      key={`tiktok-link-${index}`}
+                                      className={cn(
+                                        "cursor-pointer transition-all duration-200",
+                                        isVideoAlreadySubmitted(
+                                          video.id,
+                                          video.share_url || "",
+                                        )
+                                          ? isDark
+                                            ? "border-2 border-red-500 bg-red-900/40 opacity-90"
+                                            : "border-2 border-red-300 bg-red-50 opacity-75"
+                                          : selectedTiktokVideoIndices.includes(
+                                            index,
+                                          )
+                                            ? isDark
+                                              ? "border-2 border-purple-400 bg-[#2B184A]"
+                                              : "border-2 border-purple-500 bg-purple-50"
+                                            : isDark
+                                              ? "border border-gray-600 hover:border-purple-400 bg-[#180438]"
+                                              : "border border-gray-200 hover:border-purple-300 bg-white",
+                                      )}
+                                      onClick={() =>
+                                        handleTiktokVideoSelection(
+                                          index,
+                                          !selectedTiktokVideoIndices.includes(
+                                            index,
+                                          ),
+                                        )
+                                      }
+                                    >
+                                      <CardContent className="p-4">
+                                        <div className="flex items-start gap-4">
+                                          <div className="flex-shrink-0">
+                                            {video.cover_image_url ? (
+                                              <img
+                                                src={video.cover_image_url}
+                                                alt={
+                                                  video.title || "TikTok Video"
+                                                }
+                                                width={120}
+                                                height={120}
+                                                className="rounded-lg object-cover aspect-square"
+                                              />
+                                            ) : (
+                                              <div className="w-[120px] h-[120px] bg-muted rounded-lg flex items-center justify-center text-xs text-muted-foreground border">
+                                                🎬 No thumbnail
+                                              </div>
+                                            )}
+                                          </div>
+                                          <div className="flex-1 min-w-0">
+                                            <div className="flex items-start justify-between">
+                                              <div className="flex-1">
+                                                <div className="flex items-start gap-2 mb-2">
+                                                  <h5
+                                                    className={cn(
+                                                      "font-medium text-sm line-clamp-2 flex-1",
+                                                      isDark
+                                                        ? "text-white"
+                                                        : "text-gray-900",
+                                                    )}
+                                                  >
+                                                    {video.title ||
+                                                      video.video_description ||
+                                                      "TikTok Video"}
+                                                  </h5>
+                                                  {isVideoAlreadySubmitted(
+                                                    video.id,
+                                                    video.share_url || "",
+                                                  ) && (
+                                                      <div
+                                                        className={cn(
+                                                          "flex items-center gap-1 text-xs px-2 py-1 rounded-full flex-shrink-0",
+                                                          isDark
+                                                            ? "text-red-300 bg-red-900/60 border border-red-500/40"
+                                                            : "text-red-600 bg-red-100",
+                                                        )}
+                                                      >
+                                                        <AlertTriangle className="h-3 w-3" />
+                                                        Already Submitted
+                                                      </div>
+                                                    )}
+                                                </div>
+                                                <div
+                                                  className={cn(
+                                                    "flex flex-wrap items-center gap-4 text-xs",
+                                                    isDark
+                                                      ? "text-gray-300"
+                                                      : "text-gray-600",
+                                                  )}
+                                                >
+                                                  {video.create_time && (
+                                                    <div className="flex items-center gap-1">
+                                                      <CalendarDays className="h-4 w-4" />
+                                                      <span>
+                                                        {dayjs(
+                                                          new Date(
+                                                            video.create_time *
+                                                            1000,
+                                                          ),
+                                                        ).format("MMM D, YYYY")}
+                                                      </span>
+                                                    </div>
+                                                  )}
+                                                  <div className="flex items-center gap-1">
+                                                    <Eye className="h-4 w-4" />
+                                                    <span>
+                                                      {(
+                                                        video.view_count || 0
+                                                      ).toLocaleString()}{" "}
+                                                      views
+                                                    </span>
+                                                  </div>
+                                                  <div className="flex items-center gap-1">
+                                                    <ThumbsUp className="h-4 w-4" />
+                                                    <span>
+                                                      {(
+                                                        video.like_count || 0
+                                                      ).toLocaleString()}{" "}
+                                                      likes
+                                                    </span>
+                                                  </div>
+                                                  <div className="flex items-center gap-1">
+                                                    <MessageSquare className="h-4 w-4" />
+                                                    <span>
+                                                      {(
+                                                        video.comment_count || 0
+                                                      ).toLocaleString()}{" "}
+                                                      comments
+                                                    </span>
+                                                  </div>
+                                                </div>
+                                              </div>
+                                              <div className="flex-shrink-0 ml-2">
+                                                <Checkbox
+                                                  aria-label="Select TikTok video"
+                                                  checked={selectedTiktokVideoIndices.includes(
+                                                    index,
+                                                  )}
+                                                  onCheckedChange={(checked) =>
+                                                    handleTiktokVideoSelection(
+                                                      index,
+                                                      Boolean(checked),
+                                                    )
+                                                  }
+                                                  onClick={(event) =>
+                                                    event.stopPropagation()
+                                                  }
+                                                  className={cn(
+                                                    "h-5 w-5 border-2",
+                                                    isDark
+                                                      ? "border-gray-500 data-[state=checked]:border-purple-400 data-[state=checked]:bg-purple-500"
+                                                      : "border-gray-300 data-[state=checked]:border-purple-600 data-[state=checked]:bg-purple-600",
+                                                  )}
+                                                />
+                                              </div>
+                                            </div>
+                                          </div>
+                                        </div>
+                                      </CardContent>
+                                    </Card>
+                                  ),
                               )}
                             </div>
                           </div>
@@ -4447,17 +6016,17 @@ export default function SubmitContentPage({
                             className={cn(
                               isDark
                                 ? "border-[#C9A7FF] bg-[#C9A7FF26]"
-                                : "border-amber-200 bg-amber-50"
+                                : "border-amber-200 bg-amber-50",
                             )}
                           >
                             <AlertTriangle
                               className={cn(
-                                isDark ? "text-purple-400" : "text-amber-600"
+                                isDark ? "text-purple-400" : "text-amber-600",
                               )}
                             />
                             <AlertDescription
                               className={cn(
-                                isDark ? "text-white" : "text-amber-800"
+                                isDark ? "text-white" : "text-amber-800",
                               )}
                             >
                               <strong>Earnings Cap:</strong> You can earn up to $

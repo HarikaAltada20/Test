@@ -11,7 +11,7 @@ export const dynamic = "force-dynamic";
  */
 export async function GET(
   request: Request,
-  context: { params: Promise<{ contestId: string; creatorId: string }> }
+  context: { params: Promise<{ contestId: string; creatorId: string }> },
 ) {
   const supabase = await createClient();
   const params = await context.params;
@@ -21,7 +21,7 @@ export async function GET(
   if (!contestId || !creatorId) {
     return NextResponse.json(
       { error: "Contest ID and Creator ID are required" },
-      { status: 400 }
+      { status: 400 },
     );
   }
 
@@ -30,7 +30,7 @@ export async function GET(
     const { data: creatorSubmissions, error: subError } = await supabase
       .from("submissions")
       .select(
-        "id, creator_id, video_title, video_thumbnail_url, views, earnings, status, created_at, content_link, platform"
+        "id, creator_id, video_title, video_thumbnail_url, views, earnings, status, created_at, content_link, platform",
       )
       .eq("contest_id", contestId)
       .eq("creator_id", creatorId)
@@ -84,7 +84,7 @@ export async function GET(
 
     const { data: creatorProfile } = await supabase
       .from("creator_profiles")
-      .select("id, youtube_account, instagram_account")
+      .select("id, youtube_account, instagram_account, tiktok_account")
       .eq("id", creatorId)
       .single();
 
@@ -112,6 +112,14 @@ export async function GET(
             (ig?.name_of_account || ig?.full_name || ig?.display_name) ?? null;
           creator_username = ig?.username ?? null;
           creator_pfp_url = ig?.profile_picture_url ?? null;
+        } else if (platform === "tiktok") {
+          const tt =
+            typeof (creatorProfile as any).tiktok_account === "string"
+              ? JSON.parse((creatorProfile as any).tiktok_account)
+              : (creatorProfile as any).tiktok_account;
+          creator_display_name = tt?.display_name ?? null;
+          creator_username = tt?.username ?? null;
+          creator_pfp_url = tt?.avatar_url ?? null;
         }
       } catch (_) {}
     }
@@ -119,7 +127,8 @@ export async function GET(
       creator_display_name =
         userData?.full_name || userData?.username || "Unknown Creator";
     if (!creator_username) creator_username = userData?.username || "N/A";
-    if (!creator_pfp_url) creator_pfp_url = userData?.profile_picture_url ?? null;
+    if (!creator_pfp_url)
+      creator_pfp_url = userData?.profile_picture_url ?? null;
 
     const submissions = subs.map((sub) => ({
       ...sub,
@@ -138,7 +147,7 @@ export async function GET(
     console.error("Error in creator submissions endpoint:", error);
     return NextResponse.json(
       { error: error.message || "Failed to fetch creator submissions" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

@@ -29,9 +29,18 @@ function buildCreatorDisplay(
         creator_display_name =
           (igAccount?.name_of_account ||
             igAccount?.full_name ||
-            igAccount?.display_name) ?? null;
+            igAccount?.display_name) ??
+          null;
         creator_username = igAccount?.username ?? null;
         creator_pfp_url = igAccount?.profile_picture_url ?? null;
+      } else if (platform === "tiktok") {
+        const ttAccount =
+          typeof creatorProfile.tiktok_account === "string"
+            ? JSON.parse(creatorProfile.tiktok_account)
+            : creatorProfile.tiktok_account;
+        creator_display_name = ttAccount?.display_name ?? null;
+        creator_username = ttAccount?.username ?? null;
+        creator_pfp_url = ttAccount?.avatar_url ?? null;
       }
     } catch (_) {}
   }
@@ -76,16 +85,14 @@ async function getLeaderboardGroupedByCreator(
 
   const { data: creatorProfilesData, error: profilesError } = await supabase
     .from("creator_profiles")
-    .select("id, youtube_account, instagram_account")
+    .select("id, youtube_account, instagram_account, tiktok_account")
     .in("id", creatorIds);
 
   if (profilesError)
     console.error("Error fetching creator profiles:", profilesError);
 
   const usersMap = new Map(usersData?.map((u) => [u.id, u]) || []);
-  const profilesMap = new Map(
-    creatorProfilesData?.map((p) => [p.id, p]) || [],
-  );
+  const profilesMap = new Map(creatorProfilesData?.map((p) => [p.id, p]) || []);
 
   const leaderboard = pageCreators.map((agg, index) => {
     const userProfile = usersMap.get(agg.creator_id) || null;
@@ -154,7 +161,10 @@ export async function fetchLeaderboardPayload(
     throw new Error("Contest not found");
   }
 
-  if ((contestData as { moderation_status?: string }).moderation_status !== "published") {
+  if (
+    (contestData as { moderation_status?: string }).moderation_status !==
+    "published"
+  ) {
     throw new Error("Contest not found");
   }
 
@@ -209,11 +219,10 @@ export async function fetchLeaderboardPayload(
 
   submissionsQuery = submissionsQuery.neq("status", "rejected");
 
-  const { data: submissions, error: submissionsError } =
-    await submissionsQuery
-      .order("views", { ascending: false, nullsFirst: false })
-      .order("created_at", { ascending: true })
-      .range(from, to);
+  const { data: submissions, error: submissionsError } = await submissionsQuery
+    .order("views", { ascending: false, nullsFirst: false })
+    .order("created_at", { ascending: true })
+    .range(from, to);
 
   if (submissionsError) {
     console.error("Error fetching submissions:", submissionsError);
@@ -245,7 +254,7 @@ export async function fetchLeaderboardPayload(
   const { data: creatorProfilesData, error: creatorProfilesError } =
     await supabase
       .from("creator_profiles")
-      .select("id, youtube_account, instagram_account")
+      .select("id, youtube_account, instagram_account, tiktok_account")
       .in("id", creatorIds);
 
   if (creatorProfilesError) {
@@ -290,6 +299,14 @@ export async function fetchLeaderboardPayload(
             igAccount?.display_name;
           creator_username = igAccount?.username;
           creator_pfp_url = igAccount?.profile_picture_url || null;
+        } else if (submission.platform === "tiktok") {
+          const ttAccount =
+            typeof creatorProfile.tiktok_account === "string"
+              ? JSON.parse(creatorProfile.tiktok_account)
+              : creatorProfile.tiktok_account;
+          creator_display_name = ttAccount?.display_name;
+          creator_username = ttAccount?.username;
+          creator_pfp_url = ttAccount?.avatar_url || null;
         }
       } catch (e) {
         console.error("Error parsing social account JSON:", e);

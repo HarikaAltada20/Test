@@ -204,7 +204,7 @@ function DashboardPage() {
         if (!isMounted) return;
 
         if (userError) {
-          console.error("Error fetching user data:", userError);
+          console.error("Error fetching user data:", userError.message, userError.details);
           if (isMounted) setIsFetchingData(false);
           return;
         }
@@ -230,7 +230,7 @@ function DashboardPage() {
 
           if (!isMounted) return;
           if (profileError) {
-            console.error("Error fetching advertiser profile:", profileError);
+            console.error("Error fetching advertiser profile:", profileError.message, profileError.details);
           }
 
           // Fetch contests data for accurate calculations
@@ -310,7 +310,7 @@ function DashboardPage() {
 
           if (!isMounted) return;
           if (profileError) {
-            console.error("Error fetching creator profile:", profileError);
+            console.error("Error fetching creator profile:", profileError.message, profileError.details);
           } else {
             setProfile(creatorProfile);
           }

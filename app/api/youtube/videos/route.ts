@@ -41,7 +41,8 @@ export async function GET(request: NextRequest) {
               access_token: newTokens.access_token,
               refresh_token: newTokens.refresh_token || profile.youtube_account.refresh_token,
               expires_at: newTokens.expires_at,
-              updated_at: new Date().toISOString()
+              updated_at: new Date().toISOString(),
+              needs_reconnect: false,
             }
           })
           .eq('id', user.id);
@@ -53,6 +54,17 @@ export async function GET(request: NextRequest) {
         accessToken = newTokens.access_token;
       } catch (refreshError) {
         console.error('Error refreshing token:', refreshError);
+        await supabase
+          .from('creator_profiles')
+          .update({
+            youtube_account: {
+              ...profile.youtube_account,
+              needs_reconnect: true,
+              updated_at: new Date().toISOString(),
+            },
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', user.id);
         return NextResponse.json({ error: 'YouTube token expired and refresh failed' }, { status: 401 });
       }
     }

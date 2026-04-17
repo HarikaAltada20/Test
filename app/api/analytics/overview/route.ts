@@ -15,6 +15,7 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const submissionStatusRaw = searchParams.get("status");
     const submissionStatus = submissionStatusRaw?.trim().toLowerCase() || null;
+    const notRejected = searchParams.get("notRejected") === "true";
     const contestTypeFilter = (searchParams.get("type") ?? "all")
       .trim()
       .toLowerCase() as "all" | "leaderboard" | "cpm";
@@ -23,10 +24,11 @@ export async function GET(request: NextRequest) {
       .toLowerCase() as "video" | "text_image";
     const videoPlatform = (searchParams.get("videoPlatform") ?? "all")
       .trim()
-      .toLowerCase() as "video" | "all" | "youtube" | "instagram";
+      .toLowerCase();
+    const tiktokParam = searchParams.get("tiktok");
+    const tiktokAnalytics = tiktokParam === "true" || tiktokParam === "1";
     const twitterParam = searchParams.get("twitter");
-    const twitterAnalytics =
-      twitterParam === "true" || twitterParam === "1";
+    const twitterAnalytics = twitterParam === "true" || twitterParam === "1";
 
     // Get user type
     const { data: userData } = await supabase
@@ -52,7 +54,9 @@ export async function GET(request: NextRequest) {
       `);
 
     // Apply status filter if provided (submissionStatus is lowercase, e.g. "verifiedpaid")
-    if (submissionStatus && submissionStatus !== "all") {
+    if (notRejected) {
+      submissionsQuery = submissionsQuery.neq("status", "rejected");
+    } else if (submissionStatus && submissionStatus !== "all") {
       if (submissionStatus === "verifiedpaid") {
         submissionsQuery = submissionsQuery.in("status", ["verified", "paid"]);
       } else {
@@ -81,7 +85,7 @@ export async function GET(request: NextRequest) {
       .eq("advertiser_id", user.id)
       .order("created_at", { ascending: false });
 
-    // Normalize platform key (used for Twitter contest detection)
+    // Normalize platform key (used for Twitter/TikTok contest detection)
     const normalizePlatformKey = (contest: {
       platform?: string | null;
       contest_based_details?: unknown;
@@ -89,6 +93,7 @@ export async function GET(request: NextRequest) {
       const raw = contest.platform;
       const p = (raw ?? "").toString().trim().toLowerCase();
       if (p === "x" || p === "twitter") return "twitter";
+      if (p === "tiktok" || p === "tik_tok" || p === "tik-tok") return "tiktok";
       if (p === "youtube" || p === "instagram") return p;
       const details = contest.contest_based_details as
         | { twitter_campaign?: unknown }
@@ -122,25 +127,45 @@ export async function GET(request: NextRequest) {
               contestTypeFilter,
           );
 
-    // Platform filter: video (youtube/instagram) and/or text_image (twitter); both => all selected
+    // Platform filter: video (youtube/instagram/tiktok) and/or text_image (twitter); both => all selected
     const allowedPlatforms = ((): string[] => {
-      const videoPlatforms =
-        contentType === "video"
-          ? videoPlatform === "youtube"
-            ? ["youtube"]
-            : videoPlatform === "instagram"
-              ? ["instagram"]
-              : ["youtube", "instagram"]
-          : [];
-      const twitterPlatform = twitterAnalytics ? ["twitter"] : [];
-      if (videoPlatforms.length > 0 && twitterPlatform.length > 0) {
-        return [...videoPlatforms, ...twitterPlatform];
+      const platforms: string[] = [];
+
+      if (contentType === "video") {
+        // Parse videoPlatform to determine which video platforms are selected
+        if (videoPlatform === "all") {
+          // "all" means all three video platforms selected
+          platforms.push("youtube", "instagram", "tiktok");
+        } else if (videoPlatform === "youtube_instagram") {
+          platforms.push("youtube", "instagram");
+        } else if (videoPlatform === "youtube_tiktok") {
+          platforms.push("youtube", "tiktok");
+        } else if (videoPlatform === "instagram_tiktok") {
+          platforms.push("instagram", "tiktok");
+        } else if (videoPlatform === "youtube") {
+          platforms.push("youtube");
+        } else if (videoPlatform === "instagram") {
+          platforms.push("instagram");
+        } else if (videoPlatform === "tiktok") {
+          platforms.push("tiktok");
+        } else {
+          // Fallback: check individual flags
+          platforms.push("youtube", "instagram");
+          if (tiktokAnalytics) platforms.push("tiktok");
+        }
       }
-      if (contentType === "text_image") {
-        return twitterPlatform;
+
+      // Add twitter if selected
+      if (twitterAnalytics) {
+        platforms.push("twitter");
       }
-      if (videoPlatforms.length > 0) return videoPlatforms;
-      return ["youtube", "instagram", "twitter"];
+
+      // If no platforms selected, default to all
+      if (platforms.length === 0) {
+        return ["youtube", "instagram", "tiktok", "twitter"];
+      }
+
+      return platforms;
     })();
     const contestsFilteredByPlatform =
       allowedPlatforms.length === 0
@@ -158,13 +183,21 @@ export async function GET(request: NextRequest) {
     let twitterViewsByContest: Record<string, number> = {};
     let twitterLikesByContest: Record<string, number> = {};
     let twitterRepliesByContest: Record<string, number> = {};
-    let tweetsList: { contest_id?: string; impressions?: number; likes?: number; replies?: number; moderation_status?: string }[] = [];
+    let tweetsList: {
+      contest_id?: string;
+      impressions?: number;
+      likes?: number;
+      replies?: number;
+      moderation_status?: string;
+    }[] = [];
     if (twitterContestIds.length > 0) {
       let tweetsQuery = supabase
         .from("twitter_campaign_tweets")
         .select("contest_id, impressions, likes, replies, moderation_status")
         .in("contest_id", twitterContestIds);
-      if (submissionStatus && submissionStatus !== "all") {
+      if (notRejected) {
+        tweetsQuery = tweetsQuery.neq("moderation_status", "rejected");
+      } else if (submissionStatus && submissionStatus !== "all") {
         if (submissionStatus === "verifiedpaid") {
           tweetsQuery = tweetsQuery.in("moderation_status", [
             "verified",
@@ -230,7 +263,12 @@ export async function GET(request: NextRequest) {
           .select("id, status, contest_id, other_stats")
           .in("contest_id", contestIdsAll)
       : { data: [] };
-    let twitterTweetsAll: { contest_id?: string; likes?: number; replies?: number; moderation_status?: string }[] = [];
+    let twitterTweetsAll: {
+      contest_id?: string;
+      likes?: number;
+      replies?: number;
+      moderation_status?: string;
+    }[] = [];
     if (twitterContestIds.length > 0) {
       const { data: allTweets } = await supabase
         .from("twitter_campaign_tweets")
@@ -240,9 +278,10 @@ export async function GET(request: NextRequest) {
     }
 
     // Contest lifecycle from dates (UTC)
-    const getContestLifecycle = (
-      contest: { start_date?: string | null; end_date?: string | null },
-    ): "upcoming" | "active" | "ended" | "incomplete" => {
+    const getContestLifecycle = (contest: {
+      start_date?: string | null;
+      end_date?: string | null;
+    }): "upcoming" | "active" | "ended" | "incomplete" => {
       const start = contest.start_date
         ? new Date(contest.start_date).getTime()
         : null;
@@ -256,15 +295,17 @@ export async function GET(request: NextRequest) {
       return "active";
     };
 
-    // Extract likes/comments from submission other_stats (YouTube/Instagram)
+    // Extract likes/comments from submission other_stats (YouTube/Instagram/TikTok)
     const getSubmissionLikes = (sub: { other_stats?: unknown }): number => {
       const s = sub.other_stats as Record<string, unknown> | null | undefined;
       if (!s) return 0;
       const y = s.youtube as Record<string, unknown> | undefined;
       const i = s.instagram as Record<string, unknown> | undefined;
+      const t = s.tiktok as Record<string, unknown> | undefined;
       return (
         Number(y?.likes ?? y?.like_count ?? 0) ||
         Number(i?.likes ?? i?.like_count ?? 0) ||
+        Number(t?.likes ?? t?.like_count ?? 0) ||
         0
       );
     };
@@ -273,9 +314,11 @@ export async function GET(request: NextRequest) {
       if (!s) return 0;
       const y = s.youtube as Record<string, unknown> | undefined;
       const i = s.instagram as Record<string, unknown> | undefined;
+      const t = s.tiktok as Record<string, unknown> | undefined;
       return (
         Number(y?.comments ?? y?.comment_count ?? 0) ||
         Number(i?.comments ?? i?.comment_count ?? 0) ||
+        Number(t?.comments ?? t?.comment_count ?? 0) ||
         0
       );
     };
@@ -415,7 +458,9 @@ export async function GET(request: NextRequest) {
         }
       }
       tweetsList.forEach((row: { moderation_status?: string }) => {
-        const st = (row.moderation_status ?? "pending").toString().toLowerCase();
+        const st = (row.moderation_status ?? "pending")
+          .toString()
+          .toLowerCase();
         if (st === "verified") verifiedSubmissions++;
         else if (st === "paid") paidSubmissions++;
         else if (st === "pending") pendingSubmissions++;
@@ -430,7 +475,9 @@ export async function GET(request: NextRequest) {
         else if (st === "rejected") rejectedSubmissions++;
       });
       twitterTweetsAll.forEach((row) => {
-        const st = (row.moderation_status ?? "pending").toString().toLowerCase();
+        const st = (row.moderation_status ?? "pending")
+          .toString()
+          .toLowerCase();
         if (st === "verified") verifiedSubmissions++;
         else if (st === "paid") paidSubmissions++;
         else if (st === "pending") pendingSubmissions++;
@@ -545,23 +592,32 @@ export async function GET(request: NextRequest) {
         for (const sub of contest.submissions || []) {
           const st = (sub as { status?: string }).status ?? "";
           const stLower = st.toString().toLowerCase();
-          if (stLower === "verified") platformStats[platform].verifiedSubmissions++;
-          else if (stLower === "paid") platformStats[platform].paidSubmissions++;
-          else if (stLower === "pending") platformStats[platform].pendingSubmissions++;
-          else if (stLower === "rejected") platformStats[platform].rejectedSubmissions++;
+          if (stLower === "verified")
+            platformStats[platform].verifiedSubmissions++;
+          else if (stLower === "paid")
+            platformStats[platform].paidSubmissions++;
+          else if (stLower === "pending")
+            platformStats[platform].pendingSubmissions++;
+          else if (stLower === "rejected")
+            platformStats[platform].rejectedSubmissions++;
         }
       }
-      tweetsList.forEach((row: { contest_id?: string; moderation_status?: string }) => {
-        const cid = row.contest_id;
-        const contest = contestsFilteredByPlatform.find((c) => c.id === cid);
-        if (!contest || normalizePlatformKey(contest) !== "twitter") return;
-        const st = (row.moderation_status ?? "pending").toString().toLowerCase();
-        if (!platformStats.twitter) return;
-        if (st === "verified") platformStats.twitter.verifiedSubmissions++;
-        else if (st === "paid") platformStats.twitter.paidSubmissions++;
-        else if (st === "pending") platformStats.twitter.pendingSubmissions++;
-        else if (st === "rejected") platformStats.twitter.rejectedSubmissions++;
-      });
+      tweetsList.forEach(
+        (row: { contest_id?: string; moderation_status?: string }) => {
+          const cid = row.contest_id;
+          const contest = contestsFilteredByPlatform.find((c) => c.id === cid);
+          if (!contest || normalizePlatformKey(contest) !== "twitter") return;
+          const st = (row.moderation_status ?? "pending")
+            .toString()
+            .toLowerCase();
+          if (!platformStats.twitter) return;
+          if (st === "verified") platformStats.twitter.verifiedSubmissions++;
+          else if (st === "paid") platformStats.twitter.paidSubmissions++;
+          else if (st === "pending") platformStats.twitter.pendingSubmissions++;
+          else if (st === "rejected")
+            platformStats.twitter.rejectedSubmissions++;
+        },
+      );
     } else {
       (allSubmissionsUnfiltered || []).forEach(
         (s: { status?: string; contest_id?: string }) => {
@@ -573,7 +629,8 @@ export async function GET(request: NextRequest) {
           if (!platformStats[platform]) return;
           if (st === "verified") platformStats[platform].verifiedSubmissions++;
           else if (st === "paid") platformStats[platform].paidSubmissions++;
-          else if (st === "pending") platformStats[platform].pendingSubmissions++;
+          else if (st === "pending")
+            platformStats[platform].pendingSubmissions++;
           else if (st === "rejected")
             platformStats[platform].rejectedSubmissions++;
         },
@@ -582,7 +639,9 @@ export async function GET(request: NextRequest) {
         const cid = row.contest_id;
         const contest = contestsFilteredByPlatform.find((c) => c.id === cid);
         if (!contest || normalizePlatformKey(contest) !== "twitter") return;
-        const st = (row.moderation_status ?? "pending").toString().toLowerCase();
+        const st = (row.moderation_status ?? "pending")
+          .toString()
+          .toLowerCase();
         if (!platformStats.twitter) return;
         if (st === "verified") platformStats.twitter.verifiedSubmissions++;
         else if (st === "paid") platformStats.twitter.paidSubmissions++;
