@@ -175,7 +175,9 @@ export default async function ContestDetailPage({
       bonus_paid,
       bonus_paid_at,
       bonus_amount,
-      metadata
+      metadata,
+      insights_status,
+      last_insights_update
     `
     )
     .eq("contest_id", contestId)
@@ -910,6 +912,8 @@ export default async function ContestDetailPage({
           full_name: creatorDisplayName,
         },
         metadata: sub.metadata ?? null,
+        insights_status: sub.insights_status ?? null,
+        last_insights_update: sub.last_insights_update ?? null,
       };
     })
     : [];

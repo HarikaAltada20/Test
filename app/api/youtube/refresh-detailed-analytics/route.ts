@@ -20,7 +20,7 @@ import {
  *   - { type, creatorId, contestId }      → all submissions by creator in contest
  *   - { type, contestId }                 → all YouTube submissions in contest
  *
- * type: "traffic" | "demographics" | "both"
+ * type: "traffic" | "demographics"
  */
 export async function POST(request: Request) {
   const { isAdmin } = await verifyAdminAccess();
@@ -35,15 +35,15 @@ export async function POST(request: Request) {
     creatorId,
     contestId,
   }: {
-    type: "core" | "traffic" | "demographics" | "both" | "all";
+    type: "core" | "traffic" | "demographics" | "all";
     submissionId?: string;
     creatorId?: string;
     contestId?: string;
   } = body;
 
-  if (!type || !["core", "traffic", "demographics", "both", "all"].includes(type)) {
+  if (!type || !["core", "traffic", "demographics", "all"].includes(type)) {
     return NextResponse.json(
-      { error: "type must be 'core', 'traffic', 'demographics', 'both', or 'all'" },
+      { error: "type must be 'core', 'traffic', 'demographics', or 'all'" },
       { status: 400 }
     );
   }
@@ -171,6 +171,14 @@ export async function POST(request: Request) {
     if (!accessToken) {
       if (needsReauthCreators.includes(sub.creator_id)) {
         reauthNeeded.push(sub.id);
+        await supabaseAdmin
+          .from("submissions")
+          .update({
+            insights_status: "permanent_failure",
+            last_insights_update: now,
+            updated_at: now,
+          })
+          .eq("id", sub.id);
       }
       failed++;
       continue;
@@ -178,6 +186,14 @@ export async function POST(request: Request) {
 
     const videoId = extractYoutubeId(sub.content_link);
     if (!videoId) {
+      await supabaseAdmin
+        .from("submissions")
+        .update({
+          insights_status: "permanent_failure",
+          last_insights_update: now,
+          updated_at: now,
+        })
+        .eq("id", sub.id);
       failed++;
       continue;
     }
@@ -223,7 +239,7 @@ export async function POST(request: Request) {
       }
 
       // ── Call 2: Traffic sources ──────────────────────────────────────────────
-      if (type === "traffic" || type === "both" || type === "all") {
+      if (type === "traffic" || type === "all") {
         try {
           const trafficSources = await getVideoTrafficSources(accessToken, videoId, startDate);
           updates.traffic_sources = trafficSources;
@@ -239,7 +255,7 @@ export async function POST(request: Request) {
       }
 
       // ── Call 3: Demographics ─────────────────────────────────────────────────
-      if (type === "demographics" || type === "both" || type === "all") {
+      if (type === "demographics" || type === "all") {
         try {
           const demographics = await getVideoDemographics(accessToken, videoId, startDate);
           updates.demographics = demographics;
@@ -259,6 +275,8 @@ export async function POST(request: Request) {
         await supabaseAdmin
           .from("submissions")
           .update({
+            insights_status: "permanent_failure",
+            last_insights_update: now,
             other_stats: {
               ...sub.other_stats,
               youtube: { ...existingStats, analytics_needs_reauth: true },
@@ -271,6 +289,14 @@ export async function POST(request: Request) {
       }
 
       if (Object.keys(updates).length === 0) {
+        await supabaseAdmin
+          .from("submissions")
+          .update({
+            insights_status: "temporary_failure",
+            last_insights_update: now,
+            updated_at: now,
+          })
+          .eq("id", sub.id);
         failed++;
         continue;
       }
@@ -305,6 +331,8 @@ export async function POST(request: Request) {
       await supabaseAdmin
         .from("submissions")
         .update({
+          insights_status: "ok",
+          last_insights_update: now,
           other_stats: { ...sub.other_stats, youtube: { ...existingStats, ...updates } },
           updated_at: now,
         })
@@ -313,6 +341,14 @@ export async function POST(request: Request) {
       updated++;
     } catch (err: any) {
       console.error(`Failed for submission ${sub.id}:`, err.message);
+      await supabaseAdmin
+        .from("submissions")
+        .update({
+          insights_status: "temporary_failure",
+          last_insights_update: now,
+          updated_at: now,
+        })
+        .eq("id", sub.id);
       failed++;
     }
   }
@@ -330,8 +366,8 @@ export async function POST(request: Request) {
     const now = new Date().toISOString();
     const nextYt = { ...existingYt };
     if (type === "core" || type === "all") nextYt.core = now;
-    if (type === "traffic" || type === "both" || type === "all") nextYt.traffic = now;
-    if (type === "demographics" || type === "both" || type === "all") nextYt.demographics = now;
+    if (type === "traffic" || type === "all") nextYt.traffic = now;
+    if (type === "demographics" || type === "all") nextYt.demographics = now;
     await supabaseAdmin
       .from("contests")
       .update({
