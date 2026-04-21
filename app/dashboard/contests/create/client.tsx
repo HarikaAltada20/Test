@@ -60,6 +60,7 @@ import {
   subscriptionPlans,
   MIN_PRIZE_PER_WINNER,
   MAX_PRIZE_PER_WINNER,
+  MIN_MILESTONE_PAYOUT_CENTS,
   MIN_CPM_RATE,
   MAX_CPM_RATE,
   MIN_DAYS_UNTIL_START,
@@ -136,6 +137,27 @@ type ResourceItem = {
   description: string;
   type: "internal" | "external";
 };
+
+type MilestoneFormRow = {
+  id: string;
+  target_views: number | string;
+  payout_dollars: number | string;
+  /** Empty = unlimited winners for this milestone */
+  winner_limit: number | string;
+};
+
+function createEmptyMilestoneRow(): MilestoneFormRow {
+  return {
+    id:
+      typeof crypto !== "undefined" &&
+      typeof crypto.randomUUID === "function"
+        ? crypto.randomUUID()
+        : `m-${Date.now()}-${Math.floor(Math.random() * 1e6)}`,
+    target_views: "",
+    payout_dollars: "",
+    winner_limit: "",
+  };
+}
 
 // Regions and countries data
 const REGIONS_AND_COUNTRIES: Record<string, string[]> =
@@ -308,9 +330,9 @@ export default function CreateContestPage({
   const [paymentCompleted, setPaymentCompleted] = useState(false);
 
   // Contest Type and CPM-specific state
-  const [contestType, setContestType] = useState<"leaderboard" | "cpm">(
-    "leaderboard",
-  );
+  const [contestType, setContestType] = useState<
+    "leaderboard" | "cpm" | "milestone"
+  >("leaderboard");
   const [cpmRate, setCpmRate] = useState<number | string>("");
   const [minViews, setMinViews] = useState<number | string>("");
   const [maxViews, setMaxViews] = useState<number | string>("");
@@ -361,6 +383,21 @@ export default function CreateContestPage({
     quote_repost_retweets_multiplier: "0.1",
     quote_repost_quote_reposts_multiplier: "0.1",
   });
+  // Milestone contest (video only) — see docs/MILESTONE_CONTEST_GUIDE.md
+  const [milestoneRows, setMilestoneRows] = useState<MilestoneFormRow[]>([
+    createEmptyMilestoneRow(),
+  ]);
+  const [milestoneBonusEnabled, setMilestoneBonusEnabled] = useState(false);
+  const [milestoneBonusTopViewsMin, setMilestoneBonusTopViewsMin] = useState<
+    number | ""
+  >("");
+  const [milestoneBonusTopViewsPayout, setMilestoneBonusTopViewsPayout] =
+    useState<string>("");
+  const [milestoneBonusTopReelsMin, setMilestoneBonusTopReelsMin] = useState<
+    number | ""
+  >("");
+  const [milestoneBonusTopReelsPayout, setMilestoneBonusTopReelsPayout] =
+    useState<string>("");
   // End Contest Type and CPM-specific state
 
   // New features state (2025-10-01)
@@ -616,7 +653,15 @@ export default function CreateContestPage({
       endDate ||
       winnerAmounts.some((amount) => amount > 0) ||
       (contestType === "cpm" &&
-        (cpmRate || minViews || maxViews || totalBudget || termsConditions));
+        (cpmRate || minViews || maxViews || totalBudget || termsConditions)) ||
+      (contestType === "milestone" &&
+        (milestoneRows.some(
+          (r) =>
+            r.target_views !== "" ||
+            r.payout_dollars !== "" ||
+            r.winner_limit !== "",
+        ) ||
+          totalBudget));
 
     setHasUnsavedChanges(!!hasChanges);
 
@@ -667,6 +712,7 @@ export default function CreateContestPage({
     maxViews,
     totalBudget,
     termsConditions,
+    milestoneRows,
     hasUnsavedChanges,
   ]);
 
@@ -680,6 +726,13 @@ export default function CreateContestPage({
   const [platform, setPlatform] = useState<string>("youtube"); // Default platform
   const [category, setCategory] = useState<string>("technology");
   const isRaidTwitter = platform === "twitter" && contentType === "raid";
+
+  useEffect(() => {
+    if (contestFormat !== "video" && contestType === "milestone") {
+      setContestType("leaderboard");
+    }
+  }, [contestFormat, contestType]);
+
   const [keywordsRequirementMode, setKeywordsRequirementMode] = useState<
     "all" | "any"
   >("all");
@@ -1000,7 +1053,14 @@ export default function CreateContestPage({
                       terms_conditions: "",
                     },
                   }
-                : null,
+                : contestType === "milestone"
+                  ? {
+                      milestone_contest: {
+                        milestones: [],
+                        total_budget_cents: 0,
+                      },
+                    }
+                  : null,
           // Categories, subcategories, and interests
           categories: contestCategories.length > 0 ? contestCategories : null,
           subcategories: (() => {
@@ -1057,7 +1117,7 @@ export default function CreateContestPage({
       inspiration_links?: { url: string; description: string }[];
       start_date?: string | null;
       end_date?: string | null;
-      contest_type?: "leaderboard" | "cpm";
+      contest_type?: "leaderboard" | "cpm" | "milestone";
       contest_based_details?: any;
       categories?: string[] | null;
       subcategories?: Array<{ category: string; subcategory: string }> | null;
@@ -1626,6 +1686,154 @@ export default function CreateContestPage({
             };
           }
         }
+      } else if (contestType === "milestone") {
+        if (contestFormat !== "video") {
+          return {
+            isValid: false,
+            error: "Milestone contests are only available for video contests.",
+          };
+        }
+
+        const effectiveMilestoneRows = milestoneRows.filter(
+          (r) =>
+            r.target_views !== "" ||
+            r.payout_dollars !== "" ||
+            r.winner_limit !== "",
+        );
+
+        if (effectiveMilestoneRows.length === 0) {
+          return {
+            isValid: false,
+            error:
+              "Add at least one milestone with target views and payout amount.",
+          };
+        }
+
+        if (!totalBudget || parseFloat(totalBudget.toString()) <= 0) {
+          return {
+            isValid: false,
+            error: "Total contest budget is required for milestone contests.",
+          };
+        }
+
+        const budgetCents = Math.round(
+          parseFloat(totalBudget.toString()) * 100,
+        );
+        if (budgetCents < planFeatures.minContestBudget) {
+          return {
+            isValid: false,
+            error: `The minimum contest budget for your plan is ${formatCurrencyFromCents(
+              planFeatures.minContestBudget,
+            )}. Please increase your total budget.`,
+          };
+        }
+
+        const parsed: Array<{
+          target_views: number;
+          payout_cents: number;
+          winner_limit: number | null;
+        }> = [];
+
+        for (let i = 0; i < effectiveMilestoneRows.length; i++) {
+          const row = effectiveMilestoneRows[i];
+          const tv =
+            row.target_views === ""
+              ? NaN
+              : parseInt(String(row.target_views), 10);
+          const payoutD =
+            row.payout_dollars === ""
+              ? NaN
+              : parseFloat(String(row.payout_dollars));
+          const payoutCents = Math.round((payoutD || 0) * 100);
+          const wlRaw = row.winner_limit;
+          const winnerLimit =
+            wlRaw === "" ? null : parseInt(String(wlRaw), 10);
+
+          if (isNaN(tv) || tv <= 0) {
+            return {
+              isValid: false,
+              error: `Milestone ${i + 1}: enter a valid target view count (greater than 0).`,
+            };
+          }
+          if (isNaN(payoutD) || payoutCents < MIN_MILESTONE_PAYOUT_CENTS) {
+            return {
+              isValid: false,
+              error: `Milestone ${i + 1}: payout must be at least ${formatCurrencyFromCents(
+                MIN_MILESTONE_PAYOUT_CENTS,
+              )} per tier.`,
+            };
+          }
+          if (
+            winnerLimit !== null &&
+            (isNaN(winnerLimit) || winnerLimit < 1)
+          ) {
+            return {
+              isValid: false,
+              error: `Milestone ${i + 1}: winner limit must be at least 1, or leave blank for unlimited winners.`,
+            };
+          }
+          parsed.push({
+            target_views: tv,
+            payout_cents: payoutCents,
+            winner_limit:
+              winnerLimit !== null && !isNaN(winnerLimit) ? winnerLimit : null,
+          });
+        }
+
+        for (let j = 1; j < parsed.length; j++) {
+          if (parsed[j].target_views <= parsed[j - 1].target_views) {
+            return {
+              isValid: false,
+              error:
+                "Milestone view targets must be strictly increasing (each tier higher than the previous).",
+            };
+          }
+        }
+
+        if (milestoneBonusEnabled) {
+          const vMinFilled = milestoneBonusTopViewsMin !== "";
+          const vPayFilled = milestoneBonusTopViewsPayout !== "";
+          const rMinFilled = milestoneBonusTopReelsMin !== "";
+          const rPayFilled = milestoneBonusTopReelsPayout !== "";
+
+          if (vMinFilled !== vPayFilled) {
+            return {
+              isValid: false,
+              error:
+                "Bonus (most verified views): enter both minimum total views and payout, or clear both fields.",
+            };
+          }
+          if (rMinFilled !== rPayFilled) {
+            return {
+              isValid: false,
+              error:
+                "Bonus (most verified reels): enter both minimum reels and payout, or clear both fields.",
+            };
+          }
+
+          const viewsOk =
+            vMinFilled &&
+            vPayFilled &&
+            Number(milestoneBonusTopViewsMin) > 0 &&
+            Math.round(
+              parseFloat(String(milestoneBonusTopViewsPayout)) * 100,
+            ) >= MIN_MILESTONE_PAYOUT_CENTS;
+          const reelsOk =
+            rMinFilled &&
+            rPayFilled &&
+            Number(milestoneBonusTopReelsMin) >= 1 &&
+            Math.round(
+              parseFloat(String(milestoneBonusTopReelsPayout)) * 100,
+            ) >= MIN_MILESTONE_PAYOUT_CENTS;
+
+          if (!viewsOk && !reelsOk) {
+            return {
+              isValid: false,
+              error:
+                "With milestone bonus enabled, configure at least one bonus category (verified views or verified reels) with threshold and payout.",
+            };
+          }
+        }
       } else if (contestType === "cpm") {
         // CPM validation
         if (!cpmRate || parseFloat(cpmRate.toString()) <= 0) {
@@ -1916,7 +2124,7 @@ export default function CreateContestPage({
       }
 
       // 6. Plan and subscription validation
-      if (contestType === "cpm") {
+      if (contestType === "cpm" || contestType === "milestone") {
         const hasCpmAccess =
           planFeatures.contestTypes &&
           planFeatures.contestTypes.includes("cpm");
@@ -1924,7 +2132,7 @@ export default function CreateContestPage({
           return {
             isValid: false,
             error:
-              "CPM-based contests are only available with paid plans. Please upgrade your subscription or change to a Leaderboard contest.",
+              "CPM and Milestone contests are only available with paid plans. Please upgrade your subscription or change to a Leaderboard contest.",
           };
         }
       }
@@ -2080,6 +2288,225 @@ export default function CreateContestPage({
             winner_count: winnerCount,
             ...(flatFeeBonusCents && { flat_fee_bonus: flatFeeBonusCents }), // Only include if set
             ...(totalBudgetCents && { total_budget: totalBudgetCents }), // Only include if set
+          },
+        };
+      } else if (contestType === "milestone") {
+        const effectiveMilestoneRows = milestoneRows.filter(
+          (r) =>
+            r.target_views !== "" ||
+            r.payout_dollars !== "" ||
+            r.winner_limit !== "",
+        );
+
+        const milestonesPayload: Array<{
+          order: number;
+          target_views: number;
+          payout_cents: number;
+          winner_limit: number | null;
+        }> = [];
+
+        for (let i = 0; i < effectiveMilestoneRows.length; i++) {
+          const row = effectiveMilestoneRows[i];
+          const tv =
+            row.target_views === ""
+              ? NaN
+              : parseInt(String(row.target_views), 10);
+          const payoutD =
+            row.payout_dollars === ""
+              ? NaN
+              : parseFloat(String(row.payout_dollars));
+          const payoutCents = Math.round((payoutD || 0) * 100);
+          const wlRaw = row.winner_limit;
+          const winnerLimit =
+            wlRaw === "" ? null : parseInt(String(wlRaw), 10);
+
+          if (isDraft) {
+            if (isNaN(tv) || tv <= 0) continue;
+            milestonesPayload.push({
+              order: milestonesPayload.length + 1,
+              target_views: tv,
+              payout_cents: isNaN(payoutCents) ? 0 : payoutCents,
+              winner_limit:
+                winnerLimit !== null && !isNaN(winnerLimit)
+                  ? winnerLimit
+                  : null,
+            });
+            continue;
+          }
+
+          if (isNaN(tv) || tv <= 0) {
+            setFormFeedback(
+              `Milestone ${i + 1}: enter target views (whole number > 0).`,
+            );
+            setFormFeedbackType("error");
+            setIsLoading(false);
+            setUploadProgress(null);
+            return;
+          }
+          if (isNaN(payoutD) || payoutCents < MIN_MILESTONE_PAYOUT_CENTS) {
+            setFormFeedback(
+              `Milestone ${i + 1}: payout must be at least ${formatCurrencyFromCents(
+                MIN_MILESTONE_PAYOUT_CENTS,
+              )}.`,
+            );
+            setFormFeedbackType("error");
+            setIsLoading(false);
+            setUploadProgress(null);
+            return;
+          }
+          if (
+            winnerLimit !== null &&
+            (isNaN(winnerLimit) || winnerLimit < 1)
+          ) {
+            setFormFeedback(
+              `Milestone ${i + 1}: winner limit must be ≥ 1 or leave blank for unlimited.`,
+            );
+            setFormFeedbackType("error");
+            setIsLoading(false);
+            setUploadProgress(null);
+            return;
+          }
+          milestonesPayload.push({
+            order: milestonesPayload.length + 1,
+            target_views: tv,
+            payout_cents: payoutCents,
+            winner_limit:
+              winnerLimit !== null && !isNaN(winnerLimit)
+                ? winnerLimit
+                : null,
+          });
+        }
+
+        if (!isDraft) {
+          if (contestFormat !== "video") {
+            setFormFeedback(
+              "Milestone contests require the Video contest format.",
+            );
+            setFormFeedbackType("error");
+            setIsLoading(false);
+            setUploadProgress(null);
+            return;
+          }
+          if (milestonesPayload.length === 0) {
+            setFormFeedback(
+              "Add at least one milestone with target views and payout.",
+            );
+            setFormFeedbackType("error");
+            setIsLoading(false);
+            setUploadProgress(null);
+            return;
+          }
+          for (let j = 1; j < milestonesPayload.length; j++) {
+            if (
+              milestonesPayload[j].target_views <=
+              milestonesPayload[j - 1].target_views
+            ) {
+              setFormFeedback(
+                "Milestone view targets must increase at each step (e.g. 1,000 then 5,000 views).",
+              );
+              setFormFeedbackType("error");
+              setIsLoading(false);
+              setUploadProgress(null);
+              return;
+            }
+          }
+          if (!totalBudget || parseFloat(totalBudget.toString()) <= 0) {
+            setFormFeedback(
+              "Total contest budget is required for milestone contests.",
+            );
+            setFormFeedbackType("error");
+            setIsLoading(false);
+            setUploadProgress(null);
+            return;
+          }
+          if (milestoneBonusEnabled) {
+            const vMinFilled = milestoneBonusTopViewsMin !== "";
+            const vPayFilled = milestoneBonusTopViewsPayout !== "";
+            const rMinFilled = milestoneBonusTopReelsMin !== "";
+            const rPayFilled = milestoneBonusTopReelsPayout !== "";
+            if (vMinFilled !== vPayFilled) {
+              setFormFeedback(
+                "Bonus (most verified views): enter both minimum views and payout, or clear both.",
+              );
+              setFormFeedbackType("error");
+              setIsLoading(false);
+              setUploadProgress(null);
+              return;
+            }
+            if (rMinFilled !== rPayFilled) {
+              setFormFeedback(
+                "Bonus (most verified reels): enter both minimum reels and payout, or clear both.",
+              );
+              setFormFeedbackType("error");
+              setIsLoading(false);
+              setUploadProgress(null);
+              return;
+            }
+            const viewsOk =
+              vMinFilled &&
+              vPayFilled &&
+              Number(milestoneBonusTopViewsMin) > 0 &&
+              Math.round(
+                parseFloat(String(milestoneBonusTopViewsPayout)) * 100,
+              ) >= MIN_MILESTONE_PAYOUT_CENTS;
+            const reelsOk =
+              rMinFilled &&
+              rPayFilled &&
+              Number(milestoneBonusTopReelsMin) >= 1 &&
+              Math.round(
+                parseFloat(String(milestoneBonusTopReelsPayout)) * 100,
+              ) >= MIN_MILESTONE_PAYOUT_CENTS;
+            if (!viewsOk && !reelsOk) {
+              setFormFeedback(
+                "With bonus enabled, add at least one bonus category (verified views or verified reels).",
+              );
+              setFormFeedbackType("error");
+              setIsLoading(false);
+              setUploadProgress(null);
+              return;
+            }
+          }
+        }
+
+        let bonusPayload: Record<string, unknown> | undefined;
+        if (milestoneBonusEnabled) {
+          bonusPayload = { enabled: true };
+          if (
+            milestoneBonusTopViewsMin !== "" &&
+            milestoneBonusTopViewsPayout !== ""
+          ) {
+            (bonusPayload as Record<string, unknown>).most_verified_views = {
+              min_total_views: Number(milestoneBonusTopViewsMin),
+              payout_cents: Math.round(
+                parseFloat(String(milestoneBonusTopViewsPayout)) * 100,
+              ),
+            };
+          }
+          if (
+            milestoneBonusTopReelsMin !== "" &&
+            milestoneBonusTopReelsPayout !== ""
+          ) {
+            (bonusPayload as Record<string, unknown>).most_verified_reels = {
+              min_verified_reels: Number(milestoneBonusTopReelsMin),
+              payout_cents: Math.round(
+                parseFloat(String(milestoneBonusTopReelsPayout)) * 100,
+              ),
+            };
+          }
+        }
+
+        const totalBudgetCentsMilestone = Math.round(
+          (parseFloat(totalBudget.toString()) || 0) * 100,
+        );
+
+        contestBasedDetails = {
+          milestone_contest: {
+            milestones: milestonesPayload.map((m, idx) => ({
+              ...m,
+              order: idx + 1,
+            })),
+            total_budget_cents: totalBudgetCentsMilestone,
+            ...(bonusPayload ? { bonus: bonusPayload } : {}),
           },
         };
       } else if (contestType === "cpm") {
@@ -2453,13 +2880,13 @@ export default function CreateContestPage({
         const planFeatures = getPlanFeatures(userPlan);
 
         // Validate contest type access
-        if (contestType === "cpm") {
+        if (contestType === "cpm" || contestType === "milestone") {
           const hasCpmAccess =
             planFeatures.contestTypes &&
             planFeatures.contestTypes.includes("cpm");
           if (!hasCpmAccess) {
             setFormFeedback(
-              "CPM-based contests are only available with paid plans. Please upgrade your subscription or change to a Leaderboard contest.",
+              "CPM and Milestone contests are only available with paid plans. Please upgrade your subscription or change to a Leaderboard contest.",
             );
             setFormFeedbackType("error");
             setIsLoading(false);
@@ -2492,7 +2919,7 @@ export default function CreateContestPage({
             setUploadProgress(null);
             return;
           }
-        } else if (contestType === "cpm") {
+        } else if (contestType === "cpm" || contestType === "milestone") {
           const budgetInCents = (parseFloat(totalBudget.toString()) || 0) * 100;
           if (budgetInCents < planFeatures.minContestBudget) {
             setFormFeedback(
@@ -3915,7 +4342,7 @@ export default function CreateContestPage({
         }
 
         // Validate contest type access
-        if (contestType === "cpm") {
+        if (contestType === "cpm" || contestType === "milestone") {
           const planFeatures = getPlanFeatures(userPlan);
           const hasCpmAccess =
             planFeatures.contestTypes &&
@@ -3923,7 +4350,7 @@ export default function CreateContestPage({
 
           if (!hasCpmAccess) {
             setToastError(
-              "CPM-based contests are only available with paid plans. Please upgrade your subscription or select Leaderboard contest type.",
+              "CPM and Milestone contests are only available with paid plans. Please upgrade your subscription or select Leaderboard contest type.",
             );
             setIsLoading(false);
             return;
@@ -4175,7 +4602,14 @@ export default function CreateContestPage({
       )
         .trim()
         .toLowerCase();
-      if (selectedTypeParam === "leaderboard" || selectedTypeParam === "cpm") {
+      if (
+        selectedTypeParam === "leaderboard" ||
+        selectedTypeParam === "cpm" ||
+        selectedTypeParam === "milestone"
+      ) {
+        if (selectedTypeParam === "milestone") {
+          setContestFormat("video");
+        }
         setContestType(selectedTypeParam);
       }
 
@@ -4256,8 +4690,12 @@ export default function CreateContestPage({
     // Basic contest fields
     setTitle(draft.title || "");
 
-    // Contest type (leaderboard or CPM)
-    if (draft.contest_type === "leaderboard" || draft.contest_type === "cpm") {
+    // Contest type
+    if (
+      draft.contest_type === "leaderboard" ||
+      draft.contest_type === "cpm" ||
+      draft.contest_type === "milestone"
+    ) {
       setContestType(draft.contest_type);
     }
 
@@ -4448,7 +4886,10 @@ export default function CreateContestPage({
     const contestDetails = draft.contest_based_details || {};
 
     // Leaderboard contest details (winners, prizes, flat fee bonus, bonus budget)
-    if (contestDetails.leaderboard_contest) {
+    if (
+      contestDetails.leaderboard_contest &&
+      draft.contest_type === "leaderboard"
+    ) {
       const lc = contestDetails.leaderboard_contest;
       if (lc.winner_count) {
         setWinnerCount(lc.winner_count);
@@ -4480,8 +4921,63 @@ export default function CreateContestPage({
       }
     }
 
+    // Milestone contest (video)
+    if (
+      contestDetails.milestone_contest &&
+      draft.contest_type === "milestone"
+    ) {
+      const mc = contestDetails.milestone_contest;
+      if (Array.isArray(mc.milestones) && mc.milestones.length > 0) {
+        setMilestoneRows(
+          mc.milestones.map((m: any) => ({
+            id: createEmptyMilestoneRow().id,
+            target_views:
+              typeof m.target_views === "number" ? m.target_views : "",
+            payout_dollars:
+              typeof m.payout_cents === "number"
+                ? (m.payout_cents / 100).toString()
+                : "",
+            winner_limit:
+              m.winner_limit === null || m.winner_limit === undefined
+                ? ""
+                : m.winner_limit,
+          })),
+        );
+      }
+      if (
+        typeof mc.total_budget_cents === "number" &&
+        mc.total_budget_cents > 0
+      ) {
+        setTotalBudget((mc.total_budget_cents / 100).toString());
+      }
+      const bonus = mc.bonus;
+      if (bonus && typeof bonus === "object") {
+        if (bonus.enabled) {
+          setMilestoneBonusEnabled(true);
+        }
+        if (bonus.most_verified_views) {
+          const mv = bonus.most_verified_views;
+          if (typeof mv.min_total_views === "number") {
+            setMilestoneBonusTopViewsMin(mv.min_total_views);
+          }
+          if (typeof mv.payout_cents === "number") {
+            setMilestoneBonusTopViewsPayout((mv.payout_cents / 100).toString());
+          }
+        }
+        if (bonus.most_verified_reels) {
+          const mr = bonus.most_verified_reels;
+          if (typeof mr.min_verified_reels === "number") {
+            setMilestoneBonusTopReelsMin(mr.min_verified_reels);
+          }
+          if (typeof mr.payout_cents === "number") {
+            setMilestoneBonusTopReelsPayout((mr.payout_cents / 100).toString());
+          }
+        }
+      }
+    }
+
     // CPM contest details (rate, views, total budget, terms, flat fee bonus & cap)
-    if (contestDetails.cpm_contest) {
+    if (contestDetails.cpm_contest && draft.contest_type === "cpm") {
       const cc = contestDetails.cpm_contest;
 
       // Ensure contest type is CPM when CPM details exist
@@ -5461,6 +5957,48 @@ export default function CreateContestPage({
                           </div>
                         )}
 
+                        {contestType === "milestone" && (
+                          <div
+                            className={cn(
+                              "border rounded-xl p-4 flex flex-col justify-between shadow-sm",
+                              isDark ? "border-gray-500" : "border-gray-300",
+                            )}
+                          >
+                            <div className="flex-1">
+                              <h5
+                                className={cn(
+                                  "text-lg font-semibold mb-2",
+                                  isDark ? "text-white" : "text-gray-900",
+                                )}
+                              >
+                                Milestone rewards
+                              </h5>
+                              <p
+                                className={cn(
+                                  "text-sm leading-relaxed mb-3",
+                                  isDark ? "text-white" : "text-gray-600",
+                                )}
+                              >
+                                Define view thresholds and payouts. You set an
+                                overall contest budget upfront; optional caps
+                                per tier limit how many creators can earn each
+                                reward.
+                              </p>
+                              <div
+                                className={cn(
+                                  "text-sm font-medium border text-center rounded-lg px-3 py-2",
+                                  isDark
+                                    ? "border-gray-600"
+                                    : "bg-[#F0E7FD] border-purple-500 text-purple-600",
+                                )}
+                              >
+                                Video contests only — rewards are based on
+                                verified views
+                              </div>
+                            </div>
+                          </div>
+                        )}
+
                         {/* Min Budget Feature */}
                         <div
                           className={cn(
@@ -5858,6 +6396,20 @@ export default function CreateContestPage({
                           </div>
                         )}
 
+                        {contestType === "milestone" && (
+                          <div className="flex items-start gap-3 group">
+                            <div className="w-3 h-3 mt-2 flex-shrink-0 group-hover:scale-110 transition-transform"></div>
+                            <div>
+                              <span className="text-md font-medium">
+                                View-tier rewards with optional winner caps
+                              </span>
+                              <span className="text-xs opacity-75 block">
+                                (Milestone — video only)
+                              </span>
+                            </div>
+                          </div>
+                        )}
+
                         <div className="flex items-start gap-3 group">
                           <div className="w-3 h-3  mt-2 flex-shrink-0 group-hover:scale-110 transition-transform"></div>
                           <div>
@@ -6195,8 +6747,304 @@ export default function CreateContestPage({
                   </Alert>
                 )}
               </>
+            ) : contestType === "milestone" ? (
+              <>
+                <div className="space-y-6 py-4 px-1">
+                  <h3 className="text-lg font-medium">
+                    Milestone contest configuration
+                  </h3>
+                  <Alert
+                    className={cn(
+                      "border",
+                      isDark
+                        ? "bg-[#C9A7FF26] border-[#C9A7FF] text-white"
+                        : "bg-[#F0E7FD] border-[#4A00BE] text-purple-800",
+                    )}
+                  >
+                    <AlertDescription>
+                      <strong>Non-cumulative payouts:</strong> each creator
+                      receives only the reward for the{" "}
+                      <strong>highest</strong> milestone they reach (not the sum
+                      of all tiers below it). Each tier payout must be at least{" "}
+                      {formatCurrencyFromCents(MIN_MILESTONE_PAYOUT_CENTS)}.
+                    </AlertDescription>
+                  </Alert>
+                  <div className="space-y-4">
+                    {milestoneRows.map((row, idx) => (
+                      <div
+                        key={row.id}
+                        className={cn(
+                          "grid gap-3 md:grid-cols-12 md:items-end p-4 border rounded-lg",
+                          isDark ? "border-gray-600" : "border-gray-300",
+                        )}
+                      >
+                        <div className="md:col-span-3 space-y-2">
+                          <Label>Target views</Label>
+                          <Input
+                            type="number"
+                            min={1}
+                            value={row.target_views}
+                            onChange={(e) => {
+                              const v = e.target.value;
+                              setMilestoneRows((prev) =>
+                                prev.map((r) =>
+                                  r.id === row.id
+                                    ? { ...r, target_views: v === "" ? "" : v }
+                                    : r,
+                                ),
+                              );
+                            }}
+                            className={cn(
+                              isDark
+                                ? "bg-[#180438] border border-gray-600"
+                                : "",
+                            )}
+                            placeholder="e.g. 1000"
+                          />
+                        </div>
+                        <div className="md:col-span-3 space-y-2">
+                          <Label>Payout (USD)</Label>
+                          <Input
+                            type="number"
+                            min={MIN_MILESTONE_PAYOUT_CENTS / 100}
+                            step="0.01"
+                            value={row.payout_dollars}
+                            onChange={(e) =>
+                              setMilestoneRows((prev) =>
+                                prev.map((r) =>
+                                  r.id === row.id
+                                    ? { ...r, payout_dollars: e.target.value }
+                                    : r,
+                                ),
+                              )
+                            }
+                            className={cn(
+                              isDark
+                                ? "bg-[#180438] border border-gray-600"
+                                : "",
+                            )}
+                            placeholder="e.g. 5.00"
+                          />
+                        </div>
+                        <div className="md:col-span-4 space-y-2">
+                          <Label>Winner cap (optional)</Label>
+                          <Input
+                            type="number"
+                            min={1}
+                            value={row.winner_limit}
+                            onChange={(e) =>
+                              setMilestoneRows((prev) =>
+                                prev.map((r) =>
+                                  r.id === row.id
+                                    ? { ...r, winner_limit: e.target.value }
+                                    : r,
+                                ),
+                              )
+                            }
+                            className={cn(
+                              isDark
+                                ? "bg-[#180438] border border-gray-600"
+                                : "",
+                            )}
+                            placeholder="Unlimited if empty"
+                          />
+                          <p className="text-xs text-muted-foreground">
+                            First N creators to reach this tier, or leave blank
+                            for everyone who qualifies.
+                          </p>
+                        </div>
+                        <div className="md:col-span-2 flex md:justify-end">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="icon"
+                            className="shrink-0"
+                            disabled={milestoneRows.length <= 1}
+                            onClick={() =>
+                              setMilestoneRows((prev) =>
+                                prev.filter((r) => r.id !== row.id),
+                              )
+                            }
+                            aria-label={`Remove milestone ${idx + 1}`}
+                          >
+                            <Trash className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </div>
+                    ))}
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() =>
+                        setMilestoneRows((prev) => [
+                          ...prev,
+                          createEmptyMilestoneRow(),
+                        ])
+                      }
+                    >
+                      Add milestone
+                    </Button>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="milestoneTotalBudget">
+                      Total contest budget (USD){" "}
+                      <span className="text-red-500">*</span>
+                    </Label>
+                    <Input
+                      id="milestoneTotalBudget"
+                      type="number"
+                      value={totalBudget}
+                      onChange={(e) => setTotalBudget(e.target.value)}
+                      min="1"
+                      step="0.01"
+                      className={cn(
+                        isDark
+                          ? "bg-[#180438] border border-gray-600 text-white"
+                          : "bg-white",
+                      )}
+                      placeholder="Maximum amount reserved for this contest"
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      This is the pool you fund upfront (similar to a CPM
+                      budget). Payouts are drawn from it as creators hit
+                      milestones.
+                    </p>
+                  </div>
+                  <div
+                    className={cn(
+                      "space-y-4 p-4 border rounded-lg",
+                      isDark ? "border-gray-600" : "border-gray-300",
+                    )}
+                  >
+                    <div className="flex items-center gap-2">
+                      <Checkbox
+                        id="milestoneBonusToggle"
+                        checked={milestoneBonusEnabled}
+                        onCheckedChange={(c) =>
+                          setMilestoneBonusEnabled(c === true)
+                        }
+                      />
+                      <Label
+                        htmlFor="milestoneBonusToggle"
+                        className="cursor-pointer font-medium"
+                      >
+                        Creator bonuses (verified creators)
+                      </Label>
+                    </div>
+                    {milestoneBonusEnabled && (
+                      <div className="space-y-4 pl-1">
+                        <p className="text-sm text-muted-foreground">
+                          Optional extras for top performers. Configure at least
+                          one category when bonus is enabled.
+                        </p>
+                        <div className="grid gap-3 md:grid-cols-2">
+                          <div className="space-y-2">
+                            <Label>Most verified views — min total views</Label>
+                            <Input
+                              type="number"
+                              min={1}
+                              value={milestoneBonusTopViewsMin}
+                              onChange={(e) =>
+                                setMilestoneBonusTopViewsMin(
+                                  e.target.value === ""
+                                    ? ""
+                                    : parseInt(e.target.value, 10),
+                                )
+                              }
+                              className={cn(
+                                isDark
+                                  ? "bg-[#180438] border border-gray-600"
+                                  : "",
+                              )}
+                              placeholder="e.g. 200000"
+                            />
+                          </div>
+                          <div className="space-y-2">
+                            <Label>Most verified views — bonus (USD)</Label>
+                            <Input
+                              type="number"
+                              step="0.01"
+                              min={MIN_MILESTONE_PAYOUT_CENTS / 100}
+                              value={milestoneBonusTopViewsPayout}
+                              onChange={(e) =>
+                                setMilestoneBonusTopViewsPayout(e.target.value)
+                              }
+                              className={cn(
+                                isDark
+                                  ? "bg-[#180438] border border-gray-600"
+                                  : "",
+                              )}
+                              placeholder="e.g. 100"
+                            />
+                          </div>
+                          <div className="space-y-2">
+                            <Label>
+                              Most verified reels — min verified reels
+                            </Label>
+                            <Input
+                              type="number"
+                              min={1}
+                              value={milestoneBonusTopReelsMin}
+                              onChange={(e) =>
+                                setMilestoneBonusTopReelsMin(
+                                  e.target.value === ""
+                                    ? ""
+                                    : parseInt(e.target.value, 10),
+                                )
+                              }
+                              className={cn(
+                                isDark
+                                  ? "bg-[#180438] border border-gray-600"
+                                  : "",
+                              )}
+                              placeholder="e.g. 5"
+                            />
+                          </div>
+                          <div className="space-y-2">
+                            <Label>Most verified reels — bonus (USD)</Label>
+                            <Input
+                              type="number"
+                              step="0.01"
+                              min={MIN_MILESTONE_PAYOUT_CENTS / 100}
+                              value={milestoneBonusTopReelsPayout}
+                              onChange={(e) =>
+                                setMilestoneBonusTopReelsPayout(e.target.value)
+                              }
+                              className={cn(
+                                isDark
+                                  ? "bg-[#180438] border border-gray-600"
+                                  : "",
+                              )}
+                              placeholder="e.g. 50"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+                {parseFloat(totalBudget.toString() || "0") * 100 <
+                  planFeatures.minContestBudget &&
+                  (totalBudget.toString() || "0").length > 0 && (
+                    <Alert
+                      className={cn(
+                        "border",
+                        isDark
+                          ? "bg-[#C9A7FF26] border-[#C9A7FF] text-white"
+                          : "bg-[#F0E7FD] border-[#4A00BE] text-purple-700",
+                      )}
+                    >
+                      <AlertDescription>
+                        The minimum contest budget for your{" "}
+                        {currentPlan?.name || "current"} plan is{" "}
+                        {formatCurrencyFromCents(planFeatures.minContestBudget)}
+                        . Please increase your total budget.
+                      </AlertDescription>
+                    </Alert>
+                  )}
+              </>
             ) : (
-              // contestType === "cpm"
               <>
                 <div className="space-y-6 py-4 px-1">
                   <h3 className="text-lg font-medium">
@@ -7072,8 +7920,9 @@ export default function CreateContestPage({
               </>
             )}
 
-            {/* New Bonus Features - Apply to both contest types */}
-            <div className="space-y-6 py-6 px-0 sm:px-2 border-t-2 border-dashed mt-6">
+            {/* Creator earning opportunities are not shown for milestone contests */}
+            {contestType !== "milestone" && (
+              <div className="space-y-6 py-6 px-0 sm:px-2 border-t-2 border-dashed mt-6">
               <div>
                 <h3
                   className={cn(
@@ -7444,6 +8293,7 @@ export default function CreateContestPage({
                 )}
               </div>
             </div>
+            )}
 
             <CardFooter className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4 pt-6">
               {/* Modern Error Display for Prize step */}
@@ -8483,20 +9333,26 @@ export default function CreateContestPage({
                 <Label className="text-xl font-semibold">Contest Type</Label>
                 <RadioGroup
                   value={contestType}
-                  onValueChange={(value: "leaderboard" | "cpm") => {
+                  onValueChange={(
+                    value: "leaderboard" | "cpm" | "milestone",
+                  ) => {
                     const planFeatures = getPlanFeatures(userPlan);
                     const hasCpmAccess =
                       planFeatures.contestTypes &&
                       planFeatures.contestTypes.includes("cpm");
 
-                    // Block CPM selection if not available for current plan
-                    // For Twitter (text/image) CPM is allowed when plan supports CPM
-                    if (value === "cpm" && !hasCpmAccess) {
-                      return; // Don't change the value
+                    if (
+                      (value === "cpm" || value === "milestone") &&
+                      !hasCpmAccess
+                    ) {
+                      return;
+                    }
+                    if (value === "milestone" && contestFormat !== "video") {
+                      return;
                     }
                     setContestType(value);
                   }}
-                  className="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-4 pt-2"
+                  className="flex flex-col lg:flex-row flex-wrap gap-3 lg:gap-4 pt-2"
                 >
                   <div
                     className={`flex items-center space-x-2 p-4 border ${
@@ -8624,6 +9480,82 @@ export default function CreateContestPage({
                       </div>
                     );
                   })()}
+                  {contestFormat === "video" &&
+                    (() => {
+                      const planFeatures = getPlanFeatures(userPlan);
+                      const hasCpmAccess =
+                        planFeatures.contestTypes &&
+                        planFeatures.contestTypes.includes("cpm");
+                      const currentPlan = dbSubscriptionPlans.find(
+                        (p) => p.id === userPlan,
+                      );
+                      const isFreePlan = !currentPlan || currentPlan.price === 0;
+                      const isDisabled = !hasCpmAccess;
+
+                      return (
+                        <div
+                          className={`flex items-center space-x-2 p-4 border ${
+                            isDark ? "border-gray-600" : "border-gray-300"
+                          } rounded-lg flex-1 min-w-[220px] ${
+                            isDisabled
+                              ? isDark
+                                ? "opacity-50 cursor-not-allowed bg-slate-800"
+                                : "opacity-50 cursor-not-allowed bg-gray-50"
+                              : `cursor-pointer hover:bg-[#D9C0FF26] ${
+                                  contestType === "milestone"
+                                    ? "bg-[#D9C0FF26] border-[#7F39EC]"
+                                    : ""
+                                }`
+                          }`}
+                        >
+                          <RadioGroupItem
+                            value="milestone"
+                            id="milestone"
+                            disabled={isDisabled}
+                          />
+                          <Label
+                            htmlFor="milestone"
+                            className={
+                              isDisabled
+                                ? "cursor-not-allowed"
+                                : "cursor-pointer"
+                            }
+                          >
+                            <span className="font-semibold text-lg">
+                              Milestone Based Contest
+                            </span>
+                            <p className="text-[14px] leading-tight mt-[2px] text-muted-foreground">
+                              Creators are rewarded upon reaching milestones, with
+                              payouts based on the highest milestone achieved.
+                            </p>
+                            {!hasCpmAccess && (
+                              <div className="mt-2 flex items-center gap-2">
+                                {isFreePlan && (
+                                  <button
+                                    className={cn(
+                                      "text-white text-md px-3 rounded-full py-1 h-8",
+                                      isDark ? "bg-[#7F39EC]" : "bg-[#4A00BE]",
+                                    )}
+                                  >
+                                    <Link href="/dashboard/billing?tab=subscription">
+                                      Upgrade Plan
+                                    </Link>
+                                  </button>
+                                )}
+                                <p
+                                  className={cn(
+                                    "text-sm font-medium",
+                                    isDark ? "text-white" : "text-black",
+                                  )}
+                                >
+                                  Available in paid plans only
+                                </p>
+                              </div>
+                            )}
+                          </Label>
+                        </div>
+                      );
+                    })()}
                 </RadioGroup>
               </div>
 

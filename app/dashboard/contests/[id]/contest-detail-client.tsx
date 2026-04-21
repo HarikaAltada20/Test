@@ -227,7 +227,7 @@ interface Contest {
     | "verification_complete"
     | "payouts_processed"
     | null;
-  contest_type?: "leaderboard" | "cpm" | null;
+  contest_type?: "leaderboard" | "cpm" | "milestone" | null;
   thumbnail_url?: string | null;
   brief_html?: string | null;
   platform?: string | null;
@@ -6037,7 +6037,9 @@ export default function ContestDetailClient({
                   >
                     {currentContest.contest_type === "cpm"
                       ? "CPM"
-                      : "Leaderboard"}
+                      : currentContest.contest_type === "milestone"
+                        ? "Milestone"
+                        : "Leaderboard"}
                   </Badge>
                 )}
               </div>
@@ -6908,6 +6910,86 @@ export default function ContestDetailClient({
               // </Card>
             )}
 
+          {currentContest.contest_type === "milestone" &&
+            currentContest.contest_based_details?.milestone_contest
+              ?.total_budget_cents != null &&
+            currentContest.contest_based_details.milestone_contest
+              .total_budget_cents > 0 && (
+              <div
+                className={cn(
+                  "group rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 overflow-hidden relative",
+                  isDark
+                    ? "bg-[#180438] border border-white/20 backdrop-blur-2xl shadow-2xl shadow-blue-500/20"
+                    : "bg-white border border-gray-100",
+                )}
+              >
+                <div className="p-6 relative z-10">
+                  <div className="flex items-center justify-between mb-4">
+                    <div
+                      className={cn(
+                        "w-12 h-12 flex items-center justify-center rounded-xl shadow-lg backdrop-blur-sm",
+                        isDark
+                          ? "bg-white/20 border border-white/30 backdrop-blur-2xl shadow-lg shadow-white/20"
+                          : "bg-gradient-to-br from-blue-500 to-blue-600 text-white",
+                      )}
+                    >
+                      <Wallet
+                        className={cn(
+                          "h-6 w-6",
+                          isDark ? "text-white" : "text-white",
+                        )}
+                      />
+                    </div>
+                    <div className="text-right">
+                      <p
+                        className={cn(
+                          "text-sm font-medium uppercase tracking-wide",
+                          isDark
+                            ? "text-white/90 drop-shadow-sm"
+                            : "text-gray-500",
+                        )}
+                      >
+                        Total Budget
+                      </p>
+                      <p
+                        className={cn(
+                          "text-2xl font-bold mt-1",
+                          isDark
+                            ? "text-white drop-shadow-lg bg-gradient-to-r from-white to-blue-200 bg-clip-text text-transparent"
+                            : "text-gray-900",
+                        )}
+                      >
+                        {formatMoney(
+                          currentContest.contest_based_details.milestone_contest
+                            .total_budget_cents,
+                        )}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="mb-4">
+                    <p
+                      className={cn(
+                        "text-sm font-medium",
+                        isDark
+                          ? "text-white/80 drop-shadow-sm"
+                          : "text-gray-600",
+                      )}
+                    >
+                      Total reserved for milestone payouts
+                    </p>
+                  </div>
+                  <div
+                    className={cn(
+                      "h-1 w-full rounded-full",
+                      isDark
+                        ? "bg-gradient-to-r from-blue-400 via-sky-400 to-cyan-400 shadow-lg shadow-blue-400/70 animate-pulse"
+                        : "bg-gradient-to-r from-blue-200 to-blue-300",
+                    )}
+                  ></div>
+                </div>
+              </div>
+            )}
+
           {/* Submissions Count Card */}
           <div
             className={cn(
@@ -7104,6 +7186,72 @@ export default function ContestDetailClient({
                     total_budget:
                       currentContest.contest_based_details.leaderboard_contest
                         .total_budget,
+                    contest_based_details: currentContest.contest_based_details,
+                    contest_type: currentContest.contest_type,
+                    max_earnings_per_creator:
+                      currentContest.max_earnings_per_creator,
+                  }}
+                  submissions={currentSubmissions as any}
+                  showDetailed={true}
+                />
+              </div>
+            </div>
+          )}
+
+        {/* Budget Progress Tracker - For Milestone contests */}
+        {currentContest.contest_type === "milestone" &&
+          currentContest.contest_based_details?.milestone_contest
+            ?.total_budget_cents != null &&
+          currentContest.contest_based_details.milestone_contest
+            .total_budget_cents > 0 && (
+            <div
+              className={cn(
+                "group rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 overflow-hidden relative",
+                isDark
+                  ? "bg-[#180438] border border-white/20 backdrop-blur-2xl shadow-2xl shadow-blue-500/20"
+                  : "bg-gradient-to-br from-white to-blue-50 border border-blue-100",
+              )}
+            >
+              <div className="p-6 relative z-10">
+                <div className="flex items-center mb-4">
+                  <div
+                    className={cn(
+                      "w-12 h-12 flex items-center justify-center rounded-xl shadow-lg backdrop-blur-sm mr-4",
+                      isDark
+                        ? "bg-white/20 border border-white/30 backdrop-blur-2xl shadow-lg shadow-white/20"
+                        : "bg-gradient-to-br from-blue-500 to-blue-600 text-white",
+                    )}
+                  >
+                    <BarChart3 className="h-6 w-6 text-white" />
+                  </div>
+                  <div>
+                    <h3
+                      className={cn(
+                        "text-lg font-bold",
+                        isDark
+                          ? "text-white drop-shadow-lg bg-gradient-to-r from-white to-blue-200 bg-clip-text text-transparent"
+                          : "text-gray-900",
+                      )}
+                    >
+                      Budget Tracker
+                    </h3>
+                    <p
+                      className={cn(
+                        "text-sm",
+                        isDark
+                          ? "text-white/80 drop-shadow-sm"
+                          : "text-gray-600",
+                      )}
+                    >
+                      Monitor milestone payout spending progress
+                    </p>
+                  </div>
+                </div>
+                <BudgetProgress
+                  contest={{
+                    total_budget:
+                      currentContest.contest_based_details.milestone_contest
+                        .total_budget_cents,
                     contest_based_details: currentContest.contest_based_details,
                     contest_type: currentContest.contest_type,
                     max_earnings_per_creator:
@@ -7613,59 +7761,13 @@ export default function ContestDetailClient({
                     </div>
                   )}
 
-                {currentContest.contest_type === "cpm" &&
-                  currentContest.contest_based_details?.cpm_contest && (
-                    <div className="space-y-3">
-                      <h3 className="font-semibold text-lg text-foreground">
-                        CPM Configuration
-                      </h3>
-                      <div className="grid grid-col-1 md:grid-cols-2 gap-4">
-                        <div
-                          className={cn(
-                            "flex justify-between items-center p-3 rounded-md border",
-                            isDark ? "border-gray-600" : "border-gray-400",
-                          )}
-                        >
-                          <span
-                            className={cn(
-                              "text-md font-medium tracking-wide",
-                              isDark ? "text-white" : "text-black",
-                            )}
-                          >
-                            CPM Rate:
-                          </span>
-                          <span className="font-semibold text-md text-foreground">
-                            $
-                            {parseFloat(
-                              currentContest.contest_based_details.cpm_contest
-                                .cpm_rate_usd,
-                            ).toFixed(2)}{" "}
-                            per 1000 {isTwitterCpmCampaign ? "points" : "views"}
-                          </span>
-                        </div>
-                        <div
-                          className={cn(
-                            "flex justify-between items-center p-3 rounded-md border",
-                            isDark ? "border-gray-600" : "border-gray-400",
-                          )}
-                        >
-                          <span
-                            className={cn(
-                              "text-md font-medium tracking-wide",
-                              isDark ? "text-white" : "text-black",
-                            )}
-                          >
-                            Total Budget:
-                          </span>
-                          <span className="font-semibold text-md text-foreground">
-                            {formatMoney(
-                              currentContest.contest_based_details.cpm_contest
-                                .total_budget,
-                            )}
-                          </span>
-                        </div>
-                        {currentContest.contest_based_details.cpm_contest
-                          .min_views != null && (
+                  {currentContest.contest_type === "cpm" &&
+                    currentContest.contest_based_details?.cpm_contest && (
+                      <div className="space-y-3">
+                        <h3 className="font-semibold text-lg text-foreground">
+                          CPM Configuration
+                        </h3>
+                        <div className="grid grid-col-1 md:grid-cols-2 gap-4">
                           <div
                             className={cn(
                               "flex justify-between items-center p-3 rounded-md border",
@@ -7674,19 +7776,21 @@ export default function ContestDetailClient({
                           >
                             <span
                               className={cn(
-                                "text-md font-medium",
+                                "text-md font-medium tracking-wide",
                                 isDark ? "text-white" : "text-black",
                               )}
                             >
-                              Min Views:
+                              CPM Rate:
                             </span>
                             <span className="font-semibold text-md text-foreground">
-                              {currentContest.contest_based_details.cpm_contest.min_views.toLocaleString()}
+                              $
+                              {parseFloat(
+                                currentContest.contest_based_details.cpm_contest
+                                  .cpm_rate_usd,
+                              ).toFixed(2)}{" "}
+                              per 1000 {isTwitterCpmCampaign ? "points" : "views"}
                             </span>
                           </div>
-                        )}
-                        {currentContest.contest_based_details.cpm_contest
-                          .max_views != null && (
                           <div
                             className={cn(
                               "flex justify-between items-center p-3 rounded-md border",
@@ -7695,51 +7799,355 @@ export default function ContestDetailClient({
                           >
                             <span
                               className={cn(
-                                "text-md font-medium",
+                                "text-md font-medium tracking-wide",
                                 isDark ? "text-white" : "text-black",
                               )}
                             >
-                              Max Views (Cap):
+                              Total Budget:
                             </span>
                             <span className="font-semibold text-md text-foreground">
-                              {currentContest.contest_based_details.cpm_contest.max_views.toLocaleString()}
+                              {formatMoney(
+                                currentContest.contest_based_details.cpm_contest
+                                  .total_budget,
+                              )}
                             </span>
                           </div>
-                        )}
-                        {/* <div>
-                          <h4 className="text-sm font-medium mt-3 mb-2 text-foreground">
+                          {currentContest.contest_based_details.cpm_contest
+                            .min_views != null && (
+                            <div
+                              className={cn(
+                                "flex justify-between items-center p-3 rounded-md border",
+                                isDark ? "border-gray-600" : "border-gray-400",
+                              )}
+                            >
+                              <span
+                                className={cn(
+                                  "text-md font-medium",
+                                  isDark ? "text-white" : "text-black",
+                                )}
+                              >
+                                Min Views:
+                              </span>
+                              <span className="font-semibold text-md text-foreground">
+                                {currentContest.contest_based_details.cpm_contest.min_views.toLocaleString()}
+                              </span>
+                            </div>
+                          )}
+                          {currentContest.contest_based_details.cpm_contest
+                            .max_views != null && (
+                            <div
+                              className={cn(
+                                "flex justify-between items-center p-3 rounded-md border",
+                                isDark ? "border-gray-600" : "border-gray-400",
+                              )}
+                            >
+                              <span
+                                className={cn(
+                                  "text-md font-medium",
+                                  isDark ? "text-white" : "text-black",
+                                )}
+                              >
+                                Max Views (Cap):
+                              </span>
+                              <span className="font-semibold text-md text-foreground">
+                                {currentContest.contest_based_details.cpm_contest.max_views.toLocaleString()}
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                        <div>
+                          <h4 className="text-md font-semibold mt-4 mb-2 text-foreground">
                             Terms & Conditions
                           </h4>
-                          <div className="p-3 border rounded-lg bg-background text-sm text-foreground">
+                          <div
+                            className={cn(
+                              "p-3 border rounded-lg text-[13px] text-black",
+                              isDark
+                                ? "border-gray-600 text-white"
+                                : "border-gray-400 text-black",
+                            )}
+                          >
                             <div className="whitespace-pre-wrap break-words">
                               {currentContest.contest_based_details.cpm_contest
                                 .terms_conditions ||
                                 "No specific terms provided."}
                             </div>
                           </div>
-                        </div> */}
-                      </div>
-                      <div>
-                        <h4 className="text-md font-semibold mt-4 mb-2 text-foreground">
-                          Terms & Conditions
-                        </h4>
-                        <div
-                          className={cn(
-                            "p-3 border rounded-lg text-[13px] text-black",
-                            isDark
-                              ? "border-gray-600 text-white"
-                              : "border-gray-400 text-black",
-                          )}
-                        >
-                          <div className="whitespace-pre-wrap break-words">
-                            {currentContest.contest_based_details.cpm_contest
-                              .terms_conditions ||
-                              "No specific terms provided."}
-                          </div>
                         </div>
                       </div>
-                    </div>
-                  )}
+                    )}
+
+                  {currentContest.contest_type === "milestone" &&
+                    currentContest.contest_based_details?.milestone_contest && (
+                      <div className="space-y-6">
+                        {/* Milestone Ladder */}
+                        <div className="space-y-4">
+                          <div className="flex items-center justify-between">
+                            <h3 className="font-semibold text-lg text-foreground flex items-center gap-2">
+                              <Trophy className="h-5 w-5 text-yellow-500" />
+                              Milestone Rewards Ladder
+                            </h3>
+                            <Badge
+                              variant="outline"
+                              className={cn(
+                                "text-xs font-medium",
+                                isDark
+                                  ? "bg-purple-900/30 text-purple-300 border-purple-500/30"
+                                  : "bg-purple-50 text-purple-700 border-purple-200",
+                              )}
+                            >
+                              Non-Cumulative
+                            </Badge>
+                          </div>
+
+                          <div className="grid grid-cols-1 gap-4">
+                            {(currentContest.contest_based_details.milestone_contest.milestones || [])
+                              .sort((a: any, b: any) => a.order - b.order)
+                              .map((milestone: any, index: number) => (
+                                <div
+                                  key={index}
+                                  className={cn(
+                                    "relative overflow-hidden rounded-xl border transition-all duration-300 group",
+                                    isDark
+                                      ? "bg-[#170337] border-gray-600 hover:border-purple-500/50"
+                                      : "bg-white border-gray-200 hover:border-purple-400 font-bold",
+                                  )}
+                                >
+                                  {/* Glassmorphism background effect */}
+                                  <div className="absolute inset-0 bg-gradient-to-r from-transparent via-purple-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+
+                                  <CardContent className="p-5 flex items-center justify-between relative z-10">
+                                    <div className="flex items-center gap-5">
+                                      <div
+                                        className={cn(
+                                          "w-12 h-12 flex items-center justify-center rounded-2xl shadow-inner",
+                                          isDark
+                                            ? "bg-purple-900/40 text-purple-300 border border-purple-500/20"
+                                            : "bg-purple-50 text-purple-600 border border-purple-100",
+                                        )}
+                                      >
+                                        <Zap className="h-6 w-6" />
+                                      </div>
+                                      <div>
+                                        <div className="flex items-center gap-2 mb-1">
+                                          <p
+                                            className={cn(
+                                              "text-sm font-semibold uppercase tracking-wider",
+                                              isDark
+                                                ? "text-purple-400"
+                                                : "text-purple-600",
+                                            )}
+                                          >
+                                            Milestone {index + 1}
+                                          </p>
+                                          {milestone.winner_limit && (
+                                            <Badge
+                                              variant="secondary"
+                                              className="text-[10px] h-4 px-1.5"
+                                            >
+                                              Limit: {milestone.winner_limit}
+                                            </Badge>
+                                          )}
+                                        </div>
+                                        <p
+                                          className={cn(
+                                            "text-2xl font-black",
+                                            isDark ? "text-white" : "text-gray-900",
+                                          )}
+                                        >
+                                          {milestone.target_views.toLocaleString()}{" "}
+                                          <span className="text-sm font-medium opacity-70">
+                                            Views
+                                          </span>
+                                        </p>
+                                      </div>
+                                    </div>
+
+                                    <div className="text-right">
+                                      <p
+                                        className={cn(
+                                          "text-xs font-medium mb-1",
+                                          isDark ? "text-gray-400" : "text-gray-500",
+                                        )}
+                                      >
+                                        Payout
+                                      </p>
+                                      <p
+                                        className={cn(
+                                          "text-2xl font-bold",
+                                          isDark ? "text-green-400" : "text-green-600",
+                                        )}
+                                      >
+                                        {formatMoney(milestone.payout_cents)}
+                                      </p>
+                                    </div>
+                                  </CardContent>
+                                </div>
+                              ))}
+                          </div>
+                        </div>
+
+                        {/* Bonus Tracks */}
+                        {currentContest.contest_based_details.milestone_contest.bonus?.enabled && (
+                          <div className="space-y-4 pt-4">
+                            <h3 className="font-semibold text-lg text-foreground flex items-center gap-2">
+                              <Gift className="h-5 w-5 text-pink-500" />
+                              Competitive Bonus Tracks
+                            </h3>
+
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                              {currentContest.contest_based_details.milestone_contest.bonus.most_verified_views && (
+                                <div
+                                  className={cn(
+                                    "rounded-xl border p-5 relative overflow-hidden",
+                                    isDark
+                                      ? "bg-gradient-to-br from-blue-900/20 to-purple-900/20 border-blue-500/30"
+                                      : "bg-gradient-to-br from-blue-50 to-indigo-50 border-blue-200",
+                                  )}
+                                >
+                                  <div className="flex items-start justify-between mb-4">
+                                    <div
+                                      className={cn(
+                                        "p-2 rounded-lg",
+                                        isDark ? "bg-blue-900/40" : "bg-blue-100",
+                                      )}
+                                    >
+                                      <Eye className="h-5 w-5 text-blue-500" />
+                                    </div>
+                                    <Badge className="bg-blue-500 hover:bg-blue-600 text-white border-none">
+                                      {formatMoney(
+                                        currentContest.contest_based_details
+                                          .milestone_contest.bonus
+                                          .most_verified_views.payout_cents,
+                                      )}
+                                    </Badge>
+                                  </div>
+                                  <h4
+                                    className={cn(
+                                      "font-bold text-lg mb-1",
+                                      isDark ? "text-white" : "text-blue-900",
+                                    )}
+                                  >
+                                    Most Verified Views
+                                  </h4>
+                                  <p
+                                    className={cn(
+                                      "text-sm",
+                                      isDark ? "text-blue-200/70" : "text-blue-700",
+                                    )}
+                                  >
+                                    Awarded to the creator with the highest total
+                                    verified views.
+                                  </p>
+                                  <div className="mt-4 pt-4 border-t border-blue-500/20">
+                                    <div className="flex justify-between text-xs font-semibold">
+                                      <span className="opacity-70 uppercase tracking-tighter">Eligibility Condition</span>
+                                      <span className="text-blue-500">
+                                        Min.{" "}
+                                        {currentContest.contest_based_details.milestone_contest.bonus.most_verified_views.min_total_views.toLocaleString()}{" "}
+                                        Views
+                                      </span>
+                                    </div>
+                                  </div>
+                                </div>
+                              )}
+
+                              {currentContest.contest_based_details.milestone_contest.bonus.most_verified_reels && (
+                                <div
+                                  className={cn(
+                                    "rounded-xl border p-5 relative overflow-hidden",
+                                    isDark
+                                      ? "bg-gradient-to-br from-pink-900/20 to-purple-900/20 border-pink-500/30"
+                                      : "bg-gradient-to-br from-pink-50 to-purple-50 border-pink-200",
+                                  )}
+                                >
+                                  <div className="flex items-start justify-between mb-4">
+                                    <div
+                                      className={cn(
+                                        "p-2 rounded-lg",
+                                        isDark ? "bg-pink-900/40" : "bg-pink-100",
+                                      )}
+                                    >
+                                      <Play className="h-5 w-5 text-pink-500" />
+                                    </div>
+                                    <Badge className="bg-pink-500 hover:bg-pink-600 text-white border-none">
+                                      {formatMoney(
+                                        currentContest.contest_based_details
+                                          .milestone_contest.bonus
+                                          .most_verified_reels.payout_cents,
+                                      )}
+                                    </Badge>
+                                  </div>
+                                  <h4
+                                    className={cn(
+                                      "font-bold text-lg mb-1",
+                                      isDark ? "text-white" : "text-pink-900",
+                                    )}
+                                  >
+                                    Most Verified Reels
+                                  </h4>
+                                  <p
+                                    className={cn(
+                                      "text-sm",
+                                      isDark
+                                        ? "text-pink-200/70"
+                                        : "text-pink-700 font-bold",
+                                    )}
+                                  >
+                                    Awarded to the creator with the most reels
+                                    hitting target views.
+                                  </p>
+                                  <div className="mt-4 pt-4 border-t border-pink-500/20">
+                                    <div className="flex justify-between text-xs font-semibold">
+                                      <span className="opacity-70 uppercase tracking-tighter">Eligibility Condition</span>
+                                      <span className="text-pink-500">
+                                        Min.{" "}
+                                        {currentContest.contest_based_details.milestone_contest.bonus.most_verified_reels.min_verified_reels.toLocaleString()}{" "}
+                                        Reels
+                                      </span>
+                                    </div>
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Budget Status */}
+                        <div
+                          className={cn(
+                            "mt-6 p-4 rounded-xl border flex items-center justify-between",
+                            isDark
+                              ? "bg-gray-900/30 border-gray-600"
+                              : "bg-gray-50 border-gray-200",
+                          )}
+                        >
+                          <div className="flex items-center gap-3">
+                            <Wallet className="h-5 w-5 text-emerald-500" />
+                            <span
+                              className={cn(
+                                "text-sm font-medium",
+                                isDark ? "text-gray-300" : "text-gray-600",
+                              )}
+                            >
+                              Total Budget
+                            </span>
+                          </div>
+                          <span
+                            className={cn(
+                              "text-lg font-bold",
+                              isDark ? "text-white" : "text-gray-900",
+                            )}
+                          >
+                            {formatMoney(
+                              currentContest.contest_based_details.milestone_contest
+                                .total_budget_cents,
+                            )}
+                          </span>
+                        </div>
+                      </div>
+                    )}
+
 
                 {/* Points Configuration */}
                 {(() => {
@@ -18758,9 +19166,10 @@ export default function ContestDetailClient({
                                         0;
                                       return formatMoney(totalPrize);
                                     } else if (
-                                      currentContest.contest_type === "cpm"
+                                      currentContest.contest_type === "cpm" ||
+                                      currentContest.contest_type === "milestone"
                                     ) {
-                                      // Calculate total paid for CPM contest
+                                      // Calculate total paid for CPM/Milestone contest
                                       const totalPaid =
                                         filteredAnalyticsSubmissions
                                           ?.filter((s) => s.status === "paid")
@@ -18910,7 +19319,8 @@ export default function ContestDetailClient({
                                           ?.leaderboard_contest?.total_prize ||
                                         0;
                                     } else if (
-                                      currentContest.contest_type === "cpm"
+                                      currentContest.contest_type === "cpm" ||
+                                      currentContest.contest_type === "milestone"
                                     ) {
                                       totalCost =
                                         filteredAnalyticsSubmissions
@@ -19127,7 +19537,8 @@ export default function ContestDetailClient({
                                       currentContest.contest_based_details
                                         ?.leaderboard_contest?.total_prize || 0;
                                   } else if (
-                                    currentContest.contest_type === "cpm"
+                                    currentContest.contest_type === "cpm" ||
+                                    currentContest.contest_type === "milestone"
                                   ) {
                                     totalCost =
                                       filteredAnalyticsSubmissions

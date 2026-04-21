@@ -59,7 +59,7 @@ export function BudgetProgress({
     bonusSpent,
     totalSpent,
   } = useMemo(() => {
-    // Use total_budget from the contest object (works for both CPM and Leaderboard)
+    // Use total_budget from the contest object (works for CPM, Leaderboard, and Milestone)
     const totalBudget = contest.total_budget || 0;
 
     const prizePoolTotal =
@@ -328,10 +328,11 @@ export function BudgetProgress({
   const remaining = Math.max(0, totalBudget - totalSpent);
   const isNearLimit = totalPercentage >= 80;
 
-  // Only show for CPM and leaderboard contests
+  // Only show for CPM, leaderboard, and milestone contests
   if (
     contest.contest_type !== "cpm" &&
-    contest.contest_type !== "leaderboard"
+    contest.contest_type !== "leaderboard" &&
+    contest.contest_type !== "milestone"
   ) {
     return null;
   }
