@@ -255,13 +255,8 @@ export function AccountSwitcher({
       </button>
 
       {/* Account Switch Modal */}
-      <Dialog open={isSwitchModalOpen} onOpenChange={setIsSwitchModalOpen}>
-        <DialogContent className={cn(
-          "max-w-[95vw] sm:max-w-[500px] max-h-[600px] rounded-3xl p-6 overflow-y-auto", 
-          isDark 
-            ? "bg-[#07031E] border-slate-800 text-white" 
-            : "bg-white border-slate-200"
-        )}>
+      <Dialog open={isSwitchModalOpen} onOpenChange={setIsSwitchModalOpen} isdark={isDark}>
+        <DialogContent className="max-w-[95vw] sm:max-w-[500px] max-h-[600px] rounded-3xl p-6 overflow-y-auto" >
           <DialogHeader>
             <div className="mx-auto bg-violet-500/10 p-4 rounded-full w-fit mb-2">
               <Users className="h-8 w-8 text-violet-500" />
@@ -408,13 +403,8 @@ export function AccountSwitcher({
       </Dialog>
 
       {/* Add Account Modal */}
-      <Dialog open={isAddModalOpen} onOpenChange={setIsAddModalOpen}>
-        <DialogContent className={cn(
-          "max-w-[95vw] sm:max-w-[400px] h-[80vh] max-h-[600px] rounded-3xl p-6 overflow-y-auto", 
-          isDark 
-            ? "bg-[#07031E] border-slate-800 text-white" 
-            : "bg-white border-slate-200"
-        )}>
+      <Dialog open={isAddModalOpen} onOpenChange={setIsAddModalOpen} isdark={isDark}>
+        <DialogContent className="max-w-[95vw] sm:max-w-[400px] max-h-[600px] rounded-3xl p-6 overflow-y-auto">
           <DialogHeader>
             <div className="mx-auto bg-violet-500/10 p-4 rounded-full w-fit mb-2">
               <Users className="h-8 w-8 text-violet-500" />
