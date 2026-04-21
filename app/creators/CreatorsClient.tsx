@@ -420,7 +420,7 @@ export default function CreatorsClient({
     setIsSigningOut(true);
     try {
       const supabase = createClient();
-      await supabase.auth.signOut();
+      await supabase.auth.signOut({ scope: "local" });
       localStorage.setItem("signupRole", "creator");
       setShowAdvertiserModal(false);
       router.push("/auth/signup");

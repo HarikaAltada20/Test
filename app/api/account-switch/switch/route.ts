@@ -40,7 +40,13 @@ export async function POST(req: Request) {
     const { target_user_id } = await req.json();
 
     if (!target_user_id) {
-      return NextResponse.json({ error: "Target user ID is required" }, { status: 400 });
+      return NextResponse.json(
+        {
+          error: "Target user ID is required",
+          code: "MISSING_TARGET",
+        },
+        { status: 400 },
+      );
     }
 
     // Check if target user is also a creator
@@ -69,9 +75,14 @@ export async function POST(req: Request) {
       .single();
 
     if (vaultError || !vaultEntry) {
-      return NextResponse.json({ 
-        error: "No saved session found for this account" 
-      }, { status: 404 });
+      return NextResponse.json(
+        {
+          error: "No saved session found for this account",
+          code: "NO_VAULT_ROW",
+          target_user_id,
+        },
+        { status: 404 },
+      );
     }
 
     // 3. Decrypt the refresh token
@@ -97,10 +108,14 @@ export async function POST(req: Request) {
 
     if (refreshError || !refreshData.session) {
       console.error("Account Switch: Refresh failed for target user:", target_user_id, refreshError?.message);
-      
-      // Automatic cleanup: If token is "Not Found", it's definitely stale/used.
-      // We remove it from the vault so the user can re-auth cleanly.
-      if (refreshError?.message?.toLowerCase().includes("not found") || refreshError?.message?.toLowerCase().includes("expired")) {
+
+      const msg = (refreshError?.message || "").toLowerCase();
+      const shouldRemoveStale =
+        msg.includes("not found") ||
+        msg.includes("expired") ||
+        msg.includes("invalid");
+
+      if (shouldRemoveStale) {
         await adminSupabase
           .from("user_sessions_vault")
           .delete()
@@ -108,9 +123,15 @@ export async function POST(req: Request) {
           .eq("target_user_id", target_user_id);
       }
 
-      return NextResponse.json({ 
-        error: "Target session expired or invalid. Please link the account again." 
-      }, { status: 401 });
+      return NextResponse.json(
+        {
+          error:
+            "Target session expired or invalid. Please link the account again.",
+          code: shouldRemoveStale ? "VAULT_ROW_REMOVED" : "VAULT_REFRESH_FAILED",
+          target_user_id,
+        },
+        { status: 401 },
+      );
     }
 
     // 5. Update the vault with new tokens bidirectionally.
