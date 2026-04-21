@@ -1,3 +1,4 @@
+import { duplicateSocialAccountLinkedMessage } from '@/lib/duplicate-social-account-message';
 import { createOAuthClient, getChannelInfo } from '@/lib/youtube-api';
 import { createClient } from '@/utils/supabase/server';
 import { cookies } from 'next/headers';
@@ -149,7 +150,10 @@ export async function GET(request: NextRequest) {
 
         const errorUrl = new URL('/dashboard/settings', request.url);
         errorUrl.searchParams.set('error', 'duplicate_account');
-        errorUrl.searchParams.set('message', 'This YouTube account is already linked to another Game of Creators account.');
+        errorUrl.searchParams.set(
+            'message',
+            await duplicateSocialAccountLinkedMessage(duplicateAccount.id, 'YouTube'),
+        );
         response = NextResponse.redirect(errorUrl);
         response.cookies.set({ name: 'youtube_oauth_state', value: '', maxAge: 0, path: '/' });
         return response;

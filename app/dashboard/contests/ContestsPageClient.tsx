@@ -76,7 +76,7 @@ export function ContestsPageClient({
     setIsSigningOutForCreator(true);
     try {
       const supabase = createClient();
-      await supabase.auth.signOut();
+      await supabase.auth.signOut({ scope: "local" });
       localStorage.setItem("signupRole", "creator");
       router.push("/auth/signup");
       router.refresh();

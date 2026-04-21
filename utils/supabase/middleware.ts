@@ -66,7 +66,9 @@ export async function updateSession(request: NextRequest): Promise<UpdateSession
         user = data.user
     } catch (err) {
         if (isRefreshTokenError(err)) {
-            await supabase.auth.signOut()
+            // Default signOut() is scope "global" and revokes every device — use local
+            // so a bad/stale cookie on this browser does not log everyone else out.
+            await supabase.auth.signOut({ scope: 'local' })
             user = null
         } else {
             throw err

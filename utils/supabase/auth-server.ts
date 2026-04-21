@@ -20,7 +20,7 @@ export type GetUserSafeResult = { data: { user: User | null } }
 /**
  * Server-side safe getUser: calls supabase.auth.getUser() and on "refresh token not found",
  * "auth session missing", or similar no-session errors returns { data: { user: null } } instead of throwing.
- * When such an error occurs, signs out to clear invalid auth cookies so the next request won't retry with a bad token.
+ * When such an error occurs, signs out with scope "local" to clear invalid auth cookies on this request only (does not revoke other devices).
  * Use this in Server Components and middleware to avoid unhandled auth errors and 500s.
  */
 export async function getUserSafe(
@@ -29,14 +29,14 @@ export async function getUserSafe(
   try {
     const { data, error } = await supabase.auth.getUser()
     if (error && isRefreshTokenError(error)) {
-      await supabase.auth.signOut()
+      await supabase.auth.signOut({ scope: 'local' })
       return { data: { user: null } }
     }
     if (error) throw error
     return { data: { user: data.user ?? null } }
   } catch (err) {
     if (isRefreshTokenError(err)) {
-      await supabase.auth.signOut()
+      await supabase.auth.signOut({ scope: 'local' })
       return { data: { user: null } }
     }
     throw err
