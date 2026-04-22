@@ -1,8 +1,13 @@
-import { upsertBidirectionalVaultLinks } from "@/lib/account-switch-vault";
 import { createClient } from "@/utils/supabase/server";
 import { createAdminClient } from "@/utils/supabase/admin";
 import { NextResponse } from "next/server";
 import { createServerClient } from "@supabase/ssr";
+
+function isUuid(value: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+    value,
+  );
+}
 
 export async function POST(req: Request) {
   try {
@@ -46,7 +51,10 @@ export async function POST(req: Request) {
       }, { status: 400 });
     }
 
-    const { email, password } = await req.json();
+    const body = await req.json().catch(() => ({}));
+    const email =
+      typeof body?.email === "string" ? body.email.trim().toLowerCase() : "";
+    const password = typeof body?.password === "string" ? body.password : "";
 
     if (!email || !password) {
       return NextResponse.json({ error: "Email and password are required" }, { status: 400 });
@@ -102,6 +110,9 @@ export async function POST(req: Request) {
 
     const targetUserId = authData.user.id;
     const targetRefreshToken = authData.session.refresh_token;
+    if (!isUuid(targetUserId)) {
+      return NextResponse.json({ error: "Invalid target account" }, { status: 400 });
+    }
 
     if (targetUserId === currentUser.id) {
       return NextResponse.json({ error: "This account is already active" }, { status: 400 });
@@ -121,17 +132,33 @@ export async function POST(req: Request) {
       }, { status: 403 });
     }
 
-    const vaultResult = await upsertBidirectionalVaultLinks(
-      adminSupabase,
-      currentUser.id,
-      targetUserId,
-      currentSession.refresh_token,
-      targetRefreshToken,
-      { linkedTargetEmail: authData.user.email ?? null },
+    const { encrypt } = await import("@/lib/encryption");
+    const { data: linkResult, error: linkErr } = await adminSupabase.rpc(
+      "account_switch_link_shared_pool",
+      {
+        p_owner_user_id: currentUser.id,
+        p_target_user_id: targetUserId,
+        p_owner_encrypted_refresh: encrypt(currentSession.refresh_token),
+        p_target_encrypted_refresh: encrypt(targetRefreshToken),
+        p_target_email_hint: authData.user.email ?? null,
+      },
     );
 
-    if (!vaultResult.ok) {
-      return NextResponse.json({ error: vaultResult.error }, { status: 500 });
+    if (linkErr) {
+      console.error("[account-switch/add] link rpc:", linkErr);
+      return NextResponse.json({ error: "Failed to store session link" }, { status: 500 });
+    }
+    const rpcOk = !!(linkResult as { ok?: boolean } | null)?.ok;
+    if (!rpcOk) {
+      const rpcError =
+        (linkResult as { error?: string } | null)?.error ||
+        "Failed to store session link";
+      const status =
+        rpcError.includes("Maximum account limit") ||
+        rpcError.includes("maximum limit")
+          ? 400
+          : 500;
+      return NextResponse.json({ error: rpcError }, { status });
     }
 
     // Audit Log

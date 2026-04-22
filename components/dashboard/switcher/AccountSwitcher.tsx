@@ -512,6 +512,15 @@ export function AccountSwitcher({
               Choose an account to switch to, or link another creator profile.
             </DialogDescription>
           </DialogHeader>
+          <p
+            className={cn(
+              "text-xs text-center -mt-1",
+              isDark ? "text-slate-400" : "text-slate-600",
+            )}
+          >
+            Linked accounts are shared across your switcher pool, so accounts
+            added from one profile appear on other linked profiles too.
+          </p>
 
           {isAccountsRefreshing && (
             <div className="flex justify-center py-1">
@@ -849,12 +858,6 @@ export function AccountSwitcher({
               ? "border-slate-800 bg-[#07031E] text-white"
               : "border-slate-200 bg-white",
           )}
-          onPointerDownOutside={(e) => {
-            if (isUnlinking) e.preventDefault();
-          }}
-          onEscapeKeyDown={(e) => {
-            if (isUnlinking) e.preventDefault();
-          }}
         >
           <AlertDialogHeader>
             <AlertDialogTitle className="text-left text-lg">

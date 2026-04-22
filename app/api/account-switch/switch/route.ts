@@ -4,6 +4,12 @@ import { decrypt, encrypt } from "@/lib/encryption";
 import { NextResponse } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 
+function isUuid(value: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+    value,
+  );
+}
+
 export async function POST(req: Request) {
   try {
     const supabase = await createClient();
@@ -37,13 +43,24 @@ export async function POST(req: Request) {
       }, { status: 403 });
     }
 
-    const { target_user_id } = await req.json();
+    const body = await req.json().catch(() => ({}));
+    const target_user_id =
+      typeof body?.target_user_id === "string" ? body.target_user_id : "";
 
     if (!target_user_id) {
       return NextResponse.json(
         {
           error: "Target user ID is required",
           code: "MISSING_TARGET",
+        },
+        { status: 400 },
+      );
+    }
+    if (!isUuid(target_user_id)) {
+      return NextResponse.json(
+        {
+          error: "Target user ID is invalid",
+          code: "INVALID_TARGET",
         },
         { status: 400 },
       );
@@ -134,101 +151,20 @@ export async function POST(req: Request) {
       );
     }
 
-    // 5. Update the vault with new tokens bidirectionally.
-    // We snapshot existing rows first so we can rollback on partial failures.
+    // 5. Propagate fresh encrypted refresh tokens across the shared pool.
     const encryptedOldToken = encrypt(currentSession.refresh_token);
     const newEncryptedToken = encrypt(refreshData.session.refresh_token);
-    const [{ data: previousForward }, { data: previousReverse }] =
-      await Promise.all([
-        adminSupabase
-          .from("user_sessions_vault")
-          .select("owner_user_id, target_user_id, encrypted_refresh_token, updated_at")
-          .eq("owner_user_id", currentUser.id)
-          .eq("target_user_id", target_user_id)
-          .maybeSingle(),
-        adminSupabase
-          .from("user_sessions_vault")
-          .select("owner_user_id, target_user_id, encrypted_refresh_token, updated_at")
-          .eq("owner_user_id", target_user_id)
-          .eq("target_user_id", currentUser.id)
-          .maybeSingle(),
-      ]);
-
-    const rollbackVaultPair = async () => {
-      const restoreOne = async (
-        ownerUserId: string,
-        targetUserIdToRestore: string,
-        previous:
-          | {
-              owner_user_id: string;
-              target_user_id: string;
-              encrypted_refresh_token: string;
-              updated_at: string | null;
-            }
-          | null,
-      ) => {
-        if (previous) {
-          await adminSupabase.from("user_sessions_vault").upsert(
-            {
-              owner_user_id: previous.owner_user_id,
-              target_user_id: previous.target_user_id,
-              encrypted_refresh_token: previous.encrypted_refresh_token,
-              updated_at: previous.updated_at ?? new Date().toISOString(),
-            },
-            { onConflict: "owner_user_id,target_user_id" },
-          );
-          return;
-        }
-        await adminSupabase
-          .from("user_sessions_vault")
-          .delete()
-          .eq("owner_user_id", ownerUserId)
-          .eq("target_user_id", targetUserIdToRestore);
-      };
-
-      await restoreOne(currentUser.id, target_user_id, previousForward ?? null);
-      await restoreOne(target_user_id, currentUser.id, previousReverse ?? null);
-    };
-
-    const now = new Date().toISOString();
-    // Cross-link: User B now "owns" a link to User A
-    const { error: reverseUpsertError } = await adminSupabase
-      .from("user_sessions_vault")
-      .upsert(
-        {
-          owner_user_id: target_user_id,
-          target_user_id: currentUser.id,
-          encrypted_refresh_token: encryptedOldToken,
-          updated_at: now,
-        },
-        { onConflict: "owner_user_id,target_user_id" },
-      );
-    if (reverseUpsertError) {
-      await rollbackVaultPair().catch((rollbackErr) =>
-        console.error("Switch rollback failed after reverse upsert error:", rollbackErr),
-      );
-      return NextResponse.json(
-        { error: "Failed to update account switch links" },
-        { status: 500 },
-      );
-    }
-
-    // Update existing link: User A "owns" a link to User B using the NEW token
-    const { error: forwardUpsertError } = await adminSupabase
-      .from("user_sessions_vault")
-      .upsert(
-        {
-          owner_user_id: currentUser.id,
-          target_user_id: target_user_id,
-          encrypted_refresh_token: newEncryptedToken,
-          updated_at: now,
-        },
-        { onConflict: "owner_user_id,target_user_id" },
-      );
-    if (forwardUpsertError) {
-      await rollbackVaultPair().catch((rollbackErr) =>
-        console.error("Switch rollback failed after forward upsert error:", rollbackErr),
-      );
+    const { data: propagateResult, error: propagateErr } = await adminSupabase.rpc(
+      "account_switch_propagate_refresh_tokens",
+      {
+        p_current_user_id: currentUser.id,
+        p_target_user_id: target_user_id,
+        p_current_encrypted_refresh: encryptedOldToken,
+        p_target_encrypted_refresh: newEncryptedToken,
+      },
+    );
+    if (propagateErr || !(propagateResult as { ok?: boolean } | null)?.ok) {
+      console.error("Account Switch: token propagation failed:", propagateErr);
       return NextResponse.json(
         { error: "Failed to update account switch links" },
         { status: 500 },
@@ -241,9 +177,6 @@ export async function POST(req: Request) {
       refresh_token: refreshData.session.refresh_token,
     });
     if (setSessionError) {
-      await rollbackVaultPair().catch((rollbackErr) =>
-        console.error("Switch rollback failed after setSession error:", rollbackErr),
-      );
       return NextResponse.json(
         { error: "Failed to switch session. Please try again." },
         { status: 500 },

@@ -50,17 +50,16 @@ export async function POST() {
       return NextResponse.json({ error: "Failed to record session" }, { status: 500 });
     }
 
-    const { data: rows, error: listErr } = await admin
+    const { data: staleRows, error: staleErr } = await admin
       .from("user_device_sessions")
-      .select("id, last_seen_at")
+      .select("id")
       .eq("user_id", user.id)
-      .order("last_seen_at", { ascending: false });
+      .order("last_seen_at", { ascending: false })
+      .range(3, 200);
 
-    if (!listErr && rows && rows.length > 3) {
-      const toRemove = rows.slice(3);
-      for (const row of toRemove) {
-        await admin.from("user_device_sessions").delete().eq("id", row.id);
-      }
+    if (!staleErr && staleRows && staleRows.length > 0) {
+      const staleIds = staleRows.map((row) => row.id);
+      await admin.from("user_device_sessions").delete().in("id", staleIds);
     }
 
     return NextResponse.json({ ok: true });
