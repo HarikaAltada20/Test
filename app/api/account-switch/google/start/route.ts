@@ -52,6 +52,7 @@ export async function GET(request: Request) {
       .lt("expires_at", new Date().toISOString());
 
     const pendingId = crypto.randomUUID();
+    const pendingState = crypto.randomUUID();
     const expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString();
 
     const { error: insErr } = await admin
@@ -74,7 +75,9 @@ export async function GET(request: Request) {
       await supabase.auth.signInWithOAuth({
         provider: "google",
         options: {
-          redirectTo: `${origin}/api/account-switch/google/callback`,
+          redirectTo: `${origin}/api/account-switch/google/callback?as_state=${encodeURIComponent(
+            pendingState,
+          )}`,
           queryParams: {
             prompt: "select_account",
           },
@@ -91,6 +94,13 @@ export async function GET(request: Request) {
 
     const res = NextResponse.redirect(oauthData.url);
     res.cookies.set("account_switch_pending_id", pendingId, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "lax",
+      maxAge: 600,
+      path: "/",
+    });
+    res.cookies.set("account_switch_pending_state", pendingState, {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
       sameSite: "lax",

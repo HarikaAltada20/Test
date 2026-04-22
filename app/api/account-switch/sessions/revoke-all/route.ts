@@ -14,9 +14,6 @@ export async function POST() {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const admin = createAdminClient();
-    await admin.from("user_device_sessions").delete().eq("user_id", user.id);
-
     const { error } = await supabase.auth.signOut({ scope: "global" });
 
     if (error) {
@@ -25,6 +22,16 @@ export async function POST() {
         { error: error.message || "Could not sign out" },
         { status: 400 },
       );
+    }
+
+    const admin = createAdminClient();
+    const { error: cleanupErr } = await admin
+      .from("user_device_sessions")
+      .delete()
+      .eq("user_id", user.id);
+    if (cleanupErr) {
+      // Sign-out succeeded; retain success and just log cleanup miss.
+      console.error("[sessions/revoke-all] cleanup:", cleanupErr);
     }
 
     return NextResponse.json({ ok: true });

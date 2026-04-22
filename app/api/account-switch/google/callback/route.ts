@@ -1,7 +1,6 @@
-import { upsertBidirectionalVaultLinks } from "@/lib/account-switch-vault";
 import { createClient } from "@/utils/supabase/server";
 import { createAdminClient } from "@/utils/supabase/admin";
-import { decrypt } from "@/lib/encryption";
+import { decrypt, encrypt } from "@/lib/encryption";
 import { NextRequest, NextResponse } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 
@@ -29,8 +28,15 @@ export async function GET(request: NextRequest) {
     return NextResponse.redirect(url);
   };
 
-  const clearPendingCookie = (res: NextResponse) => {
+  const clearPendingCookies = (res: NextResponse) => {
     res.cookies.set("account_switch_pending_id", "", {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "lax",
+      maxAge: 0,
+      path: "/",
+    });
+    res.cookies.set("account_switch_pending_state", "", {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
       sameSite: "lax",
@@ -43,37 +49,44 @@ export async function GET(request: NextRequest) {
   const err = searchParams.get("error");
   if (err) {
     const res = redirectErr("account_link_oauth_denied");
-    clearPendingCookie(res);
+    clearPendingCookies(res);
     return res;
   }
 
   const code = searchParams.get("code");
   if (!code) {
     const res = redirectErr("account_link_missing_code");
-    clearPendingCookie(res);
+    clearPendingCookies(res);
     return res;
   }
 
   const pendingId = request.cookies.get("account_switch_pending_id")?.value;
-  if (!pendingId) {
+  const expectedState = request.cookies.get("account_switch_pending_state")?.value;
+  const callbackState = searchParams.get("as_state");
+  if (!pendingId || !expectedState || !callbackState || callbackState !== expectedState) {
     const res = redirectErr("account_link_missing_state");
-    clearPendingCookie(res);
+    clearPendingCookies(res);
     return res;
   }
 
   const admin = createAdminClient();
+  let exchangedSessionEstablished = false;
+  let ownerRefreshPlain: string | null = null;
+  let supabase: Awaited<ReturnType<typeof createClient>> | null = null;
 
   try {
-    const supabase = await createClient();
+    supabase = await createClient();
+    const appSupabase = supabase;
     const { data: exchanged, error: exchangeError } =
-      await supabase.auth.exchangeCodeForSession(code);
+      await appSupabase.auth.exchangeCodeForSession(code);
 
     if (exchangeError || !exchanged.session?.refresh_token) {
       console.error("[google/callback] exchange:", exchangeError);
       const res = redirectErr("account_link_exchange_failed");
-      clearPendingCookie(res);
+      clearPendingCookies(res);
       return res;
     }
+    exchangedSessionEstablished = true;
 
     const targetSession = exchanged.session;
     const targetUserId = targetSession.user.id;
@@ -87,45 +100,66 @@ export async function GET(request: NextRequest) {
       .maybeSingle();
 
     if (pendErr || !pending) {
-      await supabase.auth.signOut({ scope: "local" });
+      await appSupabase.auth.signOut({ scope: "local" });
       const res = redirectErr("account_link_pending_missing");
-      clearPendingCookie(res);
-      return res;
-    }
-
-    if (new Date(pending.expires_at as string).getTime() < Date.now()) {
-      await admin.from("account_switch_oauth_pending").delete().eq("id", pendingId);
-      const res = redirectErr("account_link_pending_expired");
-      clearPendingCookie(res);
+      clearPendingCookies(res);
       return res;
     }
 
     const ownerUserId = pending.owner_user_id as string;
-    let ownerRefreshPlain: string;
     try {
       ownerRefreshPlain = decrypt(pending.encrypted_owner_refresh as string);
     } catch (e) {
       console.error("[google/callback] decrypt owner refresh:", e);
+      await appSupabase.auth.signOut({ scope: "local" });
       const res = redirectErr("account_link_decrypt_failed");
-      clearPendingCookie(res);
+      clearPendingCookies(res);
+      await admin.from("account_switch_oauth_pending").delete().eq("id", pendingId);
+      return res;
+    }
+
+    const restoreOwnerSession = async () => {
+      if (!ownerRefreshPlain) return false;
+      const noop = noopCookieClient();
+      const { data: restored, error: refreshOwnerErr } =
+        await noop.auth.refreshSession({
+          refresh_token: ownerRefreshPlain,
+        });
+      if (refreshOwnerErr || !restored.session) {
+        console.error("[google/callback] restore owner session:", refreshOwnerErr);
+        return false;
+      }
+      const { error: setErr } = await appSupabase.auth.setSession({
+        access_token: restored.session.access_token,
+        refresh_token: restored.session.refresh_token,
+      });
+      if (setErr) {
+        console.error("[google/callback] setSession owner:", setErr);
+        return false;
+      }
+      return true;
+    };
+
+    if (new Date(pending.expires_at as string).getTime() < Date.now()) {
+      await admin.from("account_switch_oauth_pending").delete().eq("id", pendingId);
+      const restored = await restoreOwnerSession();
+      if (!restored) {
+        await appSupabase.auth.signOut({ scope: "local" });
+      }
+      const res = redirectErr("account_link_pending_expired");
+      clearPendingCookies(res);
       return res;
     }
 
     await admin.from("account_switch_oauth_pending").delete().eq("id", pendingId);
 
     if (targetUserId === ownerUserId) {
-      const noop = noopCookieClient();
-      const { data: restored } = await noop.auth.refreshSession({
-        refresh_token: ownerRefreshPlain,
-      });
-      if (restored.session) {
-        await supabase.auth.setSession({
-          access_token: restored.session.access_token,
-          refresh_token: restored.session.refresh_token,
-        });
+      const restored = await restoreOwnerSession();
+      if (!restored) {
+        await appSupabase.auth.signOut({ scope: "local" });
       }
       const res = redirectErr("account_link_same_account");
-      clearPendingCookie(res);
+      clearPendingCookies(res);
       return res;
     }
 
@@ -136,18 +170,12 @@ export async function GET(request: NextRequest) {
       .single();
 
     if (targetRow?.user_type !== "creator") {
-      const noop = noopCookieClient();
-      const { data: restored } = await noop.auth.refreshSession({
-        refresh_token: ownerRefreshPlain,
-      });
-      if (restored.session) {
-        await supabase.auth.setSession({
-          access_token: restored.session.access_token,
-          refresh_token: restored.session.refresh_token,
-        });
+      const restored = await restoreOwnerSession();
+      if (!restored) {
+        await appSupabase.auth.signOut({ scope: "local" });
       }
       const res = redirectErr("account_link_target_not_creator");
-      clearPendingCookie(res);
+      clearPendingCookies(res);
       return res;
     }
 
@@ -157,43 +185,43 @@ export async function GET(request: NextRequest) {
       .eq("owner_user_id", ownerUserId);
 
     if (!countErr && (vaultCount ?? 0) >= 5) {
-      const noop = noopCookieClient();
-      const { data: restored } = await noop.auth.refreshSession({
-        refresh_token: ownerRefreshPlain,
-      });
-      if (restored.session) {
-        await supabase.auth.setSession({
-          access_token: restored.session.access_token,
-          refresh_token: restored.session.refresh_token,
-        });
+      const restored = await restoreOwnerSession();
+      if (!restored) {
+        await appSupabase.auth.signOut({ scope: "local" });
       }
       const res = redirectErr("account_link_max_accounts");
-      clearPendingCookie(res);
+      clearPendingCookies(res);
       return res;
     }
 
-    const vaultResult = await upsertBidirectionalVaultLinks(
-      admin,
-      ownerUserId,
-      targetUserId,
-      ownerRefreshPlain,
-      targetRefresh,
-      { linkedTargetEmail: targetEmail },
+    const { data: linkResult, error: linkErr } = await admin.rpc(
+      "account_switch_link_shared_pool",
+      {
+        p_owner_user_id: ownerUserId,
+        p_target_user_id: targetUserId,
+        p_owner_encrypted_refresh: encrypt(ownerRefreshPlain!),
+        p_target_encrypted_refresh: encrypt(targetRefresh),
+        p_target_email_hint: targetEmail,
+      },
     );
 
-    if (!vaultResult.ok) {
-      const noop = noopCookieClient();
-      const { data: restored } = await noop.auth.refreshSession({
-        refresh_token: ownerRefreshPlain,
-      });
-      if (restored.session) {
-        await supabase.auth.setSession({
-          access_token: restored.session.access_token,
-          refresh_token: restored.session.refresh_token,
-        });
+    if (linkErr) {
+      console.error("[google/callback] link rpc:", linkErr);
+      const restored = await restoreOwnerSession();
+      if (!restored) {
+        await appSupabase.auth.signOut({ scope: "local" });
       }
       const res = redirectErr("account_link_vault_failed");
-      clearPendingCookie(res);
+      clearPendingCookies(res);
+      return res;
+    }
+    if (!(linkResult as { ok?: boolean } | null)?.ok) {
+      const restored = await restoreOwnerSession();
+      if (!restored) {
+        await appSupabase.auth.signOut({ scope: "local" });
+      }
+      const res = redirectErr("account_link_vault_failed");
+      clearPendingCookies(res);
       return res;
     }
 
@@ -203,40 +231,41 @@ export async function GET(request: NextRequest) {
       p_user_id: ownerUserId,
     });
 
-    const noop = noopCookieClient();
-    const { data: restored, error: refreshOwnerErr } =
-      await noop.auth.refreshSession({
-        refresh_token: ownerRefreshPlain,
-      });
-
-    if (refreshOwnerErr || !restored.session) {
-      console.error("[google/callback] restore owner session:", refreshOwnerErr);
+    const restored = await restoreOwnerSession();
+    if (!restored) {
+      await appSupabase.auth.signOut({ scope: "local" });
       const res = redirectErr("account_link_restore_owner_failed");
-      clearPendingCookie(res);
-      return res;
-    }
-
-    const { error: setErr } = await supabase.auth.setSession({
-      access_token: restored.session.access_token,
-      refresh_token: restored.session.refresh_token,
-    });
-
-    if (setErr) {
-      console.error("[google/callback] setSession owner:", setErr);
-      const res = redirectErr("account_link_set_session_failed");
-      clearPendingCookie(res);
+      clearPendingCookies(res);
       return res;
     }
 
     const okUrl = new URL("/dashboard/settings", origin);
     okUrl.searchParams.set("success", "account_linked_google");
     const res = NextResponse.redirect(okUrl);
-    clearPendingCookie(res);
+    clearPendingCookies(res);
     return res;
   } catch (e) {
     console.error("[google/callback]", e);
+    if (supabase && exchangedSessionEstablished) {
+      if (ownerRefreshPlain) {
+        const noop = noopCookieClient();
+        const { data: restored } = await noop.auth.refreshSession({
+          refresh_token: ownerRefreshPlain,
+        });
+        if (restored.session) {
+          await supabase.auth.setSession({
+            access_token: restored.session.access_token,
+            refresh_token: restored.session.refresh_token,
+          });
+        } else {
+          await supabase.auth.signOut({ scope: "local" });
+        }
+      } else {
+        await supabase.auth.signOut({ scope: "local" });
+      }
+    }
     const res = redirectErr("account_link_unexpected");
-    clearPendingCookie(res);
+    clearPendingCookies(res);
     return res;
   }
 }
