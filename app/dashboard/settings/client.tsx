@@ -49,6 +49,7 @@ import {
 } from "@/components/ui/dialog";
 import { useEffect, useState, useCallback, useRef } from "react";
 import { AccountSwitcher } from "@/components/dashboard/switcher/AccountSwitcher";
+import { DeviceSessionsPanel } from "@/components/dashboard/switcher/DeviceSessionsPanel";
 import { FaXTwitter } from "react-icons/fa6";
 import { FaDiscord, FaWhatsapp, FaLinkedin } from "react-icons/fa";
 import { SiInstagram, SiYoutube, SiTiktok } from "react-icons/si";
@@ -363,6 +364,17 @@ export default function SettingsPage({
       newUrl.searchParams.delete("error");
       newUrl.searchParams.delete("message");
       router.replace(newUrl.pathname);
+    } else if (error && String(error).startsWith("account_link_")) {
+      toast({
+        title: "Could not link account",
+        description:
+          "Google account linking did not finish. Try again, or use email and password in the switcher.",
+        variant: "destructive",
+        duration: 10000,
+      });
+      const newUrl = new URL(window.location.href);
+      newUrl.searchParams.delete("error");
+      router.replace(newUrl.pathname);
     }
 
     // Handle success parameters
@@ -410,6 +422,19 @@ export default function SettingsPage({
         duration: 5000,
       });
 
+      const newUrl = new URL(window.location.href);
+      newUrl.searchParams.delete("success");
+      router.replace(newUrl.pathname);
+    }
+
+    if (success === "account_linked_google") {
+      toast({
+        title: "Account linked",
+        description:
+          "The Google account was added to your switcher. Open Switch Account to use it.",
+        variant: "default",
+        duration: 6000,
+      });
       const newUrl = new URL(window.location.href);
       newUrl.searchParams.delete("success");
       router.replace(newUrl.pathname);
@@ -4185,12 +4210,20 @@ export default function SettingsPage({
         </CardContent>
       </Card> */}
  
+      {userType === "creator" && (
+        <div className="mb-6">
+          <DeviceSessionsPanel isDark={isDark} />
+        </div>
+      )}
+
       {/* Account Switcher Component - Hidden but functional - Only for Creators */}
       {userType === "creator" && (
         <div ref={accountSwitcherRef} className="hidden">
           <AccountSwitcher
             currentUserId={user?.id || ""}
             currentUsername={username || user?.user_metadata?.username || user?.email?.split("@")[0] || "User"}
+            currentUserEmail={user?.email ?? null}
+            currentUserJoinedAt={user?.created_at ?? null}
             isDark={isDark}
             userType={userType}
           />

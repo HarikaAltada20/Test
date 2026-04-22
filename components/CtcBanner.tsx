@@ -123,7 +123,7 @@ export default function CtcBanner() {
   const handleSignOutAndContinueCreator = async () => {
     setIsSigningOut(true);
     try {
-      await supabase.auth.signOut();
+      await supabase.auth.signOut({ scope: "local" });
       localStorage.setItem("signupRole", "creator");
       setShowAdvertiserModal(false);
       router.push("/auth/signup");
@@ -143,7 +143,7 @@ export default function CtcBanner() {
   const handleSignOutAndContinueBrand = async () => {
     setIsSigningOut(true);
     try {
-      await supabase.auth.signOut();
+      await supabase.auth.signOut({ scope: "local" });
       localStorage.setItem("signupRole", "brand");
       setShowCreatorModal(false);
       router.push("/auth/signup");

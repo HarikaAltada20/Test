@@ -2314,6 +2314,8 @@ function DashboardContent({
                               <AccountSwitcher
                                 currentUserId={user?.id || ""}
                                 currentUsername={username}
+                                currentUserEmail={user?.email ?? null}
+                                currentUserJoinedAt={user?.created_at ?? null}
                                 isDark={currentMode === "dark"}
                                 userType={userRole}
                               />
