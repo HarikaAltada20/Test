@@ -579,9 +579,13 @@ export default function EditContestPage({
   >("");
   const [milestoneBonusTopViewsPayout, setMilestoneBonusTopViewsPayout] =
     useState<string>("");
+  const [milestoneBonusTopViewsMinReels, setMilestoneBonusTopViewsMinReels] =
+    useState<number | "">("");
   const [milestoneBonusTopReelsMin, setMilestoneBonusTopReelsMin] = useState<
     number | ""
   >("");
+  const [milestoneBonusTopReelsMinViews, setMilestoneBonusTopReelsMinViews] =
+    useState<number | "">("");
   const [milestoneBonusTopReelsPayout, setMilestoneBonusTopReelsPayout] =
     useState<string>("");
   const [bonusEnabled, setBonusEnabled] = useState(false);
@@ -619,10 +623,12 @@ export default function EditContestPage({
 
     if (
       milestoneBonusTopViewsMin !== "" &&
+      milestoneBonusTopViewsMinReels !== "" &&
       milestoneBonusTopViewsPayout !== ""
     ) {
       bonusPayload.most_verified_views = {
         min_total_views: Number(milestoneBonusTopViewsMin),
+        min_verified_reels: Number(milestoneBonusTopViewsMinReels),
         payout_cents: Math.round(
           parseFloat(String(milestoneBonusTopViewsPayout)) * 100
         ),
@@ -630,10 +636,12 @@ export default function EditContestPage({
     }
 
     if (
+      milestoneBonusTopReelsMinViews !== "" &&
       milestoneBonusTopReelsMin !== "" &&
       milestoneBonusTopReelsPayout !== ""
     ) {
       bonusPayload.most_verified_reels = {
+        min_total_views: Number(milestoneBonusTopReelsMinViews),
         min_verified_reels: Number(milestoneBonusTopReelsMin),
         payout_cents: Math.round(
           parseFloat(String(milestoneBonusTopReelsPayout)) * 100
@@ -1176,6 +1184,9 @@ export default function EditContestPage({
                   if (typeof mv.min_total_views === "number") {
                     setMilestoneBonusTopViewsMin(mv.min_total_views);
                   }
+                  if (typeof mv.min_verified_reels === "number") {
+                    setMilestoneBonusTopViewsMinReels(mv.min_verified_reels);
+                  }
                   if (typeof mv.payout_cents === "number") {
                     setMilestoneBonusTopViewsPayout(
                       (mv.payout_cents / 100).toString()
@@ -1184,6 +1195,9 @@ export default function EditContestPage({
                 }
                 if ((bonus as any).most_verified_reels) {
                   const mr = (bonus as any).most_verified_reels;
+                  if (typeof mr.min_total_views === "number") {
+                    setMilestoneBonusTopReelsMinViews(mr.min_total_views);
+                  }
                   if (typeof mr.min_verified_reels === "number") {
                     setMilestoneBonusTopReelsMin(mr.min_verified_reels);
                   }
@@ -1196,7 +1210,9 @@ export default function EditContestPage({
               } else {
                 setMilestoneBonusEnabled(false);
                 setMilestoneBonusTopViewsMin("");
+                setMilestoneBonusTopViewsMinReels("");
                 setMilestoneBonusTopViewsPayout("");
+                setMilestoneBonusTopReelsMinViews("");
                 setMilestoneBonusTopReelsMin("");
                 setMilestoneBonusTopReelsPayout("");
               }
@@ -4252,18 +4268,46 @@ export default function EditContestPage({
       }
 
       if (milestoneBonusEnabled) {
-        const vMinFilled = milestoneBonusTopViewsMin !== "";
+        const vMinViewsFilled = milestoneBonusTopViewsMin !== "";
+        const vMinReelsFilled = milestoneBonusTopViewsMinReels !== "";
         const vPayFilled = milestoneBonusTopViewsPayout !== "";
+        const rMinViewsFilled = milestoneBonusTopReelsMinViews !== "";
         const rMinFilled = milestoneBonusTopReelsMin !== "";
         const rPayFilled = milestoneBonusTopReelsPayout !== "";
+        const viewsTrackFilledCount = [
+          vMinViewsFilled,
+          vMinReelsFilled,
+          vPayFilled,
+        ].filter(Boolean).length;
+        const reelsTrackFilledCount = [
+          rMinViewsFilled,
+          rMinFilled,
+          rPayFilled,
+        ].filter(Boolean).length;
 
-        if (vMinFilled !== vPayFilled) {
-          return "Bonus (most verified views): fill both minimum total views and bonus payout, or clear both.";
+        if (viewsTrackFilledCount > 0 && viewsTrackFilledCount < 3) {
+          return "Bonus (most verified views): fill minimum total views, minimum verified reels, and bonus payout, or clear all three.";
         }
-        if (rMinFilled !== rPayFilled) {
-          return "Bonus (most verified reels): fill both minimum verified reels and bonus payout, or clear both.";
+        if (reelsTrackFilledCount > 0 && reelsTrackFilledCount < 3) {
+          return "Bonus (most verified reels): fill minimum verified reels, minimum total views, and bonus payout, or clear all three.";
         }
-        if (!vMinFilled && !rMinFilled) {
+        const viewsOk =
+          vMinViewsFilled &&
+          vMinReelsFilled &&
+          vPayFilled &&
+          Number(milestoneBonusTopViewsMin) > 0 &&
+          Number(milestoneBonusTopViewsMinReels) >= 1 &&
+          Math.round(parseFloat(String(milestoneBonusTopViewsPayout)) * 100) >=
+            MIN_MILESTONE_PAYOUT_CENTS;
+        const reelsOk =
+          rMinViewsFilled &&
+          rMinFilled &&
+          rPayFilled &&
+          Number(milestoneBonusTopReelsMinViews) > 0 &&
+          Number(milestoneBonusTopReelsMin) >= 1 &&
+          Math.round(parseFloat(String(milestoneBonusTopReelsPayout)) * 100) >=
+            MIN_MILESTONE_PAYOUT_CENTS;
+        if (!viewsOk && !reelsOk) {
           return "Enable at least one creator bonus category, or disable creator bonuses.";
         }
       }
@@ -10752,9 +10796,12 @@ export default function EditContestPage({
                       Optional extras for top performers. Configure at least one
                       category when bonus is enabled.
                     </p>
-                    <div className="grid gap-3 md:grid-cols-2">
+                    <h4 className="text-sm font-semibold">
+                      Most Verified Views 
+                    </h4>
+                    <div className="grid gap-3 md:grid-cols-3">
                       <div className="space-y-2">
-                        <Label>Most verified views — min total views</Label>
+                        <Label> Minimum total verified views</Label>
                         <Input
                           type="number"
                           min={1}
@@ -10773,7 +10820,26 @@ export default function EditContestPage({
                         />
                       </div>
                       <div className="space-y-2">
-                        <Label>Most verified views — bonus (USD)</Label>
+                        <Label> Minimum verified reels</Label>
+                        <Input
+                          type="number"
+                          min={1}
+                          value={milestoneBonusTopViewsMinReels}
+                          onChange={(e) =>
+                            setMilestoneBonusTopViewsMinReels(
+                              e.target.value === ""
+                                ? ""
+                                : parseInt(e.target.value, 10)
+                            )
+                          }
+                          className={cn(
+                            isDark ? "bg-[#180438] border border-gray-600" : ""
+                          )}
+                          placeholder="e.g. 5"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Winner bonus </Label>
                         <Input
                           type="number"
                           step="0.01"
@@ -10788,8 +10854,32 @@ export default function EditContestPage({
                           placeholder="e.g. 100"
                         />
                       </div>
+                    </div>
+                    <h4 className="text-sm font-semibold">
+                      Most Verified Reels 
+                    </h4>
+                    <div className="grid gap-3 md:grid-cols-3">
                       <div className="space-y-2">
-                        <Label>Most verified reels — min verified reels</Label>
+                        <Label> Minimum total verified views</Label>
+                        <Input
+                          type="number"
+                          min={1}
+                          value={milestoneBonusTopReelsMinViews}
+                          onChange={(e) =>
+                            setMilestoneBonusTopReelsMinViews(
+                              e.target.value === ""
+                                ? ""
+                                : parseInt(e.target.value, 10)
+                            )
+                          }
+                          className={cn(
+                            isDark ? "bg-[#180438] border border-gray-600" : ""
+                          )}
+                          placeholder="e.g. 200000"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Minimum verified reels</Label>
                         <Input
                           type="number"
                           min={1}
@@ -10808,7 +10898,7 @@ export default function EditContestPage({
                         />
                       </div>
                       <div className="space-y-2">
-                        <Label>Most verified reels — bonus (USD)</Label>
+                        <Label>Winner bonus </Label>
                         <Input
                           type="number"
                           step="0.01"
@@ -11905,104 +11995,112 @@ export default function EditContestPage({
                 )}
               </div>
 
-              {/* Creator earning opportunities are not shown for milestone contests */}
-              {contestType !== "milestone" && (
+              {/* Bonus configuration */}
+              {true && (
                 <>
-                  {/* Flat Fee Bonus */}
-                  <div className="space-y-2">
-                    <Label htmlFor="flat-fee-bonus">
-                      Flat Fee Bonus Per Verified Submission (Optional)
-                    </Label>
-                    <Input
-                      id="flat-fee-bonus"
-                      type="number"
-                      step="0.01"
-                      min="0"
-                      value={flatFeeBonus}
-                      className={cn(
-                        isDark
-                          ? "bg-[#180438] border border-gray-600 text-white"
-                          : "bg-white text-black"
-                      )}
-                      onChange={(e) => setFlatFeeBonus(e.target.value)}
-                      placeholder="e.g., 10.00"
-                    />
-                    <p className="text-xs text-muted-foreground">
-                      🎁 Guaranteed payment for EVERY verified submission,
-                      regardless of views or ranking. Paid after contest ends.
-                      Great motivator for creators!
-                    </p>
-                  </div>
-                  {/* Flat Fee Bonus Cap (Only for CPM contests) */}
-                  {contestType === "cpm" &&
-                    flatFeeBonus &&
-                    parseFloat(flatFeeBonus.toString()) > 0 && (
+                  {contestType !== "milestone" && (
+                    <>
+                      {/* Flat Fee Bonus */}
                       <div className="space-y-2">
-                        <Label htmlFor="flat-fee-bonus-cap">
-                          Flat Fee Bonus Cap <span className="text-red-500">*</span>
+                        <Label htmlFor="flat-fee-bonus">
+                          Flat Fee Bonus Per Verified Submission (Optional)
                         </Label>
                         <Input
-                          id="flat-fee-bonus-cap"
+                          id="flat-fee-bonus"
                           type="number"
                           step="0.01"
                           min="0"
-                          required
-                          value={flatFeeBonusCap}
+                          value={flatFeeBonus}
                           className={cn(
                             isDark
                               ? "bg-[#180438] border border-gray-600 text-white"
                               : "bg-white text-black"
                           )}
-                          onChange={(e) => setFlatFeeBonusCap(e.target.value)}
-                          placeholder="e.g., 20.00"
+                          onChange={(e) => setFlatFeeBonus(e.target.value)}
+                          placeholder="e.g., 10.00"
                         />
                         <p className="text-xs text-muted-foreground">
-                          💰 Maximum total flat fee bonus to distribute across all
-                          creators. Once this cap is reached, no more flat fee
-                          bonuses will be given. Must not exceed Total Budget.
+                          🎁 Guaranteed payment for EVERY verified submission,
+                          regardless of views or ranking. Paid after contest ends.
+                          Great motivator for creators!
                         </p>
                       </div>
-                    )}
+                      {/* Flat Fee Bonus Cap (Only for CPM contests) */}
+                      {contestType === "cpm" &&
+                        flatFeeBonus &&
+                        parseFloat(flatFeeBonus.toString()) > 0 && (
+                          <div className="space-y-2">
+                            <Label htmlFor="flat-fee-bonus-cap">
+                              Flat Fee Bonus Cap{" "}
+                              <span className="text-red-500">*</span>
+                            </Label>
+                            <Input
+                              id="flat-fee-bonus-cap"
+                              type="number"
+                              step="0.01"
+                              min="0"
+                              required
+                              value={flatFeeBonusCap}
+                              className={cn(
+                                isDark
+                                  ? "bg-[#180438] border border-gray-600 text-white"
+                                  : "bg-white text-black"
+                              )}
+                              onChange={(e) => setFlatFeeBonusCap(e.target.value)}
+                              placeholder="e.g., 20.00"
+                            />
+                            <p className="text-xs text-muted-foreground">
+                              💰 Maximum total flat fee bonus to distribute across
+                              all creators. Once this cap is reached, no more flat
+                              fee bonuses will be given. Must not exceed Total
+                              Budget.
+                            </p>
+                          </div>
+                        )}
 
-                  {/* Total Budget for Bonuses (Only for Leaderboard contests with flat fee bonus) */}
-                  {contestType === "leaderboard" &&
-                    flatFeeBonus &&
-                    parseFloat(flatFeeBonus.toString()) > 0 && (
-                      <div className="space-y-2">
-                        <Label htmlFor="total-budget">
-                          Total Budget for Bonuses{" "}
-                          <span className="text-red-500">*</span>
-                        </Label>
-                        <Input
-                          id="total-budget"
-                          type="number"
-                          step="0.01"
-                          min="0"
-                          required
-                          value={totalBudget}
-                          onChange={(e) => setTotalBudget(e.target.value)}
-                          placeholder="e.g., 500.00"
-                          className={cn(
-                            isDark
-                              ? "bg-[#180438] border border-gray-600 text-white"
-                              : "bg-white text-black"
-                          )}
-                        />
-                        <p className="text-xs text-muted-foreground">
-                          Required: Set a budget limit for flat fee bonuses. This
-                          budget is required when Flat Fee Bonus is enabled.
-                          <br />
-                          <strong>Prize Pool:</strong>{" "}
-                          {formatCurrencyFromCents(totalPrizePool)} (for rankings)
-                          <br />
-                          <strong>Total Budget:</strong>{" "}
-                          {totalBudget
-                            ? `$${parseFloat(totalBudget.toString()).toFixed(2)}`
-                            : "No limit"}{" "}
-                          (for bonuses & extras)
-                        </p>
-                      </div>
-                    )}
+                      {/* Total Budget for Bonuses (Only for Leaderboard contests with flat fee bonus) */}
+                      {contestType === "leaderboard" &&
+                        flatFeeBonus &&
+                        parseFloat(flatFeeBonus.toString()) > 0 && (
+                          <div className="space-y-2">
+                            <Label htmlFor="total-budget">
+                              Total Budget for Bonuses{" "}
+                              <span className="text-red-500">*</span>
+                            </Label>
+                            <Input
+                              id="total-budget"
+                              type="number"
+                              step="0.01"
+                              min="0"
+                              required
+                              value={totalBudget}
+                              onChange={(e) => setTotalBudget(e.target.value)}
+                              placeholder="e.g., 500.00"
+                              className={cn(
+                                isDark
+                                  ? "bg-[#180438] border border-gray-600 text-white"
+                                  : "bg-white text-black"
+                              )}
+                            />
+                            <p className="text-xs text-muted-foreground">
+                              Required: Set a budget limit for flat fee bonuses.
+                              This budget is required when Flat Fee Bonus is
+                              enabled.
+                              <br />
+                              <strong>Prize Pool:</strong>{" "}
+                              {formatCurrencyFromCents(totalPrizePool)} (for
+                              rankings)
+                              <br />
+                              <strong>Total Budget:</strong>{" "}
+                              {totalBudget
+                                ? `$${parseFloat(totalBudget.toString()).toFixed(2)}`
+                                : "No limit"}{" "}
+                              (for bonuses & extras)
+                            </p>
+                          </div>
+                        )}
+                    </>
+                  )}
 
                   {/* Bonus Section Toggle & Editor */}
                   <div

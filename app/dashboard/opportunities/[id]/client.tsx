@@ -4020,10 +4020,27 @@ export function ContestClientPage({
                                           : "text-blue-800",
                                       )}
                                     >
-                                      Min.{" "}
-                                      {contest.contest_based_details.milestone_contest.bonus.most_verified_views.min_total_views?.toLocaleString?.() ||
-                                        0}{" "}
-                                      views required.
+                                      {typeof contest.contest_based_details
+                                        .milestone_contest.bonus
+                                        .most_verified_views.min_total_views ===
+                                        "number" && (
+                                        <>
+                                          Min.{" "}
+                                          {contest.contest_based_details.milestone_contest.bonus.most_verified_views.min_total_views.toLocaleString()}{" "}
+                                          views required.
+                                        </>
+                                      )}
+                                      {typeof contest.contest_based_details
+                                        .milestone_contest.bonus
+                                        .most_verified_views
+                                        .min_verified_reels === "number" && (
+                                        <>
+                                          <br />
+                                          Min.{" "}
+                                          {contest.contest_based_details.milestone_contest.bonus.most_verified_views.min_verified_reels.toLocaleString()}{" "}
+                                          verified reels required.
+                                        </>
+                                      )}
                                     </p>
                                   </div>
                                 )}
@@ -4069,10 +4086,27 @@ export function ContestClientPage({
                                           : "text-pink-800",
                                       )}
                                     >
-                                      Min.{" "}
-                                      {contest.contest_based_details.milestone_contest.bonus.most_verified_reels.min_verified_reels?.toLocaleString?.() ||
-                                        0}{" "}
-                                      verified reels required.
+                                      {typeof contest.contest_based_details
+                                        .milestone_contest.bonus
+                                        .most_verified_reels
+                                        .min_verified_reels === "number" && (
+                                        <>
+                                          Min.{" "}
+                                          {contest.contest_based_details.milestone_contest.bonus.most_verified_reels.min_verified_reels.toLocaleString()}{" "}
+                                          verified reels required.
+                                        </>
+                                      )}
+                                      {typeof contest.contest_based_details
+                                        .milestone_contest.bonus
+                                        .most_verified_reels.min_total_views ===
+                                        "number" && (
+                                        <>
+                                          <br />
+                                          Min.{" "}
+                                          {contest.contest_based_details.milestone_contest.bonus.most_verified_reels.min_total_views.toLocaleString()}{" "}
+                                          views required.
+                                        </>
+                                      )}
                                     </p>
                                   </div>
                                 )}

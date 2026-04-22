@@ -161,15 +161,15 @@ export async function POST(request: Request) {
       );
     }
 
-    // Allow status updates for both leaderboard and CPM contests
+    // Allow status updates for leaderboard, CPM, and milestone contests
     if (
       !contest.contest_type ||
-      !["leaderboard", "cpm"].includes(contest.contest_type)
+      !["leaderboard", "cpm", "milestone"].includes(contest.contest_type)
     ) {
       return NextResponse.json(
         {
           error:
-            "Invalid contest type. Only leaderboard and CPM contests are supported",
+            "Invalid contest type. Only leaderboard, CPM, and milestone contests are supported",
         },
         { status: 400 },
       );

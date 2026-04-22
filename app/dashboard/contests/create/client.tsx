@@ -393,9 +393,13 @@ export default function CreateContestPage({
   >("");
   const [milestoneBonusTopViewsPayout, setMilestoneBonusTopViewsPayout] =
     useState<string>("");
+  const [milestoneBonusTopViewsMinReels, setMilestoneBonusTopViewsMinReels] =
+    useState<number | "">("");
   const [milestoneBonusTopReelsMin, setMilestoneBonusTopReelsMin] = useState<
     number | ""
   >("");
+  const [milestoneBonusTopReelsMinViews, setMilestoneBonusTopReelsMinViews] =
+    useState<number | "">("");
   const [milestoneBonusTopReelsPayout, setMilestoneBonusTopReelsPayout] =
     useState<string>("");
   // End Contest Type and CPM-specific state
@@ -1791,36 +1795,53 @@ export default function CreateContestPage({
         }
 
         if (milestoneBonusEnabled) {
-          const vMinFilled = milestoneBonusTopViewsMin !== "";
+          const vMinViewsFilled = milestoneBonusTopViewsMin !== "";
+          const vMinReelsFilled = milestoneBonusTopViewsMinReels !== "";
           const vPayFilled = milestoneBonusTopViewsPayout !== "";
+          const rMinViewsFilled = milestoneBonusTopReelsMinViews !== "";
           const rMinFilled = milestoneBonusTopReelsMin !== "";
           const rPayFilled = milestoneBonusTopReelsPayout !== "";
 
-          if (vMinFilled !== vPayFilled) {
+          const viewsTrackFilledCount = [
+            vMinViewsFilled,
+            vMinReelsFilled,
+            vPayFilled,
+          ].filter(Boolean).length;
+          const reelsTrackFilledCount = [
+            rMinViewsFilled,
+            rMinFilled,
+            rPayFilled,
+          ].filter(Boolean).length;
+
+          if (viewsTrackFilledCount > 0 && viewsTrackFilledCount < 3) {
             return {
               isValid: false,
               error:
-                "Bonus (most verified views): enter both minimum total views and payout, or clear both fields.",
+                "Bonus (most verified views): enter minimum total views, minimum verified reels, and payout, or clear all three fields.",
             };
           }
-          if (rMinFilled !== rPayFilled) {
+          if (reelsTrackFilledCount > 0 && reelsTrackFilledCount < 3) {
             return {
               isValid: false,
               error:
-                "Bonus (most verified reels): enter both minimum reels and payout, or clear both fields.",
+                "Bonus (most verified reels): enter minimum verified reels, minimum total views, and payout, or clear all three fields.",
             };
           }
 
           const viewsOk =
-            vMinFilled &&
+            vMinViewsFilled &&
+            vMinReelsFilled &&
             vPayFilled &&
             Number(milestoneBonusTopViewsMin) > 0 &&
+            Number(milestoneBonusTopViewsMinReels) >= 1 &&
             Math.round(
               parseFloat(String(milestoneBonusTopViewsPayout)) * 100,
             ) >= MIN_MILESTONE_PAYOUT_CENTS;
           const reelsOk =
+            rMinViewsFilled &&
             rMinFilled &&
             rPayFilled &&
+            Number(milestoneBonusTopReelsMinViews) > 0 &&
             Number(milestoneBonusTopReelsMin) >= 1 &&
             Math.round(
               parseFloat(String(milestoneBonusTopReelsPayout)) * 100,
@@ -2420,22 +2441,34 @@ export default function CreateContestPage({
             return;
           }
           if (milestoneBonusEnabled) {
-            const vMinFilled = milestoneBonusTopViewsMin !== "";
+            const vMinViewsFilled = milestoneBonusTopViewsMin !== "";
+            const vMinReelsFilled = milestoneBonusTopViewsMinReels !== "";
             const vPayFilled = milestoneBonusTopViewsPayout !== "";
+            const rMinViewsFilled = milestoneBonusTopReelsMinViews !== "";
             const rMinFilled = milestoneBonusTopReelsMin !== "";
             const rPayFilled = milestoneBonusTopReelsPayout !== "";
-            if (vMinFilled !== vPayFilled) {
+            const viewsTrackFilledCount = [
+              vMinViewsFilled,
+              vMinReelsFilled,
+              vPayFilled,
+            ].filter(Boolean).length;
+            const reelsTrackFilledCount = [
+              rMinViewsFilled,
+              rMinFilled,
+              rPayFilled,
+            ].filter(Boolean).length;
+            if (viewsTrackFilledCount > 0 && viewsTrackFilledCount < 3) {
               setFormFeedback(
-                "Bonus (most verified views): enter both minimum views and payout, or clear both.",
+                "Bonus (most verified views): enter minimum total views, minimum verified reels, and payout, or clear all three.",
               );
               setFormFeedbackType("error");
               setIsLoading(false);
               setUploadProgress(null);
               return;
             }
-            if (rMinFilled !== rPayFilled) {
+            if (reelsTrackFilledCount > 0 && reelsTrackFilledCount < 3) {
               setFormFeedback(
-                "Bonus (most verified reels): enter both minimum reels and payout, or clear both.",
+                "Bonus (most verified reels): enter minimum verified reels, minimum total views, and payout, or clear all three.",
               );
               setFormFeedbackType("error");
               setIsLoading(false);
@@ -2443,15 +2476,19 @@ export default function CreateContestPage({
               return;
             }
             const viewsOk =
-              vMinFilled &&
+              vMinViewsFilled &&
+              vMinReelsFilled &&
               vPayFilled &&
               Number(milestoneBonusTopViewsMin) > 0 &&
+              Number(milestoneBonusTopViewsMinReels) >= 1 &&
               Math.round(
                 parseFloat(String(milestoneBonusTopViewsPayout)) * 100,
               ) >= MIN_MILESTONE_PAYOUT_CENTS;
             const reelsOk =
+              rMinViewsFilled &&
               rMinFilled &&
               rPayFilled &&
+              Number(milestoneBonusTopReelsMinViews) > 0 &&
               Number(milestoneBonusTopReelsMin) >= 1 &&
               Math.round(
                 parseFloat(String(milestoneBonusTopReelsPayout)) * 100,
@@ -2473,20 +2510,24 @@ export default function CreateContestPage({
           bonusPayload = { enabled: true };
           if (
             milestoneBonusTopViewsMin !== "" &&
+            milestoneBonusTopViewsMinReels !== "" &&
             milestoneBonusTopViewsPayout !== ""
           ) {
             (bonusPayload as Record<string, unknown>).most_verified_views = {
               min_total_views: Number(milestoneBonusTopViewsMin),
+              min_verified_reels: Number(milestoneBonusTopViewsMinReels),
               payout_cents: Math.round(
                 parseFloat(String(milestoneBonusTopViewsPayout)) * 100,
               ),
             };
           }
           if (
+            milestoneBonusTopReelsMinViews !== "" &&
             milestoneBonusTopReelsMin !== "" &&
             milestoneBonusTopReelsPayout !== ""
           ) {
             (bonusPayload as Record<string, unknown>).most_verified_reels = {
+              min_total_views: Number(milestoneBonusTopReelsMinViews),
               min_verified_reels: Number(milestoneBonusTopReelsMin),
               payout_cents: Math.round(
                 parseFloat(String(milestoneBonusTopReelsPayout)) * 100,
@@ -4960,12 +5001,18 @@ export default function CreateContestPage({
           if (typeof mv.min_total_views === "number") {
             setMilestoneBonusTopViewsMin(mv.min_total_views);
           }
+          if (typeof mv.min_verified_reels === "number") {
+            setMilestoneBonusTopViewsMinReels(mv.min_verified_reels);
+          }
           if (typeof mv.payout_cents === "number") {
             setMilestoneBonusTopViewsPayout((mv.payout_cents / 100).toString());
           }
         }
         if (bonus.most_verified_reels) {
           const mr = bonus.most_verified_reels;
+          if (typeof mr.min_total_views === "number") {
+            setMilestoneBonusTopReelsMinViews(mr.min_total_views);
+          }
           if (typeof mr.min_verified_reels === "number") {
             setMilestoneBonusTopReelsMin(mr.min_verified_reels);
           }
@@ -6938,9 +6985,14 @@ export default function CreateContestPage({
                           Optional extras for top performers. Configure at least
                           one category when bonus is enabled.
                         </p>
-                        <div className="grid gap-3 md:grid-cols-2">
+                        <h4 className="text-sm font-semibold">
+                          Most Verified Views 
+                        </h4>
+                        <div className="grid gap-3 md:grid-cols-3">
                           <div className="space-y-2">
-                            <Label>Most verified views — min total views</Label>
+                            <Label>
+                             Minimum total verified views
+                            </Label>
                             <Input
                               type="number"
                               min={1}
@@ -6961,7 +7013,30 @@ export default function CreateContestPage({
                             />
                           </div>
                           <div className="space-y-2">
-                            <Label>Most verified views — bonus (USD)</Label>
+                            <Label>
+                              Minimum verified reels
+                            </Label>
+                            <Input
+                              type="number"
+                              min={1}
+                              value={milestoneBonusTopViewsMinReels}
+                              onChange={(e) =>
+                                setMilestoneBonusTopViewsMinReels(
+                                  e.target.value === ""
+                                    ? ""
+                                    : parseInt(e.target.value, 10),
+                                )
+                              }
+                              className={cn(
+                                isDark
+                                  ? "bg-[#180438] border border-gray-600"
+                                  : "",
+                              )}
+                              placeholder="e.g. 5"
+                            />
+                          </div>
+                          <div className="space-y-2">
+                            <Label>Winner bonus (USD)</Label>
                             <Input
                               type="number"
                               step="0.01"
@@ -6978,10 +7053,36 @@ export default function CreateContestPage({
                               placeholder="e.g. 100"
                             />
                           </div>
+                        </div>
+                        <h4 className="text-sm font-semibold">
+                          Most Verified Reels 
+                        </h4>
+                        <div className="grid gap-3 md:grid-cols-3">
                           <div className="space-y-2">
                             <Label>
-                              Most verified reels — min verified reels
+                              Minimum total verified views
                             </Label>
+                            <Input
+                              type="number"
+                              min={1}
+                              value={milestoneBonusTopReelsMinViews}
+                              onChange={(e) =>
+                                setMilestoneBonusTopReelsMinViews(
+                                  e.target.value === ""
+                                    ? ""
+                                    : parseInt(e.target.value, 10),
+                                )
+                              }
+                              className={cn(
+                                isDark
+                                  ? "bg-[#180438] border border-gray-600"
+                                  : "",
+                              )}
+                              placeholder="e.g. 200000"
+                            />
+                          </div>
+                          <div className="space-y-2">
+                            <Label>Minimum verified reels</Label>
                             <Input
                               type="number"
                               min={1}
@@ -7002,7 +7103,7 @@ export default function CreateContestPage({
                             />
                           </div>
                           <div className="space-y-2">
-                            <Label>Most verified reels — bonus (USD)</Label>
+                            <Label>Winner bonus (USD)</Label>
                             <Input
                               type="number"
                               step="0.01"
@@ -7920,8 +8021,8 @@ export default function CreateContestPage({
               </>
             )}
 
-            {/* Creator earning opportunities are not shown for milestone contests */}
-            {contestType !== "milestone" && (
+            {/* Creator earning opportunities */}
+            {true && (
               <div className="space-y-6 py-6 px-0 sm:px-2 border-t-2 border-dashed mt-6">
               <div>
                 <h3
@@ -7938,61 +8039,64 @@ export default function CreateContestPage({
                 </p>
               </div>
 
-              {/* Flat Fee Bonus */}
-              <div
-                className={`space-y-3 p-4 border rounded-lg ${
-                  isDark
-                    ? "bg-green-950/40 border-green-800"
-                    : "bg-gradient-to-r from-green-50 to-emerald-50 border-green-200"
-                }`}
-              >
-                <div className="flex items-center gap-2">
-                  <span className="text-2xl">🎁</span>
-                  <Label
-                    htmlFor="flatFeeBonus"
-                    className="text-base font-semibold"
-                  >
-                    Flat Fee Bonus (Per Verified Submission)
-                  </Label>
-                </div>
-                <Input
-                  id="flatFeeBonus"
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  value={flatFeeBonus}
-                  onChange={(e) => setFlatFeeBonus(e.target.value)}
-                  placeholder="e.g., 10 for $10 per submission"
-                  className={cn(
-                    isDark
-                      ? "bg-green-950/40 border border-gray-600 text-white"
-                      : "bg-white",
-                  )}
-                />
-                <p className="text-sm text-muted-foreground">
-                  Optional: Give creators a guaranteed payment for each verified
-                  submission, regardless of views or ranking. This bonus is paid
-                  after the contest ends. Great for encouraging participation!
-                </p>
-                {flatFeeBonus && parseFloat(flatFeeBonus.toString()) > 0 && (
-                  <Alert
-                    className={cn(
-                      "border",
+              {contestType !== "milestone" && (
+                <>
+                  {/* Flat Fee Bonus */}
+                  <div
+                    className={`space-y-3 p-4 border rounded-lg ${
                       isDark
-                        ? "bg-[#C9A7FF26] border-[#C9A7FF] text-white"
-                        : "bg-[#F0E7FD] border-[#4A00BE] text-green-800",
-                    )}
+                        ? "bg-green-950/40 border-green-800"
+                        : "bg-gradient-to-r from-green-50 to-emerald-50 border-green-200"
+                    }`}
                   >
-                    <AlertDescription>
-                      ✓ Creators will earn{" "}
-                      <strong>
-                        ${parseFloat(flatFeeBonus.toString()).toFixed(2)}
-                      </strong>{" "}
-                      for each verified submission!
-                    </AlertDescription>
-                  </Alert>
-                )}
-              </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-2xl">🎁</span>
+                      <Label
+                        htmlFor="flatFeeBonus"
+                        className="text-base font-semibold"
+                      >
+                        Flat Fee Bonus (Per Verified Submission)
+                      </Label>
+                    </div>
+                    <Input
+                      id="flatFeeBonus"
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={flatFeeBonus}
+                      onChange={(e) => setFlatFeeBonus(e.target.value)}
+                      placeholder="e.g., 10 for $10 per submission"
+                      className={cn(
+                        isDark
+                          ? "bg-green-950/40 border border-gray-600 text-white"
+                          : "bg-white",
+                      )}
+                    />
+                    <p className="text-sm text-muted-foreground">
+                      Optional: Give creators a guaranteed payment for each
+                      verified submission, regardless of views or ranking. This
+                      bonus is paid after the contest ends. Great for encouraging
+                      participation!
+                    </p>
+                    {flatFeeBonus && parseFloat(flatFeeBonus.toString()) > 0 && (
+                      <Alert
+                        className={cn(
+                          "border",
+                          isDark
+                            ? "bg-[#C9A7FF26] border-[#C9A7FF] text-white"
+                            : "bg-[#F0E7FD] border-[#4A00BE] text-green-800",
+                        )}
+                      >
+                        <AlertDescription>
+                          ✓ Creators will earn{" "}
+                          <strong>
+                            ${parseFloat(flatFeeBonus.toString()).toFixed(2)}
+                          </strong>{" "}
+                          for each verified submission!
+                        </AlertDescription>
+                      </Alert>
+                    )}
+                  </div>
 
               {/* Flat Fee Bonus Cap (Only for CPM contests with flat fee bonus) */}
               {contestType === "cpm" &&
@@ -8136,16 +8240,16 @@ export default function CreateContestPage({
                   </div>
                 )}
 
-              {/* Max Earnings Per Creator */}
-              {multipleSubmissionsEnabled && (
-                <div
-                  className={cn(
-                    "space-y-3 p-4 border rounded-lg",
-                    isDark
-                      ? "bg-blue-950/50 border-blue-800"
-                      : "bg-blue-50 border-blue-200",
-                  )}
-                >
+                  {/* Max Earnings Per Creator */}
+                  {multipleSubmissionsEnabled && (
+                    <div
+                      className={cn(
+                        "space-y-3 p-4 border rounded-lg",
+                        isDark
+                          ? "bg-blue-950/50 border-blue-800"
+                          : "bg-blue-50 border-blue-200",
+                      )}
+                    >
                   <div className="flex items-center gap-2">
                     <span className="text-2xl">🎯</span>
                     <Label
@@ -8202,7 +8306,9 @@ export default function CreateContestPage({
                         </AlertDescription>
                       </Alert>
                     )}
-                </div>
+                    </div>
+                  )}
+                </>
               )}
 
               {/* Additional Bonus Section */}

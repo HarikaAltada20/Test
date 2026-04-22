@@ -40,6 +40,7 @@ import { createClient } from "@/utils/supabase/client";
 import {
   calculateLeaderboardBudgetSpent,
   calculateTwitterCpmBudgetSpent,
+  calculateMilestoneBudgetSpent,
   Submission,
 } from "@/lib/contest-utils-client";
 import { getPlatformIconWithFallback } from "@/lib/platform-icons";
@@ -78,7 +79,7 @@ type PlatformFilterType =
   | "instagram"
   | "twitter"
   | "tiktok"; // Scalable: add more platforms as needed
-type ContestTypeFilterType = "all" | "leaderboard" | "cpm";
+type ContestTypeFilterType = "all" | "leaderboard" | "cpm" | "milestone";
 type SortOptionType =
   | "relevance_desc"
   | "start_date_desc"
@@ -813,6 +814,55 @@ export default function OpportunitiesPage({
                   },
                 },
               };
+            } else if (
+              contest.contest_type === "milestone" &&
+              contest.contest_based_details?.milestone_contest
+            ) {
+              const { data: submissions } = await supabase
+                .from("submissions")
+                .select(
+                  "id, creator_id, created_at, status, paid, earnings, views, platform, other_stats",
+                )
+                .eq("contest_id", contest.id)
+                .in("status", ["verified", "paid"])
+                .order("created_at", { ascending: true });
+
+              const submissionRecords = (submissions || []).map(
+                (submission) => ({
+                  id: submission.id,
+                  creator_id: submission.creator_id,
+                  created_at: submission.created_at,
+                  status: submission.status,
+                  paid: submission.paid,
+                  earnings: submission.earnings,
+                  views: submission.views,
+                  platform: submission.platform,
+                  other_stats: submission.other_stats,
+                  manual_points_adjustment: 0,
+                  bonus_paid: submission.paid ?? false,
+                  bonus_amount: submission.earnings ?? 0,
+                }),
+              );
+
+              const milestoneDetails =
+                contest.contest_based_details.milestone_contest;
+              const milestones = milestoneDetails.milestones || [];
+
+              const actualBudgetSpent = calculateMilestoneBudgetSpent(
+                submissionRecords as Submission[],
+                milestones,
+              );
+
+              updatedContest = {
+                ...updatedContest,
+                contest_based_details: {
+                  ...updatedContest.contest_based_details,
+                  milestone_contest: {
+                    ...updatedContest.contest_based_details.milestone_contest,
+                    budget_spent: Math.round(actualBudgetSpent * 100),
+                  },
+                },
+              };
             }
 
             return updatedContest;
@@ -1158,6 +1208,11 @@ export default function OpportunitiesPage({
             a.contest_based_details?.cpm_contest?.total_budget
           ) {
             valueA = a.contest_based_details.cpm_contest.total_budget; // Assuming budget is in cents
+          } else if (
+            a.contest_type === "milestone" &&
+            a.contest_based_details?.milestone_contest?.total_budget_cents
+          ) {
+            valueA = a.contest_based_details.milestone_contest.total_budget_cents;
           }
           if (
             b.contest_type === "leaderboard" &&
@@ -1169,6 +1224,11 @@ export default function OpportunitiesPage({
             b.contest_based_details?.cpm_contest?.total_budget
           ) {
             valueB = b.contest_based_details.cpm_contest.total_budget; // Assuming budget is in cents
+          } else if (
+            b.contest_type === "milestone" &&
+            b.contest_based_details?.milestone_contest?.total_budget_cents
+          ) {
+            valueB = b.contest_based_details.milestone_contest.total_budget_cents;
           }
           if (sortOption === "value_desc") {
             return valueB - valueA;
@@ -1604,10 +1664,12 @@ export default function OpportunitiesPage({
                       ? "CPM Based"
                       : contest.contest_type === "leaderboard"
                         ? "Leaderboard"
-                        : contest.contest_type
-                          ? contest.contest_type.charAt(0).toUpperCase() +
-                            contest.contest_type.slice(1)
-                          : "N/A"}
+                        : contest.contest_type === "milestone"
+                          ? "Milestone"
+                          : contest.contest_type
+                            ? contest.contest_type.charAt(0).toUpperCase() +
+                              contest.contest_type.slice(1)
+                            : "N/A"}
                   </span>
                 </span>
               </div>
@@ -1690,6 +1752,29 @@ export default function OpportunitiesPage({
                     </span>
                   </div>
                 )}
+              {contest.contest_type === "milestone" &&
+                contest.contest_based_details?.milestone_contest
+                  ?.total_budget_cents != null &&
+                contest.contest_based_details.milestone_contest
+                  .total_budget_cents > 0 && (
+                  <div className="flex items-center">
+                    <DollarSign className="h-4 w-4 mr-2 flex-shrink-0" />
+                    <span
+                      style={{
+                        color: isDark ? "white" : "#475569",
+                        transition: "none",
+                      }}
+                    >
+                      Total Budget:{" "}
+                      <span className="font-medium">
+                        {formatMoney(
+                          contest.contest_based_details.milestone_contest
+                            .total_budget_cents,
+                        )}
+                      </span>
+                    </span>
+                  </div>
+                )}
             </div>
 
             {/* Budget Spent Progress Bar for CPM contests */}
@@ -1704,6 +1789,63 @@ export default function OpportunitiesPage({
                   contest.contest_based_details.cpm_contest.budget_spent || 0;
                 const percentage = (budgetSpent / totalBudget) * 100;
                 const remaining = totalBudget - budgetSpent;
+
+                return (
+                  <div className="mt-3">
+                    <div
+                      className="flex justify-between text-sm mb-2"
+                      style={{
+                        color: isDark ? "#d1d5db" : "#374151",
+                        transition: "none",
+                      }}
+                    >
+                      <span className="font-medium">Budget Tracker</span>
+                      <span className="font-semibold">
+                        {formatMoney(budgetSpent)} / {formatMoney(totalBudget)}
+                      </span>
+                    </div>
+                    <div
+                      className={cn(
+                        "relative w-full bg-slate-200 dark:bg-slate-700 rounded-full h-3 overflow-hidden",
+                        isDark ? "bg-[#FFFFFF42]" : "bg-slate-200",
+                      )}
+                    >
+                      <div
+                        className="absolute h-full bg-gradient-to-r from-purple-500 to-purple-600 rounded-full transition-all duration-500 ease-out"
+                        style={{ width: `${Math.min(percentage, 100)}%` }}
+                      ></div>
+                    </div>
+                    <div
+                      className="flex justify-between text-xs mt-1.5"
+                      style={{
+                        color: isDark ? "#d1d5db" : "#64748b",
+                        transition: "none",
+                      }}
+                    >
+                      <span>{percentage.toFixed(1)}% used</span>
+                      <span>{formatMoney(remaining)} remaining</span>
+                    </div>
+                  </div>
+                );
+              })()}
+
+            {/* Budget Spent Progress Bar for Milestone contests */}
+            {contest.contest_type === "milestone" &&
+              contest.contest_based_details?.milestone_contest
+                ?.total_budget_cents != null &&
+              contest.contest_based_details.milestone_contest
+                .total_budget_cents > 0 &&
+              (() => {
+                const totalBudget =
+                  contest.contest_based_details.milestone_contest
+                    .total_budget_cents;
+                const budgetSpent =
+                  contest.contest_based_details.milestone_contest
+                    .budget_spent || 0;
+                const { percentage, remaining } = getBudgetTrackerValues(
+                  totalBudget,
+                  budgetSpent,
+                );
 
                 return (
                   <div className="mt-3">
@@ -2177,6 +2319,9 @@ export default function OpportunitiesPage({
             <SelectItem value="cpm" isDark={isDark}>
               CPM
             </SelectItem>
+            <SelectItem value="milestone" isDark={isDark}>
+              Milestone
+            </SelectItem>
           </SelectContent>
         </Select>
 
@@ -2615,12 +2760,14 @@ export default function OpportunitiesPage({
                               ? "CPM Based"
                               : contest.contest_type === "leaderboard"
                                 ? "Leaderboard"
-                                : contest.contest_type
-                                  ? contest.contest_type
-                                      .charAt(0)
-                                      .toUpperCase() +
-                                    contest.contest_type.slice(1)
-                                  : "N/A"}
+                                : contest.contest_type === "milestone"
+                                  ? "Milestone"
+                                  : contest.contest_type
+                                    ? contest.contest_type
+                                        .charAt(0)
+                                        .toUpperCase() +
+                                      contest.contest_type.slice(1)
+                                    : "N/A"}
                           </span>
                         </span>
                       </div>
@@ -2722,6 +2869,29 @@ export default function OpportunitiesPage({
                                 {formatMoney(
                                   contest.contest_based_details
                                     .leaderboard_contest.total_budget,
+                                )}
+                              </span>
+                            </span>
+                          </div>
+                        )}
+                      {contest.contest_type === "milestone" &&
+                        contest.contest_based_details?.milestone_contest
+                          ?.total_budget_cents != null &&
+                        contest.contest_based_details.milestone_contest
+                          .total_budget_cents > 0 && (
+                          <div className="flex items-center">
+                            <DollarSign className="h-4 w-4 mr-2 flex-shrink-0" />
+                            <span>
+                              Total Budget:{" "}
+                              <span
+                                className={cn(
+                                  "font-medium",
+                                  isDark ? "text-white" : "text-slate-700",
+                                )}
+                              >
+                                {formatMoney(
+                                  contest.contest_based_details.milestone_contest
+                                    .total_budget_cents,
                                 )}
                               </span>
                             </span>
@@ -2847,6 +3017,71 @@ export default function OpportunitiesPage({
                               className="flex justify-between text-xs mt-1.5"
                               style={{
                                 color: isDark ? "#94a3b8" : "#64748b",
+                                transition: "none",
+                              }}
+                            >
+                              <span>{percentage.toFixed(1)}% used</span>
+                              <span>{formatMoney(remaining)} remaining</span>
+                            </div>
+                          </div>
+                        );
+                      })()}
+
+                    {/* Budget Spent Progress Bar for Milestone contests */}
+                    {contest.contest_type === "milestone" &&
+                      contest.contest_based_details?.milestone_contest
+                        ?.total_budget_cents != null &&
+                      contest.contest_based_details.milestone_contest
+                        .total_budget_cents > 0 &&
+                      (() => {
+                        const totalBudget =
+                          contest.contest_based_details.milestone_contest
+                            .total_budget_cents;
+                        const budgetSpent =
+                          contest.contest_based_details.milestone_contest
+                            .budget_spent || 0;
+                        const { percentage, remaining } = getBudgetTrackerValues(
+                          totalBudget,
+                          budgetSpent,
+                        );
+
+                        return (
+                          <div className="mt-3 mb-3">
+                            <div
+                              className="flex justify-between text-sm mb-2"
+                              style={{
+                                color: isDark ? "#d1d5db" : "#374151",
+                                transition: "none",
+                              }}
+                            >
+                              <span className="font-medium">
+                                Budget Tracker
+                              </span>
+                              <span className="font-semibold">
+                                {formatMoney(budgetSpent)} /{" "}
+                                {formatMoney(totalBudget)}
+                              </span>
+                            </div>
+                            <div
+                              className={cn(
+                                "relative w-full bg-slate-200 dark:bg-slate-700 rounded-full h-3 overflow-hidden",
+                                isDark ? "bg-[#FFFFFF42]" : "bg-slate-200",
+                              )}
+                              title={`Total Budget Spent: ${formatMoney(
+                                budgetSpent,
+                              )}`}
+                            >
+                              <div
+                                className="absolute h-full bg-gradient-to-r from-purple-500 to-purple-600 rounded-full transition-all duration-500 ease-out"
+                                style={{
+                                  width: `${Math.min(percentage, 100)}%`,
+                                }}
+                              ></div>
+                            </div>
+                            <div
+                              className="flex justify-between text-xs mt-1.5"
+                              style={{
+                                color: isDark ? "#d1d5db" : "#64748b",
                                 transition: "none",
                               }}
                             >

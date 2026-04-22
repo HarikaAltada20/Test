@@ -1400,6 +1400,84 @@ export default function ContestDetailClient({
     currentPage * itemsPerPage,
   );
 
+  const milestonePayoutEligibleSubmissions = useMemo(() => {
+    return (currentSubmissions || []).map((submission) => {
+      const rawStatus = (submission.status || "pending").toLowerCase();
+      const normalizedStatus =
+        rawStatus === "approved" ? "verified" : rawStatus;
+      const metrics = extractPlatformMetrics(submission);
+      const views = Number(metrics?.views ?? submission.views ?? 0);
+
+      return {
+        id: submission.id,
+        creator_id: submission.creator_id || null,
+        created_at: submission.created_at,
+        status: normalizedStatus,
+        deleted_at: submission.deleted_at,
+        views: Number.isFinite(views) ? views : 0,
+      };
+    });
+  }, [currentSubmissions]);
+
+  const milestoneSubmissionExpectedPayoutCents = useMemo(() => {
+    if (currentContest?.contest_type !== "milestone") {
+      return new Map<string, number>();
+    }
+    const milestones =
+      currentContest?.contest_based_details?.milestone_contest?.milestones;
+    if (!Array.isArray(milestones) || milestones.length === 0) {
+      return new Map<string, number>();
+    }
+    const sortedMilestones = [...milestones].sort(
+      (a: any, b: any) => (b.target_views || 0) - (a.target_views || 0),
+    );
+    const winnerCountsByMilestone = new Map<number, number>();
+    const submissionPayoutMap = new Map<string, number>();
+
+    const eligible = milestonePayoutEligibleSubmissions
+      .filter(
+        (submission: any) =>
+          (submission.status === "pending" ||
+            submission.status === "verified" ||
+            submission.status === "paid") &&
+          submission.deleted_at == null,
+      )
+      .sort((a: any, b: any) => {
+        const at = new Date(a.created_at || 0).getTime();
+        const bt = new Date(b.created_at || 0).getTime();
+        return at - bt;
+      });
+
+    eligible.forEach((submission: any) => {
+      let payoutCents = 0;
+      const submissionViews = Number(submission.views || 0);
+
+      for (const milestone of sortedMilestones) {
+        const targetViews = Number(milestone.target_views || 0);
+        if (submissionViews < targetViews) continue;
+
+        if (milestone.winner_limit != null) {
+          const currentWinners = winnerCountsByMilestone.get(targetViews) || 0;
+          if (currentWinners >= milestone.winner_limit) {
+            continue;
+          }
+          winnerCountsByMilestone.set(targetViews, currentWinners + 1);
+        }
+
+        payoutCents = Number(milestone.payout_cents || 0);
+        break;
+      }
+
+      submissionPayoutMap.set(submission.id, payoutCents);
+    });
+
+    return submissionPayoutMap;
+  }, [
+    currentContest?.contest_type,
+    currentContest?.contest_based_details,
+    milestonePayoutEligibleSubmissions,
+  ]);
+
   // Filter submissions for analytics based on active analytics tab
   // For Twitter tweets, use moderation_status; for regular submissions, use status
   const filteredAnalyticsSubmissions = currentSubmissions.filter(
@@ -2059,10 +2137,10 @@ export default function ContestDetailClient({
 
       if (!isTwitterTweet) {
         // Use formula-only expected so "Expected Reward" column does not become equal to "Reward Granted" after payment
-        const submissionEarnings = calculateSubmissionExpectedEarnings(
-          submission,
-          false,
-        );
+        const submissionEarnings =
+          currentContest?.contest_type === "milestone"
+            ? (milestoneSubmissionExpectedPayoutCents.get(submission.id) ?? 0)
+            : calculateSubmissionExpectedEarnings(submission, false);
         group.earnings.expected += submissionEarnings;
         if (isSubmissionPaidForGrantedReward(submission)) {
           const storedGrantedEarnings =
@@ -2387,6 +2465,34 @@ export default function ContestDetailClient({
       }
     }
 
+    if (currentContest?.contest_type === "milestone") {
+      const milestoneDetails =
+        currentContest?.contest_based_details?.milestone_contest;
+      const milestones = milestoneDetails?.milestones || [];
+      if (milestones.length > 0) {
+        const payoutMap = milestoneSubmissionExpectedPayoutCents;
+        Object.values(grouped).forEach((group: any) => {
+          const submissions = group.submissions || [];
+          group.earnings.expected = submissions.reduce(
+            (sum: number, sub: any) => sum + (payoutMap.get(sub.id) ?? 0),
+            0,
+          );
+          group.earnings.granted = submissions.reduce(
+            (sum: number, sub: any) => {
+              const isPaid =
+                (sub?.status || "").toLowerCase() === "paid" ||
+                sub?.paid === true;
+              if (!isPaid) return sum;
+              const stored = Number(sub?.earnings) || 0;
+              const fallback = payoutMap.get(sub.id) ?? 0;
+              return sum + (stored > 0 ? stored : fallback);
+            },
+            0,
+          );
+        });
+      }
+    }
+
     // Apply earnings cap per creator for expected earnings display (for non-CPM contests)
     const maxEarnings = currentContest?.max_earnings_per_creator;
     if (maxEarnings && maxEarnings > 0 && !isTwitterCpmContest) {
@@ -2404,11 +2510,14 @@ export default function ContestDetailClient({
     return Object.values(grouped);
   }, [
     filteredSubmissions,
+    currentSubmissions,
     currentContest,
     activeStatusTab,
     creatorModerationData,
     manualAdjustmentOverrides,
     getCreatorManualAdjustment,
+    milestonePayoutEligibleSubmissions,
+    milestoneSubmissionExpectedPayoutCents,
   ]);
 
   // Creator ranking for Twitter leaderboard contests (based on total points per creator)
@@ -2550,6 +2659,187 @@ export default function ContestDetailClient({
       plat === "instagram" || plat.includes("youtube");
     return !isInstagramOrYoutube;
   }, [showRejectionReasonColumn, currentContest?.platform]);
+
+  const milestoneMostVerifiedReelsConfig =
+    currentContest?.contest_type === "milestone"
+      ? (currentContest?.contest_based_details as any)?.milestone_contest?.bonus
+          ?.most_verified_reels
+      : null;
+  const milestoneMostVerifiedViewsConfig =
+    currentContest?.contest_type === "milestone"
+      ? (currentContest?.contest_based_details as any)?.milestone_contest?.bonus
+          ?.most_verified_views
+      : null;
+  const showMostVerifiedViewsBonusColumns = Boolean(
+    currentContest?.contest_type === "milestone" &&
+    (currentContest?.contest_based_details as any)?.milestone_contest?.bonus
+      ?.enabled &&
+    milestoneMostVerifiedViewsConfig,
+  );
+  const showMostVerifiedReelsCreatorColumn = Boolean(
+    currentContest?.contest_type === "milestone" &&
+    (currentContest?.contest_based_details as any)?.milestone_contest?.bonus
+      ?.enabled &&
+    milestoneMostVerifiedReelsConfig,
+  );
+  const milestoneReelsBonusByCreator = useMemo(() => {
+    const empty = new Map<
+      string,
+      {
+        expectedCents: number;
+        paidCents: number;
+        viewsExpectedCents: number;
+        viewsPaidCents: number;
+        verifiedReels: number;
+        minRequired: number;
+      }
+    >();
+    if (!showMostVerifiedReelsCreatorColumn) return empty;
+
+    const bonusConfig = (currentContest?.contest_based_details as any)
+      ?.milestone_contest?.bonus;
+    const reelsConfig = bonusConfig?.most_verified_reels;
+    const viewsConfig = bonusConfig?.most_verified_views;
+    const reelsPayout = Number(reelsConfig?.payout_cents || 0);
+    const reelsMin = Number(reelsConfig?.min_verified_reels || 0);
+    const reelsMinViews = Number(reelsConfig?.min_total_views || 0);
+    const viewsMin = Number(viewsConfig?.min_total_views || 0);
+
+    type CreatorAgg = {
+      creatorId: string;
+      verifiedReels: number;
+      totalVerifiedViews: number;
+      reelsReachedAt: number;
+      viewsReachedAt: number;
+      verifiedEvents: Array<{ createdAtMs: number; views: number }>;
+      totalPaidBonusCents: number;
+    };
+    const creators = new Map<string, CreatorAgg>();
+
+    (currentSubmissions || []).forEach((sub: any) => {
+      const creatorId = sub?.creator_id;
+      if (!creatorId) return;
+      if (!creators.has(creatorId)) {
+        creators.set(creatorId, {
+          creatorId,
+          verifiedReels: 0,
+          totalVerifiedViews: 0,
+          reelsReachedAt: Number.POSITIVE_INFINITY,
+          viewsReachedAt: Number.POSITIVE_INFINITY,
+          verifiedEvents: [],
+          totalPaidBonusCents: 0,
+        });
+      }
+      const agg = creators.get(creatorId)!;
+      if (sub?.bonus_paid === true) {
+        agg.totalPaidBonusCents += Number(sub?.bonus_amount || 0);
+      }
+      const status = String(getStatus(sub) || "").toLowerCase();
+      if (
+        !(status === "verified" || status === "paid" || status === "approved")
+      )
+        return;
+      const views = Number(sub?.views ?? 0);
+      const createdAtMs = Number.isNaN(new Date(sub?.created_at).getTime())
+        ? Number.POSITIVE_INFINITY
+        : new Date(sub.created_at).getTime();
+      agg.verifiedReels += 1;
+      agg.totalVerifiedViews += views;
+      agg.verifiedEvents.push({ createdAtMs, views });
+    });
+
+    creators.forEach((agg) => {
+      if (agg.verifiedEvents.length === 0) return;
+      const sortedEvents = [...agg.verifiedEvents].sort(
+        (a, b) => a.createdAtMs - b.createdAtMs,
+      );
+      let runningViews = 0;
+      sortedEvents.forEach((event, index) => {
+        runningViews += event.views;
+        if (
+          reelsMin > 0 &&
+          index + 1 >= reelsMin &&
+          agg.reelsReachedAt === Number.POSITIVE_INFINITY
+        ) {
+          agg.reelsReachedAt = event.createdAtMs;
+        }
+        if (
+          viewsMin > 0 &&
+          runningViews >= viewsMin &&
+          agg.viewsReachedAt === Number.POSITIVE_INFINITY
+        ) {
+          agg.viewsReachedAt = event.createdAtMs;
+        }
+      });
+    });
+
+    const allCreators = Array.from(creators.values());
+    const eligibleReels = allCreators.filter((agg) => {
+      if (agg.verifiedReels < reelsMin) return false;
+      if (reelsMinViews > 0 && agg.totalVerifiedViews < reelsMinViews)
+        return false;
+      return true;
+    });
+    eligibleReels.sort((a, b) => {
+      if (b.verifiedReels !== a.verifiedReels) {
+        return b.verifiedReels - a.verifiedReels;
+      }
+      if (b.totalVerifiedViews !== a.totalVerifiedViews) {
+        return b.totalVerifiedViews - a.totalVerifiedViews;
+      }
+      if (a.reelsReachedAt !== b.reelsReachedAt) {
+        return a.reelsReachedAt - b.reelsReachedAt;
+      }
+      return String(a.creatorId).localeCompare(String(b.creatorId));
+    });
+    const reelsWinnerId = eligibleReels[0]?.creatorId || null;
+
+    const eligibleViews = allCreators.filter(
+      (agg) => agg.totalVerifiedViews >= viewsMin,
+    );
+    eligibleViews.sort((a, b) => {
+      if (b.totalVerifiedViews !== a.totalVerifiedViews) {
+        return b.totalVerifiedViews - a.totalVerifiedViews;
+      }
+      if (b.verifiedReels !== a.verifiedReels) {
+        return b.verifiedReels - a.verifiedReels;
+      }
+      if (a.viewsReachedAt !== b.viewsReachedAt) {
+        return a.viewsReachedAt - b.viewsReachedAt;
+      }
+      return String(a.creatorId).localeCompare(String(b.creatorId));
+    });
+    const viewsWinnerId = eligibleViews[0]?.creatorId || null;
+    const viewsPayout = Number(viewsConfig?.payout_cents || 0);
+
+    creators.forEach((agg, creatorId) => {
+      let paidForReels = 0;
+      if (creatorId === reelsWinnerId && reelsPayout > 0) {
+        let unassignedPaid = agg.totalPaidBonusCents;
+        if (creatorId === viewsWinnerId && viewsPayout > 0) {
+          unassignedPaid = Math.max(0, unassignedPaid - viewsPayout);
+        }
+        paidForReels = Math.min(unassignedPaid, reelsPayout);
+      }
+      empty.set(creatorId, {
+        expectedCents: creatorId === reelsWinnerId ? reelsPayout : 0,
+        paidCents: paidForReels,
+        viewsExpectedCents: creatorId === viewsWinnerId ? viewsPayout : 0,
+        viewsPaidCents:
+          creatorId === viewsWinnerId && viewsPayout > 0
+            ? Math.min(agg.totalPaidBonusCents, viewsPayout)
+            : 0,
+        verifiedReels: agg.verifiedReels,
+        minRequired: reelsMin,
+      });
+    });
+    return empty;
+  }, [
+    currentContest,
+    currentSubmissions,
+    getStatus,
+    showMostVerifiedReelsCreatorColumn,
+  ]);
 
   // Filter creator groups by participant filter and eligibility (for Twitter contests)
   const filteredCreatorGroups = useMemo(() => {
@@ -4712,8 +5002,7 @@ export default function ContestDetailClient({
 
     if (isContestLevel) {
       if (type === "core" || type === "all") setIsRefreshingCore(true);
-      if (type === "traffic" || type === "all")
-        setIsRefreshingTraffic(true);
+      if (type === "traffic" || type === "all") setIsRefreshingTraffic(true);
       if (type === "demographics" || type === "all")
         setIsRefreshingDemographics(true);
     } else {
@@ -7761,393 +8050,444 @@ export default function ContestDetailClient({
                     </div>
                   )}
 
-                  {currentContest.contest_type === "cpm" &&
-                    currentContest.contest_based_details?.cpm_contest && (
-                      <div className="space-y-3">
-                        <h3 className="font-semibold text-lg text-foreground">
-                          CPM Configuration
-                        </h3>
-                        <div className="grid grid-col-1 md:grid-cols-2 gap-4">
-                          <div
-                            className={cn(
-                              "flex justify-between items-center p-3 rounded-md border",
-                              isDark ? "border-gray-600" : "border-gray-400",
-                            )}
-                          >
-                            <span
-                              className={cn(
-                                "text-md font-medium tracking-wide",
-                                isDark ? "text-white" : "text-black",
-                              )}
-                            >
-                              CPM Rate:
-                            </span>
-                            <span className="font-semibold text-md text-foreground">
-                              $
-                              {parseFloat(
-                                currentContest.contest_based_details.cpm_contest
-                                  .cpm_rate_usd,
-                              ).toFixed(2)}{" "}
-                              per 1000 {isTwitterCpmCampaign ? "points" : "views"}
-                            </span>
-                          </div>
-                          <div
-                            className={cn(
-                              "flex justify-between items-center p-3 rounded-md border",
-                              isDark ? "border-gray-600" : "border-gray-400",
-                            )}
-                          >
-                            <span
-                              className={cn(
-                                "text-md font-medium tracking-wide",
-                                isDark ? "text-white" : "text-black",
-                              )}
-                            >
-                              Total Budget:
-                            </span>
-                            <span className="font-semibold text-md text-foreground">
-                              {formatMoney(
-                                currentContest.contest_based_details.cpm_contest
-                                  .total_budget,
-                              )}
-                            </span>
-                          </div>
-                          {currentContest.contest_based_details.cpm_contest
-                            .min_views != null && (
-                            <div
-                              className={cn(
-                                "flex justify-between items-center p-3 rounded-md border",
-                                isDark ? "border-gray-600" : "border-gray-400",
-                              )}
-                            >
-                              <span
-                                className={cn(
-                                  "text-md font-medium",
-                                  isDark ? "text-white" : "text-black",
-                                )}
-                              >
-                                Min Views:
-                              </span>
-                              <span className="font-semibold text-md text-foreground">
-                                {currentContest.contest_based_details.cpm_contest.min_views.toLocaleString()}
-                              </span>
-                            </div>
-                          )}
-                          {currentContest.contest_based_details.cpm_contest
-                            .max_views != null && (
-                            <div
-                              className={cn(
-                                "flex justify-between items-center p-3 rounded-md border",
-                                isDark ? "border-gray-600" : "border-gray-400",
-                              )}
-                            >
-                              <span
-                                className={cn(
-                                  "text-md font-medium",
-                                  isDark ? "text-white" : "text-black",
-                                )}
-                              >
-                                Max Views (Cap):
-                              </span>
-                              <span className="font-semibold text-md text-foreground">
-                                {currentContest.contest_based_details.cpm_contest.max_views.toLocaleString()}
-                              </span>
-                            </div>
-                          )}
-                        </div>
-                        <div>
-                          <h4 className="text-md font-semibold mt-4 mb-2 text-foreground">
-                            Terms & Conditions
-                          </h4>
-                          <div
-                            className={cn(
-                              "p-3 border rounded-lg text-[13px] text-black",
-                              isDark
-                                ? "border-gray-600 text-white"
-                                : "border-gray-400 text-black",
-                            )}
-                          >
-                            <div className="whitespace-pre-wrap break-words">
-                              {currentContest.contest_based_details.cpm_contest
-                                .terms_conditions ||
-                                "No specific terms provided."}
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    )}
-
-                  {currentContest.contest_type === "milestone" &&
-                    currentContest.contest_based_details?.milestone_contest && (
-                      <div className="space-y-6">
-                        {/* Milestone Ladder */}
-                        <div className="space-y-4">
-                          <div className="flex items-center justify-between">
-                            <h3 className="font-semibold text-lg text-foreground flex items-center gap-2">
-                              <Trophy className="h-5 w-5 text-yellow-500" />
-                              Milestone Rewards Ladder
-                            </h3>
-                            <Badge
-                              variant="outline"
-                              className={cn(
-                                "text-xs font-medium",
-                                isDark
-                                  ? "bg-purple-900/30 text-purple-300 border-purple-500/30"
-                                  : "bg-purple-50 text-purple-700 border-purple-200",
-                              )}
-                            >
-                              Non-Cumulative
-                            </Badge>
-                          </div>
-
-                          <div className="grid grid-cols-1 gap-4">
-                            {(currentContest.contest_based_details.milestone_contest.milestones || [])
-                              .sort((a: any, b: any) => a.order - b.order)
-                              .map((milestone: any, index: number) => (
-                                <div
-                                  key={index}
-                                  className={cn(
-                                    "relative overflow-hidden rounded-xl border transition-all duration-300 group",
-                                    isDark
-                                      ? "bg-[#170337] border-gray-600 hover:border-purple-500/50"
-                                      : "bg-white border-gray-200 hover:border-purple-400 font-bold",
-                                  )}
-                                >
-                                  {/* Glassmorphism background effect */}
-                                  <div className="absolute inset-0 bg-gradient-to-r from-transparent via-purple-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
-
-                                  <CardContent className="p-5 flex items-center justify-between relative z-10">
-                                    <div className="flex items-center gap-5">
-                                      <div
-                                        className={cn(
-                                          "w-12 h-12 flex items-center justify-center rounded-2xl shadow-inner",
-                                          isDark
-                                            ? "bg-purple-900/40 text-purple-300 border border-purple-500/20"
-                                            : "bg-purple-50 text-purple-600 border border-purple-100",
-                                        )}
-                                      >
-                                        <Zap className="h-6 w-6" />
-                                      </div>
-                                      <div>
-                                        <div className="flex items-center gap-2 mb-1">
-                                          <p
-                                            className={cn(
-                                              "text-sm font-semibold uppercase tracking-wider",
-                                              isDark
-                                                ? "text-purple-400"
-                                                : "text-purple-600",
-                                            )}
-                                          >
-                                            Milestone {index + 1}
-                                          </p>
-                                          {milestone.winner_limit && (
-                                            <Badge
-                                              variant="secondary"
-                                              className="text-[10px] h-4 px-1.5"
-                                            >
-                                              Limit: {milestone.winner_limit}
-                                            </Badge>
-                                          )}
-                                        </div>
-                                        <p
-                                          className={cn(
-                                            "text-2xl font-black",
-                                            isDark ? "text-white" : "text-gray-900",
-                                          )}
-                                        >
-                                          {milestone.target_views.toLocaleString()}{" "}
-                                          <span className="text-sm font-medium opacity-70">
-                                            Views
-                                          </span>
-                                        </p>
-                                      </div>
-                                    </div>
-
-                                    <div className="text-right">
-                                      <p
-                                        className={cn(
-                                          "text-xs font-medium mb-1",
-                                          isDark ? "text-gray-400" : "text-gray-500",
-                                        )}
-                                      >
-                                        Payout
-                                      </p>
-                                      <p
-                                        className={cn(
-                                          "text-2xl font-bold",
-                                          isDark ? "text-green-400" : "text-green-600",
-                                        )}
-                                      >
-                                        {formatMoney(milestone.payout_cents)}
-                                      </p>
-                                    </div>
-                                  </CardContent>
-                                </div>
-                              ))}
-                          </div>
-                        </div>
-
-                        {/* Bonus Tracks */}
-                        {currentContest.contest_based_details.milestone_contest.bonus?.enabled && (
-                          <div className="space-y-4 pt-4">
-                            <h3 className="font-semibold text-lg text-foreground flex items-center gap-2">
-                              <Gift className="h-5 w-5 text-pink-500" />
-                              Competitive Bonus Tracks
-                            </h3>
-
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                              {currentContest.contest_based_details.milestone_contest.bonus.most_verified_views && (
-                                <div
-                                  className={cn(
-                                    "rounded-xl border p-5 relative overflow-hidden",
-                                    isDark
-                                      ? "bg-gradient-to-br from-blue-900/20 to-purple-900/20 border-blue-500/30"
-                                      : "bg-gradient-to-br from-blue-50 to-indigo-50 border-blue-200",
-                                  )}
-                                >
-                                  <div className="flex items-start justify-between mb-4">
-                                    <div
-                                      className={cn(
-                                        "p-2 rounded-lg",
-                                        isDark ? "bg-blue-900/40" : "bg-blue-100",
-                                      )}
-                                    >
-                                      <Eye className="h-5 w-5 text-blue-500" />
-                                    </div>
-                                    <Badge className="bg-blue-500 hover:bg-blue-600 text-white border-none">
-                                      {formatMoney(
-                                        currentContest.contest_based_details
-                                          .milestone_contest.bonus
-                                          .most_verified_views.payout_cents,
-                                      )}
-                                    </Badge>
-                                  </div>
-                                  <h4
-                                    className={cn(
-                                      "font-bold text-lg mb-1",
-                                      isDark ? "text-white" : "text-blue-900",
-                                    )}
-                                  >
-                                    Most Verified Views
-                                  </h4>
-                                  <p
-                                    className={cn(
-                                      "text-sm",
-                                      isDark ? "text-blue-200/70" : "text-blue-700",
-                                    )}
-                                  >
-                                    Awarded to the creator with the highest total
-                                    verified views.
-                                  </p>
-                                  <div className="mt-4 pt-4 border-t border-blue-500/20">
-                                    <div className="flex justify-between text-xs font-semibold">
-                                      <span className="opacity-70 uppercase tracking-tighter">Eligibility Condition</span>
-                                      <span className="text-blue-500">
-                                        Min.{" "}
-                                        {currentContest.contest_based_details.milestone_contest.bonus.most_verified_views.min_total_views.toLocaleString()}{" "}
-                                        Views
-                                      </span>
-                                    </div>
-                                  </div>
-                                </div>
-                              )}
-
-                              {currentContest.contest_based_details.milestone_contest.bonus.most_verified_reels && (
-                                <div
-                                  className={cn(
-                                    "rounded-xl border p-5 relative overflow-hidden",
-                                    isDark
-                                      ? "bg-gradient-to-br from-pink-900/20 to-purple-900/20 border-pink-500/30"
-                                      : "bg-gradient-to-br from-pink-50 to-purple-50 border-pink-200",
-                                  )}
-                                >
-                                  <div className="flex items-start justify-between mb-4">
-                                    <div
-                                      className={cn(
-                                        "p-2 rounded-lg",
-                                        isDark ? "bg-pink-900/40" : "bg-pink-100",
-                                      )}
-                                    >
-                                      <Play className="h-5 w-5 text-pink-500" />
-                                    </div>
-                                    <Badge className="bg-pink-500 hover:bg-pink-600 text-white border-none">
-                                      {formatMoney(
-                                        currentContest.contest_based_details
-                                          .milestone_contest.bonus
-                                          .most_verified_reels.payout_cents,
-                                      )}
-                                    </Badge>
-                                  </div>
-                                  <h4
-                                    className={cn(
-                                      "font-bold text-lg mb-1",
-                                      isDark ? "text-white" : "text-pink-900",
-                                    )}
-                                  >
-                                    Most Verified Reels
-                                  </h4>
-                                  <p
-                                    className={cn(
-                                      "text-sm",
-                                      isDark
-                                        ? "text-pink-200/70"
-                                        : "text-pink-700 font-bold",
-                                    )}
-                                  >
-                                    Awarded to the creator with the most reels
-                                    hitting target views.
-                                  </p>
-                                  <div className="mt-4 pt-4 border-t border-pink-500/20">
-                                    <div className="flex justify-between text-xs font-semibold">
-                                      <span className="opacity-70 uppercase tracking-tighter">Eligibility Condition</span>
-                                      <span className="text-pink-500">
-                                        Min.{" "}
-                                        {currentContest.contest_based_details.milestone_contest.bonus.most_verified_reels.min_verified_reels.toLocaleString()}{" "}
-                                        Reels
-                                      </span>
-                                    </div>
-                                  </div>
-                                </div>
-                              )}
-                            </div>
-                          </div>
-                        )}
-
-                        {/* Budget Status */}
+                {currentContest.contest_type === "cpm" &&
+                  currentContest.contest_based_details?.cpm_contest && (
+                    <div className="space-y-3">
+                      <h3 className="font-semibold text-lg text-foreground">
+                        CPM Configuration
+                      </h3>
+                      <div className="grid grid-col-1 md:grid-cols-2 gap-4">
                         <div
                           className={cn(
-                            "mt-6 p-4 rounded-xl border flex items-center justify-between",
-                            isDark
-                              ? "bg-gray-900/30 border-gray-600"
-                              : "bg-gray-50 border-gray-200",
+                            "flex justify-between items-center p-3 rounded-md border",
+                            isDark ? "border-gray-600" : "border-gray-400",
                           )}
                         >
-                          <div className="flex items-center gap-3">
-                            <Wallet className="h-5 w-5 text-emerald-500" />
-                            <span
-                              className={cn(
-                                "text-sm font-medium",
-                                isDark ? "text-gray-300" : "text-gray-600",
-                              )}
-                            >
-                              Total Budget
-                            </span>
-                          </div>
                           <span
                             className={cn(
-                              "text-lg font-bold",
-                              isDark ? "text-white" : "text-gray-900",
+                              "text-md font-medium tracking-wide",
+                              isDark ? "text-white" : "text-black",
                             )}
                           >
+                            CPM Rate:
+                          </span>
+                          <span className="font-semibold text-md text-foreground">
+                            $
+                            {parseFloat(
+                              currentContest.contest_based_details.cpm_contest
+                                .cpm_rate_usd,
+                            ).toFixed(2)}{" "}
+                            per 1000 {isTwitterCpmCampaign ? "points" : "views"}
+                          </span>
+                        </div>
+                        <div
+                          className={cn(
+                            "flex justify-between items-center p-3 rounded-md border",
+                            isDark ? "border-gray-600" : "border-gray-400",
+                          )}
+                        >
+                          <span
+                            className={cn(
+                              "text-md font-medium tracking-wide",
+                              isDark ? "text-white" : "text-black",
+                            )}
+                          >
+                            Total Budget:
+                          </span>
+                          <span className="font-semibold text-md text-foreground">
                             {formatMoney(
-                              currentContest.contest_based_details.milestone_contest
-                                .total_budget_cents,
+                              currentContest.contest_based_details.cpm_contest
+                                .total_budget,
                             )}
                           </span>
                         </div>
+                        {currentContest.contest_based_details.cpm_contest
+                          .min_views != null && (
+                          <div
+                            className={cn(
+                              "flex justify-between items-center p-3 rounded-md border",
+                              isDark ? "border-gray-600" : "border-gray-400",
+                            )}
+                          >
+                            <span
+                              className={cn(
+                                "text-md font-medium",
+                                isDark ? "text-white" : "text-black",
+                              )}
+                            >
+                              Min Views:
+                            </span>
+                            <span className="font-semibold text-md text-foreground">
+                              {currentContest.contest_based_details.cpm_contest.min_views.toLocaleString()}
+                            </span>
+                          </div>
+                        )}
+                        {currentContest.contest_based_details.cpm_contest
+                          .max_views != null && (
+                          <div
+                            className={cn(
+                              "flex justify-between items-center p-3 rounded-md border",
+                              isDark ? "border-gray-600" : "border-gray-400",
+                            )}
+                          >
+                            <span
+                              className={cn(
+                                "text-md font-medium",
+                                isDark ? "text-white" : "text-black",
+                              )}
+                            >
+                              Max Views (Cap):
+                            </span>
+                            <span className="font-semibold text-md text-foreground">
+                              {currentContest.contest_based_details.cpm_contest.max_views.toLocaleString()}
+                            </span>
+                          </div>
+                        )}
                       </div>
-                    )}
+                      <div>
+                        <h4 className="text-md font-semibold mt-4 mb-2 text-foreground">
+                          Terms & Conditions
+                        </h4>
+                        <div
+                          className={cn(
+                            "p-3 border rounded-lg text-[13px] text-black",
+                            isDark
+                              ? "border-gray-600 text-white"
+                              : "border-gray-400 text-black",
+                          )}
+                        >
+                          <div className="whitespace-pre-wrap break-words">
+                            {currentContest.contest_based_details.cpm_contest
+                              .terms_conditions ||
+                              "No specific terms provided."}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
 
+                {currentContest.contest_type === "milestone" &&
+                  currentContest.contest_based_details?.milestone_contest && (
+                    <div className="space-y-6">
+                      {/* Milestone Ladder */}
+                      <div className="space-y-4">
+                        <div className="flex items-center justify-between">
+                          <h3 className="font-semibold text-lg text-foreground flex items-center gap-2">
+                            <Trophy className="h-5 w-5 text-yellow-500" />
+                            Milestone Rewards Ladder
+                          </h3>
+                          <Badge
+                            variant="outline"
+                            className={cn(
+                              "text-xs font-medium",
+                              isDark
+                                ? "bg-purple-900/30 text-purple-300 border-purple-500/30"
+                                : "bg-purple-50 text-purple-700 border-purple-200",
+                            )}
+                          >
+                            Non-Cumulative
+                          </Badge>
+                        </div>
+
+                        <div className="grid grid-cols-1 gap-4">
+                          {(
+                            currentContest.contest_based_details
+                              .milestone_contest.milestones || []
+                          )
+                            .sort((a: any, b: any) => a.order - b.order)
+                            .map((milestone: any, index: number) => (
+                              <div
+                                key={index}
+                                className={cn(
+                                  "relative overflow-hidden rounded-xl border transition-all duration-300 group",
+                                  isDark
+                                    ? "bg-[#170337] border-gray-600 hover:border-purple-500/50"
+                                    : "bg-white border-gray-200 hover:border-purple-400 font-bold",
+                                )}
+                              >
+                                {/* Glassmorphism background effect */}
+                                <div className="absolute inset-0 bg-gradient-to-r from-transparent via-purple-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+
+                                <CardContent className="p-5 flex items-center justify-between relative z-10">
+                                  <div className="flex items-center gap-5">
+                                    <div
+                                      className={cn(
+                                        "w-12 h-12 flex items-center justify-center rounded-2xl shadow-inner",
+                                        isDark
+                                          ? "bg-purple-900/40 text-purple-300 border border-purple-500/20"
+                                          : "bg-purple-50 text-purple-600 border border-purple-100",
+                                      )}
+                                    >
+                                      <Zap className="h-6 w-6" />
+                                    </div>
+                                    <div>
+                                      <div className="flex items-center gap-2 mb-1">
+                                        <p
+                                          className={cn(
+                                            "text-sm font-semibold uppercase tracking-wider",
+                                            isDark
+                                              ? "text-purple-400"
+                                              : "text-purple-600",
+                                          )}
+                                        >
+                                          Milestone {index + 1}
+                                        </p>
+                                        {milestone.winner_limit && (
+                                          <Badge
+                                            variant="secondary"
+                                            className="text-[10px] h-4 px-1.5"
+                                          >
+                                            Limit: {milestone.winner_limit}
+                                          </Badge>
+                                        )}
+                                      </div>
+                                      <p
+                                        className={cn(
+                                          "text-2xl font-black",
+                                          isDark
+                                            ? "text-white"
+                                            : "text-gray-900",
+                                        )}
+                                      >
+                                        {milestone.target_views.toLocaleString()}{" "}
+                                        <span className="text-sm font-medium opacity-70">
+                                          Views
+                                        </span>
+                                      </p>
+                                    </div>
+                                  </div>
+
+                                  <div className="text-right">
+                                    <p
+                                      className={cn(
+                                        "text-xs font-medium mb-1",
+                                        isDark
+                                          ? "text-gray-400"
+                                          : "text-gray-500",
+                                      )}
+                                    >
+                                      Payout
+                                    </p>
+                                    <p
+                                      className={cn(
+                                        "text-2xl font-bold",
+                                        isDark
+                                          ? "text-green-400"
+                                          : "text-green-600",
+                                      )}
+                                    >
+                                      {formatMoney(milestone.payout_cents)}
+                                    </p>
+                                  </div>
+                                </CardContent>
+                              </div>
+                            ))}
+                        </div>
+                      </div>
+
+                      {/* Bonus Tracks */}
+                      {currentContest.contest_based_details.milestone_contest
+                        .bonus?.enabled && (
+                        <div className="space-y-4 pt-4">
+                          <h3 className="font-semibold text-lg text-foreground flex items-center gap-2">
+                            <Gift className="h-5 w-5 text-pink-500" />
+                            Competitive Bonus Tracks
+                          </h3>
+
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            {currentContest.contest_based_details
+                              .milestone_contest.bonus.most_verified_views && (
+                              <div
+                                className={cn(
+                                  "rounded-xl border p-5 relative overflow-hidden",
+                                  isDark
+                                    ? "bg-gradient-to-br from-blue-900/20 to-purple-900/20 border-blue-500/30"
+                                    : "bg-gradient-to-br from-blue-50 to-indigo-50 border-blue-200",
+                                )}
+                              >
+                                <div className="flex items-start justify-between mb-4">
+                                  <div
+                                    className={cn(
+                                      "p-2 rounded-lg",
+                                      isDark ? "bg-blue-900/40" : "bg-blue-100",
+                                    )}
+                                  >
+                                    <Eye className="h-5 w-5 text-blue-500" />
+                                  </div>
+                                  <Badge className="bg-blue-500 hover:bg-blue-600 text-white border-none">
+                                    {formatMoney(
+                                      currentContest.contest_based_details
+                                        .milestone_contest.bonus
+                                        .most_verified_views.payout_cents,
+                                    )}
+                                  </Badge>
+                                </div>
+                                <h4
+                                  className={cn(
+                                    "font-bold text-lg mb-1",
+                                    isDark ? "text-white" : "text-blue-900",
+                                  )}
+                                >
+                                  Most Verified Views
+                                </h4>
+                                <p
+                                  className={cn(
+                                    "text-sm",
+                                    isDark
+                                      ? "text-blue-200/70"
+                                      : "text-blue-700",
+                                  )}
+                                >
+                                  Awarded to the creator with the highest total
+                                  verified views.
+                                </p>
+                                <div className="mt-4 pt-4 border-t border-blue-500/20">
+                                  <div className="flex items-start justify-between gap-3 text-xs font-semibold">
+                                    <span className="opacity-70 uppercase tracking-tighter">
+                                      Eligibility Condition
+                                    </span>
+                                    <div className="text-blue-500 text-right space-y-1">
+                                      {typeof currentContest.contest_based_details
+                                        .milestone_contest.bonus
+                                        .most_verified_views.min_total_views ===
+                                        "number" && (
+                                        <div>
+                                          Min.{" "}
+                                          {currentContest.contest_based_details.milestone_contest.bonus.most_verified_views.min_total_views.toLocaleString()}{" "}
+                                          Views
+                                        </div>
+                                      )}
+                                      {typeof currentContest.contest_based_details
+                                        .milestone_contest.bonus
+                                        .most_verified_views
+                                        .min_verified_reels === "number" && (
+                                        <div>
+                                          Min.{" "}
+                                          {currentContest.contest_based_details.milestone_contest.bonus.most_verified_views.min_verified_reels.toLocaleString()}{" "}
+                                          Reels
+                                        </div>
+                                      )}
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+                            )}
+
+                            {currentContest.contest_based_details
+                              .milestone_contest.bonus.most_verified_reels && (
+                              <div
+                                className={cn(
+                                  "rounded-xl border p-5 relative overflow-hidden",
+                                  isDark
+                                    ? "bg-gradient-to-br from-pink-900/20 to-purple-900/20 border-pink-500/30"
+                                    : "bg-gradient-to-br from-pink-50 to-purple-50 border-pink-200",
+                                )}
+                              >
+                                <div className="flex items-start justify-between mb-4">
+                                  <div
+                                    className={cn(
+                                      "p-2 rounded-lg",
+                                      isDark ? "bg-pink-900/40" : "bg-pink-100",
+                                    )}
+                                  >
+                                    <Play className="h-5 w-5 text-pink-500" />
+                                  </div>
+                                  <Badge className="bg-pink-500 hover:bg-pink-600 text-white border-none">
+                                    {formatMoney(
+                                      currentContest.contest_based_details
+                                        .milestone_contest.bonus
+                                        .most_verified_reels.payout_cents,
+                                    )}
+                                  </Badge>
+                                </div>
+                                <h4
+                                  className={cn(
+                                    "font-bold text-lg mb-1",
+                                    isDark ? "text-white" : "text-pink-900",
+                                  )}
+                                >
+                                  Most Verified Reels
+                                </h4>
+                                <p
+                                  className={cn(
+                                    "text-sm",
+                                    isDark
+                                      ? "text-pink-200/70"
+                                      : "text-pink-700 font-bold",
+                                  )}
+                                >
+                                  Awarded to the creator with the most reels
+                                  hitting target views.
+                                </p>
+                                <div className="mt-4 pt-4 border-t border-pink-500/20">
+                                  <div className="flex items-start justify-between gap-3 text-xs font-semibold">
+                                    <span className="opacity-70 uppercase tracking-tighter">
+                                      Eligibility Condition
+                                    </span>
+                                    <div className="text-pink-500 text-right space-y-1">
+                                      {typeof currentContest.contest_based_details
+                                        .milestone_contest.bonus
+                                        .most_verified_reels
+                                        .min_verified_reels === "number" && (
+                                        <div>
+                                          Min.{" "}
+                                          {currentContest.contest_based_details.milestone_contest.bonus.most_verified_reels.min_verified_reels.toLocaleString()}{" "}
+                                          Reels
+                                        </div>
+                                      )}
+                                      {typeof currentContest.contest_based_details
+                                        .milestone_contest.bonus
+                                        .most_verified_reels.min_total_views ===
+                                        "number" && (
+                                        <div>
+                                          Min.{" "}
+                                          {currentContest.contest_based_details.milestone_contest.bonus.most_verified_reels.min_total_views.toLocaleString()}{" "}
+                                          Views
+                                        </div>
+                                      )}
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Budget Status */}
+                      <div
+                        className={cn(
+                          "mt-6 p-4 rounded-xl border flex items-center justify-between",
+                          isDark
+                            ? "bg-gray-900/30 border-gray-600"
+                            : "bg-gray-50 border-gray-200",
+                        )}
+                      >
+                        <div className="flex items-center gap-3">
+                          <Wallet className="h-5 w-5 text-emerald-500" />
+                          <span
+                            className={cn(
+                              "text-sm font-medium",
+                              isDark ? "text-gray-300" : "text-gray-600",
+                            )}
+                          >
+                            Total Budget
+                          </span>
+                        </div>
+                        <span
+                          className={cn(
+                            "text-lg font-bold",
+                            isDark ? "text-white" : "text-gray-900",
+                          )}
+                        >
+                          {formatMoney(
+                            currentContest.contest_based_details
+                              .milestone_contest.total_budget_cents,
+                          )}
+                        </span>
+                      </div>
+                    </div>
+                  )}
 
                 {/* Points Configuration */}
                 {(() => {
@@ -11830,18 +12170,31 @@ export default function ContestDetailClient({
                                 })()}
                               </div>
                               <div className="flex flex-wrap items-center justify-between gap-1 text-[11px] text-slate-600 dark:text-slate-300">
-                                <span>       
-                                  Processed <b>{youtubeRun.processed_submissions ?? 0}</b> / {youtubeRun.total_submissions}
+                                <span>
+                                  Processed{" "}
+                                  <b>{youtubeRun.processed_submissions ?? 0}</b>{" "}
+                                  / {youtubeRun.total_submissions}
                                 </span>
                                 <span className="uppercase tracking-wide text-[10px]">
                                   {youtubeRun.status}
                                 </span>
                               </div>
                               <div className="flex flex-col gap-0.5 text-[10px] text-slate-700 dark:text-slate-200 mt-1">
-                                <span>Success: <b>{youtubeRun.success_count}</b></span>
-                                <span>Temporary failure: <b>{youtubeRun.temporary_failure_count}</b></span>
-                                <span>Permanent failure: <b>{youtubeRun.permanent_failure_count}</b></span>
-                                <span>Skipped: <b>{youtubeRun.skipped_recent_count}</b></span>
+                                <span>
+                                  Success: <b>{youtubeRun.success_count}</b>
+                                </span>
+                                <span>
+                                  Temporary failure:{" "}
+                                  <b>{youtubeRun.temporary_failure_count}</b>
+                                </span>
+                                <span>
+                                  Permanent failure:{" "}
+                                  <b>{youtubeRun.permanent_failure_count}</b>
+                                </span>
+                                <span>
+                                  Skipped:{" "}
+                                  <b>{youtubeRun.skipped_recent_count}</b>
+                                </span>
                               </div>
                               {youtubeRefreshElapsedSeconds != null && (
                                 <>
@@ -12986,7 +13339,8 @@ export default function ContestDetailClient({
                                     "x") &&
                                 currentContest.contest_format ===
                                   "text_image") ||
-                              currentContest.contest_type === "cpm" ? (
+                              currentContest.contest_type === "cpm" ||
+                              currentContest.contest_type === "milestone" ? (
                                 <>
                                   {(currentContest.platform
                                     ?.toLowerCase()
@@ -13200,6 +13554,35 @@ export default function ContestDetailClient({
                                     className: "text-slate-500",
                                   };
                                 }
+                                if (
+                                  currentContest.contest_type === "milestone"
+                                ) {
+                                  const milestones =
+                                    currentContest.contest_based_details
+                                      ?.milestone_contest?.milestones;
+                                  if (
+                                    Array.isArray(milestones) &&
+                                    milestones.length > 0
+                                  ) {
+                                    const cents =
+                                      milestoneSubmissionExpectedPayoutCents.get(
+                                        submission.id,
+                                      ) ?? 0;
+                                    if (cents > 0) {
+                                      return {
+                                        amount: centsToDollars(cents),
+                                        label: "Expected",
+                                        className:
+                                          "text-slate-700 font-semibold",
+                                      };
+                                    }
+                                  }
+                                  return {
+                                    amount: 0,
+                                    label: "Expected",
+                                    className: "text-slate-500",
+                                  };
+                                }
                                 return {
                                   amount: 0,
                                   label: "N/A",
@@ -13213,6 +13596,49 @@ export default function ContestDetailClient({
                                     amount: 0,
                                     label: "No Reward",
                                     className: "text-red-600 font-semibold",
+                                  };
+                                }
+
+                                if (
+                                  currentContest.contest_type === "milestone"
+                                ) {
+                                  const milestoneCents =
+                                    milestoneSubmissionExpectedPayoutCents.get(
+                                      submission.id,
+                                    ) ?? 0;
+                                  const storedCents =
+                                    Number(submission.earnings) || 0;
+                                  const isPaid =
+                                    submission.status === "paid" ||
+                                    (submission as any).paid === true;
+
+                                  if (isPaid) {
+                                    const grantedCents =
+                                      storedCents > 0
+                                        ? storedCents
+                                        : milestoneCents;
+                                    return {
+                                      amount: centsToDollars(grantedCents),
+                                      label: grantedCents > 0 ? "Paid" : "—",
+                                      className:
+                                        grantedCents > 0
+                                          ? "text-blue-600 font-semibold"
+                                          : "text-slate-500",
+                                    };
+                                  }
+
+                                  if (storedCents > 0) {
+                                    return {
+                                      amount: centsToDollars(storedCents),
+                                      label: "Pending",
+                                      className: "text-amber-600 font-semibold",
+                                    };
+                                  }
+
+                                  return {
+                                    amount: 0,
+                                    label: "—",
+                                    className: "text-slate-500",
                                   };
                                 }
 
@@ -14591,10 +15017,11 @@ export default function ContestDetailClient({
                                         ) && (
                                           <TableCell className="text-center">
                                             {(() => {
-                                              const meta = getInsightsStatusMeta(
-                                                submission.insights_status ??
-                                                  null,
-                                              );
+                                              const meta =
+                                                getInsightsStatusMeta(
+                                                  submission.insights_status ??
+                                                    null,
+                                                );
                                               return (
                                                 <div className="flex items-center justify-center">
                                                   <Tooltip>
@@ -14641,7 +15068,9 @@ export default function ContestDetailClient({
                                         "x") &&
                                     currentContest.contest_format ===
                                       "text_image") ||
-                                  currentContest.contest_type === "cpm" ? (
+                                  currentContest.contest_type === "cpm" ||
+                                  currentContest.contest_type ===
+                                    "milestone" ? (
                                     <>
                                       {(currentContest.platform
                                         ?.toLowerCase()
@@ -15553,6 +15982,26 @@ export default function ContestDetailClient({
                                       </TableHead>
                                     </>
                                   )}
+                                  {showMostVerifiedViewsBonusColumns && (
+                                    <>
+                                      <TableHead className="text-center">
+                                        Bonus Expected Verified Views
+                                      </TableHead>
+                                      <TableHead className="text-center">
+                                        Bonus Granted Verified Views
+                                      </TableHead>
+                                    </>
+                                  )}
+                                  {showMostVerifiedReelsCreatorColumn && (
+                                    <>
+                                      <TableHead className="text-center">
+                                        Bonus Expected Verified Reels
+                                      </TableHead>
+                                      <TableHead className="text-center">
+                                        Bonus Granted Verified Reels
+                                      </TableHead>
+                                    </>
+                                  )}
                                   {/* Manual Points Adjustment and Reason Columns - Show for Twitter leaderboard and CPM campaigns */}
                                   {(currentContest.platform?.toLowerCase() ===
                                     "twitter" ||
@@ -15599,6 +16048,12 @@ export default function ContestDetailClient({
                                     <TableCell
                                       colSpan={
                                         12 +
+                                        (showMostVerifiedViewsBonusColumns
+                                          ? 2
+                                          : 0) +
+                                        (showMostVerifiedReelsCreatorColumn
+                                          ? 2
+                                          : 0) +
                                         (currentContest.platform
                                           ?.toLowerCase()
                                           .includes("tiktok")
@@ -15626,6 +16081,15 @@ export default function ContestDetailClient({
                                         hasVerifiedOrPaidSubmissions
                                           ? group.bonus.expected
                                           : 0;
+                                      const reelsBonusInfo =
+                                        milestoneReelsBonusByCreator.get(
+                                          group.creator.id,
+                                        ) || {
+                                          expectedCents: 0,
+                                          paidCents: 0,
+                                          viewsExpectedCents: 0,
+                                          viewsPaidCents: 0,
+                                        };
                                       // Prefer full name / display name from submission or creator object
                                       const primarySubmission =
                                         group.submissions?.[0];
@@ -16285,11 +16749,13 @@ export default function ContestDetailClient({
                                               )}
                                             </>
                                           )}
-                                          {/* Show reward columns for leaderboard and CPM contests (including Twitter) */}
+                                          {/* Show reward columns for leaderboard, CPM, and milestone contests */}
                                           {(currentContest.contest_type ===
                                             "leaderboard" ||
                                             currentContest.contest_type ===
-                                              "cpm") && (
+                                              "cpm" ||
+                                            currentContest.contest_type ===
+                                              "milestone") && (
                                             <>
                                               {(currentContest.platform
                                                 ?.toLowerCase()
@@ -16356,6 +16822,45 @@ export default function ContestDetailClient({
                                                 {formatMoney(
                                                   group.bonus.granted,
                                                 )}
+                                              </TableCell>
+                                            </>
+                                          )}
+                                          {showMostVerifiedViewsBonusColumns && (
+                                            <>
+                                              <TableCell className="text-center font-medium">
+                                                {reelsBonusInfo.viewsExpectedCents >
+                                                0
+                                                  ? formatMoney(
+                                                      reelsBonusInfo.viewsExpectedCents,
+                                                    )
+                                                  : "-"}
+                                              </TableCell>
+                                              <TableCell className="text-center font-medium text-green-600">
+                                                {reelsBonusInfo.viewsPaidCents >
+                                                0
+                                                  ? formatMoney(
+                                                      reelsBonusInfo.viewsPaidCents,
+                                                    )
+                                                  : "-"}
+                                              </TableCell>
+                                            </>
+                                          )}
+                                          {showMostVerifiedReelsCreatorColumn && (
+                                            <>
+                                              <TableCell className="text-center font-medium">
+                                                {reelsBonusInfo.expectedCents >
+                                                0
+                                                  ? formatMoney(
+                                                      reelsBonusInfo.expectedCents,
+                                                    )
+                                                  : "-"}
+                                              </TableCell>
+                                              <TableCell className="text-center font-medium text-green-600">
+                                                {reelsBonusInfo.paidCents > 0
+                                                  ? formatMoney(
+                                                      reelsBonusInfo.paidCents,
+                                                    )
+                                                  : "-"}
                                               </TableCell>
                                             </>
                                           )}
@@ -19167,7 +19672,8 @@ export default function ContestDetailClient({
                                       return formatMoney(totalPrize);
                                     } else if (
                                       currentContest.contest_type === "cpm" ||
-                                      currentContest.contest_type === "milestone"
+                                      currentContest.contest_type ===
+                                        "milestone"
                                     ) {
                                       // Calculate total paid for CPM/Milestone contest
                                       const totalPaid =
@@ -19320,7 +19826,8 @@ export default function ContestDetailClient({
                                         0;
                                     } else if (
                                       currentContest.contest_type === "cpm" ||
-                                      currentContest.contest_type === "milestone"
+                                      currentContest.contest_type ===
+                                        "milestone"
                                     ) {
                                       totalCost =
                                         filteredAnalyticsSubmissions
