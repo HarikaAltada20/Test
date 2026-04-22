@@ -118,9 +118,11 @@ function AccountCardEmailRow({
 
 function ConnectedOnLine({
   dateLabel,
+  prefix = "Connected on",
   isDark,
 }: {
   dateLabel: string | null;
+  prefix?: string;
   isDark: boolean;
 }) {
   if (!dateLabel) return null;
@@ -131,7 +133,7 @@ function ConnectedOnLine({
         isDark ? "text-slate-500" : "text-slate-500",
       )}
     >
-      Connected on — {dateLabel}
+      {prefix} — {dateLabel}
     </p>
   );
 }
@@ -589,6 +591,7 @@ export function AccountSwitcher({
                     />
                     <ConnectedOnLine
                       dateLabel={formatConnectedOn(currentUserJoinedAt)}
+                      prefix="Created on"
                       isDark={isDark}
                     />
                  </div>
