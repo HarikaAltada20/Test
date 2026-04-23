@@ -1419,20 +1419,27 @@ export default function ContestDetailClient({
     });
   }, [currentSubmissions]);
 
-  const milestoneSubmissionExpectedPayoutCents = useMemo(() => {
+  const milestoneSubmissionAssignments = useMemo(() => {
     if (currentContest?.contest_type !== "milestone") {
-      return new Map<string, number>();
+      return {
+        payoutMap: new Map<string, number>(),
+        labelMap: new Map<string, string>(),
+      };
     }
     const milestones =
       currentContest?.contest_based_details?.milestone_contest?.milestones;
     if (!Array.isArray(milestones) || milestones.length === 0) {
-      return new Map<string, number>();
+      return {
+        payoutMap: new Map<string, number>(),
+        labelMap: new Map<string, string>(),
+      };
     }
     const sortedMilestones = [...milestones].sort(
       (a: any, b: any) => (b.target_views || 0) - (a.target_views || 0),
     );
     const winnerCountsByMilestone = new Map<number, number>();
     const submissionPayoutMap = new Map<string, number>();
+    const submissionMilestoneLabelMap = new Map<string, string>();
 
     const eligible = milestonePayoutEligibleSubmissions
       .filter(
@@ -1450,6 +1457,7 @@ export default function ContestDetailClient({
 
     eligible.forEach((submission: any) => {
       let payoutCents = 0;
+      let milestoneLabel = "—";
       const submissionViews = Number(submission.views || 0);
 
       for (const milestone of sortedMilestones) {
@@ -1465,18 +1473,34 @@ export default function ContestDetailClient({
         }
 
         payoutCents = Number(milestone.payout_cents || 0);
+        const milestoneOrder = Number(milestone.order);
+        const hasMilestoneOrder =
+          Number.isFinite(milestoneOrder) && milestoneOrder > 0;
+        const targetLabel = `${targetViews.toLocaleString()} views`;
+        const payoutLabel = `$${(payoutCents / 100).toFixed(2)}`;
+        milestoneLabel = hasMilestoneOrder
+          ? `Milestone ${milestoneOrder} • ${targetLabel} • ${payoutLabel}`
+          : `Milestone • ${targetLabel} • ${payoutLabel}`;
         break;
       }
 
       submissionPayoutMap.set(submission.id, payoutCents);
+      submissionMilestoneLabelMap.set(submission.id, milestoneLabel);
     });
 
-    return submissionPayoutMap;
+    return {
+      payoutMap: submissionPayoutMap,
+      labelMap: submissionMilestoneLabelMap,
+    };
   }, [
     currentContest?.contest_type,
     currentContest?.contest_based_details,
     milestonePayoutEligibleSubmissions,
   ]);
+  const milestoneSubmissionExpectedPayoutCents =
+    milestoneSubmissionAssignments.payoutMap;
+  const milestoneSubmissionAssignedLabelBySubmissionId =
+    milestoneSubmissionAssignments.labelMap;
 
   // Filter submissions for analytics based on active analytics tab
   // For Twitter tweets, use moderation_status; for regular submissions, use status
@@ -2474,7 +2498,16 @@ export default function ContestDetailClient({
         Object.values(grouped).forEach((group: any) => {
           const submissions = group.submissions || [];
           group.earnings.expected = submissions.reduce(
-            (sum: number, sub: any) => sum + (payoutMap.get(sub.id) ?? 0),
+            (sum: number, sub: any) => {
+              const raw = String(getStatus(sub) || "").toLowerCase();
+              const st = raw === "approved" ? "verified" : raw;
+              // Creator-wise expected should reflect projected milestone payout
+              // for active submissions as well (pending/verified/paid), matching
+              // submission-wise expected behavior.
+              if (st !== "pending" && st !== "verified" && st !== "paid")
+                return sum;
+              return sum + (payoutMap.get(sub.id) ?? 0);
+            },
             0,
           );
           group.earnings.granted = submissions.reduce(
@@ -2518,6 +2551,7 @@ export default function ContestDetailClient({
     getCreatorManualAdjustment,
     milestonePayoutEligibleSubmissions,
     milestoneSubmissionExpectedPayoutCents,
+    getStatus,
   ]);
 
   // Creator ranking for Twitter leaderboard contests (based on total points per creator)
@@ -2694,7 +2728,11 @@ export default function ContestDetailClient({
         minRequired: number;
       }
     >();
-    if (!showMostVerifiedReelsCreatorColumn) return empty;
+    if (
+      !showMostVerifiedReelsCreatorColumn &&
+      !showMostVerifiedViewsBonusColumns
+    )
+      return empty;
 
     const bonusConfig = (currentContest?.contest_based_details as any)
       ?.milestone_contest?.bonus;
@@ -2704,6 +2742,7 @@ export default function ContestDetailClient({
     const reelsMin = Number(reelsConfig?.min_verified_reels || 0);
     const reelsMinViews = Number(reelsConfig?.min_total_views || 0);
     const viewsMin = Number(viewsConfig?.min_total_views || 0);
+    const viewsMinReels = Number(viewsConfig?.min_verified_reels || 0);
 
     type CreatorAgg = {
       creatorId: string;
@@ -2774,12 +2813,14 @@ export default function ContestDetailClient({
     });
 
     const allCreators = Array.from(creators.values());
-    const eligibleReels = allCreators.filter((agg) => {
-      if (agg.verifiedReels < reelsMin) return false;
-      if (reelsMinViews > 0 && agg.totalVerifiedViews < reelsMinViews)
-        return false;
-      return true;
-    });
+    const eligibleReels = !reelsConfig
+      ? []
+      : allCreators.filter((agg) => {
+          if (reelsMin > 0 && agg.verifiedReels < reelsMin) return false;
+          if (reelsMinViews > 0 && agg.totalVerifiedViews < reelsMinViews)
+            return false;
+          return true;
+        });
     eligibleReels.sort((a, b) => {
       if (b.verifiedReels !== a.verifiedReels) {
         return b.verifiedReels - a.verifiedReels;
@@ -2794,9 +2835,15 @@ export default function ContestDetailClient({
     });
     const reelsWinnerId = eligibleReels[0]?.creatorId || null;
 
-    const eligibleViews = allCreators.filter(
-      (agg) => agg.totalVerifiedViews >= viewsMin,
-    );
+    const eligibleViews = !viewsConfig
+      ? []
+      : allCreators.filter((agg) => {
+          if (viewsMin > 0 && agg.totalVerifiedViews < viewsMin) return false;
+          if (viewsMinReels > 0 && agg.verifiedReels < viewsMinReels)
+            return false;
+          if (viewsMin <= 0 && viewsMinReels <= 0) return false;
+          return true;
+        });
     eligibleViews.sort((a, b) => {
       if (b.totalVerifiedViews !== a.totalVerifiedViews) {
         return b.totalVerifiedViews - a.totalVerifiedViews;
@@ -2839,7 +2886,49 @@ export default function ContestDetailClient({
     currentSubmissions,
     getStatus,
     showMostVerifiedReelsCreatorColumn,
+    showMostVerifiedViewsBonusColumns,
   ]);
+
+  /** Sum of expected milestone cents for verified/paid submissions only (pending excluded — matches budget liability) */
+  const milestoneBudgetExpectedPayoutCents = useMemo(() => {
+    if (currentContest?.contest_type !== "milestone") return 0;
+    const payoutMap = milestoneSubmissionExpectedPayoutCents;
+    let sum = 0;
+    for (const sub of currentSubmissions || []) {
+      const raw = String(getStatus(sub) || "").toLowerCase();
+      const st = raw === "approved" ? "verified" : raw;
+      if (st !== "verified" && st !== "paid") continue;
+      sum += payoutMap.get(sub.id) ?? 0;
+    }
+    return sum;
+  }, [
+    currentContest?.contest_type,
+    milestoneSubmissionExpectedPayoutCents,
+    currentSubmissions,
+    getStatus,
+  ]);
+
+  /** Creator bonus (views + reels tracks) expected / paid — same numbers as creator-wise bonus columns */
+  const milestoneCreatorBonusExpectedCentsFromMap = useMemo(() => {
+    if (currentContest?.contest_type !== "milestone") return 0;
+    let sum = 0;
+    milestoneReelsBonusByCreator.forEach((row) => {
+      sum +=
+        (Number(row.viewsExpectedCents) || 0) +
+        (Number(row.expectedCents) || 0);
+    });
+    return sum;
+  }, [currentContest?.contest_type, milestoneReelsBonusByCreator]);
+
+  const milestoneCreatorBonusPaidCentsFromMap = useMemo(() => {
+    if (currentContest?.contest_type !== "milestone") return 0;
+    let sum = 0;
+    milestoneReelsBonusByCreator.forEach((row) => {
+      sum +=
+        (Number(row.viewsPaidCents) || 0) + (Number(row.paidCents) || 0);
+    });
+    return sum;
+  }, [currentContest?.contest_type, milestoneReelsBonusByCreator]);
 
   // Filter creator groups by participant filter and eligibility (for Twitter contests)
   const filteredCreatorGroups = useMemo(() => {
@@ -3676,23 +3765,23 @@ export default function ContestDetailClient({
           }
 
           if (updated) {
-            if (typeof updated.earnings !== "undefined") {
-              merged.earnings = updated.earnings;
-            }
-            if (typeof updated.paid !== "undefined") {
-              merged.paid = updated.paid;
-            }
-            if (typeof updated.paid_at !== "undefined") {
-              merged.paid_at = updated.paid_at;
-            }
-            if (typeof updated.bonus_paid !== "undefined") {
-              merged.bonus_paid = updated.bonus_paid;
-            }
-            if (typeof updated.bonus_paid_at !== "undefined") {
-              merged.bonus_paid_at = updated.bonus_paid_at;
-            }
-            if (typeof updated.bonus_amount !== "undefined") {
-              merged.bonus_amount = updated.bonus_amount;
+            const upd = updated as Record<string, unknown>;
+            const mergeKeys = [
+              "views",
+              "earnings",
+              "paid",
+              "paid_at",
+              "bonus_paid",
+              "bonus_paid_at",
+              "bonus_amount",
+              "other_stats",
+              "platform",
+              "metadata",
+            ] as const;
+            for (const key of mergeKeys) {
+              if (typeof upd[key] !== "undefined") {
+                (merged as any)[key] = upd[key];
+              }
             }
           }
 
@@ -3756,16 +3845,10 @@ export default function ContestDetailClient({
       console.log("🎉 Calling toast with config:", toastConfig);
       toast(toastConfig);
 
-      // Clear contest cache and refresh contest list to update budget tracker
-      console.log(
-        "[contest-detail-client] Dispatching contests:refresh event from handleUpdateSubmissionStatus...",
-      );
-      window.dispatchEvent(new CustomEvent("contests:refresh"));
-
-      // Also directly call the clear cache API to ensure it happens
+      // Clear server contest caches first so list/opportunities never read stale budget_spent
       try {
         console.log(
-          "[contest-detail-client] Directly calling clear cache API...",
+          "[contest-detail-client] Calling clear cache API before contests:refresh...",
         );
         await fetch("/api/contests/clear-cache", { method: "POST" });
         console.log("[contest-detail-client] Direct cache clear completed");
@@ -5816,16 +5899,9 @@ export default function ContestDetailClient({
         variant: tweetModerationVariant,
       });
 
-      // Clear contest cache and refresh contest list to update budget tracker
-      console.log(
-        "[contest-detail-client] Dispatching contests:refresh event from handleModerateTwitterTweet...",
-      );
-      window.dispatchEvent(new CustomEvent("contests:refresh"));
-
-      // Also directly call the clear cache API to ensure it happens
       try {
         console.log(
-          "[contest-detail-client] Directly calling clear cache API from Twitter moderation...",
+          "[contest-detail-client] Calling clear cache API before contests:refresh (Twitter moderation)...",
         );
         await fetch("/api/contests/clear-cache", { method: "POST" });
         console.log(
@@ -5837,6 +5913,7 @@ export default function ContestDetailClient({
           error,
         );
       }
+      window.dispatchEvent(new CustomEvent("contests:refresh"));
 
       // Page-level state is already updated via setCurrentSubmissions above.
       // We rely on that local state update plus the "contests:refresh" event
@@ -7548,6 +7625,15 @@ export default function ContestDetailClient({
                   }}
                   submissions={currentSubmissions as any}
                   showDetailed={true}
+                  milestoneExpectedPayoutCents={
+                    milestoneBudgetExpectedPayoutCents
+                  }
+                  milestoneCreatorBonusExpectedCents={
+                    milestoneCreatorBonusExpectedCentsFromMap
+                  }
+                  milestoneCreatorBonusPaidCents={
+                    milestoneCreatorBonusPaidCentsFromMap
+                  }
                 />
               </div>
             </div>
@@ -8347,19 +8433,19 @@ export default function ContestDetailClient({
                                       Eligibility Condition
                                     </span>
                                     <div className="text-blue-500 text-right space-y-1">
-                                      {typeof currentContest.contest_based_details
-                                        .milestone_contest.bonus
-                                        .most_verified_views.min_total_views ===
-                                        "number" && (
+                                      {typeof currentContest
+                                        .contest_based_details.milestone_contest
+                                        .bonus.most_verified_views
+                                        .min_total_views === "number" && (
                                         <div>
                                           Min.{" "}
                                           {currentContest.contest_based_details.milestone_contest.bonus.most_verified_views.min_total_views.toLocaleString()}{" "}
                                           Views
                                         </div>
                                       )}
-                                      {typeof currentContest.contest_based_details
-                                        .milestone_contest.bonus
-                                        .most_verified_views
+                                      {typeof currentContest
+                                        .contest_based_details.milestone_contest
+                                        .bonus.most_verified_views
                                         .min_verified_reels === "number" && (
                                         <div>
                                           Min.{" "}
@@ -8425,9 +8511,9 @@ export default function ContestDetailClient({
                                       Eligibility Condition
                                     </span>
                                     <div className="text-pink-500 text-right space-y-1">
-                                      {typeof currentContest.contest_based_details
-                                        .milestone_contest.bonus
-                                        .most_verified_reels
+                                      {typeof currentContest
+                                        .contest_based_details.milestone_contest
+                                        .bonus.most_verified_reels
                                         .min_verified_reels === "number" && (
                                         <div>
                                           Min.{" "}
@@ -8435,10 +8521,10 @@ export default function ContestDetailClient({
                                           Reels
                                         </div>
                                       )}
-                                      {typeof currentContest.contest_based_details
-                                        .milestone_contest.bonus
-                                        .most_verified_reels.min_total_views ===
-                                        "number" && (
+                                      {typeof currentContest
+                                        .contest_based_details.milestone_contest
+                                        .bonus.most_verified_reels
+                                        .min_total_views === "number" && (
                                         <div>
                                           Min.{" "}
                                           {currentContest.contest_based_details.milestone_contest.bonus.most_verified_reels.min_total_views.toLocaleString()}{" "}
@@ -13353,6 +13439,12 @@ export default function ContestDetailClient({
                                       Expected Reward
                                     </TableHead>
                                   )}
+                                  {currentContest.contest_type ===
+                                    "milestone" && (
+                                    <TableHead className="text-center min-w-[170px]">
+                                      Milestone
+                                    </TableHead>
+                                  )}
                                   {(currentContest.platform
                                     ?.toLowerCase()
                                     .includes("youtube")
@@ -13717,6 +13809,18 @@ export default function ContestDetailClient({
 
                               const expectedInfo = getExpectedReward();
                               const grantedInfo = getGrantedReward();
+                              const milestoneAssignmentLabel =
+                                currentContest.contest_type === "milestone"
+                                  ? (milestoneSubmissionAssignedLabelBySubmissionId.get(
+                                      submission.id,
+                                    ) ?? "—")
+                                  : "—";
+                              const milestoneAssignmentParts =
+                                milestoneAssignmentLabel.split(" • ");
+                              const milestonePrimaryLabel =
+                                milestoneAssignmentParts[0] || "—";
+                              const milestoneViewsLabel =
+                                milestoneAssignmentParts[1] || "—";
 
                               return (
                                 <TableRow
@@ -15119,6 +15223,40 @@ export default function ContestDetailClient({
                                           </div>
                                         </TableCell>
                                       )}
+                                      {currentContest.contest_type ===
+                                        "milestone" && (
+                                        <TableCell className="text-center">
+                                          {milestoneAssignmentLabel ===
+                                          "—" ? (
+                                            <span
+                                              className={cn(
+                                                "text-xs font-medium",
+                                                isDark
+                                                  ? "text-slate-400"
+                                                  : "text-slate-500",
+                                              )}
+                                            >
+                                             —
+                                            </span>
+                                          ) : (
+                                            <div className="flex flex-col items-center gap-1">
+                                              <span className="inline-flex items-center rounded-full bg-violet-100 text-violet-700 px-2 py-0.5 text-[10px] font-semibold">
+                                                {milestonePrimaryLabel}
+                                              </span>
+                                              <span
+                                                className={cn(
+                                                  "text-xs font-medium whitespace-nowrap",
+                                                  isDark
+                                                    ? "text-slate-200"
+                                                    : "text-slate-700",
+                                                )}
+                                              >
+                                                {milestoneViewsLabel}
+                                              </span>
+                                            </div>
+                                          )}
+                                        </TableCell>
+                                      )}
                                       {(currentContest.platform
                                         ?.toLowerCase()
                                         .includes("youtube")
@@ -15985,20 +16123,20 @@ export default function ContestDetailClient({
                                   {showMostVerifiedViewsBonusColumns && (
                                     <>
                                       <TableHead className="text-center">
-                                        Bonus Expected Verified Views
+                                        Most Verified Views (Bonus Expected)
                                       </TableHead>
                                       <TableHead className="text-center">
-                                        Bonus Granted Verified Views
+                                        Most Verified Views (Bonus Granted)
                                       </TableHead>
                                     </>
                                   )}
                                   {showMostVerifiedReelsCreatorColumn && (
                                     <>
                                       <TableHead className="text-center">
-                                        Bonus Expected Verified Reels
+                                        Most Verified Reels (Bonus Expected)
                                       </TableHead>
                                       <TableHead className="text-center">
-                                        Bonus Granted Verified Reels
+                                        Most Verified Reels (Bonus Granted)
                                       </TableHead>
                                     </>
                                   )}
@@ -20583,6 +20721,16 @@ export default function ContestDetailClient({
           contest={currentContest}
           creatorRank={
             creatorRankingMap.get(selectedCreatorForModal) ?? undefined
+          }
+          milestoneExpectedPayoutBySubmissionId={
+            currentContest?.contest_type === "milestone"
+              ? milestoneSubmissionExpectedPayoutCents
+              : undefined
+          }
+          milestoneAssignedLabelBySubmissionId={
+            currentContest?.contest_type === "milestone"
+              ? milestoneSubmissionAssignedLabelBySubmissionId
+              : undefined
           }
           onVerify={async (ids: string[]) => {
             // Handle bulk verify via new API wrapper

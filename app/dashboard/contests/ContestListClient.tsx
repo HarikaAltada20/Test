@@ -1564,7 +1564,9 @@ export function ContestListClient({
                   </div>
                 );
               })()}
-            {/* Budget Tracker for Milestone contests */}
+            {/* Budget Tracker for Milestone contests — budget_spent is enriched server-side
+                (per-submission milestone model + verified-only ladder + creator bonus expected),
+                same basis as contest detail / opportunities. */}
             {contest.contest_type === "milestone" &&
               contest.contest_based_details?.milestone_contest
                 ?.total_budget_cents != null &&
@@ -1588,7 +1590,7 @@ export function ContestListClient({
                         transition: "none",
                       }}
                     >
-                      <span className="font-medium">Milestone Budget Tracker</span>
+                      <span className="font-medium">Budget Tracker</span>
                       <span className="font-semibold">
                         {formatMoney(tracker.spent)} / {formatMoney(totalBudget)}
                       </span>
@@ -1600,7 +1602,7 @@ export function ContestListClient({
                       )}`}
                     >
                       <div
-                        className="absolute h-full bg-gradient-to-r from-blue-500 to-cyan-600 rounded-full transition-all duration-500 ease-out"
+                        className="absolute h-full bg-gradient-to-r from-purple-500 to-purple-600 rounded-full transition-all duration-500 ease-out"
                         style={{ width: `${tracker.percentage}%` }}
                       ></div>
                     </div>
@@ -2432,7 +2434,7 @@ export function ContestListClient({
                     </div>
                   );
                 })()}
-              {/* Budget Tracker for Milestone contests */}
+              {/* Milestone budget_spent: server-enriched, same model as contest detail */}
               {contest.contest_type === "milestone" &&
                 contest.contest_based_details?.milestone_contest
                   ?.total_budget_cents != null &&
@@ -2456,7 +2458,7 @@ export function ContestListClient({
                           transition: "none",
                         }}
                       >
-                        <span className="font-medium">Milestone Budget Tracker</span>
+                        <span className="font-medium"> Budget Tracker</span>
                         <span className="font-semibold">
                           {formatMoney(tracker.spent)} / {formatMoney(totalBudget)}
                         </span>

@@ -40,9 +40,9 @@ import { createClient } from "@/utils/supabase/client";
 import {
   calculateLeaderboardBudgetSpent,
   calculateTwitterCpmBudgetSpent,
-  calculateMilestoneBudgetSpent,
   Submission,
 } from "@/lib/contest-utils-client";
+import { computeMilestoneContestExpectedSpendCents } from "@/lib/milestone-contest-expected-spend";
 import { getPlatformIconWithFallback } from "@/lib/platform-icons";
 import { cn } from "@/lib/utils";
 import { EnhancedTabs } from "@/components/ui/enhancedTabs";
@@ -197,8 +197,7 @@ export default function OpportunitiesPage({
       id: "ended",
       label: "Ended",
       count: filteredContestsByMediaType.filter(
-        (c) =>
-          c.moderation_status === "published" && c.status === "ended",
+        (c) => c.moderation_status === "published" && c.status === "ended",
       ).length,
     },
   ];
@@ -452,9 +451,10 @@ export default function OpportunitiesPage({
       }
 
       if (userRow?.geo_data && !hasProfileCountry) {
-        const geoDataColumn = userRow.geo_data as
-          | { geo_data?: { country?: string }; country?: string }
-          | null;
+        const geoDataColumn = userRow.geo_data as {
+          geo_data?: { country?: string };
+          country?: string;
+        } | null;
         const extractedCountry =
           geoDataColumn?.geo_data?.country || geoDataColumn?.country || null;
 
@@ -568,8 +568,10 @@ export default function OpportunitiesPage({
               }
             });
           } else if (typeof creatorRow.subcategories === "object") {
-            localCreatorSubcategories =
-              creatorRow.subcategories as Record<string, string[]>;
+            localCreatorSubcategories = creatorRow.subcategories as Record<
+              string,
+              string[]
+            >;
           }
         }
 
@@ -821,10 +823,10 @@ export default function OpportunitiesPage({
               const { data: submissions } = await supabase
                 .from("submissions")
                 .select(
-                  "id, creator_id, created_at, status, paid, earnings, views, platform, other_stats",
+                  "id, creator_id, created_at, status, paid, earnings, views, platform, other_stats, bonus_paid, bonus_amount",
                 )
                 .eq("contest_id", contest.id)
-                .in("status", ["verified", "paid"])
+                .in("status", ["pending", "verified", "paid"])
                 .order("created_at", { ascending: true });
 
               const submissionRecords = (submissions || []).map(
@@ -839,19 +841,19 @@ export default function OpportunitiesPage({
                   platform: submission.platform,
                   other_stats: submission.other_stats,
                   manual_points_adjustment: 0,
-                  bonus_paid: submission.paid ?? false,
-                  bonus_amount: submission.earnings ?? 0,
+                  bonus_paid: submission.bonus_paid ?? false,
+                  bonus_amount: submission.bonus_amount ?? undefined,
                 }),
               );
 
               const milestoneDetails =
                 contest.contest_based_details.milestone_contest;
-              const milestones = milestoneDetails.milestones || [];
 
-              const actualBudgetSpent = calculateMilestoneBudgetSpent(
-                submissionRecords as Submission[],
-                milestones,
-              );
+              const milestoneBudgetSpentCents =
+                computeMilestoneContestExpectedSpendCents(
+                  submissionRecords,
+                  milestoneDetails,
+                );
 
               updatedContest = {
                 ...updatedContest,
@@ -859,7 +861,7 @@ export default function OpportunitiesPage({
                   ...updatedContest.contest_based_details,
                   milestone_contest: {
                     ...updatedContest.contest_based_details.milestone_contest,
-                    budget_spent: Math.round(actualBudgetSpent * 100),
+                    budget_spent: milestoneBudgetSpentCents,
                   },
                 },
               };
@@ -898,8 +900,13 @@ export default function OpportunitiesPage({
   }, [fetchOpportunities]);
 
   useEffect(() => {
-    const handleRefresh = () => {
-      fetchOpportunities();
+    const handleRefresh = async () => {
+      try {
+        await fetch("/api/contests/clear-cache", { method: "POST" });
+      } catch {
+        // Still refetch; list API may use its own path
+      }
+      await fetchOpportunities();
     };
 
     window.addEventListener("contests:refresh", handleRefresh);
@@ -1212,7 +1219,8 @@ export default function OpportunitiesPage({
             a.contest_type === "milestone" &&
             a.contest_based_details?.milestone_contest?.total_budget_cents
           ) {
-            valueA = a.contest_based_details.milestone_contest.total_budget_cents;
+            valueA =
+              a.contest_based_details.milestone_contest.total_budget_cents;
           }
           if (
             b.contest_type === "leaderboard" &&
@@ -1228,7 +1236,8 @@ export default function OpportunitiesPage({
             b.contest_type === "milestone" &&
             b.contest_based_details?.milestone_contest?.total_budget_cents
           ) {
-            valueB = b.contest_based_details.milestone_contest.total_budget_cents;
+            valueB =
+              b.contest_based_details.milestone_contest.total_budget_cents;
           }
           if (sortOption === "value_desc") {
             return valueB - valueA;
@@ -1327,7 +1336,8 @@ export default function OpportunitiesPage({
             <Badge
               className={cn(
                 "text-sm px-3 py-1 font-medium border",
-                contest.status === "active" && "capitalize bg-[#7F39EC] text-white",
+                contest.status === "active" &&
+                  "capitalize bg-[#7F39EC] text-white",
                 contest.status === "upcoming" &&
                   "capitalize bg-[#7F39EC] text-white",
                 contest.status === "ended" &&
@@ -1829,7 +1839,7 @@ export default function OpportunitiesPage({
                 );
               })()}
 
-            {/* Budget Spent Progress Bar for Milestone contests */}
+            {/* Milestone budget_spent: computeMilestoneContestExpectedSpendCents in fetchData */}
             {contest.contest_type === "milestone" &&
               contest.contest_based_details?.milestone_contest
                 ?.total_budget_cents != null &&
@@ -2890,8 +2900,8 @@ export default function OpportunitiesPage({
                                 )}
                               >
                                 {formatMoney(
-                                  contest.contest_based_details.milestone_contest
-                                    .total_budget_cents,
+                                  contest.contest_based_details
+                                    .milestone_contest.total_budget_cents,
                                 )}
                               </span>
                             </span>
@@ -3040,10 +3050,8 @@ export default function OpportunitiesPage({
                         const budgetSpent =
                           contest.contest_based_details.milestone_contest
                             .budget_spent || 0;
-                        const { percentage, remaining } = getBudgetTrackerValues(
-                          totalBudget,
-                          budgetSpent,
-                        );
+                        const { percentage, remaining } =
+                          getBudgetTrackerValues(totalBudget, budgetSpent);
 
                         return (
                           <div className="mt-3 mb-3">

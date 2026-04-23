@@ -72,10 +72,10 @@ Both must support an **independent minimum eligibility condition**. This is crit
 
 Examples:
 
-- Most Verified Views bonus condition: minimum 200,000 total verified views
-- Most Verified Reels bonus condition: minimum 5 verified reels
+- Most Verified Views bonus: minimum 200,000 total verified views, optionally plus a minimum verified reel count.
+- Most Verified Reels bonus: minimum 5 verified reels, optionally plus a minimum total verified view count.
 
-A creator can lead a metric but still be ineligible if the minimum threshold is not met.
+A creator can lead a metric but still be ineligible if the configured minimum thresholds are not met.
 
 ---
 
@@ -89,8 +89,8 @@ Definition:
 
 Eligibility condition (configurable):
 
-- `total_verified_views >= min_views_required`
-- example: `min_views_required = 200000`
+- `total_verified_views >= min_total_views` when that minimum is set (greater than zero).
+- Optionally, `verified_reels_count >= min_verified_reels` when the brand also sets a reels floor (greater than zero). If only views minimum is configured, do not require a minimum reel count for eligibility.
 
 Winner selection:
 
@@ -109,9 +109,8 @@ Definition:
 
 Eligibility condition (configurable):
 
-- `verified_reels_count >= min_reels_required`
-- optional additional condition can be enabled:
-  - `total_verified_views >= min_views_required_for_reels_bonus`
+- `verified_reels_count >= min_verified_reels` when that minimum is set (greater than zero).
+- Optionally, `total_verified_views >= min_total_views` for the reels bonus when the brand also sets a views floor (greater than zero). If only the reels minimum is configured, do not require a minimum view total for eligibility.
 
 Winner selection:
 
@@ -120,6 +119,65 @@ Winner selection:
   1. higher total verified views
   2. earlier time of reaching required reel threshold
   3. lowest creator ID
+
+### Worked examples: eligibility and winners
+
+These examples assume totals are from **verified** (and counted) submissions only. Each bonus is evaluated **independently**: different creators can win views vs reels, or one creator can win both if they rank first in each eligible pool.
+
+#### Example 1 — Both bonuses use a views floor and a reels floor
+
+Brand configuration:
+
+- **Views bonus:** minimum **500,000** total verified views **and** minimum **3** verified reels.
+- **Reels bonus:** minimum **5** verified reels **and** minimum **400,000** total verified views.
+
+Creator totals at contest end:
+
+| Creator | Total verified views | Verified reels |
+|---------|----------------------:|---------------:|
+| Sam     | 600,000               | 4              |
+| Ria     | 450,000               | 6              |
+| Leo     | 520,000               | 2              |
+
+**Views bonus:** Sam is the only creator with at least 500K views **and** at least 3 reels. Ria fails the view floor; Leo fails the reel floor. **Winner: Sam.**
+
+**Reels bonus:** Ria is the only creator with at least 5 reels **and** at least 400K views. Sam and Leo fail the reel floor. **Winner: Ria.**
+
+Outcome: **Sam** wins the views bonus; **Ria** wins the reels bonus.
+
+#### Example 2 — Views bonus: only a minimum view total
+
+Brand configuration:
+
+- **Views bonus:** minimum **500,000** views; **no** minimum reels configured (treated as not applied for eligibility).
+
+Creator totals:
+
+| Creator | Total verified views | Verified reels |
+|---------|----------------------:|---------------:|
+| Sam     | 550,000               | 1              |
+| Ria     | 600,000               | 10             |
+
+Both meet the view floor. Highest views wins. **Winner: Ria (600K).** Sam’s reel count does not disqualify him; extra reels only matter as a **tie-breaker** if two creators have the same total views.
+
+#### Example 3 — Reels bonus: only a minimum reel count
+
+Brand configuration:
+
+- **Reels bonus:** minimum **5** verified reels; **no** minimum total views configured (treated as not applied for eligibility).
+
+Creator totals:
+
+| Creator | Verified reels | Total verified views |
+|---------|-----------------:|----------------------:|
+| Sam     | 7                | 50,000                |
+| Ria     | 6                | 1,000,000             |
+
+Both meet the reel floor. Highest reel count wins. **Winner: Sam (7 reels).** Low views do not disqualify Sam.
+
+#### Example 4 — Only one bonus category is configured
+
+If the contest defines **only** the reels bonus block in configuration, the views bonus pool is not evaluated (no views winner from that track). If **only** the views bonus block exists, the reels bonus pool is not evaluated. This keeps “views-only” or “reels-only” campaigns unambiguous.
 
 ### Why separate conditions matter
 
@@ -287,17 +345,30 @@ Bonus milestones:
 - Most Verified Views per Creator -> $300 bonus, minimum 200K verified views
 - Most Verified Reels per Creator -> $200 bonus, minimum 5 verified reels
 
-Outcome illustration:
+Outcome illustration (same milestone ladder as above; bonuses are **separate** from milestone tiers):
 
-- Creator A: 650K verified views, 4 verified reels
-  - milestone payout = $250
-  - views bonus = eligible and likely winner if top views
-  - reels bonus = not eligible (below 5 reels)
+**Milestone payouts (highest qualifying tier only; not cumulative)**
 
-- Creator B: 320K verified views, 9 verified reels
-  - milestone payout = $40 (if not crossing 500K)
-  - reels bonus = eligible and can win if top reel count
-  - views bonus = eligible (crossed 200K), ranking decides
+- **Creator A:** 650K verified views, 4 verified reels → qualifies for the **500K** row → **$250**.
+- **Creator B:** 320K verified views, 9 verified reels → below 500K but at/above **100K** → **$40** (assuming 320K sits on the 100K tier in this ladder).
+
+**Most Verified Views bonus** ($300 in this sample, **min 200K** verified views)
+
+- If the brand sets **only** a view minimum (no extra reels floor), eligibility is **views ≥ 200K** only.
+  - **A (650K, 4 reels):** eligible; usually **wins the views bonus** if nobody else eligible has more than 650K views.
+  - **B (320K, 9 reels):** eligible; **loses the views rank to A** on total views (320K is lower than 650K). Extra reels help only on **ties** in total views, not as a separate disqualifier.
+- If the brand also sets a **minimum verified reel count** for this bonus, a creator must clear **both** the view floor and the reel floor to be eligible (see **Step 4 — Example 1**).
+
+**Most Verified Reels bonus** ($200 in this sample, **min 5** verified reels)
+
+- If the brand sets **only** a reel minimum (no extra views floor), eligibility is **reels ≥ 5** only.
+  - **A (4 reels):** **not eligible** (below 5 reels).
+  - **B (9 reels):** **eligible**; **wins the reels bonus** if no other eligible creator has more than 9 reels.
+- If the brand also sets a **minimum total views** for this bonus, a creator must clear **both** the reel floor and the view floor (see **Step 4 — Example 1**).
+
+**Cross-track outcome for this A/B pair (config as written: views min 200K, reels min 5, no extra cross-floors):** A takes **views bonus** (highest eligible views); B takes **reels bonus** (A never enters the reels pool).
+
+For full tables—**both floors on each track**, **views-only minimum**, **reels-only minimum**, and **only one bonus category configured**—see **Step 4 → Worked examples** (Examples 1–4) earlier in this document.
 
 ---
 
@@ -309,3 +380,6 @@ The two requested bonus milestones should always be treated as independent compe
 
 - **Most Verified Views per Creator** with configurable minimum total views (example: 200K)
 - **Most Verified Reels per Creator** with configurable minimum verified reels (and optional minimum views condition)
+
+
+

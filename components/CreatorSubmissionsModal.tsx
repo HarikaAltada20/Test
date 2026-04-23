@@ -128,6 +128,10 @@ interface CreatorSubmissionsModalProps {
   isAdminView?: boolean;
   /** For leaderboard contests: creator's rank (1-based) so expected reward per tweet matches main view */
   creatorRank?: number;
+  /** For milestone contests: precomputed expected payout per submission from normal view logic */
+  milestoneExpectedPayoutBySubmissionId?: Map<string, number>;
+  /** For milestone contests: precomputed milestone label per submission from normal view logic */
+  milestoneAssignedLabelBySubmissionId?: Map<string, string>;
 }
 
 export function CreatorSubmissionsModal({
@@ -143,6 +147,8 @@ export function CreatorSubmissionsModal({
   onCustomPayment,
   isAdminView = false,
   creatorRank,
+  milestoneExpectedPayoutBySubmissionId,
+  milestoneAssignedLabelBySubmissionId,
 }: CreatorSubmissionsModalProps) {
   const [selectedSubmissions, setSelectedSubmissions] = useState<Set<string>>(
     new Set(),
@@ -376,16 +382,27 @@ export function CreatorSubmissionsModal({
           setSelectedSubmissions(new Set());
 
           const { data } = result;
-          const message = [
-            `✓ Bulk Payment Successful!`,
-            ``,
-            `Paid items: ${data.paid_count}`,
-            `Skipped: ${data.skipped_count}`,
-            ``,
-            `CPM Earnings: $${(data.total_cpm / 100).toFixed(2)}`,
-            `Flat Fee Bonus: $${(data.total_bonus / 100).toFixed(2)}`,
-            `Total Paid: $${(data.total_amount / 100).toFixed(2)}`,
-          ];
+          const isMilestoneContest = contest.contest_type === "milestone";
+          const message = isMilestoneContest
+            ? [
+                `✓ Bulk Payment Successful!`,
+                ``,
+                `Paid items: ${data.paid_count}`,
+                `Skipped: ${data.skipped_count}`,
+                ``,
+              
+                `Total Paid: $${(data.total_amount / 100).toFixed(2)}`,
+              ]
+            : [
+                `✓ Bulk Payment Successful!`,
+                ``,
+                `Paid items: ${data.paid_count}`,
+                `Skipped: ${data.skipped_count}`,
+                ``,
+                `CPM Earnings: $${(data.total_cpm / 100).toFixed(2)}`,
+                `Flat Fee Bonus: $${(data.total_bonus / 100).toFixed(2)}`,
+                `Total Paid: $${(data.total_amount / 100).toFixed(2)}`,
+              ];
 
           if (data.cap_reached) {
             message.push(``, `⚠️ Earnings cap reached!`);
@@ -510,6 +527,13 @@ export function CreatorSubmissionsModal({
         }
       }
       return 0;
+    }
+
+    // Milestone: use the globally precomputed per-submission payout map from normal view.
+    if (contest?.contest_type === "milestone") {
+      const milestonePayout =
+        milestoneExpectedPayoutBySubmissionId?.get(submission.id) ?? 0;
+      return Math.max(Number(milestonePayout) || 0, 0);
     }
 
     if (contest?.contest_type === "cpm" && !baseExpectedReward) {
@@ -813,7 +837,13 @@ export function CreatorSubmissionsModal({
 
   // For leaderboard, expected reward per tweet = prize for creator's rank (no cap); match normal view
   const isLeaderboard = contest?.contest_type === "leaderboard";
-  if (maxEarningsPerCreator && maxEarningsPerCreator > 0 && !isLeaderboard) {
+  const isMilestone = contest?.contest_type === "milestone";
+  if (
+    maxEarningsPerCreator &&
+    maxEarningsPerCreator > 0 &&
+    !isLeaderboard &&
+    !isMilestone
+  ) {
     // Sort by created_at to apply cap in submission order (CPM only)
     const submissionsByTime = [...sortedSubmissions].sort((a, b) => {
       return (
@@ -1581,6 +1611,16 @@ export function CreatorSubmissionsModal({
                         >
                           Expected Reward
                         </TableHead>
+                        {contest?.contest_type === "milestone" && (
+                          <TableHead
+                            className={cn(
+                              "text-center min-w-[170px]",
+                              isDark ? "bg-[#391A6A] " : "bg-gray-50",
+                            )}
+                          >
+                            Milestone
+                          </TableHead>
+                        )}
                         <TableHead
                           className={cn(
                             "text-center",
@@ -1682,6 +1722,7 @@ export function CreatorSubmissionsModal({
                                   : 6
                                 : 0) + // TT: Shares + total engagement + engagement rate; IG: +Saves, Reach, Interactions, Avg/Total watch
                               2 + // Expected Reward, Reward Granted
+                              (contest?.contest_type === "milestone" ? 1 : 0) + // Milestone
                               (hasFlatFeeBonus ? 2 : 0) + // Bonus Expected, Bonus Granted
                               (isAdminView &&
                               (isInstagramContest ||
@@ -1847,6 +1888,18 @@ export function CreatorSubmissionsModal({
                         normalizedStatus === "rejected";
                       const isSubmissionPending =
                         normalizedStatus === "pending";
+                      const milestoneAssignmentLabel =
+                        contest?.contest_type === "milestone"
+                          ? (milestoneAssignedLabelBySubmissionId?.get(
+                              submission.id,
+                            ) ?? "Not eligible yet")
+                          : "—";
+                      const milestoneAssignmentParts =
+                        milestoneAssignmentLabel.split(" • ");
+                      const milestonePrimaryLabel =
+                        milestoneAssignmentParts[0] || "—";
+                      const milestoneViewsLabel =
+                        milestoneAssignmentParts[1] || "—";
 
                       return (
                         <TableRow
@@ -2370,6 +2423,39 @@ export function CreatorSubmissionsModal({
                                         )}`
                                       : formatCurrency(expectedReward)}
                                   </TableCell>
+                                  {contest?.contest_type === "milestone" && (
+                                    <TableCell className="text-center">
+                                      {milestoneAssignmentLabel ===
+                                      "—" ? (
+                                        <span
+                                          className={cn(
+                                            "text-xs font-medium",
+                                            isDark
+                                              ? "text-slate-400"
+                                              : "text-slate-500",
+                                          )}
+                                        >
+                                          —
+                                        </span>
+                                      ) : (
+                                        <div className="flex flex-col items-center gap-1">
+                                          <span className="inline-flex items-center rounded-full bg-violet-100 text-violet-700 px-2 py-0.5 text-[10px] font-semibold">
+                                            {milestonePrimaryLabel}
+                                          </span>
+                                          <span
+                                            className={cn(
+                                              "text-xs font-medium whitespace-nowrap",
+                                              isDark
+                                                ? "text-slate-200"
+                                                : "text-slate-700",
+                                            )}
+                                          >
+                                            {milestoneViewsLabel}
+                                          </span>
+                                        </div>
+                                      )}
+                                    </TableCell>
+                                  )}
                                   <TableCell className="text-center font-medium text-green-600">
                                     {grantedReward > 0
                                       ? formatCurrency(grantedReward)

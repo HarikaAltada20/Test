@@ -227,8 +227,8 @@ export type MilestonePayoutRule = {
 
 /**
  * Expected milestone payout per creator (cents), using the same rules as budget spent:
- * sum of verified/paid views per creator, highest qualifying milestone (non-cumulative),
- * earliest verified submission breaks ties when a milestone has winner_limit.
+ * sum of verified/paid/approved views per creator, highest qualifying milestone (non-cumulative),
+ * earliest qualifying submission breaks ties when a milestone has winner_limit.
  */
 export function computeMilestoneCreatorExpectedPayoutCentsByCreator(
   submissions: MilestoneSubmissionLike[],
@@ -240,7 +240,10 @@ export function computeMilestoneCreatorExpectedPayoutCentsByCreator(
   const relevantSubmissions = submissions.filter((s) => {
     const status = s.status?.toLowerCase();
     return (
-      (status === "verified" || status === "paid") && s.deleted_at == null
+      (status === "verified" ||
+        status === "paid" ||
+        status === "approved") &&
+      s.deleted_at == null
     );
   });
 

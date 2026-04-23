@@ -37,14 +37,14 @@ export async function POST(request: NextRequest) {
     ) {
       return NextResponse.json(
         { error: "submission_ids is required and must be a non-empty array" },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
     if (!["standard", "bonus", "both"].includes(payment_type)) {
       return NextResponse.json(
         { error: "payment_type must be standard, bonus, or both" },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -58,7 +58,7 @@ export async function POST(request: NextRequest) {
     if (submissionsError || !submissions || submissions.length === 0) {
       return NextResponse.json(
         { error: "Failed to fetch submissions" },
-        { status: 500 }
+        { status: 500 },
       );
     }
 
@@ -80,27 +80,91 @@ export async function POST(request: NextRequest) {
           error:
             "Payments can only be processed when contest status is 'verification_complete'",
         },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
     // Filter to verified submissions only
     const verifiedSubmissions = submissions.filter(
-      (s) => s.status === "verified"
+      (s) => s.status === "verified",
     );
 
     if (verifiedSubmissions.length === 0) {
       return NextResponse.json(
         { error: "No verified submissions found" },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
     // Sort by submission time (earliest first)
     const sortedSubmissions = verifiedSubmissions.sort(
       (a, b) =>
-        new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+        new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
     );
+
+    // Milestone payout
+ 
+    let milestonePayoutBySubmissionId = new Map<string, number>();
+    let milestoneSortedMilestones: any[] = [];
+    if (contest.contest_type === "milestone") {
+      const milestoneContest = (contest.contest_based_details as any)
+        ?.milestone_contest;
+      const milestones = Array.isArray(milestoneContest?.milestones)
+        ? milestoneContest.milestones
+        : [];
+
+      if (milestones.length > 0) {
+        milestoneSortedMilestones = [...milestones].sort(
+          (a: any, b: any) =>
+            Number(b?.target_views || 0) - Number(a?.target_views || 0),
+        );
+
+        const { data: payoutEligibleSubs, error: payoutEligibleErr } =
+          await supabaseAdmin
+          .from("submissions")
+          .select("id, status, views, created_at, deleted_at")
+          .eq("contest_id", contest_id)
+          // Use verified/paid only so pending rows do not consume milestone winner slots.
+          .in("status", ["verified", "paid"])
+          .is("deleted_at", null)
+          .order("created_at", { ascending: true });
+
+        if (payoutEligibleErr) {
+          console.error(
+            "[bulk-payment] milestone payout query failed:",
+            payoutEligibleErr,
+          );
+        } else {
+          const winnerCountsByMilestone = new Map<string, number>();
+          for (const sub of payoutEligibleSubs || []) {
+            const subViews = Number((sub as any)?.views || 0);
+            let payoutCents = 0;
+
+            for (const milestone of milestoneSortedMilestones) {
+              const targetViews = Number(milestone?.target_views || 0);
+              if (subViews < targetViews) continue;
+
+              const winnerLimit = milestone?.winner_limit;
+              const milestoneKey = `${Number(milestone?.order || 0)}:${targetViews}`;
+
+              if (winnerLimit != null) {
+                const used = winnerCountsByMilestone.get(milestoneKey) || 0;
+                if (used >= Number(winnerLimit)) continue;
+                winnerCountsByMilestone.set(milestoneKey, used + 1);
+              }
+
+              payoutCents = Number(milestone?.payout_cents || 0);
+              break;
+            }
+
+            milestonePayoutBySubmissionId.set(
+              String((sub as any).id),
+              payoutCents,
+            );
+          }
+        }
+      }
+    }
 
     // Get flat fee bonus and total budget
     const contestDetails =
@@ -151,12 +215,12 @@ export async function POST(request: NextRequest) {
 
       const currentBonusSpent = (bonusSpendingData || []).reduce(
         (sum, sub) => sum + (sub.bonus_amount || 0),
-        0
+        0,
       );
 
       // Calculate potential bonus spending for this bulk payment (only unpaid bonuses)
       const unpaidBonusSubmissions = verifiedSubmissions.filter(
-        (s) => !s.bonus_paid
+        (s) => !s.bonus_paid,
       );
       const potentialBonusSpending =
         unpaidBonusSubmissions.length * flatFeeBonus;
@@ -173,11 +237,11 @@ export async function POST(request: NextRequest) {
                 budgetLimit: totalBudget,
                 remaining: totalBudget - currentBonusSpent,
                 maxSubmissions: Math.floor(
-                  (totalBudget - currentBonusSpent) / flatFeeBonus
+                  (totalBudget - currentBonusSpent) / flatFeeBonus,
                 ),
               },
             },
-            { status: 400 }
+            { status: 400 },
           );
         }
       }
@@ -194,11 +258,11 @@ export async function POST(request: NextRequest) {
                 capLimit: flatFeeBonusCap,
                 remaining: flatFeeBonusCap - currentBonusSpent,
                 maxSubmissions: Math.floor(
-                  (flatFeeBonusCap - currentBonusSpent) / flatFeeBonus
+                  (flatFeeBonusCap - currentBonusSpent) / flatFeeBonus,
                 ),
               },
             },
-            { status: 400 }
+            { status: 400 },
           );
         }
       }
@@ -264,6 +328,19 @@ export async function POST(request: NextRequest) {
             const calculatedEarnings =
               (effectiveViews * cpmConfig.cpm_rate_usd * 100) / 1000;
             submissionEarnings = Math.round(calculatedEarnings);
+          }
+        } else if (
+          !submissionEarnings &&
+          contest.contest_type === "milestone"
+        ) {
+          submissionEarnings = milestonePayoutBySubmissionId.get(sub.id) || 0;
+          // Safety fallback for missing map entry.
+          if (!submissionEarnings && milestoneSortedMilestones.length > 0) {
+            const subViews = Number(sub.views || 0);
+            const matchedMilestone = milestoneSortedMilestones.find((m: any) => {
+              return subViews >= Number(m?.target_views || 0);
+            });
+            submissionEarnings = Number(matchedMilestone?.payout_cents || 0);
           }
         }
 
@@ -335,10 +412,7 @@ export async function POST(request: NextRequest) {
       const finalBonusAmount =
         payment_type !== "standard"
           ? shouldAdjustBonus
-            ? applyPayoutAdjustment(
-                submissionBonus,
-                payoutAdjustmentPercentage,
-              )
+            ? applyPayoutAdjustment(submissionBonus, payoutAdjustmentPercentage)
             : submissionBonus
           : 0;
 
@@ -372,7 +446,7 @@ export async function POST(request: NextRequest) {
           error:
             "No payments to process. All submissions may be already paid or cap reached.",
         },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -394,13 +468,13 @@ export async function POST(request: NextRequest) {
           total_bonus: totalBonusPaid,
           cap_reached: maxEarnings ? runningTotal >= maxEarnings : false,
         },
-      }
+      },
     );
 
     if (!creditResult.success) {
       return NextResponse.json(
         { error: `Failed to credit wallet: ${creditResult.error}` },
-        { status: 500 }
+        { status: 500 },
       );
     }
 
@@ -466,7 +540,7 @@ export async function POST(request: NextRequest) {
     console.error("Error processing bulk payment:", error);
     return NextResponse.json(
       { error: "Internal server error", details: error.message },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

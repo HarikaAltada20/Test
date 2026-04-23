@@ -846,6 +846,184 @@ export function ContestClientPage({
     creatorWiseLeaderboard,
   ]);
 
+  const milestoneDerivedData = useMemo(() => {
+    const empty = {
+      submissionExpectedRewardMap: new Map<string, number>(),
+      creatorMostVerifiedViewsBonusMap: new Map<string, number>(),
+      creatorMostVerifiedReelsBonusMap: new Map<string, number>(),
+      creatorExpectedRewardMap: new Map<string, number>(),
+    };
+
+    if (contest?.contest_type !== "milestone") return empty;
+
+    const milestoneContest = (contest?.contest_based_details as any)
+      ?.milestone_contest;
+    const milestones = Array.isArray(milestoneContest?.milestones)
+      ? milestoneContest.milestones
+      : [];
+    if (milestones.length === 0) return empty;
+
+    const sortedMilestones = [...milestones].sort(
+      (a: any, b: any) =>
+        Number(b?.target_views || 0) - Number(a?.target_views || 0),
+    );
+
+    const allSubmissionCandidates: any[] = [
+      ...(Array.isArray(leaderboard) ? leaderboard : []),
+      ...((groupedLeaderboardByCreator || []).flatMap((g: any) =>
+        Array.isArray(g?.submissions) ? g.submissions : [],
+      ) as any[]),
+    ];
+
+    const seenSubmissionIds = new Set<string>();
+    const uniqueSubmissions = allSubmissionCandidates.filter((s: any) => {
+      const id = String(s?.id || "");
+      if (!id || seenSubmissionIds.has(id)) return false;
+      seenSubmissionIds.add(id);
+      return true;
+    });
+
+    const normalizeMilestoneStatus = (rawStatus: any) => {
+      const st = String(rawStatus || "").toLowerCase();
+      if (st === "approved") return "verified";
+      return st;
+    };
+
+    const eligibleSubmissions = uniqueSubmissions
+      .filter((s: any) => {
+        const st = normalizeMilestoneStatus(s?.status);
+        return st === "pending" || st === "verified" || st === "paid";
+      })
+      .sort((a: any, b: any) => {
+        const at = new Date(a?.created_at || 0).getTime();
+        const bt = new Date(b?.created_at || 0).getTime();
+        return at - bt;
+      });
+
+    const winnerCountsByMilestone = new Map<string, number>();
+    const submissionExpectedRewardMap = new Map<string, number>();
+    const creatorExpectedRewardMap = new Map<string, number>();
+
+    eligibleSubmissions.forEach((sub: any) => {
+      const subViews = Number(sub?.views || 0);
+      let payoutCents = 0;
+
+      for (const milestone of sortedMilestones) {
+        const targetViews = Number(milestone?.target_views || 0);
+        if (subViews < targetViews) continue;
+
+        const winnerLimit = milestone?.winner_limit;
+        const milestoneKey = `${Number(milestone?.order || 0)}:${targetViews}`;
+        if (winnerLimit != null) {
+          const used = winnerCountsByMilestone.get(milestoneKey) || 0;
+          if (used >= Number(winnerLimit)) continue;
+          winnerCountsByMilestone.set(milestoneKey, used + 1);
+        }
+
+        payoutCents = Number(milestone?.payout_cents || 0);
+        break;
+      }
+
+      const submissionId = String(sub?.id || "");
+      if (submissionId) {
+        submissionExpectedRewardMap.set(submissionId, payoutCents);
+      }
+
+      const creatorId = String(sub?.creator_id || "");
+      if (creatorId) {
+        const current = creatorExpectedRewardMap.get(creatorId) || 0;
+        creatorExpectedRewardMap.set(creatorId, current + payoutCents);
+      }
+    });
+
+    const verifiedStatsByCreator = new Map<
+      string,
+      { verifiedViews: number; verifiedReels: number }
+    >();
+    eligibleSubmissions.forEach((sub: any) => {
+      const st = normalizeMilestoneStatus(sub?.status);
+      if (st !== "verified" && st !== "paid") return;
+      const creatorId = String(sub?.creator_id || "");
+      if (!creatorId) return;
+      const views = Number(sub?.views || 0);
+      const prev = verifiedStatsByCreator.get(creatorId) || {
+        verifiedViews: 0,
+        verifiedReels: 0,
+      };
+      verifiedStatsByCreator.set(creatorId, {
+        verifiedViews:
+          prev.verifiedViews + (Number.isFinite(views) ? views : 0),
+        verifiedReels: prev.verifiedReels + 1,
+      });
+    });
+
+    const creatorMostVerifiedViewsBonusMap = new Map<string, number>();
+    const creatorMostVerifiedReelsBonusMap = new Map<string, number>();
+
+    const bonus = milestoneContest?.bonus;
+    const viewsCfg = bonus?.most_verified_views;
+    if (viewsCfg) {
+      const minViews = Number(viewsCfg?.min_total_views || 0);
+      const minReels = Number(viewsCfg?.min_verified_reels || 0);
+      const payout = Number(viewsCfg?.payout_cents || 0);
+      const winner = Array.from(verifiedStatsByCreator.entries())
+        .filter(([, stats]) => {
+          return (
+            stats.verifiedViews >= minViews && stats.verifiedReels >= minReels
+          );
+        })
+        .sort((a, b) => {
+          if (b[1].verifiedViews !== a[1].verifiedViews) {
+            return b[1].verifiedViews - a[1].verifiedViews;
+          }
+          if (b[1].verifiedReels !== a[1].verifiedReels) {
+            return b[1].verifiedReels - a[1].verifiedReels;
+          }
+          return a[0].localeCompare(b[0]);
+        })[0];
+      if (winner && payout > 0) {
+        creatorMostVerifiedViewsBonusMap.set(winner[0], payout);
+      }
+    }
+
+    const reelsCfg = bonus?.most_verified_reels;
+    if (reelsCfg) {
+      const minReels = Number(reelsCfg?.min_verified_reels || 0);
+      const minViews = Number(reelsCfg?.min_total_views || 0);
+      const payout = Number(reelsCfg?.payout_cents || 0);
+      const winner = Array.from(verifiedStatsByCreator.entries())
+        .filter(([, stats]) => {
+          return (
+            stats.verifiedReels >= minReels && stats.verifiedViews >= minViews
+          );
+        })
+        .sort((a, b) => {
+          if (b[1].verifiedReels !== a[1].verifiedReels) {
+            return b[1].verifiedReels - a[1].verifiedReels;
+          }
+          if (b[1].verifiedViews !== a[1].verifiedViews) {
+            return b[1].verifiedViews - a[1].verifiedViews;
+          }
+          return a[0].localeCompare(b[0]);
+        })[0];
+      if (winner && payout > 0) {
+        creatorMostVerifiedReelsBonusMap.set(winner[0], payout);
+      }
+    }
+
+    return {
+      submissionExpectedRewardMap,
+      creatorMostVerifiedViewsBonusMap,
+      creatorMostVerifiedReelsBonusMap,
+      creatorExpectedRewardMap,
+    };
+  }, [
+    contest?.contest_type,
+    contest?.contest_based_details,
+    leaderboard,
+    groupedLeaderboardByCreator,
+  ]);
+
   const isCreatorModeTotals =
     leaderboardDisplayMode === "creator" &&
     contest?.platform?.toLowerCase() !== "twitter" &&
@@ -2465,18 +2643,18 @@ export function ContestClientPage({
                         : contest.contest_type === "milestone" &&
                             contest.contest_based_details?.milestone_contest
                           ? formatMoney(
-                            contest.contest_based_details.milestone_contest
-                              .total_budget_cents || 0,
-                          )
-                        : contest.contest_type === "leaderboard" &&
-                            contest.contest_based_details?.leaderboard_contest
-                          ? formatMoney(
-                              contest.contest_based_details.leaderboard_contest
-                                .total_prize,
+                              contest.contest_based_details.milestone_contest
+                                .total_budget_cents || 0,
                             )
-                          : contest.total_prize
-                            ? formatMoney(contest.total_prize || 0)
-                            : "$0.00"}
+                          : contest.contest_type === "leaderboard" &&
+                              contest.contest_based_details?.leaderboard_contest
+                            ? formatMoney(
+                                contest.contest_based_details
+                                  .leaderboard_contest.total_prize,
+                              )
+                            : contest.total_prize
+                              ? formatMoney(contest.total_prize || 0)
+                              : "$0.00"}
                     </div>
                     {contest.contest_type === "leaderboard" &&
                       contest.contest_based_details?.leaderboard_contest
@@ -3087,15 +3265,15 @@ export function ContestClientPage({
                           contest.contest_based_details.milestone_contest
                             .total_budget_cents || 0,
                         )
-                    : contest.contest_type === "leaderboard" &&
-                        contest.contest_based_details?.leaderboard_contest
-                      ? formatMoney(
-                          contest.contest_based_details.leaderboard_contest
-                            .total_prize,
-                        )
-                      : contest.total_prize // Fallback to old field if necessary for older data
-                        ? formatMoney(contest.total_prize || 0)
-                        : "$0.00"}
+                      : contest.contest_type === "leaderboard" &&
+                          contest.contest_based_details?.leaderboard_contest
+                        ? formatMoney(
+                            contest.contest_based_details.leaderboard_contest
+                              .total_prize,
+                          )
+                        : contest.total_prize // Fallback to old field if necessary for older data
+                          ? formatMoney(contest.total_prize || 0)
+                          : "$0.00"}
                 </p>
                 <p
                   className={cn(
@@ -3120,7 +3298,7 @@ export function ContestClientPage({
                       ? "CPM based"
                       : contest.contest_type === "milestone"
                         ? "Milestone based"
-                      : "Total prize"}
+                        : "Total prize"}
                 </p>
               </div>
               <div
@@ -8986,6 +9164,13 @@ export function ContestClientPage({
                               rank = creatorOffset + index + 1;
                             }
                             let prizeDisplay = null;
+                            let milestoneCreatorExpectedDisplay: React.ReactNode =
+                              null;
+                            const isMilestoneContest =
+                              contest?.contest_type === "milestone";
+                            const isTwitter =
+                              contest?.platform === "twitter" ||
+                              contest?.platform === "x";
 
                             // Calculate total earnings including bonuses
                             const flatFeeBonus =
@@ -8999,152 +9184,202 @@ export function ContestClientPage({
                               creatorGroup.total_earnings +
                               flatFeeBonus * creatorGroup.submission_count;
 
-                            const contestStatus = contest?.status;
-                            const postContestStatus =
-                              contest?.post_contest_status;
-                            const isLeaderboardContest =
-                              contest?.contest_type === "leaderboard";
-                            const hasPaidSubmission =
-                              (creatorGroup as any).has_paid_submission ===
-                                true ||
-                              creatorGroup.submissions.some(
-                                (submission) => submission.status === "paid",
+                            if (isMilestoneContest) {
+                              const creatorId = String(
+                                (creatorGroup as any).creator_id || "",
                               );
-                            const hasPayoutsProcessed =
-                              contestStatus === "ended" &&
-                              postContestStatus === "payouts_processed";
-                            const isTwitter =
-                              contest?.platform === "twitter" ||
-                              contest?.platform === "x";
-                            // Twitter: creator-wise row uses moderation_status === 'paid' (mapped to .paid above)
-                            const twitterPaid =
-                              isTwitter && (creatorGroup as any).paid === true;
-                            const shouldShowActualEarnings =
-                              hasPaidSubmission ||
-                              twitterPaid ||
-                              (isTwitter && hasPayoutsProcessed);
-                            const earningsLabel = shouldShowActualEarnings
-                              ? isTwitter &&
-                                (hasPayoutsProcessed || twitterPaid)
-                                ? "Paid"
-                                : "Total Earned"
-                              : contestStatus === "active" &&
-                                  isLeaderboardContest
-                                ? "Winning Zone"
-                                : "Expected";
+                              const expectedReward =
+                                milestoneDerivedData.creatorExpectedRewardMap.get(
+                                  creatorId,
+                                ) || 0;
+                              const mostVerifiedViewsBonus =
+                                milestoneDerivedData.creatorMostVerifiedViewsBonusMap.get(
+                                  creatorId,
+                                ) || 0;
+                              const mostVerifiedReelsBonus =
+                                milestoneDerivedData.creatorMostVerifiedReelsBonusMap.get(
+                                  creatorId,
+                                ) || 0;
+                              const totalExpected =
+                                expectedReward +
+                                mostVerifiedViewsBonus +
+                                mostVerifiedReelsBonus;
 
-                            const hasEarningsToDisplay =
-                              creatorGroup.total_earnings > 0 ||
-                              flatFeeBonus > 0;
-                            const shouldDisplayEarnings =
-                              shouldShowActualEarnings && hasEarningsToDisplay;
-
-                            if (shouldDisplayEarnings) {
                               if (
-                                leaderboardViewMode === "detailed" &&
-                                flatFeeBonus > 0
+                                totalExpected > 0 ||
+                                leaderboardViewMode === "detailed"
                               ) {
-                                prizeDisplay = (
+                                milestoneCreatorExpectedDisplay = (
                                   <div className="space-y-1">
-                                    <div className="font-semibold text-green-600 dark:text-green-400 text-base">
-                                      {earningsLabel}:{" "}
-                                      {formatMoney(totalEarnings)}
+                                    <div className="font-semibold text-green-600 dark:text-green-400 text-sm">
+                                      Expected Reward:{" "}
+                                      {formatMoney(expectedReward)}
                                     </div>
-                                    <div className="flex flex-wrap items-center gap-1.5 text-xs text-slate-600 dark:text-slate-400 bg-green-50 dark:bg-green-900/20 px-2 py-1.5 rounded-md border border-green-200 dark:border-green-800">
-                                      <div className="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0" />
-                                      <span className="whitespace-nowrap">
-                                        {formatMoney(
-                                          creatorGroup.total_earnings,
-                                        )}{" "}
-                                        {contestType === "cpm"
-                                          ? "CPM"
-                                          : "Prize"}
-                                      </span>
-                                      <span className="text-green-600 dark:text-green-400">
-                                        +
-                                      </span>
-                                      <span className="whitespace-nowrap">
-                                        {formatMoney(
-                                          flatFeeBonus *
-                                            creatorGroup.submission_count,
-                                        )}{" "}
-                                        Bonus ({creatorGroup.submission_count}{" "}
-                                        sub.)
-                                      </span>
-                                    </div>
-                                  </div>
-                                );
-                              } else {
-                                prizeDisplay = (
-                                  <div className="font-semibold text-green-600 dark:text-green-400 text-base">
-                                    {earningsLabel}:{" "}
-                                    {formatMoney(totalEarnings)}
+                                    {mostVerifiedViewsBonus > 0 && (
+                                      <div className="text-xs text-slate-600 dark:text-slate-400">
+                                        Most Verified Views Bonus:{" "}
+                                        {formatMoney(mostVerifiedViewsBonus)}
+                                      </div>
+                                    )}
+                                    {mostVerifiedReelsBonus > 0 && (
+                                      <div className="text-xs text-slate-600 dark:text-slate-400">
+                                        Most Verified Reels Bonus:{" "}
+                                        {formatMoney(mostVerifiedReelsBonus)}
+                                      </div>
+                                    )}
                                   </div>
                                 );
                               }
-                            } else if (
-                              contest.contest_type === "leaderboard" &&
-                              Array.isArray(
-                                contest.contest_based_details
-                                  ?.leaderboard_contest?.prizes,
-                              )
-                            ) {
-                              const prizes = contest.contest_based_details
-                                .leaderboard_contest.prizes as PrizeInfo[];
-                              // Sum prize for each of this creator's submissions
-                              const submissionRanks = (
-                                creatorGroup as { submission_ranks?: number[] }
-                              ).submission_ranks ?? [creatorGroup.best_rank];
-                              let totalPrizeAmount = 0;
-                              for (const rank of submissionRanks) {
-                                const info = prizes.find(
-                                  (p) => p.position === rank,
+                            } else {
+                              const contestStatus = contest?.status;
+                              const postContestStatus =
+                                contest?.post_contest_status;
+                              const isLeaderboardContest =
+                                contest?.contest_type === "leaderboard";
+                              const hasPaidSubmission =
+                                (creatorGroup as any).has_paid_submission ===
+                                  true ||
+                                creatorGroup.submissions.some(
+                                  (submission) => submission.status === "paid",
                                 );
-                                if (info) totalPrizeAmount += info.amount;
-                              }
-                              if (totalPrizeAmount > 0) {
-                                const prizeText =
-                                  contest.status === "active"
-                                    ? "Winning Zone"
-                                    : "Prize";
-                                const totalPrize =
-                                  totalPrizeAmount +
-                                  flatFeeBonus * creatorGroup.submission_count;
+                              const hasPayoutsProcessed =
+                                contestStatus === "ended" &&
+                                postContestStatus === "payouts_processed";
+                              // Twitter: creator-wise row uses moderation_status === 'paid' (mapped to .paid above)
+                              const twitterPaid =
+                                isTwitter &&
+                                (creatorGroup as any).paid === true;
+                              const shouldShowActualEarnings =
+                                hasPaidSubmission ||
+                                twitterPaid ||
+                                (isTwitter && hasPayoutsProcessed);
+                              const earningsLabel = shouldShowActualEarnings
+                                ? isTwitter &&
+                                  (hasPayoutsProcessed || twitterPaid)
+                                  ? "Paid"
+                                  : "Total Earned"
+                                : contestStatus === "active" &&
+                                    isLeaderboardContest
+                                  ? "Winning Zone"
+                                  : "Expected";
 
+                              const hasEarningsToDisplay =
+                                creatorGroup.total_earnings > 0 ||
+                                flatFeeBonus > 0;
+                              const shouldDisplayEarnings =
+                                shouldShowActualEarnings &&
+                                hasEarningsToDisplay;
+
+                              if (shouldDisplayEarnings) {
                                 if (
                                   leaderboardViewMode === "detailed" &&
                                   flatFeeBonus > 0
                                 ) {
                                   prizeDisplay = (
                                     <div className="space-y-1">
-                                      <div
-                                        className={`font-semibold text-base flex items-center ${"text-purple-500 dark:text-purple-400"}`}
-                                      >
-                                        <Trophy className="h-4 w-4 mr-1.5 flex-shrink-0" />
-                                        {prizeText}: {formatMoney(totalPrize)}
+                                      <div className="font-semibold text-green-600 dark:text-green-400 text-base">
+                                        {earningsLabel}:{" "}
+                                        {formatMoney(totalEarnings)}
                                       </div>
-                                      <div className="text-xs text-purple-600 dark:text-purple-500">
-                                        ({formatMoney(totalPrizeAmount)} Prize
-                                        {submissionRanks.length > 1 &&
-                                          ` (${submissionRanks.length} videos)`}{" "}
-                                        +{" "}
-                                        {formatMoney(
-                                          flatFeeBonus *
-                                            creatorGroup.submission_count,
-                                        )}{" "}
-                                        Bonus)
+                                      <div className="flex flex-wrap items-center gap-1.5 text-xs text-slate-600 dark:text-slate-400 bg-green-50 dark:bg-green-900/20 px-2 py-1.5 rounded-md border border-green-200 dark:border-green-800">
+                                        <div className="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0" />
+                                        <span className="whitespace-nowrap">
+                                          {formatMoney(
+                                            creatorGroup.total_earnings,
+                                          )}{" "}
+                                          {contestType === "cpm"
+                                            ? "CPM"
+                                            : "Prize"}
+                                        </span>
+                                        <span className="text-green-600 dark:text-green-400">
+                                          +
+                                        </span>
+                                        <span className="whitespace-nowrap">
+                                          {formatMoney(
+                                            flatFeeBonus *
+                                              creatorGroup.submission_count,
+                                          )}{" "}
+                                          Bonus ({creatorGroup.submission_count}{" "}
+                                          sub.)
+                                        </span>
                                       </div>
                                     </div>
                                   );
                                 } else {
                                   prizeDisplay = (
-                                    <span
-                                      className={`font-semibold flex items-center ${"text-purple-500 dark:text-purple-400"}`}
-                                    >
-                                      <Trophy className="h-4 w-4 mr-1.5 flex-shrink-0" />
-                                      {prizeText}: {formatMoney(totalPrize)}
-                                    </span>
+                                    <div className="font-semibold text-green-600 dark:text-green-400 text-base">
+                                      {earningsLabel}:{" "}
+                                      {formatMoney(totalEarnings)}
+                                    </div>
                                   );
+                                }
+                              } else if (
+                                contest.contest_type === "leaderboard" &&
+                                Array.isArray(
+                                  contest.contest_based_details
+                                    ?.leaderboard_contest?.prizes,
+                                )
+                              ) {
+                                const prizes = contest.contest_based_details
+                                  .leaderboard_contest.prizes as PrizeInfo[];
+                                // Sum prize for each of this creator's submissions
+                                const submissionRanks = (
+                                  creatorGroup as {
+                                    submission_ranks?: number[];
+                                  }
+                                ).submission_ranks ?? [creatorGroup.best_rank];
+                                let totalPrizeAmount = 0;
+                                for (const rank of submissionRanks) {
+                                  const info = prizes.find(
+                                    (p) => p.position === rank,
+                                  );
+                                  if (info) totalPrizeAmount += info.amount;
+                                }
+                                if (totalPrizeAmount > 0) {
+                                  const prizeText =
+                                    contest.status === "active"
+                                      ? "Winning Zone"
+                                      : "Prize";
+                                  const totalPrize =
+                                    totalPrizeAmount +
+                                    flatFeeBonus *
+                                      creatorGroup.submission_count;
+
+                                  if (
+                                    leaderboardViewMode === "detailed" &&
+                                    flatFeeBonus > 0
+                                  ) {
+                                    prizeDisplay = (
+                                      <div className="space-y-1">
+                                        <div
+                                          className={`font-semibold text-base flex items-center ${"text-purple-500 dark:text-purple-400"}`}
+                                        >
+                                          <Trophy className="h-4 w-4 mr-1.5 flex-shrink-0" />
+                                          {prizeText}: {formatMoney(totalPrize)}
+                                        </div>
+                                        <div className="text-xs text-purple-600 dark:text-purple-500">
+                                          ({formatMoney(totalPrizeAmount)} Prize
+                                          {submissionRanks.length > 1 &&
+                                            ` (${submissionRanks.length} videos)`}{" "}
+                                          +{" "}
+                                          {formatMoney(
+                                            flatFeeBonus *
+                                              creatorGroup.submission_count,
+                                          )}{" "}
+                                          Bonus)
+                                        </div>
+                                      </div>
+                                    );
+                                  } else {
+                                    prizeDisplay = (
+                                      <span
+                                        className={`font-semibold flex items-center ${"text-purple-500 dark:text-purple-400"}`}
+                                      >
+                                        <Trophy className="h-4 w-4 mr-1.5 flex-shrink-0" />
+                                        {prizeText}: {formatMoney(totalPrize)}
+                                      </span>
+                                    );
+                                  }
                                 }
                               }
                             }
@@ -9334,6 +9569,15 @@ export function ContestClientPage({
                                               </div>
                                             )}
                                           </div>
+                                          {!isTwitter &&
+                                            isMilestoneContest &&
+                                            milestoneCreatorExpectedDisplay && (
+                                              <div className="mt-1">
+                                                {
+                                                  milestoneCreatorExpectedDisplay
+                                                }
+                                              </div>
+                                            )}
                                           {showTwitterHandle ? (
                                             <p
                                               className={cn(
@@ -9530,8 +9774,25 @@ export function ContestClientPage({
                             index +
                             1;
                           let prizeDisplay = null;
+                          const isMilestoneContest =
+                            contest?.contest_type === "milestone";
 
-                          if (entry.earnings > 0) {
+                          if (isMilestoneContest) {
+                            const expectedReward =
+                              milestoneDerivedData.submissionExpectedRewardMap.get(
+                                entry.id,
+                              ) || 0;
+                            if (
+                              expectedReward > 0 ||
+                              leaderboardViewMode === "detailed"
+                            ) {
+                              prizeDisplay = (
+                                <div className="font-semibold text-green-600 dark:text-green-400 text-base">
+                                  Expected Reward: {formatMoney(expectedReward)}
+                                </div>
+                              );
+                            }
+                          } else if (entry.earnings > 0) {
                             // Twitter CPM/leaderboard: show Paid when payouts_processed; others use verified/paid only
                             const isTwitter =
                               contest?.platform === "twitter" ||

@@ -529,6 +529,69 @@ export async function POST(request: Request) {
                 ?.prizes || [];
             const prizeForRank = prizes.find((p: any) => p.position === rank);
             rewardAmount = prizeForRank?.amount || 0; // already in cents
+          } else if (contest.contest_type === "milestone") {
+            const milestoneDetails = (contest as any)?.contest_based_details
+              ?.milestone_contest;
+            const milestones = Array.isArray(milestoneDetails?.milestones)
+              ? milestoneDetails.milestones
+              : [];
+
+            if (milestones.length > 0) {
+              const sortedMilestones = [...milestones].sort(
+                (a: any, b: any) =>
+                  Number(b?.target_views || 0) - Number(a?.target_views || 0),
+              );
+
+              const { data: payoutEligibleSubs, error: payoutSubsErr } =
+                await supabaseAdmin
+                  .from("submissions")
+                  .select("id, status, views, created_at, deleted_at")
+                  .eq("contest_id", submissionFull.contest_id)
+                  .in("status", ["pending", "verified", "paid"])
+                  .is("deleted_at", null)
+                  .order("created_at", { ascending: true });
+
+              if (!payoutSubsErr && Array.isArray(payoutEligibleSubs)) {
+                const winnerCountsByMilestone = new Map<string, number>();
+                const payoutBySubmissionId = new Map<string, number>();
+
+                for (const sub of payoutEligibleSubs) {
+                  const subViews = Number((sub as any)?.views || 0);
+                  let payoutCents = 0;
+
+                  for (const milestone of sortedMilestones) {
+                    const targetViews = Number(milestone?.target_views || 0);
+                    if (subViews < targetViews) continue;
+
+                    const winnerLimit = milestone?.winner_limit;
+                    const milestoneKey = `${Number(
+                      milestone?.order || 0,
+                    )}:${targetViews}`;
+
+                    if (winnerLimit != null) {
+                      const used = winnerCountsByMilestone.get(milestoneKey) || 0;
+                      if (used >= Number(winnerLimit)) continue;
+                      winnerCountsByMilestone.set(milestoneKey, used + 1);
+                    }
+
+                    payoutCents = Number(milestone?.payout_cents || 0);
+                    break;
+                  }
+
+                  payoutBySubmissionId.set(String((sub as any).id), payoutCents);
+                }
+
+                rewardAmount =
+                  payoutBySubmissionId.get(String(submissionFull.id)) || 0;
+              } else {
+                // Fallback: best milestone by current submission views only
+                const fallbackViews = Number(submissionFull.views || 0);
+                const matchedMilestone = sortedMilestones.find((m: any) => {
+                  return fallbackViews >= Number(m?.target_views || 0);
+                });
+                rewardAmount = Number(matchedMilestone?.payout_cents || 0);
+              }
+            }
           }
         }
         if (rewardAmount > 0) {
@@ -752,7 +815,9 @@ export async function POST(request: Request) {
     // Always return the latest submission data (including updated earnings)
     const { data: latestSubmission } = await supabaseAdmin
       .from("submissions")
-      .select("id, status, earnings, paid, paid_at, bonus_paid, bonus_paid_at")
+      .select(
+        "id, status, earnings, paid, paid_at, bonus_paid, bonus_paid_at, bonus_amount, views, creator_id, created_at, contest_id, platform, other_stats, metadata",
+      )
       .eq("id", submissionId)
       .single();
 
