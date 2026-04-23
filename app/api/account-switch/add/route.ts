@@ -1,8 +1,13 @@
 import { createClient } from "@/utils/supabase/server";
 import { createAdminClient } from "@/utils/supabase/admin";
-import { encrypt } from "@/lib/encryption";
 import { NextResponse } from "next/server";
 import { createServerClient } from "@supabase/ssr";
+
+function isUuid(value: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+    value,
+  );
+}
 
 export async function POST(req: Request) {
   try {
@@ -46,7 +51,10 @@ export async function POST(req: Request) {
       }, { status: 400 });
     }
 
-    const { email, password } = await req.json();
+    const body = await req.json().catch(() => ({}));
+    const email =
+      typeof body?.email === "string" ? body.email.trim().toLowerCase() : "";
+    const password = typeof body?.password === "string" ? body.password : "";
 
     if (!email || !password) {
       return NextResponse.json({ error: "Email and password are required" }, { status: 400 });
@@ -102,6 +110,9 @@ export async function POST(req: Request) {
 
     const targetUserId = authData.user.id;
     const targetRefreshToken = authData.session.refresh_token;
+    if (!isUuid(targetUserId)) {
+      return NextResponse.json({ error: "Invalid target account" }, { status: 400 });
+    }
 
     if (targetUserId === currentUser.id) {
       return NextResponse.json({ error: "This account is already active" }, { status: 400 });
@@ -121,103 +132,33 @@ export async function POST(req: Request) {
       }, { status: 403 });
     }
 
-    // 2. Encrypt tokens for both ways to allow bidirectional switching
-    const encryptedCurrentToken = encrypt(currentSession.refresh_token);
-    const encryptedTargetToken = encrypt(targetRefreshToken);
+    const { encrypt } = await import("@/lib/encryption");
+    const { data: linkResult, error: linkErr } = await adminSupabase.rpc(
+      "account_switch_link_shared_pool",
+      {
+        p_owner_user_id: currentUser.id,
+        p_target_user_id: targetUserId,
+        p_owner_encrypted_refresh: encrypt(currentSession.refresh_token),
+        p_target_encrypted_refresh: encrypt(targetRefreshToken),
+        p_target_email_hint: authData.user.email ?? null,
+      },
+    );
 
-    // Read existing reciprocal links so we can rollback safely on partial failure.
-    const [{ data: existingForward }, { data: existingReverse }] =
-      await Promise.all([
-        adminSupabase
-          .from("user_sessions_vault")
-          .select("owner_user_id, target_user_id, encrypted_refresh_token, updated_at")
-          .eq("owner_user_id", currentUser.id)
-          .eq("target_user_id", targetUserId)
-          .maybeSingle(),
-        adminSupabase
-          .from("user_sessions_vault")
-          .select("owner_user_id, target_user_id, encrypted_refresh_token, updated_at")
-          .eq("owner_user_id", targetUserId)
-          .eq("target_user_id", currentUser.id)
-          .maybeSingle(),
-      ]);
-
-    const rollbackVaultPair = async () => {
-      const restoreOne = async (
-        ownerUserId: string,
-        targetUserIdToRestore: string,
-        previous:
-          | {
-              owner_user_id: string;
-              target_user_id: string;
-              encrypted_refresh_token: string;
-              updated_at: string | null;
-            }
-          | null,
-      ) => {
-        if (previous) {
-          await adminSupabase.from("user_sessions_vault").upsert(
-            {
-              owner_user_id: previous.owner_user_id,
-              target_user_id: previous.target_user_id,
-              encrypted_refresh_token: previous.encrypted_refresh_token,
-              updated_at: previous.updated_at ?? new Date().toISOString(),
-            },
-            { onConflict: "owner_user_id,target_user_id" },
-          );
-          return;
-        }
-        await adminSupabase
-          .from("user_sessions_vault")
-          .delete()
-          .eq("owner_user_id", ownerUserId)
-          .eq("target_user_id", targetUserIdToRestore);
-      };
-
-      await restoreOne(currentUser.id, targetUserId, existingForward ?? null);
-      await restoreOne(targetUserId, currentUser.id, existingReverse ?? null);
-    };
-
-    // 3. Store targeted account in current user's vault
-    // Note: onConflict is essential to avoid duplicate key errors
-    const { error: vaultError1 } = await adminSupabase
-      .from("user_sessions_vault")
-      .upsert({
-        owner_user_id: currentUser.id,
-        target_user_id: targetUserId,
-        encrypted_refresh_token: encryptedTargetToken,
-        updated_at: new Date().toISOString(),
-      }, { onConflict: 'owner_user_id,target_user_id' });
-    if (vaultError1) {
-      console.error("Vault forward link error:", vaultError1);
-      await rollbackVaultPair().catch((rollbackErr) =>
-        console.error("Rollback failed after forward link error:", rollbackErr),
-      );
-      return NextResponse.json(
-        { error: "Failed to store session link" },
-        { status: 500 },
-      );
+    if (linkErr) {
+      console.error("[account-switch/add] link rpc:", linkErr);
+      return NextResponse.json({ error: "Failed to store session link" }, { status: 500 });
     }
-
-    // 4. Store current account in targeted user's vault (cross-link)
-    const { error: vaultError2 } = await adminSupabase
-      .from("user_sessions_vault")
-      .upsert({
-        owner_user_id: targetUserId,
-        target_user_id: currentUser.id,
-        encrypted_refresh_token: encryptedCurrentToken,
-        updated_at: new Date().toISOString(),
-      }, { onConflict: 'owner_user_id,target_user_id' });
-
-    if (vaultError2) {
-      console.error("Vault reverse link error:", vaultError2);
-      await rollbackVaultPair().catch((rollbackErr) =>
-        console.error("Rollback failed after reverse link error:", rollbackErr),
-      );
-      return NextResponse.json(
-        { error: "Failed to store session link" },
-        { status: 500 },
-      );
+    const rpcOk = !!(linkResult as { ok?: boolean } | null)?.ok;
+    if (!rpcOk) {
+      const rpcError =
+        (linkResult as { error?: string } | null)?.error ||
+        "Failed to store session link";
+      const status =
+        rpcError.includes("Maximum account limit") ||
+        rpcError.includes("maximum limit")
+          ? 400
+          : 500;
+      return NextResponse.json({ error: rpcError }, { status });
     }
 
     // Audit Log

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { duplicateSocialAccountLinkedMessage } from "@/lib/duplicate-social-account-message";
 import { TikTokProvider } from "@/lib/tiktok/provider/TikTokProvider";
 import { createClient } from "@/utils/supabase/server";
 
@@ -192,9 +193,16 @@ export async function GET(req: NextRequest) {
               console.warn('[TikTok Auth Callback] Failed to log blocked connection attempt:', logErr);
           }
 
-          return NextResponse.redirect(
-              `${settingsUrl}?error=duplicate_account&message=${encodeURIComponent('This TikTok account is already linked to another Game of Creators account.')}`,
+          const dupUrl = new URL(settingsUrl);
+          dupUrl.searchParams.set("error", "duplicate_account");
+          dupUrl.searchParams.set(
+            "message",
+            await duplicateSocialAccountLinkedMessage(
+              duplicateAccount.id,
+              "TikTok",
+            ),
           );
+          return NextResponse.redirect(dupUrl);
       }
     }
     // --- END REFINED ---

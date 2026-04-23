@@ -2,9 +2,10 @@ import { createClient } from "@/utils/supabase/client"
 
 export async function completeLogout() {
   const supabase = createClient()
+  // Revoke server-side session everywhere before wiping storage (tokens live in storage).
+  await supabase.auth.signOut({ scope: 'global' })
   localStorage.clear()
   sessionStorage.clear()
-  await supabase.auth.signOut()
   // Only redirect if not already on the sign-in page
   // This hard redirect in completeLogout is fine when explicitly logging out.
       if (window.location.pathname !== '/auth/signin') {

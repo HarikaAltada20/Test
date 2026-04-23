@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { duplicateSocialAccountLinkedMessage } from "@/lib/duplicate-social-account-message";
 import { createClient } from "@/utils/supabase/server";
 
 export const dynamic = "force-dynamic";
@@ -83,7 +84,12 @@ export async function POST(request: NextRequest) {
           }
 
           return NextResponse.json(
-              { error: 'This Twitter account is already linked to another Game of Creators account.' },
+              {
+                error: await duplicateSocialAccountLinkedMessage(
+                  duplicateAccount.id,
+                  "Twitter (X)",
+                ),
+              },
               { status: 400 }
           );
       }

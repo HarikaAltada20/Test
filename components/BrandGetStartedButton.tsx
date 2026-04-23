@@ -56,7 +56,7 @@ export default function BrandGetStartedButton() {
     const handleSignOutAndContinueBrand = async () => {
         setIsSigningOut(true);
         try {
-            await supabase.auth.signOut();
+            await supabase.auth.signOut({ scope: 'local' });
             setShowCreatorModal(false);
             router.push('/get-started');
             router.refresh();

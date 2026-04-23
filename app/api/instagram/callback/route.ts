@@ -9,6 +9,7 @@ import {
     mergeInstagramAnalyticsEntry,
     type InstagramAnalyticsEntry,
 } from '@/lib/platform-social-archive';
+import { duplicateSocialAccountLinkedMessage } from '@/lib/duplicate-social-account-message';
 
 export const dynamic = 'force-dynamic'; // Ensures the route is not statically cached
 
@@ -166,7 +167,10 @@ export async function GET(request: NextRequest) {
             }
 
             baseRedirectUrl.searchParams.set('error', 'duplicate_account');
-            baseRedirectUrl.searchParams.set('message', 'This Instagram account is already linked to another Game of Creators account.');
+            baseRedirectUrl.searchParams.set(
+                'message',
+                await duplicateSocialAccountLinkedMessage(duplicateAccount.id, 'Instagram'),
+            );
             return NextResponse.redirect(baseRedirectUrl);
         }
         // --- END REFINED ---

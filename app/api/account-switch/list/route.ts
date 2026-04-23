@@ -37,6 +37,8 @@ export async function GET() {
       .from("user_sessions_vault")
       .select(`
         target_user_id,
+        linked_target_email,
+        created_at,
         target_user:users!user_sessions_vault_target_user_id_fkey (
           full_name,
           username,
@@ -52,7 +54,7 @@ export async function GET() {
       // Fallback: Fetch IDs first, then fetch user details separately
       const { data: simpleEntries } = await supabase
         .from("user_sessions_vault")
-        .select("target_user_id")
+        .select("target_user_id, linked_target_email, created_at")
         .eq("owner_user_id", user.id);
       
       if (simpleEntries && simpleEntries.length > 0) {
@@ -62,13 +64,19 @@ export async function GET() {
           .select("id, username, full_name, profile_picture_url, user_type")
           .in("id", ids);
         
-        const linkedAccounts = simpleEntries.map(entry => {
-          const detail = userDetails?.find(u => u.id === entry.target_user_id);
+        const linkedAccounts = simpleEntries.map((entry) => {
+          const detail = userDetails?.find((u) => u.id === entry.target_user_id);
+          const e = entry as {
+            linked_target_email?: string | null;
+            created_at?: string;
+          };
           return {
             id: entry.target_user_id,
             username: detail?.username || detail?.full_name || "User",
             avatar_url: detail?.profile_picture_url,
             user_type: detail?.user_type,
+            relink_email_hint: e.linked_target_email ?? null,
+            connected_at: e.created_at ?? null,
           };
         });
         return NextResponse.json({ accounts: linkedAccounts });
@@ -77,13 +85,24 @@ export async function GET() {
       return NextResponse.json({ accounts: [] });
     }
 
-    const linkedAccounts = vaultEntries.map(entry => {
-      const u = entry.target_user as any;
+    const linkedAccounts = vaultEntries.map((entry) => {
+      const u = entry.target_user as {
+        username?: string;
+        full_name?: string;
+        profile_picture_url?: string;
+        user_type?: string;
+      };
+      const row = entry as {
+        linked_target_email?: string | null;
+        created_at?: string;
+      };
       return {
         id: entry.target_user_id,
         username: u?.username || u?.full_name || "User",
         avatar_url: u?.profile_picture_url,
         user_type: u?.user_type,
+        relink_email_hint: row.linked_target_email ?? null,
+        connected_at: row.created_at ?? null,
       };
     });
 
