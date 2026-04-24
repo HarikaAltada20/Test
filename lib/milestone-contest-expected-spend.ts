@@ -103,7 +103,7 @@ export function sumMilestoneVerifiedExpectedPayoutCents(
   return sum;
 }
 
-type MilestoneBonusConfig = {
+export type MilestoneBonusConfig = {
   enabled?: boolean;
   most_verified_reels?: {
     payout_cents?: number;
@@ -117,19 +117,32 @@ type MilestoneBonusConfig = {
   } | null;
 };
 
+/** Per-creator most-verified bonus row — matches contest detail creator-wise columns. */
+export type MilestoneMostVerifiedBonusCreatorRow = {
+  expectedCents: number;
+  paidCents: number;
+  viewsExpectedCents: number;
+  viewsPaidCents: number;
+  verifiedReels: number;
+  minRequired: number;
+};
+
 /**
- * Expected creator bonus (views + reels tracks), cents — same rules as contest detail.
+ * Per-creator expected vs paid for milestone "most verified views" / "most verified reels"
+ * bonuses (same allocation rules as contest-detail-client milestoneReelsBonusByCreator).
  */
-export function computeMilestoneCreatorBonusExpectedCents(
+export function buildMilestoneMostVerifiedBonusByCreatorMap(
   submissions: MilestoneBudgetSubmission[],
   bonus: MilestoneBonusConfig | null | undefined,
-): number {
-  if (!bonus?.enabled) return 0;
+): Map<string, MilestoneMostVerifiedBonusCreatorRow> {
+  const empty = new Map<string, MilestoneMostVerifiedBonusCreatorRow>();
+  if (!bonus?.enabled) return empty;
+
   const reelsConfig = bonus.most_verified_reels;
   const viewsConfig = bonus.most_verified_views;
   const hasReels = Boolean(reelsConfig);
   const hasViews = Boolean(viewsConfig);
-  if (!hasReels && !hasViews) return 0;
+  if (!hasReels && !hasViews) return empty;
 
   const reelsPayout = Number(reelsConfig?.payout_cents || 0);
   const reelsMin = Number(reelsConfig?.min_verified_reels || 0);
@@ -145,6 +158,7 @@ export function computeMilestoneCreatorBonusExpectedCents(
     reelsReachedAt: number;
     viewsReachedAt: number;
     verifiedEvents: Array<{ createdAtMs: number; views: number }>;
+    totalPaidBonusCents: number;
   };
 
   const creators = new Map<string, CreatorAgg>();
@@ -152,8 +166,6 @@ export function computeMilestoneCreatorBonusExpectedCents(
   for (const sub of submissions) {
     const creatorId = sub.creator_id;
     if (!creatorId) continue;
-    const st = normalizeStatus(sub.status);
-    if (!isVerifiedLike(st)) continue;
     if (sub.deleted_at != null && sub.deleted_at !== "") continue;
 
     if (!creators.has(creatorId)) {
@@ -164,9 +176,17 @@ export function computeMilestoneCreatorBonusExpectedCents(
         reelsReachedAt: Number.POSITIVE_INFINITY,
         viewsReachedAt: Number.POSITIVE_INFINITY,
         verifiedEvents: [],
+        totalPaidBonusCents: 0,
       });
     }
     const agg = creators.get(creatorId)!;
+    if (sub.bonus_paid === true) {
+      agg.totalPaidBonusCents += Number(sub.bonus_amount || 0);
+    }
+
+    const st = normalizeStatus(sub.status);
+    if (!isVerifiedLike(st)) continue;
+
     const views = Number(sub.views ?? 0);
     const createdAtMs = Number.isNaN(new Date(sub.created_at).getTime())
       ? Number.POSITIVE_INFINITY
@@ -247,9 +267,43 @@ export function computeMilestoneCreatorBonusExpectedCents(
   });
   const viewsWinnerId = eligibleViews[0]?.creatorId || null;
 
+  creators.forEach((agg, creatorId) => {
+    let paidForReels = 0;
+    if (creatorId === reelsWinnerId && reelsPayout > 0) {
+      let unassignedPaid = agg.totalPaidBonusCents;
+      if (creatorId === viewsWinnerId && viewsPayout > 0) {
+        unassignedPaid = Math.max(0, unassignedPaid - viewsPayout);
+      }
+      paidForReels = Math.min(unassignedPaid, reelsPayout);
+    }
+    empty.set(creatorId, {
+      expectedCents: creatorId === reelsWinnerId ? reelsPayout : 0,
+      paidCents: paidForReels,
+      viewsExpectedCents: creatorId === viewsWinnerId ? viewsPayout : 0,
+      viewsPaidCents:
+        creatorId === viewsWinnerId && viewsPayout > 0
+          ? Math.min(agg.totalPaidBonusCents, viewsPayout)
+          : 0,
+      verifiedReels: agg.verifiedReels,
+      minRequired: reelsMin,
+    });
+  });
+
+  return empty;
+}
+
+/**
+ * Expected creator bonus (views + reels tracks), cents — same rules as contest detail.
+ */
+export function computeMilestoneCreatorBonusExpectedCents(
+  submissions: MilestoneBudgetSubmission[],
+  bonus: MilestoneBonusConfig | null | undefined,
+): number {
+  const map = buildMilestoneMostVerifiedBonusByCreatorMap(submissions, bonus);
   let total = 0;
-  if (reelsWinnerId && reelsPayout > 0) total += reelsPayout;
-  if (viewsWinnerId && viewsPayout > 0) total += viewsPayout;
+  map.forEach((row) => {
+    total += row.viewsExpectedCents + row.expectedCents;
+  });
   return total;
 }
 

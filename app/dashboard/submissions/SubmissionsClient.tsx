@@ -1201,7 +1201,8 @@ export default function SubmissionsClient({
     const bonusAmountCents = getSubmissionBonusAmount(submission);
     const bonusAmountDollars = centsToDollars(bonusAmountCents).toFixed(2);
     const isVerifiedForBonus = submission.status === "verified";
-    const showEstimatedBonus = !isPaidCard && (isVerifiedForBonus || flatFeeBonusForCard > 0);
+    const isMilestoneContest = contest?.contest_type === "milestone";
+    const showEstimatedBonus = !isMilestoneContest && !isPaidCard && (isVerifiedForBonus || flatFeeBonusForCard > 0);
 
     let bonusLabel = "Estimated Bonus";
     if (isRejected) {
@@ -1216,7 +1217,7 @@ export default function SubmissionsClient({
       bonusLabel = "Estimated Bonus";
     }
     const bonusColor = (bonusLabel === "Bonus Earned") ? "text-green-500" : isEnded ? "text-emerald-500" : isDark ? "text-slate-300" : "text-slate-600";
-    const showBonusRow = bonusAmountCents > 0 && (bonusLabel !== "Estimated Bonus" || showEstimatedBonus);
+    const showBonusRow = !isMilestoneContest && bonusAmountCents > 0 && (bonusLabel !== "Estimated Bonus" || showEstimatedBonus);
 
     // Massively expanded thumbnail detection for all social platforms (IG, TikTok, YT, Twitter)
     const meta = submission.metadata as any;
@@ -2542,14 +2543,15 @@ export default function SubmissionsClient({
                 contestDetailsModal?.leaderboard_contest?.flat_fee_bonus ||
                 bonusDetailsModal?.flat_fee_bonus ||
                 0;
-              const showEstimatedBonusModal = !isPaidModal && (submission.status === "verified" || flatFeeBonusModal > 0);
+              const isMilestoneContestModal = contest?.contest_type === "milestone";
+              const showEstimatedBonusModal = !isMilestoneContestModal && !isPaidModal && (submission.status === "verified" || flatFeeBonusModal > 0);
               let bonusLabelModal = "Estimated Bonus";
               if (isRejectedModal) bonusLabelModal = "Bonus Won";
               else if (isPaidModal) bonusLabelModal = "Bonus Earned";
               else if (isPayoutsProcessed) bonusLabelModal = "Bonus Earned";
               else if (isVerificationComplete) bonusLabelModal = "Estimated Bonus";
               else bonusLabelModal = "Estimated Bonus";
-              const showBonusRowModal = bonusAmountCentsModal > 0 && (bonusLabelModal !== "Estimated Bonus" || showEstimatedBonusModal);
+              const showBonusRowModal = !isMilestoneContestModal && bonusAmountCentsModal > 0 && (bonusLabelModal !== "Estimated Bonus" || showEstimatedBonusModal);
               const bonusColorModal = (bonusLabelModal === "Bonus Earned") ? "text-green-500" : isEnded ? "text-emerald-500" : isDark ? "text-slate-300" : "text-slate-600";
 
               let earningsDisplay: { label: string; amount: string; color: string; isRejected?: boolean } | null = null;

@@ -889,6 +889,19 @@ export function ContestClientPage({
       return st;
     };
 
+    const submissionIsPaidForMilestone = (s: any) => {
+      const st = normalizeMilestoneStatus(s?.status);
+      if (st === "paid") return true;
+      if (s?.paid === true) return true;
+      if (Boolean(s?.paid_at)) return true;
+      const explicit =
+        s?.granted_amount_cents ??
+        s?.paid_amount_cents ??
+        s?.other_stats?.paid_amount_cents ??
+        s?.other_stats?.granted_amount_cents;
+      return explicit != null && Number(explicit) > 0;
+    };
+
     const eligibleSubmissions = uniqueSubmissions
       .filter((s: any) => {
         const st = normalizeMilestoneStatus(s?.status);
@@ -900,11 +913,16 @@ export function ContestClientPage({
         return at - bt;
       });
 
+    // Do not treat already-paid rows as still "expected" for milestone slots / amounts
+    const eligibleForExpectedPayout = eligibleSubmissions.filter(
+      (s: any) => !submissionIsPaidForMilestone(s),
+    );
+
     const winnerCountsByMilestone = new Map<string, number>();
     const submissionExpectedRewardMap = new Map<string, number>();
     const creatorExpectedRewardMap = new Map<string, number>();
 
-    eligibleSubmissions.forEach((sub: any) => {
+    eligibleForExpectedPayout.forEach((sub: any) => {
       const subViews = Number(sub?.views || 0);
       let payoutCents = 0;
 
@@ -7660,7 +7678,9 @@ export function ContestClientPage({
                                           "payouts_processed"
                                         ? "Paid"
                                         : "Earned"
-                                      : "Expected";
+                                      : contest?.contest_type === "milestone"
+                                        ? "Earned"
+                                        : "Expected";
 
                                     // Check for flat fee bonus in detailed mode
                                     if (leaderboardViewMode === "detailed") {
@@ -7997,7 +8017,10 @@ export function ContestClientPage({
                                                             "payouts_processed"
                                                           ? "Paid"
                                                           : "Earned"
-                                                        : "Expected";
+                                                        : contest?.contest_type ===
+                                                            "milestone"
+                                                          ? "Earned"
+                                                          : "Expected";
 
                                                     const flatFeeBonus =
                                                       contestType === "cpm"
@@ -9188,6 +9211,81 @@ export function ContestClientPage({
                               const creatorId = String(
                                 (creatorGroup as any).creator_id || "",
                               );
+                              const contestStatus = contest?.status;
+                              const postContestStatus =
+                                contest?.post_contest_status;
+                              const hasPayoutsProcessed =
+                                contestStatus === "ended" &&
+                                postContestStatus === "payouts_processed";
+                              const creatorEarnedAmount = Number(
+                                (creatorGroup as any).total_earnings || 0,
+                              );
+                              const hasPaidSubmission =
+                                (creatorGroup as any).has_paid_submission ===
+                                  true ||
+                                creatorGroup.submissions.some(
+                                  (submission: any) => {
+                                    const ex =
+                                      submission?.granted_amount_cents ??
+                                      submission?.paid_amount_cents ??
+                                      submission?.other_stats
+                                        ?.paid_amount_cents ??
+                                      submission?.other_stats
+                                        ?.granted_amount_cents;
+                                    return (
+                                      submission.status === "paid" ||
+                                      submission.paid === true ||
+                                      Boolean(submission?.paid_at) ||
+                                      (ex != null && Number(ex) > 0)
+                                    );
+                                  },
+                                );
+                              const hasPaidAtSubmission = (
+                                creatorGroup.submissions || []
+                              ).some((submission: any) =>
+                                Boolean(submission?.paid_at),
+                              );
+                              const creatorPaidFromSubmissions = (
+                                creatorGroup.submissions || []
+                              ).reduce((sum: number, submission: any) => {
+                                const explicitPaidAmount =
+                                  submission?.granted_amount_cents ??
+                                  submission?.paid_amount_cents ??
+                                  submission?.other_stats?.paid_amount_cents ??
+                                  submission?.other_stats?.granted_amount_cents;
+                                const isPaid =
+                                  submission.status === "paid" ||
+                                  submission?.paid === true ||
+                                  Boolean(submission?.paid_at) ||
+                                  (explicitPaidAmount != null &&
+                                    Number(explicitPaidAmount) > 0);
+                                if (!isPaid) return sum;
+                                const amount =
+                                  explicitPaidAmount != null &&
+                                  Number(explicitPaidAmount) > 0
+                                    ? Number(explicitPaidAmount)
+                                    : Number(submission?.earnings || 0);
+                                return sum + amount;
+                              }, 0);
+                              const creatorBonusPaidFromSubmissions = (
+                                creatorGroup.submissions || []
+                              ).reduce((sum: number, submission: any) => {
+                                const explicitBonusAmount =
+                                  submission?.bonus_amount ??
+                                  submission?.other_stats?.bonus_amount;
+                                const hasBonusPaid =
+                                  submission?.bonus_paid === true ||
+                                  Boolean(submission?.bonus_paid_at) ||
+                                  (explicitBonusAmount != null &&
+                                    Number(explicitBonusAmount) > 0);
+                                if (!hasBonusPaid) return sum;
+                                const amount =
+                                  explicitBonusAmount != null &&
+                                  Number(explicitBonusAmount) > 0
+                                    ? Number(explicitBonusAmount)
+                                    : 0;
+                                return sum + amount;
+                              }, 0);
                               const expectedReward =
                                 milestoneDerivedData.creatorExpectedRewardMap.get(
                                   creatorId,
@@ -9205,25 +9303,84 @@ export function ContestClientPage({
                                 mostVerifiedViewsBonus +
                                 mostVerifiedReelsBonus;
 
-                              if (
-                                totalExpected > 0 ||
-                                leaderboardViewMode === "detailed"
+                              const milestoneHasEarnedSignal =
+                                creatorPaidFromSubmissions > 0 ||
+                                creatorBonusPaidFromSubmissions > 0 ||
+                                hasPaidSubmission ||
+                                hasPaidAtSubmission ||
+                                (hasPayoutsProcessed &&
+                                  creatorEarnedAmount > 0);
+
+                              if (milestoneHasEarnedSignal) {
+                                const milestoneEarnedAmount =
+                                  creatorPaidFromSubmissions > 0
+                                    ? creatorPaidFromSubmissions +
+                                      creatorBonusPaidFromSubmissions
+                                    : creatorBonusPaidFromSubmissions > 0
+                                      ? creatorBonusPaidFromSubmissions
+                                      : creatorEarnedAmount;
+                                const bonusPaidRemainingBase = Math.max(
+                                  0,
+                                  creatorBonusPaidFromSubmissions,
+                                );
+                                const mostVerifiedViewsBonusGranted = Math.min(
+                                  mostVerifiedViewsBonus,
+                                  bonusPaidRemainingBase,
+                                );
+                                const mostVerifiedReelsBonusGranted = Math.min(
+                                  mostVerifiedReelsBonus,
+                                  Math.max(
+                                    0,
+                                    bonusPaidRemainingBase -
+                                      mostVerifiedViewsBonusGranted,
+                                  ),
+                                );
+                                prizeDisplay = (
+                                  <div className="font-semibold text-green-600 dark:text-green-400 text-base">
+                                    Paid : {formatMoney(milestoneEarnedAmount)}
+                                  </div>
+                                );
+                                if (
+                                  mostVerifiedViewsBonusGranted > 0 ||
+                                  mostVerifiedReelsBonusGranted > 0
+                                ) {
+                                  milestoneCreatorExpectedDisplay = (
+                                    <div className="space-y-1">
+                                      {mostVerifiedViewsBonusGranted > 0 && (
+                                        <div className="text-xs text-slate-600 dark:text-slate-400">
+                                          Most Verified Views (Bonus granted):{" "}
+                                          {formatMoney(
+                                            mostVerifiedViewsBonusGranted,
+                                          )}
+                                        </div>
+                                      )}
+                                      {mostVerifiedReelsBonusGranted > 0 && (
+                                        <div className="text-xs text-slate-600 dark:text-slate-400">
+                                          Most Verified Reels (Bonus granted):{" "}
+                                          {formatMoney(
+                                            mostVerifiedReelsBonusGranted,
+                                          )}
+                                        </div>
+                                      )}
+                                    </div>
+                                  );
+                                }
+                              } else if (
+                                !hasPayoutsProcessed &&
+                                (totalExpected > 0 ||
+                                  leaderboardViewMode === "detailed")
                               ) {
                                 milestoneCreatorExpectedDisplay = (
                                   <div className="space-y-1">
-                                    <div className="font-semibold text-green-600 dark:text-green-400 text-sm">
-                                      Expected Reward:{" "}
-                                      {formatMoney(expectedReward)}
-                                    </div>
                                     {mostVerifiedViewsBonus > 0 && (
                                       <div className="text-xs text-slate-600 dark:text-slate-400">
-                                        Most Verified Views Bonus:{" "}
+                                        Most Verified Views (Bonus Expected):{" "}
                                         {formatMoney(mostVerifiedViewsBonus)}
                                       </div>
                                     )}
                                     {mostVerifiedReelsBonus > 0 && (
                                       <div className="text-xs text-slate-600 dark:text-slate-400">
-                                        Most Verified Reels Bonus:{" "}
+                                        Most Verified Reels (Bonus Expected):{" "}
                                         {formatMoney(mostVerifiedReelsBonus)}
                                       </div>
                                     )}
@@ -9261,7 +9418,9 @@ export function ContestClientPage({
                                 : contestStatus === "active" &&
                                     isLeaderboardContest
                                   ? "Winning Zone"
-                                  : "Expected";
+                                  : contest?.contest_type === "milestone"
+                                    ? "Earned"
+                                    : "Expected";
 
                               const hasEarningsToDisplay =
                                 creatorGroup.total_earnings > 0 ||
@@ -9778,17 +9937,52 @@ export function ContestClientPage({
                             contest?.contest_type === "milestone";
 
                           if (isMilestoneContest) {
+                            const hasPayoutsProcessed =
+                              contest?.post_contest_status ===
+                              "payouts_processed";
+                            const explicitBonusPaidAmount =
+                              (entry as any).bonus_amount ??
+                              (entry as any).other_stats?.bonus_amount;
+                            const explicitPaidAmount =
+                              (entry as any).granted_amount_cents ??
+                              (entry as any).paid_amount_cents ??
+                              (entry as any).other_stats?.paid_amount_cents ??
+                              (entry as any).other_stats?.granted_amount_cents;
+                            const isMilestonePaid =
+                              entry.status === "paid" ||
+                              (entry as any).paid === true ||
+                              Boolean((entry as any).paid_at) ||
+                              (entry as any).bonus_paid === true ||
+                              Boolean((entry as any).bonus_paid_at) ||
+                              (explicitBonusPaidAmount != null &&
+                                Number(explicitBonusPaidAmount) > 0) ||
+                              (explicitPaidAmount != null &&
+                                Number(explicitPaidAmount) > 0);
+                            const milestoneHasEarnedSignal =
+                              isMilestonePaid ||
+                              (hasPayoutsProcessed &&
+                                Number(entry.earnings || 0) > 0);
                             const expectedReward =
                               milestoneDerivedData.submissionExpectedRewardMap.get(
                                 entry.id,
                               ) || 0;
-                            if (
-                              expectedReward > 0 ||
-                              leaderboardViewMode === "detailed"
-                            ) {
+                            if (milestoneHasEarnedSignal) {
+                              const earnedAmount =
+                                explicitPaidAmount != null &&
+                                Number(explicitPaidAmount) > 0
+                                  ? Number(explicitPaidAmount)
+                                  : explicitBonusPaidAmount != null &&
+                                      Number(explicitBonusPaidAmount) > 0
+                                    ? Number(explicitBonusPaidAmount)
+                                    : Number(entry.earnings) > 0
+                                      ? Number(entry.earnings)
+                                      : expectedReward;
                               prizeDisplay = (
                                 <div className="font-semibold text-green-600 dark:text-green-400 text-base">
-                                  Expected Reward: {formatMoney(expectedReward)}
+                                  {isMilestonePaid || hasPayoutsProcessed
+                                    ? "Paid"
+                                    : "Earned"}
+                                  : {formatMoney(earnedAmount)}
                                 </div>
                               );
                             }
@@ -9812,7 +10006,9 @@ export function ContestClientPage({
                                     "payouts_processed"
                                   ? "Paid"
                                   : "Earned"
-                                : "Expected";
+                                : contest?.contest_type === "milestone"
+                                  ? "Earned"
+                                  : "Expected";
 
                               // Check if there's a flat fee bonus
                               const flatFeeBonus =

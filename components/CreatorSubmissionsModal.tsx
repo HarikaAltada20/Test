@@ -390,7 +390,7 @@ export function CreatorSubmissionsModal({
                 `Paid items: ${data.paid_count}`,
                 `Skipped: ${data.skipped_count}`,
                 ``,
-              
+
                 `Total Paid: $${(data.total_amount / 100).toFixed(2)}`,
               ]
             : [
@@ -837,14 +837,8 @@ export function CreatorSubmissionsModal({
 
   // For leaderboard, expected reward per tweet = prize for creator's rank (no cap); match normal view
   const isLeaderboard = contest?.contest_type === "leaderboard";
-  const isMilestone = contest?.contest_type === "milestone";
-  if (
-    maxEarningsPerCreator &&
-    maxEarningsPerCreator > 0 &&
-    !isLeaderboard &&
-    !isMilestone
-  ) {
-    // Sort by created_at to apply cap in submission order (CPM only)
+  if (maxEarningsPerCreator && maxEarningsPerCreator > 0 && !isLeaderboard) {
+    // Sort by created_at to apply creator cap in submission order
     const submissionsByTime = [...sortedSubmissions].sort((a, b) => {
       return (
         new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
@@ -2425,8 +2419,7 @@ export function CreatorSubmissionsModal({
                                   </TableCell>
                                   {contest?.contest_type === "milestone" && (
                                     <TableCell className="text-center">
-                                      {milestoneAssignmentLabel ===
-                                      "—" ? (
+                                      {milestoneAssignmentLabel === "—" ? (
                                         <span
                                           className={cn(
                                             "text-xs font-medium",

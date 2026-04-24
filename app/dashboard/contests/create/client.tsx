@@ -1802,47 +1802,41 @@ export default function CreateContestPage({
           const rMinFilled = milestoneBonusTopReelsMin !== "";
           const rPayFilled = milestoneBonusTopReelsPayout !== "";
 
-          const viewsTrackFilledCount = [
-            vMinViewsFilled,
-            vMinReelsFilled,
-            vPayFilled,
-          ].filter(Boolean).length;
-          const reelsTrackFilledCount = [
-            rMinViewsFilled,
-            rMinFilled,
-            rPayFilled,
-          ].filter(Boolean).length;
+          const viewsTrackHasAnyField =
+            vMinViewsFilled || vMinReelsFilled || vPayFilled;
+          const reelsTrackHasAnyField =
+            rMinViewsFilled || rMinFilled || rPayFilled;
+          const viewsRequiredFilled = vMinViewsFilled && vPayFilled;
+          const reelsRequiredFilled = rMinFilled && rPayFilled;
 
-          if (viewsTrackFilledCount > 0 && viewsTrackFilledCount < 3) {
+          if (viewsTrackHasAnyField && !viewsRequiredFilled) {
             return {
               isValid: false,
               error:
-                "Bonus (most verified views): enter minimum total views, minimum verified reels, and payout, or clear all three fields.",
+                "Bonus (most verified views): enter minimum total views and payout, or clear the category. Minimum verified reels is optional.",
             };
           }
-          if (reelsTrackFilledCount > 0 && reelsTrackFilledCount < 3) {
+          if (reelsTrackHasAnyField && !reelsRequiredFilled) {
             return {
               isValid: false,
               error:
-                "Bonus (most verified reels): enter minimum verified reels, minimum total views, and payout, or clear all three fields.",
+                "Bonus (most verified reels): enter minimum verified reels and payout, or clear the category. Minimum total verified views is optional.",
             };
           }
 
           const viewsOk =
             vMinViewsFilled &&
-            vMinReelsFilled &&
             vPayFilled &&
             Number(milestoneBonusTopViewsMin) > 0 &&
-            Number(milestoneBonusTopViewsMinReels) >= 1 &&
+            (!vMinReelsFilled || Number(milestoneBonusTopViewsMinReels) >= 1) &&
             Math.round(
               parseFloat(String(milestoneBonusTopViewsPayout)) * 100,
             ) >= MIN_MILESTONE_PAYOUT_CENTS;
           const reelsOk =
-            rMinViewsFilled &&
             rMinFilled &&
             rPayFilled &&
-            Number(milestoneBonusTopReelsMinViews) > 0 &&
             Number(milestoneBonusTopReelsMin) >= 1 &&
+            (!rMinViewsFilled || Number(milestoneBonusTopReelsMinViews) > 0) &&
             Math.round(
               parseFloat(String(milestoneBonusTopReelsPayout)) * 100,
             ) >= MIN_MILESTONE_PAYOUT_CENTS;
@@ -2447,28 +2441,24 @@ export default function CreateContestPage({
             const rMinViewsFilled = milestoneBonusTopReelsMinViews !== "";
             const rMinFilled = milestoneBonusTopReelsMin !== "";
             const rPayFilled = milestoneBonusTopReelsPayout !== "";
-            const viewsTrackFilledCount = [
-              vMinViewsFilled,
-              vMinReelsFilled,
-              vPayFilled,
-            ].filter(Boolean).length;
-            const reelsTrackFilledCount = [
-              rMinViewsFilled,
-              rMinFilled,
-              rPayFilled,
-            ].filter(Boolean).length;
-            if (viewsTrackFilledCount > 0 && viewsTrackFilledCount < 3) {
+            const viewsTrackHasAnyField =
+              vMinViewsFilled || vMinReelsFilled || vPayFilled;
+            const reelsTrackHasAnyField =
+              rMinViewsFilled || rMinFilled || rPayFilled;
+            const viewsRequiredFilled = vMinViewsFilled && vPayFilled;
+            const reelsRequiredFilled = rMinFilled && rPayFilled;
+            if (viewsTrackHasAnyField && !viewsRequiredFilled) {
               setFormFeedback(
-                "Bonus (most verified views): enter minimum total views, minimum verified reels, and payout, or clear all three.",
+                "Bonus (most verified views): enter minimum total views and payout, or clear the category. Minimum verified reels is optional.",
               );
               setFormFeedbackType("error");
               setIsLoading(false);
               setUploadProgress(null);
               return;
             }
-            if (reelsTrackFilledCount > 0 && reelsTrackFilledCount < 3) {
+            if (reelsTrackHasAnyField && !reelsRequiredFilled) {
               setFormFeedback(
-                "Bonus (most verified reels): enter minimum verified reels, minimum total views, and payout, or clear all three.",
+                "Bonus (most verified reels): enter minimum verified reels and payout, or clear the category. Minimum total verified views is optional.",
               );
               setFormFeedbackType("error");
               setIsLoading(false);
@@ -2477,19 +2467,18 @@ export default function CreateContestPage({
             }
             const viewsOk =
               vMinViewsFilled &&
-              vMinReelsFilled &&
               vPayFilled &&
               Number(milestoneBonusTopViewsMin) > 0 &&
-              Number(milestoneBonusTopViewsMinReels) >= 1 &&
+              (!vMinReelsFilled ||
+                Number(milestoneBonusTopViewsMinReels) >= 1) &&
               Math.round(
                 parseFloat(String(milestoneBonusTopViewsPayout)) * 100,
               ) >= MIN_MILESTONE_PAYOUT_CENTS;
             const reelsOk =
-              rMinViewsFilled &&
               rMinFilled &&
               rPayFilled &&
-              Number(milestoneBonusTopReelsMinViews) > 0 &&
               Number(milestoneBonusTopReelsMin) >= 1 &&
+              (!rMinViewsFilled || Number(milestoneBonusTopReelsMinViews) > 0) &&
               Math.round(
                 parseFloat(String(milestoneBonusTopReelsPayout)) * 100,
               ) >= MIN_MILESTONE_PAYOUT_CENTS;
@@ -2510,29 +2499,39 @@ export default function CreateContestPage({
           bonusPayload = { enabled: true };
           if (
             milestoneBonusTopViewsMin !== "" &&
-            milestoneBonusTopViewsMinReels !== "" &&
             milestoneBonusTopViewsPayout !== ""
           ) {
-            (bonusPayload as Record<string, unknown>).most_verified_views = {
+            const mostVerifiedViewsPayload: Record<string, unknown> = {
               min_total_views: Number(milestoneBonusTopViewsMin),
-              min_verified_reels: Number(milestoneBonusTopViewsMinReels),
               payout_cents: Math.round(
                 parseFloat(String(milestoneBonusTopViewsPayout)) * 100,
               ),
             };
+            if (milestoneBonusTopViewsMinReels !== "") {
+              mostVerifiedViewsPayload.min_verified_reels = Number(
+                milestoneBonusTopViewsMinReels,
+              );
+            }
+            (bonusPayload as Record<string, unknown>).most_verified_views =
+              mostVerifiedViewsPayload;
           }
           if (
-            milestoneBonusTopReelsMinViews !== "" &&
             milestoneBonusTopReelsMin !== "" &&
             milestoneBonusTopReelsPayout !== ""
           ) {
-            (bonusPayload as Record<string, unknown>).most_verified_reels = {
-              min_total_views: Number(milestoneBonusTopReelsMinViews),
+            const mostVerifiedReelsPayload: Record<string, unknown> = {
               min_verified_reels: Number(milestoneBonusTopReelsMin),
               payout_cents: Math.round(
                 parseFloat(String(milestoneBonusTopReelsPayout)) * 100,
               ),
             };
+            if (milestoneBonusTopReelsMinViews !== "") {
+              mostVerifiedReelsPayload.min_total_views = Number(
+                milestoneBonusTopReelsMinViews,
+              );
+            }
+            (bonusPayload as Record<string, unknown>).most_verified_reels =
+              mostVerifiedReelsPayload;
           }
         }
 
@@ -6957,6 +6956,71 @@ export default function CreateContestPage({
                       budget). Payouts are drawn from it as creators hit
                       milestones.
                     </p>
+                  </div>
+                  <div
+                    className={cn(
+                      "space-y-3 p-4 border rounded-lg",
+                      isDark
+                        ? "bg-blue-950/50 border-blue-800"
+                        : "bg-blue-50 border-blue-200",
+                    )}
+                  >
+                    <div className="flex items-center gap-2">
+                      <span className="text-2xl">🎯</span>
+                      <Label
+                        htmlFor="milestoneMaxEarnings"
+                        className="text-base font-semibold"
+                      >
+                        Maximum Earnings Per Creator (Optional)
+                      </Label>
+                    </div>
+                    <Input
+                      id="milestoneMaxEarnings"
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={maxEarningsPerCreator}
+                      className={cn(
+                        isDark
+                          ? "bg-[#180438] border border-gray-600 text-white"
+                          : "bg-white text-black",
+                      )}
+                      onChange={(e) => setMaxEarningsPerCreator(e.target.value)}
+                      placeholder="e.g., 500 for $500 max per creator"
+                    />
+                    <p className="text-sm text-muted-foreground">
+                      Set a maximum earning cap per creator for{" "}
+                      <strong>THIS CONTEST ONLY</strong>. Once reached, they can
+                      still submit but won't earn more from this campaign. This
+                      does NOT affect their earnings from other contests on the
+                      platform. Helps ensure fair reward distribution within this
+                      campaign.
+                    </p>
+                    {maxEarningsPerCreator &&
+                      parseFloat(maxEarningsPerCreator.toString()) > 0 && (
+                        <Alert
+                          className={cn(
+                            isDark
+                              ? "bg-blue-900/30 border-blue-900"
+                              : "bg-blue-100 border-blue-300",
+                          )}
+                        >
+                          <AlertDescription
+                            className={cn(
+                              isDark ? "text-blue-200" : "text-blue-800",
+                            )}
+                          >
+                            ℹ️ Each creator can earn up to{" "}
+                            <strong>
+                              $
+                              {parseFloat(
+                                maxEarningsPerCreator.toString(),
+                              ).toFixed(2)}
+                            </strong>{" "}
+                            from this contest.
+                          </AlertDescription>
+                        </Alert>
+                      )}
                   </div>
                   <div
                     className={cn(

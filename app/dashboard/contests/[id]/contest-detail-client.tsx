@@ -87,6 +87,7 @@ import ManualPointsModal from "@/components/ManualPointsModal";
 import { CreatorSubmissionsModal } from "@/components/CreatorSubmissionsModal";
 import { InstagramCreatorAnalyticsModal } from "@/components/contest/InstagramCreatorAnalyticsModal";
 import { BudgetProgress } from "@/components/BudgetProgress";
+import { buildMilestoneMostVerifiedBonusByCreatorMap } from "@/lib/milestone-contest-expected-spend";
 import { YouTubeAnalyticsPanel } from "@/components/youtube/YouTubeAnalyticsPanel";
 import { YT_ANALYTICS_DEFAULT_WINDOW_DAYS } from "@/lib/youtube-constants";
 import { PaginationControls } from "@/components/ui/pagination-controls";
@@ -1218,6 +1219,8 @@ export default function ContestDetailClient({
   const [igAnalyticsCreatorLabel, setIgAnalyticsCreatorLabel] = useState("");
   const [igAnalyticsLoadingCreatorId, setIgAnalyticsLoadingCreatorId] =
     useState<string | null>(null);
+  const [markingMilestoneVerifiedBonus, setMarkingMilestoneVerifiedBonus] =
+    useState<Record<string, "views" | "reels" | undefined>>({});
   const clearIgAnalyticsButtonLoading = useCallback(() => {
     setIgAnalyticsLoadingCreatorId(null);
   }, []);
@@ -2716,6 +2719,12 @@ export default function ContestDetailClient({
       ?.enabled &&
     milestoneMostVerifiedReelsConfig,
   );
+  const showCreatorMilestoneVerifiedBonusActions =
+    Boolean(isAdminView) &&
+    currentContest?.contest_type === "milestone" &&
+    currentContest?.post_contest_status === "verification_complete" &&
+    (showMostVerifiedViewsBonusColumns || showMostVerifiedReelsCreatorColumn);
+
   const milestoneReelsBonusByCreator = useMemo(() => {
     const empty = new Map<
       string,
@@ -2736,151 +2745,20 @@ export default function ContestDetailClient({
 
     const bonusConfig = (currentContest?.contest_based_details as any)
       ?.milestone_contest?.bonus;
-    const reelsConfig = bonusConfig?.most_verified_reels;
-    const viewsConfig = bonusConfig?.most_verified_views;
-    const reelsPayout = Number(reelsConfig?.payout_cents || 0);
-    const reelsMin = Number(reelsConfig?.min_verified_reels || 0);
-    const reelsMinViews = Number(reelsConfig?.min_total_views || 0);
-    const viewsMin = Number(viewsConfig?.min_total_views || 0);
-    const viewsMinReels = Number(viewsConfig?.min_verified_reels || 0);
 
-    type CreatorAgg = {
-      creatorId: string;
-      verifiedReels: number;
-      totalVerifiedViews: number;
-      reelsReachedAt: number;
-      viewsReachedAt: number;
-      verifiedEvents: Array<{ createdAtMs: number; views: number }>;
-      totalPaidBonusCents: number;
-    };
-    const creators = new Map<string, CreatorAgg>();
-
-    (currentSubmissions || []).forEach((sub: any) => {
-      const creatorId = sub?.creator_id;
-      if (!creatorId) return;
-      if (!creators.has(creatorId)) {
-        creators.set(creatorId, {
-          creatorId,
-          verifiedReels: 0,
-          totalVerifiedViews: 0,
-          reelsReachedAt: Number.POSITIVE_INFINITY,
-          viewsReachedAt: Number.POSITIVE_INFINITY,
-          verifiedEvents: [],
-          totalPaidBonusCents: 0,
-        });
-      }
-      const agg = creators.get(creatorId)!;
-      if (sub?.bonus_paid === true) {
-        agg.totalPaidBonusCents += Number(sub?.bonus_amount || 0);
-      }
-      const status = String(getStatus(sub) || "").toLowerCase();
-      if (
-        !(status === "verified" || status === "paid" || status === "approved")
-      )
-        return;
-      const views = Number(sub?.views ?? 0);
-      const createdAtMs = Number.isNaN(new Date(sub?.created_at).getTime())
-        ? Number.POSITIVE_INFINITY
-        : new Date(sub.created_at).getTime();
-      agg.verifiedReels += 1;
-      agg.totalVerifiedViews += views;
-      agg.verifiedEvents.push({ createdAtMs, views });
-    });
-
-    creators.forEach((agg) => {
-      if (agg.verifiedEvents.length === 0) return;
-      const sortedEvents = [...agg.verifiedEvents].sort(
-        (a, b) => a.createdAtMs - b.createdAtMs,
-      );
-      let runningViews = 0;
-      sortedEvents.forEach((event, index) => {
-        runningViews += event.views;
-        if (
-          reelsMin > 0 &&
-          index + 1 >= reelsMin &&
-          agg.reelsReachedAt === Number.POSITIVE_INFINITY
-        ) {
-          agg.reelsReachedAt = event.createdAtMs;
-        }
-        if (
-          viewsMin > 0 &&
-          runningViews >= viewsMin &&
-          agg.viewsReachedAt === Number.POSITIVE_INFINITY
-        ) {
-          agg.viewsReachedAt = event.createdAtMs;
-        }
-      });
-    });
-
-    const allCreators = Array.from(creators.values());
-    const eligibleReels = !reelsConfig
-      ? []
-      : allCreators.filter((agg) => {
-          if (reelsMin > 0 && agg.verifiedReels < reelsMin) return false;
-          if (reelsMinViews > 0 && agg.totalVerifiedViews < reelsMinViews)
-            return false;
-          return true;
-        });
-    eligibleReels.sort((a, b) => {
-      if (b.verifiedReels !== a.verifiedReels) {
-        return b.verifiedReels - a.verifiedReels;
-      }
-      if (b.totalVerifiedViews !== a.totalVerifiedViews) {
-        return b.totalVerifiedViews - a.totalVerifiedViews;
-      }
-      if (a.reelsReachedAt !== b.reelsReachedAt) {
-        return a.reelsReachedAt - b.reelsReachedAt;
-      }
-      return String(a.creatorId).localeCompare(String(b.creatorId));
-    });
-    const reelsWinnerId = eligibleReels[0]?.creatorId || null;
-
-    const eligibleViews = !viewsConfig
-      ? []
-      : allCreators.filter((agg) => {
-          if (viewsMin > 0 && agg.totalVerifiedViews < viewsMin) return false;
-          if (viewsMinReels > 0 && agg.verifiedReels < viewsMinReels)
-            return false;
-          if (viewsMin <= 0 && viewsMinReels <= 0) return false;
-          return true;
-        });
-    eligibleViews.sort((a, b) => {
-      if (b.totalVerifiedViews !== a.totalVerifiedViews) {
-        return b.totalVerifiedViews - a.totalVerifiedViews;
-      }
-      if (b.verifiedReels !== a.verifiedReels) {
-        return b.verifiedReels - a.verifiedReels;
-      }
-      if (a.viewsReachedAt !== b.viewsReachedAt) {
-        return a.viewsReachedAt - b.viewsReachedAt;
-      }
-      return String(a.creatorId).localeCompare(String(b.creatorId));
-    });
-    const viewsWinnerId = eligibleViews[0]?.creatorId || null;
-    const viewsPayout = Number(viewsConfig?.payout_cents || 0);
-
-    creators.forEach((agg, creatorId) => {
-      let paidForReels = 0;
-      if (creatorId === reelsWinnerId && reelsPayout > 0) {
-        let unassignedPaid = agg.totalPaidBonusCents;
-        if (creatorId === viewsWinnerId && viewsPayout > 0) {
-          unassignedPaid = Math.max(0, unassignedPaid - viewsPayout);
-        }
-        paidForReels = Math.min(unassignedPaid, reelsPayout);
-      }
-      empty.set(creatorId, {
-        expectedCents: creatorId === reelsWinnerId ? reelsPayout : 0,
-        paidCents: paidForReels,
-        viewsExpectedCents: creatorId === viewsWinnerId ? viewsPayout : 0,
-        viewsPaidCents:
-          creatorId === viewsWinnerId && viewsPayout > 0
-            ? Math.min(agg.totalPaidBonusCents, viewsPayout)
-            : 0,
-        verifiedReels: agg.verifiedReels,
-        minRequired: reelsMin,
-      });
-    });
-    return empty;
+    return buildMilestoneMostVerifiedBonusByCreatorMap(
+      (currentSubmissions || []).map((sub: any) => ({
+        id: sub.id,
+        creator_id: sub.creator_id,
+        created_at: sub.created_at,
+        status: getStatus(sub),
+        deleted_at: sub.deleted_at,
+        views: sub.views,
+        bonus_paid: sub.bonus_paid,
+        bonus_amount: sub.bonus_amount,
+      })),
+      bonusConfig,
+    );
   }, [
     currentContest,
     currentSubmissions,
@@ -2924,8 +2802,7 @@ export default function ContestDetailClient({
     if (currentContest?.contest_type !== "milestone") return 0;
     let sum = 0;
     milestoneReelsBonusByCreator.forEach((row) => {
-      sum +=
-        (Number(row.viewsPaidCents) || 0) + (Number(row.paidCents) || 0);
+      sum += (Number(row.viewsPaidCents) || 0) + (Number(row.paidCents) || 0);
     });
     return sum;
   }, [currentContest?.contest_type, milestoneReelsBonusByCreator]);
@@ -5367,6 +5244,115 @@ export default function ContestDetailClient({
         setIsRefreshingAll(false);
       }
     }
+  };
+
+  const handleMarkMilestoneMostVerifiedBonus = useCallback(
+    async (creatorId: string, track: "views" | "reels") => {
+      setMarkingMilestoneVerifiedBonus((p) => ({ ...p, [creatorId]: track }));
+      try {
+        const res = await fetch(
+          `/api/contests/${contestId}/mark-milestone-most-verified-bonus`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ creatorId, track }),
+          },
+        );
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          throw new Error(
+            typeof data?.error === "string"
+              ? data.error
+              : "Failed to mark bonus as paid",
+          );
+        }
+        toast({
+          title: track === "views" ? "Views bonus paid" : "Reels bonus paid",
+          description:
+            data?.creditedCents != null
+              ? `${formatMoney(Number(data.creditedCents))} credited to the creator.`
+              : "Bonus recorded and balance updated.",
+          variant: "success",
+        });
+        setTimeout(() => window.location.reload(), 800);
+      } catch (e: any) {
+        toast({
+          title: "Could not record bonus",
+          description: e?.message || "Request failed",
+          variant: "destructive",
+        });
+      } finally {
+        setMarkingMilestoneVerifiedBonus((p) => {
+          const next = { ...p };
+          delete next[creatorId];
+          return next;
+        });
+      }
+    },
+    [contestId, toast],
+  );
+
+  const renderMilestoneVerifiedBonusMenuItems = (
+    creatorId: string,
+    extraDisabled?: boolean,
+  ) => {
+    if (!showCreatorMilestoneVerifiedBonusActions) return null;
+    const row = milestoneReelsBonusByCreator.get(creatorId) ?? {
+      expectedCents: 0,
+      paidCents: 0,
+      viewsExpectedCents: 0,
+      viewsPaidCents: 0,
+      verifiedReels: 0,
+      minRequired: 0,
+    };
+    const busy = markingMilestoneVerifiedBonus[creatorId];
+    const d = Boolean(busy) || Boolean(extraDisabled);
+    const viewsDone =
+      row.viewsExpectedCents <= 0 ||
+      row.viewsPaidCents >= row.viewsExpectedCents;
+    const reelsDone =
+      row.expectedCents <= 0 || row.paidCents >= row.expectedCents;
+    const reelsBlockedByViews =
+      row.viewsExpectedCents > 0 && row.viewsPaidCents < row.viewsExpectedCents;
+
+    return (
+      <>
+        <DropdownMenuSeparator />
+        <DropdownMenuLabel className="text-amber-600 dark:text-amber-400">
+          Milestone bonuses
+        </DropdownMenuLabel>
+        {showMostVerifiedViewsBonusColumns && (
+          <DropdownMenuItem
+            // disabled={d || viewsDone}
+            onClick={() =>
+              void handleMarkMilestoneMostVerifiedBonus(creatorId, "views")
+            }
+          >
+            {busy === "views" ? (
+              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+            ) : (
+              <Gift className="h-4 w-4 mr-2" />
+            )}
+            Mark most verified views bonus paid
+          </DropdownMenuItem>
+        )}
+        {showMostVerifiedReelsCreatorColumn && (
+          <DropdownMenuItem
+            // disabled={d || reelsDone || reelsBlockedByViews}
+            onClick={() =>
+              void handleMarkMilestoneMostVerifiedBonus(creatorId, "reels")
+            }
+          >
+            {busy === "reels" ? (
+              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+            ) : (
+              <Gift className="h-4 w-4 mr-2" />
+            )}
+            Mark most verified reels bonus paid
+          </DropdownMenuItem>
+        )}
+      </>
+    );
   };
 
   // Helper function to determine if refresh should be disabled and why
@@ -8262,7 +8248,7 @@ export default function ContestDetailClient({
                             <Trophy className="h-5 w-5 text-yellow-500" />
                             Milestone Rewards Ladder
                           </h3>
-                          <Badge
+                          {/* <Badge
                             variant="outline"
                             className={cn(
                               "text-xs font-medium",
@@ -8272,7 +8258,7 @@ export default function ContestDetailClient({
                             )}
                           >
                             Non-Cumulative
-                          </Badge>
+                          </Badge> */}
                         </div>
 
                         <div className="grid grid-cols-1 gap-4">
@@ -15226,8 +15212,7 @@ export default function ContestDetailClient({
                                       {currentContest.contest_type ===
                                         "milestone" && (
                                         <TableCell className="text-center">
-                                          {milestoneAssignmentLabel ===
-                                          "—" ? (
+                                          {milestoneAssignmentLabel === "—" ? (
                                             <span
                                               className={cn(
                                                 "text-xs font-medium",
@@ -15236,7 +15221,7 @@ export default function ContestDetailClient({
                                                   : "text-slate-500",
                                               )}
                                             >
-                                             —
+                                              —
                                             </span>
                                           ) : (
                                             <div className="flex flex-col items-center gap-1">
@@ -17320,6 +17305,72 @@ export default function ContestDetailClient({
                                                           <RefreshCw className="h-4 w-4 mr-2 text-purple-500" />
                                                           Refresh All Metrics
                                                         </DropdownMenuItem>
+                                                        {renderMilestoneVerifiedBonusMenuItems(
+                                                          group.creator.id,
+                                                          !!loadingDetailedAnalytics[
+                                                            group.creator.id
+                                                          ],
+                                                        )}
+                                                      </DropdownMenuContent>
+                                                    </DropdownMenu>
+                                                  )}
+                                                {showCreatorMilestoneVerifiedBonusActions &&
+                                                  currentContest.platform
+                                                    ?.toLowerCase()
+                                                    .includes("instagram") && (
+                                                    <DropdownMenu>
+                                                      <DropdownMenuTrigger
+                                                        asChild
+                                                      >
+                                                        <Button
+                                                          size="sm"
+                                                          variant="ghost"
+                                                          className="h-8 w-8 p-0"
+                                                          aria-label="Milestone bonus actions"
+                                                        >
+                                                          {markingMilestoneVerifiedBonus[
+                                                            group.creator.id
+                                                          ] ? (
+                                                            <Loader2 className="h-4 w-4 animate-spin" />
+                                                          ) : (
+                                                            <MoreVertical className="h-4 w-4" />
+                                                          )}
+                                                        </Button>
+                                                      </DropdownMenuTrigger>
+                                                      <DropdownMenuContent align="end">
+                                                        {renderMilestoneVerifiedBonusMenuItems(
+                                                          group.creator.id,
+                                                        )}
+                                                      </DropdownMenuContent>
+                                                    </DropdownMenu>
+                                                  )}
+                                                {showCreatorMilestoneVerifiedBonusActions &&
+                                                  currentContest.platform
+                                                    ?.toLowerCase()
+                                                    .includes("tiktok") && (
+                                                    <DropdownMenu>
+                                                      <DropdownMenuTrigger
+                                                        asChild
+                                                      >
+                                                        <Button
+                                                          size="sm"
+                                                          variant="ghost"
+                                                          className="h-8 w-8 p-0"
+                                                          aria-label="Milestone bonus actions"
+                                                        >
+                                                          {markingMilestoneVerifiedBonus[
+                                                            group.creator.id
+                                                          ] ? (
+                                                            <Loader2 className="h-4 w-4 animate-spin" />
+                                                          ) : (
+                                                            <MoreVertical className="h-4 w-4" />
+                                                          )}
+                                                        </Button>
+                                                      </DropdownMenuTrigger>
+                                                      <DropdownMenuContent align="end">
+                                                        {renderMilestoneVerifiedBonusMenuItems(
+                                                          group.creator.id,
+                                                        )}
                                                       </DropdownMenuContent>
                                                     </DropdownMenu>
                                                   )}

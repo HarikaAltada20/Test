@@ -623,30 +623,38 @@ export default function EditContestPage({
 
     if (
       milestoneBonusTopViewsMin !== "" &&
-      milestoneBonusTopViewsMinReels !== "" &&
       milestoneBonusTopViewsPayout !== ""
     ) {
-      bonusPayload.most_verified_views = {
+      const mostVerifiedViewsPayload: Record<string, unknown> = {
         min_total_views: Number(milestoneBonusTopViewsMin),
-        min_verified_reels: Number(milestoneBonusTopViewsMinReels),
         payout_cents: Math.round(
           parseFloat(String(milestoneBonusTopViewsPayout)) * 100
         ),
       };
+      if (milestoneBonusTopViewsMinReels !== "") {
+        mostVerifiedViewsPayload.min_verified_reels = Number(
+          milestoneBonusTopViewsMinReels
+        );
+      }
+      bonusPayload.most_verified_views = mostVerifiedViewsPayload;
     }
 
     if (
-      milestoneBonusTopReelsMinViews !== "" &&
       milestoneBonusTopReelsMin !== "" &&
       milestoneBonusTopReelsPayout !== ""
     ) {
-      bonusPayload.most_verified_reels = {
-        min_total_views: Number(milestoneBonusTopReelsMinViews),
+      const mostVerifiedReelsPayload: Record<string, unknown> = {
         min_verified_reels: Number(milestoneBonusTopReelsMin),
         payout_cents: Math.round(
           parseFloat(String(milestoneBonusTopReelsPayout)) * 100
         ),
       };
+      if (milestoneBonusTopReelsMinViews !== "") {
+        mostVerifiedReelsPayload.min_total_views = Number(
+          milestoneBonusTopReelsMinViews
+        );
+      }
+      bonusPayload.most_verified_reels = mostVerifiedReelsPayload;
     }
 
     return bonusPayload;
@@ -4274,37 +4282,31 @@ export default function EditContestPage({
         const rMinViewsFilled = milestoneBonusTopReelsMinViews !== "";
         const rMinFilled = milestoneBonusTopReelsMin !== "";
         const rPayFilled = milestoneBonusTopReelsPayout !== "";
-        const viewsTrackFilledCount = [
-          vMinViewsFilled,
-          vMinReelsFilled,
-          vPayFilled,
-        ].filter(Boolean).length;
-        const reelsTrackFilledCount = [
-          rMinViewsFilled,
-          rMinFilled,
-          rPayFilled,
-        ].filter(Boolean).length;
+        const viewsTrackHasAnyField =
+          vMinViewsFilled || vMinReelsFilled || vPayFilled;
+        const reelsTrackHasAnyField =
+          rMinViewsFilled || rMinFilled || rPayFilled;
+        const viewsRequiredFilled = vMinViewsFilled && vPayFilled;
+        const reelsRequiredFilled = rMinFilled && rPayFilled;
 
-        if (viewsTrackFilledCount > 0 && viewsTrackFilledCount < 3) {
-          return "Bonus (most verified views): fill minimum total views, minimum verified reels, and bonus payout, or clear all three.";
+        if (viewsTrackHasAnyField && !viewsRequiredFilled) {
+          return "Bonus (most verified views): fill minimum total views and bonus payout, or clear the category. Minimum verified reels is optional.";
         }
-        if (reelsTrackFilledCount > 0 && reelsTrackFilledCount < 3) {
-          return "Bonus (most verified reels): fill minimum verified reels, minimum total views, and bonus payout, or clear all three.";
+        if (reelsTrackHasAnyField && !reelsRequiredFilled) {
+          return "Bonus (most verified reels): fill minimum verified reels and bonus payout, or clear the category. Minimum total verified views is optional.";
         }
         const viewsOk =
           vMinViewsFilled &&
-          vMinReelsFilled &&
           vPayFilled &&
           Number(milestoneBonusTopViewsMin) > 0 &&
-          Number(milestoneBonusTopViewsMinReels) >= 1 &&
+          (!vMinReelsFilled || Number(milestoneBonusTopViewsMinReels) >= 1) &&
           Math.round(parseFloat(String(milestoneBonusTopViewsPayout)) * 100) >=
             MIN_MILESTONE_PAYOUT_CENTS;
         const reelsOk =
-          rMinViewsFilled &&
           rMinFilled &&
           rPayFilled &&
-          Number(milestoneBonusTopReelsMinViews) > 0 &&
           Number(milestoneBonusTopReelsMin) >= 1 &&
+          (!rMinViewsFilled || Number(milestoneBonusTopReelsMinViews) > 0) &&
           Math.round(parseFloat(String(milestoneBonusTopReelsPayout)) * 100) >=
             MIN_MILESTONE_PAYOUT_CENTS;
         if (!viewsOk && !reelsOk) {
