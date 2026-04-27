@@ -10693,7 +10693,15 @@ export default function EditContestPage({
                       />
                     </div>
                     <div className="md:col-span-4 space-y-2">
-                      <Label>Winner cap (optional)</Label>
+                    <p className="text-xs">
+                            <span className="font-medium">
+                              Winner cap (optional):
+                            </span>{" "}
+                            <span className="text-muted-foreground">
+                              First N creators to reach this tier, or leave blank
+                              for everyone who qualifies.
+                            </span>
+                          </p>
                       <Input
                         type="number"
                         min={1}
@@ -10787,9 +10795,9 @@ export default function EditContestPage({
                   />
                   <Label
                     htmlFor="milestoneBonusToggle"
-                    className="cursor-pointer font-medium"
+                    className="cursor-pointer text-md font-medium"
                   >
-                    Creator bonuses (verified creators)
+                    Creator Bonus (verified creators)
                   </Label>
                 </div>
                 {milestoneBonusEnabled && (
@@ -10841,7 +10849,7 @@ export default function EditContestPage({
                         />
                       </div>
                       <div className="space-y-2">
-                        <Label>Winner bonus </Label>
+                        <Label>Winner bonus (USD)</Label>
                         <Input
                           type="number"
                           step="0.01"
@@ -10900,7 +10908,7 @@ export default function EditContestPage({
                         />
                       </div>
                       <div className="space-y-2">
-                        <Label>Winner bonus </Label>
+                        <Label>Winner bonus (USD)</Label>
                         <Input
                           type="number"
                           step="0.01"

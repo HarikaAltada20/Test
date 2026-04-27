@@ -3523,6 +3523,9 @@ export function ContestListClient({
                   <SelectItem isDark={isDark} value="cpm">
                     CPM
                   </SelectItem>
+                  <SelectItem isDark={isDark} value="milestone">
+                    Milestone
+                  </SelectItem>
                 </SelectContent>
               </Select>
             </div>

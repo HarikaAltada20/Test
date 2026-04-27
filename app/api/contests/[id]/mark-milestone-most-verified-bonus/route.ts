@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createAdminClient } from "@/utils/supabase/admin";
 import { verifyAdminAccess } from "@/utils/admin-auth";
 import { creditCreatorWithdrawableBalance } from "@/lib/payment-utils";
+import { revalidateLeaderboardCache } from "@/lib/leaderboard-cache";
 import {
   buildMilestoneMostVerifiedBonusByCreatorMap,
   type MilestoneBudgetSubmission,
@@ -203,7 +204,10 @@ export async function POST(
         metadata: {
           contest_id: contestId,
           bonus_type: `milestone_most_verified_${track}`,
-          submission_id: target.id,
+          // Keep a track-specific submission key so this reward does not collide
+          // with normal per-submission reward rows on ux_reward_per_submission_cycle.
+          submission_id: `${target.id}:milestone_most_verified_${track}`,
+          source_submission_id: target.id,
         },
       },
     );
@@ -235,6 +239,7 @@ export async function POST(
         { status: 500 },
       );
     }
+    revalidateLeaderboardCache(contestId);
 
     return NextResponse.json({
       success: true,

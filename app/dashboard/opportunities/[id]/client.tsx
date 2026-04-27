@@ -296,6 +296,7 @@ export function ContestClientPage({
       best_rank: number;
       submission_count: number;
       has_paid_submission?: boolean;
+      creator_bonus_paid_total?: number;
     }>
   >([]);
   const tabs = useMemo(() => getTabs(contest?.platform), [contest?.platform]);
@@ -1407,6 +1408,7 @@ export function ContestClientPage({
               best_rank: r.best_rank ?? 0,
               submission_count: r.submission_count ?? 0,
               has_paid_submission: r.has_paid_submission,
+              creator_bonus_paid_total: r.creator_bonus_paid_total ?? 0,
             })),
           );
           setCreatorTotalEntries(data.totalEntries ?? 0);
@@ -4164,6 +4166,16 @@ export function ContestClientPage({
                                   </div>
                                 ))}
                             </div>
+                            
+                            <Alert className={cn(
+                              "mt-2 border-purple-600 shadow-sm",
+                              isDark ? "bg-purple-900/20 text-purple-200" : "bg-purple-50 text-purple-800"
+                            )}>
+                              <Info className="h-4 w-4" />
+                              <AlertDescription className="text-sm font-medium mt-0.5">
+                               Once a submission reaches the target view threshold, the corresponding milestone reward will be granted.
+                              </AlertDescription>
+                            </Alert>
                           </div>
 
                           {contest.contest_based_details.milestone_contest.bonus
@@ -6945,12 +6957,19 @@ export function ContestClientPage({
                     {/* Earnings View Mode Toggle - Show for both CPM and leaderboard contests with bonus */}
                     {/* Only show if contest is ended and payouts are processed */}
                     {(contest?.contest_type === "leaderboard" ||
-                      contest?.contest_type === "cpm") &&
+                      contest?.contest_type === "cpm" ||
+                      contest?.contest_type === "milestone") &&
                       (contest.contest_based_details?.leaderboard_contest
                         ?.flat_fee_bonus ||
                         contest.contest_based_details?.cpm_contest
                           ?.flat_fee_bonus ||
-                        (contest as any).bonus_details?.description_html) &&
+                        (contest as any).bonus_details?.description_html ||
+                        ((contest.contest_based_details as any)
+                          ?.milestone_contest?.bonus?.most_verified_views
+                          ?.payout_cents || 0) > 0 ||
+                        ((contest.contest_based_details as any)
+                          ?.milestone_contest?.bonus?.most_verified_reels
+                          ?.payout_cents || 0) > 0) &&
                       contest?.status?.toLowerCase() === "ended" &&
                       contest?.post_contest_status === "payouts_processed" && (
                         <div
@@ -7645,7 +7664,7 @@ export function ContestClientPage({
                                     )}
                                   </p>
                                 </div>
-                                {(() => {
+                                {(() : React.ReactNode => {
                                   // Don't show winning zone for rejected entries
                                   if (
                                     contest?.platform === "twitter" &&
@@ -7676,73 +7695,92 @@ export function ContestClientPage({
                                       ? isTwitter &&
                                         contest?.post_contest_status ===
                                           "payouts_processed"
-                                        ? "Paid"
+                                        ? contest?.contest_type === "milestone"
+                                          ? "Earned"
+                                          : "Paid"
                                         : "Earned"
                                       : contest?.contest_type === "milestone"
                                         ? "Earned"
                                         : "Expected";
 
-                                    // Check for flat fee bonus in detailed mode
-                                    if (leaderboardViewMode === "detailed") {
-                                      const flatFeeBonus =
-                                        contestType === "cpm"
-                                          ? (
-                                              contest.contest_based_details as any
-                                            )?.cpm_contest?.flat_fee_bonus || 0
-                                          : (
-                                              contest.contest_based_details as any
-                                            )?.leaderboard_contest
-                                              ?.flat_fee_bonus || 0;
+                                    const flatFeeBonus =
+                                      contestType === "cpm"
+                                        ? (
+                                            contest.contest_based_details as any
+                                          )?.cpm_contest?.flat_fee_bonus || 0
+                                        : (
+                                            contest.contest_based_details as any
+                                          )?.leaderboard_contest?.flat_fee_bonus ||
+                                          0;
 
-                                      if (flatFeeBonus > 0) {
-                                        const totalEarnings =
-                                          earningsBase + flatFeeBonus;
-                                        prizeDisplay = (
-                                          <div className="space-y-1">
-                                            <div className="font-semibold text-green-600 dark:text-green-400 text-base">
-                                              {earningsLabel}:{" "}
-                                              {formatMoney(totalEarnings)}
-                                            </div>
-                                            <div className="flex flex-wrap items-center gap-1.5 text-xs text-slate-600 dark:text-slate-400 bg-green-50 dark:bg-green-900/20 px-2 py-1.5 rounded-md border border-green-200 dark:border-green-800">
-                                              <div className="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0" />
-                                              <span className="whitespace-nowrap">
-                                                {formatMoney(earningsBase)}{" "}
-                                                {contestType === "cpm"
-                                                  ? "CPM"
-                                                  : "Prize"}
-                                              </span>
-                                              <span className="text-green-600 dark:text-green-400">
-                                                +
-                                              </span>
-                                              <span className="whitespace-nowrap">
-                                                {formatMoney(flatFeeBonus)}{" "}
-                                                Bonus
-                                              </span>
-                                            </div>
-                                          </div>
-                                        );
-                                      } else {
-                                        prizeDisplay = (
+                                    const creatorIdMyCard = String(
+                                      myLeaderboardEntry?.creator_id || "",
+                                    );
+                                    const mvvBonusMyCard =
+                                      milestoneDerivedData.creatorMostVerifiedViewsBonusMap.get(
+                                        creatorIdMyCard,
+                                      ) || 0;
+                                    const mvrBonusMyCard =
+                                      milestoneDerivedData.creatorMostVerifiedReelsBonusMap.get(
+                                        creatorIdMyCard,
+                                      ) || 0;
+
+                                    const hasPayoutsProcessedMyCard =
+                                      contest?.status === "ended" &&
+                                      contest?.post_contest_status ===
+                                        "payouts_processed";
+                                    const creatorBonusPaidTotalMyCard = Number(
+                                      (myLeaderboardEntry as any)
+                                        ?.creator_bonus_paid_total ||
+                                        (myCreatorGroupOnPage as any)
+                                          ?.creator_bonus_paid_total ||
+                                        0,
+                                    );
+
+                                    const bonusAmount =
+                                      contestType === "milestone"
+                                        ? hasPayoutsProcessedMyCard
+                                          ? creatorBonusPaidTotalMyCard
+                                          : mvvBonusMyCard + mvrBonusMyCard
+                                        : flatFeeBonus;
+
+                                    const totalEarnings =
+                                      earningsBase + bonusAmount;
+                                    const baseAmount = earningsBase;
+                                    const baseLabel =
+                                      contestType === "milestone"
+                                        ? "Milestone"
+                                        : contestType === "cpm"
+                                          ? "CPM"
+                                          : "Prize";
+
+                                    if (
+                                      leaderboardViewMode === "detailed" &&
+                                      bonusAmount > 0
+                                    ) {
+                                      prizeDisplay = (
+                                        <div className="space-y-1">
                                           <div className="font-semibold text-green-600 dark:text-green-400 text-base">
                                             {earningsLabel}:{" "}
-                                            {formatMoney(earningsBase)}
+                                            {formatMoney(totalEarnings)}
                                           </div>
-                                        );
-                                      }
+                                          <div className="flex flex-wrap items-center gap-1.5 text-xs text-slate-600 dark:text-slate-400 bg-green-50 dark:bg-green-900/20 px-2 py-1.5 rounded-md border border-green-200 dark:border-green-800">
+                                            <div className="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0" />
+                                            <span className="whitespace-nowrap">
+                                              {formatMoney(baseAmount)}{" "}
+                                              {baseLabel}
+                                            </span>
+                                            <span className="text-green-600 dark:text-green-400">
+                                              +
+                                            </span>
+                                            <span className="whitespace-nowrap">
+                                              {formatMoney(bonusAmount)}{" "}
+                                              Bonus
+                                            </span>
+                                          </div>
+                                        </div>
+                                      );
                                     } else {
-                                      // Simple view - show total earnings if bonus exists
-                                      const flatFeeBonus =
-                                        contestType === "cpm"
-                                          ? (
-                                              contest.contest_based_details as any
-                                            )?.cpm_contest?.flat_fee_bonus || 0
-                                          : (
-                                              contest.contest_based_details as any
-                                            )?.leaderboard_contest
-                                              ?.flat_fee_bonus || 0;
-
-                                      const totalEarnings =
-                                        earningsBase + flatFeeBonus;
                                       prizeDisplay = (
                                         <div className="font-semibold text-green-600 dark:text-green-400 text-base">
                                           {earningsLabel}:{" "}
@@ -8015,7 +8053,7 @@ export function ContestClientPage({
                                                         ? isTwitter &&
                                                           contest?.post_contest_status ===
                                                             "payouts_processed"
-                                                          ? "Paid"
+                                                          ? contest?.contest_type === "milestone" ? "Earned" : "Paid"
                                                           : "Earned"
                                                         : contest?.contest_type ===
                                                             "milestone"
@@ -8081,7 +8119,10 @@ export function ContestClientPage({
                                                               {contestType ===
                                                               "cpm"
                                                                 ? "CPM"
-                                                                : "Prize"}
+                                                                : contestType ===
+                                                                    "milestone"
+                                                                  ? "Milestone"
+                                                                  : "Prize"}
                                                             </span>
                                                             <span
                                                               className={cn(
@@ -8100,6 +8141,77 @@ export function ContestClientPage({
                                                               Bonus
                                                             </span>
                                                           </div>
+                                                        </div>
+                                                      );
+                                                    } else if (
+                                                      modalViewMode ===
+                                                        "detailed" &&
+                                                      contest?.contest_type ===
+                                                        "milestone"
+                                                    ) {
+                                                      const submissionBonus =
+                                                        Number(
+                                                          (submission as any)
+                                                            .bonus_amount || 0,
+                                                        );
+                                                      prizeDisplay = (
+                                                        <div className="space-y-1">
+                                                          <div
+                                                            className={cn(
+                                                              "font-semibold text-green-600 dark:text-green-400 text-sm",
+                                                              isDark
+                                                                ? "text-green-400"
+                                                                : "text-green-600",
+                                                            )}
+                                                          >
+                                                            {earningsLabel}:{" "}
+                                                            {formatMoney(
+                                                              submission.earnings +
+                                                                submissionBonus,
+                                                            )}
+                                                          </div>
+                                                          {submissionBonus >
+                                                            0 && (
+                                                            <div
+                                                              className={cn(
+                                                                "flex flex-wrap items-center gap-1.5 text-xs",
+                                                                isDark
+                                                                  ? "text-green-400 bg-green-900/20 border border-green-800"
+                                                                  : "text-green-600 bg-green-50 border border-green-200",
+                                                              )}
+                                                            >
+                                                              <div
+                                                                className={cn(
+                                                                  "w-1.5 h-1.5 rounded-full flex-shrink-0",
+                                                                  isDark
+                                                                    ? "bg-green-400"
+                                                                    : "bg-green-500",
+                                                                )}
+                                                              ></div>
+                                                              <span className="whitespace-nowrap">
+                                                                {formatMoney(
+                                                                  submission.earnings,
+                                                                )}{" "}
+                                                                Milestone
+                                                              </span>
+                                                              <span
+                                                                className={cn(
+                                                                  "text-green-600 dark:text-green-400",
+                                                                  isDark
+                                                                    ? "text-green-400"
+                                                                    : "text-green-600",
+                                                                )}
+                                                              >
+                                                                +
+                                                              </span>
+                                                              <span className="whitespace-nowrap">
+                                                                {formatMoney(
+                                                                  submissionBonus,
+                                                                )}{" "}
+                                                                Bonus
+                                                              </span>
+                                                            </div>
+                                                          )}
                                                         </div>
                                                       );
                                                     } else {
@@ -8640,14 +8752,30 @@ export function ContestClientPage({
                                     let prizeDisplay = null;
                                     if (video.earnings > 0) {
                                       // For CPM contests, show Expected vs Earned based on verification/paid status (YouTube/Instagram - no Twitter-specific logic)
-                                      if (contestType === "cpm") {
-                                        const isEarned =
-                                          video.status === "verified" ||
-                                          video.status === "paid";
-                                        const earningsLabel = isEarned
+                                      const isTwitter =
+                                        contest?.platform === "twitter" ||
+                                        contest?.platform === "x";
+                                      const isEarned =
+                                        video.status === "verified" ||
+                                        video.status === "paid" ||
+                                        (isTwitter &&
+                                          ((video as any).moderation_status ===
+                                            "paid" ||
+                                            (video as any).paid === true ||
+                                            contest?.post_contest_status ===
+                                              "payouts_processed"));
+                                      const earningsLabel = isEarned
+                                        ? isTwitter &&
+                                          contest?.post_contest_status ===
+                                            "payouts_processed" &&
+                                          contest?.contest_type !== "milestone"
+                                          ? "Paid"
+                                          : "Earned"
+                                        : contest?.contest_type === "milestone"
                                           ? "Earned"
                                           : "Expected";
 
+                                      if (contestType === "cpm") {
                                         // Check if there's a flat fee bonus
                                         const flatFeeBonus =
                                           (contest.contest_based_details as any)
@@ -8693,21 +8821,40 @@ export function ContestClientPage({
                                           );
                                         }
                                       } else {
-                                        // For leaderboard contests with earnings
+                                        // For leaderboard or milestone contests with earnings in detailed view
                                         if (
-                                          contestType === "leaderboard" &&
+                                          (contestType === "leaderboard" ||
+                                            contestType === "milestone") &&
                                           leaderboardViewMode === "detailed"
                                         ) {
-                                          // Check for flat fee bonus in leaderboard contests
                                           const flatFeeBonus =
-                                            (
-                                              contest.contest_based_details as any
-                                            )?.leaderboard_contest
-                                              ?.flat_fee_bonus || 0;
+                                            contestType === "leaderboard"
+                                              ? (
+                                                  contest.contest_based_details as any
+                                                )?.leaderboard_contest
+                                                  ?.flat_fee_bonus || 0
+                                              : 0;
 
-                                          if (flatFeeBonus > 0) {
+                                          const creatorId =
+                                            selectedCreatorId || "";
+                                          const mvvBonus =
+                                            milestoneDerivedData.creatorMostVerifiedViewsBonusMap.get(
+                                              creatorId,
+                                            ) || 0;
+                                          const mvrBonus =
+                                            milestoneDerivedData.creatorMostVerifiedReelsBonusMap.get(
+                                              creatorId,
+                                            ) || 0;
+                                          const milestoneBonus =
+                                            mvvBonus + mvrBonus;
+                                          const bonusAmount =
+                                            contestType === "milestone"
+                                              ? milestoneBonus
+                                              : flatFeeBonus;
+
+                                          if (bonusAmount > 0) {
                                             const totalEarnings =
-                                              video.earnings + flatFeeBonus;
+                                              video.earnings + bonusAmount;
                                             prizeDisplay = (
                                               <div className="space-y-1">
                                                 <div
@@ -8718,7 +8865,7 @@ export function ContestClientPage({
                                                       : "text-green-600",
                                                   )}
                                                 >
-                                                  Earned:{" "}
+                                                  {earningsLabel}:{" "}
                                                   {formatMoney(totalEarnings)}
                                                 </div>
                                                 <div className="flex flex-wrap items-center gap-1.5 text-xs text-slate-600 dark:text-slate-400 bg-green-50 dark:bg-green-900/20 px-2 py-1.5 rounded-md border border-green-200 dark:border-green-800">
@@ -8727,13 +8874,15 @@ export function ContestClientPage({
                                                     {formatMoney(
                                                       video.earnings,
                                                     )}{" "}
-                                                    Prize
+                                                    {contestType === "milestone"
+                                                      ? "Milestone"
+                                                      : "Prize"}
                                                   </span>
                                                   <span className="text-green-600 dark:text-green-400">
                                                     +
                                                   </span>
                                                   <span className="whitespace-nowrap">
-                                                    {formatMoney(flatFeeBonus)}{" "}
+                                                    {formatMoney(bonusAmount)}{" "}
                                                     Bonus
                                                   </span>
                                                 </div>
@@ -8742,16 +8891,16 @@ export function ContestClientPage({
                                           } else {
                                             prizeDisplay = (
                                               <div className="font-semibold text-green-600 dark:text-green-400 text-base">
-                                                Earned:{" "}
+                                                {earningsLabel}:{" "}
                                                 {formatMoney(video.earnings)}
                                               </div>
                                             );
                                           }
                                         } else {
-                                          // Simple view for leaderboard or non-CPM contests
+                                          // Simple view for leaderboard or milestone contests
                                           prizeDisplay = (
-                                            <span className="font-semibold text-green-600 dark:text-green-400">
-                                              Earned:{" "}
+                                            <span className="font-semibold text-green-600 dark:text-green-400 text-base">
+                                              {earningsLabel}:{" "}
                                               {formatMoney(video.earnings)}
                                             </span>
                                           );
@@ -9195,51 +9344,60 @@ export function ContestClientPage({
                               contest?.platform === "twitter" ||
                               contest?.platform === "x";
 
-                            // Calculate total earnings including bonuses
-                            const flatFeeBonus =
-                              contestType === "cpm"
-                                ? (contest.contest_based_details as any)
-                                    ?.cpm_contest?.flat_fee_bonus || 0
-                                : (contest.contest_based_details as any)
-                                    ?.leaderboard_contest?.flat_fee_bonus || 0;
+                             const contestStatus = contest?.status;
+                             const postContestStatus = contest?.post_contest_status;
+                             const isLeaderboardContest = contest?.contest_type === "leaderboard";
+                             const hasPayoutsProcessed = contestStatus === "ended" && postContestStatus === "payouts_processed";
 
-                            const totalEarnings =
-                              creatorGroup.total_earnings +
-                              flatFeeBonus * creatorGroup.submission_count;
+                             const hasPaidSubmission =
+                               (creatorGroup as any).has_paid_submission === true ||
+                               creatorGroup.submissions.some((submission: any) => {
+                                 const ex =
+                                   submission?.granted_amount_cents ??
+                                   submission?.paid_amount_cents ??
+                                   submission?.other_stats?.paid_amount_cents ??
+                                   submission?.other_stats?.granted_amount_cents;
+                                 return (
+                                   submission.status === "paid" ||
+                                   submission.paid === true ||
+                                   Boolean(submission?.paid_at) ||
+                                   (ex != null && Number(ex) > 0)
+                                 );
+                               });
+
+                             const twitterPaid = isTwitter && (creatorGroup as any).paid === true;
+                             const shouldShowActualEarnings = hasPaidSubmission || twitterPaid || (isTwitter && hasPayoutsProcessed);
+
+                             const earningsLabel = shouldShowActualEarnings
+                               ? isTwitter && (hasPayoutsProcessed || twitterPaid)
+                                 ? "Paid"
+                                 : "Earned"
+                               : isMilestoneContest
+                                 ? "Earned"
+                                 : contestStatus === "active" && isLeaderboardContest
+                                   ? "Winning Zone"
+                                   : "Expected";
+
+                             // Calculate total earnings including bonuses
+                             const flatFeeBonus =
+                               contestType === "cpm"
+                                 ? (contest.contest_based_details as any)
+                                     ?.cpm_contest?.flat_fee_bonus || 0
+                                 : (contest.contest_based_details as any)
+                                     ?.leaderboard_contest?.flat_fee_bonus || 0;
+
+                             const totalEarnings =
+                               creatorGroup.total_earnings +
+                               flatFeeBonus * creatorGroup.submission_count;
 
                             if (isMilestoneContest) {
                               const creatorId = String(
                                 (creatorGroup as any).creator_id || "",
                               );
-                              const contestStatus = contest?.status;
-                              const postContestStatus =
-                                contest?.post_contest_status;
-                              const hasPayoutsProcessed =
-                                contestStatus === "ended" &&
-                                postContestStatus === "payouts_processed";
+                              
                               const creatorEarnedAmount = Number(
                                 (creatorGroup as any).total_earnings || 0,
                               );
-                              const hasPaidSubmission =
-                                (creatorGroup as any).has_paid_submission ===
-                                  true ||
-                                creatorGroup.submissions.some(
-                                  (submission: any) => {
-                                    const ex =
-                                      submission?.granted_amount_cents ??
-                                      submission?.paid_amount_cents ??
-                                      submission?.other_stats
-                                        ?.paid_amount_cents ??
-                                      submission?.other_stats
-                                        ?.granted_amount_cents;
-                                    return (
-                                      submission.status === "paid" ||
-                                      submission.paid === true ||
-                                      Boolean(submission?.paid_at) ||
-                                      (ex != null && Number(ex) > 0)
-                                    );
-                                  },
-                                );
                               const hasPaidAtSubmission = (
                                 creatorGroup.submissions || []
                               ).some((submission: any) =>
@@ -9286,6 +9444,13 @@ export function ContestClientPage({
                                     : 0;
                                 return sum + amount;
                               }, 0);
+                              const creatorBonusPaidTotal = Math.max(
+                                creatorBonusPaidFromSubmissions,
+                                Number(
+                                  (creatorGroup as any)
+                                    .creator_bonus_paid_total || 0,
+                                ),
+                              );
                               const expectedReward =
                                 milestoneDerivedData.creatorExpectedRewardMap.get(
                                   creatorId,
@@ -9305,23 +9470,18 @@ export function ContestClientPage({
 
                               const milestoneHasEarnedSignal =
                                 creatorPaidFromSubmissions > 0 ||
-                                creatorBonusPaidFromSubmissions > 0 ||
+                                creatorBonusPaidTotal > 0 ||
                                 hasPaidSubmission ||
                                 hasPaidAtSubmission ||
                                 (hasPayoutsProcessed &&
                                   creatorEarnedAmount > 0);
 
                               if (milestoneHasEarnedSignal) {
-                                const milestoneEarnedAmount =
-                                  creatorPaidFromSubmissions > 0
-                                    ? creatorPaidFromSubmissions +
-                                      creatorBonusPaidFromSubmissions
-                                    : creatorBonusPaidFromSubmissions > 0
-                                      ? creatorBonusPaidFromSubmissions
-                                      : creatorEarnedAmount;
+                                const submissionPaidTotal =
+                                  creatorPaidFromSubmissions;
                                 const bonusPaidRemainingBase = Math.max(
                                   0,
-                                  creatorBonusPaidFromSubmissions,
+                                  creatorBonusPaidTotal,
                                 );
                                 const mostVerifiedViewsBonusGranted = Math.min(
                                   mostVerifiedViewsBonus,
@@ -9335,9 +9495,56 @@ export function ContestClientPage({
                                       mostVerifiedViewsBonusGranted,
                                   ),
                                 );
+                                const otherBonusPaid = Math.max(
+                                  0,
+                                  creatorBonusPaidTotal -
+                                    mostVerifiedViewsBonusGranted -
+                                    mostVerifiedReelsBonusGranted,
+                                );
+                                let milestoneEarnedAmount =
+                                  submissionPaidTotal +
+                                  mostVerifiedViewsBonusGranted +
+                                  mostVerifiedReelsBonusGranted +
+                                  otherBonusPaid;
+                                if (milestoneEarnedAmount <= 0) {
+                                  milestoneEarnedAmount = creatorEarnedAmount;
+                                } else if (
+                                  creatorEarnedAmount > milestoneEarnedAmount
+                                ) {
+                                  milestoneEarnedAmount = creatorEarnedAmount;
+                                }
+
+                                const milestoneBonusTotal =
+                                  mostVerifiedViewsBonusGranted +
+                                  mostVerifiedReelsBonusGranted +
+                                  otherBonusPaid;
+                                const milestoneBaseAmount =
+                                  milestoneEarnedAmount - milestoneBonusTotal;
+
                                 prizeDisplay = (
                                   <div className="font-semibold text-green-600 dark:text-green-400 text-base">
-                                    Paid : {formatMoney(milestoneEarnedAmount)}
+                                    <div className="flex flex-col items-end">
+                                      <span>
+                                        {earningsLabel}: {formatMoney(creatorEarnedAmount + (hasPayoutsProcessed ? creatorBonusPaidTotal : (mostVerifiedViewsBonus + mostVerifiedReelsBonus)))}
+                                      </span>
+                                      {leaderboardViewMode === "detailed" &&
+                                        milestoneBonusTotal > 0 && (
+                                          <div className="flex flex-wrap items-center justify-end gap-1.5 text-xs text-slate-600 dark:text-slate-400 bg-green-50 dark:bg-green-900/20 px-2 py-1 rounded-md border border-green-200 dark:border-green-800 mt-1">
+                                            <div className="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0" />
+                                            <span className="whitespace-nowrap">
+                                              {formatMoney(creatorEarnedAmount)}{" "}
+                                              Milestone
+                                            </span>
+                                            <span className="text-green-600 dark:text-green-400">
+                                              +
+                                            </span>
+                                            <span className="whitespace-nowrap">
+                                              {formatMoney(hasPayoutsProcessed ? creatorBonusPaidTotal : (mostVerifiedViewsBonus + mostVerifiedReelsBonus))}{" "}
+                                              Bonus
+                                            </span>
+                                          </div>
+                                        )}
+                                    </div>
                                   </div>
                                 );
                                 if (
@@ -9347,16 +9554,16 @@ export function ContestClientPage({
                                   milestoneCreatorExpectedDisplay = (
                                     <div className="space-y-1">
                                       {mostVerifiedViewsBonusGranted > 0 && (
-                                        <div className="text-xs text-slate-600 dark:text-slate-400">
-                                          Most Verified Views (Bonus granted):{" "}
+                                        <div className="text-xs text-green-700">
+                                          Most Verified Views Bonus (granted):{" "}
                                           {formatMoney(
                                             mostVerifiedViewsBonusGranted,
                                           )}
                                         </div>
                                       )}
                                       {mostVerifiedReelsBonusGranted > 0 && (
-                                        <div className="text-xs text-slate-600 dark:text-slate-400">
-                                          Most Verified Reels (Bonus granted):{" "}
+                                        <div className="text-xs text-green-700">
+                                          Most Verified Reels Bonus (granted):{" "}
                                           {formatMoney(
                                             mostVerifiedReelsBonusGranted,
                                           )}
@@ -9374,13 +9581,13 @@ export function ContestClientPage({
                                   <div className="space-y-1">
                                     {mostVerifiedViewsBonus > 0 && (
                                       <div className="text-xs text-slate-600 dark:text-slate-400">
-                                        Most Verified Views (Bonus Expected):{" "}
+                                        Most Verified Views Bonus (expected):{" "}
                                         {formatMoney(mostVerifiedViewsBonus)}
                                       </div>
                                     )}
                                     {mostVerifiedReelsBonus > 0 && (
                                       <div className="text-xs text-slate-600 dark:text-slate-400">
-                                        Most Verified Reels (Bonus Expected):{" "}
+                                        Most Verified Reels Bonus (expected):{" "}
                                         {formatMoney(mostVerifiedReelsBonus)}
                                       </div>
                                     )}
@@ -9388,46 +9595,12 @@ export function ContestClientPage({
                                 );
                               }
                             } else {
-                              const contestStatus = contest?.status;
-                              const postContestStatus =
-                                contest?.post_contest_status;
-                              const isLeaderboardContest =
-                                contest?.contest_type === "leaderboard";
-                              const hasPaidSubmission =
-                                (creatorGroup as any).has_paid_submission ===
-                                  true ||
-                                creatorGroup.submissions.some(
-                                  (submission) => submission.status === "paid",
-                                );
-                              const hasPayoutsProcessed =
-                                contestStatus === "ended" &&
-                                postContestStatus === "payouts_processed";
-                              // Twitter: creator-wise row uses moderation_status === 'paid' (mapped to .paid above)
-                              const twitterPaid =
-                                isTwitter &&
-                                (creatorGroup as any).paid === true;
-                              const shouldShowActualEarnings =
-                                hasPaidSubmission ||
-                                twitterPaid ||
-                                (isTwitter && hasPayoutsProcessed);
-                              const earningsLabel = shouldShowActualEarnings
-                                ? isTwitter &&
-                                  (hasPayoutsProcessed || twitterPaid)
-                                  ? "Paid"
-                                  : "Total Earned"
-                                : contestStatus === "active" &&
-                                    isLeaderboardContest
-                                  ? "Winning Zone"
-                                  : contest?.contest_type === "milestone"
-                                    ? "Earned"
-                                    : "Expected";
-
-                              const hasEarningsToDisplay =
-                                creatorGroup.total_earnings > 0 ||
-                                flatFeeBonus > 0;
-                              const shouldDisplayEarnings =
-                                shouldShowActualEarnings &&
-                                hasEarningsToDisplay;
+                               const hasEarningsToDisplay =
+                                 creatorGroup.total_earnings > 0 ||
+                                 flatFeeBonus > 0;
+                               const shouldDisplayEarnings =
+                                 shouldShowActualEarnings &&
+                                 hasEarningsToDisplay;
 
                               if (shouldDisplayEarnings) {
                                 if (
@@ -9686,47 +9859,6 @@ export function ContestClientPage({
                                             >
                                               {twitterDisplayName}
                                             </span>
-                                            {!isTwitter && (
-                                              <div className="flex shrink-0 items-center gap-0.5">
-                                                <span
-                                                  className={cn(
-                                                    "text-sm sm:text-base font-semibold tabular-nums whitespace-nowrap leading-snug",
-                                                    isDark
-                                                      ? "text-slate-100"
-                                                      : "text-slate-800",
-                                                  )}
-                                                >
-                                                  {creatorGroup.total_views.toLocaleString()}{" "}
-                                                  views
-                                                </span>
-                                                <Button
-                                                  variant="ghost"
-                                                  size="sm"
-                                                  onClick={() => {
-                                                    setSelectedCreatorId(
-                                                      creatorGroup.creator_id,
-                                                    );
-                                                    setShowCreatorVideosModal(
-                                                      true,
-                                                    );
-                                                    setCreatorVideosCurrentPage(
-                                                      1,
-                                                    );
-                                                  }}
-                                                  className="h-7 w-7 p-0 shrink-0"
-                                                  title="View all videos by this creator"
-                                                >
-                                                  <Eye
-                                                    className={cn(
-                                                      "h-4 w-4",
-                                                      isDark
-                                                        ? "text-slate-400"
-                                                        : "text-slate-600",
-                                                    )}
-                                                  />
-                                                </Button>
-                                              </div>
-                                            )}
                                           </div>
                                           {!isTwitter &&
                                             isMilestoneContest &&
@@ -9889,7 +10021,7 @@ export function ContestClientPage({
                                       className={cn(
                                         isTwitter
                                           ? "flex flex-col gap-2 sm:items-end sm:text-right shrink-0 w-full sm:w-auto sm:min-w-[7.5rem] border-t sm:border-t-0 pt-3 sm:pt-0"
-                                          : "flex items-center shrink-0 sm:items-end sm:text-right",
+                                          : "flex flex-col items-end gap-1.5 shrink-0 sm:text-right",
                                         isDark
                                           ? "border-white/10"
                                           : "border-violet-100",
@@ -9913,8 +10045,45 @@ export function ContestClientPage({
                                           points
                                         </p>
                                       ) : null}
+                                      {!isTwitter && (
+                                        <div className="flex items-center justify-end gap-1">
+                                          <p
+                                            className={cn(
+                                              "text-sm sm:text-base font-semibold tabular-nums whitespace-nowrap",
+                                              isDark
+                                                ? "text-slate-100"
+                                                : "text-slate-800",
+                                            )}
+                                          >
+                                            {creatorGroup.total_views.toLocaleString()}{" "}
+                                            views
+                                          </p>
+                                          <Button
+                                            variant="ghost"
+                                            size="sm"
+                                            onClick={() => {
+                                              setSelectedCreatorId(
+                                                creatorGroup.creator_id,
+                                              );
+                                              setShowCreatorVideosModal(true);
+                                              setCreatorVideosCurrentPage(1);
+                                            }}
+                                            className="h-7 w-7 p-0 shrink-0"
+                                            title="View all videos by this creator"
+                                          >
+                                            <Eye
+                                              className={cn(
+                                                "h-4 w-4",
+                                                isDark
+                                                  ? "text-slate-400"
+                                                  : "text-slate-600",
+                                              )}
+                                            />
+                                          </Button>
+                                        </div>
+                                      )}
                                       {!isTwitter && prizeDisplay && (
-                                        <div className="text-xs sm:text-sm mt-2 w-full sm:w-auto">
+                                        <div className="text-xs sm:text-sm w-full sm:w-auto">
                                           {prizeDisplay}
                                         </div>
                                       )}
@@ -9967,22 +10136,27 @@ export function ContestClientPage({
                                 entry.id,
                               ) || 0;
                             if (milestoneHasEarnedSignal) {
-                              const earnedAmount =
+                              const submissionPaidCents =
                                 explicitPaidAmount != null &&
                                 Number(explicitPaidAmount) > 0
                                   ? Number(explicitPaidAmount)
-                                  : explicitBonusPaidAmount != null &&
-                                      Number(explicitBonusPaidAmount) > 0
-                                    ? Number(explicitBonusPaidAmount)
-                                    : Number(entry.earnings) > 0
-                                      ? Number(entry.earnings)
-                                      : expectedReward;
+                                  : 0;
+                              const totalBonusCents =
+                                explicitBonusPaidAmount != null &&
+                                Number(explicitBonusPaidAmount) > 0
+                                  ? Number(explicitBonusPaidAmount)
+                                  : 0;
+                              const paidPlusBonus =
+                                submissionPaidCents + totalBonusCents;
+                              const earnedAmount =
+                                paidPlusBonus > 0
+                                  ? paidPlusBonus
+                                  : Number(entry.earnings) > 0
+                                    ? Number(entry.earnings)
+                                    : expectedReward;
                               prizeDisplay = (
                                 <div className="font-semibold text-green-600 dark:text-green-400 text-base">
-                                  {isMilestonePaid || hasPayoutsProcessed
-                                    ? "Paid"
-                                    : "Earned"}
-                                  : {formatMoney(earnedAmount)}
+                                  Earned: {formatMoney(earnedAmount)}
                                 </div>
                               );
                             }
@@ -10140,7 +10314,7 @@ export function ContestClientPage({
                                   (contest.contest_based_details as any)
                                     ?.leaderboard_contest?.flat_fee_bonus || 0;
 
-                                if (flatFeeBonus > 0) {
+                                if (flatFeeBonus > 0 || (contestType === "milestone" && (milestoneDerivedData.creatorMostVerifiedViewsBonusMap.get(String(myLeaderboardEntry?.creator_id || "")) || 0) + (milestoneDerivedData.creatorMostVerifiedReelsBonusMap.get(String(myLeaderboardEntry?.creator_id || "")) || 0) > 0)) {
                                   const totalEarnings =
                                     prizeInfo.amount + flatFeeBonus;
                                   prizeDisplay = (

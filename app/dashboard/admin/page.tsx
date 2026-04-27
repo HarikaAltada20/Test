@@ -201,21 +201,34 @@ export default async function AdminDashboardPage({
   }
 
   try {
-    // Fetch platform-wide statistics for admin
-    // Use count-only queries for users to avoid Supabase's default 1000-row limit
+    // Fetch all contests in chunks to avoid 1000-row limit
+    let allContests: any[] = [];
+    const CHUNK_CONTEST = 1000;
+    let contestRangeFrom = 0;
+    while (true) {
+      const { data: chunk, error: contestError } = await supabase
+        .from("contests_with_status")
+        .select(
+          "id, contest_type, contest_based_details, created_at, moderation_status, status, post_contest_status, payment_details",
+        )
+        .range(contestRangeFrom, contestRangeFrom + CHUNK_CONTEST - 1);
+      
+      if (contestError) {
+        console.error("Error fetching contests chunk:", contestError);
+        break;
+      }
+      if (!chunk || chunk.length === 0) break;
+      allContests = allContests.concat(chunk);
+      if (chunk.length < CHUNK_CONTEST) break;
+      contestRangeFrom += CHUNK_CONTEST;
+    }
+
+    // Fetch other platform-wide statistics for admin
     const [
-      { data: allContests },
-      { data: allSubmissions },
       { count: totalUsersCount },
       { count: totalCreatorsCount },
       { count: totalBrandsCount },
     ] = await Promise.all([
-      supabase
-        .from("contests_with_status")
-        .select(
-          "id, contest_type, contest_based_details, created_at, moderation_status, status, post_contest_status, payment_details",
-        ),
-      supabase.from("submissions").select("id, views, status, contest_id"),
       supabase.from("users").select("*", { count: "exact", head: true }),
       supabase
         .from("users")
@@ -226,6 +239,26 @@ export default async function AdminDashboardPage({
         .select("*", { count: "exact", head: true })
         .eq("user_type", "advertiser"),
     ]);
+
+    // Fetch all submissions in chunks to avoid 1000-row limit
+    let allSubmissions: any[] = [];
+    const CHUNK_SUB = 1000;
+    let subRangeFrom = 0;
+    while (true) {
+      const { data: chunk, error: subError } = await supabase
+        .from("submissions")
+        .select("id, views, status, contest_id")
+        .range(subRangeFrom, subRangeFrom + CHUNK_SUB - 1);
+      
+      if (subError) {
+        console.error("Error fetching submissions chunk:", subError);
+        break;
+      }
+      if (!chunk || chunk.length === 0) break;
+      allSubmissions = allSubmissions.concat(chunk);
+      if (chunk.length < CHUNK_SUB) break;
+      subRangeFrom += CHUNK_SUB;
+    }
 
     // Supabase returns max 1000 rows per request; fetch users for growth in chunks so graph shows all users (e.g. 1022+)
     const twoYearsAgoIso = new Date(

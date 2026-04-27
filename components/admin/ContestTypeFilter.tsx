@@ -16,10 +16,11 @@ const LABELS: Record<string, string> = {
   all: "All Contest Types",
   leaderboard: "Leaderboard",
   cpm: "CPM",
+  milestone: "Milestone",
 };
 
 interface ContestTypeFilterProps {
-  value?: "all" | "leaderboard" | "cpm";
+  value?: "all" | "leaderboard" | "cpm" | "milestone";
   onChange?: (value: string) => void;
 }
 
@@ -144,6 +145,21 @@ export default function ContestTypeFilter({
           )}
           {value !== "cpm" && <span className="w-4" />}
           CPM
+        </DropdownMenuItem>
+        <DropdownMenuItem
+          className={cn(
+            "flex items-center gap-2 cursor-pointer font-medium",
+            isDark ? "text-white focus:bg-white/10" : "text-gray-900",
+          )}
+          onClick={() => onChange("milestone")}
+        >
+          {value === "milestone" && (
+            <span className="w-4 h-4 flex items-center justify-center text-xs">
+              ✓
+            </span>
+          )}
+          {value !== "milestone" && <span className="w-4" />}
+          Milestone
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>

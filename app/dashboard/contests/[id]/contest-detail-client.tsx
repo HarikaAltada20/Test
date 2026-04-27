@@ -24,6 +24,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
   EnhancedTabs as Tabs,
   EnhancedTabsContent as TabsContent,
@@ -5319,7 +5320,7 @@ export default function ContestDetailClient({
       <>
         <DropdownMenuSeparator />
         <DropdownMenuLabel className="text-amber-600 dark:text-amber-400">
-          Milestone bonuses
+          Milestone bonus
         </DropdownMenuLabel>
         {showMostVerifiedViewsBonusColumns && (
           <DropdownMenuItem
@@ -8355,6 +8356,16 @@ export default function ContestDetailClient({
                               </div>
                             ))}
                         </div>
+
+                        <Alert className={cn(
+                          "mt-4 border-purple-600 shadow-sm",
+                          isDark ? "bg-purple-900/20 text-purple-200" : "bg-purple-50 text-purple-800"
+                        )}>
+                          <Info className="h-4 w-4" />
+                          <AlertDescription className="text-sm font-medium mt-0.5">
+                         Once a submission reaches the target view threshold, the corresponding milestone reward will be granted.
+                          </AlertDescription>
+                        </Alert>
                       </div>
 
                       {/* Bonus Tracks */}
