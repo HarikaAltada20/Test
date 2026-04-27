@@ -92,7 +92,7 @@ export async function POST(
     const { data: subs, error: subsError } = await supabaseAdmin
       .from("submissions")
       .select(
-        "id, creator_id, status, views, created_at, bonus_paid, bonus_amount",
+        "id, creator_id, status, views, created_at, bonus_paid, bonus_amount, metadata",
       )
       .eq("contest_id", contestId);
 
@@ -113,16 +113,40 @@ export async function POST(
       );
     }
 
-    const S = submissions
-      .filter(
-        (s) =>
-          s.creator_id === creatorId &&
-          s.bonus_paid === true,
-      )
-      .reduce((sum, s) => sum + (Number(s.bonus_amount) || 0), 0);
-
     const V = row.viewsExpectedCents;
     const R = row.expectedCents;
+
+    const { data: paidRewards, error: paidRewardsError } = await supabaseAdmin
+      .from("money_transactions")
+      .select("amount, metadata")
+      .eq("user_id", creatorId)
+      .eq("type", "reward")
+      .eq("status", "success")
+      .contains("metadata", { contest_id: contestId });
+
+    if (paidRewardsError) {
+      return NextResponse.json(
+        {
+          error:
+            paidRewardsError.message ||
+            "Failed to load creator reward history for milestone bonus",
+        },
+        { status: 500 },
+      );
+    }
+
+    const viewsBonusType = "milestone_most_verified_views";
+    const reelsBonusType = "milestone_most_verified_reels";
+    const paidByTrack = (paidRewards || []).reduce(
+      (sum, tx: any) => {
+        const bt = String(tx?.metadata?.bonus_type || "");
+        const amt = Number(tx?.amount) || 0;
+        if (bt === viewsBonusType) sum.views += amt;
+        if (bt === reelsBonusType) sum.reels += amt;
+        return sum;
+      },
+      { views: 0, reels: 0 },
+    );
 
     let creditCents = 0;
     if (track === "views") {
@@ -132,7 +156,7 @@ export async function POST(
           { status: 400 },
         );
       }
-      const viewsPaid = Math.min(S, V);
+      const viewsPaid = Math.min(paidByTrack.views, V);
       creditCents = Math.max(0, V - viewsPaid);
     } else {
       if (R <= 0) {
@@ -141,16 +165,7 @@ export async function POST(
           { status: 400 },
         );
       }
-      if (V > 0 && Math.min(S, V) < V) {
-        return NextResponse.json(
-          {
-            error:
-              "Mark the most verified views bonus as paid first (views allocation must be satisfied before reels).",
-          },
-          { status: 400 },
-        );
-      }
-      const paidReels = Math.min(Math.max(0, S - V), R);
+      const paidReels = Math.min(paidByTrack.reels, R);
       creditCents = Math.max(0, R - paidReels);
     }
 
@@ -224,12 +239,40 @@ export async function POST(
     const prevAmount = target.bonus_paid
       ? Number(target.bonus_amount) || 0
       : 0;
+    const prevMeta =
+      target?.metadata && typeof target.metadata === "object"
+        ? { ...target.metadata }
+        : {};
+    const prevTrackPaidRaw =
+      prevMeta?.milestone_bonus_paid &&
+      typeof prevMeta.milestone_bonus_paid === "object"
+        ? prevMeta.milestone_bonus_paid
+        : {};
+    const prevTrackPaid = {
+      views: Number(prevTrackPaidRaw?.views || 0),
+      reels: Number(prevTrackPaidRaw?.reels || 0),
+    };
+    const nextTrackPaid =
+      track === "views"
+        ? {
+            views: prevTrackPaid.views + creditCents,
+            reels: prevTrackPaid.reels,
+          }
+        : {
+            views: prevTrackPaid.views,
+            reels: prevTrackPaid.reels + creditCents,
+          };
+
     const { error: updErr } = await supabaseAdmin
       .from("submissions")
       .update({
         bonus_paid: true,
         bonus_paid_at: new Date().toISOString(),
         bonus_amount: prevAmount + creditCents,
+        metadata: {
+          ...prevMeta,
+          milestone_bonus_paid: nextTrackPaid,
+        },
       })
       .eq("id", target.id);
 

@@ -10,6 +10,7 @@ export type MilestoneBudgetSubmission = {
   views?: number | null;
   bonus_paid?: boolean | null;
   bonus_amount?: number | null;
+  metadata?: any;
 };
 
 function normalizeStatus(raw: string | null | undefined): string {
@@ -127,6 +128,14 @@ export type MilestoneMostVerifiedBonusCreatorRow = {
   minRequired: number;
 };
 
+export type MilestoneMostVerifiedBonusPaidByCreator = Record<
+  string,
+  {
+    viewsPaidCents?: number;
+    reelsPaidCents?: number;
+  }
+>;
+
 /**
  * Per-creator expected vs paid for milestone "most verified views" / "most verified reels"
  * bonuses (same allocation rules as contest-detail-client milestoneReelsBonusByCreator).
@@ -134,6 +143,7 @@ export type MilestoneMostVerifiedBonusCreatorRow = {
 export function buildMilestoneMostVerifiedBonusByCreatorMap(
   submissions: MilestoneBudgetSubmission[],
   bonus: MilestoneBonusConfig | null | undefined,
+  paidByCreatorTrack?: MilestoneMostVerifiedBonusPaidByCreator,
 ): Map<string, MilestoneMostVerifiedBonusCreatorRow> {
   const empty = new Map<string, MilestoneMostVerifiedBonusCreatorRow>();
   if (!bonus?.enabled) return empty;
@@ -159,6 +169,8 @@ export function buildMilestoneMostVerifiedBonusByCreatorMap(
     viewsReachedAt: number;
     verifiedEvents: Array<{ createdAtMs: number; views: number }>;
     totalPaidBonusCents: number;
+    viewsPaidCentsFromMetadata: number;
+    reelsPaidCentsFromMetadata: number;
   };
 
   const creators = new Map<string, CreatorAgg>();
@@ -177,11 +189,18 @@ export function buildMilestoneMostVerifiedBonusByCreatorMap(
         viewsReachedAt: Number.POSITIVE_INFINITY,
         verifiedEvents: [],
         totalPaidBonusCents: 0,
+        viewsPaidCentsFromMetadata: 0,
+        reelsPaidCentsFromMetadata: 0,
       });
     }
     const agg = creators.get(creatorId)!;
     if (sub.bonus_paid === true) {
       agg.totalPaidBonusCents += Number(sub.bonus_amount || 0);
+    }
+    const milestoneBonusPaid = sub?.metadata?.milestone_bonus_paid;
+    if (milestoneBonusPaid && typeof milestoneBonusPaid === "object") {
+      agg.viewsPaidCentsFromMetadata += Number(milestoneBonusPaid.views || 0);
+      agg.reelsPaidCentsFromMetadata += Number(milestoneBonusPaid.reels || 0);
     }
 
     const st = normalizeStatus(sub.status);
@@ -268,22 +287,52 @@ export function buildMilestoneMostVerifiedBonusByCreatorMap(
   const viewsWinnerId = eligibleViews[0]?.creatorId || null;
 
   creators.forEach((agg, creatorId) => {
-    let paidForReels = 0;
+    const hasTrackPaid =
+      paidByCreatorTrack &&
+      Object.prototype.hasOwnProperty.call(paidByCreatorTrack, creatorId);
+    const trackPaid = paidByCreatorTrack?.[creatorId];
+    const viewsPaidFromTrack = Number(trackPaid?.viewsPaidCents || 0);
+    const reelsPaidFromTrack = Number(trackPaid?.reelsPaidCents || 0);
+    const viewsPaidFromMetadata = Number(agg.viewsPaidCentsFromMetadata || 0);
+    const reelsPaidFromMetadata = Number(agg.reelsPaidCentsFromMetadata || 0);
+    const hasAnyTrackSpecificEvidence =
+      hasTrackPaid || viewsPaidFromMetadata > 0 || reelsPaidFromMetadata > 0;
+
+    const fallbackViewsPaid =
+      creatorId === viewsWinnerId && viewsPayout > 0
+        ? Math.min(agg.totalPaidBonusCents, viewsPayout)
+        : 0;
+
+    let fallbackReelsPaid = 0;
     if (creatorId === reelsWinnerId && reelsPayout > 0) {
       let unassignedPaid = agg.totalPaidBonusCents;
       if (creatorId === viewsWinnerId && viewsPayout > 0) {
         unassignedPaid = Math.max(0, unassignedPaid - viewsPayout);
       }
-      paidForReels = Math.min(unassignedPaid, reelsPayout);
+      fallbackReelsPaid = Math.min(unassignedPaid, reelsPayout);
     }
+
+    const viewsPaidCandidate = hasAnyTrackSpecificEvidence
+      ? Math.max(viewsPaidFromMetadata, hasTrackPaid ? viewsPaidFromTrack : 0)
+      : fallbackViewsPaid;
+    const reelsPaidCandidate = hasAnyTrackSpecificEvidence
+      ? Math.max(reelsPaidFromMetadata, hasTrackPaid ? reelsPaidFromTrack : 0)
+      : fallbackReelsPaid;
+
+    const viewsPaidCents =
+      creatorId === viewsWinnerId && viewsPayout > 0
+        ? Math.min(viewsPaidCandidate, viewsPayout)
+        : 0;
+    const paidCents =
+      creatorId === reelsWinnerId && reelsPayout > 0
+        ? Math.min(reelsPaidCandidate, reelsPayout)
+        : 0;
+
     empty.set(creatorId, {
       expectedCents: creatorId === reelsWinnerId ? reelsPayout : 0,
-      paidCents: paidForReels,
+      paidCents,
       viewsExpectedCents: creatorId === viewsWinnerId ? viewsPayout : 0,
-      viewsPaidCents:
-        creatorId === viewsWinnerId && viewsPayout > 0
-          ? Math.min(agg.totalPaidBonusCents, viewsPayout)
-          : 0,
+      viewsPaidCents,
       verifiedReels: agg.verifiedReels,
       minRequired: reelsMin,
     });

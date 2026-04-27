@@ -628,6 +628,76 @@ export default async function ContestDetailPage({
     }
   }
 
+  // For milestone contests: fetch creator-level bonus paid split by track (views/reels)
+  // so creator-wise "Bonus Granted" columns remain accurate regardless of payout order.
+  let milestoneBonusPaidByCreator: Record<
+    string,
+    { viewsPaidCents: number; reelsPaidCents: number }
+  > = {};
+  if (contestData.contest_type === "milestone") {
+    try {
+      const supabaseAdmin = createAdminClient();
+      const [{ data: milestoneRewards }, { data: milestoneRefunds }] =
+        await Promise.all([
+          supabaseAdmin
+            .from("money_transactions")
+            .select("amount, metadata, user_id")
+            .eq("type", "reward")
+            .eq("status", "success")
+            .contains("metadata", { contest_id: contestId }),
+          supabaseAdmin
+            .from("money_transactions")
+            .select("amount, metadata, remarks, user_id")
+            .eq("type", "refund")
+            .contains("metadata", { contest_id: contestId }),
+        ]);
+
+      const addByTrack = (
+        row: any,
+        sign: 1 | -1,
+        acc: Map<string, { views: number; reels: number }>
+      ) => {
+        const creatorId = String(row?.user_id || "").trim();
+        if (!creatorId) return;
+        const bt = String(row?.metadata?.bonus_type || "");
+        const amount = Number(row?.amount) || 0;
+        if (amount <= 0) return;
+        if (
+          bt !== "milestone_most_verified_views" &&
+          bt !== "milestone_most_verified_reels"
+        )
+          return;
+        const cur = acc.get(creatorId) || { views: 0, reels: 0 };
+        if (bt === "milestone_most_verified_views") {
+          cur.views += sign * amount;
+        } else {
+          cur.reels += sign * amount;
+        }
+        acc.set(creatorId, cur);
+      };
+
+      const paidByTrack = new Map<string, { views: number; reels: number }>();
+      (milestoneRewards || []).forEach((r: any) => addByTrack(r, 1, paidByTrack));
+      (milestoneRefunds || [])
+        .filter(
+          (r: any) => !r?.remarks || r.remarks === REVERSAL_TRANSACTION_REMARK
+        )
+        .forEach((r: any) => addByTrack(r, -1, paidByTrack));
+
+      paidByTrack.forEach((v, creatorId) => {
+        milestoneBonusPaidByCreator[creatorId] = {
+          viewsPaidCents: Math.max(0, v.views || 0),
+          reelsPaidCents: Math.max(0, v.reels || 0),
+        };
+      });
+    } catch (err) {
+      console.error(
+        "[page.tsx] Error fetching milestone bonus paid split by track:",
+        err
+      );
+    }
+  }
+
   // Transform Twitter tweets into submission-like format for display
   const twitterSubmissions = twitterTweetsData
     ? twitterTweetsData.map((tweet: any) => {
@@ -942,6 +1012,7 @@ export default async function ContestDetailPage({
         isAdminView={isAdmin}
         user={user}
         creatorModerationData={creatorModerationData}
+        milestoneBonusPaidByCreator={milestoneBonusPaidByCreator}
       />
     </TooltipProvider>
   );

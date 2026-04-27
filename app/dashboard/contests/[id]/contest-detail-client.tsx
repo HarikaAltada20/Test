@@ -88,7 +88,10 @@ import ManualPointsModal from "@/components/ManualPointsModal";
 import { CreatorSubmissionsModal } from "@/components/CreatorSubmissionsModal";
 import { InstagramCreatorAnalyticsModal } from "@/components/contest/InstagramCreatorAnalyticsModal";
 import { BudgetProgress } from "@/components/BudgetProgress";
-import { buildMilestoneMostVerifiedBonusByCreatorMap } from "@/lib/milestone-contest-expected-spend";
+import {
+  buildMilestoneMostVerifiedBonusByCreatorMap,
+  type MilestoneMostVerifiedBonusPaidByCreator,
+} from "@/lib/milestone-contest-expected-spend";
 import { YouTubeAnalyticsPanel } from "@/components/youtube/YouTubeAnalyticsPanel";
 import { YT_ANALYTICS_DEFAULT_WINDOW_DAYS } from "@/lib/youtube-constants";
 import { PaginationControls } from "@/components/ui/pagination-controls";
@@ -418,6 +421,7 @@ interface ContestDetailClientProps {
       paid_rank?: number | null;
     }
   >;
+  milestoneBonusPaidByCreator?: MilestoneMostVerifiedBonusPaidByCreator;
 }
 
 const sanitizeTwitterList = (value: unknown): string[] => {
@@ -728,6 +732,7 @@ export default function ContestDetailClient({
   isAdminView = false,
   user,
   creatorModerationData = {},
+  milestoneBonusPaidByCreator = {},
 }: ContestDetailClientProps) {
   const supabase = createClient();
   const { toast, toasts } = useToast();
@@ -2757,13 +2762,16 @@ export default function ContestDetailClient({
         views: sub.views,
         bonus_paid: sub.bonus_paid,
         bonus_amount: sub.bonus_amount,
+        metadata: sub.metadata,
       })),
       bonusConfig,
+      milestoneBonusPaidByCreator,
     );
   }, [
     currentContest,
     currentSubmissions,
     getStatus,
+    milestoneBonusPaidByCreator,
     showMostVerifiedReelsCreatorColumn,
     showMostVerifiedViewsBonusColumns,
   ]);
