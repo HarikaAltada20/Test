@@ -9699,8 +9699,7 @@ export default function CreateContestPage({
                               Milestone Based Contest
                             </span>
                             <p className="text-[14px] leading-tight mt-[2px] text-muted-foreground">
-                              Creators are rewarded upon reaching milestones, with
-                              payouts based on the highest milestone achieved.
+                          Creators will be rewarded upon reaching milestones based on views, according to the defined view targets and payout for each milestone.
                             </p>
                             {!hasCpmAccess && (
                               <div className="mt-2 flex items-center gap-2">
