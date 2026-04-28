@@ -847,12 +847,19 @@ export function ContestClientPage({
     creatorWiseLeaderboard,
   ]);
 
-  const milestoneDerivedData = useMemo(() => {
+  const milestoneDerivedData = useMemo<{
+    submissionExpectedRewardMap: Map<string, number>;
+    creatorMostVerifiedViewsBonusMap: Map<string, number>;
+    creatorMostVerifiedReelsBonusMap: Map<string, number>;
+    creatorExpectedRewardMap: Map<string, number>;
+    winnerCountsByMilestone: Map<string, number>;
+  }>(() => {
     const empty = {
       submissionExpectedRewardMap: new Map<string, number>(),
       creatorMostVerifiedViewsBonusMap: new Map<string, number>(),
       creatorMostVerifiedReelsBonusMap: new Map<string, number>(),
       creatorExpectedRewardMap: new Map<string, number>(),
+      winnerCountsByMilestone: new Map<string, number>(),
     };
 
     if (contest?.contest_type !== "milestone") return empty;
@@ -1035,6 +1042,7 @@ export function ContestClientPage({
       creatorMostVerifiedViewsBonusMap,
       creatorMostVerifiedReelsBonusMap,
       creatorExpectedRewardMap,
+      winnerCountsByMilestone,
     };
   }, [
     contest?.contest_type,
@@ -4127,16 +4135,24 @@ export function ContestClientPage({
                                         Views
                                       </div>
                                       {milestone.winner_limit != null && (
-                                        <div
-                                          className={cn(
-                                            "text-xs mt-1",
-                                            isDark
-                                              ? "text-gray-300"
-                                              : "text-slate-500",
-                                          )}
-                                        >
-                                          Winner limit: {milestone.winner_limit}
-                                        </div>
+                                        (() => {
+                                          const reachedCount = milestoneDerivedData.winnerCountsByMilestone?.get(
+                                            `${Number(milestone.order || 0)}:${Number(milestone.target_views || 0)}`,
+                                          ) || 0;
+                                          const isFull = reachedCount >= Number(milestone.winner_limit);
+                                          return (
+                                            <div
+                                              className={cn(
+                                                "text-xs mt-1 font-semibold",
+                                                isFull
+                                                  ? "text-red-500 dark:text-red-400"
+                                                  : "text-green-600 dark:text-green-400",
+                                              )}
+                                            >
+                                              Winner limit: {reachedCount} / {milestone.winner_limit}
+                                            </div>
+                                          );
+                                        })()
                                       )}
                                     </div>
                                     <div className="text-right">
@@ -7744,8 +7760,20 @@ export function ContestClientPage({
                                           : mvvBonusMyCard + mvrBonusMyCard
                                         : flatFeeBonus;
 
+                                    const isSubmissionWiseBestPerformanceCard =
+                                      leaderboardDisplayMode === "submission" &&
+                                      !isCreatorWiseMyCard &&
+                                      Boolean(bestSubmission) &&
+                                      Boolean(myLeaderboardEntry) &&
+                                      bestSubmission?.id !== myLeaderboardEntry?.id;
+
+                                    const effectiveBonusAmount =
+                                      isSubmissionWiseBestPerformanceCard
+                                        ? 0
+                                        : bonusAmount;
+
                                     const totalEarnings =
-                                      earningsBase + bonusAmount;
+                                      earningsBase + effectiveBonusAmount;
                                     const baseAmount = earningsBase;
                                     const baseLabel =
                                       contestType === "milestone"
@@ -7756,7 +7784,7 @@ export function ContestClientPage({
 
                                     if (
                                       leaderboardViewMode === "detailed" &&
-                                      bonusAmount > 0
+                                      effectiveBonusAmount > 0
                                     ) {
                                       prizeDisplay = (
                                         <div className="space-y-1">
@@ -7774,7 +7802,7 @@ export function ContestClientPage({
                                               +
                                             </span>
                                             <span className="whitespace-nowrap">
-                                              {formatMoney(bonusAmount)}{" "}
+                                              {formatMoney(effectiveBonusAmount)}{" "}
                                               Bonus
                                             </span>
                                           </div>
@@ -8079,6 +8107,8 @@ export function ContestClientPage({
                                                     if (
                                                       modalViewMode ===
                                                         "detailed" &&
+                                                      contest?.contest_type !==
+                                                        "milestone" &&
                                                       flatFeeBonus > 0
                                                     ) {
                                                       prizeDisplay = (
@@ -8149,11 +8179,6 @@ export function ContestClientPage({
                                                       contest?.contest_type ===
                                                         "milestone"
                                                     ) {
-                                                      const submissionBonus =
-                                                        Number(
-                                                          (submission as any)
-                                                            .bonus_amount || 0,
-                                                        );
                                                       prizeDisplay = (
                                                         <div className="space-y-1">
                                                           <div
@@ -8166,52 +8191,9 @@ export function ContestClientPage({
                                                           >
                                                             {earningsLabel}:{" "}
                                                             {formatMoney(
-                                                              submission.earnings +
-                                                                submissionBonus,
+                                                              submission.earnings,
                                                             )}
                                                           </div>
-                                                          {submissionBonus >
-                                                            0 && (
-                                                            <div
-                                                              className={cn(
-                                                                "flex flex-wrap items-center gap-1.5 text-xs",
-                                                                isDark
-                                                                  ? "text-green-400 bg-green-900/20 border border-green-800"
-                                                                  : "text-green-600 bg-green-50 border border-green-200",
-                                                              )}
-                                                            >
-                                                              <div
-                                                                className={cn(
-                                                                  "w-1.5 h-1.5 rounded-full flex-shrink-0",
-                                                                  isDark
-                                                                    ? "bg-green-400"
-                                                                    : "bg-green-500",
-                                                                )}
-                                                              ></div>
-                                                              <span className="whitespace-nowrap">
-                                                                {formatMoney(
-                                                                  submission.earnings,
-                                                                )}{" "}
-                                                                Milestone
-                                                              </span>
-                                                              <span
-                                                                className={cn(
-                                                                  "text-green-600 dark:text-green-400",
-                                                                  isDark
-                                                                    ? "text-green-400"
-                                                                    : "text-green-600",
-                                                                )}
-                                                              >
-                                                                +
-                                                              </span>
-                                                              <span className="whitespace-nowrap">
-                                                                {formatMoney(
-                                                                  submissionBonus,
-                                                                )}{" "}
-                                                                Bonus
-                                                              </span>
-                                                            </div>
-                                                          )}
                                                         </div>
                                                       );
                                                     } else {
@@ -8678,25 +8660,151 @@ export function ContestClientPage({
                       isdark={isDark}
                     >
                       <DialogContent className="max-w-4xl max-h-[85vh] overflow-hidden flex flex-col">
-                        <DialogHeader className="flex-shrink-0">
-                          <DialogTitle
-                            className={cn(
-                              "flex items-center gap-2",
-                              isDark ? "text-white" : "text-gray-700",
-                            )}
-                          >
-                            <Eye className="h-5 w-5" />
+                        <DialogHeader className="flex-shrink-0 mb-6">
+                          <div className="flex flex-col gap-4">
+                            <DialogTitle
+                              className={cn(
+                                "flex items-center gap-2 text-xl font-bold",
+                                isDark ? "text-white" : "text-gray-900",
+                              )}
+                            >
+                              <Eye className="h-5 w-5 text-primary" />
+                              {(() => {
+                                const creatorGroup =
+                                  groupedLeaderboardByCreator?.find(
+                                    (group) =>
+                                      group.creator_id === selectedCreatorId,
+                                  );
+                                return creatorGroup
+                                  ? `All Videos by ${(creatorGroup as any).user_platform_username ?? creatorGroup.creator_username}`
+                                  : "Creator Videos";
+                              })()}
+                            </DialogTitle>
+
+                            {/* Summary Cards */}
                             {(() => {
-                              const creatorGroup =
-                                groupedLeaderboardByCreator?.find(
-                                  (group) =>
-                                    group.creator_id === selectedCreatorId,
-                                );
-                              return creatorGroup
-                                ? `All Videos by ${(creatorGroup as any).user_platform_username ?? creatorGroup.creator_username}`
-                                : "Creator Videos";
+                              if (loadingCreatorVideosModal) return null;
+                              if (contest?.contest_type !== "milestone") return null;
+                              
+                              const isTwitter = contest?.platform?.toLowerCase() === "twitter" || contest?.platform?.toLowerCase() === "x";
+                              
+                              const verifiedVideos = getCreatorVideos.filter(v => 
+                                v.status === 'verified' || 
+                                v.status === 'paid' ||
+                                (isTwitter && ((v as any).moderation_status === 'paid' || (v as any).paid === true))
+                              );
+                              const pendingVideos = getCreatorVideos.filter(v => v.status === 'pending');
+                              
+                              const vReels = verifiedVideos.length;
+                              const vViews = verifiedVideos.reduce((sum, v) => sum + (v.views || 0), 0);
+                              
+                              const pReels = pendingVideos.length;
+                              const pViews = pendingVideos.reduce((sum, v) => sum + (v.views || 0), 0);
+                              
+                              const totalReels = vReels + pReels;
+                              const totalViews = vViews + pViews;
+
+                              return (
+                                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 w-full">
+                                  {/* Verified Reels */}
+                                  <div className={cn(
+                                    "flex flex-col p-2 rounded-lg border shadow-sm transition-all duration-200",
+                                    isDark ? "bg-emerald-500/5 border-emerald-500/20" : "bg-emerald-50/50 border-emerald-100"
+                                  )}>
+                                    <div className="flex items-center gap-1.5 mb-0.5">
+                                      <CheckCircle2 className="h-3 w-3 text-emerald-500" />
+                                      <span className={cn("text-[9px] uppercase tracking-wider font-bold", isDark ? "text-emerald-400/80" : "text-emerald-600")}>
+                                        Verified Reels
+                                      </span>
+                                    </div>
+                                    <div className={cn("text-base font-bold tabular-nums", isDark ? "text-white" : "text-slate-900")}>
+                                      {vReels}
+                                    </div>
+                                  </div>
+
+                                  {/* Verified Views */}
+                                  <div className={cn(
+                                    "flex flex-col p-2 rounded-lg border shadow-sm transition-all duration-200",
+                                    isDark ? "bg-emerald-500/5 border-emerald-500/20" : "bg-emerald-50/50 border-emerald-100"
+                                  )}>
+                                    <div className="flex items-center gap-1.5 mb-0.5">
+                                      <Eye className="h-3 w-3 text-emerald-500" />
+                                      <span className={cn("text-[9px] uppercase tracking-wider font-bold", isDark ? "text-emerald-400/80" : "text-emerald-600")}>
+                                        Verified Views
+                                      </span>
+                                    </div>
+                                    <div className={cn("text-base font-bold tabular-nums", isDark ? "text-white" : "text-slate-900")}>
+                                      {vViews.toLocaleString()}
+                                    </div>
+                                  </div>
+
+                                  {/* Pending Reels */}
+                                  <div className={cn(
+                                    "flex flex-col p-2 rounded-lg border shadow-sm transition-all duration-200",
+                                    isDark ? "bg-amber-500/5 border-amber-500/20" : "bg-amber-50/50 border-amber-100"
+                                  )}>
+                                    <div className="flex items-center gap-1.5 mb-0.5">
+                                      <Clock className="h-3 w-3 text-amber-500" />
+                                      <span className={cn("text-[9px] uppercase tracking-wider font-bold", isDark ? "text-amber-400/80" : "text-amber-600")}>
+                                        Pending Reels
+                                      </span>
+                                    </div>
+                                    <div className={cn("text-base font-bold tabular-nums", isDark ? "text-white" : "text-slate-900")}>
+                                      {pReels}
+                                    </div>
+                                  </div>
+
+                                  {/* Pending Views */}
+                                  <div className={cn(
+                                    "flex flex-col p-2 rounded-lg border shadow-sm transition-all duration-200",
+                                    isDark ? "bg-amber-500/5 border-amber-500/20" : "bg-amber-50/50 border-amber-100"
+                                  )}>
+                                    <div className="flex items-center gap-1.5 mb-0.5">
+                                      <TrendingUp className="h-3 w-3 text-amber-500" />
+                                      <span className={cn("text-[9px] uppercase tracking-wider font-bold", isDark ? "text-amber-400/80" : "text-amber-600")}>
+                                        Pending Views
+                                      </span>
+                                    </div>
+                                    <div className={cn("text-base font-bold tabular-nums", isDark ? "text-white" : "text-slate-900")}>
+                                      {pViews.toLocaleString()}
+                                    </div>
+                                  </div>
+
+                                  {/* All Reels */}
+                                  <div className={cn(
+                                    "flex flex-col p-2 rounded-lg border shadow-sm transition-all duration-200",
+                                    isDark ? "bg-blue-500/5 border-blue-500/20" : "bg-blue-50/50 border-blue-100"
+                                  )}>
+                                    <div className="flex items-center gap-1.5 mb-0.5">
+                                      <Video className="h-3 w-3 text-blue-500" />
+                                      <span className={cn("text-[9px] uppercase tracking-wider font-bold", isDark ? "text-blue-400/80" : "text-blue-600")}>
+                                        All Reels
+                                      </span>
+                                    </div>
+                                    <div className={cn("text-base font-bold tabular-nums", isDark ? "text-white" : "text-slate-900")}>
+                                      {totalReels}
+                                    </div>
+                                  </div>
+
+                                  {/* All Views */}
+                                  <div className={cn(
+                                    "flex flex-col p-2 rounded-lg border shadow-sm transition-all duration-200",
+                                    isDark ? "bg-blue-500/5 border-blue-500/20" : "bg-blue-50/50 border-blue-100"
+                                  )}>
+                                    <div className="flex items-center gap-1.5 mb-0.5">
+                                      <BarChart3 className="h-3 w-3 text-blue-500" />
+                                      <span className={cn("text-[9px] uppercase tracking-wider font-bold", isDark ? "text-blue-400/80" : "text-blue-600")}>
+                                        All Views
+                                      </span>
+                                    </div>
+                                    <div className={cn("text-base font-bold tabular-nums", isDark ? "text-white" : "text-slate-900")}>
+                                      {totalViews.toLocaleString()}
+                                    </div>
+                                  </div>
+                                </div>
+                              );
                             })()}
-                          </DialogTitle>
+                          </div>
                         </DialogHeader>
 
                         {/* Scrollable Content Area */}
@@ -8834,25 +8942,15 @@ export function ContestClientPage({
                                                 )?.leaderboard_contest
                                                   ?.flat_fee_bonus || 0
                                               : 0;
-
-                                          const creatorId =
-                                            selectedCreatorId || "";
-                                          const mvvBonus =
-                                            milestoneDerivedData.creatorMostVerifiedViewsBonusMap.get(
-                                              creatorId,
-                                            ) || 0;
-                                          const mvrBonus =
-                                            milestoneDerivedData.creatorMostVerifiedReelsBonusMap.get(
-                                              creatorId,
-                                            ) || 0;
-                                          const milestoneBonus =
-                                            mvvBonus + mvrBonus;
                                           const bonusAmount =
-                                            contestType === "milestone"
-                                              ? milestoneBonus
-                                              : flatFeeBonus;
+                                            contestType === "leaderboard"
+                                              ? flatFeeBonus
+                                              : 0;
 
-                                          if (bonusAmount > 0) {
+                                          if (
+                                            contestType === "leaderboard" &&
+                                            bonusAmount > 0
+                                          ) {
                                             const totalEarnings =
                                               video.earnings + bonusAmount;
                                             prizeDisplay = (
@@ -8874,9 +8972,7 @@ export function ContestClientPage({
                                                     {formatMoney(
                                                       video.earnings,
                                                     )}{" "}
-                                                    {contestType === "milestone"
-                                                      ? "Milestone"
-                                                      : "Prize"}
+                                                    Prize
                                                   </span>
                                                   <span className="text-green-600 dark:text-green-400">
                                                     +
@@ -9552,21 +9648,33 @@ export function ContestClientPage({
                                   mostVerifiedReelsBonusGranted > 0
                                 ) {
                                   milestoneCreatorExpectedDisplay = (
-                                    <div className="space-y-1">
+                                    <div className="flex flex-col items-end gap-1.5 mt-1">
                                       {mostVerifiedViewsBonusGranted > 0 && (
-                                        <div className="text-xs text-green-700">
-                                          Most Verified Views Bonus (granted):{" "}
-                                          {formatMoney(
-                                            mostVerifiedViewsBonusGranted,
+                                        <div 
+                                          className={cn(
+                                            "inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full border text-[10px] font-bold shadow-sm whitespace-nowrap cursor-help",
+                                            isDark 
+                                              ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-400 shadow-emerald-500/5" 
+                                              : "bg-emerald-50 border-emerald-200 text-emerald-700 shadow-emerald-200/20"
                                           )}
+                                          title="You have achieved the highest number of verified views among all creators in this contest."
+                                        >
+                                          <Trophy className="h-3 w-3" />
+                                          <span>MOST VIEWS BONUS WINNER: {formatMoney(mostVerifiedViewsBonusGranted)}</span>
                                         </div>
                                       )}
                                       {mostVerifiedReelsBonusGranted > 0 && (
-                                        <div className="text-xs text-green-700">
-                                          Most Verified Reels Bonus (granted):{" "}
-                                          {formatMoney(
-                                            mostVerifiedReelsBonusGranted,
+                                        <div 
+                                          className={cn(
+                                            "inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full border text-[10px] font-bold shadow-sm whitespace-nowrap cursor-help",
+                                            isDark 
+                                              ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-400 shadow-emerald-500/5" 
+                                              : "bg-emerald-50 border-emerald-200 text-emerald-700 shadow-emerald-200/20"
                                           )}
+                                          title="You have achieved the highest number of verified reels among all creators in this contest."
+                                        >
+                                          <Video className="h-3 w-3" />
+                                          <span>MOST REELS BONUS WINNER: {formatMoney(mostVerifiedReelsBonusGranted)}</span>
                                         </div>
                                       )}
                                     </div>
@@ -9578,17 +9686,33 @@ export function ContestClientPage({
                                   leaderboardViewMode === "detailed")
                               ) {
                                 milestoneCreatorExpectedDisplay = (
-                                  <div className="space-y-1">
+                                  <div className="flex flex-col items-end gap-1.5 mt-1">
                                     {mostVerifiedViewsBonus > 0 && (
-                                      <div className="text-xs text-slate-600 dark:text-slate-400">
-                                        Most Verified Views Bonus (expected):{" "}
-                                        {formatMoney(mostVerifiedViewsBonus)}
+                                      <div 
+                                        className={cn(
+                                          "inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full border text-[10px] font-bold shadow-sm whitespace-nowrap cursor-help",
+                                          isDark 
+                                            ? "bg-amber-500/10 border-amber-500/30 text-amber-400 shadow-amber-500/5" 
+                                            : "bg-amber-50 border-amber-200 text-amber-700 shadow-amber-200/20"
+                                        )}
+                                        title="You currently have the highest number of verified views. You will win this bonus if you maintain this lead until the contest ends."
+                                      >
+                                        <TrendingUp className="h-3 w-3" />
+                                        <span>MOST VERIFIED VIEWS BONUS (EXPECTED): {formatMoney(mostVerifiedViewsBonus)}</span>
                                       </div>
                                     )}
                                     {mostVerifiedReelsBonus > 0 && (
-                                      <div className="text-xs text-slate-600 dark:text-slate-400">
-                                        Most Verified Reels Bonus (expected):{" "}
-                                        {formatMoney(mostVerifiedReelsBonus)}
+                                      <div 
+                                        className={cn(
+                                          "inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full border text-[10px] font-bold shadow-sm whitespace-nowrap cursor-help",
+                                          isDark 
+                                            ? "bg-amber-500/10 border-amber-500/30 text-amber-400 shadow-amber-500/5" 
+                                            : "bg-amber-50 border-amber-200 text-amber-700 shadow-amber-200/20"
+                                        )}
+                                        title="You currently have the highest number of verified reels. You will win this bonus if you maintain this lead until the contest ends."
+                                      >
+                                        <Video className="h-3 w-3" />
+                                        <span>MOST VERIFIED REELS BONUS (EXPECTED): {formatMoney(mostVerifiedReelsBonus)}</span>
                                       </div>
                                     )}
                                   </div>
@@ -9860,15 +9984,7 @@ export function ContestClientPage({
                                               {twitterDisplayName}
                                             </span>
                                           </div>
-                                          {!isTwitter &&
-                                            isMilestoneContest &&
-                                            milestoneCreatorExpectedDisplay && (
-                                              <div className="mt-1">
-                                                {
-                                                  milestoneCreatorExpectedDisplay
-                                                }
-                                              </div>
-                                            )}
+
                                           {showTwitterHandle ? (
                                             <p
                                               className={cn(
@@ -10087,6 +10203,13 @@ export function ContestClientPage({
                                           {prizeDisplay}
                                         </div>
                                       )}
+                                      {!isTwitter &&
+                                        isMilestoneContest &&
+                                        milestoneCreatorExpectedDisplay && (
+                                          <div className="mt-1 w-full">
+                                            {milestoneCreatorExpectedDisplay}
+                                          </div>
+                                        )}
                                     </div>
                                   </div>
                                 </CardContent>

@@ -431,6 +431,14 @@ const sanitizeTwitterList = (value: unknown): string[] => {
   );
 };
 
+const extractMilestoneOrderFromLabel = (label: string): number | null => {
+  // Example label: "Milestone 2 • 10,000 views • $5.00"
+  const match = label.match(/Milestone\s+(\d+)/i);
+  if (!match) return null;
+  const n = Number(match[1]);
+  return Number.isFinite(n) ? n : null;
+};
+
 /** Per-tweet points for ranking / prizes — matches table "Total Points" when `points` is unset (base + manual). */
 function getTwitterSubmissionPointsForRanking(submission: any): number {
   const manual = Number((submission as any)?.manual_points_adjustment) || 0;
@@ -1428,11 +1436,16 @@ export default function ContestDetailClient({
     });
   }, [currentSubmissions]);
 
-  const milestoneSubmissionAssignments = useMemo(() => {
+  const milestoneSubmissionAssignments = useMemo<{
+    payoutMap: Map<string, number>;
+    labelMap: Map<string, string>;
+    winnerCountsByMilestone: Map<number, number>;
+  }>(() => {
     if (currentContest?.contest_type !== "milestone") {
       return {
         payoutMap: new Map<string, number>(),
         labelMap: new Map<string, string>(),
+        winnerCountsByMilestone: new Map<number, number>(),
       };
     }
     const milestones =
@@ -1441,6 +1454,7 @@ export default function ContestDetailClient({
       return {
         payoutMap: new Map<string, number>(),
         labelMap: new Map<string, string>(),
+        winnerCountsByMilestone: new Map<number, number>(),
       };
     }
     const sortedMilestones = [...milestones].sort(
@@ -1500,6 +1514,7 @@ export default function ContestDetailClient({
     return {
       payoutMap: submissionPayoutMap,
       labelMap: submissionMilestoneLabelMap,
+      winnerCountsByMilestone,
     };
   }, [
     currentContest?.contest_type,
@@ -2762,6 +2777,7 @@ export default function ContestDetailClient({
         views: sub.views,
         bonus_paid: sub.bonus_paid,
         bonus_amount: sub.bonus_amount,
+        milestone_bonus_paid: sub.milestone_bonus_paid,
         metadata: sub.metadata,
       })),
       bonusConfig,
@@ -5324,13 +5340,18 @@ export default function ContestDetailClient({
     const reelsBlockedByViews =
       row.viewsExpectedCents > 0 && row.viewsPaidCents < row.viewsExpectedCents;
 
+    const canGetViewsBonus = row.viewsExpectedCents > 0;
+    const canGetReelsBonus = row.expectedCents > 0;
+
+    if (!canGetViewsBonus && !canGetReelsBonus) return null;
+
     return (
       <>
         <DropdownMenuSeparator />
         <DropdownMenuLabel className="text-amber-600 dark:text-amber-400">
           Milestone bonus
         </DropdownMenuLabel>
-        {showMostVerifiedViewsBonusColumns && (
+        {showMostVerifiedViewsBonusColumns && canGetViewsBonus && (
           <DropdownMenuItem
             // disabled={d || viewsDone}
             onClick={() =>
@@ -5345,7 +5366,7 @@ export default function ContestDetailClient({
             Mark most verified views bonus paid
           </DropdownMenuItem>
         )}
-        {showMostVerifiedReelsCreatorColumn && (
+        {showMostVerifiedReelsCreatorColumn && canGetReelsBonus && (
           <DropdownMenuItem
             // disabled={d || reelsDone || reelsBlockedByViews}
             onClick={() =>
@@ -8313,14 +8334,27 @@ export default function ContestDetailClient({
                                         >
                                           Milestone {index + 1}
                                         </p>
-                                        {milestone.winner_limit && (
-                                          <Badge
-                                            variant="secondary"
-                                            className="text-[10px] h-4 px-1.5"
-                                          >
-                                            Limit: {milestone.winner_limit}
-                                          </Badge>
-                                        )}
+                                          {milestone.winner_limit && (
+                                            (() => {
+                                              const reachedCount = milestoneSubmissionAssignments.winnerCountsByMilestone?.get(
+                                                Number(milestone.target_views),
+                                              ) || 0;
+                                              const isFull = reachedCount >= milestone.winner_limit;
+                                              return (
+                                                <Badge
+                                                  variant="secondary"
+                                                  className={cn(
+                                                    "text-[10px] h-4 px-1.5",
+                                                    isFull 
+                                                      ? "bg-red-100 text-red-700 border-red-200 dark:bg-red-900/30 dark:text-red-400 dark:border-red-500/30" 
+                                                      : "bg-green-100 text-green-700 border-green-200 dark:bg-green-900/30 dark:text-green-400 dark:border-green-500/30"
+                                                  )}
+                                                >
+                                                  Limit: {reachedCount} / {milestone.winner_limit}
+                                                </Badge>
+                                              );
+                                            })()
+                                          )}
                                       </div>
                                       <p
                                         className={cn(
@@ -16086,9 +16120,17 @@ export default function ContestDetailClient({
                                             "expected_reward",
                                           )
                                         : true) && (
-                                        <TableHead className="text-center">
-                                          Expected Reward
-                                        </TableHead>
+                                        <>
+                                          <TableHead className="text-center">
+                                            Expected Reward
+                                          </TableHead>
+                                          {currentContest.contest_type ===
+                                            "milestone" && (
+                                            <TableHead className="text-center min-w-[170px]">
+                                              Milestone
+                                            </TableHead>
+                                          )}
+                                        </>
                                       )}
                                       {(currentContest.platform
                                         ?.toLowerCase()
@@ -16190,6 +16232,10 @@ export default function ContestDetailClient({
                                     <TableCell
                                       colSpan={
                                         12 +
+                                        (currentContest.contest_type ===
+                                        "milestone"
+                                          ? 1
+                                          : 0) +
                                         (showMostVerifiedViewsBonusColumns
                                           ? 2
                                           : 0) +
@@ -16906,25 +16952,105 @@ export default function ContestDetailClient({
                                                     "expected_reward",
                                                   )
                                                 : true) && (
-                                                <TableCell className="text-center font-medium">
-                                                  <div className="flex items-center justify-center gap-1">
-                                                    {formatMoney(
-                                                      group.earnings.expected,
-                                                    )}
-                                                    {group.isCapped && (
-                                                      <span
-                                                        className="text-amber-600 cursor-help"
-                                                        title={`Capped at ${formatMoney(
-                                                          currentContest.max_earnings_per_creator,
-                                                        )}. Original: ${formatMoney(
-                                                          group.earningsBeforeCap,
-                                                        )}`}
-                                                      >
-                                                        ⚠️
-                                                      </span>
-                                                    )}
-                                                  </div>
-                                                </TableCell>
+                                                <>
+                                                  <TableCell className="text-center font-medium">
+                                                    <div className="flex items-center justify-center gap-1">
+                                                      {formatMoney(
+                                                        group.earnings
+                                                          .expected,
+                                                      )}
+                                                      {group.isCapped && (
+                                                        <span
+                                                          className="text-amber-600 cursor-help"
+                                                          title={`Capped at ${formatMoney(
+                                                            currentContest.max_earnings_per_creator,
+                                                          )}. Original: ${formatMoney(
+                                                            group.earningsBeforeCap,
+                                                          )}`}
+                                                        >
+                                                          ⚠️
+                                                        </span>
+                                                      )}
+                                                    </div>
+                                                  </TableCell>
+                                                  {currentContest.contest_type ===
+                                                    "milestone" && (
+                                                    <TableCell className="text-center font-medium min-w-[170px]">
+                                                      {(() => {
+                                                        const counts =
+                                                          new Map<
+                                                            number,
+                                                            number
+                                                          >();
+
+                                                        for (const sub of
+                                                          group.submissions ||
+                                                          []) {
+                                                          const label =
+                                                            milestoneSubmissionAssignedLabelBySubmissionId.get(
+                                                              sub.id,
+                                                            ) ?? "—";
+                                                          const order =
+                                                            extractMilestoneOrderFromLabel(
+                                                              label,
+                                                            );
+                                                          if (order == null) {
+                                                            continue;
+                                                          }
+                                                          counts.set(
+                                                            order,
+                                                            (counts.get(order) ||
+                                                              0) + 1,
+                                                          );
+                                                        }
+
+                                                        if (counts.size === 0) {
+                                                          return (
+                                                            <span className="text-muted-foreground">—</span>
+                                                          );
+                                                        }
+
+                                                        const milestonesAchieved =
+                                                          Array.from(
+                                                            counts.entries(),
+                                                          ).sort(
+                                                            (a, b) => a[0] - b[0],
+                                                          );
+
+                                                        return (
+                                                          <div className="flex flex-wrap justify-center gap-1.5">
+                                                            {milestonesAchieved.map(
+                                                              ([order, count]) => {
+                                                                return (
+                                                                  <span
+                                                                    key={`${group.creator.id}-milestone-${order}`}
+                                                                    className="inline-flex items-center gap-1"
+                                                                  >
+                                                                    <Badge
+                                                                      className={cn(
+                                                                        "text-[11px] font-semibold px-2 py-0.5 border",
+                                                                        "bg-violet-100 text-violet-900 border-violet-200 dark:bg-violet-950/40 dark:text-violet-200 dark:border-violet-800",
+                                                                      )}
+                                                                    >
+                                                                      Milestone{" "}
+                                                                      {order}
+                                                                    </Badge>
+                                                                    <span className="text-[11px] text-muted-foreground">
+                                                                      {count}{" "}
+                                                                      {count === 1
+                                                                        ? "sub"
+                                                                        : "sub"}
+                                                                    </span>
+                                                                  </span>
+                                                                );
+                                                              },
+                                                            )}
+                                                          </div>
+                                                        );
+                                                      })()}
+                                                    </TableCell>
+                                                  )}
+                                                </>
                                               )}
                                               {(currentContest.platform
                                                 ?.toLowerCase()

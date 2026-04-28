@@ -1886,7 +1886,7 @@ export function CreatorSubmissionsModal({
                         contest?.contest_type === "milestone"
                           ? (milestoneAssignedLabelBySubmissionId?.get(
                               submission.id,
-                            ) ?? "Not eligible yet")
+                            ) ?? "Not eligible")
                           : "—";
                       const milestoneAssignmentParts =
                         milestoneAssignmentLabel.split(" • ");

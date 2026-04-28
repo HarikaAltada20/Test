@@ -175,6 +175,7 @@ export default async function ContestDetailPage({
       bonus_paid,
       bonus_paid_at,
       bonus_amount,
+      milestone_bonus_paid,
       metadata,
       insights_status,
       last_insights_update
@@ -968,6 +969,7 @@ export default async function ContestDetailPage({
         bonus_paid: sub.bonus_paid,
         bonus_paid_at: sub.bonus_paid_at,
         bonus_amount: sub.bonus_amount ?? null,
+        milestone_bonus_paid: sub.milestone_bonus_paid ?? null,
         creator_display_name: creatorDisplayName,
         creator_username: creatorUsername,
         // Explicit username from users table for creator-wise view

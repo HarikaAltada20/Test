@@ -387,6 +387,10 @@ export default function CreateContestPage({
   const [milestoneRows, setMilestoneRows] = useState<MilestoneFormRow[]>([
     createEmptyMilestoneRow(),
   ]);
+  const [milestoneSequenceError, setMilestoneSequenceError] = useState<
+    string | null
+  >(null);
+  const lastMilestoneSequenceToastRef = useRef<string | null>(null);
   const [milestoneBonusEnabled, setMilestoneBonusEnabled] = useState(false);
   const [milestoneBonusTopViewsMin, setMilestoneBonusTopViewsMin] = useState<
     number | ""
@@ -758,6 +762,89 @@ export default function CreateContestPage({
   const [toastErrorMessage, setToastErrorMessage] = useState<string | null>(
     null,
   );
+
+  const parseMilestoneViews = (value: number | string): number =>
+    value === "" ? NaN : parseInt(String(value), 10);
+
+  const parseMilestonePayout = (value: number | string): number =>
+    value === "" ? NaN : parseFloat(String(value));
+
+  const getMilestoneSequenceError = (
+    rows: MilestoneFormRow[],
+  ): string | null => {
+    for (let i = 1; i < rows.length; i++) {
+      const prevViews = parseMilestoneViews(rows[i - 1].target_views);
+      const currentViews = parseMilestoneViews(rows[i].target_views);
+      const prevPayout = parseMilestonePayout(rows[i - 1].payout_dollars);
+      const currentPayout = parseMilestonePayout(rows[i].payout_dollars);
+
+      if (!isNaN(currentViews) && !isNaN(prevViews) && currentViews <= prevViews) {
+        return `Milestone ${i + 1}: target views must be higher than milestone ${i}.`;
+      }
+
+      if (
+        !isNaN(currentPayout) &&
+        !isNaN(prevPayout) &&
+        currentPayout <= prevPayout
+      ) {
+        return `Milestone ${i + 1}: payout must be higher than milestone ${i}.`;
+      }
+    }
+
+    return null;
+  };
+
+  const canAddNextMilestone = (rows: MilestoneFormRow[]): boolean => {
+    if (rows.length === 0) return false;
+    const last = rows[rows.length - 1];
+    const lastViews = parseMilestoneViews(last.target_views);
+    const lastPayout = parseMilestonePayout(last.payout_dollars);
+
+    if (isNaN(lastViews) || lastViews <= 0) return false;
+    if (isNaN(lastPayout) || lastPayout <= 0) return false;
+
+    if (rows.length === 1) return true;
+
+    const previous = rows[rows.length - 2];
+    const previousViews = parseMilestoneViews(previous.target_views);
+    const previousPayout = parseMilestonePayout(previous.payout_dollars);
+
+    return lastViews > previousViews && lastPayout > previousPayout;
+  };
+
+  const updateMilestoneRowsWithValidation = (rows: MilestoneFormRow[]) => {
+    const sequenceError = getMilestoneSequenceError(rows);
+    setMilestoneSequenceError(sequenceError);
+  };
+
+  const handleAddMilestoneRow = () => {
+    if (!canAddNextMilestone(milestoneRows)) return;
+
+    const previousRow = milestoneRows[milestoneRows.length - 1];
+    setMilestoneRows((prev) => [
+      ...prev,
+      {
+        ...createEmptyMilestoneRow(),
+        target_views: previousRow.target_views,
+        payout_dollars: previousRow.payout_dollars,
+        winner_limit: previousRow.winner_limit,
+      },
+    ]);
+  };
+
+  useEffect(() => {
+    if (!milestoneSequenceError) {
+      lastMilestoneSequenceToastRef.current = null;
+      return;
+    }
+    if (lastMilestoneSequenceToastRef.current === milestoneSequenceError) return;
+    toast({
+      title: "Invalid Milestone Sequence",
+      description: milestoneSequenceError,
+      variant: "destructive",
+    });
+    lastMilestoneSequenceToastRef.current = milestoneSequenceError;
+  }, [milestoneSequenceError]);
 
   // Section-specific error states for Assets step
   const [assetUploadError, setAssetUploadError] = useState<string | null>(null);
@@ -1792,6 +1879,13 @@ export default function CreateContestPage({
                 "Milestone view targets must be strictly increasing (each tier higher than the previous).",
             };
           }
+          if (parsed[j].payout_cents <= parsed[j - 1].payout_cents) {
+            return {
+              isValid: false,
+              error:
+                "Milestone payouts must be strictly increasing (each tier higher than the previous).",
+            };
+          }
         }
 
         if (milestoneBonusEnabled) {
@@ -2420,6 +2514,23 @@ export default function CreateContestPage({
                 "Milestone view targets must increase at each step (e.g. 1,000 then 5,000 views).",
               );
               setFormFeedbackType("error");
+              setIsLoading(false);
+              setUploadProgress(null);
+              return;
+            }
+            if (
+              milestonesPayload[j].payout_cents <=
+              milestonesPayload[j - 1].payout_cents
+            ) {
+              const payoutSequenceError =
+                "Milestone payouts must increase at each step (each tier payout should be higher than the previous tier).";
+              setFormFeedback(payoutSequenceError);
+              setFormFeedbackType("error");
+              toast({
+                title: "Invalid Milestone Sequence",
+                description: payoutSequenceError,
+                variant: "destructive",
+              });
               setIsLoading(false);
               setUploadProgress(null);
               return;
@@ -6816,7 +6927,23 @@ export default function CreateContestPage({
                     </AlertDescription>
                   </Alert>
                   <div className="space-y-4">
-                    {milestoneRows.map((row, idx) => (
+                    {milestoneRows.map((row, idx) => {
+                      const winnerLimitValue =
+                        row.winner_limit === ""
+                          ? NaN
+                          : parseInt(String(row.winner_limit), 10);
+                      const payoutDollarsValue = parseFloat(
+                        String(row.payout_dollars),
+                      );
+                      const estimatedPayoutCents =
+                        !isNaN(winnerLimitValue) &&
+                        winnerLimitValue > 0 &&
+                        !isNaN(payoutDollarsValue) &&
+                        payoutDollarsValue > 0
+                          ? Math.round(payoutDollarsValue * 100 * winnerLimitValue)
+                          : null;
+
+                      return (
                       <div
                         key={row.id}
                         className={cn(
@@ -6824,6 +6951,9 @@ export default function CreateContestPage({
                           isDark ? "border-gray-600" : "border-gray-300",
                         )}
                       >
+                        <div className="md:col-span-12">
+                          <h4 className="text-sm font-semibold">Milestone {idx + 1}</h4>
+                        </div>
                         <div className="md:col-span-3 space-y-2">
                           <Label>Target views</Label>
                           <Input
@@ -6832,13 +6962,13 @@ export default function CreateContestPage({
                             value={row.target_views}
                             onChange={(e) => {
                               const v = e.target.value;
-                              setMilestoneRows((prev) =>
-                                prev.map((r) =>
-                                  r.id === row.id
-                                    ? { ...r, target_views: v === "" ? "" : v }
-                                    : r,
-                                ),
+                              const updatedRows = milestoneRows.map((r) =>
+                                r.id === row.id
+                                  ? { ...r, target_views: v === "" ? "" : v }
+                                  : r,
                               );
+                              setMilestoneRows(updatedRows);
+                              updateMilestoneRowsWithValidation(updatedRows);
                             }}
                             className={cn(
                               isDark
@@ -6855,15 +6985,15 @@ export default function CreateContestPage({
                             min={MIN_MILESTONE_PAYOUT_CENTS / 100}
                             step="0.01"
                             value={row.payout_dollars}
-                            onChange={(e) =>
-                              setMilestoneRows((prev) =>
-                                prev.map((r) =>
-                                  r.id === row.id
-                                    ? { ...r, payout_dollars: e.target.value }
-                                    : r,
-                                ),
-                              )
-                            }
+                            onChange={(e) => {
+                              const updatedRows = milestoneRows.map((r) =>
+                                r.id === row.id
+                                  ? { ...r, payout_dollars: e.target.value }
+                                  : r,
+                              );
+                              setMilestoneRows(updatedRows);
+                              updateMilestoneRowsWithValidation(updatedRows);
+                            }}
                             className={cn(
                               isDark
                                 ? "bg-[#180438] border border-gray-600"
@@ -6872,7 +7002,7 @@ export default function CreateContestPage({
                             placeholder="e.g. 5.00"
                           />
                         </div>
-                        <div className="md:col-span-4 space-y-2">
+                        <div className="md:col-span-3 space-y-2">
                           <p className="text-xs">
                             <span className="font-medium">
                               Winner cap (optional):
@@ -6903,35 +7033,56 @@ export default function CreateContestPage({
                             placeholder="0"
                           />
                         </div>
-                        <div className="md:col-span-2 flex md:justify-end">
+                        <div className="md:col-span-2 space-y-2">
+                          {estimatedPayoutCents !== null && (
+                            <>
+                              <Label>Estimated payout</Label>
+                              <div
+                                className={cn(
+                                  "h-10 rounded-md border px-3 flex items-center text-sm",
+                                  isDark
+                                    ? "bg-[#180438] border-gray-600 text-white"
+                                    : "bg-muted/40 border-input",
+                                )}
+                              >
+                                {formatCurrencyFromCents(estimatedPayoutCents)}
+                              </div>
+                            </>
+                          )}
+                        </div>
+                        <div className="md:col-span-1 flex md:justify-end">
                           <Button
                             type="button"
                             variant="outline"
                             size="icon"
                             className="shrink-0"
                             disabled={milestoneRows.length <= 1}
-                            onClick={() =>
-                              setMilestoneRows((prev) =>
-                                prev.filter((r) => r.id !== row.id),
-                              )
-                            }
+                            onClick={() => {
+                              const updatedRows = milestoneRows.filter(
+                                (r) => r.id !== row.id,
+                              );
+                              setMilestoneRows(updatedRows);
+                              updateMilestoneRowsWithValidation(updatedRows);
+                            }}
                             aria-label={`Remove milestone ${idx + 1}`}
                           >
                             <Trash className="h-4 w-4" />
                           </Button>
                         </div>
                       </div>
-                    ))}
+                    );
+                    })}
+                    {milestoneSequenceError && (
+                      <Alert variant="destructive">
+                        <AlertDescription>{milestoneSequenceError}</AlertDescription>
+                      </Alert>
+                    )}
                     <Button
                       type="button"
                       variant="outline"
                       size="sm"
-                      onClick={() =>
-                        setMilestoneRows((prev) => [
-                          ...prev,
-                          createEmptyMilestoneRow(),
-                        ])
-                      }
+                      disabled={!canAddNextMilestone(milestoneRows)}
+                      onClick={handleAddMilestoneRow}
                     >
                       Add milestone
                     </Button>

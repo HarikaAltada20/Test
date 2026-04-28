@@ -10,6 +10,7 @@ export type MilestoneBudgetSubmission = {
   views?: number | null;
   bonus_paid?: boolean | null;
   bonus_amount?: number | null;
+  milestone_bonus_paid?: any;
   metadata?: any;
 };
 
@@ -197,7 +198,8 @@ export function buildMilestoneMostVerifiedBonusByCreatorMap(
     if (sub.bonus_paid === true) {
       agg.totalPaidBonusCents += Number(sub.bonus_amount || 0);
     }
-    const milestoneBonusPaid = sub?.metadata?.milestone_bonus_paid;
+    const milestoneBonusPaid =
+      sub?.milestone_bonus_paid ?? sub?.metadata?.milestone_bonus_paid;
     if (milestoneBonusPaid && typeof milestoneBonusPaid === "object") {
       agg.viewsPaidCentsFromMetadata += Number(milestoneBonusPaid.views || 0);
       agg.reelsPaidCentsFromMetadata += Number(milestoneBonusPaid.reels || 0);

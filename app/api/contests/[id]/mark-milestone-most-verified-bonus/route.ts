@@ -92,7 +92,7 @@ export async function POST(
     const { data: subs, error: subsError } = await supabaseAdmin
       .from("submissions")
       .select(
-        "id, creator_id, status, views, created_at, bonus_paid, bonus_amount, metadata",
+        "id, creator_id, status, views, created_at, bonus_paid, bonus_amount, milestone_bonus_paid, metadata",
       )
       .eq("contest_id", contestId);
 
@@ -243,11 +243,19 @@ export async function POST(
       target?.metadata && typeof target.metadata === "object"
         ? { ...target.metadata }
         : {};
-    const prevTrackPaidRaw =
+    // Prefer the first-class column; fall back to legacy metadata during rollout.
+    const prevTrackPaidRawFromColumn =
+      (target as any)?.milestone_bonus_paid &&
+      typeof (target as any).milestone_bonus_paid === "object"
+        ? (target as any).milestone_bonus_paid
+        : null;
+    const prevTrackPaidRawFromMeta =
       prevMeta?.milestone_bonus_paid &&
       typeof prevMeta.milestone_bonus_paid === "object"
         ? prevMeta.milestone_bonus_paid
-        : {};
+        : null;
+    const prevTrackPaidRaw =
+      prevTrackPaidRawFromColumn || prevTrackPaidRawFromMeta || {};
     const prevTrackPaid = {
       views: Number(prevTrackPaidRaw?.views || 0),
       reels: Number(prevTrackPaidRaw?.reels || 0),
@@ -263,16 +271,19 @@ export async function POST(
             reels: prevTrackPaid.reels + creditCents,
           };
 
+    // Remove the legacy key from metadata (the column is the source of truth now).
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { milestone_bonus_paid: _legacyMilestoneBonusPaid, ...metaWithoutLegacy } =
+      prevMeta || {};
+
     const { error: updErr } = await supabaseAdmin
       .from("submissions")
       .update({
         bonus_paid: true,
         bonus_paid_at: new Date().toISOString(),
         bonus_amount: prevAmount + creditCents,
-        metadata: {
-          ...prevMeta,
-          milestone_bonus_paid: nextTrackPaid,
-        },
+        milestone_bonus_paid: nextTrackPaid,
+        metadata: metaWithoutLegacy,
       })
       .eq("id", target.id);
 
