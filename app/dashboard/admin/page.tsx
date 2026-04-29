@@ -449,6 +449,14 @@ export default async function AdminDashboardPage({
       if (c.contest_type === "cpm" && details?.cpm_contest?.total_budget) {
         return sum + (details.cpm_contest.total_budget || 0);
       }
+      if (c.contest_type === "milestone") {
+        return (
+          sum +
+          (Number(details?.milestone_contest?.total_budget_cents) ||
+            Number(details?.milestone_contest?.total_budget) ||
+            0)
+        );
+      }
       return sum;
     }, 0);
 
@@ -464,6 +472,14 @@ export default async function AdminDashboardPage({
       }
       if (c.contest_type === "cpm" && details?.cpm_contest?.total_budget) {
         return sum + (details.cpm_contest.total_budget || 0);
+      }
+      if (c.contest_type === "milestone") {
+        return (
+          sum +
+          (Number(details?.milestone_contest?.total_budget_cents) ||
+            Number(details?.milestone_contest?.total_budget) ||
+            0)
+        );
       }
       return sum;
     }, 0);
@@ -506,6 +522,11 @@ export default async function AdminDashboardPage({
         details?.cpm_contest?.total_budget
       ) {
         base = details.cpm_contest.total_budget || 0;
+      } else if (c.contest_type === "milestone") {
+        base =
+          Number(details?.milestone_contest?.total_budget_cents) ||
+          Number(details?.milestone_contest?.total_budget) ||
+          0;
       }
       const pd = parsePayment(c.payment_details);
       if (pd) {
