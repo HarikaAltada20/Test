@@ -93,6 +93,34 @@ async function getLeaderboardGroupedByCreator(
 
   const usersMap = new Map(usersData?.map((u) => [u.id, u]) || []);
   const profilesMap = new Map(creatorProfilesData?.map((p) => [p.id, p]) || []);
+  const creatorBonusPaidTotalMap = new Map<string, number>();
+  const { data: creatorBonusRows, error: creatorBonusError } = await supabase
+    .from("submissions")
+    .select("creator_id, bonus_paid, bonus_paid_at, bonus_amount")
+    .eq("contest_id", contestId)
+    .in("creator_id", creatorIds);
+
+  if (creatorBonusError) {
+    console.error(
+      "Error fetching creator bonus paid totals for creator-wise:",
+      creatorBonusError,
+    );
+  } else {
+    for (const row of creatorBonusRows || []) {
+      const explicitBonusAmount = (row as any)?.bonus_amount;
+      const hasBonusPaid =
+        (row as any)?.bonus_paid === true ||
+        Boolean((row as any)?.bonus_paid_at) ||
+        (explicitBonusAmount != null && Number(explicitBonusAmount) > 0);
+      if (!hasBonusPaid) continue;
+      const current = creatorBonusPaidTotalMap.get((row as any).creator_id) || 0;
+      const amount =
+        explicitBonusAmount != null && Number(explicitBonusAmount) > 0
+          ? Number(explicitBonusAmount)
+          : 0;
+      creatorBonusPaidTotalMap.set((row as any).creator_id, current + amount);
+    }
+  }
 
   const leaderboard = pageCreators.map((agg, index) => {
     const userProfile = usersMap.get(agg.creator_id) || null;
@@ -114,6 +142,8 @@ async function getLeaderboardGroupedByCreator(
       best_rank,
       submission_ranks: agg.submission_ranks,
       has_paid_submission: agg.has_paid_submission,
+      creator_bonus_paid_total:
+        creatorBonusPaidTotalMap.get(agg.creator_id) ?? 0,
       submissions: [],
     };
   });

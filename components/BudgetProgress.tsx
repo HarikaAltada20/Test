@@ -1,5 +1,6 @@
 "use client";
 
+import { calculateMilestoneBudgetSpent } from "@/lib/contest-utils-client";
 import { cn } from "@/lib/utils";
 import { useEffect, useMemo, useState } from "react";
 
@@ -22,6 +23,12 @@ interface BudgetProgressProps {
   submissions: Submission[];
   showDetailed?: boolean; // Toggle between simple and detailed view
   creatorManualPointsAdjustments?: Record<string, number>;
+  /** Cents — same sum as creator-wise milestone "expected" (per-submission model). When set, overrides aggregate milestone spend. */
+  milestoneExpectedPayoutCents?: number | null;
+  /** Cents — creator bonus pools (views + reels) expected, aligned with creator-wise columns */
+  milestoneCreatorBonusExpectedCents?: number | null;
+  /** Cents — creator bonus actually marked paid on submissions (subset of expected) */
+  milestoneCreatorBonusPaidCents?: number | null;
 }
 
 export function BudgetProgress({
@@ -29,6 +36,9 @@ export function BudgetProgress({
   submissions,
   showDetailed = true,
   creatorManualPointsAdjustments,
+  milestoneExpectedPayoutCents = null,
+  milestoneCreatorBonusExpectedCents = null,
+  milestoneCreatorBonusPaidCents = null,
 }: BudgetProgressProps) {
   const [mode, setMode] = useState<"light" | "dark">("light");
   // Get contest config outside useMemo so it's available in the component
@@ -43,7 +53,23 @@ export function BudgetProgress({
 
   const flatFeeBonus =
     cpmConfig?.flat_fee_bonus || leaderboardConfig?.flat_fee_bonus || 0;
-  const hasFlatFeeBonus = flatFeeBonus > 0;
+  const milestoneContestConfig =
+    contest.contest_type === "milestone"
+      ? (contest.contest_based_details as any)?.milestone_contest
+      : null;
+  const milestoneCreatorBonusConfigured = Boolean(
+    milestoneContestConfig?.bonus?.enabled &&
+      (milestoneContestConfig?.bonus?.most_verified_views ||
+        milestoneContestConfig?.bonus?.most_verified_reels),
+  );
+  const hasFlatFeeBonus =
+    flatFeeBonus > 0 ||
+    (contest.contest_type === "milestone" &&
+      (milestoneCreatorBonusConfigured ||
+        (typeof milestoneCreatorBonusExpectedCents === "number" &&
+          milestoneCreatorBonusExpectedCents > 0) ||
+        (typeof milestoneCreatorBonusPaidCents === "number" &&
+          milestoneCreatorBonusPaidCents > 0)));
 
   const {
     cpmPaid,
@@ -59,7 +85,7 @@ export function BudgetProgress({
     bonusSpent,
     totalSpent,
   } = useMemo(() => {
-    // Use total_budget from the contest object (works for both CPM and Leaderboard)
+    // Use total_budget from the contest object (works for CPM, Leaderboard, and Milestone)
     const totalBudget = contest.total_budget || 0;
 
     const prizePoolTotal =
@@ -91,6 +117,92 @@ export function BudgetProgress({
         ? s.is_eligible === false ||
           (s.deleted_at != null && s.deleted_at !== "")
         : false;
+
+    if (contest.contest_type === "milestone") {
+      const milestoneContest = (contest.contest_based_details as any)
+        ?.milestone_contest;
+      const milestones = milestoneContest?.milestones || [];
+      const normalizeMilestoneStatus = (raw: unknown) => {
+        const st = String(raw || "").toLowerCase();
+        return st === "approved" ? "verified" : st;
+      };
+      const subsForMilestone = submissions.map((s) => ({
+        ...(s as object),
+        status: normalizeMilestoneStatus((s as any).status),
+      }));
+
+      const milestoneDollars =
+        milestones.length > 0
+          ? calculateMilestoneBudgetSpent(subsForMilestone as any, milestones)
+          : 0;
+      const aggregateMilestoneCents = Math.round(milestoneDollars * 100);
+
+      const useDetailMilestone =
+        typeof milestoneExpectedPayoutCents === "number" &&
+        !Number.isNaN(milestoneExpectedPayoutCents) &&
+        milestoneExpectedPayoutCents >= 0;
+      const cpmPaid = useDetailMilestone
+        ? Math.round(milestoneExpectedPayoutCents)
+        : aggregateMilestoneCents;
+
+      let bonusPaidFromSubmissions = 0;
+      for (const s of submissions) {
+        const st = normalizeMilestoneStatus((s as any).status).toLowerCase();
+        if (st !== "verified" && st !== "paid") continue;
+        if (twitterExcluded(s)) continue;
+        if ((s as any).bonus_paid && (s as any).bonus_amount != null) {
+          bonusPaidFromSubmissions += Number((s as any).bonus_amount) || 0;
+        }
+      }
+
+      const useDetailBonusExpected =
+        typeof milestoneCreatorBonusExpectedCents === "number" &&
+        !Number.isNaN(milestoneCreatorBonusExpectedCents) &&
+        milestoneCreatorBonusExpectedCents >= 0;
+      const bonusExpectedCents = useDetailBonusExpected
+        ? Math.round(milestoneCreatorBonusExpectedCents)
+        : 0;
+
+      const useDetailBonusPaidMap =
+        typeof milestoneCreatorBonusPaidCents === "number" &&
+        !Number.isNaN(milestoneCreatorBonusPaidCents) &&
+        milestoneCreatorBonusPaidCents >= 0;
+      const bonusPaidFromMap = useDetailBonusPaidMap
+        ? Math.round(milestoneCreatorBonusPaidCents)
+        : null;
+
+      const bonusPaidCents = useDetailBonusExpected
+        ? bonusExpectedCents
+        : bonusPaidFromMap !== null && bonusPaidFromMap > 0
+          ? bonusPaidFromMap
+          : bonusPaidFromSubmissions;
+
+      const totalSpent = cpmPaid + bonusPaidCents;
+      const cpmPercentage =
+        totalBudget > 0 ? Math.min((cpmPaid / totalBudget) * 100, 100) : 0;
+      const bonusPercentage = 0;
+      const bonusPercentageOfTotal =
+        totalBudget > 0
+          ? Math.min((bonusPaidCents / totalBudget) * 100, 100)
+          : 0;
+      const totalPercentage =
+        totalBudget > 0 ? Math.min((totalSpent / totalBudget) * 100, 100) : 0;
+
+      return {
+        cpmPaid,
+        bonusPaid: bonusPaidCents,
+        totalBudget,
+        cpmPercentage,
+        bonusPercentage,
+        bonusPercentageOfTotal,
+        totalPercentage,
+        prizePoolSpent: 0,
+        prizePoolTotal: 0,
+        bonusBudget: 0,
+        bonusSpent: bonusPaidCents,
+        totalSpent,
+      };
+    }
 
     const relevantSubmissions = submissions.filter((s) => {
       const status = (s as any).status?.toLowerCase();
@@ -319,7 +431,14 @@ export function BudgetProgress({
       bonusSpent: bonusPaid,
       totalSpent,
     };
-  }, [contest, submissions, creatorManualPointsAdjustments]);
+  }, [
+    contest,
+    submissions,
+    creatorManualPointsAdjustments,
+    milestoneExpectedPayoutCents,
+    milestoneCreatorBonusExpectedCents,
+    milestoneCreatorBonusPaidCents,
+  ]);
 
   const formatCurrency = (cents: number) => {
     return `$${(cents / 100).toFixed(2)}`;
@@ -328,10 +447,11 @@ export function BudgetProgress({
   const remaining = Math.max(0, totalBudget - totalSpent);
   const isNearLimit = totalPercentage >= 80;
 
-  // Only show for CPM and leaderboard contests
+  // Only show for CPM, leaderboard, and milestone contests
   if (
     contest.contest_type !== "cpm" &&
-    contest.contest_type !== "leaderboard"
+    contest.contest_type !== "leaderboard" &&
+    contest.contest_type !== "milestone"
   ) {
     return null;
   }
@@ -522,20 +642,30 @@ export function BudgetProgress({
         )}
         title={
           hasFlatFeeBonus && bonusPaid > 0
-            ? `${
-                contest.contest_type === "cpm" ? "CPM" : "Contest"
-              } Earnings: ${formatCurrency(
-                cpmPaid
-              )} | Flat Fee Bonus: ${formatCurrency(bonusPaid)}${
-                contest.contest_type === "cpm" && bonusBudget && bonusBudget > 0
-                  ? ` / ${formatCurrency(bonusBudget)} cap`
-                  : ""
-              } | Total: ${formatCurrency(totalSpent)}`
-            : `Total ${
-                contest.contest_type === "cpm"
-                  ? "CPM earnings (based on platform)"
-                  : "contest earnings"
-              }: ${formatCurrency(cpmPaid)}`
+            ? contest.contest_type === "milestone"
+              ? `Milestone payouts (expected): ${formatCurrency(
+                  cpmPaid,
+                )} | Creator bonus: ${formatCurrency(
+                  bonusPaid,
+                )} | Total: ${formatCurrency(totalSpent)}`
+              : `${
+                  contest.contest_type === "cpm" ? "CPM" : "Contest"
+                } Earnings: ${formatCurrency(
+                  cpmPaid,
+                )} | Flat Fee Bonus: ${formatCurrency(bonusPaid)}${
+                  contest.contest_type === "cpm" &&
+                  bonusBudget &&
+                  bonusBudget > 0
+                    ? ` / ${formatCurrency(bonusBudget)} cap`
+                    : ""
+                } | Total: ${formatCurrency(totalSpent)}`
+            : contest.contest_type === "milestone"
+              ? `Milestone payouts (expected): ${formatCurrency(cpmPaid)}`
+              : `Total ${
+                  contest.contest_type === "cpm"
+                    ? "CPM earnings (based on platform)"
+                    : "contest earnings"
+                }: ${formatCurrency(cpmPaid)}`
         }
       >
         {/* CPM/Leaderboard earnings portion */}
@@ -575,7 +705,9 @@ export function BudgetProgress({
             >
               {contest.contest_type === "cpm"
                 ? "CPM Earnings"
-                : "Contest Earnings"}
+                : contest.contest_type === "milestone"
+                  ? "Milestone payouts"
+                  : "Contest Earnings"}
             </p>
             <p
               className={cn(
@@ -597,7 +729,9 @@ export function BudgetProgress({
                   isDark ? "text-gray-300" : "text-gray-700"
                 )}
               >
-                Flat Fee Bonus
+                {contest.contest_type === "milestone"
+                  ? "Creator bonus"
+                  : "Flat Fee Bonus"}
               </p>
               <p
                 className={cn(

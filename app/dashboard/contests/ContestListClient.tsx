@@ -96,6 +96,10 @@ type Contest = {
       max_views?: number;
       flat_fee_bonus?: number;
     };
+    milestone_contest?: {
+      total_budget_cents?: number;
+      budget_spent?: number;
+    };
     twitter_campaign?: {
       campaign_type?: "raid" | "awareness";
       keywords?: string[];
@@ -319,6 +323,52 @@ const getBudgetTrackerValues = (
   const remaining = Math.max(totalBudget - clampedSpent, 0);
 
   return { spent: clampedSpent, percentage, remaining };
+};
+
+const getContestTypeLabel = (contestType: string | null | undefined) => {
+  if (contestType === "cpm") return "CPM Based";
+  if (contestType === "leaderboard") return "Leaderboard";
+  if (contestType === "milestone") return "Milestone";
+  if (!contestType) return "N/A";
+  return contestType.charAt(0).toUpperCase() + contestType.slice(1);
+};
+
+const getContestValueForSort = (contest: Contest): number => {
+  if (
+    contest.contest_type === "leaderboard" &&
+    contest.contest_based_details?.leaderboard_contest?.total_prize
+  ) {
+    return contest.contest_based_details.leaderboard_contest.total_prize;
+  }
+  if (
+    contest.contest_type === "cpm" &&
+    contest.contest_based_details?.cpm_contest?.total_budget
+  ) {
+    return contest.contest_based_details.cpm_contest.total_budget;
+  }
+  if (
+    contest.contest_type === "milestone" &&
+    contest.contest_based_details?.milestone_contest?.total_budget_cents
+  ) {
+    return contest.contest_based_details.milestone_contest.total_budget_cents;
+  }
+  return 0;
+};
+
+const getContestPrimaryFinancialText = (contest: Contest): string => {
+  if (contest.contest_type === "leaderboard") {
+    return `Prize: ${formatMoney(
+      contest.contest_based_details?.leaderboard_contest?.total_prize || 0,
+    )}`;
+  }
+  if (contest.contest_type === "milestone") {
+    return `Budget: ${formatMoney(
+      contest.contest_based_details?.milestone_contest?.total_budget_cents || 0,
+    )}`;
+  }
+  return `Budget: ${formatMoney(
+    contest.contest_based_details?.cpm_contest?.total_budget || 0,
+  )}`;
 };
 
 export function ContestListClient({
@@ -932,30 +982,8 @@ export function ContestListClient({
           );
         case "value_desc":
         case "value_asc":
-          let valueA = 0;
-          let valueB = 0;
-          if (
-            a.contest_type === "leaderboard" &&
-            a.contest_based_details?.leaderboard_contest?.total_prize
-          ) {
-            valueA = a.contest_based_details.leaderboard_contest.total_prize;
-          } else if (
-            a.contest_type === "cpm" &&
-            a.contest_based_details?.cpm_contest?.total_budget
-          ) {
-            valueA = a.contest_based_details.cpm_contest.total_budget;
-          }
-          if (
-            b.contest_type === "leaderboard" &&
-            b.contest_based_details?.leaderboard_contest?.total_prize
-          ) {
-            valueB = b.contest_based_details.leaderboard_contest.total_prize;
-          } else if (
-            b.contest_type === "cpm" &&
-            b.contest_based_details?.cpm_contest?.total_budget
-          ) {
-            valueB = b.contest_based_details.cpm_contest.total_budget;
-          }
+          const valueA = getContestValueForSort(a);
+          const valueB = getContestValueForSort(b);
           return sortOption === "value_desc"
             ? valueB - valueA
             : valueA - valueB;
@@ -1323,14 +1351,7 @@ export function ContestListClient({
                 <span>
                   Contest Type:{" "}
                   <span className="font-medium">
-                    {contest.contest_type === "cpm"
-                      ? "CPM Based"
-                      : contest.contest_type === "leaderboard"
-                        ? "Leaderboard"
-                        : contest.contest_type
-                          ? contest.contest_type.charAt(0).toUpperCase() +
-                            contest.contest_type.slice(1)
-                          : "N/A"}
+                    {getContestTypeLabel(contest.contest_type)}
                   </span>
                 </span>
               </div>
@@ -1405,6 +1426,24 @@ export function ContestListClient({
                         {formatMoney(
                           contest.contest_based_details.leaderboard_contest
                             .total_budget,
+                        )}
+                      </span>
+                    </span>
+                  </div>
+                )}
+              {contest.contest_type === "milestone" &&
+                contest.contest_based_details?.milestone_contest
+                  ?.total_budget_cents != null &&
+                contest.contest_based_details.milestone_contest
+                  .total_budget_cents > 0 && (
+                  <div className="flex items-center">
+                    <DollarSign className="h-4 w-4 mr-2 flex-shrink-0 text-blue-600" />
+                    <span>
+                      Total Budget:{" "}
+                      <span className="font-medium text-blue-700 dark:text-blue-300">
+                        {formatMoney(
+                          contest.contest_based_details.milestone_contest
+                            .total_budget_cents,
                         )}
                       </span>
                     </span>
@@ -1525,6 +1564,61 @@ export function ContestListClient({
                   </div>
                 );
               })()}
+            {/* Budget Tracker for Milestone contests — budget_spent is enriched server-side
+                (per-submission milestone model + verified-only ladder + creator bonus expected),
+                same basis as contest detail / opportunities. */}
+            {contest.contest_type === "milestone" &&
+              contest.contest_based_details?.milestone_contest
+                ?.total_budget_cents != null &&
+              contest.contest_based_details.milestone_contest.total_budget_cents >
+                0 &&
+              (() => {
+                const totalBudget =
+                  contest.contest_based_details.milestone_contest
+                    .total_budget_cents;
+                const budgetSpent =
+                  contest.contest_based_details.milestone_contest.budget_spent ||
+                  0;
+                const tracker = getBudgetTrackerValues(totalBudget, budgetSpent);
+
+                return (
+                  <div className="mt-3 mb-3">
+                    <div
+                      className="flex justify-between text-sm mb-2"
+                      style={{
+                        color: isDark ? "#cbd5e1" : "#475569",
+                        transition: "none",
+                      }}
+                    >
+                      <span className="font-medium">Budget Tracker</span>
+                      <span className="font-semibold">
+                        {formatMoney(tracker.spent)} / {formatMoney(totalBudget)}
+                      </span>
+                    </div>
+                    <div
+                      className="relative w-full bg-slate-200 dark:bg-slate-700 rounded-full h-3 overflow-hidden"
+                      title={`Milestone Budget Spent: ${formatMoney(
+                        tracker.spent,
+                      )}`}
+                    >
+                      <div
+                        className="absolute h-full bg-gradient-to-r from-purple-500 to-purple-600 rounded-full transition-all duration-500 ease-out"
+                        style={{ width: `${tracker.percentage}%` }}
+                      ></div>
+                    </div>
+                    <div
+                      className="flex justify-between text-xs mt-1.5"
+                      style={{
+                        color: isDark ? "#94a3b8" : "#64748b",
+                        transition: "none",
+                      }}
+                    >
+                      <span>{tracker.percentage.toFixed(1)}% used</span>
+                      <span>{formatMoney(tracker.remaining)} remaining</span>
+                    </div>
+                  </div>
+                );
+              })()}
 
             <button
               className={cn(
@@ -1613,7 +1707,7 @@ export function ContestListClient({
                 variant="outline"
                 className="text-sm  bg-[#7F39EC] text-white py-1 capitalize"
               >
-                {contest.contest_type || "Type"}
+                {getContestTypeLabel(contest.contest_type)}
               </Badge>
             </div>
 
@@ -1678,17 +1772,7 @@ export function ContestListClient({
               {contest.contest_based_details && (
                 <div className="flex items-center gap-1">
                   <DollarSign className="h-3 w-3" />
-                  <span>
-                    {contest.contest_type === "leaderboard"
-                      ? `Prize: ${formatMoney(
-                          contest.contest_based_details.leaderboard_contest
-                            ?.total_prize || 0,
-                        )}`
-                      : `Budget: ${formatMoney(
-                          contest.contest_based_details.cpm_contest
-                            ?.total_budget || 0,
-                        )}`}
-                  </span>
+                  <span>{getContestPrimaryFinancialText(contest)}</span>
                 </div>
               )}
               {contest.moderation_status === "rejected" &&
@@ -2140,14 +2224,7 @@ export function ContestListClient({
                   >
                     Contest Type:{" "}
                     <span className="font-medium">
-                      {contest.contest_type === "cpm"
-                        ? "CPM Based"
-                        : contest.contest_type === "leaderboard"
-                          ? "Leaderboard"
-                          : contest.contest_type
-                            ? contest.contest_type.charAt(0).toUpperCase() +
-                              contest.contest_type.slice(1)
-                            : "N/A"}
+                      {getContestTypeLabel(contest.contest_type)}
                     </span>
                   </span>
                 </div>
@@ -2220,6 +2297,29 @@ export function ContestListClient({
                           {formatMoney(
                             contest.contest_based_details.leaderboard_contest
                               .total_prize,
+                          )}
+                        </span>
+                      </span>
+                    </div>
+                  )}
+                {contest.contest_type === "milestone" &&
+                  contest.contest_based_details?.milestone_contest
+                    ?.total_budget_cents != null &&
+                  contest.contest_based_details.milestone_contest
+                    .total_budget_cents > 0 && (
+                    <div className="flex items-center">
+                      <DollarSign className="h-4 w-4 mr-2 flex-shrink-0 text-blue-600" />
+                      <span
+                        style={{
+                          color: isDark ? "white" : "#475569",
+                          transition: "none",
+                        }}
+                      >
+                        Total Budget:{" "}
+                        <span className="font-medium text-blue-700 dark:text-blue-300">
+                          {formatMoney(
+                            contest.contest_based_details.milestone_contest
+                              .total_budget_cents,
                           )}
                         </span>
                       </span>
@@ -2334,6 +2434,54 @@ export function ContestListClient({
                     </div>
                   );
                 })()}
+              {/* Milestone budget_spent: server-enriched, same model as contest detail */}
+              {contest.contest_type === "milestone" &&
+                contest.contest_based_details?.milestone_contest
+                  ?.total_budget_cents != null &&
+                contest.contest_based_details.milestone_contest
+                  .total_budget_cents > 0 &&
+                (() => {
+                  const totalBudget =
+                    contest.contest_based_details.milestone_contest
+                      .total_budget_cents;
+                  const budgetSpent =
+                    contest.contest_based_details.milestone_contest
+                      .budget_spent || 0;
+                  const tracker = getBudgetTrackerValues(totalBudget, budgetSpent);
+
+                  return (
+                    <div className="mt-3">
+                      <div
+                        className="flex justify-between text-sm mb-2"
+                        style={{
+                          color: isDark ? "#cbd5e1" : "#475569",
+                          transition: "none",
+                        }}
+                      >
+                        <span className="font-medium"> Budget Tracker</span>
+                        <span className="font-semibold">
+                          {formatMoney(tracker.spent)} / {formatMoney(totalBudget)}
+                        </span>
+                      </div>
+                      <div className="relative w-full bg-slate-200 dark:bg-slate-700 rounded-full h-3 overflow-hidden">
+                        <div
+                          className="absolute h-full bg-gradient-to-r from-blue-500 to-cyan-600 rounded-full transition-all duration-500 ease-out"
+                          style={{ width: `${tracker.percentage}%` }}
+                        ></div>
+                      </div>
+                      <div
+                        className="flex justify-between text-xs mt-1.5"
+                        style={{
+                          color: isDark ? "#94a3b8" : "#64748b",
+                          transition: "none",
+                        }}
+                      >
+                        <span>{tracker.percentage.toFixed(1)}% used</span>
+                        <span>{formatMoney(tracker.remaining)} remaining</span>
+                      </div>
+                    </div>
+                  );
+                })()}
             </CardContent>
           </div>
 
@@ -2425,7 +2573,7 @@ export function ContestListClient({
               variant="outline"
               className="text-sm bg-[#7F39EC] text-white py-1 capitalize"
             >
-              {contest.contest_type || "Type"}
+              {getContestTypeLabel(contest.contest_type)}
             </Badge>
           </div>
 
@@ -2490,17 +2638,7 @@ export function ContestListClient({
             {contest.contest_based_details && (
               <div className="flex items-center gap-1 text-base">
                 <DollarSign className="h-3 w-3" />
-                <span>
-                  {contest.contest_type === "leaderboard"
-                    ? `Prize: ${formatMoney(
-                        contest.contest_based_details.leaderboard_contest
-                          ?.total_prize || 0,
-                      )}`
-                    : `Budget: ${formatMoney(
-                        contest.contest_based_details.cpm_contest
-                          ?.total_budget || 0,
-                      )}`}
-                </span>
+                <span>{getContestPrimaryFinancialText(contest)}</span>
               </div>
             )}
             {contest.rejection_reason && (
@@ -3384,6 +3522,9 @@ export function ContestListClient({
                   </SelectItem>
                   <SelectItem isDark={isDark} value="cpm">
                     CPM
+                  </SelectItem>
+                  <SelectItem isDark={isDark} value="milestone">
+                    Milestone
                   </SelectItem>
                 </SelectContent>
               </Select>

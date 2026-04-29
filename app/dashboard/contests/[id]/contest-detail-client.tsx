@@ -24,6 +24,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
   EnhancedTabs as Tabs,
   EnhancedTabsContent as TabsContent,
@@ -87,6 +88,10 @@ import ManualPointsModal from "@/components/ManualPointsModal";
 import { CreatorSubmissionsModal } from "@/components/CreatorSubmissionsModal";
 import { InstagramCreatorAnalyticsModal } from "@/components/contest/InstagramCreatorAnalyticsModal";
 import { BudgetProgress } from "@/components/BudgetProgress";
+import {
+  buildMilestoneMostVerifiedBonusByCreatorMap,
+  type MilestoneMostVerifiedBonusPaidByCreator,
+} from "@/lib/milestone-contest-expected-spend";
 import { YouTubeAnalyticsPanel } from "@/components/youtube/YouTubeAnalyticsPanel";
 import { YT_ANALYTICS_DEFAULT_WINDOW_DAYS } from "@/lib/youtube-constants";
 import { PaginationControls } from "@/components/ui/pagination-controls";
@@ -227,7 +232,7 @@ interface Contest {
     | "verification_complete"
     | "payouts_processed"
     | null;
-  contest_type?: "leaderboard" | "cpm" | null;
+  contest_type?: "leaderboard" | "cpm" | "milestone" | null;
   thumbnail_url?: string | null;
   brief_html?: string | null;
   platform?: string | null;
@@ -416,6 +421,7 @@ interface ContestDetailClientProps {
       paid_rank?: number | null;
     }
   >;
+  milestoneBonusPaidByCreator?: MilestoneMostVerifiedBonusPaidByCreator;
 }
 
 const sanitizeTwitterList = (value: unknown): string[] => {
@@ -423,6 +429,14 @@ const sanitizeTwitterList = (value: unknown): string[] => {
   return value.filter(
     (item): item is string => typeof item === "string" && item.trim() !== "",
   );
+};
+
+const extractMilestoneOrderFromLabel = (label: string): number | null => {
+  // Example label: "Milestone 2 • 10,000 views • $5.00"
+  const match = label.match(/Milestone\s+(\d+)/i);
+  if (!match) return null;
+  const n = Number(match[1]);
+  return Number.isFinite(n) ? n : null;
 };
 
 /** Per-tweet points for ranking / prizes — matches table "Total Points" when `points` is unset (base + manual). */
@@ -726,6 +740,7 @@ export default function ContestDetailClient({
   isAdminView = false,
   user,
   creatorModerationData = {},
+  milestoneBonusPaidByCreator = {},
 }: ContestDetailClientProps) {
   const supabase = createClient();
   const { toast, toasts } = useToast();
@@ -1218,6 +1233,8 @@ export default function ContestDetailClient({
   const [igAnalyticsCreatorLabel, setIgAnalyticsCreatorLabel] = useState("");
   const [igAnalyticsLoadingCreatorId, setIgAnalyticsLoadingCreatorId] =
     useState<string | null>(null);
+  const [markingMilestoneVerifiedBonus, setMarkingMilestoneVerifiedBonus] =
+    useState<Record<string, "views" | "reels" | undefined>>({});
   const clearIgAnalyticsButtonLoading = useCallback(() => {
     setIgAnalyticsLoadingCreatorId(null);
   }, []);
@@ -1399,6 +1416,115 @@ export default function ContestDetailClient({
     (currentPage - 1) * itemsPerPage,
     currentPage * itemsPerPage,
   );
+
+  const milestonePayoutEligibleSubmissions = useMemo(() => {
+    return (currentSubmissions || []).map((submission) => {
+      const rawStatus = (submission.status || "pending").toLowerCase();
+      const normalizedStatus =
+        rawStatus === "approved" ? "verified" : rawStatus;
+      const metrics = extractPlatformMetrics(submission);
+      const views = Number(metrics?.views ?? submission.views ?? 0);
+
+      return {
+        id: submission.id,
+        creator_id: submission.creator_id || null,
+        created_at: submission.created_at,
+        status: normalizedStatus,
+        deleted_at: submission.deleted_at,
+        views: Number.isFinite(views) ? views : 0,
+      };
+    });
+  }, [currentSubmissions]);
+
+  const milestoneSubmissionAssignments = useMemo<{
+    payoutMap: Map<string, number>;
+    labelMap: Map<string, string>;
+    winnerCountsByMilestone: Map<number, number>;
+  }>(() => {
+    if (currentContest?.contest_type !== "milestone") {
+      return {
+        payoutMap: new Map<string, number>(),
+        labelMap: new Map<string, string>(),
+        winnerCountsByMilestone: new Map<number, number>(),
+      };
+    }
+    const milestones =
+      currentContest?.contest_based_details?.milestone_contest?.milestones;
+    if (!Array.isArray(milestones) || milestones.length === 0) {
+      return {
+        payoutMap: new Map<string, number>(),
+        labelMap: new Map<string, string>(),
+        winnerCountsByMilestone: new Map<number, number>(),
+      };
+    }
+    const sortedMilestones = [...milestones].sort(
+      (a: any, b: any) => (b.target_views || 0) - (a.target_views || 0),
+    );
+    const winnerCountsByMilestone = new Map<number, number>();
+    const submissionPayoutMap = new Map<string, number>();
+    const submissionMilestoneLabelMap = new Map<string, string>();
+
+    const eligible = milestonePayoutEligibleSubmissions
+      .filter(
+        (submission: any) =>
+          (submission.status === "pending" ||
+            submission.status === "verified" ||
+            submission.status === "paid") &&
+          submission.deleted_at == null,
+      )
+      .sort((a: any, b: any) => {
+        const at = new Date(a.created_at || 0).getTime();
+        const bt = new Date(b.created_at || 0).getTime();
+        return at - bt;
+      });
+
+    eligible.forEach((submission: any) => {
+      let payoutCents = 0;
+      let milestoneLabel = "—";
+      const submissionViews = Number(submission.views || 0);
+
+      for (const milestone of sortedMilestones) {
+        const targetViews = Number(milestone.target_views || 0);
+        if (submissionViews < targetViews) continue;
+
+        if (milestone.winner_limit != null) {
+          const currentWinners = winnerCountsByMilestone.get(targetViews) || 0;
+          if (currentWinners >= milestone.winner_limit) {
+            continue;
+          }
+          winnerCountsByMilestone.set(targetViews, currentWinners + 1);
+        }
+
+        payoutCents = Number(milestone.payout_cents || 0);
+        const milestoneOrder = Number(milestone.order);
+        const hasMilestoneOrder =
+          Number.isFinite(milestoneOrder) && milestoneOrder > 0;
+        const targetLabel = `${targetViews.toLocaleString()} views`;
+        const payoutLabel = `$${(payoutCents / 100).toFixed(2)}`;
+        milestoneLabel = hasMilestoneOrder
+          ? `Milestone ${milestoneOrder} • ${targetLabel} • ${payoutLabel}`
+          : `Milestone • ${targetLabel} • ${payoutLabel}`;
+        break;
+      }
+
+      submissionPayoutMap.set(submission.id, payoutCents);
+      submissionMilestoneLabelMap.set(submission.id, milestoneLabel);
+    });
+
+    return {
+      payoutMap: submissionPayoutMap,
+      labelMap: submissionMilestoneLabelMap,
+      winnerCountsByMilestone,
+    };
+  }, [
+    currentContest?.contest_type,
+    currentContest?.contest_based_details,
+    milestonePayoutEligibleSubmissions,
+  ]);
+  const milestoneSubmissionExpectedPayoutCents =
+    milestoneSubmissionAssignments.payoutMap;
+  const milestoneSubmissionAssignedLabelBySubmissionId =
+    milestoneSubmissionAssignments.labelMap;
 
   // Filter submissions for analytics based on active analytics tab
   // For Twitter tweets, use moderation_status; for regular submissions, use status
@@ -2059,10 +2185,10 @@ export default function ContestDetailClient({
 
       if (!isTwitterTweet) {
         // Use formula-only expected so "Expected Reward" column does not become equal to "Reward Granted" after payment
-        const submissionEarnings = calculateSubmissionExpectedEarnings(
-          submission,
-          false,
-        );
+        const submissionEarnings =
+          currentContest?.contest_type === "milestone"
+            ? (milestoneSubmissionExpectedPayoutCents.get(submission.id) ?? 0)
+            : calculateSubmissionExpectedEarnings(submission, false);
         group.earnings.expected += submissionEarnings;
         if (isSubmissionPaidForGrantedReward(submission)) {
           const storedGrantedEarnings =
@@ -2387,6 +2513,43 @@ export default function ContestDetailClient({
       }
     }
 
+    if (currentContest?.contest_type === "milestone") {
+      const milestoneDetails =
+        currentContest?.contest_based_details?.milestone_contest;
+      const milestones = milestoneDetails?.milestones || [];
+      if (milestones.length > 0) {
+        const payoutMap = milestoneSubmissionExpectedPayoutCents;
+        Object.values(grouped).forEach((group: any) => {
+          const submissions = group.submissions || [];
+          group.earnings.expected = submissions.reduce(
+            (sum: number, sub: any) => {
+              const raw = String(getStatus(sub) || "").toLowerCase();
+              const st = raw === "approved" ? "verified" : raw;
+              // Creator-wise expected should reflect projected milestone payout
+              // for active submissions as well (pending/verified/paid), matching
+              // submission-wise expected behavior.
+              if (st !== "pending" && st !== "verified" && st !== "paid")
+                return sum;
+              return sum + (payoutMap.get(sub.id) ?? 0);
+            },
+            0,
+          );
+          group.earnings.granted = submissions.reduce(
+            (sum: number, sub: any) => {
+              const isPaid =
+                (sub?.status || "").toLowerCase() === "paid" ||
+                sub?.paid === true;
+              if (!isPaid) return sum;
+              const stored = Number(sub?.earnings) || 0;
+              const fallback = payoutMap.get(sub.id) ?? 0;
+              return sum + (stored > 0 ? stored : fallback);
+            },
+            0,
+          );
+        });
+      }
+    }
+
     // Apply earnings cap per creator for expected earnings display (for non-CPM contests)
     const maxEarnings = currentContest?.max_earnings_per_creator;
     if (maxEarnings && maxEarnings > 0 && !isTwitterCpmContest) {
@@ -2404,11 +2567,15 @@ export default function ContestDetailClient({
     return Object.values(grouped);
   }, [
     filteredSubmissions,
+    currentSubmissions,
     currentContest,
     activeStatusTab,
     creatorModerationData,
     manualAdjustmentOverrides,
     getCreatorManualAdjustment,
+    milestonePayoutEligibleSubmissions,
+    milestoneSubmissionExpectedPayoutCents,
+    getStatus,
   ]);
 
   // Creator ranking for Twitter leaderboard contests (based on total points per creator)
@@ -2550,6 +2717,120 @@ export default function ContestDetailClient({
       plat === "instagram" || plat.includes("youtube");
     return !isInstagramOrYoutube;
   }, [showRejectionReasonColumn, currentContest?.platform]);
+
+  const milestoneMostVerifiedReelsConfig =
+    currentContest?.contest_type === "milestone"
+      ? (currentContest?.contest_based_details as any)?.milestone_contest?.bonus
+          ?.most_verified_reels
+      : null;
+  const milestoneMostVerifiedViewsConfig =
+    currentContest?.contest_type === "milestone"
+      ? (currentContest?.contest_based_details as any)?.milestone_contest?.bonus
+          ?.most_verified_views
+      : null;
+  const showMostVerifiedViewsBonusColumns = Boolean(
+    currentContest?.contest_type === "milestone" &&
+    (currentContest?.contest_based_details as any)?.milestone_contest?.bonus
+      ?.enabled &&
+    milestoneMostVerifiedViewsConfig,
+  );
+  const showMostVerifiedReelsCreatorColumn = Boolean(
+    currentContest?.contest_type === "milestone" &&
+    (currentContest?.contest_based_details as any)?.milestone_contest?.bonus
+      ?.enabled &&
+    milestoneMostVerifiedReelsConfig,
+  );
+  const showCreatorMilestoneVerifiedBonusActions =
+    Boolean(isAdminView) &&
+    currentContest?.contest_type === "milestone" &&
+    currentContest?.post_contest_status === "verification_complete" &&
+    (showMostVerifiedViewsBonusColumns || showMostVerifiedReelsCreatorColumn);
+
+  const milestoneReelsBonusByCreator = useMemo(() => {
+    const empty = new Map<
+      string,
+      {
+        expectedCents: number;
+        paidCents: number;
+        viewsExpectedCents: number;
+        viewsPaidCents: number;
+        verifiedReels: number;
+        minRequired: number;
+      }
+    >();
+    if (
+      !showMostVerifiedReelsCreatorColumn &&
+      !showMostVerifiedViewsBonusColumns
+    )
+      return empty;
+
+    const bonusConfig = (currentContest?.contest_based_details as any)
+      ?.milestone_contest?.bonus;
+
+    return buildMilestoneMostVerifiedBonusByCreatorMap(
+      (currentSubmissions || []).map((sub: any) => ({
+        id: sub.id,
+        creator_id: sub.creator_id,
+        created_at: sub.created_at,
+        status: getStatus(sub),
+        deleted_at: sub.deleted_at,
+        views: sub.views,
+        bonus_paid: sub.bonus_paid,
+        bonus_amount: sub.bonus_amount,
+        milestone_bonus_paid: sub.milestone_bonus_paid,
+        metadata: sub.metadata,
+      })),
+      bonusConfig,
+      milestoneBonusPaidByCreator,
+    );
+  }, [
+    currentContest,
+    currentSubmissions,
+    getStatus,
+    milestoneBonusPaidByCreator,
+    showMostVerifiedReelsCreatorColumn,
+    showMostVerifiedViewsBonusColumns,
+  ]);
+
+  /** Sum of expected milestone cents for verified/paid submissions only (pending excluded — matches budget liability) */
+  const milestoneBudgetExpectedPayoutCents = useMemo(() => {
+    if (currentContest?.contest_type !== "milestone") return 0;
+    const payoutMap = milestoneSubmissionExpectedPayoutCents;
+    let sum = 0;
+    for (const sub of currentSubmissions || []) {
+      const raw = String(getStatus(sub) || "").toLowerCase();
+      const st = raw === "approved" ? "verified" : raw;
+      if (st !== "verified" && st !== "paid") continue;
+      sum += payoutMap.get(sub.id) ?? 0;
+    }
+    return sum;
+  }, [
+    currentContest?.contest_type,
+    milestoneSubmissionExpectedPayoutCents,
+    currentSubmissions,
+    getStatus,
+  ]);
+
+  /** Creator bonus (views + reels tracks) expected / paid — same numbers as creator-wise bonus columns */
+  const milestoneCreatorBonusExpectedCentsFromMap = useMemo(() => {
+    if (currentContest?.contest_type !== "milestone") return 0;
+    let sum = 0;
+    milestoneReelsBonusByCreator.forEach((row) => {
+      sum +=
+        (Number(row.viewsExpectedCents) || 0) +
+        (Number(row.expectedCents) || 0);
+    });
+    return sum;
+  }, [currentContest?.contest_type, milestoneReelsBonusByCreator]);
+
+  const milestoneCreatorBonusPaidCentsFromMap = useMemo(() => {
+    if (currentContest?.contest_type !== "milestone") return 0;
+    let sum = 0;
+    milestoneReelsBonusByCreator.forEach((row) => {
+      sum += (Number(row.viewsPaidCents) || 0) + (Number(row.paidCents) || 0);
+    });
+    return sum;
+  }, [currentContest?.contest_type, milestoneReelsBonusByCreator]);
 
   // Filter creator groups by participant filter and eligibility (for Twitter contests)
   const filteredCreatorGroups = useMemo(() => {
@@ -3386,23 +3667,23 @@ export default function ContestDetailClient({
           }
 
           if (updated) {
-            if (typeof updated.earnings !== "undefined") {
-              merged.earnings = updated.earnings;
-            }
-            if (typeof updated.paid !== "undefined") {
-              merged.paid = updated.paid;
-            }
-            if (typeof updated.paid_at !== "undefined") {
-              merged.paid_at = updated.paid_at;
-            }
-            if (typeof updated.bonus_paid !== "undefined") {
-              merged.bonus_paid = updated.bonus_paid;
-            }
-            if (typeof updated.bonus_paid_at !== "undefined") {
-              merged.bonus_paid_at = updated.bonus_paid_at;
-            }
-            if (typeof updated.bonus_amount !== "undefined") {
-              merged.bonus_amount = updated.bonus_amount;
+            const upd = updated as Record<string, unknown>;
+            const mergeKeys = [
+              "views",
+              "earnings",
+              "paid",
+              "paid_at",
+              "bonus_paid",
+              "bonus_paid_at",
+              "bonus_amount",
+              "other_stats",
+              "platform",
+              "metadata",
+            ] as const;
+            for (const key of mergeKeys) {
+              if (typeof upd[key] !== "undefined") {
+                (merged as any)[key] = upd[key];
+              }
             }
           }
 
@@ -3466,16 +3747,10 @@ export default function ContestDetailClient({
       console.log("🎉 Calling toast with config:", toastConfig);
       toast(toastConfig);
 
-      // Clear contest cache and refresh contest list to update budget tracker
-      console.log(
-        "[contest-detail-client] Dispatching contests:refresh event from handleUpdateSubmissionStatus...",
-      );
-      window.dispatchEvent(new CustomEvent("contests:refresh"));
-
-      // Also directly call the clear cache API to ensure it happens
+      // Clear server contest caches first so list/opportunities never read stale budget_spent
       try {
         console.log(
-          "[contest-detail-client] Directly calling clear cache API...",
+          "[contest-detail-client] Calling clear cache API before contests:refresh...",
         );
         await fetch("/api/contests/clear-cache", { method: "POST" });
         console.log("[contest-detail-client] Direct cache clear completed");
@@ -4712,8 +4987,7 @@ export default function ContestDetailClient({
 
     if (isContestLevel) {
       if (type === "core" || type === "all") setIsRefreshingCore(true);
-      if (type === "traffic" || type === "all")
-        setIsRefreshingTraffic(true);
+      if (type === "traffic" || type === "all") setIsRefreshingTraffic(true);
       if (type === "demographics" || type === "all")
         setIsRefreshingDemographics(true);
     } else {
@@ -4995,6 +5269,120 @@ export default function ContestDetailClient({
         setIsRefreshingAll(false);
       }
     }
+  };
+
+  const handleMarkMilestoneMostVerifiedBonus = useCallback(
+    async (creatorId: string, track: "views" | "reels") => {
+      setMarkingMilestoneVerifiedBonus((p) => ({ ...p, [creatorId]: track }));
+      try {
+        const res = await fetch(
+          `/api/contests/${contestId}/mark-milestone-most-verified-bonus`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ creatorId, track }),
+          },
+        );
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          throw new Error(
+            typeof data?.error === "string"
+              ? data.error
+              : "Failed to mark bonus as paid",
+          );
+        }
+        toast({
+          title: track === "views" ? "Views bonus paid" : "Reels bonus paid",
+          description:
+            data?.creditedCents != null
+              ? `${formatMoney(Number(data.creditedCents))} credited to the creator.`
+              : "Bonus recorded and balance updated.",
+          variant: "success",
+        });
+        setTimeout(() => window.location.reload(), 800);
+      } catch (e: any) {
+        toast({
+          title: "Could not record bonus",
+          description: e?.message || "Request failed",
+          variant: "destructive",
+        });
+      } finally {
+        setMarkingMilestoneVerifiedBonus((p) => {
+          const next = { ...p };
+          delete next[creatorId];
+          return next;
+        });
+      }
+    },
+    [contestId, toast],
+  );
+
+  const renderMilestoneVerifiedBonusMenuItems = (
+    creatorId: string,
+    extraDisabled?: boolean,
+  ) => {
+    if (!showCreatorMilestoneVerifiedBonusActions) return null;
+    const row = milestoneReelsBonusByCreator.get(creatorId) ?? {
+      expectedCents: 0,
+      paidCents: 0,
+      viewsExpectedCents: 0,
+      viewsPaidCents: 0,
+      verifiedReels: 0,
+      minRequired: 0,
+    };
+    const busy = markingMilestoneVerifiedBonus[creatorId];
+    const d = Boolean(busy) || Boolean(extraDisabled);
+    const viewsDone =
+      row.viewsExpectedCents <= 0 ||
+      row.viewsPaidCents >= row.viewsExpectedCents;
+    const reelsDone =
+      row.expectedCents <= 0 || row.paidCents >= row.expectedCents;
+    const reelsBlockedByViews =
+      row.viewsExpectedCents > 0 && row.viewsPaidCents < row.viewsExpectedCents;
+
+    const canGetViewsBonus = row.viewsExpectedCents > 0;
+    const canGetReelsBonus = row.expectedCents > 0;
+
+    if (!canGetViewsBonus && !canGetReelsBonus) return null;
+
+    return (
+      <>
+        <DropdownMenuSeparator />
+        <DropdownMenuLabel className="text-amber-600 dark:text-amber-400">
+          Milestone bonus
+        </DropdownMenuLabel>
+        {showMostVerifiedViewsBonusColumns && canGetViewsBonus && (
+          <DropdownMenuItem
+            // disabled={d || viewsDone}
+            onClick={() =>
+              void handleMarkMilestoneMostVerifiedBonus(creatorId, "views")
+            }
+          >
+            {busy === "views" ? (
+              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+            ) : (
+              <Gift className="h-4 w-4 mr-2" />
+            )}
+            Mark most verified views bonus paid
+          </DropdownMenuItem>
+        )}
+        {showMostVerifiedReelsCreatorColumn && canGetReelsBonus && (
+          <DropdownMenuItem
+            // disabled={d || reelsDone || reelsBlockedByViews}
+            onClick={() =>
+              void handleMarkMilestoneMostVerifiedBonus(creatorId, "reels")
+            }
+          >
+            {busy === "reels" ? (
+              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+            ) : (
+              <Gift className="h-4 w-4 mr-2" />
+            )}
+            Mark most verified reels bonus paid
+          </DropdownMenuItem>
+        )}
+      </>
+    );
   };
 
   // Helper function to determine if refresh should be disabled and why
@@ -5527,16 +5915,9 @@ export default function ContestDetailClient({
         variant: tweetModerationVariant,
       });
 
-      // Clear contest cache and refresh contest list to update budget tracker
-      console.log(
-        "[contest-detail-client] Dispatching contests:refresh event from handleModerateTwitterTweet...",
-      );
-      window.dispatchEvent(new CustomEvent("contests:refresh"));
-
-      // Also directly call the clear cache API to ensure it happens
       try {
         console.log(
-          "[contest-detail-client] Directly calling clear cache API from Twitter moderation...",
+          "[contest-detail-client] Calling clear cache API before contests:refresh (Twitter moderation)...",
         );
         await fetch("/api/contests/clear-cache", { method: "POST" });
         console.log(
@@ -5548,6 +5929,7 @@ export default function ContestDetailClient({
           error,
         );
       }
+      window.dispatchEvent(new CustomEvent("contests:refresh"));
 
       // Page-level state is already updated via setCurrentSubmissions above.
       // We rely on that local state update plus the "contests:refresh" event
@@ -6037,7 +6419,9 @@ export default function ContestDetailClient({
                   >
                     {currentContest.contest_type === "cpm"
                       ? "CPM"
-                      : "Leaderboard"}
+                      : currentContest.contest_type === "milestone"
+                        ? "Milestone"
+                        : "Leaderboard"}
                   </Badge>
                 )}
               </div>
@@ -6908,6 +7292,86 @@ export default function ContestDetailClient({
               // </Card>
             )}
 
+          {currentContest.contest_type === "milestone" &&
+            currentContest.contest_based_details?.milestone_contest
+              ?.total_budget_cents != null &&
+            currentContest.contest_based_details.milestone_contest
+              .total_budget_cents > 0 && (
+              <div
+                className={cn(
+                  "group rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 overflow-hidden relative",
+                  isDark
+                    ? "bg-[#180438] border border-white/20 backdrop-blur-2xl shadow-2xl shadow-blue-500/20"
+                    : "bg-white border border-gray-100",
+                )}
+              >
+                <div className="p-6 relative z-10">
+                  <div className="flex items-center justify-between mb-4">
+                    <div
+                      className={cn(
+                        "w-12 h-12 flex items-center justify-center rounded-xl shadow-lg backdrop-blur-sm",
+                        isDark
+                          ? "bg-white/20 border border-white/30 backdrop-blur-2xl shadow-lg shadow-white/20"
+                          : "bg-gradient-to-br from-blue-500 to-blue-600 text-white",
+                      )}
+                    >
+                      <Wallet
+                        className={cn(
+                          "h-6 w-6",
+                          isDark ? "text-white" : "text-white",
+                        )}
+                      />
+                    </div>
+                    <div className="text-right">
+                      <p
+                        className={cn(
+                          "text-sm font-medium uppercase tracking-wide",
+                          isDark
+                            ? "text-white/90 drop-shadow-sm"
+                            : "text-gray-500",
+                        )}
+                      >
+                        Total Budget
+                      </p>
+                      <p
+                        className={cn(
+                          "text-2xl font-bold mt-1",
+                          isDark
+                            ? "text-white drop-shadow-lg bg-gradient-to-r from-white to-blue-200 bg-clip-text text-transparent"
+                            : "text-gray-900",
+                        )}
+                      >
+                        {formatMoney(
+                          currentContest.contest_based_details.milestone_contest
+                            .total_budget_cents,
+                        )}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="mb-4">
+                    <p
+                      className={cn(
+                        "text-sm font-medium",
+                        isDark
+                          ? "text-white/80 drop-shadow-sm"
+                          : "text-gray-600",
+                      )}
+                    >
+                      Total reserved for milestone payouts
+                    </p>
+                  </div>
+                  <div
+                    className={cn(
+                      "h-1 w-full rounded-full",
+                      isDark
+                        ? "bg-gradient-to-r from-blue-400 via-sky-400 to-cyan-400 shadow-lg shadow-blue-400/70 animate-pulse"
+                        : "bg-gradient-to-r from-blue-200 to-blue-300",
+                    )}
+                  ></div>
+                </div>
+              </div>
+            )}
+
           {/* Submissions Count Card */}
           <div
             className={cn(
@@ -7111,6 +7575,81 @@ export default function ContestDetailClient({
                   }}
                   submissions={currentSubmissions as any}
                   showDetailed={true}
+                />
+              </div>
+            </div>
+          )}
+
+        {/* Budget Progress Tracker - For Milestone contests */}
+        {currentContest.contest_type === "milestone" &&
+          currentContest.contest_based_details?.milestone_contest
+            ?.total_budget_cents != null &&
+          currentContest.contest_based_details.milestone_contest
+            .total_budget_cents > 0 && (
+            <div
+              className={cn(
+                "group rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 overflow-hidden relative",
+                isDark
+                  ? "bg-[#180438] border border-white/20 backdrop-blur-2xl shadow-2xl shadow-blue-500/20"
+                  : "bg-gradient-to-br from-white to-blue-50 border border-blue-100",
+              )}
+            >
+              <div className="p-6 relative z-10">
+                <div className="flex items-center mb-4">
+                  <div
+                    className={cn(
+                      "w-12 h-12 flex items-center justify-center rounded-xl shadow-lg backdrop-blur-sm mr-4",
+                      isDark
+                        ? "bg-white/20 border border-white/30 backdrop-blur-2xl shadow-lg shadow-white/20"
+                        : "bg-gradient-to-br from-blue-500 to-blue-600 text-white",
+                    )}
+                  >
+                    <BarChart3 className="h-6 w-6 text-white" />
+                  </div>
+                  <div>
+                    <h3
+                      className={cn(
+                        "text-lg font-bold",
+                        isDark
+                          ? "text-white drop-shadow-lg bg-gradient-to-r from-white to-blue-200 bg-clip-text text-transparent"
+                          : "text-gray-900",
+                      )}
+                    >
+                      Budget Tracker
+                    </h3>
+                    <p
+                      className={cn(
+                        "text-sm",
+                        isDark
+                          ? "text-white/80 drop-shadow-sm"
+                          : "text-gray-600",
+                      )}
+                    >
+                      Monitor milestone payout spending progress
+                    </p>
+                  </div>
+                </div>
+                <BudgetProgress
+                  contest={{
+                    total_budget:
+                      currentContest.contest_based_details.milestone_contest
+                        .total_budget_cents,
+                    contest_based_details: currentContest.contest_based_details,
+                    contest_type: currentContest.contest_type,
+                    max_earnings_per_creator:
+                      currentContest.max_earnings_per_creator,
+                  }}
+                  submissions={currentSubmissions as any}
+                  showDetailed={true}
+                  milestoneExpectedPayoutCents={
+                    milestoneBudgetExpectedPayoutCents
+                  }
+                  milestoneCreatorBonusExpectedCents={
+                    milestoneCreatorBonusExpectedCentsFromMap
+                  }
+                  milestoneCreatorBonusPaidCents={
+                    milestoneCreatorBonusPaidCentsFromMap
+                  }
                 />
               </div>
             </div>
@@ -7706,18 +8245,6 @@ export default function ContestDetailClient({
                             </span>
                           </div>
                         )}
-                        {/* <div>
-                          <h4 className="text-sm font-medium mt-3 mb-2 text-foreground">
-                            Terms & Conditions
-                          </h4>
-                          <div className="p-3 border rounded-lg bg-background text-sm text-foreground">
-                            <div className="whitespace-pre-wrap break-words">
-                              {currentContest.contest_based_details.cpm_contest
-                                .terms_conditions ||
-                                "No specific terms provided."}
-                            </div>
-                          </div>
-                        </div> */}
                       </div>
                       <div>
                         <h4 className="text-md font-semibold mt-4 mb-2 text-foreground">
@@ -7737,6 +8264,352 @@ export default function ContestDetailClient({
                               "No specific terms provided."}
                           </div>
                         </div>
+                      </div>
+                    </div>
+                  )}
+
+                {currentContest.contest_type === "milestone" &&
+                  currentContest.contest_based_details?.milestone_contest && (
+                    <div className="space-y-6">
+                      {/* Milestone Ladder */}
+                      <div className="space-y-4">
+                        <div className="flex items-center justify-between">
+                          <h3 className="font-semibold text-lg text-foreground flex items-center gap-2">
+                            <Trophy className="h-5 w-5 text-yellow-500" />
+                            Milestone Rewards Ladder
+                          </h3>
+                          {/* <Badge
+                            variant="outline"
+                            className={cn(
+                              "text-xs font-medium",
+                              isDark
+                                ? "bg-purple-900/30 text-purple-300 border-purple-500/30"
+                                : "bg-purple-50 text-purple-700 border-purple-200",
+                            )}
+                          >
+                            Non-Cumulative
+                          </Badge> */}
+                        </div>
+
+                        <div className="grid grid-cols-1 gap-4">
+                          {(
+                            currentContest.contest_based_details
+                              .milestone_contest.milestones || []
+                          )
+                            .sort((a: any, b: any) => a.order - b.order)
+                            .map((milestone: any, index: number) => (
+                              <div
+                                key={index}
+                                className={cn(
+                                  "relative overflow-hidden rounded-xl border transition-all duration-300 group",
+                                  isDark
+                                    ? "bg-[#170337] border-gray-600 hover:border-purple-500/50"
+                                    : "bg-white border-gray-200 hover:border-purple-400 font-bold",
+                                )}
+                              >
+                                {/* Glassmorphism background effect */}
+                                <div className="absolute inset-0 bg-gradient-to-r from-transparent via-purple-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+
+                                <CardContent className="p-5 flex items-center justify-between relative z-10">
+                                  <div className="flex items-center gap-5">
+                                    <div
+                                      className={cn(
+                                        "w-12 h-12 flex items-center justify-center rounded-2xl shadow-inner",
+                                        isDark
+                                          ? "bg-purple-900/40 text-purple-300 border border-purple-500/20"
+                                          : "bg-purple-50 text-purple-600 border border-purple-100",
+                                      )}
+                                    >
+                                      <Zap className="h-6 w-6" />
+                                    </div>
+                                    <div>
+                                      <div className="flex items-center gap-2 mb-1">
+                                        <p
+                                          className={cn(
+                                            "text-sm font-semibold uppercase tracking-wider",
+                                            isDark
+                                              ? "text-purple-400"
+                                              : "text-purple-600",
+                                          )}
+                                        >
+                                          Milestone {index + 1}
+                                        </p>
+                                          {milestone.winner_limit && (
+                                            (() => {
+                                              const reachedCount = milestoneSubmissionAssignments.winnerCountsByMilestone?.get(
+                                                Number(milestone.target_views),
+                                              ) || 0;
+                                              const isFull = reachedCount >= milestone.winner_limit;
+                                              return (
+                                                <Badge
+                                                  variant="secondary"
+                                                  className={cn(
+                                                    "text-[10px] h-4 px-1.5",
+                                                    isFull 
+                                                      ? "bg-red-100 text-red-700 border-red-200 dark:bg-red-900/30 dark:text-red-400 dark:border-red-500/30" 
+                                                      : "bg-green-100 text-green-700 border-green-200 dark:bg-green-900/30 dark:text-green-400 dark:border-green-500/30"
+                                                  )}
+                                                >
+                                                  Limit: {reachedCount} / {milestone.winner_limit}
+                                                </Badge>
+                                              );
+                                            })()
+                                          )}
+                                      </div>
+                                      <p
+                                        className={cn(
+                                          "text-2xl font-black",
+                                          isDark
+                                            ? "text-white"
+                                            : "text-gray-900",
+                                        )}
+                                      >
+                                        {milestone.target_views.toLocaleString()}{" "}
+                                        <span className="text-sm font-medium opacity-70">
+                                          Views
+                                        </span>
+                                      </p>
+                                    </div>
+                                  </div>
+
+                                  <div className="text-right">
+                                    <p
+                                      className={cn(
+                                        "text-xs font-medium mb-1",
+                                        isDark
+                                          ? "text-gray-400"
+                                          : "text-gray-500",
+                                      )}
+                                    >
+                                      Payout
+                                    </p>
+                                    <p
+                                      className={cn(
+                                        "text-2xl font-bold",
+                                        isDark
+                                          ? "text-green-400"
+                                          : "text-green-600",
+                                      )}
+                                    >
+                                      {formatMoney(milestone.payout_cents)}
+                                    </p>
+                                  </div>
+                                </CardContent>
+                              </div>
+                            ))}
+                        </div>
+
+                        <Alert className={cn(
+                          "mt-4 border-purple-600 shadow-sm",
+                          isDark ? "bg-purple-900/20 text-purple-200" : "bg-purple-50 text-purple-800"
+                        )}>
+                          <Info className="h-4 w-4" />
+                          <AlertDescription className="text-sm font-medium mt-0.5">
+                         Once a submission reaches the target view threshold, the corresponding milestone reward will be granted.
+                          </AlertDescription>
+                        </Alert>
+                      </div>
+
+                      {/* Bonus Tracks */}
+                      {currentContest.contest_based_details.milestone_contest
+                        .bonus?.enabled && (
+                        <div className="space-y-4 pt-4">
+                          <h3 className="font-semibold text-lg text-foreground flex items-center gap-2">
+                            <Gift className="h-5 w-5 text-pink-500" />
+                            Competitive Bonus Tracks
+                          </h3>
+
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            {currentContest.contest_based_details
+                              .milestone_contest.bonus.most_verified_views && (
+                              <div
+                                className={cn(
+                                  "rounded-xl border p-5 relative overflow-hidden",
+                                  isDark
+                                    ? "bg-gradient-to-br from-blue-900/20 to-purple-900/20 border-blue-500/30"
+                                    : "bg-gradient-to-br from-blue-50 to-indigo-50 border-blue-200",
+                                )}
+                              >
+                                <div className="flex items-start justify-between mb-4">
+                                  <div
+                                    className={cn(
+                                      "p-2 rounded-lg",
+                                      isDark ? "bg-blue-900/40" : "bg-blue-100",
+                                    )}
+                                  >
+                                    <Eye className="h-5 w-5 text-blue-500" />
+                                  </div>
+                                  <Badge className="bg-blue-500 hover:bg-blue-600 text-white border-none">
+                                    {formatMoney(
+                                      currentContest.contest_based_details
+                                        .milestone_contest.bonus
+                                        .most_verified_views.payout_cents,
+                                    )}
+                                  </Badge>
+                                </div>
+                                <h4
+                                  className={cn(
+                                    "font-bold text-lg mb-1",
+                                    isDark ? "text-white" : "text-blue-900",
+                                  )}
+                                >
+                                  Most Verified Views
+                                </h4>
+                                <p
+                                  className={cn(
+                                    "text-sm",
+                                    isDark
+                                      ? "text-blue-200/70"
+                                      : "text-blue-700",
+                                  )}
+                                >
+                                  Awarded to the creator with the highest total
+                                  verified views.
+                                </p>
+                                <div className="mt-4 pt-4 border-t border-blue-500/20">
+                                  <div className="flex items-start justify-between gap-3 text-xs font-semibold">
+                                    <span className="opacity-70 uppercase tracking-tighter">
+                                      Eligibility Condition
+                                    </span>
+                                    <div className="text-blue-500 text-right space-y-1">
+                                      {typeof currentContest
+                                        .contest_based_details.milestone_contest
+                                        .bonus.most_verified_views
+                                        .min_total_views === "number" && (
+                                        <div>
+                                          Min.{" "}
+                                          {currentContest.contest_based_details.milestone_contest.bonus.most_verified_views.min_total_views.toLocaleString()}{" "}
+                                          Views
+                                        </div>
+                                      )}
+                                      {typeof currentContest
+                                        .contest_based_details.milestone_contest
+                                        .bonus.most_verified_views
+                                        .min_verified_reels === "number" && (
+                                        <div>
+                                          Min.{" "}
+                                          {currentContest.contest_based_details.milestone_contest.bonus.most_verified_views.min_verified_reels.toLocaleString()}{" "}
+                                          Reels
+                                        </div>
+                                      )}
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+                            )}
+
+                            {currentContest.contest_based_details
+                              .milestone_contest.bonus.most_verified_reels && (
+                              <div
+                                className={cn(
+                                  "rounded-xl border p-5 relative overflow-hidden",
+                                  isDark
+                                    ? "bg-gradient-to-br from-pink-900/20 to-purple-900/20 border-pink-500/30"
+                                    : "bg-gradient-to-br from-pink-50 to-purple-50 border-pink-200",
+                                )}
+                              >
+                                <div className="flex items-start justify-between mb-4">
+                                  <div
+                                    className={cn(
+                                      "p-2 rounded-lg",
+                                      isDark ? "bg-pink-900/40" : "bg-pink-100",
+                                    )}
+                                  >
+                                    <Play className="h-5 w-5 text-pink-500" />
+                                  </div>
+                                  <Badge className="bg-pink-500 hover:bg-pink-600 text-white border-none">
+                                    {formatMoney(
+                                      currentContest.contest_based_details
+                                        .milestone_contest.bonus
+                                        .most_verified_reels.payout_cents,
+                                    )}
+                                  </Badge>
+                                </div>
+                                <h4
+                                  className={cn(
+                                    "font-bold text-lg mb-1",
+                                    isDark ? "text-white" : "text-pink-900",
+                                  )}
+                                >
+                                  Most Verified Reels
+                                </h4>
+                                <p
+                                  className={cn(
+                                    "text-sm",
+                                    isDark
+                                      ? "text-pink-200/70"
+                                      : "text-pink-700 font-bold",
+                                  )}
+                                >
+                                  Awarded to the creator with the most reels
+                                  hitting target views.
+                                </p>
+                                <div className="mt-4 pt-4 border-t border-pink-500/20">
+                                  <div className="flex items-start justify-between gap-3 text-xs font-semibold">
+                                    <span className="opacity-70 uppercase tracking-tighter">
+                                      Eligibility Condition
+                                    </span>
+                                    <div className="text-pink-500 text-right space-y-1">
+                                      {typeof currentContest
+                                        .contest_based_details.milestone_contest
+                                        .bonus.most_verified_reels
+                                        .min_verified_reels === "number" && (
+                                        <div>
+                                          Min.{" "}
+                                          {currentContest.contest_based_details.milestone_contest.bonus.most_verified_reels.min_verified_reels.toLocaleString()}{" "}
+                                          Reels
+                                        </div>
+                                      )}
+                                      {typeof currentContest
+                                        .contest_based_details.milestone_contest
+                                        .bonus.most_verified_reels
+                                        .min_total_views === "number" && (
+                                        <div>
+                                          Min.{" "}
+                                          {currentContest.contest_based_details.milestone_contest.bonus.most_verified_reels.min_total_views.toLocaleString()}{" "}
+                                          Views
+                                        </div>
+                                      )}
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Budget Status */}
+                      <div
+                        className={cn(
+                          "mt-6 p-4 rounded-xl border flex items-center justify-between",
+                          isDark
+                            ? "bg-gray-900/30 border-gray-600"
+                            : "bg-gray-50 border-gray-200",
+                        )}
+                      >
+                        <div className="flex items-center gap-3">
+                          <Wallet className="h-5 w-5 text-emerald-500" />
+                          <span
+                            className={cn(
+                              "text-sm font-medium",
+                              isDark ? "text-gray-300" : "text-gray-600",
+                            )}
+                          >
+                            Total Budget
+                          </span>
+                        </div>
+                        <span
+                          className={cn(
+                            "text-lg font-bold",
+                            isDark ? "text-white" : "text-gray-900",
+                          )}
+                        >
+                          {formatMoney(
+                            currentContest.contest_based_details
+                              .milestone_contest.total_budget_cents,
+                          )}
+                        </span>
                       </div>
                     </div>
                   )}
@@ -11422,18 +12295,31 @@ export default function ContestDetailClient({
                                 })()}
                               </div>
                               <div className="flex flex-wrap items-center justify-between gap-1 text-[11px] text-slate-600 dark:text-slate-300">
-                                <span>       
-                                  Processed <b>{youtubeRun.processed_submissions ?? 0}</b> / {youtubeRun.total_submissions}
+                                <span>
+                                  Processed{" "}
+                                  <b>{youtubeRun.processed_submissions ?? 0}</b>{" "}
+                                  / {youtubeRun.total_submissions}
                                 </span>
                                 <span className="uppercase tracking-wide text-[10px]">
                                   {youtubeRun.status}
                                 </span>
                               </div>
                               <div className="flex flex-col gap-0.5 text-[10px] text-slate-700 dark:text-slate-200 mt-1">
-                                <span>Success: <b>{youtubeRun.success_count}</b></span>
-                                <span>Temporary failure: <b>{youtubeRun.temporary_failure_count}</b></span>
-                                <span>Permanent failure: <b>{youtubeRun.permanent_failure_count}</b></span>
-                                <span>Skipped: <b>{youtubeRun.skipped_recent_count}</b></span>
+                                <span>
+                                  Success: <b>{youtubeRun.success_count}</b>
+                                </span>
+                                <span>
+                                  Temporary failure:{" "}
+                                  <b>{youtubeRun.temporary_failure_count}</b>
+                                </span>
+                                <span>
+                                  Permanent failure:{" "}
+                                  <b>{youtubeRun.permanent_failure_count}</b>
+                                </span>
+                                <span>
+                                  Skipped:{" "}
+                                  <b>{youtubeRun.skipped_recent_count}</b>
+                                </span>
                               </div>
                               {youtubeRefreshElapsedSeconds != null && (
                                 <>
@@ -12578,7 +13464,8 @@ export default function ContestDetailClient({
                                     "x") &&
                                 currentContest.contest_format ===
                                   "text_image") ||
-                              currentContest.contest_type === "cpm" ? (
+                              currentContest.contest_type === "cpm" ||
+                              currentContest.contest_type === "milestone" ? (
                                 <>
                                   {(currentContest.platform
                                     ?.toLowerCase()
@@ -12589,6 +13476,12 @@ export default function ContestDetailClient({
                                     : true) && (
                                     <TableHead className="text-center">
                                       Expected Reward
+                                    </TableHead>
+                                  )}
+                                  {currentContest.contest_type ===
+                                    "milestone" && (
+                                    <TableHead className="text-center min-w-[170px]">
+                                      Milestone
                                     </TableHead>
                                   )}
                                   {(currentContest.platform
@@ -12792,6 +13685,35 @@ export default function ContestDetailClient({
                                     className: "text-slate-500",
                                   };
                                 }
+                                if (
+                                  currentContest.contest_type === "milestone"
+                                ) {
+                                  const milestones =
+                                    currentContest.contest_based_details
+                                      ?.milestone_contest?.milestones;
+                                  if (
+                                    Array.isArray(milestones) &&
+                                    milestones.length > 0
+                                  ) {
+                                    const cents =
+                                      milestoneSubmissionExpectedPayoutCents.get(
+                                        submission.id,
+                                      ) ?? 0;
+                                    if (cents > 0) {
+                                      return {
+                                        amount: centsToDollars(cents),
+                                        label: "Expected",
+                                        className:
+                                          "text-slate-700 font-semibold",
+                                      };
+                                    }
+                                  }
+                                  return {
+                                    amount: 0,
+                                    label: "Expected",
+                                    className: "text-slate-500",
+                                  };
+                                }
                                 return {
                                   amount: 0,
                                   label: "N/A",
@@ -12805,6 +13727,49 @@ export default function ContestDetailClient({
                                     amount: 0,
                                     label: "No Reward",
                                     className: "text-red-600 font-semibold",
+                                  };
+                                }
+
+                                if (
+                                  currentContest.contest_type === "milestone"
+                                ) {
+                                  const milestoneCents =
+                                    milestoneSubmissionExpectedPayoutCents.get(
+                                      submission.id,
+                                    ) ?? 0;
+                                  const storedCents =
+                                    Number(submission.earnings) || 0;
+                                  const isPaid =
+                                    submission.status === "paid" ||
+                                    (submission as any).paid === true;
+
+                                  if (isPaid) {
+                                    const grantedCents =
+                                      storedCents > 0
+                                        ? storedCents
+                                        : milestoneCents;
+                                    return {
+                                      amount: centsToDollars(grantedCents),
+                                      label: grantedCents > 0 ? "Paid" : "—",
+                                      className:
+                                        grantedCents > 0
+                                          ? "text-blue-600 font-semibold"
+                                          : "text-slate-500",
+                                    };
+                                  }
+
+                                  if (storedCents > 0) {
+                                    return {
+                                      amount: centsToDollars(storedCents),
+                                      label: "Pending",
+                                      className: "text-amber-600 font-semibold",
+                                    };
+                                  }
+
+                                  return {
+                                    amount: 0,
+                                    label: "—",
+                                    className: "text-slate-500",
                                   };
                                 }
 
@@ -12883,6 +13848,18 @@ export default function ContestDetailClient({
 
                               const expectedInfo = getExpectedReward();
                               const grantedInfo = getGrantedReward();
+                              const milestoneAssignmentLabel =
+                                currentContest.contest_type === "milestone"
+                                  ? (milestoneSubmissionAssignedLabelBySubmissionId.get(
+                                      submission.id,
+                                    ) ?? "—")
+                                  : "—";
+                              const milestoneAssignmentParts =
+                                milestoneAssignmentLabel.split(" • ");
+                              const milestonePrimaryLabel =
+                                milestoneAssignmentParts[0] || "—";
+                              const milestoneViewsLabel =
+                                milestoneAssignmentParts[1] || "—";
 
                               return (
                                 <TableRow
@@ -14183,10 +15160,11 @@ export default function ContestDetailClient({
                                         ) && (
                                           <TableCell className="text-center">
                                             {(() => {
-                                              const meta = getInsightsStatusMeta(
-                                                submission.insights_status ??
-                                                  null,
-                                              );
+                                              const meta =
+                                                getInsightsStatusMeta(
+                                                  submission.insights_status ??
+                                                    null,
+                                                );
                                               return (
                                                 <div className="flex items-center justify-center">
                                                   <Tooltip>
@@ -14233,7 +15211,9 @@ export default function ContestDetailClient({
                                         "x") &&
                                     currentContest.contest_format ===
                                       "text_image") ||
-                                  currentContest.contest_type === "cpm" ? (
+                                  currentContest.contest_type === "cpm" ||
+                                  currentContest.contest_type ===
+                                    "milestone" ? (
                                     <>
                                       {(currentContest.platform
                                         ?.toLowerCase()
@@ -14280,6 +15260,39 @@ export default function ContestDetailClient({
                                               </span>
                                             </div>
                                           </div>
+                                        </TableCell>
+                                      )}
+                                      {currentContest.contest_type ===
+                                        "milestone" && (
+                                        <TableCell className="text-center">
+                                          {milestoneAssignmentLabel === "—" ? (
+                                            <span
+                                              className={cn(
+                                                "text-xs font-medium",
+                                                isDark
+                                                  ? "text-slate-400"
+                                                  : "text-slate-500",
+                                              )}
+                                            >
+                                              —
+                                            </span>
+                                          ) : (
+                                            <div className="flex flex-col items-center gap-1">
+                                              <span className="inline-flex items-center rounded-full bg-violet-100 text-violet-700 px-2 py-0.5 text-[10px] font-semibold">
+                                                {milestonePrimaryLabel}
+                                              </span>
+                                              <span
+                                                className={cn(
+                                                  "text-xs font-medium whitespace-nowrap",
+                                                  isDark
+                                                    ? "text-slate-200"
+                                                    : "text-slate-700",
+                                                )}
+                                              >
+                                                {milestoneViewsLabel}
+                                              </span>
+                                            </div>
+                                          )}
                                         </TableCell>
                                       )}
                                       {(currentContest.platform
@@ -15107,9 +16120,17 @@ export default function ContestDetailClient({
                                             "expected_reward",
                                           )
                                         : true) && (
-                                        <TableHead className="text-center">
-                                          Expected Reward
-                                        </TableHead>
+                                        <>
+                                          <TableHead className="text-center">
+                                            Expected Reward
+                                          </TableHead>
+                                          {currentContest.contest_type ===
+                                            "milestone" && (
+                                            <TableHead className="text-center min-w-[170px]">
+                                              Milestone
+                                            </TableHead>
+                                          )}
+                                        </>
                                       )}
                                       {(currentContest.platform
                                         ?.toLowerCase()
@@ -15142,6 +16163,26 @@ export default function ContestDetailClient({
                                       </TableHead>
                                       <TableHead className="text-center">
                                         Bonus Granted
+                                      </TableHead>
+                                    </>
+                                  )}
+                                  {showMostVerifiedViewsBonusColumns && (
+                                    <>
+                                      <TableHead className="text-center">
+                                        Most Verified Views (Bonus Expected)
+                                      </TableHead>
+                                      <TableHead className="text-center">
+                                        Most Verified Views (Bonus Granted)
+                                      </TableHead>
+                                    </>
+                                  )}
+                                  {showMostVerifiedReelsCreatorColumn && (
+                                    <>
+                                      <TableHead className="text-center">
+                                        Most Verified Reels (Bonus Expected)
+                                      </TableHead>
+                                      <TableHead className="text-center">
+                                        Most Verified Reels (Bonus Granted)
                                       </TableHead>
                                     </>
                                   )}
@@ -15191,6 +16232,16 @@ export default function ContestDetailClient({
                                     <TableCell
                                       colSpan={
                                         12 +
+                                        (currentContest.contest_type ===
+                                        "milestone"
+                                          ? 1
+                                          : 0) +
+                                        (showMostVerifiedViewsBonusColumns
+                                          ? 2
+                                          : 0) +
+                                        (showMostVerifiedReelsCreatorColumn
+                                          ? 2
+                                          : 0) +
                                         (currentContest.platform
                                           ?.toLowerCase()
                                           .includes("tiktok")
@@ -15218,6 +16269,15 @@ export default function ContestDetailClient({
                                         hasVerifiedOrPaidSubmissions
                                           ? group.bonus.expected
                                           : 0;
+                                      const reelsBonusInfo =
+                                        milestoneReelsBonusByCreator.get(
+                                          group.creator.id,
+                                        ) || {
+                                          expectedCents: 0,
+                                          paidCents: 0,
+                                          viewsExpectedCents: 0,
+                                          viewsPaidCents: 0,
+                                        };
                                       // Prefer full name / display name from submission or creator object
                                       const primarySubmission =
                                         group.submissions?.[0];
@@ -15877,11 +16937,13 @@ export default function ContestDetailClient({
                                               )}
                                             </>
                                           )}
-                                          {/* Show reward columns for leaderboard and CPM contests (including Twitter) */}
+                                          {/* Show reward columns for leaderboard, CPM, and milestone contests */}
                                           {(currentContest.contest_type ===
                                             "leaderboard" ||
                                             currentContest.contest_type ===
-                                              "cpm") && (
+                                              "cpm" ||
+                                            currentContest.contest_type ===
+                                              "milestone") && (
                                             <>
                                               {(currentContest.platform
                                                 ?.toLowerCase()
@@ -15890,25 +16952,105 @@ export default function ContestDetailClient({
                                                     "expected_reward",
                                                   )
                                                 : true) && (
-                                                <TableCell className="text-center font-medium">
-                                                  <div className="flex items-center justify-center gap-1">
-                                                    {formatMoney(
-                                                      group.earnings.expected,
-                                                    )}
-                                                    {group.isCapped && (
-                                                      <span
-                                                        className="text-amber-600 cursor-help"
-                                                        title={`Capped at ${formatMoney(
-                                                          currentContest.max_earnings_per_creator,
-                                                        )}. Original: ${formatMoney(
-                                                          group.earningsBeforeCap,
-                                                        )}`}
-                                                      >
-                                                        ⚠️
-                                                      </span>
-                                                    )}
-                                                  </div>
-                                                </TableCell>
+                                                <>
+                                                  <TableCell className="text-center font-medium">
+                                                    <div className="flex items-center justify-center gap-1">
+                                                      {formatMoney(
+                                                        group.earnings
+                                                          .expected,
+                                                      )}
+                                                      {group.isCapped && (
+                                                        <span
+                                                          className="text-amber-600 cursor-help"
+                                                          title={`Capped at ${formatMoney(
+                                                            currentContest.max_earnings_per_creator,
+                                                          )}. Original: ${formatMoney(
+                                                            group.earningsBeforeCap,
+                                                          )}`}
+                                                        >
+                                                          ⚠️
+                                                        </span>
+                                                      )}
+                                                    </div>
+                                                  </TableCell>
+                                                  {currentContest.contest_type ===
+                                                    "milestone" && (
+                                                    <TableCell className="text-center font-medium min-w-[170px]">
+                                                      {(() => {
+                                                        const counts =
+                                                          new Map<
+                                                            number,
+                                                            number
+                                                          >();
+
+                                                        for (const sub of
+                                                          group.submissions ||
+                                                          []) {
+                                                          const label =
+                                                            milestoneSubmissionAssignedLabelBySubmissionId.get(
+                                                              sub.id,
+                                                            ) ?? "—";
+                                                          const order =
+                                                            extractMilestoneOrderFromLabel(
+                                                              label,
+                                                            );
+                                                          if (order == null) {
+                                                            continue;
+                                                          }
+                                                          counts.set(
+                                                            order,
+                                                            (counts.get(order) ||
+                                                              0) + 1,
+                                                          );
+                                                        }
+
+                                                        if (counts.size === 0) {
+                                                          return (
+                                                            <span className="text-muted-foreground">—</span>
+                                                          );
+                                                        }
+
+                                                        const milestonesAchieved =
+                                                          Array.from(
+                                                            counts.entries(),
+                                                          ).sort(
+                                                            (a, b) => a[0] - b[0],
+                                                          );
+
+                                                        return (
+                                                          <div className="flex flex-wrap justify-center gap-1.5">
+                                                            {milestonesAchieved.map(
+                                                              ([order, count]) => {
+                                                                return (
+                                                                  <span
+                                                                    key={`${group.creator.id}-milestone-${order}`}
+                                                                    className="inline-flex items-center gap-1"
+                                                                  >
+                                                                    <Badge
+                                                                      className={cn(
+                                                                        "text-[11px] font-semibold px-2 py-0.5 border",
+                                                                        "bg-violet-100 text-violet-900 border-violet-200 dark:bg-violet-950/40 dark:text-violet-200 dark:border-violet-800",
+                                                                      )}
+                                                                    >
+                                                                      Milestone{" "}
+                                                                      {order}
+                                                                    </Badge>
+                                                                    <span className="text-[11px] text-muted-foreground">
+                                                                      {count}{" "}
+                                                                      {count === 1
+                                                                        ? "sub"
+                                                                        : "sub"}
+                                                                    </span>
+                                                                  </span>
+                                                                );
+                                                              },
+                                                            )}
+                                                          </div>
+                                                        );
+                                                      })()}
+                                                    </TableCell>
+                                                  )}
+                                                </>
                                               )}
                                               {(currentContest.platform
                                                 ?.toLowerCase()
@@ -15948,6 +17090,45 @@ export default function ContestDetailClient({
                                                 {formatMoney(
                                                   group.bonus.granted,
                                                 )}
+                                              </TableCell>
+                                            </>
+                                          )}
+                                          {showMostVerifiedViewsBonusColumns && (
+                                            <>
+                                              <TableCell className="text-center font-medium">
+                                                {reelsBonusInfo.viewsExpectedCents >
+                                                0
+                                                  ? formatMoney(
+                                                      reelsBonusInfo.viewsExpectedCents,
+                                                    )
+                                                  : "-"}
+                                              </TableCell>
+                                              <TableCell className="text-center font-medium text-green-600">
+                                                {reelsBonusInfo.viewsPaidCents >
+                                                0
+                                                  ? formatMoney(
+                                                      reelsBonusInfo.viewsPaidCents,
+                                                    )
+                                                  : "-"}
+                                              </TableCell>
+                                            </>
+                                          )}
+                                          {showMostVerifiedReelsCreatorColumn && (
+                                            <>
+                                              <TableCell className="text-center font-medium">
+                                                {reelsBonusInfo.expectedCents >
+                                                0
+                                                  ? formatMoney(
+                                                      reelsBonusInfo.expectedCents,
+                                                    )
+                                                  : "-"}
+                                              </TableCell>
+                                              <TableCell className="text-center font-medium text-green-600">
+                                                {reelsBonusInfo.paidCents > 0
+                                                  ? formatMoney(
+                                                      reelsBonusInfo.paidCents,
+                                                    )
+                                                  : "-"}
                                               </TableCell>
                                             </>
                                           )}
@@ -16269,6 +17450,72 @@ export default function ContestDetailClient({
                                                           <RefreshCw className="h-4 w-4 mr-2 text-purple-500" />
                                                           Refresh All Metrics
                                                         </DropdownMenuItem>
+                                                        {renderMilestoneVerifiedBonusMenuItems(
+                                                          group.creator.id,
+                                                          !!loadingDetailedAnalytics[
+                                                            group.creator.id
+                                                          ],
+                                                        )}
+                                                      </DropdownMenuContent>
+                                                    </DropdownMenu>
+                                                  )}
+                                                {showCreatorMilestoneVerifiedBonusActions &&
+                                                  currentContest.platform
+                                                    ?.toLowerCase()
+                                                    .includes("instagram") && (
+                                                    <DropdownMenu>
+                                                      <DropdownMenuTrigger
+                                                        asChild
+                                                      >
+                                                        <Button
+                                                          size="sm"
+                                                          variant="ghost"
+                                                          className="h-8 w-8 p-0"
+                                                          aria-label="Milestone bonus actions"
+                                                        >
+                                                          {markingMilestoneVerifiedBonus[
+                                                            group.creator.id
+                                                          ] ? (
+                                                            <Loader2 className="h-4 w-4 animate-spin" />
+                                                          ) : (
+                                                            <MoreVertical className="h-4 w-4" />
+                                                          )}
+                                                        </Button>
+                                                      </DropdownMenuTrigger>
+                                                      <DropdownMenuContent align="end">
+                                                        {renderMilestoneVerifiedBonusMenuItems(
+                                                          group.creator.id,
+                                                        )}
+                                                      </DropdownMenuContent>
+                                                    </DropdownMenu>
+                                                  )}
+                                                {showCreatorMilestoneVerifiedBonusActions &&
+                                                  currentContest.platform
+                                                    ?.toLowerCase()
+                                                    .includes("tiktok") && (
+                                                    <DropdownMenu>
+                                                      <DropdownMenuTrigger
+                                                        asChild
+                                                      >
+                                                        <Button
+                                                          size="sm"
+                                                          variant="ghost"
+                                                          className="h-8 w-8 p-0"
+                                                          aria-label="Milestone bonus actions"
+                                                        >
+                                                          {markingMilestoneVerifiedBonus[
+                                                            group.creator.id
+                                                          ] ? (
+                                                            <Loader2 className="h-4 w-4 animate-spin" />
+                                                          ) : (
+                                                            <MoreVertical className="h-4 w-4" />
+                                                          )}
+                                                        </Button>
+                                                      </DropdownMenuTrigger>
+                                                      <DropdownMenuContent align="end">
+                                                        {renderMilestoneVerifiedBonusMenuItems(
+                                                          group.creator.id,
+                                                        )}
                                                       </DropdownMenuContent>
                                                     </DropdownMenu>
                                                   )}
@@ -18758,9 +20005,11 @@ export default function ContestDetailClient({
                                         0;
                                       return formatMoney(totalPrize);
                                     } else if (
-                                      currentContest.contest_type === "cpm"
+                                      currentContest.contest_type === "cpm" ||
+                                      currentContest.contest_type ===
+                                        "milestone"
                                     ) {
-                                      // Calculate total paid for CPM contest
+                                      // Calculate total paid for CPM/Milestone contest
                                       const totalPaid =
                                         filteredAnalyticsSubmissions
                                           ?.filter((s) => s.status === "paid")
@@ -18910,7 +20159,9 @@ export default function ContestDetailClient({
                                           ?.leaderboard_contest?.total_prize ||
                                         0;
                                     } else if (
-                                      currentContest.contest_type === "cpm"
+                                      currentContest.contest_type === "cpm" ||
+                                      currentContest.contest_type ===
+                                        "milestone"
                                     ) {
                                       totalCost =
                                         filteredAnalyticsSubmissions
@@ -19127,7 +20378,8 @@ export default function ContestDetailClient({
                                       currentContest.contest_based_details
                                         ?.leaderboard_contest?.total_prize || 0;
                                   } else if (
-                                    currentContest.contest_type === "cpm"
+                                    currentContest.contest_type === "cpm" ||
+                                    currentContest.contest_type === "milestone"
                                   ) {
                                     totalCost =
                                       filteredAnalyticsSubmissions
@@ -19665,6 +20917,16 @@ export default function ContestDetailClient({
           contest={currentContest}
           creatorRank={
             creatorRankingMap.get(selectedCreatorForModal) ?? undefined
+          }
+          milestoneExpectedPayoutBySubmissionId={
+            currentContest?.contest_type === "milestone"
+              ? milestoneSubmissionExpectedPayoutCents
+              : undefined
+          }
+          milestoneAssignedLabelBySubmissionId={
+            currentContest?.contest_type === "milestone"
+              ? milestoneSubmissionAssignedLabelBySubmissionId
+              : undefined
           }
           onVerify={async (ids: string[]) => {
             // Handle bulk verify via new API wrapper

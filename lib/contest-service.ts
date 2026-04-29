@@ -12,7 +12,7 @@ import {
   getContestDetailsCacheKey,
   clearContestsCache,
 } from "@/lib/cache-utils";
-
+import { computeMilestoneContestExpectedSpendCents } from "@/lib/milestone-contest-expected-spend";
 
 type ContestWithDetails = {
   id: string;
@@ -38,7 +38,7 @@ interface FetchContestsOptions {
 
 async function fetchContestsWithDetails(
   supabase: SupabaseClient,
-  options: FetchContestsOptions = {}
+  options: FetchContestsOptions = {},
 ) {
   const cacheKey = getContestsCacheKey(options);
   const cachedData = contestCache.get<ContestWithDetails[]>(cacheKey);
@@ -70,13 +70,16 @@ async function fetchContestsWithDetails(
 
 async function enrichContestWithCalculatedBudgets(
   contest: ContestWithDetails,
-  supabase: SupabaseClient
+  supabase: SupabaseClient,
 ) {
   const cacheKey = getContestDetailsCacheKey(contest.id);
-  const cachedData = contestDetailsCache.get<ContestWithDetails>(cacheKey);
-
-  if (cachedData) {
-    return cachedData;
+  const isMilestone = contest.contest_type === "milestone";
+  // Milestone budget_spent is derived from live submissions; do not serve stale cached rows.
+  if (!isMilestone) {
+    const cachedData = contestDetailsCache.get<ContestWithDetails>(cacheKey);
+    if (cachedData) {
+      return cachedData;
+    }
   }
 
   let updatedContest: ContestWithDetails = {
@@ -149,7 +152,7 @@ async function enrichContestWithCalculatedBudgets(
       const { data: submissions } = await supabase
         .from("submissions")
         .select(
-          "id, paid, earnings, bonus_paid, bonus_amount, creator_id, created_at, status, views"
+          "id, paid, earnings, bonus_paid, bonus_amount, creator_id, created_at, status, views",
         )
         .eq("contest_id", contest.id)
         .in("status", ["verified", "paid"]);
@@ -173,7 +176,7 @@ async function enrichContestWithCalculatedBudgets(
 
     const actualBudgetSpent = calculateLeaderboardBudgetSpent(
       leaderboardSubmissions,
-      leaderboard.flat_fee_bonus
+      leaderboard.flat_fee_bonus,
     );
 
     updatedContest = {
@@ -259,7 +262,7 @@ async function enrichContestWithCalculatedBudgets(
       cpmDetails.max_views,
       cpmDetails.flat_fee_bonus || 0,
       cpmDetails.flat_fee_bonus_cap || null,
-      manualAdjustmentMap
+      manualAdjustmentMap,
     );
 
     updatedContest = {
@@ -288,7 +291,7 @@ async function enrichContestWithCalculatedBudgets(
               other_stats,
               bonus_paid,
               bonus_amount
-            `
+            `,
       )
       .eq("contest_id", contest.id)
       .in("status", ["verified", "paid"])
@@ -335,7 +338,7 @@ async function enrichContestWithCalculatedBudgets(
         cpmDetails.max_views,
         cpmDetails.flat_fee_bonus || 0,
         cpmDetails.flat_fee_bonus_cap || null,
-        manualAdjustmentMap
+        manualAdjustmentMap,
       );
 
       updatedContest = {
@@ -352,7 +355,61 @@ async function enrichContestWithCalculatedBudgets(
       console.error(
         "Failed to calculate CPM budget for contest",
         contest.id,
-        submissionsError.message
+        submissionsError.message,
+      );
+    }
+  }
+
+  const milestoneContestDetails =
+    normalizeContestDetails(updatedContest).milestone_contest;
+  if (
+    contest.contest_type === "milestone" &&
+    milestoneContestDetails &&
+    Array.isArray(milestoneContestDetails.milestones) &&
+    milestoneContestDetails.milestones.length > 0
+  ) {
+    const { data: milestoneSubmissions, error: milestoneSubErr } =
+      await supabase
+        .from("submissions")
+        .select(
+          "id, creator_id, created_at, status, views, bonus_paid, bonus_amount",
+        )
+        .eq("contest_id", contest.id)
+        .in("status", ["pending", "verified", "paid"])
+        .order("created_at", { ascending: true });
+
+    if (!milestoneSubErr) {
+      const milestoneRecords = (milestoneSubmissions || []).map((s: any) => ({
+        id: s.id,
+        creator_id: s.creator_id,
+        created_at: s.created_at,
+        status: s.status,
+        views: s.views,
+        bonus_paid: s.bonus_paid,
+        bonus_amount: s.bonus_amount,
+      }));
+
+      const milestoneBudgetSpentCents =
+        computeMilestoneContestExpectedSpendCents(
+          milestoneRecords,
+          milestoneContestDetails,
+        );
+
+      updatedContest = {
+        ...updatedContest,
+        contest_based_details: {
+          ...normalizeContestDetails(updatedContest),
+          milestone_contest: {
+            ...milestoneContestDetails,
+            budget_spent: milestoneBudgetSpentCents,
+          },
+        },
+      };
+    } else {
+      console.error(
+        "Failed to calculate milestone budget for contest",
+        contest.id,
+        milestoneSubErr.message,
       );
     }
   }
@@ -361,13 +418,15 @@ async function enrichContestWithCalculatedBudgets(
     updatedContest.status = "unknown";
   }
 
-  contestDetailsCache.set(cacheKey, updatedContest);
+  if (!isMilestone) {
+    contestDetailsCache.set(cacheKey, updatedContest);
+  }
   return updatedContest;
 }
 
 export async function getAdvertiserContestsWithCalculatedBudgets(
   advertiserId: string,
-  supabaseClient?: SupabaseClient
+  supabaseClient?: SupabaseClient,
 ) {
   const supabase = supabaseClient ?? (await createClient());
   const contestsData = await fetchContestsWithDetails(supabase, {
@@ -376,16 +435,19 @@ export async function getAdvertiserContestsWithCalculatedBudgets(
 
   const contestsWithCalculatedBudgets = await Promise.all(
     contestsData.map(async (contest) => {
-      const enrichedContest = await enrichContestWithCalculatedBudgets(contest, supabase);
+      const enrichedContest = await enrichContestWithCalculatedBudgets(
+        contest,
+        supabase,
+      );
       return enrichedContest;
-    })
+    }),
   );
 
   return contestsWithCalculatedBudgets;
 }
 
 export async function getAllContestsWithCalculatedBudgets(
-  supabaseClient?: SupabaseClient
+  supabaseClient?: SupabaseClient,
 ) {
   const supabase = supabaseClient ?? (await createClient());
   const contestsData = await fetchContestsWithDetails(supabase, {
@@ -394,9 +456,12 @@ export async function getAllContestsWithCalculatedBudgets(
 
   const contestsWithCalculatedBudgets = await Promise.all(
     contestsData.map(async (contest) => {
-      const enrichedContest = await enrichContestWithCalculatedBudgets(contest, supabase);
+      const enrichedContest = await enrichContestWithCalculatedBudgets(
+        contest,
+        supabase,
+      );
       return enrichedContest;
-    })
+    }),
   );
 
   return contestsWithCalculatedBudgets;

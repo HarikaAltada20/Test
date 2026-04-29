@@ -4070,16 +4070,30 @@ export default function AdminUsersPage() {
                                               </a>
                                             )}
                                           </div>
-                                          {account?.username && (
+                                          {/* {account?.username && (
                                             <div className="text-xs text-muted-foreground">
                                               @{account.username.replace(/^@/, "")}
                                             </div>
-                                          )}
+                                          )} */}
                                           {account?.follower_count !==
                                             undefined && (
                                             <div className="text-xs text-muted-foreground">
                                               {account.follower_count.toLocaleString()}{" "}
                                               followers
+                                            </div>
+                                          )}
+                                          {/* {account?.likes_count !==
+                                            undefined && (
+                                            <div className="text-xs text-muted-foreground">
+                                              {account.likes_count.toLocaleString()}{" "}
+                                              likes
+                                            </div>
+                                          )} */}
+                                          {account?.video_count !==
+                                            undefined && (
+                                            <div className="text-xs text-muted-foreground">
+                                              {account.video_count.toLocaleString()}{" "}
+                                              videos
                                             </div>
                                           )}
                                         </div>

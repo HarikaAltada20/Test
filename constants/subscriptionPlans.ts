@@ -191,6 +191,9 @@ export const HIGH_BUDGET_THRESHOLD = Infinity; // No upper limit - removed $1000
 export const MIN_PRIZE_PER_WINNER = 500  // $5.00 in cents
 export const MAX_PRIZE_PER_WINNER = Infinity  // No upper limit - removed $1000 restriction
 
+// Milestone contest: minimum payout per milestone tier (see MILESTONE_CONTEST_GUIDE)
+export const MIN_MILESTONE_PAYOUT_CENTS = 10 // $0.10
+
 // CPM Rate Limits (per 1000 views)
 export const MIN_CPM_RATE = 0.1  // $0.10 per 1000 views
 export const MAX_CPM_RATE = 100  // $100.00 per 1000 views

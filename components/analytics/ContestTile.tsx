@@ -330,6 +330,12 @@ export default function ContestTile({
     contest.contest_based_details?.cpm_contest?.total_budget
   ) {
     totalSpent = contest.contest_based_details.cpm_contest.total_budget;
+  } else if (
+    contest.contest_type === "milestone" &&
+    contest.contest_based_details?.milestone_contest?.total_budget_cents
+  ) {
+    totalSpent =
+      contest.contest_based_details.milestone_contest.total_budget_cents;
   }
 
   const daysRemaining = getDaysRemaining(contest.end_date);
