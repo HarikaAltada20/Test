@@ -617,6 +617,14 @@ export async function GET(request: NextRequest) {
       if (c.contest_type === "cpm" && details?.cpm_contest?.total_budget) {
         return sum + (details.cpm_contest.total_budget || 0);
       }
+      if (c.contest_type === "milestone") {
+        return (
+          sum +
+          (Number(details?.milestone_contest?.total_budget_cents) ||
+            Number(details?.milestone_contest?.total_budget) ||
+            0)
+        );
+      }
       return sum;
     }, 0);
 
@@ -643,6 +651,14 @@ export async function GET(request: NextRequest) {
       }
       if (c.contest_type === "cpm" && details?.cpm_contest?.total_budget) {
         return sum + (details.cpm_contest.total_budget || 0);
+      }
+      if (c.contest_type === "milestone") {
+        return (
+          sum +
+          (Number(details?.milestone_contest?.total_budget_cents) ||
+            Number(details?.milestone_contest?.total_budget) ||
+            0)
+        );
       }
       return sum;
     }, 0);
@@ -761,6 +777,11 @@ export async function GET(request: NextRequest) {
             details?.cpm_contest?.total_budget
           ) {
             contestSpent = details.cpm_contest.total_budget;
+          } else if (contest.contest_type === "milestone") {
+            contestSpent =
+              Number(details?.milestone_contest?.total_budget_cents) ||
+              Number(details?.milestone_contest?.total_budget) ||
+              0;
           }
           acc[key].spent += contestSpent;
         }
@@ -801,6 +822,11 @@ export async function GET(request: NextRequest) {
             details?.cpm_contest?.total_budget
           ) {
             acc[type].spent += details.cpm_contest.total_budget;
+          } else if (contest.contest_type === "milestone") {
+            acc[type].spent +=
+              Number(details?.milestone_contest?.total_budget_cents) ||
+              Number(details?.milestone_contest?.total_budget) ||
+              0;
           }
         }
         return acc;

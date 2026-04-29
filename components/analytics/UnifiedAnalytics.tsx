@@ -64,7 +64,7 @@ interface MetricTile {
   category: "contests" | "submissions" | "engagement" | "financial";
 }
 
-type ContestTypeFilterType = "all" | "leaderboard" | "cpm";
+type ContestTypeFilterType = "all" | "leaderboard" | "cpm" | "milestone";
 
 const defaultMetricTiles: MetricTile[] = [
   // Contest Metrics

@@ -50,19 +50,351 @@ index 0000000..714ebda
 +  ON public.user_device_sessions
 +  FOR DELETE
 +  USING (auth.uid() = user_id);
+diff --git a/SUPABASE/migrations/20260422_account_switcher_rpc_permissions_hardening.sql b/SUPABASE/migrations/20260422_account_switcher_rpc_permissions_hardening.sql
+new file mode 100644
+index 0000000..3478c0c
+--- /dev/null
++++ b/SUPABASE/migrations/20260422_account_switcher_rpc_permissions_hardening.sql
+@@ -0,0 +1,17 @@
++-- Hardening delta: explicitly remove account-switch RPC execute grants from
++-- anon/authenticated and allow only service_role (plus owner postgres).
++
++REVOKE ALL ON FUNCTION public.account_switch_link_shared_pool(UUID, UUID, TEXT, TEXT, TEXT)
++  FROM PUBLIC, anon, authenticated;
++GRANT EXECUTE ON FUNCTION public.account_switch_link_shared_pool(UUID, UUID, TEXT, TEXT, TEXT)
++  TO service_role;
++
++REVOKE ALL ON FUNCTION public.account_switch_unlink_from_pool(UUID, UUID)
++  FROM PUBLIC, anon, authenticated;
++GRANT EXECUTE ON FUNCTION public.account_switch_unlink_from_pool(UUID, UUID)
++  TO service_role;
++
++REVOKE ALL ON FUNCTION public.account_switch_propagate_refresh_tokens(UUID, UUID, TEXT, TEXT)
++  FROM PUBLIC, anon, authenticated;
++GRANT EXECUTE ON FUNCTION public.account_switch_propagate_refresh_tokens(UUID, UUID, TEXT, TEXT)
++  TO service_role;
+diff --git a/SUPABASE/migrations/20260422_account_switcher_shared_pool_rpcs.sql b/SUPABASE/migrations/20260422_account_switcher_shared_pool_rpcs.sql
+new file mode 100644
+index 0000000..e914f8d
+--- /dev/null
++++ b/SUPABASE/migrations/20260422_account_switcher_shared_pool_rpcs.sql
+@@ -0,0 +1,273 @@
++-- Account switcher shared-pool RPCs for atomic link/unlink operations.
++-- These run inside a single DB transaction to avoid partial graph updates.
++
++CREATE INDEX IF NOT EXISTS idx_user_sessions_vault_target_user
++  ON public.user_sessions_vault (target_user_id);
++
++CREATE OR REPLACE FUNCTION public.account_switch_link_shared_pool(
++  p_owner_user_id UUID,
++  p_target_user_id UUID,
++  p_owner_encrypted_refresh TEXT,
++  p_target_encrypted_refresh TEXT,
++  p_target_email_hint TEXT DEFAULT NULL
++) RETURNS JSONB
++LANGUAGE plpgsql
++SECURITY DEFINER
++SET search_path = public
++AS $$
++DECLARE
++  v_member_ids UUID[];
++  v_member_count INTEGER;
++  v_missing_count INTEGER;
++BEGIN
++  IF p_owner_user_id IS NULL OR p_target_user_id IS NULL THEN
++    RETURN jsonb_build_object('ok', false, 'error', 'Missing owner or target');
++  END IF;
++
++  IF p_owner_user_id = p_target_user_id THEN
++    RETURN jsonb_build_object('ok', false, 'error', 'Cannot link account to itself');
++  END IF;
++
++  IF p_owner_encrypted_refresh IS NULL OR p_target_encrypted_refresh IS NULL THEN
++    RETURN jsonb_build_object('ok', false, 'error', 'Missing refresh token payload');
++  END IF;
++
++  -- Lock both endpoints consistently to avoid concurrent link/unlink races.
++  IF p_owner_user_id::TEXT < p_target_user_id::TEXT THEN
++    PERFORM pg_advisory_xact_lock(hashtext('account-switch:' || p_owner_user_id::TEXT));
++    PERFORM pg_advisory_xact_lock(hashtext('account-switch:' || p_target_user_id::TEXT));
++  ELSE
++    PERFORM pg_advisory_xact_lock(hashtext('account-switch:' || p_target_user_id::TEXT));
++    PERFORM pg_advisory_xact_lock(hashtext('account-switch:' || p_owner_user_id::TEXT));
++  END IF;
++
++  SELECT ARRAY(
++    SELECT DISTINCT x.id
++    FROM (
++      SELECT p_owner_user_id AS id
++      UNION ALL
++      SELECT p_target_user_id AS id
++      UNION ALL
++      SELECT usv.target_user_id AS id
++      FROM public.user_sessions_vault usv
++      WHERE usv.owner_user_id = p_owner_user_id
++    ) AS x
++    WHERE x.id IS NOT NULL
++  )
++  INTO v_member_ids;
++
++  v_member_count := COALESCE(array_length(v_member_ids, 1), 0);
++
++  -- 5 linked accounts max per owner => max pool size 6 including active owner.
++  IF v_member_count > 6 THEN
++    RETURN jsonb_build_object(
++      'ok', false,
++      'error', 'Maximum account limit reached (5 accounts). Remove an existing account to add a new one.'
++    );
++  END IF;
++
++  -- Check each impacted owner won't exceed link cap after full-mesh sync.
++  IF EXISTS (
++    SELECT 1
++    FROM (
++      SELECT
++        m.owner_id,
++        COALESCE(
++          SUM(CASE WHEN usv.target_user_id = ANY(v_member_ids) THEN 0 ELSE 1 END),
++          0
++        ) AS outside_count
++      FROM unnest(v_member_ids) AS m(owner_id)
++      LEFT JOIN public.user_sessions_vault usv
++        ON usv.owner_user_id = m.owner_id
++      GROUP BY m.owner_id
++    ) q
++    WHERE q.outside_count + (v_member_count - 1) > 5
++  ) THEN
++    RETURN jsonb_build_object(
++      'ok', false,
++      'error', 'One linked account is already at the maximum limit. Unlink an account from that profile and try again.'
++    );
++  END IF;
++
++  CREATE TEMP TABLE _as_member_tokens (
++    user_id UUID PRIMARY KEY,
++    encrypted_token TEXT NOT NULL,
++    email_hint TEXT
++  ) ON COMMIT DROP;
++
++  INSERT INTO _as_member_tokens (user_id, encrypted_token, email_hint)
++  VALUES
++    (p_owner_user_id, p_owner_encrypted_refresh, NULL),
++    (p_target_user_id, p_target_encrypted_refresh, p_target_email_hint)
++  ON CONFLICT (user_id) DO UPDATE
++  SET
++    encrypted_token = EXCLUDED.encrypted_token,
++    email_hint = COALESCE(EXCLUDED.email_hint, _as_member_tokens.email_hint);
++
++  -- Pull encrypted token payload for existing pool members from owner's rows.
++  INSERT INTO _as_member_tokens (user_id, encrypted_token, email_hint)
++  SELECT
++    usv.target_user_id,
++    usv.encrypted_refresh_token,
++    usv.linked_target_email
++  FROM public.user_sessions_vault usv
++  WHERE usv.owner_user_id = p_owner_user_id
++    AND usv.target_user_id = ANY(v_member_ids)
++    AND usv.target_user_id <> p_target_user_id
++  ON CONFLICT (user_id) DO UPDATE
++  SET
++    encrypted_token = EXCLUDED.encrypted_token,
++    email_hint = COALESCE(_as_member_tokens.email_hint, EXCLUDED.email_hint);
++
++  -- If any member token is missing, don't partially mutate.
++  SELECT COUNT(*)
++  INTO v_missing_count
++  FROM unnest(v_member_ids) m(user_id)
++  LEFT JOIN _as_member_tokens t ON t.user_id = m.user_id
++  WHERE t.user_id IS NULL;
++
++  IF v_missing_count > 0 THEN
++    RETURN jsonb_build_object(
++      'ok', false,
++      'error', 'One linked account needs re-link before adding another account to the shared pool'
++    );
++  END IF;
++
++  INSERT INTO public.user_sessions_vault (
++    owner_user_id,
++    target_user_id,
++    encrypted_refresh_token,
++    updated_at,
++    linked_target_email
++  )
++  SELECT
++    owners.owner_id,
++    targets.user_id,
++    targets.encrypted_token,
++    NOW(),
++    targets.email_hint
++  FROM unnest(v_member_ids) AS owners(owner_id)
++  CROSS JOIN _as_member_tokens AS targets
++  WHERE owners.owner_id <> targets.user_id
++  ON CONFLICT (owner_user_id, target_user_id) DO UPDATE
++  SET
++    encrypted_refresh_token = EXCLUDED.encrypted_refresh_token,
++    updated_at = EXCLUDED.updated_at,
++    linked_target_email = COALESCE(EXCLUDED.linked_target_email, public.user_sessions_vault.linked_target_email);
++
++  RETURN jsonb_build_object('ok', true, 'pool_size', v_member_count);
++END;
++$$;
++
++CREATE OR REPLACE FUNCTION public.account_switch_unlink_from_pool(
++  p_owner_user_id UUID,
++  p_target_user_id UUID
++) RETURNS JSONB
++LANGUAGE plpgsql
++SECURITY DEFINER
++SET search_path = public
++AS $$
++DECLARE
++  v_member_ids UUID[];
++  v_deleted_count INTEGER := 0;
++BEGIN
++  IF p_owner_user_id IS NULL OR p_target_user_id IS NULL THEN
++    RETURN jsonb_build_object('ok', false, 'error', 'Missing owner or target');
++  END IF;
++
++  IF p_owner_user_id = p_target_user_id THEN
++    RETURN jsonb_build_object('ok', false, 'error', 'Cannot unlink active account');
++  END IF;
++
++  IF p_owner_user_id::TEXT < p_target_user_id::TEXT THEN
++    PERFORM pg_advisory_xact_lock(hashtext('account-switch:' || p_owner_user_id::TEXT));
++    PERFORM pg_advisory_xact_lock(hashtext('account-switch:' || p_target_user_id::TEXT));
++  ELSE
++    PERFORM pg_advisory_xact_lock(hashtext('account-switch:' || p_target_user_id::TEXT));
++    PERFORM pg_advisory_xact_lock(hashtext('account-switch:' || p_owner_user_id::TEXT));
++  END IF;
++
++  SELECT ARRAY(
++    SELECT DISTINCT x.id
++    FROM (
++      SELECT p_owner_user_id AS id
++      UNION ALL
++      SELECT usv.target_user_id AS id
++      FROM public.user_sessions_vault usv
++      WHERE usv.owner_user_id = p_owner_user_id
++    ) AS x
++    WHERE x.id IS NOT NULL
++  )
++  INTO v_member_ids;
++
++  IF NOT (p_target_user_id = ANY(v_member_ids)) THEN
++    RETURN jsonb_build_object('ok', false, 'error', 'NO_LINK');
++  END IF;
++
++  DELETE FROM public.user_sessions_vault usv
++  WHERE
++    (usv.owner_user_id = ANY(v_member_ids) AND usv.target_user_id = p_target_user_id)
++    OR
++    (usv.owner_user_id = p_target_user_id AND usv.target_user_id = ANY(v_member_ids));
++
++  GET DIAGNOSTICS v_deleted_count = ROW_COUNT;
++
++  RETURN jsonb_build_object('ok', true, 'removed_edges', v_deleted_count);
++END;
++$$;
++
++CREATE OR REPLACE FUNCTION public.account_switch_propagate_refresh_tokens(
++  p_current_user_id UUID,
++  p_target_user_id UUID,
++  p_current_encrypted_refresh TEXT,
++  p_target_encrypted_refresh TEXT
++) RETURNS JSONB
++LANGUAGE plpgsql
++SECURITY DEFINER
++SET search_path = public
++AS $$
++DECLARE
++  v_updated_count INTEGER := 0;
++BEGIN
++  IF p_current_user_id IS NULL OR p_target_user_id IS NULL THEN
++    RETURN jsonb_build_object('ok', false, 'error', 'Missing current or target user');
++  END IF;
++
++  IF p_current_encrypted_refresh IS NULL OR p_target_encrypted_refresh IS NULL THEN
++    RETURN jsonb_build_object('ok', false, 'error', 'Missing encrypted refresh token payload');
++  END IF;
++
++  -- Lock both endpoints consistently to avoid overlap with link/unlink mutations.
++  IF p_current_user_id::TEXT < p_target_user_id::TEXT THEN
++    PERFORM pg_advisory_xact_lock(hashtext('account-switch:' || p_current_user_id::TEXT));
++    PERFORM pg_advisory_xact_lock(hashtext('account-switch:' || p_target_user_id::TEXT));
++  ELSE
++    PERFORM pg_advisory_xact_lock(hashtext('account-switch:' || p_target_user_id::TEXT));
++    PERFORM pg_advisory_xact_lock(hashtext('account-switch:' || p_current_user_id::TEXT));
++  END IF;
++
++  UPDATE public.user_sessions_vault usv
++  SET
++    encrypted_refresh_token = CASE
++      WHEN usv.target_user_id = p_target_user_id THEN p_target_encrypted_refresh
++      WHEN usv.target_user_id = p_current_user_id THEN p_current_encrypted_refresh
++      ELSE usv.encrypted_refresh_token
++    END,
++    updated_at = NOW()
++  WHERE usv.target_user_id IN (p_target_user_id, p_current_user_id);
++
++  GET DIAGNOSTICS v_updated_count = ROW_COUNT;
++
++  RETURN jsonb_build_object('ok', true, 'updated_rows', v_updated_count);
++END;
++$$;
++
++-- Lock down SECURITY DEFINER RPCs: callable only by service_role.
++REVOKE ALL ON FUNCTION public.account_switch_link_shared_pool(UUID, UUID, TEXT, TEXT, TEXT) FROM PUBLIC;
++GRANT EXECUTE ON FUNCTION public.account_switch_link_shared_pool(UUID, UUID, TEXT, TEXT, TEXT) TO service_role;
++
++REVOKE ALL ON FUNCTION public.account_switch_unlink_from_pool(UUID, UUID) FROM PUBLIC;
++GRANT EXECUTE ON FUNCTION public.account_switch_unlink_from_pool(UUID, UUID) TO service_role;
++
++REVOKE ALL ON FUNCTION public.account_switch_propagate_refresh_tokens(UUID, UUID, TEXT, TEXT) FROM PUBLIC;
++GRANT EXECUTE ON FUNCTION public.account_switch_propagate_refresh_tokens(UUID, UUID, TEXT, TEXT) TO service_role;
 diff --git a/app/api/account-switch/add/route.ts b/app/api/account-switch/add/route.ts
-index 089e2f7..b608edf 100644
+index 089e2f7..9f551e5 100644
 --- a/app/api/account-switch/add/route.ts
 +++ b/app/api/account-switch/add/route.ts
-@@ -1,6 +1,6 @@
-+import { upsertBidirectionalVaultLinks } from "@/lib/account-switch-vault";
+@@ -1,9 +1,14 @@
  import { createClient } from "@/utils/supabase/server";
  import { createAdminClient } from "@/utils/supabase/admin";
 -import { encrypt } from "@/lib/encryption";
  import { NextResponse } from "next/server";
  import { createServerClient } from "@supabase/ssr";
  
-@@ -121,103 +121,17 @@ export async function POST(req: Request) {
++function isUuid(value: string): boolean {
++  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
++    value,
++  );
++}
++
+ export async function POST(req: Request) {
+   try {
+     const supabase = await createClient();
+@@ -46,7 +51,10 @@ export async function POST(req: Request) {
+       }, { status: 400 });
+     }
+ 
+-    const { email, password } = await req.json();
++    const body = await req.json().catch(() => ({}));
++    const email =
++      typeof body?.email === "string" ? body.email.trim().toLowerCase() : "";
++    const password = typeof body?.password === "string" ? body.password : "";
+ 
+     if (!email || !password) {
+       return NextResponse.json({ error: "Email and password are required" }, { status: 400 });
+@@ -102,6 +110,9 @@ export async function POST(req: Request) {
+ 
+     const targetUserId = authData.user.id;
+     const targetRefreshToken = authData.session.refresh_token;
++    if (!isUuid(targetUserId)) {
++      return NextResponse.json({ error: "Invalid target account" }, { status: 400 });
++    }
+ 
+     if (targetUserId === currentUser.id) {
+       return NextResponse.json({ error: "This account is already active" }, { status: 400 });
+@@ -121,103 +132,33 @@ export async function POST(req: Request) {
        }, { status: 403 });
      }
  
@@ -143,13 +475,16 @@ index 089e2f7..b608edf 100644
 -        { status: 500 },
 -      );
 -    }
-+    const vaultResult = await upsertBidirectionalVaultLinks(
-+      adminSupabase,
-+      currentUser.id,
-+      targetUserId,
-+      currentSession.refresh_token,
-+      targetRefreshToken,
-+      { linkedTargetEmail: authData.user.email ?? null },
++    const { encrypt } = await import("@/lib/encryption");
++    const { data: linkResult, error: linkErr } = await adminSupabase.rpc(
++      "account_switch_link_shared_pool",
++      {
++        p_owner_user_id: currentUser.id,
++        p_target_user_id: targetUserId,
++        p_owner_encrypted_refresh: encrypt(currentSession.refresh_token),
++        p_target_encrypted_refresh: encrypt(targetRefreshToken),
++        p_target_email_hint: authData.user.email ?? null,
++      },
 +    );
  
 -    // 4. Store current account in targeted user's vault (cross-link)
@@ -171,21 +506,33 @@ index 089e2f7..b608edf 100644
 -        { error: "Failed to store session link" },
 -        { status: 500 },
 -      );
-+    if (!vaultResult.ok) {
-+      return NextResponse.json({ error: vaultResult.error }, { status: 500 });
++    if (linkErr) {
++      console.error("[account-switch/add] link rpc:", linkErr);
++      return NextResponse.json({ error: "Failed to store session link" }, { status: 500 });
++    }
++    const rpcOk = !!(linkResult as { ok?: boolean } | null)?.ok;
++    if (!rpcOk) {
++      const rpcError =
++        (linkResult as { error?: string } | null)?.error ||
++        "Failed to store session link";
++      const status =
++        rpcError.includes("Maximum account limit") ||
++        rpcError.includes("maximum limit")
++          ? 400
++          : 500;
++      return NextResponse.json({ error: rpcError }, { status });
      }
  
      // Audit Log
 diff --git a/app/api/account-switch/google/callback/route.ts b/app/api/account-switch/google/callback/route.ts
 new file mode 100644
-index 0000000..0d2a563
+index 0000000..8865760
 --- /dev/null
 +++ b/app/api/account-switch/google/callback/route.ts
-@@ -0,0 +1,242 @@
-+import { upsertBidirectionalVaultLinks } from "@/lib/account-switch-vault";
+@@ -0,0 +1,271 @@
 +import { createClient } from "@/utils/supabase/server";
 +import { createAdminClient } from "@/utils/supabase/admin";
-+import { decrypt } from "@/lib/encryption";
++import { decrypt, encrypt } from "@/lib/encryption";
 +import { NextRequest, NextResponse } from "next/server";
 +import { createServerClient } from "@supabase/ssr";
 +
@@ -213,8 +560,15 @@ index 0000000..0d2a563
 +    return NextResponse.redirect(url);
 +  };
 +
-+  const clearPendingCookie = (res: NextResponse) => {
++  const clearPendingCookies = (res: NextResponse) => {
 +    res.cookies.set("account_switch_pending_id", "", {
++      httpOnly: true,
++      secure: process.env.NODE_ENV === "production",
++      sameSite: "lax",
++      maxAge: 0,
++      path: "/",
++    });
++    res.cookies.set("account_switch_pending_state", "", {
 +      httpOnly: true,
 +      secure: process.env.NODE_ENV === "production",
 +      sameSite: "lax",
@@ -227,37 +581,44 @@ index 0000000..0d2a563
 +  const err = searchParams.get("error");
 +  if (err) {
 +    const res = redirectErr("account_link_oauth_denied");
-+    clearPendingCookie(res);
++    clearPendingCookies(res);
 +    return res;
 +  }
 +
 +  const code = searchParams.get("code");
 +  if (!code) {
 +    const res = redirectErr("account_link_missing_code");
-+    clearPendingCookie(res);
++    clearPendingCookies(res);
 +    return res;
 +  }
 +
 +  const pendingId = request.cookies.get("account_switch_pending_id")?.value;
-+  if (!pendingId) {
++  const expectedState = request.cookies.get("account_switch_pending_state")?.value;
++  const callbackState = searchParams.get("as_state");
++  if (!pendingId || !expectedState || !callbackState || callbackState !== expectedState) {
 +    const res = redirectErr("account_link_missing_state");
-+    clearPendingCookie(res);
++    clearPendingCookies(res);
 +    return res;
 +  }
 +
 +  const admin = createAdminClient();
++  let exchangedSessionEstablished = false;
++  let ownerRefreshPlain: string | null = null;
++  let supabase: Awaited<ReturnType<typeof createClient>> | null = null;
 +
 +  try {
-+    const supabase = await createClient();
++    supabase = await createClient();
++    const appSupabase = supabase;
 +    const { data: exchanged, error: exchangeError } =
-+      await supabase.auth.exchangeCodeForSession(code);
++      await appSupabase.auth.exchangeCodeForSession(code);
 +
 +    if (exchangeError || !exchanged.session?.refresh_token) {
 +      console.error("[google/callback] exchange:", exchangeError);
 +      const res = redirectErr("account_link_exchange_failed");
-+      clearPendingCookie(res);
++      clearPendingCookies(res);
 +      return res;
 +    }
++    exchangedSessionEstablished = true;
 +
 +    const targetSession = exchanged.session;
 +    const targetUserId = targetSession.user.id;
@@ -271,45 +632,66 @@ index 0000000..0d2a563
 +      .maybeSingle();
 +
 +    if (pendErr || !pending) {
-+      await supabase.auth.signOut({ scope: "local" });
++      await appSupabase.auth.signOut({ scope: "local" });
 +      const res = redirectErr("account_link_pending_missing");
-+      clearPendingCookie(res);
-+      return res;
-+    }
-+
-+    if (new Date(pending.expires_at as string).getTime() < Date.now()) {
-+      await admin.from("account_switch_oauth_pending").delete().eq("id", pendingId);
-+      const res = redirectErr("account_link_pending_expired");
-+      clearPendingCookie(res);
++      clearPendingCookies(res);
 +      return res;
 +    }
 +
 +    const ownerUserId = pending.owner_user_id as string;
-+    let ownerRefreshPlain: string;
 +    try {
 +      ownerRefreshPlain = decrypt(pending.encrypted_owner_refresh as string);
 +    } catch (e) {
 +      console.error("[google/callback] decrypt owner refresh:", e);
++      await appSupabase.auth.signOut({ scope: "local" });
 +      const res = redirectErr("account_link_decrypt_failed");
-+      clearPendingCookie(res);
++      clearPendingCookies(res);
++      await admin.from("account_switch_oauth_pending").delete().eq("id", pendingId);
++      return res;
++    }
++
++    const restoreOwnerSession = async () => {
++      if (!ownerRefreshPlain) return false;
++      const noop = noopCookieClient();
++      const { data: restored, error: refreshOwnerErr } =
++        await noop.auth.refreshSession({
++          refresh_token: ownerRefreshPlain,
++        });
++      if (refreshOwnerErr || !restored.session) {
++        console.error("[google/callback] restore owner session:", refreshOwnerErr);
++        return false;
++      }
++      const { error: setErr } = await appSupabase.auth.setSession({
++        access_token: restored.session.access_token,
++        refresh_token: restored.session.refresh_token,
++      });
++      if (setErr) {
++        console.error("[google/callback] setSession owner:", setErr);
++        return false;
++      }
++      return true;
++    };
++
++    if (new Date(pending.expires_at as string).getTime() < Date.now()) {
++      await admin.from("account_switch_oauth_pending").delete().eq("id", pendingId);
++      const restored = await restoreOwnerSession();
++      if (!restored) {
++        await appSupabase.auth.signOut({ scope: "local" });
++      }
++      const res = redirectErr("account_link_pending_expired");
++      clearPendingCookies(res);
 +      return res;
 +    }
 +
 +    await admin.from("account_switch_oauth_pending").delete().eq("id", pendingId);
 +
 +    if (targetUserId === ownerUserId) {
-+      const noop = noopCookieClient();
-+      const { data: restored } = await noop.auth.refreshSession({
-+        refresh_token: ownerRefreshPlain,
-+      });
-+      if (restored.session) {
-+        await supabase.auth.setSession({
-+          access_token: restored.session.access_token,
-+          refresh_token: restored.session.refresh_token,
-+        });
++      const restored = await restoreOwnerSession();
++      if (!restored) {
++        await appSupabase.auth.signOut({ scope: "local" });
 +      }
 +      const res = redirectErr("account_link_same_account");
-+      clearPendingCookie(res);
++      clearPendingCookies(res);
 +      return res;
 +    }
 +
@@ -320,18 +702,12 @@ index 0000000..0d2a563
 +      .single();
 +
 +    if (targetRow?.user_type !== "creator") {
-+      const noop = noopCookieClient();
-+      const { data: restored } = await noop.auth.refreshSession({
-+        refresh_token: ownerRefreshPlain,
-+      });
-+      if (restored.session) {
-+        await supabase.auth.setSession({
-+          access_token: restored.session.access_token,
-+          refresh_token: restored.session.refresh_token,
-+        });
++      const restored = await restoreOwnerSession();
++      if (!restored) {
++        await appSupabase.auth.signOut({ scope: "local" });
 +      }
 +      const res = redirectErr("account_link_target_not_creator");
-+      clearPendingCookie(res);
++      clearPendingCookies(res);
 +      return res;
 +    }
 +
@@ -341,43 +717,43 @@ index 0000000..0d2a563
 +      .eq("owner_user_id", ownerUserId);
 +
 +    if (!countErr && (vaultCount ?? 0) >= 5) {
-+      const noop = noopCookieClient();
-+      const { data: restored } = await noop.auth.refreshSession({
-+        refresh_token: ownerRefreshPlain,
-+      });
-+      if (restored.session) {
-+        await supabase.auth.setSession({
-+          access_token: restored.session.access_token,
-+          refresh_token: restored.session.refresh_token,
-+        });
++      const restored = await restoreOwnerSession();
++      if (!restored) {
++        await appSupabase.auth.signOut({ scope: "local" });
 +      }
 +      const res = redirectErr("account_link_max_accounts");
-+      clearPendingCookie(res);
++      clearPendingCookies(res);
 +      return res;
 +    }
 +
-+    const vaultResult = await upsertBidirectionalVaultLinks(
-+      admin,
-+      ownerUserId,
-+      targetUserId,
-+      ownerRefreshPlain,
-+      targetRefresh,
-+      { linkedTargetEmail: targetEmail },
++    const { data: linkResult, error: linkErr } = await admin.rpc(
++      "account_switch_link_shared_pool",
++      {
++        p_owner_user_id: ownerUserId,
++        p_target_user_id: targetUserId,
++        p_owner_encrypted_refresh: encrypt(ownerRefreshPlain!),
++        p_target_encrypted_refresh: encrypt(targetRefresh),
++        p_target_email_hint: targetEmail,
++      },
 +    );
 +
-+    if (!vaultResult.ok) {
-+      const noop = noopCookieClient();
-+      const { data: restored } = await noop.auth.refreshSession({
-+        refresh_token: ownerRefreshPlain,
-+      });
-+      if (restored.session) {
-+        await supabase.auth.setSession({
-+          access_token: restored.session.access_token,
-+          refresh_token: restored.session.refresh_token,
-+        });
++    if (linkErr) {
++      console.error("[google/callback] link rpc:", linkErr);
++      const restored = await restoreOwnerSession();
++      if (!restored) {
++        await appSupabase.auth.signOut({ scope: "local" });
 +      }
 +      const res = redirectErr("account_link_vault_failed");
-+      clearPendingCookie(res);
++      clearPendingCookies(res);
++      return res;
++    }
++    if (!(linkResult as { ok?: boolean } | null)?.ok) {
++      const restored = await restoreOwnerSession();
++      if (!restored) {
++        await appSupabase.auth.signOut({ scope: "local" });
++      }
++      const res = redirectErr("account_link_vault_failed");
++      clearPendingCookies(res);
 +      return res;
 +    }
 +
@@ -387,49 +763,50 @@ index 0000000..0d2a563
 +      p_user_id: ownerUserId,
 +    });
 +
-+    const noop = noopCookieClient();
-+    const { data: restored, error: refreshOwnerErr } =
-+      await noop.auth.refreshSession({
-+        refresh_token: ownerRefreshPlain,
-+      });
-+
-+    if (refreshOwnerErr || !restored.session) {
-+      console.error("[google/callback] restore owner session:", refreshOwnerErr);
++    const restored = await restoreOwnerSession();
++    if (!restored) {
++      await appSupabase.auth.signOut({ scope: "local" });
 +      const res = redirectErr("account_link_restore_owner_failed");
-+      clearPendingCookie(res);
-+      return res;
-+    }
-+
-+    const { error: setErr } = await supabase.auth.setSession({
-+      access_token: restored.session.access_token,
-+      refresh_token: restored.session.refresh_token,
-+    });
-+
-+    if (setErr) {
-+      console.error("[google/callback] setSession owner:", setErr);
-+      const res = redirectErr("account_link_set_session_failed");
-+      clearPendingCookie(res);
++      clearPendingCookies(res);
 +      return res;
 +    }
 +
 +    const okUrl = new URL("/dashboard/settings", origin);
 +    okUrl.searchParams.set("success", "account_linked_google");
 +    const res = NextResponse.redirect(okUrl);
-+    clearPendingCookie(res);
++    clearPendingCookies(res);
 +    return res;
 +  } catch (e) {
 +    console.error("[google/callback]", e);
++    if (supabase && exchangedSessionEstablished) {
++      if (ownerRefreshPlain) {
++        const noop = noopCookieClient();
++        const { data: restored } = await noop.auth.refreshSession({
++          refresh_token: ownerRefreshPlain,
++        });
++        if (restored.session) {
++          await supabase.auth.setSession({
++            access_token: restored.session.access_token,
++            refresh_token: restored.session.refresh_token,
++          });
++        } else {
++          await supabase.auth.signOut({ scope: "local" });
++        }
++      } else {
++        await supabase.auth.signOut({ scope: "local" });
++      }
++    }
 +    const res = redirectErr("account_link_unexpected");
-+    clearPendingCookie(res);
++    clearPendingCookies(res);
 +    return res;
 +  }
 +}
 diff --git a/app/api/account-switch/google/start/route.ts b/app/api/account-switch/google/start/route.ts
 new file mode 100644
-index 0000000..1696fe7
+index 0000000..14d9682
 --- /dev/null
 +++ b/app/api/account-switch/google/start/route.ts
-@@ -0,0 +1,107 @@
+@@ -0,0 +1,117 @@
 +import { createClient } from "@/utils/supabase/server";
 +import { createAdminClient } from "@/utils/supabase/admin";
 +import { encrypt } from "@/lib/encryption";
@@ -484,6 +861,7 @@ index 0000000..1696fe7
 +      .lt("expires_at", new Date().toISOString());
 +
 +    const pendingId = crypto.randomUUID();
++    const pendingState = crypto.randomUUID();
 +    const expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString();
 +
 +    const { error: insErr } = await admin
@@ -506,7 +884,9 @@ index 0000000..1696fe7
 +      await supabase.auth.signInWithOAuth({
 +        provider: "google",
 +        options: {
-+          redirectTo: `${origin}/api/account-switch/google/callback`,
++          redirectTo: `${origin}/api/account-switch/google/callback?as_state=${encodeURIComponent(
++            pendingState,
++          )}`,
 +          queryParams: {
 +            prompt: "select_account",
 +          },
@@ -523,6 +903,13 @@ index 0000000..1696fe7
 +
 +    const res = NextResponse.redirect(oauthData.url);
 +    res.cookies.set("account_switch_pending_id", pendingId, {
++      httpOnly: true,
++      secure: process.env.NODE_ENV === "production",
++      sameSite: "lax",
++      maxAge: 600,
++      path: "/",
++    });
++    res.cookies.set("account_switch_pending_state", pendingState, {
 +      httpOnly: true,
 +      secure: process.env.NODE_ENV === "production",
 +      sameSite: "lax",
@@ -610,10 +997,10 @@ index e669140..e4ad8c9 100644
  
 diff --git a/app/api/account-switch/sessions/revoke-all/route.ts b/app/api/account-switch/sessions/revoke-all/route.ts
 new file mode 100644
-index 0000000..b80c103
+index 0000000..4e45bc3
 --- /dev/null
 +++ b/app/api/account-switch/sessions/revoke-all/route.ts
-@@ -0,0 +1,35 @@
+@@ -0,0 +1,42 @@
 +import { NextResponse } from "next/server";
 +import { createClient } from "@/utils/supabase/server";
 +import { createAdminClient } from "@/utils/supabase/admin";
@@ -630,9 +1017,6 @@ index 0000000..b80c103
 +      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 +    }
 +
-+    const admin = createAdminClient();
-+    await admin.from("user_device_sessions").delete().eq("user_id", user.id);
-+
 +    const { error } = await supabase.auth.signOut({ scope: "global" });
 +
 +    if (error) {
@@ -641,6 +1025,16 @@ index 0000000..b80c103
 +        { error: error.message || "Could not sign out" },
 +        { status: 400 },
 +      );
++    }
++
++    const admin = createAdminClient();
++    const { error: cleanupErr } = await admin
++      .from("user_device_sessions")
++      .delete()
++      .eq("user_id", user.id);
++    if (cleanupErr) {
++      // Sign-out succeeded; retain success and just log cleanup miss.
++      console.error("[sessions/revoke-all] cleanup:", cleanupErr);
 +    }
 +
 +    return NextResponse.json({ ok: true });
@@ -727,10 +1121,10 @@ index 0000000..307c28c
 +}
 diff --git a/app/api/account-switch/sessions/touch/route.ts b/app/api/account-switch/sessions/touch/route.ts
 new file mode 100644
-index 0000000..07019ff
+index 0000000..bd79da7
 --- /dev/null
 +++ b/app/api/account-switch/sessions/touch/route.ts
-@@ -0,0 +1,71 @@
+@@ -0,0 +1,70 @@
 +import { createHash } from "crypto";
 +import { headers } from "next/headers";
 +import { NextResponse } from "next/server";
@@ -783,17 +1177,16 @@ index 0000000..07019ff
 +      return NextResponse.json({ error: "Failed to record session" }, { status: 500 });
 +    }
 +
-+    const { data: rows, error: listErr } = await admin
++    const { data: staleRows, error: staleErr } = await admin
 +      .from("user_device_sessions")
-+      .select("id, last_seen_at")
++      .select("id")
 +      .eq("user_id", user.id)
-+      .order("last_seen_at", { ascending: false });
++      .order("last_seen_at", { ascending: false })
++      .range(3, 200);
 +
-+    if (!listErr && rows && rows.length > 3) {
-+      const toRemove = rows.slice(3);
-+      for (const row of toRemove) {
-+        await admin.from("user_device_sessions").delete().eq("id", row.id);
-+      }
++    if (!staleErr && staleRows && staleRows.length > 0) {
++      const staleIds = staleRows.map((row) => row.id);
++      await admin.from("user_device_sessions").delete().in("id", staleIds);
 +    }
 +
 +    return NextResponse.json({ ok: true });
@@ -803,11 +1196,30 @@ index 0000000..07019ff
 +  }
 +}
 diff --git a/app/api/account-switch/switch/route.ts b/app/api/account-switch/switch/route.ts
-index 71f7979..df761d2 100644
+index 71f7979..f5835f2 100644
 --- a/app/api/account-switch/switch/route.ts
 +++ b/app/api/account-switch/switch/route.ts
-@@ -40,7 +40,13 @@ export async function POST(req: Request) {
-     const { target_user_id } = await req.json();
+@@ -4,6 +4,12 @@ import { decrypt, encrypt } from "@/lib/encryption";
+ import { NextResponse } from "next/server";
+ import { createServerClient } from "@supabase/ssr";
+ 
++function isUuid(value: string): boolean {
++  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
++    value,
++  );
++}
++
+ export async function POST(req: Request) {
+   try {
+     const supabase = await createClient();
+@@ -37,10 +43,27 @@ export async function POST(req: Request) {
+       }, { status: 403 });
+     }
+ 
+-    const { target_user_id } = await req.json();
++    const body = await req.json().catch(() => ({}));
++    const target_user_id =
++      typeof body?.target_user_id === "string" ? body.target_user_id : "";
  
      if (!target_user_id) {
 -      return NextResponse.json({ error: "Target user ID is required" }, { status: 400 });
@@ -818,10 +1230,19 @@ index 71f7979..df761d2 100644
 +        },
 +        { status: 400 },
 +      );
++    }
++    if (!isUuid(target_user_id)) {
++      return NextResponse.json(
++        {
++          error: "Target user ID is invalid",
++          code: "INVALID_TARGET",
++        },
++        { status: 400 },
++      );
      }
  
      // Check if target user is also a creator
-@@ -69,9 +75,14 @@ export async function POST(req: Request) {
+@@ -69,9 +92,14 @@ export async function POST(req: Request) {
        .single();
  
      if (vaultError || !vaultEntry) {
@@ -839,7 +1260,7 @@ index 71f7979..df761d2 100644
      }
  
      // 3. Decrypt the refresh token
-@@ -97,10 +108,14 @@ export async function POST(req: Request) {
+@@ -97,10 +125,14 @@ export async function POST(req: Request) {
  
      if (refreshError || !refreshData.session) {
        console.error("Account Switch: Refresh failed for target user:", target_user_id, refreshError?.message);
@@ -858,34 +1279,158 @@ index 71f7979..df761d2 100644
          await adminSupabase
            .from("user_sessions_vault")
            .delete()
-@@ -108,9 +123,15 @@ export async function POST(req: Request) {
+@@ -108,106 +140,31 @@ export async function POST(req: Request) {
            .eq("target_user_id", target_user_id);
        }
  
 -      return NextResponse.json({ 
 -        error: "Target session expired or invalid. Please link the account again." 
 -      }, { status: 401 });
+-    }
+-
+-    // 5. Update the vault with new tokens bidirectionally.
+-    // We snapshot existing rows first so we can rollback on partial failures.
+-    const encryptedOldToken = encrypt(currentSession.refresh_token);
+-    const newEncryptedToken = encrypt(refreshData.session.refresh_token);
+-    const [{ data: previousForward }, { data: previousReverse }] =
+-      await Promise.all([
+-        adminSupabase
+-          .from("user_sessions_vault")
+-          .select("owner_user_id, target_user_id, encrypted_refresh_token, updated_at")
+-          .eq("owner_user_id", currentUser.id)
+-          .eq("target_user_id", target_user_id)
+-          .maybeSingle(),
+-        adminSupabase
+-          .from("user_sessions_vault")
+-          .select("owner_user_id, target_user_id, encrypted_refresh_token, updated_at")
+-          .eq("owner_user_id", target_user_id)
+-          .eq("target_user_id", currentUser.id)
+-          .maybeSingle(),
+-      ]);
+-
+-    const rollbackVaultPair = async () => {
+-      const restoreOne = async (
+-        ownerUserId: string,
+-        targetUserIdToRestore: string,
+-        previous:
+-          | {
+-              owner_user_id: string;
+-              target_user_id: string;
+-              encrypted_refresh_token: string;
+-              updated_at: string | null;
+-            }
+-          | null,
+-      ) => {
+-        if (previous) {
+-          await adminSupabase.from("user_sessions_vault").upsert(
+-            {
+-              owner_user_id: previous.owner_user_id,
+-              target_user_id: previous.target_user_id,
+-              encrypted_refresh_token: previous.encrypted_refresh_token,
+-              updated_at: previous.updated_at ?? new Date().toISOString(),
+-            },
+-            { onConflict: "owner_user_id,target_user_id" },
+-          );
+-          return;
+-        }
+-        await adminSupabase
+-          .from("user_sessions_vault")
+-          .delete()
+-          .eq("owner_user_id", ownerUserId)
+-          .eq("target_user_id", targetUserIdToRestore);
+-      };
+-
+-      await restoreOne(currentUser.id, target_user_id, previousForward ?? null);
+-      await restoreOne(target_user_id, currentUser.id, previousReverse ?? null);
+-    };
+-
+-    const now = new Date().toISOString();
+-    // Cross-link: User B now "owns" a link to User A
+-    const { error: reverseUpsertError } = await adminSupabase
+-      .from("user_sessions_vault")
+-      .upsert(
 +      return NextResponse.json(
-+        {
+         {
+-          owner_user_id: target_user_id,
+-          target_user_id: currentUser.id,
+-          encrypted_refresh_token: encryptedOldToken,
+-          updated_at: now,
 +          error:
 +            "Target session expired or invalid. Please link the account again.",
 +          code: shouldRemoveStale ? "VAULT_ROW_REMOVED" : "VAULT_REFRESH_FAILED",
 +          target_user_id,
-+        },
+         },
+-        { onConflict: "owner_user_id,target_user_id" },
+-      );
+-    if (reverseUpsertError) {
+-      await rollbackVaultPair().catch((rollbackErr) =>
+-        console.error("Switch rollback failed after reverse upsert error:", rollbackErr),
+-      );
+-      return NextResponse.json(
+-        { error: "Failed to update account switch links" },
+-        { status: 500 },
 +        { status: 401 },
-+      );
+       );
      }
  
-     // 5. Update the vault with new tokens bidirectionally.
+-    // Update existing link: User A "owns" a link to User B using the NEW token
+-    const { error: forwardUpsertError } = await adminSupabase
+-      .from("user_sessions_vault")
+-      .upsert(
+-        {
+-          owner_user_id: currentUser.id,
+-          target_user_id: target_user_id,
+-          encrypted_refresh_token: newEncryptedToken,
+-          updated_at: now,
+-        },
+-        { onConflict: "owner_user_id,target_user_id" },
+-      );
+-    if (forwardUpsertError) {
+-      await rollbackVaultPair().catch((rollbackErr) =>
+-        console.error("Switch rollback failed after forward upsert error:", rollbackErr),
+-      );
++    // 5. Propagate fresh encrypted refresh tokens across the shared pool.
++    const encryptedOldToken = encrypt(currentSession.refresh_token);
++    const newEncryptedToken = encrypt(refreshData.session.refresh_token);
++    const { data: propagateResult, error: propagateErr } = await adminSupabase.rpc(
++      "account_switch_propagate_refresh_tokens",
++      {
++        p_current_user_id: currentUser.id,
++        p_target_user_id: target_user_id,
++        p_current_encrypted_refresh: encryptedOldToken,
++        p_target_encrypted_refresh: newEncryptedToken,
++      },
++    );
++    if (propagateErr || !(propagateResult as { ok?: boolean } | null)?.ok) {
++      console.error("Account Switch: token propagation failed:", propagateErr);
+       return NextResponse.json(
+         { error: "Failed to update account switch links" },
+         { status: 500 },
+@@ -220,9 +177,6 @@ export async function POST(req: Request) {
+       refresh_token: refreshData.session.refresh_token,
+     });
+     if (setSessionError) {
+-      await rollbackVaultPair().catch((rollbackErr) =>
+-        console.error("Switch rollback failed after setSession error:", rollbackErr),
+-      );
+       return NextResponse.json(
+         { error: "Failed to switch session. Please try again." },
+         { status: 500 },
 diff --git a/app/api/account-switch/unlink/route.ts b/app/api/account-switch/unlink/route.ts
 new file mode 100644
-index 0000000..dd01a1e
+index 0000000..d729f3d
 --- /dev/null
 +++ b/app/api/account-switch/unlink/route.ts
-@@ -0,0 +1,110 @@
+@@ -0,0 +1,106 @@
 +import { createClient } from "@/utils/supabase/server";
 +import { createAdminClient } from "@/utils/supabase/admin";
 +import { NextResponse } from "next/server";
++
++function isUuid(value: string): boolean {
++  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
++    value,
++  );
++}
 +
 +export async function POST(req: Request) {
 +  try {
@@ -921,6 +1466,12 @@ index 0000000..dd01a1e
 +        { status: 400 },
 +      );
 +    }
++    if (!isUuid(targetUserId)) {
++      return NextResponse.json(
++        { error: "target_user_id is invalid", code: "INVALID_TARGET" },
++        { status: 400 },
++      );
++    }
 +
 +    if (targetUserId === currentUser.id) {
 +      return NextResponse.json(
@@ -929,58 +1480,42 @@ index 0000000..dd01a1e
 +      );
 +    }
 +
-+    const { data: forwardRow, error: forwardErr } = await adminSupabase
-+      .from("user_sessions_vault")
-+      .select("owner_user_id, target_user_id")
-+      .eq("owner_user_id", currentUser.id)
-+      .eq("target_user_id", targetUserId)
-+      .maybeSingle();
-+
-+    if (forwardErr) {
-+      console.error("[account-switch/unlink] forward lookup:", forwardErr);
++    const { data: unlinkResult, error: unlinkErr } = await adminSupabase.rpc(
++      "account_switch_unlink_from_pool",
++      {
++        p_owner_user_id: currentUser.id,
++        p_target_user_id: targetUserId,
++      },
++    );
++    if (unlinkErr) {
++      console.error("[account-switch/unlink] unlink rpc:", unlinkErr);
++      return NextResponse.json({ error: "Failed to remove link" }, { status: 500 });
++    }
++    const rpcResult = (unlinkResult ?? null) as
++      | { ok?: boolean; error?: string; removed_edges?: number }
++      | null;
++    if (!rpcResult?.ok) {
++      if (rpcResult?.error === "NO_LINK") {
++        return NextResponse.json(
++          {
++            error: "This account is not linked to your switcher",
++            code: "NO_LINK",
++          },
++          { status: 404 },
++        );
++      }
 +      return NextResponse.json(
-+        { error: "Failed to verify link" },
++        { error: rpcResult?.error || "Failed to remove link" },
 +        { status: 500 },
 +      );
-+    }
-+
-+    if (!forwardRow) {
-+      return NextResponse.json(
-+        {
-+          error: "This account is not linked to your switcher",
-+          code: "NO_LINK",
-+        },
-+        { status: 404 },
-+      );
-+    }
-+
-+    const { error: delForward } = await adminSupabase
-+      .from("user_sessions_vault")
-+      .delete()
-+      .eq("owner_user_id", currentUser.id)
-+      .eq("target_user_id", targetUserId);
-+
-+    if (delForward) {
-+      console.error("[account-switch/unlink] delete forward:", delForward);
-+      return NextResponse.json(
-+        { error: "Failed to remove link" },
-+        { status: 500 },
-+      );
-+    }
-+
-+    const { error: delReverse } = await adminSupabase
-+      .from("user_sessions_vault")
-+      .delete()
-+      .eq("owner_user_id", targetUserId)
-+      .eq("target_user_id", currentUser.id);
-+
-+    if (delReverse) {
-+      console.error("[account-switch/unlink] delete reverse:", delReverse);
 +    }
 +
 +    await adminSupabase.rpc("log_action", {
 +      p_action: "account_link_removed",
-+      p_metadata: { unlinked_user_id: targetUserId },
++      p_metadata: {
++        unlinked_user_id: targetUserId,
++        removed_pool_edges: rpcResult.removed_edges ?? 0,
++      },
 +      p_user_id: currentUser.id,
 +    });
 +
@@ -1139,10 +1674,10 @@ index 372d02c..2340b6d 100644
        setShowCreatorModal(false);
        router.push("/auth/signup");
 diff --git a/components/dashboard/switcher/AccountSwitcher.tsx b/components/dashboard/switcher/AccountSwitcher.tsx
-index e5b090c..9dd694f 100644
+index e5b090c..39ffbf4 100644
 --- a/components/dashboard/switcher/AccountSwitcher.tsx
 +++ b/components/dashboard/switcher/AccountSwitcher.tsx
-@@ -1,63 +1,201 @@
+@@ -1,63 +1,203 @@
  "use client";
  
  import React, { useState, useEffect } from "react";
@@ -1278,9 +1813,11 @@ index e5b090c..9dd694f 100644
 +
 +function ConnectedOnLine({
 +  dateLabel,
++  prefix = "Connected on",
 +  isDark,
 +}: {
 +  dateLabel: string | null;
++  prefix?: string;
 +  isDark: boolean;
 +}) {
 +  if (!dateLabel) return null;
@@ -1291,7 +1828,7 @@ index e5b090c..9dd694f 100644
 +        isDark ? "text-slate-500" : "text-slate-500",
 +      )}
 +    >
-+      Connected on ΓÇö {dateLabel}
++      {prefix} ΓÇö {dateLabel}
 +    </p>
 +  );
 +}
@@ -1362,7 +1899,7 @@ index e5b090c..9dd694f 100644
      try {
        const res = await fetch("/api/account-switch/list");
        const data = await res.json();
-@@ -67,7 +205,11 @@ export function AccountSwitcher({
+@@ -67,7 +207,11 @@ export function AccountSwitcher({
      } catch (err) {
        console.error("[AccountSwitcher] Fetch failed:", err);
      } finally {
@@ -1375,7 +1912,7 @@ index e5b090c..9dd694f 100644
      }
    };
  
-@@ -75,6 +217,13 @@ export function AccountSwitcher({
+@@ -75,6 +219,13 @@ export function AccountSwitcher({
      fetchAccounts();
    }, []);
  
@@ -1389,7 +1926,7 @@ index e5b090c..9dd694f 100644
    const handleSwitch = async (targetUserId: string) => {
      if (isSwitching) return;
      
-@@ -89,31 +238,64 @@ export function AccountSwitcher({
+@@ -89,31 +240,64 @@ export function AccountSwitcher({
      }
      
      setIsSwitching(targetUserId);
@@ -1433,7 +1970,7 @@ index e5b090c..9dd694f 100644
 -        throw new Error(data.error || "Failed to switch accounts");
 +        window.location.href = "/dashboard/settings";
 +        return;
-       }
++      }
 +
 +      const code = data.code as string | undefined;
 +      const tid = (data.target_user_id as string) || targetUserId;
@@ -1454,7 +1991,7 @@ index e5b090c..9dd694f 100644
 +          duration: 8000,
 +        });
 +        return;
-+      }
+       }
 +
 +      throw new Error(data.error || "Failed to switch accounts");
      } catch (err: any) {
@@ -1469,7 +2006,7 @@ index e5b090c..9dd694f 100644
        });
      } finally {
        setIsSwitching(null);
-@@ -133,40 +315,89 @@ export function AccountSwitcher({
+@@ -133,42 +317,91 @@ export function AccountSwitcher({
        return;
      }
      
@@ -1518,12 +2055,13 @@ index e5b090c..9dd694f 100644
 +        title: "Connection Error",
 +        description: err.message,
 +        variant: "destructive",
-+      });
-+    } finally {
+       });
+     } finally {
+-      setIsLoading(false);
 +      setIsLinking(false);
-+    }
-+  };
-+
+     }
+   };
+ 
 +  const handleConfirmUnlink = async () => {
 +    if (!unlinkTarget || isUnlinking) return;
 +    setIsUnlinking(true);
@@ -1552,9 +2090,8 @@ index e5b090c..9dd694f 100644
 +        title: "Unlink failed",
 +        description: err instanceof Error ? err.message : "Something went wrong",
 +        variant: "destructive",
-       });
-     } finally {
--      setIsLoading(false);
++      });
++    } finally {
 +      setIsUnlinking(false);
 +    }
 +  };
@@ -1568,13 +2105,15 @@ index e5b090c..9dd694f 100644
 +      setEmail(hint);
 +    } else {
 +      setEmail("");
-     }
++    }
 +    setIsSwitchModalOpen(false);
 +    setIsAddModalOpen(true);
-   };
- 
++  };
++
    return (
-@@ -255,9 +486,19 @@ export function AccountSwitcher({
+     <div className="py-2 px-1">
+       {/* Quick Action - Account Switcher */}
+@@ -255,9 +488,19 @@ export function AccountSwitcher({
        </button>
  
        {/* Account Switch Modal */}
@@ -1596,7 +2135,7 @@ index e5b090c..9dd694f 100644
            isDark 
              ? "bg-[#07031E] border-slate-800 text-white" 
              : "bg-white border-slate-200"
-@@ -268,22 +509,55 @@ export function AccountSwitcher({
+@@ -268,22 +511,64 @@ export function AccountSwitcher({
              </div>
              <DialogTitle className="text-2xl text-center font-bold">Account Switcher</DialogTitle>
              <DialogDescription className="text-center">
@@ -1604,6 +2143,15 @@ index e5b090c..9dd694f 100644
 +              Choose an account to switch to, or link another creator profile.
              </DialogDescription>
            </DialogHeader>
++          <p
++            className={cn(
++              "text-xs text-center -mt-1",
++              isDark ? "text-slate-400" : "text-slate-600",
++            )}
++          >
++            Linked accounts are shared across your switcher pool, so accounts
++            added from one profile appear on other linked profiles too.
++          </p>
 +
 +          {isAccountsRefreshing && (
 +            <div className="flex justify-center py-1">
@@ -1656,7 +2204,7 @@ index e5b090c..9dd694f 100644
                      <Avatar className="h-10 w-10 border-2 border-violet-500">
                        <AvatarFallback className="bg-violet-600 text-[10px] text-white font-bold">
                          {currentUsername.slice(0, 2).toUpperCase()}
-@@ -293,52 +567,204 @@ export function AccountSwitcher({
+@@ -293,52 +578,205 @@ export function AccountSwitcher({
                         <div className="h-1.5 w-1.5 rounded-full bg-white animate-pulse" />
                      </div>
                   </div>
@@ -1674,6 +2222,7 @@ index e5b090c..9dd694f 100644
 +                    />
 +                    <ConnectedOnLine
 +                      dateLabel={formatConnectedOn(currentUserJoinedAt)}
++                      prefix="Created on"
 +                      isDark={isDark}
 +                    />
                   </div>
@@ -1895,7 +2444,7 @@ index e5b090c..9dd694f 100644
                <div className={cn(
                  "flex flex-col items-center justify-center py-8 px-4 rounded-xl border border-dashed",
                   isDark ? "border-slate-800" : "border-slate-200"
-@@ -359,13 +785,16 @@ export function AccountSwitcher({
+@@ -359,13 +797,16 @@ export function AccountSwitcher({
                   <p className="text-sm text-red-600 text-center font-medium">
                      Maximum account limit reached (5/5)
                   </p>
@@ -1916,7 +2465,7 @@ index e5b090c..9dd694f 100644
                <div className="flex justify-center py-6">
                  <Loader2 className="h-6 w-6 animate-spin text-violet-500" />
                </div>
-@@ -407,8 +836,96 @@ export function AccountSwitcher({
+@@ -407,8 +848,90 @@ export function AccountSwitcher({
          </DialogContent>
        </Dialog>
  
@@ -1933,12 +2482,6 @@ index e5b090c..9dd694f 100644
 +              ? "border-slate-800 bg-[#07031E] text-white"
 +              : "border-slate-200 bg-white",
 +          )}
-+          onPointerDownOutside={(e) => {
-+            if (isUnlinking) e.preventDefault();
-+          }}
-+          onEscapeKeyDown={(e) => {
-+            if (isUnlinking) e.preventDefault();
-+          }}
 +        >
 +          <AlertDialogHeader>
 +            <AlertDialogTitle className="text-left text-lg">
@@ -2014,7 +2557,7 @@ index e5b090c..9dd694f 100644
          <DialogContent className={cn(
            "max-w-[95vw] sm:max-w-[400px] h-[80vh] max-h-[600px] rounded-3xl p-6 overflow-y-auto", 
            isDark 
-@@ -421,11 +938,48 @@ export function AccountSwitcher({
+@@ -421,11 +944,48 @@ export function AccountSwitcher({
              </div>
              <DialogTitle className="text-2xl text-center font-bold">Link New Account</DialogTitle>
              <DialogDescription className="text-center">
@@ -2065,7 +2608,7 @@ index e5b090c..9dd694f 100644
               <div className="space-y-2">
                 <Label htmlFor="s-email" className="text-sm font-semibold ml-1">Account Email</Label>
                 <Input 
-@@ -500,10 +1054,10 @@ export function AccountSwitcher({
+@@ -500,10 +1060,10 @@ export function AccountSwitcher({
                  </Button>
                  <Button 
                    type="submit" 
@@ -2313,19 +2856,31 @@ index 0000000..ce386bf
 +}
 diff --git a/lib/account-switch-vault.ts b/lib/account-switch-vault.ts
 new file mode 100644
-index 0000000..9286536
+index 0000000..8172f1e
 --- /dev/null
 +++ b/lib/account-switch-vault.ts
-@@ -0,0 +1,123 @@
+@@ -0,0 +1,319 @@
 +import type { SupabaseClient } from "@supabase/supabase-js";
-+import { encrypt } from "@/lib/encryption";
++import { decrypt, encrypt } from "@/lib/encryption";
++
++const MAX_LINKED_ACCOUNTS = 5;
++const MAX_POOL_MEMBERS = MAX_LINKED_ACCOUNTS + 1;
++const VAULT_CONFLICT_KEY = "owner_user_id,target_user_id";
++
++type VaultSnapshotRow = {
++  owner_user_id: string;
++  target_user_id: string;
++  encrypted_refresh_token: string;
++  updated_at: string | null;
++  linked_target_email?: string | null;
++};
 +
 +/**
 + * Bidirectional vault upsert for account switching (owner Γåö target).
 + * Forward row stores target's refresh; reverse row stores owner's refresh.
 + */
 +export async function upsertBidirectionalVaultLinks(
-+  adminSupabase: Admin,
++  adminSupabase: SupabaseClient,
 +  ownerUserId: string,
 +  targetUserId: string,
 +  ownerRefreshPlain: string,
@@ -2438,6 +2993,190 @@ index 0000000..9286536
 +    return { ok: false, error: "Failed to store session link" };
 +  }
 +
++  // Final safety check against max-account races. If concurrent link attempts
++  // push this owner above the allowed limit, rollback this pair.
++  const { count: ownerLinkCount, error: ownerCountErr } = await adminSupabase
++    .from("user_sessions_vault")
++    .select("id", { count: "exact", head: true })
++    .eq("owner_user_id", ownerUserId);
++
++  if (!ownerCountErr && (ownerLinkCount ?? 0) > 5) {
++    await rollbackVaultPair().catch((e) =>
++      console.error("[vault] rollback after max-limit race:", e),
++    );
++    return { ok: false, error: "Maximum account limit reached (5 accounts)." };
++  }
++
++  return { ok: true };
++}
++
++function pairKey(ownerId: string, targetId: string): string {
++  return `${ownerId}::${targetId}`;
++}
++
++export async function linkAccountIntoSharedPool(
++  adminSupabase: SupabaseClient,
++  ownerUserId: string,
++  targetUserId: string,
++  ownerRefreshPlain: string,
++  targetRefreshPlain: string,
++  options?: { linkedTargetEmail?: string | null },
++): Promise<{ ok: true } | { ok: false; error: string }> {
++  const { data: ownerRows, error: ownerRowsErr } = await adminSupabase
++    .from("user_sessions_vault")
++    .select("target_user_id, encrypted_refresh_token, linked_target_email")
++    .eq("owner_user_id", ownerUserId);
++
++  if (ownerRowsErr) {
++    console.error("[vault/shared] owner rows fetch failed:", ownerRowsErr);
++    return { ok: false, error: "Failed to load existing linked accounts" };
++  }
++
++  const tokenByUserId = new Map<string, string>();
++  tokenByUserId.set(ownerUserId, ownerRefreshPlain);
++  tokenByUserId.set(targetUserId, targetRefreshPlain);
++
++  const emailHintByUserId = new Map<string, string | null>();
++  if (options?.linkedTargetEmail) {
++    emailHintByUserId.set(targetUserId, options.linkedTargetEmail);
++  }
++
++  for (const row of ownerRows ?? []) {
++    const rowTargetId = row.target_user_id as string;
++    if (!rowTargetId || rowTargetId === targetUserId) continue;
++    try {
++      tokenByUserId.set(
++        rowTargetId,
++        decrypt(row.encrypted_refresh_token as string),
++      );
++    } catch (e) {
++      console.error("[vault/shared] decrypt existing token failed:", e);
++      return {
++        ok: false,
++        error:
++          "One linked account needs re-link before adding another account to the shared pool",
++      };
++    }
++    const hint = (row.linked_target_email as string | null | undefined) ?? null;
++    if (hint && !emailHintByUserId.has(rowTargetId)) {
++      emailHintByUserId.set(rowTargetId, hint);
++    }
++  }
++
++  const memberIds = Array.from(tokenByUserId.keys());
++  if (memberIds.length > MAX_POOL_MEMBERS) {
++    return {
++      ok: false,
++      error:
++        "Maximum account limit reached (5 accounts). Remove an existing account to add a new one.",
++    };
++  }
++
++  const { data: memberOwnerRows, error: memberOwnerRowsErr } = await adminSupabase
++    .from("user_sessions_vault")
++    .select("owner_user_id, target_user_id")
++    .in("owner_user_id", memberIds);
++
++  if (memberOwnerRowsErr) {
++    console.error("[vault/shared] member row fetch failed:", memberOwnerRowsErr);
++    return { ok: false, error: "Failed to validate linked account limits" };
++  }
++
++  const outsideCounts = new Map<string, number>();
++  for (const memberId of memberIds) outsideCounts.set(memberId, 0);
++  for (const row of memberOwnerRows ?? []) {
++    const owner = row.owner_user_id as string;
++    const target = row.target_user_id as string;
++    if (!outsideCounts.has(owner)) continue;
++    if (memberIds.includes(target)) continue;
++    outsideCounts.set(owner, (outsideCounts.get(owner) ?? 0) + 1);
++  }
++
++  const poolLinksPerOwner = memberIds.length - 1;
++  for (const memberId of memberIds) {
++    if ((outsideCounts.get(memberId) ?? 0) + poolLinksPerOwner > MAX_LINKED_ACCOUNTS) {
++      return {
++        ok: false,
++        error:
++          "One linked account is already at the maximum limit. Unlink an account from that profile and try again.",
++      };
++    }
++  }
++
++  const { data: existingPoolRows, error: existingPoolRowsErr } = await adminSupabase
++    .from("user_sessions_vault")
++    .select(
++      "owner_user_id, target_user_id, encrypted_refresh_token, updated_at, linked_target_email",
++    )
++    .in("owner_user_id", memberIds)
++    .in("target_user_id", memberIds);
++
++  if (existingPoolRowsErr) {
++    console.error("[vault/shared] existing pool fetch failed:", existingPoolRowsErr);
++    return { ok: false, error: "Failed to prepare account-link update" };
++  }
++
++  const snapshot = (existingPoolRows ?? []).filter(
++    (row) => row.owner_user_id !== row.target_user_id,
++  ) as VaultSnapshotRow[];
++
++  const snapshotKeys = new Set(
++    snapshot.map((row) => pairKey(row.owner_user_id, row.target_user_id)),
++  );
++
++  const now = new Date().toISOString();
++  const upsertRows: Record<string, unknown>[] = [];
++  for (const ownerId of memberIds) {
++    for (const toId of memberIds) {
++      if (ownerId === toId) continue;
++      const targetToken = tokenByUserId.get(toId);
++      if (!targetToken) {
++        return { ok: false, error: "Failed to build shared account switch pool" };
++      }
++      const row: Record<string, unknown> = {
++        owner_user_id: ownerId,
++        target_user_id: toId,
++        encrypted_refresh_token: encrypt(targetToken),
++        updated_at: now,
++      };
++      const emailHint = emailHintByUserId.get(toId);
++      if (emailHint) row.linked_target_email = emailHint;
++      upsertRows.push(row);
++    }
++  }
++
++  const rollbackSharedPool = async () => {
++    if (snapshot.length > 0) {
++      await adminSupabase
++        .from("user_sessions_vault")
++        .upsert(snapshot, { onConflict: VAULT_CONFLICT_KEY });
++    }
++    for (const ownerId of memberIds) {
++      for (const toId of memberIds) {
++        if (ownerId === toId) continue;
++        const key = pairKey(ownerId, toId);
++        if (snapshotKeys.has(key)) continue;
++        await adminSupabase
++          .from("user_sessions_vault")
++          .delete()
++          .eq("owner_user_id", ownerId)
++          .eq("target_user_id", toId);
++      }
++    }
++  };
++
++  const { error: upsertPoolErr } = await adminSupabase
++    .from("user_sessions_vault")
++    .upsert(upsertRows, { onConflict: VAULT_CONFLICT_KEY });
++
++  if (upsertPoolErr) {
++    console.error("[vault/shared] upsert failed:", upsertPoolErr);
++    await rollbackSharedPool().catch((e) =>
++      console.error("[vault/shared] rollback failed:", e),
++    );
++    return { ok: false, error: "Failed to store session link" };
++  }
++
 +  return { ok: true };
 +}
 diff --git a/lib/auth-utils.ts b/lib/auth-utils.ts
@@ -2457,9 +3196,8 @@ index ae463e2..1137c7c 100644
    // This hard redirect in completeLogout is fine when explicitly logging out.
        if (window.location.pathname !== '/auth/signin') {
 diff --git a/reviews/pr-admin.diff b/reviews/pr-admin.diff
-deleted file mode 100644
-index 55bf812..0000000
-Binary files a/reviews/pr-admin.diff and /dev/null differ
+index 55bf812..857f0d7 100644
+Binary files a/reviews/pr-admin.diff and b/reviews/pr-admin.diff differ
 diff --git a/reviews/pr-feature-tiktok-integration.diff b/reviews/pr-feature-tiktok-integration.diff
 deleted file mode 100644
 index db409c4..0000000
