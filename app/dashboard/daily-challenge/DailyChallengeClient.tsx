@@ -15,6 +15,7 @@ import {
   Flame,
   Loader2,
   Medal,
+  PencilLine,
   RefreshCw,
   Trophy,
   Upload,
@@ -79,6 +80,26 @@ function fromNow(iso?: string) {
   return `${Math.floor(hrs / 24)}d ago`;
 }
 
+function formatForDatetimeLocal(d: Date) {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  const h = String(d.getHours()).padStart(2, "0");
+  const min = String(d.getMinutes()).padStart(2, "0");
+  return `${y}-${m}-${day}T${h}:${min}`;
+}
+
+type CompetitionEventRow = {
+  id: string;
+  name: string;
+  starts_at: string;
+  ends_at: string;
+  timezone: string;
+  status: string;
+  is_active: boolean;
+  phase: "live" | "upcoming" | "past";
+};
+
 type BoardTab = "views" | "reels";
 const DAILY_WINNER_REWARD_INR = 50;
 const CREATOR_REFRESH_COOLDOWN_MS = 30 * 60 * 1000;
@@ -106,6 +127,25 @@ export default function DailyChallengeClient({
   const [lastRefreshAt, setLastRefreshAt] = useState<string | null>(null);
   const [savingRules, setSavingRules] = useState(false);
   const [rulesMessage, setRulesMessage] = useState<string | null>(null);
+  const [creatingEvent, setCreatingEvent] = useState(false);
+  const [eventBootstrapMessage, setEventBootstrapMessage] = useState<string | null>(null);
+  const [eventForm, setEventForm] = useState({
+    name: "Daily Challenge",
+    pastDays: "1",
+    durationDays: "30",
+  });
+  const [competitionEvents, setCompetitionEvents] = useState<CompetitionEventRow[]>([]);
+  const [loadingCompetitionEvents, setLoadingCompetitionEvents] = useState(false);
+  const [editingEventId, setEditingEventId] = useState<string | null>(null);
+  const [editEventDraft, setEditEventDraft] = useState<{
+    name: string;
+    startsLocal: string;
+    endsLocal: string;
+    status: string;
+    is_active: boolean;
+  } | null>(null);
+  const [savingEventId, setSavingEventId] = useState<string | null>(null);
+  const [eventsPanelMessage, setEventsPanelMessage] = useState<string | null>(null);
   const [adminRules, setAdminRules] = useState({
     viewsMinViews: "1000",
     reelsMinReels: "3",
@@ -208,6 +248,7 @@ export default function DailyChallengeClient({
 
   const me = payload?.me;
   const config = payload?.config;
+  const hasActiveEvent = Boolean(payload?.hasActiveEvent && payload?.config);
   const isDark = mode === "dark";
   const rows = activeBoard === "views" ? payload?.topCreatorsByViews || [] : payload?.topCreatorsByReels || [];
   const pagination = payload?.pagination;
@@ -253,8 +294,113 @@ export default function DailyChallengeClient({
     });
   }, [config]);
 
+  const loadCompetitionEvents = async () => {
+    if (!isAdmin) return;
+    setLoadingCompetitionEvents(true);
+    setEventsPanelMessage(null);
+    try {
+      const res = await fetch("/api/admin/competition/events");
+      const json = await res.json();
+      if (!res.ok) throw new Error(json?.error || "Failed to load competition windows");
+      setCompetitionEvents(json.events || []);
+    } catch (e: any) {
+      setEventsPanelMessage(e?.message || "Failed to load competition windows");
+    } finally {
+      setLoadingCompetitionEvents(false);
+    }
+  };
+
+  useEffect(() => {
+    if (isAdmin) loadCompetitionEvents();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isAdmin]);
+
+  const createCompetitionEvent = async () => {
+    if (!isAdmin || creatingEvent) return;
+    setCreatingEvent(true);
+    setEventBootstrapMessage(null);
+    try {
+      const past = Math.max(0, Math.floor(Number(eventForm.pastDays) || 0));
+      const duration = Math.max(1, Math.floor(Number(eventForm.durationDays) || 30));
+      const endsAt = new Date();
+      endsAt.setTime(endsAt.getTime() + duration * 24 * 60 * 60 * 1000);
+      const startsAt = new Date();
+      startsAt.setTime(startsAt.getTime() - past * 24 * 60 * 60 * 1000);
+      const res = await fetch("/api/admin/competition/event", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: eventForm.name.trim() || "Daily Challenge",
+          startsAt: startsAt.toISOString(),
+          endsAt: endsAt.toISOString(),
+        }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json?.error || "Failed to create competition");
+      setEventBootstrapMessage("Competition created. You can adjust eligibility rules below.");
+      await load(true);
+      await loadCompetitionEvents();
+    } catch (e: any) {
+      setEventBootstrapMessage(e?.message || "Failed to create competition");
+    } finally {
+      setCreatingEvent(false);
+    }
+  };
+
+  const beginEditEvent = (row: CompetitionEventRow) => {
+    setEditingEventId(row.id);
+    setEditEventDraft({
+      name: row.name,
+      startsLocal: formatForDatetimeLocal(new Date(row.starts_at)),
+      endsLocal: formatForDatetimeLocal(new Date(row.ends_at)),
+      status: row.status,
+      is_active: row.is_active,
+    });
+    setEventsPanelMessage(null);
+  };
+
+  const cancelEditEvent = () => {
+    setEditingEventId(null);
+    setEditEventDraft(null);
+  };
+
+  const saveEditedEvent = async (id: string, makeSoleActive?: boolean) => {
+    if (!editEventDraft || savingEventId) return;
+    setSavingEventId(id);
+    setEventsPanelMessage(null);
+    try {
+      const starts = new Date(editEventDraft.startsLocal);
+      const ends = new Date(editEventDraft.endsLocal);
+      if (Number.isNaN(starts.getTime()) || Number.isNaN(ends.getTime())) {
+        throw new Error("Invalid start or end date");
+      }
+      const res = await fetch(`/api/admin/competition/event/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: editEventDraft.name.trim() || "Daily Challenge",
+          starts_at: starts.toISOString(),
+          ends_at: ends.toISOString(),
+          status: editEventDraft.status,
+          is_active: editEventDraft.is_active,
+          makeSoleActive: makeSoleActive === true,
+        }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json?.error || "Failed to update competition");
+      setEventsPanelMessage("Competition window updated.");
+      cancelEditEvent();
+      await load(true);
+      await loadCompetitionEvents();
+    } catch (e: any) {
+      setEventsPanelMessage(e?.message || "Failed to update competition");
+    } finally {
+      setSavingEventId(null);
+    }
+  };
+
   const saveEligibilityRules = async () => {
-    if (!isAdmin || savingRules) return;
+    if (!isAdmin || savingRules || !hasActiveEvent) return;
     setSavingRules(true);
     setRulesMessage(null);
     try {
@@ -273,11 +419,27 @@ export default function DailyChallengeClient({
       if (!res.ok) throw new Error(json?.error || "Failed to save eligibility rules");
       setRulesMessage("Eligibility rules updated.");
       await load(true);
+      await loadCompetitionEvents();
     } catch (e: any) {
       setRulesMessage(e?.message || "Failed to save eligibility rules");
     } finally {
       setSavingRules(false);
     }
+  };
+
+  const eventsByPhase = {
+    live: competitionEvents.filter((e) => e.phase === "live"),
+    upcoming: competitionEvents.filter((e) => e.phase === "upcoming"),
+    past: competitionEvents.filter((e) => e.phase === "past"),
+  };
+
+  const fmtEventRange = (isoStart: string, isoEnd: string) => {
+    const opts: Intl.DateTimeFormatOptions = {
+      dateStyle: "medium",
+      timeStyle: "short",
+      timeZone: "Asia/Kolkata",
+    };
+    return `${new Date(isoStart).toLocaleString("en-IN", opts)} → ${new Date(isoEnd).toLocaleString("en-IN", opts)}`;
   };
 
   return (
@@ -397,12 +559,315 @@ export default function DailyChallengeClient({
         </div>
       </div>
 
+      {!hasActiveEvent && !loading && !error && (
+        <div
+          className={cn(
+            "rounded-2xl border p-4 sm:p-5 flex gap-3",
+            isDark ? "border-amber-400/35 bg-amber-500/10" : "border-amber-200 bg-amber-50/90",
+          )}
+        >
+          <AlertCircle className={cn("w-5 h-5 shrink-0 mt-0.5", isDark ? "text-amber-200" : "text-amber-700")} />
+          <div className="min-w-0">
+            <p className={cn("font-semibold", isDark ? "text-amber-50" : "text-amber-950")}>
+              No active Daily Challenge
+            </p>
+            <p className={cn("text-sm mt-1.5 leading-relaxed", isDark ? "text-amber-100/90" : "text-amber-900/85")}>
+              {isAdmin ? (
+                <>
+                  There is no competition window in its live date range with status <strong>active</strong> and{" "}
+                  <strong>is_active</strong> on. Use <span className="font-medium">Competition windows</span> below to
+                  create or activate one.
+                </>
+              ) : (
+                <>
+                  There isn&apos;t a live Daily Challenge season right now, so rankings and eligibility are paused.
+                  Check back soon — once the team opens the next window, leaderboards and your progress will show here
+                  again.
+                </>
+              )}
+            </p>
+          </div>
+        </div>
+      )}
+
+      {isAdmin && (
+        <Card className={panelClass}>
+          <CardHeader className="pb-2 flex flex-row flex-wrap items-start justify-between gap-2">
+            <div>
+              <CardTitle className="text-base">Competition windows</CardTitle>
+              <p className="text-xs text-muted-foreground mt-1 font-normal">
+                Set how long the Daily Challenge runs (e.g. 30 days), then manage live / upcoming / past
+                windows below. Creating a new window deactivates other <code className="text-[11px]">is_active</code>{" "}
+                events and attaches default eligibility rules.
+              </p>
+            </div>
+            <Button type="button" variant="outline" size="sm" onClick={loadCompetitionEvents} disabled={loadingCompetitionEvents}>
+              {loadingCompetitionEvents ? <Loader2 className="w-4 h-4 animate-spin" /> : "Refresh list"}
+            </Button>
+          </CardHeader>
+          <CardContent className="pt-1 space-y-6 text-sm">
+            {!hasActiveEvent && (
+              <p className="text-xs text-amber-600 dark:text-amber-400 rounded-lg border border-amber-200/80 dark:border-amber-500/30 bg-amber-50/80 dark:bg-amber-500/10 px-3 py-2">
+                No competition window is currently driving the leaderboard. Create one below, or activate
+                an upcoming window by editing it.
+              </p>
+            )}
+
+            <div
+              className={cn(
+                "space-y-3 rounded-xl border p-3.5",
+                isDark ? "border-white/10" : "border-gray-200",
+              )}
+            >
+              <p className="text-sm font-semibold">Create new window</p>
+              <p className="text-xs text-muted-foreground">
+                <span className="font-medium text-foreground">Duration</span> is measured from today: end date = today
+                + the number of days you enter (use <span className="font-medium text-foreground">30</span> for a
+                one-month season). Start offset pulls submissions from up to N days before today.
+              </p>
+              <div>
+                <p className="text-xs text-muted-foreground mb-1">Event name</p>
+                <Input
+                  value={eventForm.name}
+                  onChange={(e) => setEventForm((p) => ({ ...p, name: e.target.value }))}
+                  className="h-10 text-sm"
+                />
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <p className="text-xs text-muted-foreground mb-1">Start offset (days before today)</p>
+                  <Input
+                    type="number"
+                    min={0}
+                    value={eventForm.pastDays}
+                    onChange={(e) => setEventForm((p) => ({ ...p, pastDays: e.target.value }))}
+                    className="h-10 text-sm"
+                  />
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground mb-1">Duration (days from today)</p>
+                  <Input
+                    type="number"
+                    min={1}
+                    value={eventForm.durationDays}
+                    onChange={(e) => setEventForm((p) => ({ ...p, durationDays: e.target.value }))}
+                    className="h-10 text-sm"
+                  />
+                </div>
+              </div>
+              <Button onClick={createCompetitionEvent} disabled={creatingEvent} className="w-full sm:w-auto">
+                {creatingEvent ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : null}
+                Create active competition
+              </Button>
+              {eventBootstrapMessage && (
+                <p
+                  className={cn(
+                    "text-xs",
+                    eventBootstrapMessage.toLowerCase().includes("fail") ? "text-red-500" : "text-emerald-600",
+                  )}
+                >
+                  {eventBootstrapMessage}
+                </p>
+              )}
+            </div>
+
+            <div className="space-y-2">
+              <p className="text-sm font-semibold">All windows</p>
+              {loadingCompetitionEvents ? (
+                <div className="flex items-center gap-2 text-muted-foreground text-sm py-4">
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Loading…
+                </div>
+              ) : competitionEvents.length === 0 ? (
+                <p className="text-sm text-muted-foreground py-2">No rows in competition_event yet.</p>
+              ) : (
+                <div className="space-y-6">
+                  {(
+                    [
+                      { key: "live" as const, label: "Live now" },
+                      { key: "upcoming" as const, label: "Upcoming" },
+                      { key: "past" as const, label: "Past" },
+                    ] as const
+                  ).map(({ key, label }) => {
+                    const items = eventsByPhase[key];
+                    if (items.length === 0) return null;
+                    return (
+                      <div key={key}>
+                        <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                          {label}
+                        </p>
+                        <div className="mt-2 space-y-2">
+                          {items.map((row) => (
+                            <div
+                              key={row.id}
+                              className={cn(
+                                "rounded-xl border p-3 space-y-2",
+                                isDark ? "border-white/10 bg-white/[0.03]" : "border-gray-200 bg-gray-50/50",
+                              )}
+                            >
+                              {editingEventId === row.id && editEventDraft ? (
+                                <div className="space-y-3">
+                                  <div>
+                                    <p className="text-xs text-muted-foreground mb-1">Name</p>
+                                    <Input
+                                      value={editEventDraft.name}
+                                      onChange={(e) =>
+                                        setEditEventDraft((d) => (d ? { ...d, name: e.target.value } : d))
+                                      }
+                                      className="h-10 text-sm"
+                                    />
+                                  </div>
+                                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                    <div>
+                                      <p className="text-xs text-muted-foreground mb-1">Starts (local)</p>
+                                      <Input
+                                        type="datetime-local"
+                                        value={editEventDraft.startsLocal}
+                                        onChange={(e) =>
+                                          setEditEventDraft((d) =>
+                                            d ? { ...d, startsLocal: e.target.value } : d,
+                                          )
+                                        }
+                                        className="h-10 text-sm"
+                                      />
+                                    </div>
+                                    <div>
+                                      <p className="text-xs text-muted-foreground mb-1">Ends (local)</p>
+                                      <Input
+                                        type="datetime-local"
+                                        value={editEventDraft.endsLocal}
+                                        onChange={(e) =>
+                                          setEditEventDraft((d) =>
+                                            d ? { ...d, endsLocal: e.target.value } : d,
+                                          )
+                                        }
+                                        className="h-10 text-sm"
+                                      />
+                                    </div>
+                                  </div>
+                                  <div>
+                                    <p className="text-xs text-muted-foreground mb-1">Status</p>
+                                    <Select
+                                      value={editEventDraft.status}
+                                      onValueChange={(v) =>
+                                        setEditEventDraft((d) => (d ? { ...d, status: v } : d))
+                                      }
+                                    >
+                                      <SelectTrigger isDark={isDark} className="h-10 text-sm">
+                                        <SelectValue />
+                                      </SelectTrigger>
+                                      <SelectContent isDark={isDark}>
+                                        <SelectItem value="draft" isDark={isDark}>
+                                          draft
+                                        </SelectItem>
+                                        <SelectItem value="active" isDark={isDark}>
+                                          active
+                                        </SelectItem>
+                                        <SelectItem value="ended" isDark={isDark}>
+                                          ended
+                                        </SelectItem>
+                                      </SelectContent>
+                                    </Select>
+                                  </div>
+                                  <div className="flex items-center justify-between rounded-lg border px-3 py-2">
+                                    <span className="text-sm">is_active</span>
+                                    <Switch
+                                      checked={editEventDraft.is_active}
+                                      onCheckedChange={(c) =>
+                                        setEditEventDraft((d) => (d ? { ...d, is_active: Boolean(c) } : d))
+                                      }
+                                    />
+                                  </div>
+                                  <div className="flex flex-col sm:flex-row flex-wrap gap-2">
+                                    <Button
+                                      size="sm"
+                                      onClick={() => saveEditedEvent(row.id, false)}
+                                      disabled={savingEventId === row.id}
+                                    >
+                                      {savingEventId === row.id ? (
+                                        <Loader2 className="w-4 h-4 mr-1 animate-spin" />
+                                      ) : null}
+                                      Save
+                                    </Button>
+                                    <Button
+                                      size="sm"
+                                      variant="secondary"
+                                      onClick={() => saveEditedEvent(row.id, true)}
+                                      disabled={savingEventId === row.id}
+                                    >
+                                      Set as only active — save
+                                    </Button>
+                                    <Button size="sm" variant="outline" onClick={cancelEditEvent} type="button">
+                                      Cancel
+                                    </Button>
+                                  </div>
+                                </div>
+                              ) : (
+                                <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2">
+                                  <div className="min-w-0 space-y-1">
+                                    <div className="flex flex-wrap items-center gap-2">
+                                      <p className="font-medium truncate">{row.name}</p>
+                                      <Badge variant="outline" className="text-[10px] shrink-0">
+                                        {row.phase}
+                                      </Badge>
+                                      <Badge variant="outline" className="text-[10px] shrink-0">
+                                        {row.status}
+                                      </Badge>
+                                      {row.is_active ? (
+                                        <Badge className="text-[10px] shrink-0">active flag</Badge>
+                                      ) : null}
+                                    </div>
+                                    <p className="text-xs text-muted-foreground break-words">
+                                      {fmtEventRange(row.starts_at, row.ends_at)} · {row.timezone}
+                                    </p>
+                                  </div>
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    className="shrink-0"
+                                    onClick={() => beginEditEvent(row)}
+                                    type="button"
+                                  >
+                                    <PencilLine className="w-4 h-4 mr-1" />
+                                    Edit
+                                  </Button>
+                                </div>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+              {eventsPanelMessage && (
+                <p
+                  className={cn(
+                    "text-xs",
+                    eventsPanelMessage.toLowerCase().includes("fail") ? "text-red-500" : "text-emerald-600",
+                  )}
+                >
+                  {eventsPanelMessage}
+                </p>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {isAdmin && (
         <Card className={panelClass}>
           <CardHeader className="pb-2">
             <CardTitle className="text-base">Admin Eligibility Settings</CardTitle>
           </CardHeader>
           <CardContent className="pt-1 space-y-3">
+            {!hasActiveEvent && (
+              <p className="text-xs text-amber-600 dark:text-amber-400">
+                Create or activate a competition window above before saving custom rules (defaults are applied on
+                create).
+              </p>
+            )}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               <div>
                 <p className="text-xs text-muted-foreground mb-1">Views winner min verified views</p>
@@ -458,7 +923,11 @@ export default function DailyChallengeClient({
               <p className="text-xs text-muted-foreground">
                 Changes are versioned and become effective immediately.
               </p>
-              <Button onClick={saveEligibilityRules} disabled={savingRules} className="sm:w-auto w-full">
+              <Button
+                onClick={saveEligibilityRules}
+                disabled={savingRules || !hasActiveEvent}
+                className="sm:w-auto w-full"
+              >
                 {savingRules ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : null}
                 Save Rules
               </Button>
@@ -496,6 +965,12 @@ export default function DailyChallengeClient({
             <CardTitle className="text-base">Your Progress</CardTitle>
           </CardHeader>
           <CardContent className="grid md:grid-cols-2 gap-3 text-sm pt-1">
+            {!hasActiveEvent && (
+              <p className="md:col-span-2 text-xs text-muted-foreground rounded-lg border px-3 py-2 bg-muted/30">
+                No live season is configured. Ranks and eligibility below will populate when the next Daily Challenge
+                opens.
+              </p>
+            )}
             <div className={cn("rounded-xl border p-3.5", isDark ? "border-white/10" : "border-gray-200")}>
               <p className="font-semibold">Views Board Rank #{me?.viewsRank ?? "-"}</p>
               <p className="text-muted-foreground mt-1">
@@ -666,16 +1141,31 @@ export default function DailyChallengeClient({
               ))}
               {rows.length === 0 && (
                 <div className="py-10 sm:py-12 text-center px-2">
-                  <p className="text-base sm:text-lg font-semibold tracking-tight">Be the first to take the lead</p>
-                  <p className="text-sm text-muted-foreground mt-1.5">
-                    Upload one strong reel today and climb into the winners zone.
-                  </p>
-                  <Button asChild className="mt-5 rounded-lg w-full sm:w-auto">
-                    <Link href="/dashboard/opportunities" className="inline-flex items-center justify-center w-full sm:w-auto">
-                      <Upload className="w-4 h-4 mr-1" />
-                      Upload your first reel
-                    </Link>
-                  </Button>
+                  {!hasActiveEvent ? (
+                    <>
+                      <p className="text-base sm:text-lg font-semibold tracking-tight">Leaderboard paused</p>
+                      <p className="text-sm text-muted-foreground mt-1.5 max-w-md mx-auto">
+                        The Daily Challenge is not running at the moment. When the next season opens, verified
+                        submissions in the window will rank here again.
+                      </p>
+                    </>
+                  ) : (
+                    <>
+                      <p className="text-base sm:text-lg font-semibold tracking-tight">Be the first to take the lead</p>
+                      <p className="text-sm text-muted-foreground mt-1.5">
+                        Upload one strong reel today and climb into the winners zone.
+                      </p>
+                      <Button asChild className="mt-5 rounded-lg w-full sm:w-auto">
+                        <Link
+                          href="/dashboard/opportunities"
+                          className="inline-flex items-center justify-center w-full sm:w-auto"
+                        >
+                          <Upload className="w-4 h-4 mr-1" />
+                          Upload your first reel
+                        </Link>
+                      </Button>
+                    </>
+                  )}
                 </div>
               )}
             </div>
