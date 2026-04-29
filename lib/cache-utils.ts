@@ -114,6 +114,7 @@ class MemoryCache {
 // Create singleton instances for different cache buckets
 export const leaderboardCache = new MemoryCache(600000); // 10 minutes TTL
 export const adminLeaderboardCache = new MemoryCache(600000); // 10 minutes TTL
+export const dailyChallengeCache = new MemoryCache(3600000); // 1 hour TTL
 export const contestCache = new MemoryCache(300000); // 5 minutes TTL
 export const contestDetailsCache = new MemoryCache(300000); // 5 minutes TTL
 /**
@@ -164,6 +165,19 @@ export function getPlatformSubmissionsCacheKey(platform: string): string {
 export function clearLeaderboardCache(): void {
   leaderboardCache.clearPrefix("leaderboard:");
   adminLeaderboardCache.clearPrefix("admin_leaderboard:");
+}
+
+export function getDailyChallengeCacheKey(params: {
+  period: string;
+  scope: string;
+  page: number;
+  limit: number;
+}): string {
+  return `daily_challenge:${params.period}:${params.scope}:${params.page}:${params.limit}`;
+}
+
+export function clearDailyChallengeCache(): number {
+  return dailyChallengeCache.clearPrefix("daily_challenge:");
 }
 
 

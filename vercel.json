@@ -15,6 +15,10 @@
     {
       "path": "/api/cron/refresh-all-tokens",
       "schedule": "0 0 * * *"
+    },
+    {
+      "path": "/api/cron/snapshot-daily-challenge-winners",
+      "schedule": "35 18 * * *"
     }
   ]
 }

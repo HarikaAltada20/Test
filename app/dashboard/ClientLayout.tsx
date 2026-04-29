@@ -794,6 +794,7 @@ function DashboardContent({
     if (path.includes("/settings")) return "Settings";
     if (path.includes("/submissions")) return "Submissions";
     if (path.includes("/opportunities")) return "Opportunities";
+    if (path.includes("/daily-challenge")) return "Daily Challenge";
     if (path.includes("/earnings")) return "Earnings";
     if (path.includes("/admin")) return "Admin";
 
