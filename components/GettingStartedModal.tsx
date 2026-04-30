@@ -13,6 +13,7 @@ import {
   Check,
   Video,
   PartyPopper,
+  Award,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ButtonLoadingSpinner } from "@/components/loading/LoadingSpinner";
@@ -419,7 +420,7 @@ export default function GettingStartedModal({
         </div>
 
         <div className="p-2 md:px-6 space-y-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
             {/* Leaderboard Contest Section */}
             <div
               className={cn(
@@ -622,6 +623,13 @@ export default function GettingStartedModal({
                 >
                   Pay Per 1000 Views
                 </Badge>
+
+                <span className={cn(
+                  "text-xs font-medium px-2 py-0.5 rounded-full shrink-0 whitespace-nowrap",
+                  isDark ? "bg-yellow-900/40 text-yellow-300 border border-yellow-700/30" : "bg-yellow-50 text-yellow-700 border border-yellow-200",
+                )}>
+                  Paid plans only
+                </span>
               </div>
 
               <p
@@ -743,6 +751,171 @@ export default function GettingStartedModal({
                   >
                     {isNavigating ? <ButtonLoadingSpinner /> : <DollarSign className="w-4 h-4" />}
                     Create CPM Contest
+                  </Button>
+                </Link>
+              </div>
+            </div>
+
+            {/* Milestone Contest Section */}
+            <div
+              className={cn(
+                "p-6 border rounded-lg flex flex-col",
+                isDark
+                  ? "bg-[#170337] border-[#7F39EC]"
+                  : "border-[#7F39EC] bg-[#D9C0FF26]"
+              )}
+            >
+              <div className="flex flex-wrap items-center gap-3 mb-4">
+                <div
+                  className={cn(
+                    "p-2.5 rounded-full",
+                    isDark
+                      ? "bg-[#FFFFFF3D] text-white"
+                      : "bg-[#ECE1FC] text-purple-600"
+                  )}
+                >
+                  <Award className="w-6 h-6" />
+                </div>
+                <h3 className="font-bold text-lg">Milestone Contests</h3>
+
+                <Badge
+                  variant="outline"
+                  className={cn(
+                    "py-1 px-3 rounded-full",
+                    isDark
+                      ? "bg-[#FFFFFF3D] text-white"
+                      : "bg-[#ECE1FC] text-purple-700"
+                  )}
+                >
+                  Guaranteed Payouts
+                </Badge>
+
+                <span className={cn(
+                  "text-xs font-medium px-2 py-0.5 rounded-full shrink-0 whitespace-nowrap",
+                  isDark ? "bg-yellow-900/40 text-yellow-300 border border-yellow-700/30" : "bg-yellow-50 text-yellow-700 border border-yellow-200",
+                )}>
+                  Paid plans only
+                </span>
+              </div>
+
+              <p
+                className={cn(
+                  "text-md mb-4",
+                  isDark ? "text-white" : "text-gray-600 dark:text-gray-300"
+                )}
+              >
+                Reward creators as they hit specific view milestones.
+              </p>
+
+              {/* Visual Process */}
+              <div className="text-center mb-4">
+                <div
+                  className={cn(
+                    "inline-block p-4 rounded-lg border",
+                    isDark
+                      ? "bg-[#06021D26] border-[#7F39EC]"
+                      : "bg-[#D9C0FF26] border-[#7F39EC]"
+                  )}
+                >
+                  <div
+                    className={cn(
+                      "text-lg font-bold mb-2",
+                      isDark ? "text-white" : "text-black"
+                    )}
+                  >
+                    Set Milestones → Creators Post → Hit Views & Get Paid
+                  </div>
+                  <div
+                    className={cn(
+                      "text-sm",
+                      isDark ? "text-white" : "text-black"
+                    )}
+                  >
+                    Example: $50 at 10K views, $100 at 50K views, $500 at 1M views
+                  </div>
+                </div>
+              </div>
+
+              {/* Benefits */}
+              <div className="space-y-4 mb-4 flex-grow">
+                <div className="flex items-start space-x-2">
+                  <Check
+                    className={cn(
+                      "w-5 h-5 mt-0.5 flex-shrink-0",
+                      isDark ? "text-purple-400" : "text-[#4A00BE]"
+                    )}
+                  />
+                  <span
+                    className={cn(
+                      "text-md",
+                      isDark ? "text-white" : "text-gray-700 dark:text-gray-300"
+                    )}
+                  >
+                    Set a max budget cap for full cost control
+                  </span>
+                </div>
+                <div className="flex items-start space-x-2">
+                  <Check
+                    className={cn(
+                      "w-5 h-5 mt-0.5 flex-shrink-0",
+                      isDark ? "text-purple-400" : "text-[#4A00BE]"
+                    )}
+                  />
+                  <span
+                    className={cn(
+                      "text-md",
+                      isDark ? "text-white" : "text-gray-700 dark:text-gray-300"
+                    )}
+                  >
+                    Pay only when specific milestones are reached
+                  </span>
+                </div>
+                <div className="flex items-start space-x-2">
+                  <Check
+                    className={cn(
+                      "w-5 h-5 mt-0.5 flex-shrink-0",
+                      isDark ? "text-purple-400" : "text-[#4A00BE]"
+                    )}
+                  />
+                  <span
+                    className={cn(
+                      "text-md",
+                      isDark ? "text-white" : "text-gray-700 dark:text-gray-300"
+                    )}
+                  >
+                    Flexible tiers for different creator sizes
+                  </span>
+                </div>
+                <div className="flex items-start space-x-2">
+                  <Check
+                    className={cn(
+                      "w-5 h-5 mt-0.5 flex-shrink-0",
+                      isDark ? "text-purple-400" : "text-[#4A00BE]"
+                    )}
+                  />
+                  <span
+                    className={cn(
+                      "text-md",
+                      isDark ? "text-white" : "text-gray-700 dark:text-gray-300"
+                    )}
+                  >
+                    Built-in bonuses for top performers
+                  </span>
+                </div>
+              </div>
+
+              <div className="text-center pt-4 mt-auto">
+                <Link href="/dashboard/contests/create" onClick={handleNavigation}>
+                  <Button
+                    className={cn(
+                      "text-md text-white w-full",
+                      isDark
+                        ? "bg-[#5F2BB1] hover:bg-[#4A1F8A]"
+                        : "bg-purple-600 hover:bg-purple-700"
+                    )}
+                  >
+                    {isNavigating ? <ButtonLoadingSpinner /> : <Award className="w-4 h-4" />}
+                    Create Milestone Contest
                   </Button>
                 </Link>
               </div>
