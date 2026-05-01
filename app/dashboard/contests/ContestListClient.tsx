@@ -1579,42 +1579,47 @@ export function ContestListClient({
                 const budgetSpent =
                   contest.contest_based_details.milestone_contest.budget_spent ||
                   0;
-                const tracker = getBudgetTrackerValues(totalBudget, budgetSpent);
+                const { percentage, remaining } = getBudgetTrackerValues(
+                  totalBudget,
+                  budgetSpent,
+                );
 
                 return (
                   <div className="mt-3 mb-3">
                     <div
                       className="flex justify-between text-sm mb-2"
                       style={{
-                        color: isDark ? "#cbd5e1" : "#475569",
+                        color: isDark ? "#d1d5db" : "#374151",
                         transition: "none",
                       }}
                     >
                       <span className="font-medium">Budget Tracker</span>
                       <span className="font-semibold">
-                        {formatMoney(tracker.spent)} / {formatMoney(totalBudget)}
+                        {formatMoney(budgetSpent)} /{" "}
+                        {formatMoney(totalBudget)}
                       </span>
                     </div>
                     <div
-                      className="relative w-full bg-slate-200 dark:bg-slate-700 rounded-full h-3 overflow-hidden"
-                      title={`Milestone Budget Spent: ${formatMoney(
-                        tracker.spent,
-                      )}`}
+                      className={cn(
+                        "relative w-full rounded-full h-3 overflow-hidden",
+                        isDark ? "bg-[#FFFFFF42]" : "bg-slate-200",
+                      )}
+                      title={`Total Budget Spent: ${formatMoney(budgetSpent)}`}
                     >
                       <div
                         className="absolute h-full bg-gradient-to-r from-purple-500 to-purple-600 rounded-full transition-all duration-500 ease-out"
-                        style={{ width: `${tracker.percentage}%` }}
+                        style={{ width: `${Math.min(percentage, 100)}%` }}
                       ></div>
                     </div>
                     <div
                       className="flex justify-between text-xs mt-1.5"
                       style={{
-                        color: isDark ? "#94a3b8" : "#64748b",
+                        color: isDark ? "#d1d5db" : "#64748b",
                         transition: "none",
                       }}
                     >
-                      <span>{tracker.percentage.toFixed(1)}% used</span>
-                      <span>{formatMoney(tracker.remaining)} remaining</span>
+                      <span>{percentage.toFixed(1)}% used</span>
+                      <span>{formatMoney(remaining)} remaining</span>
                     </div>
                   </div>
                 );
@@ -2447,37 +2452,47 @@ export function ContestListClient({
                   const budgetSpent =
                     contest.contest_based_details.milestone_contest
                       .budget_spent || 0;
-                  const tracker = getBudgetTrackerValues(totalBudget, budgetSpent);
+                  const { percentage, remaining } = getBudgetTrackerValues(
+                    totalBudget,
+                    budgetSpent,
+                  );
 
                   return (
                     <div className="mt-3">
                       <div
                         className="flex justify-between text-sm mb-2"
                         style={{
-                          color: isDark ? "#cbd5e1" : "#475569",
+                          color: isDark ? "#d1d5db" : "#374151",
                           transition: "none",
                         }}
                       >
-                        <span className="font-medium"> Budget Tracker</span>
+                        <span className="font-medium">Budget Tracker</span>
                         <span className="font-semibold">
-                          {formatMoney(tracker.spent)} / {formatMoney(totalBudget)}
+                          {formatMoney(budgetSpent)} /{" "}
+                          {formatMoney(totalBudget)}
                         </span>
                       </div>
-                      <div className="relative w-full bg-slate-200 dark:bg-slate-700 rounded-full h-3 overflow-hidden">
+                      <div
+                        className={cn(
+                          "relative w-full rounded-full h-3 overflow-hidden",
+                          isDark ? "bg-[#FFFFFF42]" : "bg-slate-200",
+                        )}
+                        title={`Total Budget Spent: ${formatMoney(budgetSpent)}`}
+                      >
                         <div
-                          className="absolute h-full bg-gradient-to-r from-blue-500 to-cyan-600 rounded-full transition-all duration-500 ease-out"
-                          style={{ width: `${tracker.percentage}%` }}
+                          className="absolute h-full bg-gradient-to-r from-purple-500 to-purple-600 rounded-full transition-all duration-500 ease-out"
+                          style={{ width: `${Math.min(percentage, 100)}%` }}
                         ></div>
                       </div>
                       <div
                         className="flex justify-between text-xs mt-1.5"
                         style={{
-                          color: isDark ? "#94a3b8" : "#64748b",
+                          color: isDark ? "#d1d5db" : "#64748b",
                           transition: "none",
                         }}
                       >
-                        <span>{tracker.percentage.toFixed(1)}% used</span>
-                        <span>{formatMoney(tracker.remaining)} remaining</span>
+                        <span>{percentage.toFixed(1)}% used</span>
+                        <span>{formatMoney(remaining)} remaining</span>
                       </div>
                     </div>
                   );

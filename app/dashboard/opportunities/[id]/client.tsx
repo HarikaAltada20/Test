@@ -155,6 +155,10 @@ type LeaderboardEntry = {
   user_platform_pfp_url: string | null;
   /** Global rank (1-based) from API; matches contest/brand side for correct Winning Zone / expected reward */
   rank?: number;
+  bonus_paid?: boolean;
+  bonus_paid_at?: string | null;
+  bonus_amount?: number | null;
+  milestone_bonus_paid?: { views?: number; reels?: number } | null;
 };
 
 // Store for generated dummy data to avoid re-computation if count doesn't change
@@ -297,6 +301,10 @@ export function ContestClientPage({
       submission_count: number;
       has_paid_submission?: boolean;
       creator_bonus_paid_total?: number;
+      /** Paid cents for milestone "most verified views" bonus (from milestone_bonus_paid.views) */
+      most_verified_bonus_paid_views_cents?: number;
+      /** Paid cents for milestone "most verified reels" bonus (from milestone_bonus_paid.reels) */
+      most_verified_bonus_paid_reels_cents?: number;
     }>
   >([]);
   const tabs = useMemo(() => getTabs(contest?.platform), [contest?.platform]);
@@ -881,6 +889,7 @@ export function ContestClientPage({
       ...((groupedLeaderboardByCreator || []).flatMap((g: any) =>
         Array.isArray(g?.submissions) ? g.submissions : [],
       ) as any[]),
+      ...(Array.isArray(mySubmissionsListFromApi) ? mySubmissionsListFromApi : []),
     ];
 
     const seenSubmissionIds = new Set<string>();
@@ -1049,6 +1058,7 @@ export function ContestClientPage({
     contest?.contest_based_details,
     leaderboard,
     groupedLeaderboardByCreator,
+    mySubmissionsListFromApi,
   ]);
 
   const isCreatorModeTotals =
@@ -1417,6 +1427,10 @@ export function ContestClientPage({
               submission_count: r.submission_count ?? 0,
               has_paid_submission: r.has_paid_submission,
               creator_bonus_paid_total: r.creator_bonus_paid_total ?? 0,
+              most_verified_bonus_paid_views_cents:
+                r.most_verified_bonus_paid_views_cents ?? 0,
+              most_verified_bonus_paid_reels_cents:
+                r.most_verified_bonus_paid_reels_cents ?? 0,
             })),
           );
           setCreatorTotalEntries(data.totalEntries ?? 0);
@@ -9551,9 +9565,24 @@ export function ContestClientPage({
                                 mostVerifiedViewsBonus +
                                 mostVerifiedReelsBonus;
 
+                              const paidMostVerifiedViewsCents =
+                                Number(
+                                  (creatorGroup as any)
+                                    .most_verified_bonus_paid_views_cents ??
+                                    0,
+                                ) || 0;
+                              const paidMostVerifiedReelsCents =
+                                Number(
+                                  (creatorGroup as any)
+                                    .most_verified_bonus_paid_reels_cents ??
+                                    0,
+                                ) || 0;
+
                               const milestoneHasEarnedSignal =
                                 creatorPaidFromSubmissions > 0 ||
                                 creatorBonusPaidTotal > 0 ||
+                                paidMostVerifiedViewsCents > 0 ||
+                                paidMostVerifiedReelsCents > 0 ||
                                 hasPaidSubmission ||
                                 hasPaidAtSubmission ||
                                 (hasPayoutsProcessed &&
@@ -9566,41 +9595,50 @@ export function ContestClientPage({
                                   0,
                                   creatorBonusPaidTotal,
                                 );
-                                const mostVerifiedViewsBonusGranted = Math.min(
-                                  mostVerifiedViewsBonus,
-                                  bonusPaidRemainingBase,
-                                );
-                                const mostVerifiedReelsBonusGranted = Math.min(
-                                  mostVerifiedReelsBonus,
-                                  Math.max(
-                                    0,
-                                    bonusPaidRemainingBase -
-                                      mostVerifiedViewsBonusGranted,
-                                  ),
-                                );
+                                const mostVerifiedViewsBonusGranted =
+                                  paidMostVerifiedViewsCents > 0
+                                    ? paidMostVerifiedViewsCents
+                                    : Math.min(
+                                        mostVerifiedViewsBonus,
+                                        bonusPaidRemainingBase,
+                                      );
+                                const viewsAllocated =
+                                  paidMostVerifiedViewsCents > 0
+                                    ? paidMostVerifiedViewsCents
+                                    : mostVerifiedViewsBonusGranted;
+                                const mostVerifiedReelsBonusGranted =
+                                  paidMostVerifiedReelsCents > 0
+                                    ? paidMostVerifiedReelsCents
+                                    : Math.min(
+                                        mostVerifiedReelsBonus,
+                                        Math.max(
+                                          0,
+                                          bonusPaidRemainingBase -
+                                            viewsAllocated,
+                                        ),
+                                      );
                                 const otherBonusPaid = Math.max(
                                   0,
                                   creatorBonusPaidTotal -
                                     mostVerifiedViewsBonusGranted -
                                     mostVerifiedReelsBonusGranted,
                                 );
-                                let milestoneEarnedAmount =
-                                  submissionPaidTotal +
-                                  mostVerifiedViewsBonusGranted +
-                                  mostVerifiedReelsBonusGranted +
-                                  otherBonusPaid;
-                                if (milestoneEarnedAmount <= 0) {
-                                  milestoneEarnedAmount = creatorEarnedAmount;
-                                } else if (
-                                  creatorEarnedAmount > milestoneEarnedAmount
-                                ) {
-                                  milestoneEarnedAmount = creatorEarnedAmount;
-                                }
-
                                 const milestoneBonusTotal =
                                   mostVerifiedViewsBonusGranted +
                                   mostVerifiedReelsBonusGranted +
                                   otherBonusPaid;
+                                // `total_earnings` from the server is sum(submission.earnings) and does not
+                                // include `bonus_amount` / most-verified payout. Creator-wise rows often have
+                                // `submissions: []`, so `submissionPaidTotal` is 0 while `creatorEarnedAmount`
+                                // still has milestone slot payouts. Never replace (slots + bonuses) with
+                                // `creatorEarnedAmount` alone — that dropped paid most-verified bonuses.
+                                const slotBest = Math.max(
+                                  submissionPaidTotal,
+                                  creatorEarnedAmount,
+                                );
+                                const milestoneEarnedAmount =
+                                  slotBest + milestoneBonusTotal;
+
                                 const milestoneBaseAmount =
                                   milestoneEarnedAmount - milestoneBonusTotal;
 
@@ -10220,6 +10258,11 @@ export function ContestClientPage({
                             const hasPayoutsProcessed =
                               contest?.post_contest_status ===
                               "payouts_processed";
+                            const milestoneTrackBonusesPaidCents =
+                              (Number((entry as any).milestone_bonus_paid?.views) ||
+                                0) +
+                              (Number((entry as any).milestone_bonus_paid?.reels) ||
+                                0);
                             const explicitBonusPaidAmount =
                               (entry as any).bonus_amount ??
                               (entry as any).other_stats?.bonus_amount;
@@ -10236,6 +10279,7 @@ export function ContestClientPage({
                               Boolean((entry as any).bonus_paid_at) ||
                               (explicitBonusPaidAmount != null &&
                                 Number(explicitBonusPaidAmount) > 0) ||
+                              milestoneTrackBonusesPaidCents > 0 ||
                               (explicitPaidAmount != null &&
                                 Number(explicitPaidAmount) > 0);
                             const milestoneHasEarnedSignal =
@@ -10256,7 +10300,9 @@ export function ContestClientPage({
                                 explicitBonusPaidAmount != null &&
                                 Number(explicitBonusPaidAmount) > 0
                                   ? Number(explicitBonusPaidAmount)
-                                  : 0;
+                                  : milestoneTrackBonusesPaidCents > 0
+                                    ? milestoneTrackBonusesPaidCents
+                                    : 0;
                               const paidPlusBonus =
                                 submissionPaidCents + totalBonusCents;
                               const earnedAmount =

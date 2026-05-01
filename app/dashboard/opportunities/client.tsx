@@ -823,7 +823,7 @@ export default function OpportunitiesPage({
               const { data: submissions } = await supabase
                 .from("submissions")
                 .select(
-                  "id, creator_id, created_at, status, paid, earnings, views, platform, other_stats, bonus_paid, bonus_amount",
+                  "id, creator_id, created_at, status, paid, earnings, views, platform, other_stats, bonus_paid, bonus_amount, metadata, milestone_bonus_paid",
                 )
                 .eq("contest_id", contest.id)
                 .in("status", ["pending", "verified", "paid"])
@@ -843,6 +843,8 @@ export default function OpportunitiesPage({
                   manual_points_adjustment: 0,
                   bonus_paid: submission.bonus_paid ?? false,
                   bonus_amount: submission.bonus_amount ?? undefined,
+                  metadata: submission.metadata,
+                  milestone_bonus_paid: submission.milestone_bonus_paid,
                 }),
               );
 

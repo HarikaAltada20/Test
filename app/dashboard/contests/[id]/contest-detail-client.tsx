@@ -1261,6 +1261,15 @@ export default function ContestDetailClient({
   const [itemsPerPage, setItemsPerPage] = useState(25);
   const [creatorWisePage, setCreatorWisePage] = useState(1);
   const [creatorWiseItemsPerPage, setCreatorWiseItemsPerPage] = useState(25);
+  /** Creator-wise milestone column: show 2 badges by default, expand per row */
+  const [creatorWiseMilestoneExpandedByCreatorId, setCreatorWiseMilestoneExpandedByCreatorId] =
+    useState<Record<string, boolean>>({});
+  const toggleCreatorWiseMilestoneRow = useCallback((creatorId: string) => {
+    setCreatorWiseMilestoneExpandedByCreatorId((prev) => ({
+      ...prev,
+      [creatorId]: !prev[creatorId],
+    }));
+  }, []);
 
   // Twitter Feed state
   const [twitterTweets, setTwitterTweets] = useState<any[]>([]);
@@ -11523,7 +11532,11 @@ export default function ContestDetailClient({
                                   : "border-purple-400 text-purple-900",
                               )}
                             >
-                              <option value="cpm_only">CPM only</option>
+                              <option value="cpm_only">
+                                {currentContest.contest_type === "milestone"
+                                  ? "Milestone only"
+                                  : "CPM only"}
+                              </option>
                               <option value="bonus_only">Bonus only</option>
                               <option value="combined">Both</option>
                             </select>
@@ -17020,34 +17033,79 @@ export default function ContestDetailClient({
                                                           ).sort(
                                                             (a, b) => a[0] - b[0],
                                                           );
+                                                        const creatorId =
+                                                          String(group.creator.id);
+                                                        const milestonePreviewCount = 2;
+                                                        const showMilestoneExpand =
+                                                          milestonesAchieved.length >
+                                                          milestonePreviewCount;
+                                                        const milestonesExpanded =
+                                                          !!creatorWiseMilestoneExpandedByCreatorId[
+                                                            creatorId
+                                                          ];
+                                                        const milestonesToShow =
+                                                          showMilestoneExpand &&
+                                                          !milestonesExpanded
+                                                            ? milestonesAchieved.slice(
+                                                                0,
+                                                                milestonePreviewCount,
+                                                              )
+                                                            : milestonesAchieved;
 
                                                         return (
-                                                          <div className="flex flex-wrap justify-center gap-1.5">
-                                                            {milestonesAchieved.map(
-                                                              ([order, count]) => {
-                                                                return (
-                                                                  <span
-                                                                    key={`${group.creator.id}-milestone-${order}`}
-                                                                    className="inline-flex items-center gap-1"
-                                                                  >
-                                                                    <Badge
-                                                                      className={cn(
-                                                                        "text-[11px] font-semibold px-2 py-0.5 border",
-                                                                        "bg-violet-100 text-violet-900 border-violet-200 dark:bg-violet-950/40 dark:text-violet-200 dark:border-violet-800",
-                                                                      )}
+                                                          <div className="flex flex-col items-center gap-1">
+                                                            <div className="flex flex-wrap justify-center gap-1.5">
+                                                              {milestonesToShow.map(
+                                                                ([
+                                                                  order,
+                                                                  count,
+                                                                ]) => {
+                                                                  return (
+                                                                    <span
+                                                                      key={`${group.creator.id}-milestone-${order}`}
+                                                                      className="inline-flex items-center gap-1"
                                                                     >
-                                                                      Milestone{" "}
-                                                                      {order}
-                                                                    </Badge>
-                                                                    <span className="text-[11px] text-muted-foreground">
-                                                                      {count}{" "}
-                                                                      {count === 1
-                                                                        ? "sub"
-                                                                        : "sub"}
+                                                                      <Badge
+                                                                        className={cn(
+                                                                          "text-[11px] font-semibold px-2 py-0.5 border",
+                                                                          "bg-violet-100 text-violet-900 border-violet-200 dark:bg-violet-950/40 dark:text-violet-200 dark:border-violet-800",
+                                                                        )}
+                                                                      >
+                                                                        Milestone{" "}
+                                                                        {order}
+                                                                      </Badge>
+                                                                      <span className="text-[11px] text-muted-foreground">
+                                                                        {count}{" "}
+                                                                        {count ===
+                                                                        1
+                                                                          ? "sub"
+                                                                          : "sub"}
+                                                                      </span>
                                                                     </span>
-                                                                  </span>
-                                                                );
-                                                              },
+                                                                  );
+                                                                },
+                                                              )}
+                                                            </div>
+                                                            {showMilestoneExpand && (
+                                                              <Button
+                                                                type="button"
+                                                                variant="ghost"
+                                                                size="sm"
+                                                                className="h-7 px-2 text-[11px] font-medium underline underline-offset-2 text-violet-600 hover:text-violet-700 dark:text-violet-400 dark:hover:text-violet-300"
+                                                                aria-expanded={
+                                                                  milestonesExpanded
+                                                                }
+                                                                onClick={(e) => {
+                                                                  e.stopPropagation();
+                                                                  toggleCreatorWiseMilestoneRow(
+                                                                    creatorId,
+                                                                  );
+                                                                }}
+                                                              >
+                                                                {milestonesExpanded
+                                                                  ? "Less"
+                                                                  : "More"}
+                                                              </Button>
                                                             )}
                                                           </div>
                                                         );
