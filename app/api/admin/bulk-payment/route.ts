@@ -286,46 +286,45 @@ export async function POST(request: NextRequest) {
       let submissionEarnings = 0;
 
       if (payment_type !== "bonus") {
-        // Numeric normalize: DB/JSON may send string "0" which is truthy and would skip milestone math below.
-        const storedEarnings = Number((sub as any).earnings);
-        submissionEarnings =
-          Number.isFinite(storedEarnings) && storedEarnings > 0
-            ? storedEarnings
-            : 0;
-
-        // If earnings not stored, calculate dynamically for CPM contests
-        if (!submissionEarnings && contest.contest_type === "cpm") {
-          const cpmConfig = (contest.contest_based_details as any)?.cpm_contest;
-          if (cpmConfig?.cpm_rate_usd) {
-            let effectiveViews = sub.views || 0;
-
-            // Apply min_views threshold
-            if (
-              cpmConfig.min_views != null &&
-              effectiveViews < cpmConfig.min_views
-            ) {
-              effectiveViews = 0;
-            }
-
-            // Apply max_views cap
-            if (
-              cpmConfig.max_views != null &&
-              effectiveViews > cpmConfig.max_views
-            ) {
-              effectiveViews = cpmConfig.max_views;
-            }
-
-            // Calculate earnings: (views * CPM rate) / 1000, convert to cents
-            const calculatedEarnings =
-              (effectiveViews * cpmConfig.cpm_rate_usd * 100) / 1000;
-            submissionEarnings = Math.round(calculatedEarnings);
-          }
-        } else if (
-          !submissionEarnings &&
-          contest.contest_type === "milestone"
-        ) {
+        if (contest.contest_type === "milestone") {
           submissionEarnings =
             milestonePayoutBySubmissionId.get(String(sub.id)) || 0;
+        } else {
+          // Numeric normalize: DB/JSON may send string "0" which is truthy and would skip CPM math below.
+          const storedEarnings = Number((sub as any).earnings);
+          submissionEarnings =
+            Number.isFinite(storedEarnings) && storedEarnings > 0
+              ? storedEarnings
+              : 0;
+
+          // If earnings not stored, calculate dynamically for CPM contests
+          if (!submissionEarnings && contest.contest_type === "cpm") {
+            const cpmConfig = (contest.contest_based_details as any)?.cpm_contest;
+            if (cpmConfig?.cpm_rate_usd) {
+              let effectiveViews = sub.views || 0;
+
+              // Apply min_views threshold
+              if (
+                cpmConfig.min_views != null &&
+                effectiveViews < cpmConfig.min_views
+              ) {
+                effectiveViews = 0;
+              }
+
+              // Apply max_views cap
+              if (
+                cpmConfig.max_views != null &&
+                effectiveViews > cpmConfig.max_views
+              ) {
+                effectiveViews = cpmConfig.max_views;
+              }
+
+              // Calculate earnings: (views * CPM rate) / 1000, convert to cents
+              const calculatedEarnings =
+                (effectiveViews * cpmConfig.cpm_rate_usd * 100) / 1000;
+              submissionEarnings = Math.round(calculatedEarnings);
+            }
+          }
         }
 
         // Check if adding this submission would exceed the cap

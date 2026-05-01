@@ -3265,7 +3265,7 @@ export function ContestListClient({
           )}
         >
           <img
-            src="/images/milestone-contest.avif"
+            src="/images/milestones.avif"
             alt="Milestone contest preview"
             className="w-full h-full object-cover transition-transform duration-300 ease-in-out group-hover:scale-105"
           />
@@ -3281,7 +3281,7 @@ export function ContestListClient({
           <div className={cn("space-y-4 text-md leading-6", isDark ? "text-slate-300" : "text-slate-800")}>
             <div className="rounded-lg">
               <p className="mt-2">
-                Milestone contests reward creators automatically as they reach specific view targets. This provides guaranteed payouts for creators and guaranteed results for your brand, with full control over the maximum budget.
+                Milestone contests reward creators as they reach specific view targets. This provides guaranteed payouts for creators and guaranteed results for your brand, with full control over the maximum budget.
               </p>
             </div>
 
@@ -3353,7 +3353,7 @@ export function ContestListClient({
                   Payouts Based on Achieved Milestones
                   </p>
                   <p className={cn("mt-1", isDark ? "text-slate-300" : "text-slate-600")}>
-                  When a creator reaches a milestone, the payout is calculated and credited based only on the milestones they have actually achieved for that submission.
+                  When a creator reaches a milestone, the payout is calculated and credited based only the milestone they have actually achieved for that submission.
                   </p>
                 </div>
               </div>

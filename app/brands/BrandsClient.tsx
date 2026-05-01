@@ -563,7 +563,7 @@ export default function BrandsClient({ totalViews }: BrandsClientProps) {
                   id: "1",
                   title: "Create a Contest",
                   description:
-                    "Set your brief, budget, duration, and payout model (Leaderboard or CPM). Choose platforms like Instagram, YouTube, or Twitter (X).",
+                    "Set your brief, budget, duration, and payout model (Leaderboard or CPM or Milestone). Choose platforms like Instagram, YouTube, or Twitter (X).",
                   image: "/images/GoC How It Works - 1.png",
                   number: "1",
                 },
@@ -587,7 +587,7 @@ export default function BrandsClient({ totalViews }: BrandsClientProps) {
                   id: "4",
                   title: "Pay Only for Performance",
                   description:
-                    "Leaderboard: Top creators get paid. CPM: Pay per 1,000 views for Instagram & YouTube, per 1,000 engagement points for Twitter.",
+                    "Leaderboard: Top creators get paid. CPM: Pay per 1,000 views for Instagram & YouTube, per 1,000 engagement points for Twitter. Milestone: Pay fixed amounts when creators reach view milestones.",
                   image: "/images/GoC How It Works - 4.png",
                   number: "4",
                 },

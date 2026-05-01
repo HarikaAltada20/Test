@@ -121,6 +121,46 @@ export function buildMilestoneSubmissionPayoutCentsMap(
   return result;
 }
 
+/**
+ * Per-creator earnings cap in submission `created_at` order (same rule as
+ * CreatorSubmissionsModal expectedRewardsMap for milestone).
+ */
+export function getMilestoneCappedPayoutCentsForCreatorSubmission(
+  payoutMap: Map<string, number>,
+  creatorSubmissions: { id: string; created_at: string }[],
+  maxEarningsPerCreator: number | null | undefined,
+  targetSubmissionId: string,
+): number {
+  const sorted = [...creatorSubmissions].sort(
+    (a, b) =>
+      new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
+  );
+  const max =
+    maxEarningsPerCreator != null && Number(maxEarningsPerCreator) > 0
+      ? Number(maxEarningsPerCreator)
+      : null;
+
+  let runningApplied = 0;
+  for (const s of sorted) {
+    const base = Math.max(0, Number(payoutMap.get(s.id) ?? 0) || 0);
+    let capped = base;
+    if (max != null) {
+      const remaining = max - runningApplied;
+      if (remaining <= 0) {
+        capped = 0;
+      } else if (base > remaining) {
+        capped = remaining;
+      }
+      const amountApplied = Math.min(base, Math.max(0, remaining));
+      runningApplied += amountApplied;
+    }
+    if (s.id === targetSubmissionId) {
+      return capped;
+    }
+  }
+  return 0;
+}
+
 /** Sum map values for verified / paid / approved only (pending excluded from liability). */
 export function sumMilestoneVerifiedExpectedPayoutCents(
   payoutMap: Map<string, number>,

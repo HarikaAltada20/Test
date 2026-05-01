@@ -1858,9 +1858,13 @@ export function CreatorSubmissionsModal({
                       const grantedReward = isPaidForGranted
                         ? explicitPaidAmount != null && explicitPaidAmount > 0
                           ? Number(explicitPaidAmount)
-                          : submission.earnings && submission.earnings > 0
-                            ? submission.earnings
-                            : expectedReward
+                          : contest?.contest_type === "milestone"
+                            ? shouldAdjustReward
+                              ? adjustedExpectedReward
+                              : expectedReward
+                            : submission.earnings && submission.earnings > 0
+                              ? submission.earnings
+                              : expectedReward
                         : 0;
                       const expectedBonus =
                         expectedBonusMap.get(submission.id) || 0;
