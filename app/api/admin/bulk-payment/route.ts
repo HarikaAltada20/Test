@@ -36,7 +36,6 @@ export async function POST(request: NextRequest) {
       payment_type,
       contest_id,
       creator_id,
-      payout_operation_id,
     } = body;
 
     if (
@@ -57,6 +56,13 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    if (typeof creator_id !== "string" || creator_id.trim().length === 0) {
+      return NextResponse.json(
+        { error: "creator_id is required and must be a non-empty string" },
+        { status: 400 },
+      );
+    }
+
     // Fetch all submissions
     const { data: submissions, error: submissionsError } = await supabaseAdmin
       .from("submissions")
@@ -68,6 +74,21 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         { error: "Failed to fetch submissions" },
         { status: 500 },
+      );
+    }
+
+    // Financial safety guard:
+    // all selected submissions must belong to the same creator we are crediting.
+    const mismatchedCreatorSubmission = submissions.find(
+      (s) => String(s.creator_id || "") !== creator_id,
+    );
+    if (mismatchedCreatorSubmission) {
+      return NextResponse.json(
+        {
+          error:
+            "creator_id does not match one or more selected submissions. Refusing to process payout.",
+        },
+        { status: 400 },
       );
     }
 
@@ -474,18 +495,15 @@ export async function POST(request: NextRequest) {
         submission_ids.map((value: unknown) => String(value)).filter(Boolean),
       ),
     ).sort((a, b) => a.localeCompare(b));
-    const operationSeed =
-      typeof payout_operation_id === "string" && payout_operation_id.trim().length > 0
-        ? payout_operation_id.trim()
-        : JSON.stringify({
-            contest_id,
-            creator_id,
-            payment_type,
-            requested_submission_ids: requestedSubmissionIds,
-            payout_adjustment_percentage: payoutAdjustmentPercentage,
-            payout_adjustment_mode: payoutAdjustmentMode ?? null,
-            contest_refund_count_at_payout: contestRefundCount,
-          });
+    const operationSeed = JSON.stringify({
+      contest_id,
+      creator_id,
+      payment_type,
+      requested_submission_ids: requestedSubmissionIds,
+      payout_adjustment_percentage: payoutAdjustmentPercentage,
+      payout_adjustment_mode: payoutAdjustmentMode ?? null,
+      contest_refund_count_at_payout: contestRefundCount,
+    });
     const bulkPayIdempotencyKey = `bulk_pay_v2:${createHash("sha256")
       .update(operationSeed)
       .digest("hex")
