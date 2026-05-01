@@ -507,57 +507,67 @@ export async function POST(
           }
         }
 
-        const debitRes = await debitCreatorWithdrawableBalance(
-          creatorId,
-          totalAmount
-        );
-        if (!debitRes.success) {
-          console.error(
-            "[bulk-pay-twitter-cpm] CRITICAL: Wallet rollback failed after tweet update error:",
-            debitRes.error
+        // Only roll back wallet if this request actually credited fresh funds.
+        // Idempotent retries (alreadyApplied) must not debit — that would strip balance
+        // when no new credit happened in this invocation.
+        if (!creditRes.alreadyApplied) {
+          const debitRes = await debitCreatorWithdrawableBalance(
+            creatorId,
+            totalAmount
           );
-          return NextResponse.json(
-            {
-              error:
-                "Tweet payment could not be saved and automatic wallet rollback failed. Contact support immediately.",
-              details: { tweet_id: tid, rollback_error: debitRes.error },
-            },
-            { status: 500 }
-          );
-        }
-
-        const contestTitle = contest.title || "Contest";
-        const logged = await logTransactionAsAdmin(
-          creatorId,
-          "refund",
-          totalAmount,
-          "success",
-          `Rollback: Twitter CPM bulk payment (DB update failed) — ${contestTitle}`,
-          {
-            remarks: REVERSAL_TRANSACTION_REMARK,
-            paymentMethod: "refund",
-            metadata: {
-              contest_id: contestId,
-              twitter_creator_id: creatorId,
-              payout_type: "twitter_cpm_bulk",
-              rollback_reason: "tweet_row_update_failed",
-              failed_tweet_id: tid,
-              original_reward_transaction_id: creditRes.transactionId,
-            },
+          if (!debitRes.success) {
+            console.error(
+              "[bulk-pay-twitter-cpm] CRITICAL: Wallet rollback failed after tweet update error:",
+              debitRes.error
+            );
+            return NextResponse.json(
+              {
+                error:
+                  "Tweet payment could not be saved and automatic wallet rollback failed. Contact support immediately.",
+                details: { tweet_id: tid, rollback_error: debitRes.error },
+              },
+              { status: 500 }
+            );
           }
-        );
-        if (!logged) {
-          console.error(
-            "[bulk-pay-twitter-cpm] CRITICAL: Wallet rolled back but refund row insert failed for creator:",
-            creatorId
+
+          const contestTitle = contest.title || "Contest";
+          const logged = await logTransactionAsAdmin(
+            creatorId,
+            "refund",
+            totalAmount,
+            "success",
+            `Rollback: Twitter CPM bulk payment (DB update failed) — ${contestTitle}`,
+            {
+              remarks: REVERSAL_TRANSACTION_REMARK,
+              paymentMethod: "refund",
+              metadata: {
+                contest_id: contestId,
+                twitter_creator_id: creatorId,
+                payout_type: "twitter_cpm_bulk",
+                rollback_reason: "tweet_row_update_failed",
+                failed_tweet_id: tid,
+                original_reward_transaction_id: creditRes.transactionId,
+              },
+            }
           );
+          if (!logged) {
+            console.error(
+              "[bulk-pay-twitter-cpm] CRITICAL: Wallet rolled back but refund row insert failed for creator:",
+              creatorId
+            );
+          }
         }
 
         return NextResponse.json(
           {
-            error:
-              "Wallet credit was rolled back because tweet rows could not be updated. You can retry bulk pay.",
-            details: { tweet_id: tid, message: upErr.message },
+            error: creditRes.alreadyApplied
+              ? "Tweet rows could not be updated. This request reused a prior payout idempotency key (no new credit). Partial tweet updates were reverted where possible. Retry or contact support if state is inconsistent."
+              : "Wallet credit was rolled back because tweet rows could not be updated. You can retry bulk pay.",
+            details: {
+              tweet_id: tid,
+              message: upErr.message,
+              idempotent_retry: Boolean(creditRes.alreadyApplied),
+            },
           },
           { status: 500 }
         );

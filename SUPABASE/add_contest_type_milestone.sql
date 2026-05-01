@@ -1,11 +1,1 @@
--- Milestone-based video contests (see docs/MILESTONE_CONTEST_GUIDE.md)
--- Run on Supabase before creating contests with contest_type = 'milestone'.
-
-DO $$
-BEGIN
-  ALTER TYPE public.contest_type_enum ADD VALUE 'milestone';
-EXCEPTION
-  WHEN duplicate_object THEN
-    NULL;
-END;
-$$;
+-- Superseded by SUPABASE/migrations/20260427_add_contest_type_milestone_enum_value.sql (run via your migration pipeline).
