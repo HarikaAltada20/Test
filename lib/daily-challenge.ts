@@ -1,4 +1,5 @@
 import { createClient } from "@/utils/supabase/server";
+import { createAdminClient } from "@/utils/supabase/admin";
 
 export type CompetitionPeriod =
   | "today"
@@ -40,7 +41,17 @@ type EligibilityConfig = {
 type SnapshotOptions = {
   reason?: string;
   allowOverwrite?: boolean;
+  useAdminClient?: boolean;
 };
+
+type DataClientMode = "session" | "admin";
+
+async function getDataClient(mode: DataClientMode = "session") {
+  if (mode === "admin") {
+    return createAdminClient();
+  }
+  return createClient();
+}
 
 function toIstDateParts(date: Date) {
   const shifted = new Date(date.getTime() + IST_OFFSET_MINUTES * 60 * 1000);
@@ -128,10 +139,12 @@ export function getPeriodRange(period: CompetitionPeriod, now = new Date()) {
   return { start, end };
 }
 
-async function getActiveEventAndConfig(): Promise<EligibilityConfig | null> {
-  const supabase = await createClient();
+async function getActiveEventAndConfig(
+  mode: DataClientMode = "session",
+): Promise<EligibilityConfig | null> {
+  const supabase = await getDataClient(mode);
   const nowIso = new Date().toISOString();
-  const { data: event } = await supabase
+  const { data: event, error: eventError } = await supabase
     .from("competition_event")
     .select("id")
     .eq("is_active", true)
@@ -142,9 +155,13 @@ async function getActiveEventAndConfig(): Promise<EligibilityConfig | null> {
     .limit(1)
     .maybeSingle();
 
+  if (eventError) {
+    throw eventError;
+  }
+
   if (!event?.id) return null;
 
-  const { data: config } = await supabase
+  const { data: config, error: configError } = await supabase
     .from("competition_eligibility_config")
     .select(
       "views_min_views,reels_min_reels,reels_min_views,min_views_per_reel_for_reels_lb,promote_next_eligible",
@@ -153,6 +170,10 @@ async function getActiveEventAndConfig(): Promise<EligibilityConfig | null> {
     .order("effective_from", { ascending: false })
     .limit(1)
     .maybeSingle();
+
+  if (configError) {
+    throw configError;
+  }
 
   return {
     eventId: event.id,
@@ -208,7 +229,7 @@ function buildRemainingText(row: CreatorMetrics, config: EligibilityConfig) {
 }
 
 export async function getDailyChallengeConfig() {
-  const config = await getActiveEventAndConfig();
+  const config = await getActiveEventAndConfig("session");
   return config;
 }
 
@@ -219,8 +240,10 @@ export async function getDailyChallengeLeaderboard(params: {
   limit: number;
   meUserId?: string | null;
   rangeOverride?: { start: Date; end: Date } | null;
+  clientMode?: DataClientMode;
 }) {
-  const config = await getActiveEventAndConfig();
+  const clientMode = params.clientMode ?? "session";
+  const config = await getActiveEventAndConfig(clientMode);
   if (!config) {
     return {
       hasActiveEvent: false,
@@ -233,12 +256,15 @@ export async function getDailyChallengeLeaderboard(params: {
     };
   }
 
-  const supabase = await createClient();
-  const { data: event } = await supabase
+  const supabase = await getDataClient(clientMode);
+  const { data: event, error: eventError } = await supabase
     .from("competition_event")
     .select("starts_at,ends_at")
     .eq("id", config.eventId)
     .single();
+  if (eventError) {
+    throw eventError;
+  }
 
   let query = supabase
     .from("submissions")
@@ -376,15 +402,18 @@ export async function getDailyChallengeLeaderboard(params: {
 }
 
 export async function getDailyWinnersHistory(days = 30) {
-  const config = await getActiveEventAndConfig();
+  const config = await getActiveEventAndConfig("session");
   if (!config) return [];
   const supabase = await createClient();
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from("competition_daily_winner_snapshot")
     .select("*")
     .eq("event_id", config.eventId)
     .order("snapshot_date", { ascending: false })
     .limit(days * 2);
+  if (error) {
+    throw error;
+  }
   return data || [];
 }
 
@@ -392,19 +421,23 @@ export async function snapshotWinnersForIstDate(
   snapshotDate: string,
   options: SnapshotOptions = {},
 ) {
-  const config = await getActiveEventAndConfig();
+  const mode: DataClientMode = options.useAdminClient ? "admin" : "session";
+  const config = await getActiveEventAndConfig(mode);
   if (!config) return { ok: false, reason: "no_active_event" };
   const reason = options.reason || "manual_admin_refresh";
   const allowOverwrite = options.allowOverwrite ?? false;
 
-  const supabase = await createClient();
+  const supabase = await getDataClient(mode);
   if (!allowOverwrite) {
-    const { data: existing } = await supabase
+    const { data: existing, error: existingError } = await supabase
       .from("competition_daily_winner_snapshot")
       .select("id")
       .eq("event_id", config.eventId)
       .eq("snapshot_date", snapshotDate)
       .limit(1);
+    if (existingError) {
+      throw existingError;
+    }
     if (existing && existing.length > 0) {
       return { ok: true, snapshotDate, locked: true, skipped: true };
     }
@@ -418,6 +451,7 @@ export async function snapshotWinnersForIstDate(
     page: 1,
     limit: 200,
     rangeOverride: { start: dayStart, end: dayEnd },
+    clientMode: mode,
   });
   if (Number.isNaN(dayStart.getTime()) || Number.isNaN(dayEnd.getTime())) {
     return { ok: false, reason: "invalid_snapshot_date" };

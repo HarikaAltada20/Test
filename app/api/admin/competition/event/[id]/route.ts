@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { verifyAdminAccess } from "@/utils/admin-auth";
-import { createClient } from "@/utils/supabase/server";
+import { createAdminClient } from "@/utils/supabase/admin";
 import { clearDailyChallengeCache } from "@/lib/cache-utils";
 
 export const dynamic = "force-dynamic";
@@ -54,19 +54,13 @@ export async function PATCH(
       if (!Number.isNaN(d.getTime())) updates.ends_at = d.toISOString();
     }
 
-    if (body?.makeSoleActive === true) {
-      updates.is_active = true;
+    const shouldMakeSoleActive =
+      body?.makeSoleActive === true || body?.is_active === true;
+    if (shouldMakeSoleActive) {
+      delete updates.is_active;
     }
 
-    const supabase = await createClient();
-
-    if (body?.makeSoleActive === true) {
-      const { error: deactErr } = await supabase
-        .from("competition_event")
-        .update({ is_active: false, updated_at: new Date().toISOString() })
-        .eq("is_active", true);
-      if (deactErr) throw deactErr;
-    }
+    const supabase = createAdminClient();
 
     const { data: current, error: readErr } = await supabase
       .from("competition_event")
@@ -93,10 +87,25 @@ export async function PATCH(
 
     if (updateErr) throw updateErr;
 
+    if (shouldMakeSoleActive) {
+      const { error: activateError } = await supabase.rpc(
+        "competition_set_sole_active",
+        { p_event_id: id },
+      );
+      if (activateError) throw activateError;
+    }
+
+    const { data: finalEvent, error: readFinalError } = await supabase
+      .from("competition_event")
+      .select("id,name,starts_at,ends_at,timezone,status,is_active")
+      .eq("id", id)
+      .single();
+    if (readFinalError) throw readFinalError;
+
     const cleared = clearDailyChallengeCache();
     return NextResponse.json({
       success: true,
-      event,
+      event: finalEvent,
       cacheEntriesCleared: cleared,
       updatedAt: new Date().toISOString(),
     });

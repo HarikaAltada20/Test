@@ -25,7 +25,18 @@ export async function GET(request: NextRequest) {
     const snapshot = await snapshotWinnersForIstDate(snapshotDate, {
       reason: "daily_auto_snapshot",
       allowOverwrite: false,
+      useAdminClient: true,
     });
+    if (!snapshot?.ok) {
+      return NextResponse.json(
+        {
+          error: "Snapshot failed",
+          snapshotDate,
+          snapshot,
+        },
+        { status: 500 },
+      );
+    }
     const cleared = clearDailyChallengeCache();
 
     return NextResponse.json({

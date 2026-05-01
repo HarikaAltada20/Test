@@ -37,6 +37,10 @@ import Link from "next/link";
 import { PaginationControls } from "@/components/ui/pagination-controls";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
+import {
+  DAILY_CHALLENGE_REFRESH_COOLDOWN_MS_ADMIN,
+  DAILY_CHALLENGE_REFRESH_COOLDOWN_MS_CREATOR,
+} from "@/lib/constants";
 
 /** Daily Challenge only surfaces same-day and prior IST day ranges. */
 type Period = "today" | "yesterday";
@@ -102,8 +106,6 @@ type CompetitionEventRow = {
 
 type BoardTab = "views" | "reels";
 const DAILY_WINNER_REWARD_INR = 50;
-const CREATOR_REFRESH_COOLDOWN_MS = 30 * 60 * 1000;
-const ADMIN_REFRESH_COOLDOWN_MS = 1 * 60 * 1000;
 
 export default function DailyChallengeClient({
   isAdmin,
@@ -257,8 +259,8 @@ export default function DailyChallengeClient({
   const lastUpdated = fromNow(payload?.generatedAt);
   const endsIn = getHoursUntilIstMidnight();
   const cooldownMs = isAdmin
-    ? ADMIN_REFRESH_COOLDOWN_MS
-    : CREATOR_REFRESH_COOLDOWN_MS;
+    ? DAILY_CHALLENGE_REFRESH_COOLDOWN_MS_ADMIN
+    : DAILY_CHALLENGE_REFRESH_COOLDOWN_MS_CREATOR;
   const elapsedMs = lastRefreshAt
     ? Date.now() - new Date(lastRefreshAt).getTime()
     : Number.POSITIVE_INFINITY;
