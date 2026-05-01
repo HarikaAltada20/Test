@@ -19,24 +19,19 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    // Check if user is admin or advertiser
+    // Check if user is admin
     const { data: userData } = await supabaseAdmin
       .from("users")
       .select("user_type")
       .eq("id", user.id)
       .single();
 
-    if (!userData || !["admin", "advertiser"].includes(userData.user_type)) {
+    if (!userData || userData.user_type !== "admin") {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
     const body = await request.json();
-    const {
-      submission_ids,
-      payment_type,
-      contest_id,
-      creator_id,
-    } = body;
+    const { submission_ids, payment_type, contest_id, creator_id } = body;
 
     if (
       !submission_ids ||
@@ -52,6 +47,13 @@ export async function POST(request: NextRequest) {
     if (!["standard", "bonus", "both"].includes(payment_type)) {
       return NextResponse.json(
         { error: "payment_type must be standard, bonus, or both" },
+        { status: 400 },
+      );
+    }
+
+    if (typeof contest_id !== "string" || contest_id.trim().length === 0) {
+      return NextResponse.json(
+        { error: "contest_id is required and must be a non-empty string" },
         { status: 400 },
       );
     }
