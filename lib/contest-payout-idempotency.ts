@@ -1,11 +1,10 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-const REVERSAL_TRANSACTION_REMARK = "Forfeited due to status reversal";
-
 /**
  * Count refund rows logged for this creator + contest (metadata.contest_id).
  * Increments when reversing paid submissions, so bulk/Twitter bulk idempotency keys
- * change after refunds and legitimate re-payouts are not suppressed.
+ * change after refunds and legitimate re-payouts are not suppressed. Count all
+ * refund reasons because any refund can reopen payout headroom.
  *
  * Same count on immediate retry (no refunds in between) → same idempotency → safe dedupe.
  */
@@ -19,7 +18,6 @@ export async function countRefundsForCreatorContest(
     .select("id", { count: "exact", head: true })
     .eq("user_id", creatorId)
     .eq("type", "refund")
-    .eq("remarks", REVERSAL_TRANSACTION_REMARK)
     .contains("metadata", { contest_id: contestId });
 
   if (error) {

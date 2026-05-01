@@ -4,6 +4,8 @@ import { createAdminClient } from "@/utils/supabase/admin";
 import { verifyAdminAccess } from "@/utils/admin-auth";
 import {
   creditCreatorWithdrawableBalance,
+  debitCreatorWithdrawableBalance,
+  logTransactionAsAdmin,
   REVERSAL_TRANSACTION_REMARK,
 } from "@/lib/payment-utils";
 
@@ -54,9 +56,9 @@ export async function POST(
     }
 
     const { isAdmin, error: adminError } = await verifyAdminAccess();
-    if (!isAdmin && adminError) {
+    if (!isAdmin) {
       return NextResponse.json(
-        { error: "Admin access required" },
+        { error: adminError || "Admin access required" },
         { status: 403 }
       );
     }
@@ -326,19 +328,67 @@ export async function POST(
       );
     }
 
-    const { error: updateTweetErr } = await supabaseAdmin
+    const { data: updatedTweetRows, error: updateTweetErr } = await supabaseAdmin
       .from("twitter_campaign_tweets")
       .update({ moderation_status: "paid", earnings: rewardAmount })
       .eq("id", tweetId)
-      .eq("contest_id", contestId);
+      .eq("contest_id", contestId)
+      .neq("moderation_status", "paid")
+      .select("id")
+      .limit(1);
 
-    if (updateTweetErr) {
+    if (updateTweetErr || !updatedTweetRows?.length) {
       console.error(
         "[pay-twitter-tweet] Error updating tweet:",
         updateTweetErr
       );
+      if (!creditRes.alreadyApplied) {
+        const debitRes = await debitCreatorWithdrawableBalance(
+          creatorId,
+          rewardAmount,
+        );
+        if (debitRes.success) {
+          await logTransactionAsAdmin(
+            creatorId,
+            "refund",
+            rewardAmount,
+            "success",
+            `Rollback: Twitter tweet payment row update failed - ${
+              contest.title || "Contest"
+            }`,
+            {
+              remarks: REVERSAL_TRANSACTION_REMARK,
+              paymentMethod: "refund",
+              metadata: {
+                contest_id: contestId,
+                twitter_creator_id: creatorId,
+                tweet_id: tweetId,
+                payout_type: "twitter_cpm_tweet_rollback",
+                original_reward_transaction_id: creditRes.transactionId,
+              },
+            },
+          );
+        } else {
+          console.error(
+            "[pay-twitter-tweet] CRITICAL: wallet rollback failed after tweet update error:",
+            debitRes.error,
+          );
+          return NextResponse.json(
+            {
+              error:
+                "Tweet payment could not be saved and automatic wallet rollback failed. Contact support immediately.",
+              details: debitRes.error,
+            },
+            { status: 500 },
+          );
+        }
+      }
       return NextResponse.json(
-        { error: "Failed to update tweet payment status" },
+        {
+          error: creditRes.alreadyApplied
+            ? "Tweet row could not be reconciled with an existing payout. Retry or contact support."
+            : "Tweet payment could not be saved. Wallet credit was rolled back; retry after resolving the row state.",
+        },
         { status: 500 }
       );
     }

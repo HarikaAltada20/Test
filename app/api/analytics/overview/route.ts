@@ -18,7 +18,7 @@ export async function GET(request: NextRequest) {
     const notRejected = searchParams.get("notRejected") === "true";
     const contestTypeFilter = (searchParams.get("type") ?? "all")
       .trim()
-      .toLowerCase() as "all" | "leaderboard" | "cpm";
+      .toLowerCase() as "all" | "leaderboard" | "cpm" | "milestone";
     const contentType = (searchParams.get("contentType") ?? "video")
       .trim()
       .toLowerCase() as "video" | "text_image";

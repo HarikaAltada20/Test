@@ -177,7 +177,7 @@ export async function POST(
       }
 
       // Re-rank so leaderboard order reflects new total_points
-      await rerankTwitterLeaderboard(contestId, supabaseAdmin);
+      await rerankTwitterContestLeaderboard(contestId, supabaseAdmin);
     }
 
     return NextResponse.json({

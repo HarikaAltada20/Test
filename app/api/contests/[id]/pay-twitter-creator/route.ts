@@ -4,6 +4,8 @@ import { createAdminClient } from "@/utils/supabase/admin";
 import { verifyAdminAccess } from "@/utils/admin-auth";
 import {
   creditCreatorWithdrawableBalance,
+  debitCreatorWithdrawableBalance,
+  logTransactionAsAdmin,
   REVERSAL_TRANSACTION_REMARK,
 } from "@/lib/payment-utils";
 
@@ -91,9 +93,9 @@ export async function POST(
 
     // Verify admin access
     const { isAdmin, error: adminError } = await verifyAdminAccess();
-    if (!isAdmin && adminError) {
+    if (!isAdmin) {
       return NextResponse.json(
-        { error: "Admin access required" },
+        { error: adminError || "Admin access required" },
         { status: 403 }
       );
     }
@@ -149,7 +151,7 @@ export async function POST(
       await supabaseAdmin
         .from("twitter_campaign_leaderboard")
         .select(
-          "id, creator_id, current_rank, total_points, earnings, paid_rank, moderation_status"
+          "id, creator_id, current_rank, total_points, earnings, paid_rank, paid_at, moderation_status"
         )
         .eq("contest_id", contestId)
         .eq("creator_id", creatorId)
@@ -393,7 +395,7 @@ export async function POST(
     // Mark non-rejected tweets paid and set per-tweet earnings (DB + reversals; bulk CPM already does this).
     const { data: tweetsToPay, error: tweetsFetchError } = await supabaseAdmin
       .from("twitter_campaign_tweets")
-      .select("id, points, manual_points_adjustment")
+      .select("id, points, manual_points_adjustment, moderation_status, earnings")
       .eq("contest_id", contestId)
       .eq("creator_id", creatorId)
       .neq("moderation_status", "rejected")
@@ -433,6 +435,75 @@ export async function POST(
           "[pay-twitter-creator] Error updating tweets with earnings:",
           tweetUpdateErr
         );
+        if (!creditRes.alreadyApplied) {
+          const debitRes = await debitCreatorWithdrawableBalance(
+            creatorId,
+            rewardAmount,
+          );
+          if (debitRes.success) {
+            await logTransactionAsAdmin(
+              creatorId,
+              "refund",
+              rewardAmount,
+              "success",
+              `Rollback: Twitter creator payment tweet update failed - ${
+                contest.title || "Contest"
+              }`,
+              {
+                remarks: REVERSAL_TRANSACTION_REMARK,
+                paymentMethod: "refund",
+                metadata: {
+                  contest_id: contestId,
+                  twitter_creator_id: creatorId,
+                  payout_type: "twitter_creator_rollback",
+                  original_reward_transaction_id: creditRes.transactionId,
+                },
+              },
+            );
+          } else {
+            console.error(
+              "[pay-twitter-creator] CRITICAL: wallet rollback failed after tweet update error:",
+              debitRes.error,
+            );
+            return NextResponse.json(
+              {
+                error:
+                  "Creator payment could not be reconciled and automatic wallet rollback failed. Contact support immediately.",
+                details: debitRes.error,
+              },
+              { status: 500 },
+            );
+          }
+        }
+        await supabaseAdmin
+          .from("twitter_campaign_leaderboard")
+          .update({
+            paid_at: leaderboardEntry.paid_at,
+            earnings: leaderboardEntry.earnings,
+            paid_rank: leaderboardEntry.paid_rank,
+            moderation_status: leaderboardEntry.moderation_status,
+          })
+          .eq("id", leaderboardEntry.id);
+        await Promise.all(
+          tweetsToPay.map((t) =>
+            supabaseAdmin
+              .from("twitter_campaign_tweets")
+              .update({
+                moderation_status: t.moderation_status,
+                earnings: t.earnings,
+              })
+              .eq("id", t.id)
+              .eq("contest_id", contestId),
+          ),
+        );
+        return NextResponse.json(
+          {
+            error: creditRes.alreadyApplied
+              ? "Creator payout existed, but tweet rows could not be reconciled. Retry or contact support."
+              : "Creator payment row updates failed. Wallet credit was rolled back; retry after resolving tweets.",
+          },
+          { status: 500 },
+        );
       }
     } else {
       const { error: tweetsUpdateError } = await supabaseAdmin
@@ -446,6 +517,58 @@ export async function POST(
         console.error(
           "[pay-twitter-creator] Error updating tweets:",
           tweetsUpdateError
+        );
+        if (!creditRes.alreadyApplied) {
+          const debitRes = await debitCreatorWithdrawableBalance(
+            creatorId,
+            rewardAmount,
+          );
+          if (!debitRes.success) {
+            return NextResponse.json(
+              {
+                error:
+                  "Creator payment could not be reconciled and automatic wallet rollback failed. Contact support immediately.",
+                details: debitRes.error,
+              },
+              { status: 500 },
+            );
+          }
+          await logTransactionAsAdmin(
+            creatorId,
+            "refund",
+            rewardAmount,
+            "success",
+            `Rollback: Twitter creator payment tweet update failed - ${
+              contest.title || "Contest"
+            }`,
+            {
+              remarks: REVERSAL_TRANSACTION_REMARK,
+              paymentMethod: "refund",
+              metadata: {
+                contest_id: contestId,
+                twitter_creator_id: creatorId,
+                payout_type: "twitter_creator_rollback",
+                original_reward_transaction_id: creditRes.transactionId,
+              },
+            },
+          );
+        }
+        await supabaseAdmin
+          .from("twitter_campaign_leaderboard")
+          .update({
+            paid_at: leaderboardEntry.paid_at,
+            earnings: leaderboardEntry.earnings,
+            paid_rank: leaderboardEntry.paid_rank,
+            moderation_status: leaderboardEntry.moderation_status,
+          })
+          .eq("id", leaderboardEntry.id);
+        return NextResponse.json(
+          {
+            error: creditRes.alreadyApplied
+              ? "Creator payout existed, but tweet rows could not be reconciled. Retry or contact support."
+              : "Creator payment row updates failed. Wallet credit was rolled back; retry after resolving tweets.",
+          },
+          { status: 500 },
         );
       }
     }

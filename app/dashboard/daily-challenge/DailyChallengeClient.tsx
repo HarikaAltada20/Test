@@ -63,10 +63,18 @@ function number(v: number) {
 
 function getHoursUntilIstMidnight() {
   const now = new Date();
-  const istNow = new Date(now.toLocaleString("en-US", { timeZone: "Asia/Kolkata" }));
-  const nextMidnight = new Date(istNow);
-  nextMidnight.setHours(24, 0, 0, 0);
-  const diffMs = nextMidnight.getTime() - istNow.getTime();
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Kolkata",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(now);
+  const get = (type: string) =>
+    Number(parts.find((part) => part.type === type)?.value || 0);
+  const nextMidnightUtcMs =
+    Date.UTC(get("year"), get("month") - 1, get("day") + 1, 0, 0, 0) -
+    330 * 60 * 1000;
+  const diffMs = nextMidnightUtcMs - now.getTime();
   const hours = Math.floor(diffMs / (1000 * 60 * 60));
   const mins = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
   return `${hours}h ${mins}m`;
@@ -85,12 +93,41 @@ function fromNow(iso?: string) {
 }
 
 function formatForDatetimeLocal(d: Date) {
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  const h = String(d.getHours()).padStart(2, "0");
-  const min = String(d.getMinutes()).padStart(2, "0");
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Kolkata",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).formatToParts(d);
+  const value = (type: string) =>
+    parts.find((part) => part.type === type)?.value || "00";
+  const y = value("year");
+  const m = value("month");
+  const day = value("day");
+  const h = value("hour");
+  const min = value("minute");
   return `${y}-${m}-${day}T${h}:${min}`;
+}
+
+function parseIstDatetimeLocal(value: string) {
+  const match = value.match(
+    /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/,
+  );
+  if (!match) return new Date(Number.NaN);
+  const [, year, month, day, hour, minute] = match;
+  return new Date(
+    Date.UTC(
+      Number(year),
+      Number(month) - 1,
+      Number(day),
+      Number(hour),
+      Number(minute),
+    ) -
+      330 * 60 * 1000,
+  );
 }
 
 type CompetitionEventRow = {
@@ -382,8 +419,8 @@ export default function DailyChallengeClient({
     setSavingEventId(id);
     setEventsPanelMessage(null);
     try {
-      const starts = new Date(editEventDraft.startsLocal);
-      const ends = new Date(editEventDraft.endsLocal);
+      const starts = parseIstDatetimeLocal(editEventDraft.startsLocal);
+      const ends = parseIstDatetimeLocal(editEventDraft.endsLocal);
       if (Number.isNaN(starts.getTime()) || Number.isNaN(ends.getTime())) {
         throw new Error("Invalid start or end date");
       }
@@ -732,7 +769,7 @@ export default function DailyChallengeClient({
                                   </div>
                                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                                     <div>
-                                      <p className="text-xs text-muted-foreground mb-1">Starts (local)</p>
+                                      <p className="text-xs text-muted-foreground mb-1">Starts (IST)</p>
                                       <Input
                                         type="datetime-local"
                                         value={editEventDraft.startsLocal}
@@ -745,7 +782,7 @@ export default function DailyChallengeClient({
                                       />
                                     </div>
                                     <div>
-                                      <p className="text-xs text-muted-foreground mb-1">Ends (local)</p>
+                                      <p className="text-xs text-muted-foreground mb-1">Ends (IST)</p>
                                       <Input
                                         type="datetime-local"
                                         value={editEventDraft.endsLocal}

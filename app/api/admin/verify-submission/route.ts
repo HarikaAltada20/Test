@@ -155,6 +155,14 @@ export async function POST(request: Request) {
       action === SUBMISSION_STATUS.paid ||
       action === "mark_bonus_paid" ||
       action === "mark_both_paid";
+
+    if (isPaymentAction && !isAdmin) {
+      return NextResponse.json(
+        { error: "Admin access required for payment actions" },
+        { status: 403 },
+      );
+    }
+
     if (
       isPaymentAction &&
       contest.post_contest_status !== "verification_complete"
@@ -675,23 +683,30 @@ export async function POST(request: Request) {
         }
         if (rewardAmount > 0) {
           // Determine payout cycle, allowing repay after full refund
-          const { data: existingRewards } = await supabase
+          const { data: existingRewards } = await supabaseAdmin
             .from("money_transactions")
-            .select("id")
+            .select("id, metadata")
             .eq("user_id", submissionFull.creator_id)
             .eq("type", "reward")
             .contains("metadata", { submission_id: submissionId });
 
-          const { data: existingRefunds } = await supabase
+          const { data: existingRefunds } = await supabaseAdmin
             .from("money_transactions")
-            .select("id, remarks")
+            .select("id, remarks, metadata")
             .eq("user_id", submissionFull.creator_id)
             .eq("type", "refund")
             .contains("metadata", { submission_id: submissionId });
 
-          const rewardsCount = (existingRewards || []).length;
+          const mainRewards = (existingRewards || []).filter(
+            (r: any) => !r?.metadata?.bonus_type,
+          );
+          const mainRefunds = (existingRefunds || []).filter(
+            (r: any) => !r?.metadata?.bonus_type,
+          );
+
+          const rewardsCount = mainRewards.length;
           const refundsCount =
-            (existingRefunds || [])?.filter(
+            mainRefunds?.filter(
               (r: any) =>
                 !r.remarks || r.remarks === REVERSAL_TRANSACTION_REMARK,
             ).length || 0;
@@ -699,9 +714,9 @@ export async function POST(request: Request) {
             rewardsCount > refundsCount ? rewardsCount : rewardsCount + 1;
 
           // Check duplicate reward in this cycle
-          const { data: rewardInThisCycle } = await supabase
+          const { data: rewardInThisCycle } = await supabaseAdmin
             .from("money_transactions")
-            .select("id")
+            .select("id, metadata")
             .eq("user_id", submissionFull.creator_id)
             .eq("type", "reward")
             .contains("metadata", {
@@ -713,7 +728,11 @@ export async function POST(request: Request) {
             ? `contest_reward:v1:${submissionId}:cycle:${nextCycle}:amt:${rewardAmount}`
             : `contest_reward:v1:${submissionId}:cycle:${nextCycle}`;
 
-          if (!rewardInThisCycle || rewardInThisCycle.length === 0) {
+          const mainRewardInThisCycle = (rewardInThisCycle || []).filter(
+            (r: any) => !r?.metadata?.bonus_type,
+          );
+
+          if (mainRewardInThisCycle.length === 0) {
             const creditRes = await creditCreatorWithdrawableBalance(
               submissionFull.creator_id,
               rewardAmount,
@@ -810,52 +829,83 @@ export async function POST(request: Request) {
         action === SUBMISSION_STATUS.rejected) &&
       submission.status === SUBMISSION_STATUS.paid
     ) {
-      // O(1) reversal: prefer the current earnings snapshot on the submission
-      // This is exactly the last granted amount for this submission
-      let reversalAmount = submissionFull.earnings || 0;
-      if (!reversalAmount || reversalAmount <= 0) {
-        // Fallback: calculate net unreversed reward = rewards - prior reversals (rare path)
-        const [
-          { data: rewardTxns, error: rewardErr },
-          { data: refundTxns, error: refundErr },
-        ] = await Promise.all([
-          supabaseAdmin
-            .from("money_transactions")
-            .select("id, amount")
-            .eq("user_id", submissionFull.creator_id)
-            .eq("type", "reward")
-            .contains("metadata", { submission_id: submissionId }),
-          supabaseAdmin
-            .from("money_transactions")
-            .select("id, amount, remarks")
-            .eq("user_id", submissionFull.creator_id)
-            .eq("type", "refund")
-            .contains("metadata", { submission_id: submissionId }),
-        ] as any);
+      const [
+        { data: rewardTxns, error: rewardErr },
+        { data: refundTxns, error: refundErr },
+      ] = await Promise.all([
+        supabaseAdmin
+          .from("money_transactions")
+          .select("id, amount, metadata")
+          .eq("user_id", submissionFull.creator_id)
+          .eq("type", "reward")
+          .contains("metadata", { contest_id: submissionFull.contest_id }),
+        supabaseAdmin
+          .from("money_transactions")
+          .select("id, amount, remarks, metadata")
+          .eq("user_id", submissionFull.creator_id)
+          .eq("type", "refund")
+          .contains("metadata", { contest_id: submissionFull.contest_id }),
+      ] as any);
 
-        if (rewardErr || refundErr) {
-          const message = rewardErr?.message || refundErr?.message || "unknown";
-          return NextResponse.json(
-            { error: `Failed to fetch transactions for reversal: ${message}` },
-            { status: 500 },
-          );
-        }
-
-        const totalRewards = (rewardTxns || []).reduce(
-          (sum: number, tx: any) => sum + (tx.amount || 0),
-          0,
+      if (rewardErr || refundErr) {
+        const message = rewardErr?.message || refundErr?.message || "unknown";
+        return NextResponse.json(
+          { error: `Failed to fetch transactions for reversal: ${message}` },
+          { status: 500 },
         );
-        const totalReversals = (refundTxns || [])
-          .filter(
-            (tx: any) =>
-              !tx.remarks || tx.remarks === REVERSAL_TRANSACTION_REMARK,
-          )
-          .reduce((sum: number, tx: any) => sum + (tx.amount || 0), 0);
-        reversalAmount = Math.max(0, totalRewards - totalReversals);
       }
 
+      const isReversalRefund = (tx: any) =>
+        !tx.remarks || tx.remarks === REVERSAL_TRANSACTION_REMARK;
+      const isMainSubmissionTx = (tx: any) =>
+        String(tx?.metadata?.submission_id || "") === String(submissionId) &&
+        !tx?.metadata?.bonus_type;
+      const isBonusSubmissionTx = (tx: any) => {
+        const metadata = tx?.metadata || {};
+        if (!metadata.bonus_type) return false;
+        return (
+          String(metadata.submission_id || "") === String(submissionId) ||
+          String(metadata.source_submission_id || "") === String(submissionId)
+        );
+      };
+      const sumAmount = (rows: any[]) =>
+        rows.reduce((sum: number, tx: any) => sum + (Number(tx.amount) || 0), 0);
+
+      const mainRewardNet = Math.max(
+        0,
+        sumAmount((rewardTxns || []).filter(isMainSubmissionTx)) -
+          sumAmount((refundTxns || []).filter((tx: any) => isReversalRefund(tx) && isMainSubmissionTx(tx))),
+      );
+      const mainReversalAmount =
+        Number(submissionFull.earnings) > 0
+          ? Number(submissionFull.earnings)
+          : mainRewardNet;
+
+      const bonusRewards = (rewardTxns || []).filter(isBonusSubmissionTx);
+      const bonusRefunds = (refundTxns || []).filter(
+        (tx: any) => isReversalRefund(tx) && isBonusSubmissionTx(tx),
+      );
+      const bonusByType = new Map<string, number>();
+      for (const tx of bonusRewards) {
+        const key = String(tx?.metadata?.bonus_type || "bonus");
+        bonusByType.set(key, (bonusByType.get(key) || 0) + (Number(tx.amount) || 0));
+      }
+      for (const tx of bonusRefunds) {
+        const key = String(tx?.metadata?.bonus_type || "bonus");
+        bonusByType.set(key, (bonusByType.get(key) || 0) - (Number(tx.amount) || 0));
+      }
+      const bonusReversals = Array.from(bonusByType.entries())
+        .map(([bonusType, amount]) => ({ bonusType, amount: Math.max(0, amount) }))
+        .filter((row) => row.amount > 0);
+      const bonusReversalAmount = bonusReversals.reduce(
+        (sum, row) => sum + row.amount,
+        0,
+      );
+
+      const reversalAmount = mainReversalAmount + bonusReversalAmount;
+
       if (reversalAmount > 0) {
-        // Debit creator wallet by the credited total
+        // Debit creator wallet once, then write explicit refund ledger rows.
         const debitRes = await debitCreatorWithdrawableBalance(
           submissionFull.creator_id,
           reversalAmount,
@@ -877,33 +927,58 @@ export async function POST(request: Request) {
           console.error("Metrics update (revert paid) failed:", e);
         }
         // Do NOT delete the original reward transactions. We only add a new explicit reversal entry.
-        await logTransactionAsAdmin(
-          submissionFull.creator_id,
-          "refund",
-          reversalAmount,
-          "success",
-          `Reversal of contest reward - ${
-            (contest as any)?.title || "Contest"
-          }`,
-          {
-            remarks: REVERSAL_TRANSACTION_REMARK,
-            paymentMethod: "refund",
-            metadata: {
-              submission_id: submissionId,
-              contest_id: submissionFull.contest_id,
+        if (mainReversalAmount > 0) {
+          await logTransactionAsAdmin(
+            submissionFull.creator_id,
+            "refund",
+            mainReversalAmount,
+            "success",
+            `Reversal of contest reward - ${
+              (contest as any)?.title || "Contest"
+            }`,
+            {
+              remarks: REVERSAL_TRANSACTION_REMARK,
+              paymentMethod: "refund",
+              metadata: {
+                submission_id: submissionId,
+                contest_id: submissionFull.contest_id,
+              },
             },
-          },
-        );
+          );
+        }
+        for (const bonus of bonusReversals) {
+          await logTransactionAsAdmin(
+            submissionFull.creator_id,
+            "refund",
+            bonus.amount,
+            "success",
+            `Reversal of contest bonus - ${(contest as any)?.title || "Contest"}`,
+            {
+              remarks: REVERSAL_TRANSACTION_REMARK,
+              paymentMethod: "refund",
+              metadata: {
+                submission_id: submissionId,
+                source_submission_id: submissionId,
+                contest_id: submissionFull.contest_id,
+                bonus_type: bonus.bonusType,
+              },
+            },
+          );
+        }
         // No longer keep earnings on reversal; it should be cleared when leaving Paid
       }
 
-      // Always clear earnings and paid status once we move away from Paid, regardless of reversalAmount
+      // Always clear paid/bonus state once we move away from Paid.
       await supabaseAdmin
         .from("submissions")
         .update({
           earnings: null,
           paid: false,
           paid_at: null,
+          bonus_paid: false,
+          bonus_paid_at: null,
+          bonus_amount: null,
+          milestone_bonus_paid: null,
         })
         .eq("id", submissionId);
     }

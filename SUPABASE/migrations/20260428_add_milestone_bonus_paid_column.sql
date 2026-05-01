@@ -15,10 +15,6 @@ WHERE milestone_bonus_paid IS NULL
   AND jsonb_typeof(metadata) = 'object'
   AND (metadata ? 'milestone_bonus_paid');
 
--- Optional cleanup: remove the key from metadata to avoid duplicated sources of truth
-UPDATE public.submissions
-SET metadata = metadata - 'milestone_bonus_paid'
-WHERE metadata IS NOT NULL
-  AND jsonb_typeof(metadata) = 'object'
-  AND (metadata ? 'milestone_bonus_paid');
+-- Do not remove the legacy metadata key in this rollout. Keeping it preserves
+-- rollback safety and avoids an extra broad write on submissions during deploy.
 

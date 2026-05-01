@@ -31,10 +31,20 @@ export async function processQueuedPayouts(batchSize: number = 10): Promise<Payo
 
   for (const job of jobs) {
     try {
-      await supabaseAdmin
+      const { data: claimedJob, error: claimErr } = await supabaseAdmin
         .from('payout_jobs')
         .update({ status: 'processing' })
-        .eq('id', job.id);
+        .eq('id', job.id)
+        .eq('status', 'queued')
+        .select('id')
+        .maybeSingle();
+      if (claimErr) {
+        throw new Error(`Failed to claim job: ${claimErr.message}`);
+      }
+      if (!claimedJob) {
+        results.push({ id: job.id, status: 'done' });
+        continue;
+      }
 
       // Load submission + contest
       const { data: sub, error: subErr } = await supabaseAdmin

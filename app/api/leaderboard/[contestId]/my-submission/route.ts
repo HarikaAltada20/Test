@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 export const dynamic = "force-dynamic";
 export async function GET(
   request: Request,
-  context: { params: { contestId: string } },
+  context: { params: Promise<{ contestId: string }> },
 ) {
   const supabase = await createClient();
   const params = await context.params;

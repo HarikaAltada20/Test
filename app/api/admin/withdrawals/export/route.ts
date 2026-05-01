@@ -13,6 +13,26 @@ import { WITHDRAWAL_EXPORT_COLUMN_IDS } from "@/lib/withdrawal-export-columns";
 
 const MAX_EXPORT = 50_000;
 
+type WithdrawalExportRow = Record<string, unknown> & {
+  id?: string | number | null;
+  created_at?: string | null;
+  processed_at?: string | null;
+  status?: string | null;
+  amount?: number | string | null;
+  amount_type?: string | null;
+  currency?: string | null;
+  transaction_reference?: string | null;
+  admin_notes?: string | null;
+  user_notes?: string | null;
+  payment_proof_link?: string | null;
+  payment_proof_storage_path?: string | null;
+  users?: {
+    full_name?: string | null;
+    email?: string | null;
+    username?: string | null;
+  } | null;
+};
+
 const SORT_COLUMN: Record<WithdrawalsSortKey, string> = {
   created_at: "created_at",
   amount: "amount",
@@ -57,7 +77,7 @@ function rowToExport(
   r: Record<string, unknown>,
   columns: Set<string>,
 ): string[] {
-  const m = mapWithdrawalListRow(r);
+  const m = mapWithdrawalListRow(r) as WithdrawalExportRow;
   const users = m.users as {
     full_name?: string | null;
     email?: string | null;

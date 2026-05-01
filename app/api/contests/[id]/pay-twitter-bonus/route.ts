@@ -41,9 +41,9 @@ export async function POST(
     }
 
     const { isAdmin, error: adminError } = await verifyAdminAccess();
-    if (!isAdmin && adminError) {
+    if (!isAdmin) {
       return NextResponse.json(
-        { error: "Admin access required" },
+        { error: adminError || "Admin access required" },
         { status: 403 }
       );
     }
@@ -110,8 +110,23 @@ export async function POST(
       );
     }
 
-    // For bonuses we rely on contest-level verification state and idempotency;
-    // do not block on per-tweet moderation_status here.
+    if (tweet.moderation_status === "rejected") {
+      return NextResponse.json(
+        { error: "Cannot pay bonus for a rejected tweet" },
+        { status: 400 },
+      );
+    }
+
+    if (
+      tweet.moderation_status !== "verified" &&
+      tweet.moderation_status !== "paid"
+    ) {
+      return NextResponse.json(
+        { error: "Tweet must be verified or paid before paying bonus" },
+        { status: 400 },
+      );
+    }
+
     const creatorId = tweet.creator_id;
     if (!creatorId) {
       return NextResponse.json(

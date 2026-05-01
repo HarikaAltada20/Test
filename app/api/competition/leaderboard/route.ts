@@ -70,6 +70,20 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Invalid scope" }, { status: 400 });
     }
 
+    const supabaseAdmin = createAdminClient();
+    const nowIso = new Date().toISOString();
+    const { data: activeEventRow, error: activeEventErr } = await supabaseAdmin
+      .from("competition_event")
+      .select("id")
+      .eq("is_active", true)
+      .eq("status", "active")
+      .lte("starts_at", nowIso)
+      .gte("ends_at", nowIso)
+      .order("starts_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (activeEventErr) throw activeEventErr;
+
     if (fresh) {
       if (!user) {
         return NextResponse.json(
@@ -78,7 +92,6 @@ export async function GET(request: NextRequest) {
         );
       }
 
-      const supabaseAdmin = createAdminClient();
       const { data: userRow, error: userError } = await supabaseAdmin
         .from("users")
         .select("user_type")
@@ -92,19 +105,7 @@ export async function GET(request: NextRequest) {
           ? DAILY_CHALLENGE_REFRESH_COOLDOWN_MS_ADMIN
           : DAILY_CHALLENGE_REFRESH_COOLDOWN_MS_CREATOR;
 
-      const nowIso = new Date().toISOString();
-      const { data: eventRow, error: eventErr } = await supabaseAdmin
-        .from("competition_event")
-        .select("id")
-        .eq("is_active", true)
-        .eq("status", "active")
-        .lte("starts_at", nowIso)
-        .gte("ends_at", nowIso)
-        .order("starts_at", { ascending: false })
-        .limit(1)
-        .maybeSingle();
-      if (eventErr) throw eventErr;
-      if (!eventRow?.id) {
+      if (!activeEventRow?.id) {
         return NextResponse.json(
           { error: "No active competition event found" },
           { status: 400 },
@@ -114,7 +115,7 @@ export async function GET(request: NextRequest) {
       const { data: gateRaw, error: gateErr } = await supabaseAdmin.rpc(
         "competition_consume_leaderboard_refresh",
         {
-          p_event_id: eventRow.id,
+          p_event_id: activeEventRow.id,
           p_cooldown_ms: cooldownMs,
         },
       );
@@ -137,7 +138,13 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    const cacheKey = `${getDailyChallengeCacheKey({ period, scope, page, limit })}:user:${user.id}`;
+    const eventCacheSegment = activeEventRow?.id || "no-active-event";
+    const cacheKey = `${getDailyChallengeCacheKey({
+      period,
+      scope,
+      page,
+      limit,
+    })}:event:${eventCacheSegment}:user:${user.id}`;
     if (!fresh) {
       const cached = dailyChallengeCache.get<any>(cacheKey);
       if (cached) return NextResponse.json({ ...cached, cached: true });

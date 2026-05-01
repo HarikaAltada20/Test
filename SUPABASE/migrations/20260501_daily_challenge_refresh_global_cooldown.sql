@@ -1,9 +1,9 @@
 -- Daily Challenge refresh cooldown using a shared event-level timestamp
 -- (same model as contests.last_metrics_updated).
 
--- Cleanup prior per-user model (safe if not present).
-DROP FUNCTION IF EXISTS public.daily_challenge_consume_refresh(uuid, integer, text);
-DROP TABLE IF EXISTS public.daily_challenge_refresh_control;
+-- Keep prior per-user refresh artifacts in place for production rollback safety.
+-- They are no longer used by application code; remove them in a later cleanup migration
+-- after confirming all deployed versions use competition_consume_leaderboard_refresh.
 
 ALTER TABLE public.competition_event
   ADD COLUMN IF NOT EXISTS leaderboard_last_refreshed_at timestamptz;

@@ -791,7 +791,14 @@ export async function debitCreatorWithdrawableBalance(
 
     const currentBalance = profile?.withdrawable_balance || 0;
     const currentTotalWon = profile?.total_money_won || 0;
-    const newBalance = Math.max(0, currentBalance - amountInCents);
+    if (currentBalance < amountInCents) {
+      return {
+        success: false,
+        error: `Insufficient withdrawable balance to reverse ${amountInCents} cents`,
+      };
+    }
+
+    const newBalance = currentBalance - amountInCents;
     const newTotalWon = Math.max(0, currentTotalWon - amountInCents);
 
     const { error: updateErr } = await supabase

@@ -17,7 +17,7 @@ export async function rerankTwitterContestLeaderboard(
   if (!allEntries?.length) return;
 
   await Promise.all(
-    allEntries.map((entry, index) =>
+    allEntries.map((entry: { creator_id: string }, index: number) =>
       supabaseAdmin
         .from("twitter_campaign_leaderboard")
         .update({ current_rank: index + 1 })

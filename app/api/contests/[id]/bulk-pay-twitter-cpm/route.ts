@@ -36,9 +36,9 @@ export async function POST(
     }
 
     const { isAdmin, error: adminError } = await verifyAdminAccess();
-    if (!isAdmin && adminError) {
+    if (!isAdmin) {
       return NextResponse.json(
-        { error: "Admin access required" },
+        { error: adminError || "Admin access required" },
         { status: 403 }
       );
     }
