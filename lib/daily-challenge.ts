@@ -224,7 +224,9 @@ export function getPeriodRange(period: CompetitionPeriod, now = new Date()) {
 
   if (period === "this_week") {
     const start = getIstWeekStart(now);
-    return { start, end: tomorrowStart };
+    /** Exclusive end = start of the following Monday (IST), so the window is 7 full calendar days by IST. */
+    const end = addIstDays(start, 7);
+    return { start, end };
   }
 
   if (period === "last_week") {
@@ -235,10 +237,13 @@ export function getPeriodRange(period: CompetitionPeriod, now = new Date()) {
 
   const { year, month } = toIstDateParts(now);
   if (period === "this_month") {
-    return {
-      start: makeUtcFromIstParts(year, month, 1),
-      end: tomorrowStart,
-    };
+    const start = makeUtcFromIstParts(year, month, 1);
+    /** Exclusive end = first moment of the next calendar month (IST). */
+    const end =
+      month === 11
+        ? makeUtcFromIstParts(year + 1, 0, 1)
+        : makeUtcFromIstParts(year, month + 1, 1);
+    return { start, end };
   }
   if (period === "last_month") {
     const start = makeUtcFromIstParts(year, month - 1, 1);
@@ -248,7 +253,7 @@ export function getPeriodRange(period: CompetitionPeriod, now = new Date()) {
   if (period === "this_year") {
     return {
       start: makeUtcFromIstParts(year, 0, 1),
-      end: tomorrowStart,
+      end: makeUtcFromIstParts(year + 1, 0, 1),
     };
   }
   const start = makeUtcFromIstParts(year - 1, 0, 1);

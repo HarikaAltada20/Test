@@ -4,6 +4,7 @@ import { createAdminClient } from "@/utils/supabase/admin";
 import {
   dailyChallengeCache,
   getDailyChallengeCacheKey,
+  getDailyChallengeLastFreshMetaKey,
 } from "@/lib/cache-utils";
 import {
   CompetitionPeriod,
@@ -156,9 +157,26 @@ export async function GET(request: NextRequest) {
       page,
       limit,
     })}:event:${eventCacheSegment}:user:${user.id}`;
+    const lastFreshMetaKey = getDailyChallengeLastFreshMetaKey({
+      eventSegmentId: eventCacheSegment,
+      userId: user.id,
+      period,
+      scope,
+    });
+    const readLastLeaderboardFreshAt = (): string | null => {
+      const v = dailyChallengeCache.get<string>(lastFreshMetaKey);
+      return typeof v === "string" && v.length > 0 ? v : null;
+    };
+
     if (!fresh && activeEventRow?.id) {
       const cached = dailyChallengeCache.get<any>(cacheKey);
-      if (cached) return NextResponse.json({ ...cached, cached: true });
+      if (cached) {
+        return NextResponse.json({
+          ...cached,
+          lastLeaderboardFreshAt: readLastLeaderboardFreshAt(),
+          cached: true,
+        });
+      }
     }
 
     const payload = await getDailyChallengeLeaderboard({
@@ -169,8 +187,16 @@ export async function GET(request: NextRequest) {
       meUserId: user.id,
     });
 
-    dailyChallengeCache.set(cacheKey, payload, 60 * 60 * 1000);
-    return NextResponse.json(payload);
+    let lastLeaderboardFreshAt = readLastLeaderboardFreshAt();
+    if (fresh) {
+      lastLeaderboardFreshAt = new Date().toISOString();
+      /** Longer than payload rows so “last refresh” survives hourly cache churn. */
+      dailyChallengeCache.set(lastFreshMetaKey, lastLeaderboardFreshAt, 48 * 60 * 60 * 1000);
+    }
+
+    const merged = { ...payload, lastLeaderboardFreshAt };
+    dailyChallengeCache.set(cacheKey, merged, 60 * 60 * 1000);
+    return NextResponse.json(merged);
   } catch (error) {
     console.error("[competition/leaderboard] error", error);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });

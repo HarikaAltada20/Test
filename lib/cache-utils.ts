@@ -176,6 +176,16 @@ export function getDailyChallengeCacheKey(params: {
   return `daily_challenge:${params.period}:${params.scope}:${params.page}:${params.limit}`;
 }
 
+/** Persist last successful gated `fresh=1` time; shared across page/limit for same event & user slice. Prefix must stay `daily_challenge:` for clears. */
+export function getDailyChallengeLastFreshMetaKey(params: {
+  eventSegmentId: string;
+  userId: string;
+  period: string;
+  scope: string;
+}): string {
+  return `daily_challenge:lastFresh:${params.eventSegmentId}:user:${params.userId}:${params.period}:${params.scope}`;
+}
+
 export function clearDailyChallengeCache(): number {
   return dailyChallengeCache.clearPrefix("daily_challenge:");
 }

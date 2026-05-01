@@ -1,13 +1,12 @@
 "use client";
 
-import { useEffect, useLayoutEffect, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
   AlertCircle,
-  Award,
   Clock3,
   CheckCircle2,
   Crown,
@@ -25,6 +24,7 @@ import {
   EnhancedTabs as Tabs,
   EnhancedTabsList as TabsList,
   EnhancedTabsTrigger as TabsTrigger,
+  EnhancedTabsContent as TabsContent,
 } from "@/components/ui/enhanced-tabs";
 import {
   Select,
@@ -42,25 +42,35 @@ import {
   DAILY_CHALLENGE_REFRESH_COOLDOWN_MS_CREATOR,
 } from "@/lib/constants";
 
-type Period = "today" | "yesterday" | "this_week" | "last_week" | "this_month" | "last_month";
+/** Only “open” windows—maps to API competition period. */
+type LeaderboardPeriod = "today" | "this_week" | "this_month";
+type RewardMode = "daily" | "weekly" | "monthly";
 type Scope = "pending" | "verified" | "all";
 
-const PERIOD_OPTIONS: { value: Period; label: string }[] = [
-  { value: "today", label: "Today" },
-  { value: "yesterday", label: "Yesterday" },
-  { value: "this_week", label: "This Week" },
-  { value: "last_week", label: "Last Week" },
-  { value: "this_month", label: "This Month" },
-  { value: "last_month", label: "Last Month" },
+type AdminPrimaryTab = "setup" | "live";
+
+const REWARD_MODE_OPTIONS: { value: RewardMode; label: string }[] = [
+  { value: "daily", label: "Daily" },
+  { value: "weekly", label: "Weekly" },
+  { value: "monthly", label: "Monthly" },
 ];
 
-const PERIOD_LABELS: Record<Period, string> = {
-  today: "Today",
-  yesterday: "Yesterday",
-  this_week: "This Week",
-  last_week: "Last Week",
-  this_month: "This Month",
-  last_month: "Last Month",
+const LEADERBOARD_PERIOD_FOR_MODE: Record<RewardMode, LeaderboardPeriod> = {
+  daily: "today",
+  weekly: "this_week",
+  monthly: "this_month",
+};
+
+const MODE_HEADLINE: Record<RewardMode, string> = {
+  daily: "Today",
+  weekly: "This week",
+  monthly: "This month",
+};
+
+const CHALLENGE_TITLE: Record<RewardMode, string> = {
+  daily: "Daily Challenge",
+  weekly: "Weekly Challenge",
+  monthly: "Monthly Challenge",
 };
 
 const SNAPSHOT_PERIOD_LABELS: Record<string, string> = {
@@ -77,6 +87,16 @@ const SCOPE_OPTIONS: { value: Scope; label: string }[] = [
 
 function number(v: number) {
   return (v || 0).toLocaleString();
+}
+
+function perReelMinVerifiedPhrase(minViewsPerReel: number) {
+  const n = Number(minViewsPerReel || 0);
+  return n === 1 ? "1 verified view" : `${number(n)} verified views`;
+}
+
+function verifiedReelsPhrase(count: number) {
+  const n = Math.round(Number(count || 0));
+  return n === 1 ? `${number(n)} verified reel` : `${number(n)} verified reels`;
 }
 
 function getHoursUntilIstMidnight() {
@@ -107,6 +127,22 @@ function getTimeUntil(iso?: string | null) {
   const mins = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
   if (days > 0) return `${days}d ${hours}h`;
   return `${hours}h ${mins}m`;
+}
+
+function formatContestInstantIst(iso: string) {
+  return new Date(iso).toLocaleString("en-IN", {
+    dateStyle: "medium",
+    timeStyle: "short",
+    timeZone: "Asia/Kolkata",
+  });
+}
+
+function formatIsoIstDetailed(iso: string) {
+  return new Date(iso).toLocaleString("en-IN", {
+    dateStyle: "medium",
+    timeStyle: "medium",
+    timeZone: "Asia/Kolkata",
+  });
 }
 
 function fromNow(iso?: string) {
@@ -176,20 +212,36 @@ type CompetitionEventRow = {
 
 type BoardTab = "views" | "reels";
 
+/** Formats minor units using the ISO 4217 code from the event (symbol + separators from Intl, not hardcoded per currency). */
 function formatPrize(amountMinorUnits: number, currency: string) {
-  const normalizedCurrency = currency.trim().toUpperCase();
-  const symbolByCurrency: Record<string, string> = {
-    INR: "₹",
-    USD: "$",
-  };
-  const amount = new Intl.NumberFormat("en-IN", {
-    maximumFractionDigits: amountMinorUnits % 100 === 0 ? 0 : 2,
-  }).format(amountMinorUnits / 100);
-  return `${symbolByCurrency[normalizedCurrency] || `${normalizedCurrency} `}${amount}`;
+  const code = currency.trim().toUpperCase();
+  const numeric = amountMinorUnits / 100;
+  const maxFrac = amountMinorUnits % 100 === 0 ? 0 : 2;
+  if (!/^[A-Z]{3}$/.test(code)) {
+    const digits = new Intl.NumberFormat("en-IN", {
+      minimumFractionDigits: 0,
+      maximumFractionDigits: maxFrac,
+    }).format(numeric);
+    return code.length > 0 ? `${code} ${digits}` : digits;
+  }
+  try {
+    return new Intl.NumberFormat("en-IN", {
+      style: "currency",
+      currency: code,
+      minimumFractionDigits: 0,
+      maximumFractionDigits: maxFrac,
+    }).format(numeric);
+  } catch {
+    const digits = new Intl.NumberFormat("en-IN", {
+      minimumFractionDigits: 0,
+      maximumFractionDigits: maxFrac,
+    }).format(numeric);
+    return `${code} ${digits}`;
+  }
 }
 
-/** Minor units shown for leaderboard / badges for the selected period (matches server effectivePrizeMinorUnits when present). */
-function effectivePrizeMinorForPeriod(activeEvent: Record<string, unknown> | null, p: Period): number {
+/** Minor units for the open Daily / Weekly / Monthly window (matches server effectivePrizeMinorUnits). */
+function effectivePrizeMinorForPeriod(activeEvent: Record<string, unknown> | null, p: LeaderboardPeriod): number {
   const eff = Number((activeEvent as { effectivePrizeMinorUnits?: number })?.effectivePrizeMinorUnits);
   if (Number.isFinite(eff)) return Math.round(eff);
   const daily = Number(
@@ -207,8 +259,8 @@ function effectivePrizeMinorForPeriod(activeEvent: Record<string, unknown> | nul
       (activeEvent as { monthly_prize_minor_units?: number })?.monthly_prize_minor_units ??
       daily,
   );
-  if (p === "this_week" || p === "last_week") return weekly;
-  if (p === "this_month" || p === "last_month") return monthly;
+  if (p === "this_week") return weekly;
+  if (p === "this_month") return monthly;
   return daily;
 }
 
@@ -252,7 +304,8 @@ export default function DailyChallengeClient({
   currentUserId: string;
   isAdmin: boolean;
 }) {
-  const [period, setPeriod] = useState<Period>("today");
+  const [rewardMode, setRewardMode] = useState<RewardMode>("daily");
+  const leaderboardPeriod = LEADERBOARD_PERIOD_FOR_MODE[rewardMode];
   const [scope, setScope] = useState<Scope>("verified");
   const [activeBoard, setActiveBoard] = useState<BoardTab>("views");
   const [currentPage, setCurrentPage] = useState(1);
@@ -266,6 +319,10 @@ export default function DailyChallengeClient({
   const [error, setError] = useState<string | null>(null);
   const [mode, setMode] = useState<"light" | "dark">("light");
   const [lastRefreshAt, setLastRefreshAt] = useState<string | null>(null);
+  /** Server gate from /leaderboard fresh=1 429 — drives disabled state so we do not wreck the leaderboard UI. */
+  const [refreshCooldownEndsAtMs, setRefreshCooldownEndsAtMs] = useState<number | null>(null);
+  /** Bumps on an interval while a cooldown is active so countdown + button state update without navigation. */
+  const [cooldownPollTick, setCooldownPollTick] = useState(0);
   const [savingRules, setSavingRules] = useState(false);
   const [rulesMessage, setRulesMessage] = useState<string | null>(null);
   const [creatingEvent, setCreatingEvent] = useState(false);
@@ -300,50 +357,133 @@ export default function DailyChallengeClient({
     minViewsPerReel: "100",
     promoteNextEligible: false,
   });
+  /** Nudges countdown text without waiting for unrelated re-renders. */
+  const [countdownTick, setCountdownTick] = useState(0);
+  const [adminPrimaryTab, setAdminPrimaryTab] = useState<AdminPrimaryTab>("live");
+  useEffect(() => {
+    const id = window.setInterval(() => setCountdownTick((n) => n + 1), 30_000);
+    return () => clearInterval(id);
+  }, []);
 
-  const load = async (fresh = false, throwOnError = false) => {
+  const latestQueryRef = useRef({
+    leaderboardPeriod,
+    scope,
+    currentPage,
+    limit,
+  });
+  latestQueryRef.current = { leaderboardPeriod, scope, currentPage, limit };
+  const loadSeqRef = useRef(0);
+
+  /** Returns true only when fresh=1 ran and consumed the server refresh gate (not 429-recovery fallback). */
+  const load = async (fresh = false, throwOnError = false): Promise<boolean> => {
+    const seq = ++loadSeqRef.current;
+    let freshGateConsumed = false;
+    const captured = {
+      leaderboardPeriod,
+      scope,
+      currentPage,
+      limit,
+    };
+
+    const responseStillRelevant = () => {
+      const q = latestQueryRef.current;
+      return (
+        captured.leaderboardPeriod === q.leaderboardPeriod &&
+        captured.scope === q.scope &&
+        captured.currentPage === q.currentPage &&
+        captured.limit === q.limit
+      );
+    };
+
     setLoading(true);
     setError(null);
     try {
-      const params = new URLSearchParams({
-        period,
-        scope,
-        page: String(currentPage),
-        limit: String(limit),
+      const baseQs = new URLSearchParams({
+        period: captured.leaderboardPeriod,
+        scope: captured.scope,
+        page: String(captured.currentPage),
+        limit: String(captured.limit),
       });
-      if (fresh) params.set("fresh", "1");
-      const [leaderboardRes, winnersRes] = await Promise.all([
-        fetch(`/api/competition/leaderboard?${params.toString()}`),
-        fetch(`/api/competition/winners/daily?days=15&period=${period}`),
-      ]);
+      let leaderboardParams = new URLSearchParams(baseQs);
+      if (fresh) leaderboardParams.set("fresh", "1");
+
+      let leaderboardRes = await fetch(
+        `/api/competition/leaderboard?${leaderboardParams.toString()}`,
+      );
+      let recoveredFromFreshCooldown429 = false;
+      if (leaderboardRes.status === 429 && fresh) {
+        let body: {
+          remainingMs?: number;
+          nextRefreshAvailable?: string | null;
+        } = {};
+        try {
+          body = await leaderboardRes.json();
+        } catch {
+          /* ignore */
+        }
+        const rem = Math.max(0, Number(body.remainingMs || 0));
+        const next = body.nextRefreshAvailable
+          ? new Date(body.nextRefreshAvailable).getTime()
+          : Number.NaN;
+        const endsMs =
+          Number.isFinite(next) && next > Date.now() ? next : Date.now() + rem;
+        setRefreshCooldownEndsAtMs(endsMs);
+        recoveredFromFreshCooldown429 = true;
+        leaderboardParams = new URLSearchParams(baseQs);
+        leaderboardRes = await fetch(
+          `/api/competition/leaderboard?${leaderboardParams.toString()}`,
+        );
+      }
+
       if (!leaderboardRes.ok) {
-        const msg = await leaderboardRes.json();
+        const msg = await leaderboardRes.json().catch(() => ({}));
         throw new Error(msg?.error || "Failed to load Daily Challenge");
       }
       const leaderboard = await leaderboardRes.json();
+      if (fresh && !recoveredFromFreshCooldown429) {
+        setRefreshCooldownEndsAtMs(null);
+      }
+      freshGateConsumed = Boolean(fresh && !recoveredFromFreshCooldown429);
+
+      const winnersRes = await fetch(
+        `/api/competition/winners/daily?days=15&period=${captured.leaderboardPeriod}`,
+      );
       if (!winnersRes.ok) {
-        const msg = await winnersRes.json();
+        const msg = await winnersRes.json().catch(() => ({}));
         throw new Error(msg?.error || "Failed to load Daily Challenge winners");
       }
       const winnersJson = await winnersRes.json();
+
+      if (!responseStillRelevant()) {
+        return false;
+      }
+
       setPayload(leaderboard);
       setWinners(winnersJson.winners || []);
     } catch (e: any) {
-      setError(e?.message || "Failed to load Daily Challenge");
+      freshGateConsumed = false;
+      if (seq === loadSeqRef.current && responseStillRelevant()) {
+        setError(e?.message || "Failed to load Daily Challenge");
+        setPayload(null);
+        setWinners([]);
+      }
       if (throwOnError) throw e;
     } finally {
-      setLoading(false);
+      if (seq === loadSeqRef.current) {
+        setLoading(false);
+      }
     }
+    return freshGateConsumed;
   };
 
   useEffect(() => {
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [period, scope, currentPage, limit]);
+  }, [leaderboardPeriod, scope, currentPage, limit]);
 
   useEffect(() => {
-    setCurrentPage(1);
-  }, [period, scope]);
+    setWinnersPage(1);
+  }, [rewardMode]);
 
   useLayoutEffect(() => {
     const checkMode = () => {
@@ -377,34 +517,40 @@ export default function DailyChallengeClient({
     if (saved) setLastRefreshAt(saved);
   }, [isAdmin]);
 
-  const refreshNow = async () => {
-    if (!canRefresh) return;
-    setRefreshing(true);
-    try {
-      if (isAdmin) {
-        const adminRefreshRes = await fetch("/api/admin/competition/refresh", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ period }),
-        });
-        if (!adminRefreshRes.ok) {
-          const msg = await adminRefreshRes.json().catch(() => ({}));
-          throw new Error(msg?.error || "Failed to refresh Daily Challenge");
-        }
+  useEffect(() => {
+    const cooldownMsLocal = isAdmin
+      ? DAILY_CHALLENGE_REFRESH_COOLDOWN_MS_ADMIN
+      : DAILY_CHALLENGE_REFRESH_COOLDOWN_MS_CREATOR;
+    let intervalId: number | undefined;
+    const tick = () => {
+      const now = Date.now();
+      const serverRem = refreshCooldownEndsAtMs
+        ? Math.max(0, refreshCooldownEndsAtMs - now)
+        : 0;
+      const clientRem = lastRefreshAt
+        ? Math.max(0, cooldownMsLocal - Math.max(0, now - new Date(lastRefreshAt).getTime()))
+        : 0;
+      if (Math.max(serverRem, clientRem) <= 0) {
+        if (intervalId !== undefined) clearInterval(intervalId);
+        intervalId = undefined;
+        return;
       }
-      await load(true, true);
-      const nowIso = new Date().toISOString();
-      setLastRefreshAt(nowIso);
-      if (typeof window !== "undefined") {
-        const key = isAdmin
-          ? "daily_challenge_refresh_admin"
-          : "daily_challenge_refresh_creator";
-        localStorage.setItem(key, nowIso);
-      }
-    } finally {
-      setRefreshing(false);
-    }
-  };
+      setCooldownPollTick((p) => p + 1);
+    };
+    const now0 = Date.now();
+    const sr0 = refreshCooldownEndsAtMs
+      ? Math.max(0, refreshCooldownEndsAtMs - now0)
+      : 0;
+    const cr0 = lastRefreshAt
+      ? Math.max(0, cooldownMsLocal - Math.max(0, now0 - new Date(lastRefreshAt).getTime()))
+      : 0;
+    if (Math.max(sr0, cr0) <= 0) return undefined;
+    intervalId = window.setInterval(tick, 1000) as unknown as number;
+    tick();
+    return () => {
+      if (intervalId !== undefined) clearInterval(intervalId);
+    };
+  }, [refreshCooldownEndsAtMs, lastRefreshAt, isAdmin]);
 
   const me = payload?.me;
   const config = payload?.config;
@@ -423,30 +569,72 @@ export default function DailyChallengeClient({
   const pagination = payload?.pagination;
   const totalItems = pagination?.totalItems ?? 0;
   const totalPages = pagination?.totalPages ?? 1;
-  const lastUpdated = fromNow(payload?.generatedAt);
-  const selectedPeriodLabel = PERIOD_LABELS[period];
-  const endsIn = getTimeUntil(payload?.effectiveRange?.end);
+  const lastLeaderboardFreshIso =
+    typeof payload?.lastLeaderboardFreshAt === "string" && payload.lastLeaderboardFreshAt.length > 0
+      ? payload.lastLeaderboardFreshAt
+      : null;
+  const lastManualRefreshRelative = lastLeaderboardFreshIso ? fromNow(lastLeaderboardFreshIso) : null;
+  const modeHeadline = MODE_HEADLINE[rewardMode];
+  const challengeTitle = CHALLENGE_TITLE[rewardMode];
+  const scopeWindowLabel =
+    scope === "verified" ? "Verified" : scope === "pending" ? "Pending" : "All";
+  void countdownTick;
+  const endsIn =
+    typeof payload?.effectiveRange?.end === "string"
+      ? getTimeUntil(payload.effectiveRange.end)
+      : "—";
   const activeEvent =
     (payload?.event || selectedLiveEvent || selectedEvent || null) as Record<string, unknown> | null;
-  const prizeAmountMinorUnits = effectivePrizeMinorForPeriod(activeEvent, period);
+  const prizeAmountMinorUnits = effectivePrizeMinorForPeriod(activeEvent, leaderboardPeriod);
   const prizeCurrency = String(
     (activeEvent as { prizeCurrency?: string })?.prizeCurrency ||
       (activeEvent as { prize_currency?: string })?.prize_currency ||
       "INR",
   );
   const prizeLabel = formatPrize(prizeAmountMinorUnits, prizeCurrency);
+  /** Two winner slots (views leaderboard + reels leaderboard) at the tier amount each. */
+  const totalPrizePoolMinor = Math.round(prizeAmountMinorUnits * 2);
+  const totalPrizePoolLabel = formatPrize(totalPrizePoolMinor, prizeCurrency);
   const cooldownMs = isAdmin
     ? DAILY_CHALLENGE_REFRESH_COOLDOWN_MS_ADMIN
     : DAILY_CHALLENGE_REFRESH_COOLDOWN_MS_CREATOR;
   const elapsedMs = lastRefreshAt
     ? Date.now() - new Date(lastRefreshAt).getTime()
     : Number.POSITIVE_INFINITY;
-  const remainingMs = Math.max(0, cooldownMs - Math.max(0, elapsedMs));
-  const canRefresh = remainingMs <= 0 && !refreshing;
-  const cooldownText =
-    remainingMs <= 0
-      ? "Refresh available"
-      : `${Math.ceil(remainingMs / 60000)}m cooldown`;
+  const remainingClientMs = Math.max(0, cooldownMs - Math.max(0, elapsedMs));
+  const remainingServerMs = refreshCooldownEndsAtMs
+    ? Math.max(0, refreshCooldownEndsAtMs - Date.now())
+    : 0;
+  const cooldownRemainingMs =
+    Math.max(remainingClientMs, remainingServerMs) + cooldownPollTick * 0;
+  const canRefresh = cooldownRemainingMs <= 0 && !refreshing;
+  const cooldownMinsCeil = Math.max(1, Math.ceil(cooldownRemainingMs / 60000));
+
+  const leaderboardMisaligned =
+    payload != null && payload.period !== leaderboardPeriod;
+  const showFullPageLoader = leaderboardMisaligned || (loading && payload === null);
+
+  const refreshNow = async () => {
+    if (!canRefresh) return;
+    setRefreshing(true);
+    try {
+      const consumed = await load(true, true);
+      if (!consumed) return;
+      const nowIso = new Date().toISOString();
+      setLastRefreshAt(nowIso);
+      if (typeof window !== "undefined") {
+        const key = isAdmin
+          ? "daily_challenge_refresh_admin"
+          : "daily_challenge_refresh_creator";
+        localStorage.setItem(key, nowIso);
+      }
+    } catch {
+      /* Admin or load errors: keep last good leaderboard; no red banner for cooldown. */
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
   const panelClass = cn(
     "rounded-2xl border shadow-sm",
     isDark ? "bg-[#14052c] border-white/10" : "bg-white border-gray-200/90",
@@ -659,8 +847,24 @@ export default function DailyChallengeClient({
     return `${label} • ${row?.snapshot_date || "Snapshot"}`;
   };
 
-  return (
-    <div className="max-w-6xl mx-auto px-3 sm:px-4 py-4 sm:py-6 md:py-8 space-y-6">
+  if (showFullPageLoader) {
+    return (
+      <div
+        className={cn(
+          "max-w-6xl mx-auto px-3 sm:px-4 py-4 sm:py-6 md:py-8 flex flex-col items-center justify-center gap-4 min-h-[52vh]",
+          isDark ? "text-white" : "text-gray-900",
+        )}
+      >
+        <Loader2 className="h-10 w-10 animate-spin text-violet-600 shrink-0" aria-hidden />
+        <p className="text-sm sm:text-base text-muted-foreground text-center max-w-sm">
+          Loading {challengeTitle} data…
+        </p>
+      </div>
+    );
+  }
+
+  const liveDashboard = (
+    <>
       <div>
         <div className={cn(panelClass, "relative overflow-hidden p-5 sm:p-6 md:p-7")}>
           <div className="relative">
@@ -679,55 +883,188 @@ export default function DailyChallengeClient({
                   isDark ? "text-white" : "text-gray-900",
                 )}
               >
-                Daily Challenge
+                {challengeTitle}
               </h1>
             </div>
             <p
               className={cn(
-                "text-sm sm:text-base leading-relaxed max-w-4xl",
-                isDark ? "text-gray-300" : "text-gray-700",
+                "text-base sm:text-lg font-medium leading-snug max-w-2xl",
+                isDark ? "text-gray-200" : "text-gray-800",
               )}
             >
-              Compete across daily, weekly, and monthly windows for two independent trophies: Most Views and Most
-              Verified Reels. Refreshes hourly; eligibility affects winners, not visibility.
+              Win instant cash on winning challenges — pick daily, weekly, or monthly below.
             </p>
-            <div className="mt-5 grid grid-cols-1 md:grid-cols-3 gap-3">
+            <div className="mt-5 grid grid-cols-1 md:grid-cols-2 gap-3">
               <div className={cn("rounded-xl px-3.5 py-3 border", isDark ? "border-violet-500/25 bg-violet-500/10" : "border-violet-200/90 bg-violet-50/80")}>
-                <p className="text-[11px] uppercase tracking-wider text-muted-foreground font-semibold">Expected Earning</p>
-                <p className="font-semibold flex items-center gap-1.5 mt-1">
-                  <Trophy className="w-4 h-4" /> {selectedPeriodLabel}: 2 winners • {prizeLabel} each
+                <p className="text-[11px] uppercase tracking-wider text-muted-foreground font-semibold">
+                  Prize pool ({modeHeadline})
                 </p>
+                <div className="mt-2 space-y-2">
+                  <div className="flex items-start gap-2">
+                    <Trophy className="w-4 h-4 shrink-0 mt-0.5" aria-hidden />
+                    <div className={cn("min-w-0 text-sm leading-snug", isDark ? "text-violet-50" : "text-violet-950")}>
+                      <p className="text-muted-foreground text-[11px] font-semibold uppercase tracking-wide mb-1">
+                        Total prize pool
+                      </p>
+                      <p className="text-lg sm:text-xl font-bold tracking-tight">{totalPrizePoolLabel}</p>
+                    </div>
+                  </div>
+                  <ul className={cn("pl-6 space-y-1.5 text-xs sm:text-sm", isDark ? "text-gray-300" : "text-gray-800")}>
+                    <li className="flex gap-2 justify-between gap-x-3 flex-wrap">
+                      <span className="text-muted-foreground shrink min-w-[9rem]">Most verified reels</span>
+                      <span className="font-semibold tabular-nums shrink-0">{prizeLabel}</span>
+                    </li>
+                    <li className="flex gap-2 justify-between gap-x-3 flex-wrap">
+                      <span className="text-muted-foreground shrink min-w-[9rem]">Most verified views</span>
+                      <span className="font-semibold tabular-nums shrink-0">{prizeLabel}</span>
+                    </li>
+                  </ul>
+                </div>
               </div>
               <div className={cn("rounded-xl px-3.5 py-3 border", isDark ? "border-amber-500/25 bg-amber-500/10" : "border-amber-200/90 bg-amber-50/80")}>
-                <p className="text-[11px] uppercase tracking-wider text-muted-foreground font-semibold">Period Ends</p>
-                <p className="font-semibold flex items-center gap-1.5 mt-1">
-                  <Clock3 className="w-4 h-4" /> Ends in {endsIn}
+                <p className="text-[11px] uppercase tracking-wider text-muted-foreground font-semibold">
+                  Contest duration
                 </p>
-              </div>
-              <div className={cn("rounded-xl px-3.5 py-3 border", isDark ? "border-emerald-500/25 bg-emerald-500/10" : "border-emerald-200/90 bg-emerald-50/80")}>
-                <p className="text-[11px] uppercase tracking-wider text-muted-foreground font-semibold">Motivation</p>
-                <p className="font-semibold mt-1">
-                  Daily: locks the whole previous IST day (job ~00:05 IST) · Weekly Sun UTC · Monthly (IST rollover)
-                </p>
+                <p className="text-[10px] text-muted-foreground mt-1">All times in India Standard Time (IST).</p>
+                {typeof payload?.effectiveRange?.start === "string" &&
+                typeof payload?.effectiveRange?.end === "string" ? (
+                  <div
+                    className={cn(
+                      "mt-2.5 space-y-1 text-sm",
+                      isDark ? "text-amber-50" : "text-amber-950",
+                    )}
+                  >
+                    <p>
+                      <span className={cn("text-muted-foreground", isDark ? "text-amber-200/85" : "text-amber-900/70")}>
+                        Starts:{" "}
+                      </span>
+                      <span className="font-semibold">{formatContestInstantIst(payload.effectiveRange.start)}</span>
+                    </p>
+                    <p>
+                      <span className={cn("text-muted-foreground", isDark ? "text-amber-200/85" : "text-amber-900/70")}>
+                        Ends:{" "}
+                      </span>
+                      <span className="font-semibold">{formatContestInstantIst(payload.effectiveRange.end)}</span>
+                    </p>
+                    <p className="flex flex-wrap items-center gap-1.5 pt-2 mt-1 border-t border-amber-500/20 dark:border-amber-400/25">
+                      <Clock3 className="w-4 h-4 shrink-0 opacity-80" aria-hidden />
+                      <span className={cn("text-muted-foreground font-medium uppercase text-[11px] tracking-wide", isDark ? "text-amber-200/90" : "text-amber-900/70")}>
+                        Ends in:
+                      </span>
+                      <span className="font-semibold">{endsIn === "—" ? "—" : endsIn}</span>
+                    </p>
+                  </div>
+                ) : (
+                  <p className="text-xs mt-2 text-muted-foreground">
+                    Dates appear when this mode lines up with an active challenge window ({scopeWindowLabel} posts only).
+                  </p>
+                )}
               </div>
             </div>
+
+            {config && (
+              <div
+                className={cn(
+                  "mt-5 pt-5 border-t",
+                  isDark ? "border-white/10" : "border-gray-200/90",
+                )}
+              >
+                <div className="flex items-center gap-2 mb-3">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" aria-hidden />
+                  <p className="text-[11px] uppercase tracking-wider text-muted-foreground font-semibold">
+                    Contest rules (this challenge): Eligibility &amp; how you win
+                  </p>
+                </div>
+                <div
+                  className={cn(
+                    "text-sm space-y-5 rounded-xl border px-3.5 py-3.5",
+                    isDark ? "border-white/10 bg-white/[0.02] text-gray-300" : "border-gray-200/90 bg-muted/40 text-muted-foreground",
+                  )}
+                >
+                  <div className="space-y-2">
+                    <p className={cn("font-semibold text-[13px]", isDark ? "text-gray-100" : "text-foreground")}>
+                      Most verified views prize
+                    </p>
+                    <p>
+                      <span className={cn("font-semibold", isDark ? "text-emerald-200/95" : "text-emerald-800")}>Eligibility: </span>
+                      If you have{" "}
+                      <span className={cn("font-semibold", isDark ? "text-gray-100" : "text-foreground")}>
+                        combined at least {number(config.viewsMinViews)} verified views
+                      </span>{" "}
+                      across all verified reels that count toward the views leaderboard,{" "}
+                      <span className="font-medium">you are eligible.</span>
+                    </p>
+                    <p>
+                      <span className={cn("font-semibold", isDark ? "text-emerald-200/95" : "text-emerald-800")}>How you win: </span>
+                      If you are eligible and{" "}
+                      <span className={cn("font-semibold", isDark ? "text-gray-100" : "text-foreground")}>
+                        you are #1 on the views leaderboard
+                      </span>{" "}
+                      (&ldquo;best among everyone&rdquo; for views here) during this contest,{" "}
+                      <span className="font-medium">you win.</span>
+                    </p>
+                  </div>
+                  <div
+                    className={cn(
+                      "space-y-2 pt-4 border-t",
+                      isDark ? "border-white/10" : "border-gray-200/90",
+                    )}
+                  >
+                    <p className={cn("font-semibold text-[13px]", isDark ? "text-gray-100" : "text-foreground")}>
+                      Most verified reels prize
+                    </p>
+                    <p>
+                      <span className={cn("font-semibold", isDark ? "text-emerald-200/95" : "text-emerald-800")}>Eligibility: </span>
+                      If you have at least{" "}
+                      <span className={cn("font-semibold", isDark ? "text-gray-100" : "text-foreground")}>
+                        {verifiedReelsPhrase(config.reelsMinReels)}
+                      </span>{" "}
+                      counted on the reels leaderboard,{" "}
+                      <span className={cn("font-semibold", isDark ? "text-gray-100" : "text-foreground")}>
+                        each with at least {perReelMinVerifiedPhrase(config.minViewsPerReel)}
+                      </span>
+                      , and{" "}
+                      <span className={cn("font-semibold", isDark ? "text-gray-100" : "text-foreground")}>
+                        at least {number(config.reelsMinViews)} combined verified views
+                      </span>{" "}
+                      across those reels, <span className="font-medium">you are eligible.</span>
+                    </p>
+                    <p>
+                      <span className={cn("font-semibold", isDark ? "text-emerald-200/95" : "text-emerald-800")}>How you win: </span>
+                      If you are eligible and{" "}
+                      <span className={cn("font-semibold", isDark ? "text-gray-100" : "text-foreground")}>
+                        you are #1 on the reels leaderboard
+                      </span>{" "}
+                      (&ldquo;best among everyone&rdquo; for reels here) during this contest,{" "}
+                      <span className="font-medium">you win.</span>
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </div>
 
       <div className={cn(panelClass, "py-4 px-3 sm:px-4")}>
         <div className="space-y-3">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-3 md:items-end">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 md:items-end">
             <div className="space-y-1">
               <p className={cn("text-[11px] font-semibold uppercase tracking-wider", isDark ? "text-gray-300" : "text-gray-500")}>
-                Time range
+                Mode
               </p>
-              <Select value={period} onValueChange={(v) => setPeriod(v as Period)}>
+              <Select
+                value={rewardMode}
+                onValueChange={(v) => {
+                  setRewardMode(v as RewardMode);
+                  setCurrentPage(1);
+                }}
+              >
                 <SelectTrigger isDark={isDark} className="h-10 text-sm">
-                  <SelectValue placeholder="Select time range" />
+                  <SelectValue placeholder="Mode" />
                 </SelectTrigger>
                 <SelectContent isDark={isDark}>
-                  {PERIOD_OPTIONS.map((opt) => (
+                  {REWARD_MODE_OPTIONS.map((opt) => (
                     <SelectItem key={opt.value} value={opt.value} isDark={isDark}>
                       {opt.label}
                     </SelectItem>
@@ -738,9 +1075,15 @@ export default function DailyChallengeClient({
 
             <div className="space-y-1">
               <p className={cn("text-[11px] font-semibold uppercase tracking-wider", isDark ? "text-gray-300" : "text-gray-500")}>
-                Submission status
+                Include posts that are
               </p>
-              <Select value={scope} onValueChange={(v) => setScope(v as Scope)}>
+              <Select
+                value={scope}
+                onValueChange={(v) => {
+                  setScope(v as Scope);
+                  setCurrentPage(1);
+                }}
+              >
                 <SelectTrigger isDark={isDark} className="h-10 text-sm">
                   <SelectValue placeholder="Select status" />
                 </SelectTrigger>
@@ -752,27 +1095,6 @@ export default function DailyChallengeClient({
                   ))}
                 </SelectContent>
               </Select>
-            </div>
-
-            <div className="flex flex-col gap-1 w-full md:w-auto md:justify-self-end md:min-w-[170px]">
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={refreshNow}
-                disabled={!canRefresh}
-                className="border-gray-500 h-10 w-full md:w-auto rounded-lg inline-flex items-center justify-center gap-1"
-              >
-                {refreshing ? (
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                ) : (
-                  <RefreshCw className="w-4 h-4" />
-                )}
-                {isAdmin ? "Refresh now" : "Refresh"}
-              </Button>
-              <div className="text-[11px] text-muted-foreground text-center md:text-right space-y-0.5">
-                <p>Updated {lastUpdated}</p>
-                <p>{cooldownText}</p>
-              </div>
             </div>
           </div>
         </div>
@@ -788,19 +1110,19 @@ export default function DailyChallengeClient({
           <AlertCircle className={cn("w-5 h-5 shrink-0 mt-0.5", isDark ? "text-amber-200" : "text-amber-700")} />
           <div className="min-w-0">
             <p className={cn("font-semibold", isDark ? "text-amber-50" : "text-amber-950")}>
-              No Daily Challenge results
+              No {challengeTitle} results
             </p>
             <p className={cn("text-sm mt-1.5 leading-relaxed", isDark ? "text-amber-100/90" : "text-amber-900/85")}>
               {isAdmin ? (
                 <>
-                  There is no selected competition event covering this period. Use{" "}
-                  <span className="font-medium">Competition windows</span> below to create one or mark one as selected
-                  for the leaderboard.
+                  There is no selected competition event covering this mode window. Open the{" "}
+                  <span className="font-medium">Contest setup</span> tab to create one or mark one as selected for the
+                  leaderboard.
                 </>
               ) : (
                 <>
-                  There isn&apos;t a Daily Challenge event covering this period, so rankings and eligibility are paused.
-                  Check another time range or come back once the next event opens.
+                  There isn&apos;t an event covering your selected mode window, so rankings and eligibility are paused. Try another
+                  mode above or come back when the next one opens.
                 </>
               )}
             </p>
@@ -808,7 +1130,434 @@ export default function DailyChallengeClient({
         </div>
       )}
 
-      {isAdmin && (
+      {!isAdmin && (
+        <div className="grid grid-cols-1 gap-4">
+          <Card className={panelClass}>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base">Your Progress</CardTitle>
+            </CardHeader>
+            <CardContent className="grid md:grid-cols-2 gap-3 text-sm pt-1">
+              {!hasActiveEvent && (
+                <p className="md:col-span-2 text-xs text-muted-foreground rounded-lg border px-3 py-2 bg-muted/30">
+                  No event covers this mode window yet. Ranks and eligibility populate when there’s a matching live window.
+                </p>
+              )}
+              <div className={cn("rounded-xl border p-3.5", isDark ? "border-white/10" : "border-gray-200")}>
+                <p className="font-semibold">Views Board Rank #{me?.viewsRank ?? "-"}</p>
+                <p className="text-muted-foreground mt-1">
+                  {me?.remaining?.views || "Submit and verify reels to see your progress."}
+                </p>
+                <Badge
+                  variant={String(me?.remaining?.views || "").toLowerCase().includes("eligible") ? "default" : "outline"}
+                  className="mt-2 text-[10px]"
+                >
+                  {String(me?.remaining?.views || "").toLowerCase().includes("eligible")
+                    ? "Eligible"
+                    : "Needs more"}
+                </Badge>
+                {typeof me?.viewsRank === "number" && me.viewsRank > 3 && rows[2] && activeBoard === "views" && (
+                  <p className="text-xs mt-2.5 text-violet-600">
+                    You need {number(Math.max(0, (rows[2].totalViews || 0) - (me.views || 0)))} more views to reach #3.
+                  </p>
+                )}
+              </div>
+              <div className={cn("rounded-xl border p-3.5", isDark ? "border-white/10" : "border-gray-200")}>
+                <p className="font-semibold">Reels Board Rank #{me?.reelsRank ?? "-"}</p>
+                <p className="text-muted-foreground mt-1">
+                  {me?.remaining?.reels || "Maintain daily consistency to climb faster."}
+                </p>
+                <Badge
+                  variant={String(me?.remaining?.reels || "").toLowerCase().includes("eligible") ? "default" : "outline"}
+                  className="mt-2 text-[10px]"
+                >
+                  {String(me?.remaining?.reels || "").toLowerCase().includes("eligible")
+                    ? "Eligible"
+                    : "Needs more"}
+                </Badge>
+                {typeof me?.reelsRank === "number" && me.reelsRank > 3 && rows[2] && activeBoard === "reels" && (
+                  <p className="text-xs mt-2.5 text-violet-600">
+                    You need {number(Math.max(0, (rows[2].totalReels || 0) - (me.reels || 0)))} more reels to reach #3.
+                  </p>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      <Card className={panelClass}>
+        <CardHeader className="pb-4 space-y-4">
+          <div
+            className={cn(
+              "rounded-xl border p-4 sm:p-5 space-y-4",
+              isDark ? "border-white/10 bg-white/[0.03]" : "border-gray-200/90 bg-gray-50/50",
+            )}
+          >
+            <div className="space-y-1.5 min-w-0">
+              <div className="flex items-center gap-2">
+                <span className="h-2 w-2 rounded-full bg-violet-600 shrink-0" aria-hidden />
+                <h3
+                  className={cn(
+                    "text-base sm:text-lg font-semibold tracking-tight",
+                    isDark ? "text-white" : "text-gray-900",
+                  )}
+                >
+                  Leaderboard metrics
+                </h3>
+              </div>
+              <p className="text-sm text-muted-foreground">
+                Normal page loads reuse server cache or DB-backed rows. Refresh bypasses TTL, recomputes this slice, then
+                cooldown applies — same pattern as contests.
+              </p>
+              <p
+                className="text-xs text-muted-foreground"
+                title={lastLeaderboardFreshIso ? formatIsoIstDetailed(lastLeaderboardFreshIso) : undefined}
+              >
+                {lastManualRefreshRelative ? (
+                  <>Last successful refresh: {lastManualRefreshRelative}</>
+                ) : (
+                  <>
+                    No successful refresh yet — tap the button to recompute rankings (then cooldown kicks in).
+                  </>
+                )}
+              </p>
+              {cooldownRemainingMs > 0 && !refreshing && (
+                <p className="text-xs text-muted-foreground">
+                  Refresh available in ~{cooldownMinsCeil} min{cooldownMinsCeil !== 1 ? "s" : ""}
+                </p>
+              )}
+              {refreshing && (
+                <p className="text-xs text-muted-foreground">Refreshing metrics and leaderboard…</p>
+              )}
+            </div>
+            <button
+              type="button"
+              onClick={refreshNow}
+              disabled={!canRefresh}
+              className={cn(
+                "w-full flex items-center justify-center py-2.5 px-4 gap-2 rounded-2xl text-sm font-medium transition-all",
+                !canRefresh
+                  ? isDark
+                    ? "border border-violet-500/45 text-violet-300 bg-transparent cursor-not-allowed opacity-90"
+                    : "border border-violet-300 text-violet-700 bg-white cursor-not-allowed"
+                  : "bg-[#6C43D0] text-white hover:bg-[#5A35B8]",
+              )}
+            >
+              {refreshing ? (
+                <Loader2 className="h-4 w-4 animate-spin shrink-0" />
+              ) : (
+                <RefreshCw className="h-4 w-4 shrink-0" />
+              )}
+              {refreshing
+                ? "Updating..."
+                : cooldownRemainingMs > 0
+                  ? `Wait ${cooldownMinsCeil}m`
+                  : "Refresh leaderboard"}
+            </button>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-4 pt-0">
+          <Tabs value={activeBoard} onValueChange={(v) => setActiveBoard(v as BoardTab)}>
+            <TabsList className="grid grid-cols-1 sm:grid-cols-2 gap-2 -mx-1 px-1">
+              <TabsTrigger
+                value="views"
+                className={cn(
+                  "border w-full text-xs sm:text-sm inline-flex items-center justify-center px-3 py-2 rounded-full transition-all duration-200",
+                  isDark ? "text-white border-gray-500" : "text-gray-700 border-gray-600",
+                )}
+              >
+                <Eye className="w-3 h-3 mr-1" />
+                Views Leaderboard
+              </TabsTrigger>
+              <TabsTrigger
+                value="reels"
+                className={cn(
+                  "border w-full text-xs sm:text-sm inline-flex items-center justify-center px-3 py-2 rounded-full transition-all duration-200",
+                  isDark ? "text-white border-gray-500" : "text-gray-700 border-gray-600",
+                )}
+              >
+                <Flame className="w-3 h-3 mr-1" />
+                Reels Leaderboard
+              </TabsTrigger>
+            </TabsList>
+          </Tabs>
+
+          {error ? (
+            <div className="rounded-lg border border-red-300 bg-red-50 p-4 text-sm text-red-700 flex items-center gap-2">
+              <AlertCircle className="w-4 h-4" />
+              {error}
+            </div>
+          ) : loading ? (
+            <div className="space-y-3">
+              {Array.from({ length: 5 }).map((_, idx) => (
+                <div key={idx} className="rounded-xl border p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 animate-pulse">
+                  <div className="h-4 w-36 sm:w-40 bg-gray-200 rounded" />
+                  <div className="h-4 w-20 sm:w-24 bg-gray-200 rounded" />
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {rows.map((row: any) => (
+                <div
+                  key={`${activeBoard}-${row.creatorId}`}
+                  className={cn(
+                    "group relative flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 p-3.5 sm:p-4 rounded-xl border transition-all duration-200",
+                    row.rank === 1
+                      ? isDark
+                        ? "bg-amber-500/10 border-amber-400/45 hover:border-amber-300"
+                        : "bg-amber-50 border-amber-300 hover:shadow-lg"
+                      : row.rank === 2
+                        ? isDark
+                          ? "bg-slate-500/10 border-slate-300/40 hover:border-slate-200"
+                          : "bg-slate-50 border-slate-300 hover:shadow-lg"
+                        : row.rank === 3
+                          ? isDark
+                            ? "bg-orange-500/10 border-orange-400/40 hover:border-orange-300"
+                            : "bg-orange-50 border-orange-300 hover:shadow-lg"
+                          : isDark
+                      ? "bg-[#170337] border-white/10 hover:border-violet-400"
+                      : "bg-white border-gray-200 hover:border-violet-300 hover:shadow-md",
+                  )}
+                >
+                  <div className="flex items-center gap-3 min-w-0 w-full">
+                    <div
+                      className={cn(
+                        "flex items-center justify-center w-10 h-10 rounded-full border-2 font-bold",
+                        row.rank === 1
+                          ? "border-amber-400 text-amber-700 bg-amber-100"
+                          : row.rank === 2
+                            ? "border-slate-400 text-slate-700 bg-slate-100"
+                            : row.rank === 3
+                              ? "border-orange-400 text-orange-700 bg-orange-100"
+                          : isDark
+                            ? "border-gray-500 text-gray-100"
+                            : "border-gray-300 text-gray-700",
+                      )}
+                    >
+                      {row.rank}
+                    </div>
+                    <Avatar className="w-10 h-10 ring-2 ring-violet-200">
+                      <AvatarImage src={row.profilePictureUrl || undefined} />
+                      <AvatarFallback>{(row.username || "A").charAt(0).toUpperCase()}</AvatarFallback>
+                    </Avatar>
+                    <div className="min-w-0 flex-1">
+                      <div className="font-semibold truncate flex items-center gap-2 flex-wrap">
+                        {row.username}
+                        {row.rank === 1 && row.trophy && (
+                          <Badge className="text-[10px]">
+                            <Medal className="w-3 h-3 mr-1" />
+                            Leading
+                          </Badge>
+                        )}
+                        {row.rank === 1 && row.trophy && (
+                          <Badge variant="outline" className="text-[10px]">
+                            Expected {prizeLabel}
+                          </Badge>
+                        )}
+                        {row.rank === 1 && !row.trophy && (
+                          <Badge variant="outline" className="text-[10px]">
+                            Not eligible
+                          </Badge>
+                        )}
+                      </div>
+                      <p className="text-xs text-muted-foreground leading-relaxed break-words sm:truncate">
+                        {formatSecondary(row)}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="text-left sm:text-right shrink-0 min-w-[110px] w-full sm:w-auto">
+                    <p className="text-xl sm:text-2xl font-bold leading-none">
+                      {activeBoard === "views"
+                        ? `${number(row.totalViews)} views`
+                        : `${number(row.totalReels)} reels`}
+                    </p>
+                    <p className="text-[11px] text-muted-foreground mt-1">
+                      {activeBoard === "views"
+                        ? `${number(row.totalReels)} reels`
+                        : `${number(row.totalViews)} views`}
+                    </p>
+                  </div>
+                </div>
+              ))}
+              {rows.length === 0 && (
+                <div className="py-10 sm:py-12 text-center px-2">
+                  {!hasActiveEvent ? (
+                    <>
+                      <p className="text-base sm:text-lg font-semibold tracking-tight">Leaderboard paused</p>
+                      <p className="text-sm text-muted-foreground mt-1.5 max-w-md mx-auto">
+                        {challengeTitle} is not running at the moment. When the next window opens, verified submissions will
+                        rank here again.
+                      </p>
+                    </>
+                  ) : (
+                    <>
+                      <p className="text-base sm:text-lg font-semibold tracking-tight">Be the first to take the lead</p>
+                      <p className="text-sm text-muted-foreground mt-1.5">
+                        {rewardMode === "daily"
+                          ? "Upload a strong reel today and climb the board."
+                          : rewardMode === "weekly"
+                            ? "Keep posting verified reels—your weekly totals update when you refresh."
+                            : "Your monthly totals add up across the calendar month."}
+                      </p>
+                      <Button asChild className="mt-5 rounded-lg w-full sm:w-auto">
+                        <Link
+                          href="/dashboard/opportunities"
+                          className="inline-flex items-center justify-center w-full sm:w-auto"
+                        >
+                          <Upload className="w-4 h-4 mr-1" />
+                          Upload your first reel
+                        </Link>
+                      </Button>
+                    </>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+          {!loading && !error && rows.length > 0 && totalPages > 0 && (
+            <div className={cn("border-t pt-4 sm:pt-6 mt-4 sm:mt-6", isDark ? "border-white/10" : "border-gray-200")}>
+              <PaginationControls
+                page={currentPage}
+                limit={limit}
+                isDark={isDark}
+                total={totalItems}
+                totalPages={totalPages}
+                hasNextPage={currentPage < totalPages}
+                hasPreviousPage={currentPage > 1}
+                onPageChange={setCurrentPage}
+                onLimitChange={setLimit}
+                loading={loading}
+                hide200Option
+              />
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {winners.length > 0 && (
+      <Card className={panelClass}>
+        <CardHeader className="pb-2">
+          <CardTitle className="flex items-center gap-2">
+            <Crown className="w-5 h-5" />
+            Past winners ({MODE_HEADLINE[rewardMode]})
+          </CardTitle>
+          <p className="text-xs text-muted-foreground font-normal mt-1">
+            Shown here only after a finished run has been recorded for this mode—not from the refresh button above.
+          </p>
+        </CardHeader>
+        <CardContent className="space-y-2">
+          {(() => {
+              const totalWinners = winners.length;
+              const winnersTotalPages = Math.max(1, Math.ceil(totalWinners / winnersLimit));
+              const offset = (winnersPage - 1) * winnersLimit;
+              const pageRows = winners.slice(offset, offset + winnersLimit);
+              return (
+                <>
+                  {pageRows.map((w) =>
+                    (() => {
+                      const verifiedViews = Number(
+                        w?.metrics_json?.verifiedViews ?? w?.metrics_json?.totalViews ?? 0,
+                      );
+                      const verifiedReels = Number(
+                        w?.metrics_json?.verifiedReels ?? w?.metrics_json?.totalReels ?? 0,
+                      );
+                      const hasWinner = Boolean(w?.winner_creator_id) && Boolean(w?.is_eligible);
+                      const winnerName = hasWinner
+                        ? w?.metrics_json?.username || w?.metrics_json?.fullName || "Winner"
+                        : "N/A";
+                      const { minor: snapMinor, currency: snapCur } = snapshotWinnerPrize(
+                        w as Record<string, unknown>,
+                        prizeAmountMinorUnits,
+                        prizeCurrency,
+                      );
+                      const rewardLabel = formatPrize(snapMinor, snapCur);
+                      const statsSuffix =
+                        w.category === "views"
+                          ? ` • ${number(verifiedViews)} verified views • ${number(verifiedReels)} verified reels`
+                          : ` • ${number(verifiedReels)} verified reels • ${number(verifiedViews)} verified views`;
+                      return (
+                        <div
+                          key={w.id}
+                          className={cn(
+                            "border rounded-xl p-3.5 text-sm flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3",
+                            isDark ? "border-white/10" : "border-gray-200",
+                          )}
+                        >
+                          <div className="min-w-0">
+                            <p className="font-medium">
+                              {fmtWinnerPeriod(w)} - <span className="capitalize">{w.category}</span>
+                            </p>
+                            <p className="text-xs text-muted-foreground mt-1 break-words sm:truncate">
+                              Winner:{" "}
+                              <span className="font-medium text-foreground">{winnerName}</span>
+                              {statsSuffix}
+                            </p>
+                          </div>
+                          <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+                            <Badge variant="outline" className="whitespace-nowrap">
+                              {hasWinner ? `Prize won ${rewardLabel}` : "No prize that round"}
+                            </Badge>
+                            <Badge variant={hasWinner ? "default" : "outline"}>
+                              {hasWinner ? "Winner recorded" : "No one cleared the rule bar"}
+                            </Badge>
+                          </div>
+                        </div>
+                      );
+                    })(),
+                  )}
+                  {totalWinners > 0 && winnersTotalPages > 1 && (
+                    <div className={cn("border-t pt-4 mt-4", isDark ? "border-white/10" : "border-gray-200")}>
+                      <PaginationControls
+                        page={winnersPage}
+                        limit={winnersLimit}
+                        isDark={isDark}
+                        total={totalWinners}
+                        totalPages={winnersTotalPages}
+                        hasNextPage={winnersPage < winnersTotalPages}
+                        hasPreviousPage={winnersPage > 1}
+                        onPageChange={setWinnersPage}
+                        onLimitChange={(n) => {
+                          setWinnersLimit(n);
+                          setWinnersPage(1);
+                        }}
+                        loading={false}
+                        hide200Option
+                        pageSizeOptions={[5, 10, 25, 50]}
+                      />
+                    </div>
+                  )}
+                </>
+              );
+          })()}
+        </CardContent>
+      </Card>
+      )}
+    </>
+  );
+
+  return (
+    <div className="max-w-6xl mx-auto px-3 sm:px-4 py-4 sm:py-6 md:py-8 space-y-6">
+      {isAdmin ? (
+        <Tabs
+          value={adminPrimaryTab}
+          onValueChange={(v) => setAdminPrimaryTab(v as AdminPrimaryTab)}
+          className="w-full space-y-6"
+        >
+          <TabsList
+            className={cn(
+              "min-h-0 w-full max-w-xl gap-1.5 rounded-xl border p-1.5 py-2",
+              panelClass,
+            )}
+          >
+            <TabsTrigger value="setup" className="rounded-lg text-xs sm:text-sm">
+              Contest setup
+            </TabsTrigger>
+            <TabsTrigger value="live" className="rounded-lg text-xs sm:text-sm">
+              Live event & leaderboard
+            </TabsTrigger>
+          </TabsList>
+          <TabsContent value="setup" className="mt-0 space-y-6 focus-visible:ring-0 focus-visible:ring-offset-0">
         <Card className={panelClass}>
           <CardHeader className="pb-2 flex flex-row flex-wrap items-start justify-between gap-2">
             <div>
@@ -1172,450 +1921,105 @@ export default function DailyChallengeClient({
                 </p>
               )}
             </div>
-          </CardContent>
-        </Card>
-      )}
 
-      {isAdmin && (
-        <Card className={panelClass}>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-base">Eligibility Rules for Selected Event</CardTitle>
-          </CardHeader>
-          <CardContent className="pt-1 space-y-3">
-            {!hasSelectedEvent && (
-              <p className="text-xs text-amber-600 dark:text-amber-400">
-                Create or select a Daily Challenge event above before saving event-specific rules. Defaults are applied
-                when an event is created.
-              </p>
-            )}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div
+              className={cn(
+                "space-y-3 rounded-xl border p-4",
+                isDark ? "border-white/10 bg-white/[0.02]" : "border-gray-200 bg-muted/40",
+              )}
+            >
               <div>
-                <p className="text-xs text-muted-foreground mb-1">Views winner min verified views</p>
-                <Input
-                  type="number"
-                  min={0}
-                  value={adminRules.viewsMinViews}
-                  onChange={(e) => setAdminRules((prev) => ({ ...prev, viewsMinViews: e.target.value }))}
-                  className="h-10 text-sm"
-                />
+                <p className="text-sm font-semibold">Contest rules · selected event</p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  These numbers feed the eligibility copy in the hero on the Live tab (Most verified views / Most verified reels). Save to update.
+                </p>
               </div>
-              <div>
-                <p className="text-xs text-muted-foreground mb-1">Reels winner min verified reels</p>
-                <Input
-                  type="number"
-                  min={0}
-                  value={adminRules.reelsMinReels}
-                  onChange={(e) => setAdminRules((prev) => ({ ...prev, reelsMinReels: e.target.value }))}
-                  className="h-10 text-sm"
-                />
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground mb-1">Reels winner min verified views</p>
-                <Input
-                  type="number"
-                  min={0}
-                  value={adminRules.reelsMinViews}
-                  onChange={(e) => setAdminRules((prev) => ({ ...prev, reelsMinViews: e.target.value }))}
-                  className="h-10 text-sm"
-                />
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground mb-1">Min views per reel for reels board</p>
-                <Input
-                  type="number"
-                  min={0}
-                  value={adminRules.minViewsPerReel}
-                  onChange={(e) => setAdminRules((prev) => ({ ...prev, minViewsPerReel: e.target.value }))}
-                  className="h-10 text-sm"
-                />
-              </div>
-            </div>
-            <div className="flex items-center justify-between rounded-xl border px-3 py-2">
-              <p className="text-sm">Promote next eligible when rank #1 is not eligible</p>
-              <Switch
-                checked={adminRules.promoteNextEligible}
-                onCheckedChange={(checked) =>
-                  setAdminRules((prev) => ({ ...prev, promoteNextEligible: Boolean(checked) }))
-                }
-              />
-            </div>
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-              <p className="text-xs text-muted-foreground">
-                Changes are versioned and become effective immediately.
-              </p>
-              <Button
-                onClick={saveEligibilityRules}
-                disabled={savingRules || !hasSelectedEvent}
-                className="sm:w-auto w-full"
-              >
-                {savingRules ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : null}
-                Save Rules
-              </Button>
-            </div>
-            {rulesMessage && (
-              <p className={cn("text-xs", rulesMessage.includes("Failed") ? "text-red-500" : "text-emerald-600")}>
-                {rulesMessage}
-              </p>
-            )}
-          </CardContent>
-        </Card>
-      )}
-
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        {config && (
-          <Card className={cn(panelClass, isAdmin ? "lg:col-span-3" : "")}>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-base flex items-center gap-2">
-                <CheckCircle2 className="w-4 h-4 text-emerald-500" />
-                Eligibility Rules
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="text-sm space-y-2.5 text-muted-foreground pt-1">
-              <p>Views winner: at least <span className="font-semibold text-foreground">{number(config.viewsMinViews)}</span> verified views.</p>
-              <p>
-                Reels winner: at least <span className="font-semibold text-foreground">{number(config.reelsMinReels)}</span> verified reels and{" "}
-                <span className="font-semibold text-foreground">{number(config.reelsMinViews)}</span> verified views.
-              </p>
-            </CardContent>
-          </Card>
-        )}
-
-        {!isAdmin && (
-          <Card className={cn("lg:col-span-2", panelClass)}>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-base">Your Progress</CardTitle>
-            </CardHeader>
-            <CardContent className="grid md:grid-cols-2 gap-3 text-sm pt-1">
-              {!hasActiveEvent && (
-                <p className="md:col-span-2 text-xs text-muted-foreground rounded-lg border px-3 py-2 bg-muted/30">
-                  No Daily Challenge event covers this period. Ranks and eligibility below will populate when a matching
-                  event is available.
+              {!hasSelectedEvent && (
+                <p className="text-xs text-amber-600 dark:text-amber-400 rounded-lg border border-amber-200/80 dark:border-amber-500/30 bg-amber-50/80 dark:bg-amber-500/10 px-3 py-2">
+                  Create or select an event in this tab before saving eligibility rules for that window.
                 </p>
               )}
-              <div className={cn("rounded-xl border p-3.5", isDark ? "border-white/10" : "border-gray-200")}>
-                <p className="font-semibold">Views Board Rank #{me?.viewsRank ?? "-"}</p>
-                <p className="text-muted-foreground mt-1">
-                  {me?.remaining?.views || "Submit and verify reels to see your progress."}
-                </p>
-                <Badge
-                  variant={String(me?.remaining?.views || "").toLowerCase().includes("eligible") ? "default" : "outline"}
-                  className="mt-2 text-[10px]"
-                >
-                  {String(me?.remaining?.views || "").toLowerCase().includes("eligible")
-                    ? "Eligible"
-                    : "Needs more"}
-                </Badge>
-                {typeof me?.viewsRank === "number" && me.viewsRank > 3 && rows[2] && activeBoard === "views" && (
-                  <p className="text-xs mt-2.5 text-violet-600">
-                    You need {number(Math.max(0, (rows[2].totalViews || 0) - (me.views || 0)))} more views to reach #3.
-                  </p>
-                )}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div>
+                  <p className="text-xs text-muted-foreground mb-1">Views winner min verified views</p>
+                  <Input
+                    type="number"
+                    min={0}
+                    value={adminRules.viewsMinViews}
+                    onChange={(e) => setAdminRules((prev) => ({ ...prev, viewsMinViews: e.target.value }))}
+                    className="h-10 text-sm"
+                  />
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground mb-1">Reels winner min verified reels</p>
+                  <Input
+                    type="number"
+                    min={0}
+                    value={adminRules.reelsMinReels}
+                    onChange={(e) => setAdminRules((prev) => ({ ...prev, reelsMinReels: e.target.value }))}
+                    className="h-10 text-sm"
+                  />
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground mb-1">Reels winner min verified views</p>
+                  <Input
+                    type="number"
+                    min={0}
+                    value={adminRules.reelsMinViews}
+                    onChange={(e) => setAdminRules((prev) => ({ ...prev, reelsMinViews: e.target.value }))}
+                    className="h-10 text-sm"
+                  />
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground mb-1">Min views per reel for reels board</p>
+                  <Input
+                    type="number"
+                    min={0}
+                    value={adminRules.minViewsPerReel}
+                    onChange={(e) => setAdminRules((prev) => ({ ...prev, minViewsPerReel: e.target.value }))}
+                    className="h-10 text-sm"
+                  />
+                </div>
               </div>
-              <div className={cn("rounded-xl border p-3.5", isDark ? "border-white/10" : "border-gray-200")}>
-                <p className="font-semibold">Reels Board Rank #{me?.reelsRank ?? "-"}</p>
-                <p className="text-muted-foreground mt-1">
-                  {me?.remaining?.reels || "Maintain daily consistency to climb faster."}
-                </p>
-                <Badge
-                  variant={String(me?.remaining?.reels || "").toLowerCase().includes("eligible") ? "default" : "outline"}
-                  className="mt-2 text-[10px]"
-                >
-                  {String(me?.remaining?.reels || "").toLowerCase().includes("eligible")
-                    ? "Eligible"
-                    : "Needs more"}
-                </Badge>
-                {typeof me?.reelsRank === "number" && me.reelsRank > 3 && rows[2] && activeBoard === "reels" && (
-                  <p className="text-xs mt-2.5 text-violet-600">
-                    You need {number(Math.max(0, (rows[2].totalReels || 0) - (me.reels || 0)))} more reels to reach #3.
-                  </p>
-                )}
+              <div className="flex items-center justify-between rounded-xl border px-3 py-2">
+                <p className="text-sm">Promote next eligible when rank #1 is not eligible</p>
+                <Switch
+                  checked={adminRules.promoteNextEligible}
+                  onCheckedChange={(checked) =>
+                    setAdminRules((prev) => ({ ...prev, promoteNextEligible: Boolean(checked) }))
+                  }
+                />
               </div>
-            </CardContent>
-          </Card>
-        )}
-      </div>
-
-      <Card className={panelClass}>
-        <CardHeader className="pb-2">
-          <CardTitle className="flex items-center gap-2">
-            <Award className="w-5 h-5" />
-            Competition Leaderboard
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <Tabs value={activeBoard} onValueChange={(v) => setActiveBoard(v as BoardTab)}>
-            <TabsList className="grid grid-cols-1 sm:grid-cols-2 gap-2 -mx-1 px-1">
-              <TabsTrigger
-                value="views"
-                className={cn(
-                  "border w-full text-xs sm:text-sm inline-flex items-center justify-center px-3 py-2 rounded-full transition-all duration-200",
-                  isDark ? "text-white border-gray-500" : "text-gray-700 border-gray-600",
-                )}
-              >
-                <Eye className="w-3 h-3 mr-1" />
-                Views Leaderboard
-              </TabsTrigger>
-              <TabsTrigger
-                value="reels"
-                className={cn(
-                  "border w-full text-xs sm:text-sm inline-flex items-center justify-center px-3 py-2 rounded-full transition-all duration-200",
-                  isDark ? "text-white border-gray-500" : "text-gray-700 border-gray-600",
-                )}
-              >
-                <Flame className="w-3 h-3 mr-1" />
-                Reels Leaderboard
-              </TabsTrigger>
-            </TabsList>
-          </Tabs>
-
-          {error ? (
-            <div className="rounded-lg border border-red-300 bg-red-50 p-4 text-sm text-red-700 flex items-center gap-2">
-              <AlertCircle className="w-4 h-4" />
-              {error}
-            </div>
-          ) : loading ? (
-            <div className="space-y-3">
-              {Array.from({ length: 5 }).map((_, idx) => (
-                <div key={idx} className="rounded-xl border p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 animate-pulse">
-                  <div className="h-4 w-36 sm:w-40 bg-gray-200 rounded" />
-                  <div className="h-4 w-20 sm:w-24 bg-gray-200 rounded" />
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div className="space-y-3">
-              {rows.map((row: any) => (
-                <div
-                  key={`${activeBoard}-${row.creatorId}`}
-                  className={cn(
-                    "group relative flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 p-3.5 sm:p-4 rounded-xl border transition-all duration-200",
-                    row.rank === 1
-                      ? isDark
-                        ? "bg-amber-500/10 border-amber-400/45 hover:border-amber-300"
-                        : "bg-amber-50 border-amber-300 hover:shadow-lg"
-                      : row.rank === 2
-                        ? isDark
-                          ? "bg-slate-500/10 border-slate-300/40 hover:border-slate-200"
-                          : "bg-slate-50 border-slate-300 hover:shadow-lg"
-                        : row.rank === 3
-                          ? isDark
-                            ? "bg-orange-500/10 border-orange-400/40 hover:border-orange-300"
-                            : "bg-orange-50 border-orange-300 hover:shadow-lg"
-                          : isDark
-                      ? "bg-[#170337] border-white/10 hover:border-violet-400"
-                      : "bg-white border-gray-200 hover:border-violet-300 hover:shadow-md",
-                  )}
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                <p className="text-xs text-muted-foreground">Changes are versioned and apply immediately to the leaderboard.</p>
+                <Button
+                  onClick={saveEligibilityRules}
+                  disabled={savingRules || !hasSelectedEvent}
+                  className="sm:w-auto w-full"
                 >
-                  <div className="flex items-center gap-3 min-w-0 w-full">
-                    <div
-                      className={cn(
-                        "flex items-center justify-center w-10 h-10 rounded-full border-2 font-bold",
-                        row.rank === 1
-                          ? "border-amber-400 text-amber-700 bg-amber-100"
-                          : row.rank === 2
-                            ? "border-slate-400 text-slate-700 bg-slate-100"
-                            : row.rank === 3
-                              ? "border-orange-400 text-orange-700 bg-orange-100"
-                          : isDark
-                            ? "border-gray-500 text-gray-100"
-                            : "border-gray-300 text-gray-700",
-                      )}
-                    >
-                      {row.rank}
-                    </div>
-                    <Avatar className="w-10 h-10 ring-2 ring-violet-200">
-                      <AvatarImage src={row.profilePictureUrl || undefined} />
-                      <AvatarFallback>{(row.username || "A").charAt(0).toUpperCase()}</AvatarFallback>
-                    </Avatar>
-                    <div className="min-w-0 flex-1">
-                      <div className="font-semibold truncate flex items-center gap-2 flex-wrap">
-                        {row.username}
-                        {row.rank === 1 && row.trophy && (
-                          <Badge className="text-[10px]">
-                            <Medal className="w-3 h-3 mr-1" />
-                            Winner
-                          </Badge>
-                        )}
-                        {row.rank === 1 && row.trophy && (
-                          <Badge variant="outline" className="text-[10px]">
-                            Expected {prizeLabel}
-                          </Badge>
-                        )}
-                        {row.rank === 1 && !row.trophy && (
-                          <Badge variant="outline" className="text-[10px]">
-                            Not eligible
-                          </Badge>
-                        )}
-                      </div>
-                      <p className="text-xs text-muted-foreground leading-relaxed break-words sm:truncate">
-                        {formatSecondary(row)}
-                      </p>
-                    </div>
-                  </div>
-                  <div className="text-left sm:text-right shrink-0 min-w-[110px] w-full sm:w-auto">
-                    <p className="text-xl sm:text-2xl font-bold leading-none">
-                      {activeBoard === "views"
-                        ? `${number(row.totalViews)} views`
-                        : `${number(row.totalReels)} reels`}
-                    </p>
-                    <p className="text-[11px] text-muted-foreground mt-1">
-                      {activeBoard === "views"
-                        ? `${number(row.totalReels)} reels`
-                        : `${number(row.totalViews)} views`}
-                    </p>
-                  </div>
-                </div>
-              ))}
-              {rows.length === 0 && (
-                <div className="py-10 sm:py-12 text-center px-2">
-                  {!hasActiveEvent ? (
-                    <>
-                      <p className="text-base sm:text-lg font-semibold tracking-tight">Leaderboard paused</p>
-                      <p className="text-sm text-muted-foreground mt-1.5 max-w-md mx-auto">
-                        The Daily Challenge is not running at the moment. When the next season opens, verified
-                        submissions in the window will rank here again.
-                      </p>
-                    </>
-                  ) : (
-                    <>
-                      <p className="text-base sm:text-lg font-semibold tracking-tight">Be the first to take the lead</p>
-                      <p className="text-sm text-muted-foreground mt-1.5">
-                        Upload one strong reel today and climb into the winners zone.
-                      </p>
-                      <Button asChild className="mt-5 rounded-lg w-full sm:w-auto">
-                        <Link
-                          href="/dashboard/opportunities"
-                          className="inline-flex items-center justify-center w-full sm:w-auto"
-                        >
-                          <Upload className="w-4 h-4 mr-1" />
-                          Upload your first reel
-                        </Link>
-                      </Button>
-                    </>
-                  )}
-                </div>
+                  {savingRules ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : null}
+                  Save contest rules
+                </Button>
+              </div>
+              {rulesMessage && (
+                <p className={cn("text-xs", rulesMessage.includes("Failed") ? "text-red-500" : "text-emerald-600")}>
+                  {rulesMessage}
+                </p>
               )}
             </div>
-          )}
-          {!loading && !error && rows.length > 0 && totalPages > 0 && (
-            <div className={cn("border-t pt-4 sm:pt-6 mt-4 sm:mt-6", isDark ? "border-white/10" : "border-gray-200")}>
-              <PaginationControls
-                page={currentPage}
-                limit={limit}
-                isDark={isDark}
-                total={totalItems}
-                totalPages={totalPages}
-                hasNextPage={currentPage < totalPages}
-                hasPreviousPage={currentPage > 1}
-                onPageChange={setCurrentPage}
-                onLimitChange={setLimit}
-                loading={loading}
-                hide200Option
-              />
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
-      <Card className={panelClass}>
-        <CardHeader className="pb-2">
-          <CardTitle className="flex items-center gap-2">
-            <Crown className="w-5 h-5" />
-            Winners (Recent)
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-2">
-          {winners.length === 0 ? (
-            <div className="py-8 text-sm text-muted-foreground text-center">
-              No winner snapshots yet. Winners are locked after each configured period closes.
-            </div>
-          ) : (
-            (() => {
-              const totalWinners = winners.length;
-              const winnersTotalPages = Math.max(1, Math.ceil(totalWinners / winnersLimit));
-              const offset = (winnersPage - 1) * winnersLimit;
-              const pageRows = winners.slice(offset, offset + winnersLimit);
-              return (
-                <>
-                  {pageRows.map((w) =>
-                    (() => {
-                      const verifiedViews = Number(
-                        w?.metrics_json?.verifiedViews ?? w?.metrics_json?.totalViews ?? 0,
-                      );
-                      const verifiedReels = Number(
-                        w?.metrics_json?.verifiedReels ?? w?.metrics_json?.totalReels ?? 0,
-                      );
-                      const hasWinner = Boolean(w?.winner_creator_id) && Boolean(w?.is_eligible);
-                      const winnerName = hasWinner
-                        ? w?.metrics_json?.username || w?.metrics_json?.fullName || "Winner"
-                        : "N/A";
-                      const { minor: snapMinor, currency: snapCur } = snapshotWinnerPrize(
-                        w as Record<string, unknown>,
-                        prizeAmountMinorUnits,
-                        prizeCurrency,
-                      );
-                      const rewardLabel = formatPrize(snapMinor, snapCur);
-                      const statsSuffix =
-                        w.category === "views"
-                          ? ` • ${number(verifiedViews)} verified views • ${number(verifiedReels)} verified reels`
-                          : ` • ${number(verifiedReels)} verified reels • ${number(verifiedViews)} verified views`;
-                      return (
-                        <div
-                          key={w.id}
-                          className={cn(
-                            "border rounded-xl p-3.5 text-sm flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3",
-                            isDark ? "border-white/10" : "border-gray-200",
-                          )}
-                        >
-                          <div className="min-w-0">
-                            <p className="font-medium">
-                              {fmtWinnerPeriod(w)} - <span className="capitalize">{w.category}</span>
-                            </p>
-                            <p className="text-xs text-muted-foreground mt-1 break-words sm:truncate">
-                              Winner:{" "}
-                              <span className="font-medium text-foreground">{winnerName}</span>
-                              {statsSuffix}
-                            </p>
-                          </div>
-                          <div className="flex items-center gap-2 sm:gap-3 shrink-0">
-                            <Badge variant="outline" className="whitespace-nowrap">
-                              {hasWinner ? `Earned ${rewardLabel}` : "No earning"}
-                            </Badge>
-                            <Badge variant={hasWinner ? "default" : "outline"}>
-                              {hasWinner ? "Winner Locked" : "No Eligible Winner"}
-                            </Badge>
-                          </div>
-                        </div>
-                      );
-                    })(),
-                  )}
-                  {totalWinners > 0 && winnersTotalPages > 1 && (
-                    <div className={cn("border-t pt-4 mt-4", isDark ? "border-white/10" : "border-gray-200")}>
-                      <PaginationControls
-                        page={winnersPage}
-                        limit={winnersLimit}
-                        isDark={isDark}
-                        total={totalWinners}
-                        totalPages={winnersTotalPages}
-                        hasNextPage={winnersPage < winnersTotalPages}
-                        hasPreviousPage={winnersPage > 1}
-                        onPageChange={setWinnersPage}
-                        onLimitChange={(n) => {
-                          setWinnersLimit(n);
-                          setWinnersPage(1);
-                        }}
-                        loading={false}
-                        hide200Option
-                        pageSizeOptions={[5, 10, 25, 50]}
-                      />
-                    </div>
-                  )}
-                </>
-              );
-            })()
-          )}
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+          </TabsContent>
+          <TabsContent
+            value="live"
+            className="mt-0 space-y-6 focus-visible:ring-0 focus-visible:ring-offset-0"
+          >
+            {liveDashboard}
+          </TabsContent>
+        </Tabs>
+      ) : (
+        liveDashboard
+      )}
     </div>
   );
 }
