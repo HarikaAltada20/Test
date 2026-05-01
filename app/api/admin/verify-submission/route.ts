@@ -209,13 +209,9 @@ export async function POST(request: Request) {
 
     // Update the submission status
     const updateData: any = {
-      status: normalizedStatus,
+      // Payment actions finalize status only after wallet credit succeeds.
+      status: isPaymentAction ? submission.status : normalizedStatus,
     };
-
-    if (shouldMarkPaid) {
-      updateData.paid = true;
-      updateData.paid_at = new Date().toISOString();
-    }
 
     // Clear views_locked when changing status to pending or rejected
     if (action === "pending" || action === "rejected") {
@@ -411,7 +407,41 @@ export async function POST(request: Request) {
         }
         // Check if bonus already paid
         if (!submissionFull.bonus_paid) {
-          const flatFeeBonusIdempotencyKey = `flat_fee_bonus:v1:${submissionId}`;
+          const [
+            { data: existingBonusRewards },
+            { data: existingBonusRefunds },
+          ] = await Promise.all([
+            supabaseAdmin
+              .from("money_transactions")
+              .select("id")
+              .eq("user_id", submissionFull.creator_id)
+              .eq("type", "reward")
+              .contains("metadata", {
+                submission_id: submissionId,
+                bonus_type: "flat_fee",
+              }),
+            supabaseAdmin
+              .from("money_transactions")
+              .select("id, remarks")
+              .eq("user_id", submissionFull.creator_id)
+              .eq("type", "refund")
+              .contains("metadata", {
+                submission_id: submissionId,
+                bonus_type: "flat_fee",
+              }),
+          ] as any);
+          const bonusRewardsCount = (existingBonusRewards || []).length;
+          const bonusRefundsCount = (existingBonusRefunds || [])
+            .filter(
+              (r: any) =>
+                !r.remarks || r.remarks === REVERSAL_TRANSACTION_REMARK,
+            )
+            .length;
+          const nextBonusCycle =
+            bonusRewardsCount > bonusRefundsCount
+              ? bonusRewardsCount
+              : bonusRewardsCount + 1;
+          const flatFeeBonusIdempotencyKey = `flat_fee_bonus:v2:${submissionId}:cycle:${nextBonusCycle}`;
 
           const creditResult = await creditCreatorWithdrawableBalance(
             submissionFull.creator_id,
@@ -428,6 +458,7 @@ export async function POST(request: Request) {
                 submission_id: submissionId,
                 contest_id: submissionFull.contest_id,
                 bonus_type: "flat_fee",
+                payout_cycle: nextBonusCycle,
               },
             },
           );
@@ -730,6 +761,7 @@ export async function POST(request: Request) {
               .from("submissions")
               .update({
                 earnings: rewardAmount,
+                status: SUBMISSION_STATUS.paid,
                 paid: true,
                 paid_at: new Date().toISOString(),
               })
@@ -740,6 +772,7 @@ export async function POST(request: Request) {
               .from("submissions")
               .update({
                 paid: true,
+                status: SUBMISSION_STATUS.paid,
                 paid_at: new Date().toISOString(),
               })
               .eq("id", submissionId);

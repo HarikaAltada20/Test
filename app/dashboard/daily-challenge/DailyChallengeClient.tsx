@@ -156,7 +156,7 @@ export default function DailyChallengeClient({
     promoteNextEligible: false,
   });
 
-  const load = async (fresh = false) => {
+  const load = async (fresh = false, throwOnError = false) => {
     setLoading(true);
     setError(null);
     try {
@@ -176,11 +176,16 @@ export default function DailyChallengeClient({
         throw new Error(msg?.error || "Failed to load Daily Challenge");
       }
       const leaderboard = await leaderboardRes.json();
+      if (!winnersRes.ok) {
+        const msg = await winnersRes.json();
+        throw new Error(msg?.error || "Failed to load Daily Challenge winners");
+      }
       const winnersJson = await winnersRes.json();
       setPayload(leaderboard);
       setWinners(winnersJson.winners || []);
     } catch (e: any) {
       setError(e?.message || "Failed to load Daily Challenge");
+      if (throwOnError) throw e;
     } finally {
       setLoading(false);
     }
@@ -232,9 +237,15 @@ export default function DailyChallengeClient({
     setRefreshing(true);
     try {
       if (isAdmin) {
-        await fetch("/api/admin/competition/refresh", { method: "POST" });
+        const adminRefreshRes = await fetch("/api/admin/competition/refresh", {
+          method: "POST",
+        });
+        if (!adminRefreshRes.ok) {
+          const msg = await adminRefreshRes.json().catch(() => ({}));
+          throw new Error(msg?.error || "Failed to refresh Daily Challenge");
+        }
       }
-      await load(true);
+      await load(true, true);
       const nowIso = new Date().toISOString();
       setLastRefreshAt(nowIso);
       if (typeof window !== "undefined") {

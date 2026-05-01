@@ -2,7 +2,10 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/utils/supabase/server";
 import { createAdminClient } from "@/utils/supabase/admin";
 import { verifyAdminAccess } from "@/utils/admin-auth";
-import { creditCreatorWithdrawableBalance } from "@/lib/payment-utils";
+import {
+  creditCreatorWithdrawableBalance,
+  REVERSAL_TRANSACTION_REMARK,
+} from "@/lib/payment-utils";
 
 /**
  * POST /api/contests/[id]/pay-twitter-tweet
@@ -157,7 +160,7 @@ export async function POST(
         .contains("metadata", { contest_id: contestId, tweet_id: tweetId }),
       supabaseAdmin
         .from("money_transactions")
-        .select("id, amount")
+        .select("id, amount, remarks")
         .eq("user_id", creatorId)
         .eq("type", "refund")
         .contains("metadata", { contest_id: contestId, tweet_id: tweetId }),
@@ -167,12 +170,13 @@ export async function POST(
       (sum: number, row: any) => sum + (row.amount || 0),
       0
     );
-    const totalRefundsForTweet = (existingTweetRefunds || []).reduce(
-      (sum: number, row: any) => sum + (row.amount || 0),
-      0
-    );
+    const totalRefundsForTweet = (existingTweetRefunds || [])
+      .filter((row: any) => !row.remarks || row.remarks === REVERSAL_TRANSACTION_REMARK)
+      .reduce((sum: number, row: any) => sum + (row.amount || 0), 0);
     const netPaidForTweet = totalRewardsForTweet - totalRefundsForTweet;
-    if (netPaidForTweet > 0) {
+    const canReconcileExistingReward =
+      netPaidForTweet > 0 && tweet.moderation_status !== "paid";
+    if (netPaidForTweet > 0 && !canReconcileExistingReward) {
       return NextResponse.json(
         { error: "This tweet has already been paid", alreadyPaid: true },
         { status: 400 }
@@ -185,7 +189,7 @@ export async function POST(
 
     if (useCustomAmount) {
       rewardAmount = Math.round(Number(customAmountInCents));
-      if (rewardAmount <= 0) {
+      if (!Number.isFinite(rewardAmount) || rewardAmount <= 0) {
         return NextResponse.json(
           { error: "Custom amount must be greater than zero" },
           { status: 400 }
@@ -262,40 +266,58 @@ export async function POST(
       }
     }
 
-    const twitterTweetPayKey = useCustomAmount
-      ? `twitter_tweet_pay:v1:${contestId}:${tweetId}:amt:${rewardAmount}`
-      : `twitter_tweet_pay:v1:${contestId}:${tweetId}`;
+    const rewardsCount = (existingTweetRewards || []).length;
+    const refundsCount = (existingTweetRefunds || [])
+      .filter((r: any) => !r.remarks || r.remarks === REVERSAL_TRANSACTION_REMARK)
+      .length;
+    const nextCycle = rewardsCount > refundsCount ? rewardsCount : rewardsCount + 1;
 
-    const creditRes = await creditCreatorWithdrawableBalance(
-      creatorId,
-      rewardAmount,
-      useCustomAmount
-        ? `Custom tweet payment - ${contest.title || "Contest"}`
-        : `Twitter CPM tweet reward - ${contest.title || "Contest"}`,
-      {
-        idempotencyKey: twitterTweetPayKey,
-        remarks:
-          customRemarks?.trim() ||
-          (useCustomAmount
-            ? "Custom per-tweet payout credited to creator wallet"
-            : "Per-tweet CPM payout credited to creator wallet"),
-        metadata: {
-          contest_id: contestId,
-          twitter_creator_id: creatorId,
-          tweet_id: tweetId,
-          payout_type: useCustomAmount ? "twitter_cpm_tweet_custom" : "twitter_cpm_tweet",
-          prize_amount: rewardAmount,
-          ...(useCustomAmount ? { is_custom: true } : {}),
-          ...(tweet.points != null ? { points: (tweet.points || 0) + (tweet.manual_points_adjustment || 0) } : {}),
-          ...(paymentProofUrl?.trim()
-            ? { paymentProofUrl: paymentProofUrl.trim() }
-            : {}),
-          ...(paymentDescription?.trim()
-            ? { paymentDescription: paymentDescription.trim() }
-            : {}),
-        },
-      }
-    );
+    const twitterTweetPayKey = useCustomAmount
+      ? `twitter_tweet_pay:v2:${contestId}:${tweetId}:cycle:${nextCycle}:amt:${rewardAmount}`
+      : `twitter_tweet_pay:v2:${contestId}:${tweetId}:cycle:${nextCycle}`;
+
+    const creditRes: {
+      success: boolean;
+      transactionId?: string;
+      alreadyApplied?: boolean;
+      error?: string;
+    } = canReconcileExistingReward
+      ? {
+          success: true,
+          transactionId: existingTweetRewards?.[0]?.id,
+          alreadyApplied: true,
+        }
+      : await creditCreatorWithdrawableBalance(
+          creatorId,
+          rewardAmount,
+          useCustomAmount
+            ? `Custom tweet payment - ${contest.title || "Contest"}`
+            : `Twitter CPM tweet reward - ${contest.title || "Contest"}`,
+          {
+            idempotencyKey: twitterTweetPayKey,
+            remarks:
+              customRemarks?.trim() ||
+              (useCustomAmount
+                ? "Custom per-tweet payout credited to creator wallet"
+                : "Per-tweet CPM payout credited to creator wallet"),
+            metadata: {
+              contest_id: contestId,
+              twitter_creator_id: creatorId,
+              tweet_id: tweetId,
+              payout_type: useCustomAmount ? "twitter_cpm_tweet_custom" : "twitter_cpm_tweet",
+              payout_cycle: nextCycle,
+              prize_amount: rewardAmount,
+              ...(useCustomAmount ? { is_custom: true } : {}),
+              ...(tweet.points != null ? { points: (tweet.points || 0) + (tweet.manual_points_adjustment || 0) } : {}),
+              ...(paymentProofUrl?.trim()
+                ? { paymentProofUrl: paymentProofUrl.trim() }
+                : {}),
+              ...(paymentDescription?.trim()
+                ? { paymentDescription: paymentDescription.trim() }
+                : {}),
+            },
+          }
+        );
 
     if (!creditRes.success) {
       return NextResponse.json(
@@ -335,13 +357,15 @@ export async function POST(
         "[pay-twitter-tweet] Leaderboard earnings delta RPC failed:",
         rpcErr
       );
-      return NextResponse.json(
-        {
-          error:
-            "Tweet marked paid but leaderboard earnings could not be updated. Please contact support.",
-        },
-        { status: 500 }
-      );
+      return NextResponse.json({
+        success: true,
+        warning:
+          "Tweet payment was credited and marked paid, but leaderboard earnings could not be updated automatically.",
+        amount: rewardAmount,
+        tweetId,
+        creatorId,
+        transactionId: creditRes.transactionId,
+      });
     }
 
     return NextResponse.json({

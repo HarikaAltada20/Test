@@ -267,7 +267,16 @@ export async function POST(
       }
     }
 
-    const twitterFlatFeeBonusKey = `twitter_flat_fee_bonus:v1:${contestId}:${tweetId}`;
+    const bonusRewardsCount = (tweetBonusRewards || []).length;
+    const bonusRefundsCount = (tweetBonusRefunds || [])
+      .filter((r: any) => !r.remarks || r.remarks === REVERSAL_TRANSACTION_REMARK)
+      .length;
+    const nextBonusCycle =
+      bonusRewardsCount > bonusRefundsCount
+        ? bonusRewardsCount
+        : bonusRewardsCount + 1;
+
+    const twitterFlatFeeBonusKey = `twitter_flat_fee_bonus:v2:${contestId}:${tweetId}:cycle:${nextBonusCycle}`;
 
     const creditResult = await creditCreatorWithdrawableBalance(
       creatorId,
@@ -280,6 +289,7 @@ export async function POST(
           contest_id: contestId,
           tweet_id: tweetId,
           bonus_type: "flat_fee",
+          payout_cycle: nextBonusCycle,
         },
       }
     );

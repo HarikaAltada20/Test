@@ -59,6 +59,9 @@ export async function GET(request: NextRequest) {
     const {
       data: { user },
     } = await supabase.auth.getUser();
+    if (!user) {
+      return NextResponse.json({ error: "Authentication required" }, { status: 401 });
+    }
 
     if (!VALID_PERIODS.includes(period)) {
       return NextResponse.json({ error: "Invalid period" }, { status: 400 });
@@ -134,7 +137,7 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    const cacheKey = getDailyChallengeCacheKey({ period, scope, page, limit });
+    const cacheKey = `${getDailyChallengeCacheKey({ period, scope, page, limit })}:user:${user.id}`;
     if (!fresh) {
       const cached = dailyChallengeCache.get<any>(cacheKey);
       if (cached) return NextResponse.json({ ...cached, cached: true });
@@ -145,7 +148,7 @@ export async function GET(request: NextRequest) {
       scope,
       page,
       limit,
-      meUserId: user?.id || null,
+        meUserId: user.id,
     });
 
     dailyChallengeCache.set(cacheKey, payload, 60 * 60 * 1000);

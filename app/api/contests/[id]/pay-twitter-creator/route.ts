@@ -188,7 +188,14 @@ export async function POST(
     const prizes = leaderboardContest?.prizes || [];
 
     let rewardAmount = 0;
-    const customAmount = isCustom && amountInCents ? amountInCents : 0;
+    const parsedCustomAmount = Number(amountInCents);
+    if (isCustom && (!Number.isFinite(parsedCustomAmount) || parsedCustomAmount <= 0)) {
+      return NextResponse.json(
+        { error: "Custom amount must be a positive number of cents" },
+        { status: 400 }
+      );
+    }
+    const customAmount = isCustom ? Math.round(parsedCustomAmount) : 0;
 
     if (customAmount > 0) {
       // Use custom amount
@@ -291,7 +298,11 @@ export async function POST(
         payout_cycle: nextCycle,
       });
 
-    if (rewardInThisCycle && rewardInThisCycle.length > 0) {
+    const hasRewardInThisCycle =
+      Boolean(rewardInThisCycle && rewardInThisCycle.length > 0);
+    const canReconcileExistingReward =
+      hasRewardInThisCycle && leaderboardEntry.moderation_status !== "paid";
+    if (hasRewardInThisCycle && !canReconcileExistingReward) {
       return NextResponse.json(
         { error: "Payment for this cycle has already been processed" },
         { status: 400 }
@@ -303,39 +314,50 @@ export async function POST(
         ? `twitter_creator_pay:v1:${contestId}:${creatorId}:cycle:${nextCycle}:amt:${rewardAmount}`
         : `twitter_creator_pay:v1:${contestId}:${creatorId}:cycle:${nextCycle}`;
 
-    const creditRes = await creditCreatorWithdrawableBalance(
-      creatorId,
-      rewardAmount,
-      customAmount > 0
-        ? `Custom Twitter contest payment - ${contest.title || "Contest"}`
-        : contest.contest_type === "cpm"
-        ? `Twitter CPM contest reward - ${contest.title || "Contest"}`
-        : `Twitter contest reward - ${contest.title || "Contest"}`,
-      {
-        idempotencyKey: twitterCreatorPayKey,
-        remarks:
-          customRemarks ||
-          (customAmount > 0
-            ? "Custom Twitter payout credited to creator wallet"
+    const creditRes: {
+      success: boolean;
+      transactionId?: string;
+      alreadyApplied?: boolean;
+      error?: string;
+    } = canReconcileExistingReward
+      ? {
+          success: true,
+          transactionId: rewardInThisCycle?.[0]?.id,
+          alreadyApplied: true,
+        }
+      : await creditCreatorWithdrawableBalance(
+          creatorId,
+          rewardAmount,
+          customAmount > 0
+            ? `Custom Twitter contest payment - ${contest.title || "Contest"}`
             : contest.contest_type === "cpm"
-            ? "Standard Twitter CPM payout credited to creator wallet"
-            : "Standard Twitter payout credited to creator wallet"),
-        metadata: {
-          contest_id: contestId,
-          twitter_creator_id: creatorId,
-          payout_type:
-            customAmount > 0
-              ? "custom"
-              : contest.contest_type === "cpm"
-              ? "standard_cpm"
-              : "standard",
-          payout_cycle: nextCycle,
-          rank: leaderboardEntry.current_rank,
-          prize_amount: rewardAmount,
-          total_points: leaderboardEntry.total_points,
-        },
-      }
-    );
+            ? `Twitter CPM contest reward - ${contest.title || "Contest"}`
+            : `Twitter contest reward - ${contest.title || "Contest"}`,
+          {
+            idempotencyKey: twitterCreatorPayKey,
+            remarks:
+              customRemarks ||
+              (customAmount > 0
+                ? "Custom Twitter payout credited to creator wallet"
+                : contest.contest_type === "cpm"
+                ? "Standard Twitter CPM payout credited to creator wallet"
+                : "Standard Twitter payout credited to creator wallet"),
+            metadata: {
+              contest_id: contestId,
+              twitter_creator_id: creatorId,
+              payout_type:
+                customAmount > 0
+                  ? "custom"
+                  : contest.contest_type === "cpm"
+                  ? "twitter_cpm_creator"
+                  : "standard",
+              payout_cycle: nextCycle,
+              rank: leaderboardEntry.current_rank,
+              prize_amount: rewardAmount,
+              total_points: leaderboardEntry.total_points,
+            },
+          }
+        );
 
     if (!creditRes.success) {
       return NextResponse.json(

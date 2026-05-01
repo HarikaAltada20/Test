@@ -85,9 +85,15 @@ export async function GET(request: NextRequest) {
     let allSubmissions: any[] = [];
     if (advertiserContestIds.length > 0) {
       const CHUNK = 1000;
-      let rangeFrom = 0;
-      while (true) {
-        let query = supabase.from("submissions").select(`
+      const CONTEST_ID_CHUNK = 200;
+      for (let idFrom = 0; idFrom < advertiserContestIds.length; idFrom += CONTEST_ID_CHUNK) {
+        const contestIdChunk = advertiserContestIds.slice(
+          idFrom,
+          idFrom + CONTEST_ID_CHUNK,
+        );
+        let rangeFrom = 0;
+        while (true) {
+          let query = supabase.from("submissions").select(`
             id,
             views,
             created_at,
@@ -97,29 +103,33 @@ export async function GET(request: NextRequest) {
             status,
             contest_id
           `)
-          .in("contest_id", advertiserContestIds)
-          .range(rangeFrom, rangeFrom + CHUNK - 1);
+            .in("contest_id", contestIdChunk)
+            .range(rangeFrom, rangeFrom + CHUNK - 1);
 
-        // Apply status filter if provided
-        if (notRejected) {
-          query = query.neq("status", "rejected");
-        } else if (submissionStatus && submissionStatus !== "all") {
-          if (submissionStatus === "verifiedpaid") {
-            query = query.in("status", ["verified", "paid"]);
-          } else {
-            query = query.eq("status", submissionStatus);
+          // Apply status filter if provided
+          if (notRejected) {
+            query = query.neq("status", "rejected");
+          } else if (submissionStatus && submissionStatus !== "all") {
+            if (submissionStatus === "verifiedpaid") {
+              query = query.in("status", ["verified", "paid"]);
+            } else {
+              query = query.eq("status", submissionStatus);
+            }
           }
-        }
 
-        const { data: chunk, error: submissionsError } = await query;
-        if (submissionsError) {
-          console.error("Error fetching submissions chunk:", submissionsError);
-          break;
+          const { data: chunk, error: submissionsError } = await query;
+          if (submissionsError) {
+            console.error("Error fetching submissions chunk:", submissionsError);
+            return NextResponse.json(
+              { error: "Failed to fetch submissions" },
+              { status: 500 },
+            );
+          }
+          if (!chunk || chunk.length === 0) break;
+          allSubmissions = allSubmissions.concat(chunk);
+          if (chunk.length < CHUNK) break;
+          rangeFrom += CHUNK;
         }
-        if (!chunk || chunk.length === 0) break;
-        allSubmissions = allSubmissions.concat(chunk);
-        if (chunk.length < CHUNK) break;
-        rangeFrom += CHUNK;
       }
     }
 
@@ -298,22 +308,32 @@ export async function GET(request: NextRequest) {
     let allSubmissionsUnfiltered: any[] = [];
     if (contestIdsAll.length > 0) {
       const CHUNK = 1000;
-      let rangeFrom = 0;
-      while (true) {
-        const { data: chunk, error: unfilteredError } = await supabase
-          .from("submissions")
-          .select("id, status, contest_id, other_stats")
-          .in("contest_id", contestIdsAll)
-          .range(rangeFrom, rangeFrom + CHUNK - 1);
+      const CONTEST_ID_CHUNK = 200;
+      for (let idFrom = 0; idFrom < contestIdsAll.length; idFrom += CONTEST_ID_CHUNK) {
+        const contestIdChunk = contestIdsAll.slice(
+          idFrom,
+          idFrom + CONTEST_ID_CHUNK,
+        );
+        let rangeFrom = 0;
+        while (true) {
+          const { data: chunk, error: unfilteredError } = await supabase
+            .from("submissions")
+            .select("id, status, contest_id, other_stats")
+            .in("contest_id", contestIdChunk)
+            .range(rangeFrom, rangeFrom + CHUNK - 1);
 
-        if (unfilteredError) {
-          console.error("Error fetching unfiltered submissions:", unfilteredError);
-          break;
+          if (unfilteredError) {
+            console.error("Error fetching unfiltered submissions:", unfilteredError);
+            return NextResponse.json(
+              { error: "Failed to fetch unfiltered submissions" },
+              { status: 500 },
+            );
+          }
+          if (!chunk || chunk.length === 0) break;
+          allSubmissionsUnfiltered = allSubmissionsUnfiltered.concat(chunk);
+          if (chunk.length < CHUNK) break;
+          rangeFrom += CHUNK;
         }
-        if (!chunk || chunk.length === 0) break;
-        allSubmissionsUnfiltered = allSubmissionsUnfiltered.concat(chunk);
-        if (chunk.length < CHUNK) break;
-        rangeFrom += CHUNK;
       }
     }
     let twitterTweetsAll: {

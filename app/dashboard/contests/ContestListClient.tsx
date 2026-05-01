@@ -3280,7 +3280,7 @@ export function ContestListClient({
           )}
         >
           <img
-            src="/images/milestones.avif"
+            src="/images/Milestones.avif"
             alt="Milestone contest preview"
             className="w-full h-full object-cover transition-transform duration-300 ease-in-out group-hover:scale-105"
           />

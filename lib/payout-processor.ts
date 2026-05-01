@@ -89,13 +89,7 @@ export async function processQueuedPayouts(batchSize: number = 10): Promise<Payo
       }
 
       if (rewardAmount > 0) {
-        // 1) Update submission to paid and persist earnings
-        await supabaseAdmin
-          .from('submissions')
-          .update({ earnings: rewardAmount, status: 'paid' })
-          .eq('id', sub.id);
-
-        // 2) Idempotency-safe wallet crediting
+        // 1) Idempotency-safe wallet crediting
         // Determine payout cycle based on prior rewards/refunds for this submission
         const [{ data: existingRewards }, { data: existingRefunds }] = await Promise.all([
           supabaseAdmin
@@ -156,6 +150,15 @@ export async function processQueuedPayouts(batchSize: number = 10): Promise<Payo
           if (!creditRes.success) {
             throw new Error(`Failed to credit creator wallet: ${creditRes.error}`);
           }
+        }
+
+        // 2) Mark submission paid only after the wallet credit is known to be safe.
+        const { error: paidUpdateErr } = await supabaseAdmin
+          .from('submissions')
+          .update({ earnings: rewardAmount, status: 'paid' })
+          .eq('id', sub.id);
+        if (paidUpdateErr) {
+          throw new Error(`Reward credited but failed to mark submission paid: ${paidUpdateErr.message}`);
         }
 
         // 3) Metrics are now updated automatically by database triggers when status changes to 'paid'

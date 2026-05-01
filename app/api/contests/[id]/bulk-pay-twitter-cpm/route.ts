@@ -205,7 +205,12 @@ export async function POST(
         }
         return;
       }
-      if (pt === "twitter_cpm_tweet" || pt === "twitter_cpm_tweet_custom") {
+      if (
+        pt === "twitter_cpm_tweet" ||
+        pt === "twitter_cpm_tweet_custom" ||
+        pt === "twitter_cpm_creator" ||
+        pt === "standard_cpm"
+      ) {
         totalCreatorCpmRewards += Number(r.amount) || 0;
       }
     });
@@ -220,7 +225,12 @@ export async function POST(
         }
         return;
       }
-      if (pt === "twitter_cpm_tweet" || pt === "twitter_cpm_tweet_custom") {
+      if (
+        pt === "twitter_cpm_tweet" ||
+        pt === "twitter_cpm_tweet_custom" ||
+        pt === "twitter_cpm_creator" ||
+        pt === "standard_cpm"
+      ) {
         totalCreatorCpmRefunds += Number(r.amount) || 0;
       }
     });
@@ -484,12 +494,15 @@ export async function POST(
 
     const cpmTweetIdsUpdated: string[] = [];
     for (const [tid, cents] of Object.entries(cpmBreakdown)) {
-      const { error: upErr } = await supabaseAdmin
+      const { data: updatedTweetRows, error: upErr } = await supabaseAdmin
         .from("twitter_campaign_tweets")
         .update({ moderation_status: "paid", earnings: cents })
         .eq("id", tid)
-        .eq("contest_id", contestId);
-      if (upErr) {
+        .eq("contest_id", contestId)
+        .neq("moderation_status", "paid")
+        .select("id")
+        .limit(1);
+      if (upErr || !updatedTweetRows?.length) {
         console.error("[bulk-pay-twitter-cpm] Tweet update failed:", tid, upErr);
 
         for (const rid of cpmTweetIdsUpdated) {
@@ -565,7 +578,9 @@ export async function POST(
               : "Wallet credit was rolled back because tweet rows could not be updated. You can retry bulk pay.",
             details: {
               tweet_id: tid,
-              message: upErr.message,
+              message:
+                upErr?.message ||
+                "Tweet was already claimed by another payout request.",
               idempotent_retry: Boolean(creditRes.alreadyApplied),
             },
           },

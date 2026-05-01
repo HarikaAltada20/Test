@@ -143,9 +143,14 @@ export default function ContestAnalytics({
         return sum + details.cpm_contest.total_budget;
       } else if (
         contest.contest_type === "milestone" &&
-        details?.milestone_contest?.total_budget_cents
+        (details?.milestone_contest?.total_budget_cents ||
+          details?.milestone_contest?.total_budget)
       ) {
-        return sum + details.milestone_contest.total_budget_cents;
+        return (
+          sum +
+          (details.milestone_contest.total_budget_cents ||
+            details.milestone_contest.total_budget)
+        );
       }
       return sum;
     }, 0);

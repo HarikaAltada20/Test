@@ -147,16 +147,25 @@ export function getPeriodRange(period: CompetitionPeriod, now = new Date()) {
 
 async function getActiveEventAndConfig(
   mode: DataClientMode = "session",
+  activeWindow?: { start: Date; end: Date } | null,
 ): Promise<EligibilityConfig | null> {
   const supabase = await getDataClient(mode);
-  const nowIso = new Date().toISOString();
-  const { data: event, error: eventError } = await supabase
+  let eventQuery = supabase
     .from("competition_event")
     .select("id")
     .eq("is_active", true)
-    .eq("status", "active")
-    .lte("starts_at", nowIso)
-    .gte("ends_at", nowIso)
+    .eq("status", "active");
+
+  if (activeWindow) {
+    eventQuery = eventQuery
+      .lte("starts_at", activeWindow.end.toISOString())
+      .gte("ends_at", activeWindow.start.toISOString());
+  } else {
+    const nowIso = new Date().toISOString();
+    eventQuery = eventQuery.lte("starts_at", nowIso).gte("ends_at", nowIso);
+  }
+
+  const { data: event, error: eventError } = await eventQuery
     .order("starts_at", { ascending: false })
     .limit(1)
     .maybeSingle();
@@ -370,9 +379,13 @@ export async function getDailyChallengeLeaderboard(params: {
   meUserId?: string | null;
   rangeOverride?: { start: Date; end: Date } | null;
   clientMode?: DataClientMode;
+  configOverride?: EligibilityConfig | null;
 }) {
   const clientMode = params.clientMode ?? "session";
-  const config = await getActiveEventAndConfig(clientMode);
+  const config =
+    params.configOverride === undefined
+      ? await getActiveEventAndConfig(clientMode)
+      : params.configOverride;
   if (!config) {
     return {
       hasActiveEvent: false,
@@ -520,14 +533,21 @@ export async function snapshotWinnersForIstDate(
   options: SnapshotOptions = {},
 ) {
   const mode: DataClientMode = options.useAdminClient ? "admin" : "session";
-  const config = await getActiveEventAndConfig(mode);
-  if (!config) return { ok: false, reason: "no_active_event" };
   const reason = options.reason || "manual_admin_refresh";
   const allowOverwrite = options.allowOverwrite ?? false;
 
   const supabase = await getDataClient(mode);
   const dayStart = new Date(`${snapshotDate}T00:00:00+05:30`);
   const dayEnd = new Date(new Date(`${snapshotDate}T00:00:00+05:30`).getTime() + 24 * 60 * 60 * 1000);
+  if (Number.isNaN(dayStart.getTime()) || Number.isNaN(dayEnd.getTime())) {
+    return { ok: false, reason: "invalid_snapshot_date" };
+  }
+  const config = await getActiveEventAndConfig(mode, {
+    start: dayStart,
+    end: dayEnd,
+  });
+  if (!config) return { ok: false, reason: "no_event_for_snapshot_date" };
+
   const payload = await getDailyChallengeLeaderboard({
     period: "today",
     scope: "verified",
@@ -535,37 +555,54 @@ export async function snapshotWinnersForIstDate(
     limit: 200,
     rangeOverride: { start: dayStart, end: dayEnd },
     clientMode: mode,
+    configOverride: config,
   });
-  if (Number.isNaN(dayStart.getTime()) || Number.isNaN(dayEnd.getTime())) {
-    return { ok: false, reason: "invalid_snapshot_date" };
-  }
 
-  const topViews = payload.topCreatorsByViews[0];
-  const topReels = payload.topCreatorsByReels[0];
+  const pickWinner = (
+    rows: Array<{ eligible?: boolean; rank?: number; creatorId?: string }>,
+  ) => {
+    const top = rows[0];
+    if (top?.eligible) return { row: top, promoted: false };
+    if (config.promoteNextEligible) {
+      const promoted = rows.find((row) => row.eligible);
+      if (promoted) return { row: promoted, promoted: true };
+    }
+    return { row: top, promoted: false };
+  };
+  const topViews = pickWinner(payload.topCreatorsByViews);
+  const topReels = pickWinner(payload.topCreatorsByReels);
   const rows = [
     {
       event_id: config.eventId,
       snapshot_date: snapshotDate,
       category: "views",
-      winner_creator_id: topViews?.eligible ? topViews.creatorId : null,
-      rank_at_snapshot: topViews?.rank ?? null,
-      is_eligible: Boolean(topViews?.eligible),
-      promoted: false,
-      metrics_json: topViews || {},
+      winner_creator_id: topViews.row?.eligible ? topViews.row.creatorId : null,
+      rank_at_snapshot: topViews.row?.rank ?? null,
+      is_eligible: Boolean(topViews.row?.eligible),
+      promoted: topViews.promoted,
+      metrics_json: topViews.row || {},
       rules_json: config,
-      reason: topViews?.eligible ? reason : "rank_1_not_eligible",
+      reason: topViews.row?.eligible
+        ? topViews.promoted
+          ? `${reason}_promoted_next_eligible`
+          : reason
+        : "rank_1_not_eligible",
     },
     {
       event_id: config.eventId,
       snapshot_date: snapshotDate,
       category: "reels",
-      winner_creator_id: topReels?.eligible ? topReels.creatorId : null,
-      rank_at_snapshot: topReels?.rank ?? null,
-      is_eligible: Boolean(topReels?.eligible),
-      promoted: false,
-      metrics_json: topReels || {},
+      winner_creator_id: topReels.row?.eligible ? topReels.row.creatorId : null,
+      rank_at_snapshot: topReels.row?.rank ?? null,
+      is_eligible: Boolean(topReels.row?.eligible),
+      promoted: topReels.promoted,
+      metrics_json: topReels.row || {},
       rules_json: config,
-      reason: topReels?.eligible ? reason : "rank_1_not_eligible",
+      reason: topReels.row?.eligible
+        ? topReels.promoted
+          ? `${reason}_promoted_next_eligible`
+          : reason
+        : "rank_1_not_eligible",
     },
   ];
 

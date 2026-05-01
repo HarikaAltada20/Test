@@ -1,7 +1,10 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/utils/supabase/admin";
 import { verifyAdminAccess } from "@/utils/admin-auth";
-import { creditCreatorWithdrawableBalance } from "@/lib/payment-utils";
+import {
+  creditCreatorWithdrawableBalance,
+  REVERSAL_TRANSACTION_REMARK,
+} from "@/lib/payment-utils";
 import { revalidateLeaderboardCache } from "@/lib/leaderboard-cache";
 import {
   buildMilestoneMostVerifiedBonusByCreatorMap,
@@ -135,9 +138,28 @@ export async function POST(
       );
     }
 
+    const { data: paidRefunds, error: paidRefundsError } = await supabaseAdmin
+      .from("money_transactions")
+      .select("amount, metadata, remarks")
+      .eq("user_id", creatorId)
+      .eq("type", "refund")
+      .eq("status", "success")
+      .contains("metadata", { contest_id: contestId });
+
+    if (paidRefundsError) {
+      return NextResponse.json(
+        {
+          error:
+            paidRefundsError.message ||
+            "Failed to load creator refund history for milestone bonus",
+        },
+        { status: 500 },
+      );
+    }
+
     const viewsBonusType = "milestone_most_verified_views";
     const reelsBonusType = "milestone_most_verified_reels";
-    const paidByTrack = (paidRewards || []).reduce(
+    const rewardedByTrack = (paidRewards || []).reduce(
       (sum, tx: any) => {
         const bt = String(tx?.metadata?.bonus_type || "");
         const amt = Number(tx?.amount) || 0;
@@ -147,6 +169,23 @@ export async function POST(
       },
       { views: 0, reels: 0 },
     );
+    const refundedByTrack = (paidRefunds || []).reduce(
+      (sum, tx: any) => {
+        if (tx.remarks && tx.remarks !== REVERSAL_TRANSACTION_REMARK) {
+          return sum;
+        }
+        const bt = String(tx?.metadata?.bonus_type || "");
+        const amt = Number(tx?.amount) || 0;
+        if (bt === viewsBonusType) sum.views += amt;
+        if (bt === reelsBonusType) sum.reels += amt;
+        return sum;
+      },
+      { views: 0, reels: 0 },
+    );
+    const paidByTrack = {
+      views: Math.max(0, rewardedByTrack.views - refundedByTrack.views),
+      reels: Math.max(0, rewardedByTrack.reels - refundedByTrack.reels),
+    };
 
     let creditCents = 0;
     if (track === "views") {
@@ -208,7 +247,22 @@ export async function POST(
       );
     }
 
-    const milestoneMvBonusIdempotencyKey = `milestone_mv_bonus:v1:${contestId}:${creatorId}:${track}`;
+    const paidTrackRewardsCount = (paidRewards || []).filter(
+      (tx: any) =>
+        String(tx?.metadata?.bonus_type || "") ===
+        `milestone_most_verified_${track}`,
+    ).length;
+    const paidTrackRefundsCount = (paidRefunds || []).filter(
+      (tx: any) =>
+        (!tx.remarks || tx.remarks === REVERSAL_TRANSACTION_REMARK) &&
+        String(tx?.metadata?.bonus_type || "") ===
+          `milestone_most_verified_${track}`,
+    ).length;
+    const nextBonusCycle =
+      paidTrackRewardsCount > paidTrackRefundsCount
+        ? paidTrackRewardsCount
+        : paidTrackRewardsCount + 1;
+    const milestoneMvBonusIdempotencyKey = `milestone_mv_bonus:v2:${contestId}:${creatorId}:${track}:cycle:${nextBonusCycle}`;
 
     const creditResult = await creditCreatorWithdrawableBalance(
       creatorId,
@@ -224,6 +278,7 @@ export async function POST(
           bonus_type: `milestone_most_verified_${track}`,
           submission_id: `${target.id}:milestone_most_verified_${track}`,
           source_submission_id: target.id,
+          payout_cycle: nextBonusCycle,
         },
       },
     );

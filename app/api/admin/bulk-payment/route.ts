@@ -1,7 +1,12 @@
 import { createHash } from "node:crypto";
 import { createClient } from "@/utils/supabase/server";
 import { NextRequest, NextResponse } from "next/server";
-import { creditCreatorWithdrawableBalance } from "@/lib/payment-utils";
+import {
+  creditCreatorWithdrawableBalance,
+  debitCreatorWithdrawableBalance,
+  logTransactionAsAdmin,
+  REVERSAL_TRANSACTION_REMARK,
+} from "@/lib/payment-utils";
 import { applyPayoutAdjustment } from "@/lib/payout-adjustment";
 import { buildMilestoneSubmissionPayoutCentsMap } from "@/lib/milestone-contest-expected-spend";
 import { countRefundsForCreatorContest } from "@/lib/contest-payout-idempotency";
@@ -546,12 +551,16 @@ export async function POST(request: NextRequest) {
       bonus_amount: item.bonus_amount,
       paid: payment_type !== "bonus" ? true : undefined,
       paid_at: payment_type !== "bonus" ? new Date().toISOString() : undefined,
-      bonus_paid: payment_type !== "standard" ? true : undefined,
+      bonus_paid:
+        payment_type !== "standard" && item.bonus_amount > 0 ? true : undefined,
       bonus_paid_at:
-        payment_type !== "standard" ? new Date().toISOString() : undefined,
+        payment_type !== "standard" && item.bonus_amount > 0
+          ? new Date().toISOString()
+          : undefined,
     }));
 
     const updateFailures: { submission_id: string; message: string }[] = [];
+    const appliedUpdates: typeof submissionUpdates = [];
     // Update each submission
     for (const update of submissionUpdates) {
       const updatePayload: Record<string, unknown> = {};
@@ -571,10 +580,21 @@ export async function POST(request: NextRequest) {
         updatePayload.bonus_amount = update.bonus_amount; // Store actual bonus amount paid
       }
 
-      const { error: updateError } = await supabaseAdmin
+      let updateQuery = supabaseAdmin
         .from("submissions")
         .update(updatePayload)
         .eq("id", update.id);
+
+      if (payment_type !== "bonus") {
+        updateQuery = updateQuery.neq("paid", true);
+      }
+      if (update.bonus_paid !== undefined) {
+        updateQuery = updateQuery.neq("bonus_paid", true);
+      }
+
+      const { data: updatedRows, error: updateError } = await updateQuery
+        .select("id")
+        .limit(1);
 
       if (updateError) {
         console.error(`Failed to update submission ${update.id}:`, updateError);
@@ -582,14 +602,79 @@ export async function POST(request: NextRequest) {
           submission_id: update.id as string,
           message: updateError.message,
         });
+      } else if (!updatedRows || updatedRows.length === 0) {
+        updateFailures.push({
+          submission_id: update.id as string,
+          message:
+            "Submission was already claimed by another payout request. Wallet credit will be rolled back if this request applied fresh funds.",
+        });
+      } else {
+        appliedUpdates.push(update);
       }
     }
 
     if (updateFailures.length > 0) {
+      if (!creditResult.alreadyApplied) {
+        const rollback = await debitCreatorWithdrawableBalance(
+          creator_id,
+          totalAmount,
+        );
+        if (rollback.success) {
+          await logTransactionAsAdmin(
+            creator_id,
+            "refund",
+            totalAmount,
+            "success",
+            `Rollback: bulk payment row update failed for ${
+              contest.title || "Contest"
+            }`,
+            {
+              remarks: REVERSAL_TRANSACTION_REMARK,
+              paymentMethod: "refund",
+              metadata: {
+                contest_id,
+                payout_type: "bulk_payment_rollback",
+                original_reward_transaction_id: creditResult.transactionId,
+                payout_operation_key: bulkPayIdempotencyKey,
+                update_failures: updateFailures,
+              },
+            },
+          );
+        } else {
+          console.error(
+            "[bulk-payment] CRITICAL: wallet rollback failed after submission update failure:",
+            rollback.error,
+          );
+        }
+
+        for (const applied of appliedUpdates) {
+          const revertPayload: Record<string, unknown> = {};
+          if (payment_type !== "bonus") {
+            revertPayload.earnings = null;
+            revertPayload.paid = false;
+            revertPayload.paid_at = null;
+            revertPayload.status = "verified";
+          }
+          if (applied.bonus_paid !== undefined) {
+            revertPayload.bonus_paid = false;
+            revertPayload.bonus_paid_at = null;
+            revertPayload.bonus_amount = null;
+          }
+          if (Object.keys(revertPayload).length > 0) {
+            await supabaseAdmin
+              .from("submissions")
+              .update(revertPayload)
+              .eq("id", applied.id);
+          }
+        }
+      }
+
       return NextResponse.json(
         {
           error:
-            "Wallet credit succeeded but one or more submission rows failed to update. Retry this exact request to reconcile; payout credit is deduplicated by operation idempotency key.",
+            creditResult.alreadyApplied
+              ? "Payout credit was already applied earlier, but one or more submission rows still could not be reconciled. Retry or contact support."
+              : "Submission rows could not be marked paid. Fresh wallet credit was rolled back where possible; retry after resolving the listed rows.",
           updateFailures,
           transaction_id: creditResult.transactionId,
           already_applied_idempotent: Boolean(creditResult.alreadyApplied),
