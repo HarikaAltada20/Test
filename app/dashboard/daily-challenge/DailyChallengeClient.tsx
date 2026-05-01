@@ -42,14 +42,32 @@ import {
   DAILY_CHALLENGE_REFRESH_COOLDOWN_MS_CREATOR,
 } from "@/lib/constants";
 
-/** Daily Challenge only surfaces same-day and prior IST day ranges. */
-type Period = "today" | "yesterday";
+type Period = "today" | "yesterday" | "this_week" | "last_week" | "this_month" | "last_month";
 type Scope = "pending" | "verified" | "all";
 
 const PERIOD_OPTIONS: { value: Period; label: string }[] = [
   { value: "today", label: "Today" },
   { value: "yesterday", label: "Yesterday" },
+  { value: "this_week", label: "This Week" },
+  { value: "last_week", label: "Last Week" },
+  { value: "this_month", label: "This Month" },
+  { value: "last_month", label: "Last Month" },
 ];
+
+const PERIOD_LABELS: Record<Period, string> = {
+  today: "Today",
+  yesterday: "Yesterday",
+  this_week: "This Week",
+  last_week: "Last Week",
+  this_month: "This Month",
+  last_month: "Last Month",
+};
+
+const SNAPSHOT_PERIOD_LABELS: Record<string, string> = {
+  day: "Daily",
+  week: "Weekly",
+  month: "Monthly",
+};
 
 const SCOPE_OPTIONS: { value: Scope; label: string }[] = [
   { value: "pending", label: "Pending" },
@@ -77,6 +95,17 @@ function getHoursUntilIstMidnight() {
   const diffMs = nextMidnightUtcMs - now.getTime();
   const hours = Math.floor(diffMs / (1000 * 60 * 60));
   const mins = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
+  return `${hours}h ${mins}m`;
+}
+
+function getTimeUntil(iso?: string | null) {
+  const end = iso ? new Date(iso).getTime() : Number.NaN;
+  if (!Number.isFinite(end)) return getHoursUntilIstMidnight();
+  const diffMs = Math.max(0, end - Date.now());
+  const days = Math.floor(diffMs / (24 * 60 * 60 * 1000));
+  const hours = Math.floor((diffMs % (24 * 60 * 60 * 1000)) / (1000 * 60 * 60));
+  const mins = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
+  if (days > 0) return `${days}d ${hours}h`;
   return `${hours}h ${mins}m`;
 }
 
@@ -139,6 +168,8 @@ type CompetitionEventRow = {
   status: string;
   is_active: boolean;
   prize_amount_minor_units?: number | string | null;
+  weekly_prize_minor_units?: number | string | null;
+  monthly_prize_minor_units?: number | string | null;
   prize_currency?: string | null;
   phase: "live" | "upcoming" | "past";
 };
@@ -155,6 +186,55 @@ function formatPrize(amountMinorUnits: number, currency: string) {
     maximumFractionDigits: amountMinorUnits % 100 === 0 ? 0 : 2,
   }).format(amountMinorUnits / 100);
   return `${symbolByCurrency[normalizedCurrency] || `${normalizedCurrency} `}${amount}`;
+}
+
+/** Minor units shown for leaderboard / badges for the selected period (matches server effectivePrizeMinorUnits when present). */
+function effectivePrizeMinorForPeriod(activeEvent: Record<string, unknown> | null, p: Period): number {
+  const eff = Number((activeEvent as { effectivePrizeMinorUnits?: number })?.effectivePrizeMinorUnits);
+  if (Number.isFinite(eff)) return Math.round(eff);
+  const daily = Number(
+    (activeEvent as { prizeAmountMinorUnits?: number })?.prizeAmountMinorUnits ??
+      (activeEvent as { prize_amount_minor_units?: number })?.prize_amount_minor_units ??
+      5000,
+  );
+  const weekly = Number(
+    (activeEvent as { weeklyPrizeMinorUnits?: number })?.weeklyPrizeMinorUnits ??
+      (activeEvent as { weekly_prize_minor_units?: number })?.weekly_prize_minor_units ??
+      daily,
+  );
+  const monthly = Number(
+    (activeEvent as { monthlyPrizeMinorUnits?: number })?.monthlyPrizeMinorUnits ??
+      (activeEvent as { monthly_prize_minor_units?: number })?.monthly_prize_minor_units ??
+      daily,
+  );
+  if (p === "this_week" || p === "last_week") return weekly;
+  if (p === "this_month" || p === "last_month") return monthly;
+  return daily;
+}
+
+function snapshotWinnerPrize(
+  w: Record<string, unknown>,
+  boardMinor: number,
+  boardCurrency: string,
+): { minor: number; currency: string } {
+  const prizeMinorUnits = Number(w?.prize_minor_units);
+  if (Number.isFinite(prizeMinorUnits)) {
+    return { minor: Math.round(prizeMinorUnits), currency: String(w.prize_currency || boardCurrency) };
+  }
+  const ev = w?.rules_json as { event?: Record<string, unknown> } | undefined;
+  const e = ev?.event;
+  const d = Number(
+    e?.prizeAmountMinorUnits ?? e?.prize_amount_minor_units ?? boardMinor,
+  );
+  const we = Number(e?.weeklyPrizeMinorUnits ?? e?.weekly_prize_minor_units ?? d);
+  const mo = Number(e?.monthlyPrizeMinorUnits ?? e?.monthly_prize_minor_units ?? d);
+  const tier = String(w.period || "day");
+  const minor =
+    tier === "week" ? Math.round(we) : tier === "month" ? Math.round(mo) : Math.round(d);
+  return {
+    minor,
+    currency: String(e?.prizeCurrency || e?.prize_currency || boardCurrency),
+  };
 }
 
 function getDefaultEventWindow() {
@@ -194,6 +274,8 @@ export default function DailyChallengeClient({
     name: "Daily Challenge",
     ...getDefaultEventWindow(),
     prizeAmount: "50",
+    weeklyPrizeAmount: "",
+    monthlyPrizeAmount: "",
     prizeCurrency: "INR",
   }));
   const [competitionEvents, setCompetitionEvents] = useState<CompetitionEventRow[]>([]);
@@ -205,6 +287,8 @@ export default function DailyChallengeClient({
     endsLocal: string;
     is_active: boolean;
     prizeAmount: string;
+    weeklyPrizeAmount: string;
+    monthlyPrizeAmount: string;
     prizeCurrency: string;
   } | null>(null);
   const [savingEventId, setSavingEventId] = useState<string | null>(null);
@@ -230,7 +314,7 @@ export default function DailyChallengeClient({
       if (fresh) params.set("fresh", "1");
       const [leaderboardRes, winnersRes] = await Promise.all([
         fetch(`/api/competition/leaderboard?${params.toString()}`),
-        fetch("/api/competition/winners/daily?days=15"),
+        fetch(`/api/competition/winners/daily?days=15&period=${period}`),
       ]);
       if (!leaderboardRes.ok) {
         const msg = await leaderboardRes.json();
@@ -300,6 +384,8 @@ export default function DailyChallengeClient({
       if (isAdmin) {
         const adminRefreshRes = await fetch("/api/admin/competition/refresh", {
           method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ period }),
         });
         if (!adminRefreshRes.ok) {
           const msg = await adminRefreshRes.json().catch(() => ({}));
@@ -338,15 +424,15 @@ export default function DailyChallengeClient({
   const totalItems = pagination?.totalItems ?? 0;
   const totalPages = pagination?.totalPages ?? 1;
   const lastUpdated = fromNow(payload?.generatedAt);
-  const endsIn = getHoursUntilIstMidnight();
-  const activeEvent = payload?.event || selectedLiveEvent || selectedEvent || null;
-  const prizeAmountMinorUnits = Number(
-    activeEvent?.prizeAmountMinorUnits ??
-      activeEvent?.prize_amount_minor_units ??
-      5000,
-  );
+  const selectedPeriodLabel = PERIOD_LABELS[period];
+  const endsIn = getTimeUntil(payload?.effectiveRange?.end);
+  const activeEvent =
+    (payload?.event || selectedLiveEvent || selectedEvent || null) as Record<string, unknown> | null;
+  const prizeAmountMinorUnits = effectivePrizeMinorForPeriod(activeEvent, period);
   const prizeCurrency = String(
-    activeEvent?.prizeCurrency || activeEvent?.prize_currency || "INR",
+    (activeEvent as { prizeCurrency?: string })?.prizeCurrency ||
+      (activeEvent as { prize_currency?: string })?.prize_currency ||
+      "INR",
   );
   const prizeLabel = formatPrize(prizeAmountMinorUnits, prizeCurrency);
   const cooldownMs = isAdmin
@@ -421,16 +507,27 @@ export default function DailyChallengeClient({
       if (endsAt.getTime() <= startsAt.getTime()) {
         throw new Error("End date must be after start date");
       }
+      const dailyMu = Math.max(0, Math.round(Number(eventForm.prizeAmount || 0) * 100));
+      const payloadBody: Record<string, unknown> = {
+        name: eventForm.name.trim() || "Daily Challenge",
+        startsAt: startsAt.toISOString(),
+        endsAt: endsAt.toISOString(),
+        prizeAmountMinorUnits: dailyMu,
+        prizeCurrency: eventForm.prizeCurrency,
+      };
+      const wWeekly = eventForm.weeklyPrizeAmount.trim();
+      if (wWeekly !== "") {
+        payloadBody.weeklyPrizeMinorUnits = Math.max(0, Math.round(Number(wWeekly || 0) * 100));
+      }
+      const wMonthly = eventForm.monthlyPrizeAmount.trim();
+      if (wMonthly !== "") {
+        payloadBody.monthlyPrizeMinorUnits = Math.max(0, Math.round(Number(wMonthly || 0) * 100));
+      }
+
       const res = await fetch("/api/admin/competition/event", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name: eventForm.name.trim() || "Daily Challenge",
-          startsAt: startsAt.toISOString(),
-          endsAt: endsAt.toISOString(),
-          prizeAmountMinorUnits: Math.max(0, Math.round(Number(eventForm.prizeAmount || 0) * 100)),
-          prizeCurrency: eventForm.prizeCurrency,
-        }),
+        body: JSON.stringify(payloadBody),
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json?.error || "Failed to create competition");
@@ -446,12 +543,17 @@ export default function DailyChallengeClient({
 
   const beginEditEvent = (row: CompetitionEventRow) => {
     setEditingEventId(row.id);
+    const dailyMu = Number(row.prize_amount_minor_units ?? 5000);
+    const weeklyMu = Number(row.weekly_prize_minor_units ?? dailyMu);
+    const monthlyMu = Number(row.monthly_prize_minor_units ?? dailyMu);
     setEditEventDraft({
       name: row.name,
       startsLocal: formatForDatetimeLocal(new Date(row.starts_at)),
       endsLocal: formatForDatetimeLocal(new Date(row.ends_at)),
       is_active: row.is_active,
-      prizeAmount: String(Number(row.prize_amount_minor_units ?? 5000) / 100),
+      prizeAmount: String(dailyMu / 100),
+      weeklyPrizeAmount: String(weeklyMu / 100),
+      monthlyPrizeAmount: String(monthlyMu / 100),
       prizeCurrency: row.prize_currency || "INR",
     });
     setEventsPanelMessage(null);
@@ -482,6 +584,14 @@ export default function DailyChallengeClient({
           is_active: editEventDraft.is_active,
           makeSoleActive: makeSoleActive === true,
           prizeAmountMinorUnits: Math.max(0, Math.round(Number(editEventDraft.prizeAmount || 0) * 100)),
+          weeklyPrizeMinorUnits: Math.max(
+            0,
+            Math.round(Number(editEventDraft.weeklyPrizeAmount || 0) * 100),
+          ),
+          monthlyPrizeMinorUnits: Math.max(
+            0,
+            Math.round(Number(editEventDraft.monthlyPrizeAmount || 0) * 100),
+          ),
           prizeCurrency: editEventDraft.prizeCurrency,
         }),
       });
@@ -541,6 +651,14 @@ export default function DailyChallengeClient({
     return `${new Date(isoStart).toLocaleString("en-IN", opts)} → ${new Date(isoEnd).toLocaleString("en-IN", opts)}`;
   };
 
+  const fmtWinnerPeriod = (row: any) => {
+    const label = SNAPSHOT_PERIOD_LABELS[row?.period || "day"] || "Period";
+    if (row?.period_start && row?.period_end) {
+      return `${label} • ${fmtEventRange(row.period_start, row.period_end)}`;
+    }
+    return `${label} • ${row?.snapshot_date || "Snapshot"}`;
+  };
+
   return (
     <div className="max-w-6xl mx-auto px-3 sm:px-4 py-4 sm:py-6 md:py-8 space-y-6">
       <div>
@@ -570,25 +688,27 @@ export default function DailyChallengeClient({
                 isDark ? "text-gray-300" : "text-gray-700",
               )}
             >
-              Compete daily for two independent trophies: Most Views and Most Verified Reels.
-              Refreshes hourly; eligibility affects winners, not visibility.
+              Compete across daily, weekly, and monthly windows for two independent trophies: Most Views and Most
+              Verified Reels. Refreshes hourly; eligibility affects winners, not visibility.
             </p>
             <div className="mt-5 grid grid-cols-1 md:grid-cols-3 gap-3">
               <div className={cn("rounded-xl px-3.5 py-3 border", isDark ? "border-violet-500/25 bg-violet-500/10" : "border-violet-200/90 bg-violet-50/80")}>
                 <p className="text-[11px] uppercase tracking-wider text-muted-foreground font-semibold">Expected Earning</p>
                 <p className="font-semibold flex items-center gap-1.5 mt-1">
-                  <Trophy className="w-4 h-4" /> 2 winners • {prizeLabel} each
+                  <Trophy className="w-4 h-4" /> {selectedPeriodLabel}: 2 winners • {prizeLabel} each
                 </p>
               </div>
               <div className={cn("rounded-xl px-3.5 py-3 border", isDark ? "border-amber-500/25 bg-amber-500/10" : "border-amber-200/90 bg-amber-50/80")}>
-                <p className="text-[11px] uppercase tracking-wider text-muted-foreground font-semibold">Round Ends</p>
+                <p className="text-[11px] uppercase tracking-wider text-muted-foreground font-semibold">Period Ends</p>
                 <p className="font-semibold flex items-center gap-1.5 mt-1">
                   <Clock3 className="w-4 h-4" /> Ends in {endsIn}
                 </p>
               </div>
               <div className={cn("rounded-xl px-3.5 py-3 border", isDark ? "border-emerald-500/25 bg-emerald-500/10" : "border-emerald-200/90 bg-emerald-50/80")}>
                 <p className="text-[11px] uppercase tracking-wider text-muted-foreground font-semibold">Motivation</p>
-                <p className="font-semibold mt-1">Auto-lock at 12:05 AM IST</p>
+                <p className="font-semibold mt-1">
+                  Daily: locks the whole previous IST day (job ~00:05 IST) · Weekly Sun UTC · Monthly (IST rollover)
+                </p>
               </div>
             </div>
           </div>
@@ -668,20 +788,19 @@ export default function DailyChallengeClient({
           <AlertCircle className={cn("w-5 h-5 shrink-0 mt-0.5", isDark ? "text-amber-200" : "text-amber-700")} />
           <div className="min-w-0">
             <p className={cn("font-semibold", isDark ? "text-amber-50" : "text-amber-950")}>
-              No active Daily Challenge
+              No Daily Challenge results
             </p>
             <p className={cn("text-sm mt-1.5 leading-relaxed", isDark ? "text-amber-100/90" : "text-amber-900/85")}>
               {isAdmin ? (
                 <>
-                  There is no selected competition event whose dates are live right now. Use{" "}
+                  There is no selected competition event covering this period. Use{" "}
                   <span className="font-medium">Competition windows</span> below to create one or mark one as selected
                   for the leaderboard.
                 </>
               ) : (
                 <>
-                  There isn&apos;t a live Daily Challenge season right now, so rankings and eligibility are paused.
-                  Check back soon — once the team opens the next window, leaderboards and your progress will show here
-                  again.
+                  There isn&apos;t a Daily Challenge event covering this period, so rankings and eligibility are paused.
+                  Check another time range or come back once the next event opens.
                 </>
               )}
             </p>
@@ -706,8 +825,7 @@ export default function DailyChallengeClient({
           <CardContent className="pt-1 space-y-6 text-sm">
             {!hasSelectedEvent && (
               <p className="text-xs text-amber-600 dark:text-amber-400 rounded-lg border border-amber-200/80 dark:border-amber-500/30 bg-amber-50/80 dark:bg-amber-500/10 px-3 py-2">
-                No selected event is currently inside its live dates. Create one below, or select an upcoming event by
-                editing it.
+                No event is selected for the leaderboard. Create one below, or select an event by editing it.
               </p>
             )}
 
@@ -751,16 +869,46 @@ export default function DailyChallengeClient({
                 </div>
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-[1fr_160px] gap-3">
-                <div>
-                  <p className="text-xs text-muted-foreground mb-1">Prize amount per winner</p>
-                  <Input
-                    type="number"
-                    min={0}
-                    step="0.01"
-                    value={eventForm.prizeAmount}
-                    onChange={(e) => setEventForm((p) => ({ ...p, prizeAmount: e.target.value }))}
-                    className="h-10 text-sm"
-                  />
+                <div className="space-y-2">
+                  <div>
+                    <p className="text-xs text-muted-foreground mb-1">Daily prize per winner</p>
+                    <Input
+                      type="number"
+                      min={0}
+                      step="0.01"
+                      value={eventForm.prizeAmount}
+                      onChange={(e) => setEventForm((p) => ({ ...p, prizeAmount: e.target.value }))}
+                      className="h-10 text-sm"
+                    />
+                  </div>
+                  <div>
+                    <p className="text-xs text-muted-foreground mb-1">
+                      Weekly prize (optional, defaults to daily)
+                    </p>
+                    <Input
+                      type="number"
+                      min={0}
+                      step="0.01"
+                      value={eventForm.weeklyPrizeAmount}
+                      onChange={(e) => setEventForm((p) => ({ ...p, weeklyPrizeAmount: e.target.value }))}
+                      className="h-10 text-sm"
+                      placeholder="Same as daily"
+                    />
+                  </div>
+                  <div>
+                    <p className="text-xs text-muted-foreground mb-1">
+                      Monthly prize (optional, defaults to daily)
+                    </p>
+                    <Input
+                      type="number"
+                      min={0}
+                      step="0.01"
+                      value={eventForm.monthlyPrizeAmount}
+                      onChange={(e) => setEventForm((p) => ({ ...p, monthlyPrizeAmount: e.target.value }))}
+                      className="h-10 text-sm"
+                      placeholder="Same as daily"
+                    />
+                  </div>
                 </div>
                 <div>
                   <p className="text-xs text-muted-foreground mb-1">Currency</p>
@@ -862,18 +1010,50 @@ export default function DailyChallengeClient({
                                     </div>
                                   </div>
                                   <div className="grid grid-cols-1 sm:grid-cols-[1fr_160px] gap-3">
-                                    <div>
-                                      <p className="text-xs text-muted-foreground mb-1">Prize amount per winner</p>
-                                      <Input
-                                        type="number"
-                                        min={0}
-                                        step="0.01"
-                                        value={editEventDraft.prizeAmount}
-                                        onChange={(e) =>
-                                          setEditEventDraft((d) => (d ? { ...d, prizeAmount: e.target.value } : d))
-                                        }
-                                        className="h-10 text-sm"
-                                      />
+                                    <div className="space-y-2">
+                                      <div>
+                                        <p className="text-xs text-muted-foreground mb-1">Daily prize per winner</p>
+                                        <Input
+                                          type="number"
+                                          min={0}
+                                          step="0.01"
+                                          value={editEventDraft.prizeAmount}
+                                          onChange={(e) =>
+                                            setEditEventDraft((d) => (d ? { ...d, prizeAmount: e.target.value } : d))
+                                          }
+                                          className="h-10 text-sm"
+                                        />
+                                      </div>
+                                      <div>
+                                        <p className="text-xs text-muted-foreground mb-1">Weekly prize per winner</p>
+                                        <Input
+                                          type="number"
+                                          min={0}
+                                          step="0.01"
+                                          value={editEventDraft.weeklyPrizeAmount}
+                                          onChange={(e) =>
+                                            setEditEventDraft((d) =>
+                                              d ? { ...d, weeklyPrizeAmount: e.target.value } : d,
+                                            )
+                                          }
+                                          className="h-10 text-sm"
+                                        />
+                                      </div>
+                                      <div>
+                                        <p className="text-xs text-muted-foreground mb-1">Monthly prize per winner</p>
+                                        <Input
+                                          type="number"
+                                          min={0}
+                                          step="0.01"
+                                          value={editEventDraft.monthlyPrizeAmount}
+                                          onChange={(e) =>
+                                            setEditEventDraft((d) =>
+                                              d ? { ...d, monthlyPrizeAmount: e.target.value } : d,
+                                            )
+                                          }
+                                          className="h-10 text-sm"
+                                        />
+                                      </div>
                                     </div>
                                     <div>
                                       <p className="text-xs text-muted-foreground mb-1">Currency</p>
@@ -938,8 +1118,27 @@ export default function DailyChallengeClient({
                                       ) : null}
                                     </div>
                                     <p className="text-xs text-muted-foreground break-words">
-                                      {fmtEventRange(row.starts_at, row.ends_at)} · {row.timezone} ·{" "}
-                                      {formatPrize(Number(row.prize_amount_minor_units ?? 5000), row.prize_currency || "INR")} per winner
+                                      {fmtEventRange(row.starts_at, row.ends_at)} · {row.timezone}
+                                      {" · "}D{" "}
+                                      {formatPrize(
+                                        Number(row.prize_amount_minor_units ?? 5000),
+                                        row.prize_currency || "INR",
+                                      )}{" "}
+                                      · W{" "}
+                                      {formatPrize(
+                                        Number(
+                                          row.weekly_prize_minor_units ?? row.prize_amount_minor_units ?? 5000,
+                                        ),
+                                        row.prize_currency || "INR",
+                                      )}{" "}
+                                      · M{" "}
+                                      {formatPrize(
+                                        Number(
+                                          row.monthly_prize_minor_units ?? row.prize_amount_minor_units ?? 5000,
+                                        ),
+                                        row.prize_currency || "INR",
+                                      )}{" "}
+                                      (per winner)
                                     </p>
                                   </div>
                                   <Button
@@ -983,7 +1182,7 @@ export default function DailyChallengeClient({
             <CardTitle className="text-base">Eligibility Rules for Selected Event</CardTitle>
           </CardHeader>
           <CardContent className="pt-1 space-y-3">
-            {!hasActiveEvent && (
+            {!hasSelectedEvent && (
               <p className="text-xs text-amber-600 dark:text-amber-400">
                 Create or select a Daily Challenge event above before saving event-specific rules. Defaults are applied
                 when an event is created.
@@ -1089,8 +1288,8 @@ export default function DailyChallengeClient({
             <CardContent className="grid md:grid-cols-2 gap-3 text-sm pt-1">
               {!hasActiveEvent && (
                 <p className="md:col-span-2 text-xs text-muted-foreground rounded-lg border px-3 py-2 bg-muted/30">
-                  No live season is configured. Ranks and eligibility below will populate when the next Daily Challenge
-                  opens.
+                  No Daily Challenge event covers this period. Ranks and eligibility below will populate when a matching
+                  event is available.
                 </p>
               )}
               <div className={cn("rounded-xl border p-3.5", isDark ? "border-white/10" : "border-gray-200")}>
@@ -1322,13 +1521,13 @@ export default function DailyChallengeClient({
         <CardHeader className="pb-2">
           <CardTitle className="flex items-center gap-2">
             <Crown className="w-5 h-5" />
-            Daily Winners (Recent)
+            Winners (Recent)
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-2">
           {winners.length === 0 ? (
             <div className="py-8 text-sm text-muted-foreground text-center">
-              No winner snapshots yet. Daily winners are auto-locked after IST day close.
+              No winner snapshots yet. Winners are locked after each configured period closes.
             </div>
           ) : (
             (() => {
@@ -1350,13 +1549,12 @@ export default function DailyChallengeClient({
                       const winnerName = hasWinner
                         ? w?.metrics_json?.username || w?.metrics_json?.fullName || "Winner"
                         : "N/A";
-                      const rowPrizeAmountMinorUnits = Number(
-                        w?.rules_json?.event?.prizeAmountMinorUnits ?? prizeAmountMinorUnits,
+                      const { minor: snapMinor, currency: snapCur } = snapshotWinnerPrize(
+                        w as Record<string, unknown>,
+                        prizeAmountMinorUnits,
+                        prizeCurrency,
                       );
-                      const rowPrizeCurrency = String(
-                        w?.rules_json?.event?.prizeCurrency || prizeCurrency,
-                      );
-                      const rewardLabel = formatPrize(rowPrizeAmountMinorUnits, rowPrizeCurrency);
+                      const rewardLabel = formatPrize(snapMinor, snapCur);
                       const statsSuffix =
                         w.category === "views"
                           ? ` • ${number(verifiedViews)} verified views • ${number(verifiedReels)} verified reels`
@@ -1371,7 +1569,7 @@ export default function DailyChallengeClient({
                         >
                           <div className="min-w-0">
                             <p className="font-medium">
-                              {w.snapshot_date} - <span className="capitalize">{w.category}</span>
+                              {fmtWinnerPeriod(w)} - <span className="capitalize">{w.category}</span>
                             </p>
                             <p className="text-xs text-muted-foreground mt-1 break-words sm:truncate">
                               Winner:{" "}

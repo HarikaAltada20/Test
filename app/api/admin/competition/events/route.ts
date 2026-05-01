@@ -29,7 +29,9 @@ export async function GET() {
     const supabase = await createClient();
     const { data: rows, error } = await supabase
       .from("competition_event")
-      .select("id,name,starts_at,ends_at,timezone,status,is_active,created_at,prize_amount_minor_units,prize_currency")
+      .select(
+        "id,name,starts_at,ends_at,timezone,status,is_active,created_at,prize_amount_minor_units,weekly_prize_minor_units,monthly_prize_minor_units,prize_currency",
+      )
       .order("starts_at", { ascending: false });
 
     if (error) throw error;

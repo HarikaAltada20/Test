@@ -9,6 +9,7 @@ import {
   CompetitionPeriod,
   SubmissionScope,
   getDailyChallengeLeaderboard,
+  getPeriodRange,
 } from "@/lib/daily-challenge";
 import {
   DAILY_CHALLENGE_REFRESH_COOLDOWN_MS_ADMIN,
@@ -29,6 +30,10 @@ const VALID_PERIODS: CompetitionPeriod[] = [
 const VALID_SCOPES: SubmissionScope[] = ["pending", "verified", "all"];
 
 export const dynamic = "force-dynamic";
+
+function isCurrentPeriod(period: CompetitionPeriod) {
+  return period === "today" || period === "this_week" || period === "this_month";
+}
 
 function parsePositiveInt(
   value: string | null,
@@ -72,12 +77,19 @@ export async function GET(request: NextRequest) {
 
     const supabaseAdmin = createAdminClient();
     const nowIso = new Date().toISOString();
-    const { data: activeEventRow, error: activeEventErr } = await supabaseAdmin
+    const periodRange = getPeriodRange(period);
+    let eventQuery = supabaseAdmin
       .from("competition_event")
       .select("id")
-      .eq("is_active", true)
-      .lte("starts_at", nowIso)
-      .gte("ends_at", nowIso)
+      .eq("is_active", true);
+    if (isCurrentPeriod(period) || !periodRange) {
+      eventQuery = eventQuery.lte("starts_at", nowIso).gte("ends_at", nowIso);
+    } else {
+      eventQuery = eventQuery
+        .lte("starts_at", periodRange.end.toISOString())
+        .gte("ends_at", periodRange.start.toISOString());
+    }
+    const { data: activeEventRow, error: activeEventErr } = await eventQuery
       .order("starts_at", { ascending: false })
       .limit(1)
       .maybeSingle();
@@ -106,7 +118,7 @@ export async function GET(request: NextRequest) {
 
       if (!activeEventRow?.id) {
         return NextResponse.json(
-          { error: "No active competition event found" },
+          { error: "No competition event found for this period" },
           { status: 400 },
         );
       }
@@ -144,7 +156,7 @@ export async function GET(request: NextRequest) {
       page,
       limit,
     })}:event:${eventCacheSegment}:user:${user.id}`;
-    if (!fresh) {
+    if (!fresh && activeEventRow?.id) {
       const cached = dailyChallengeCache.get<any>(cacheKey);
       if (cached) return NextResponse.json({ ...cached, cached: true });
     }
@@ -154,7 +166,7 @@ export async function GET(request: NextRequest) {
       scope,
       page,
       limit,
-        meUserId: user.id,
+      meUserId: user.id,
     });
 
     dailyChallengeCache.set(cacheKey, payload, 60 * 60 * 1000);

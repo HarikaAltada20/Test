@@ -69,6 +69,20 @@ export async function POST(request: NextRequest) {
     }
 
     const prizeAmountMinorUnits = parsePrizeAmountMinorUnits(body?.prizeAmountMinorUnits);
+    const weeklyParsed = parsePrizeAmountMinorUnits(body?.weeklyPrizeMinorUnits);
+    const monthlyParsed = parsePrizeAmountMinorUnits(body?.monthlyPrizeMinorUnits);
+    const weeklyPrizeMinorUnits =
+      typeof body?.weeklyPrizeMinorUnits === "undefined" ||
+      body?.weeklyPrizeMinorUnits === null ||
+      body?.weeklyPrizeMinorUnits === ""
+        ? prizeAmountMinorUnits
+        : weeklyParsed;
+    const monthlyPrizeMinorUnits =
+      typeof body?.monthlyPrizeMinorUnits === "undefined" ||
+      body?.monthlyPrizeMinorUnits === null ||
+      body?.monthlyPrizeMinorUnits === ""
+        ? prizeAmountMinorUnits
+        : monthlyParsed;
     const prizeCurrency = parseCurrency(body?.prizeCurrency);
 
     const supabase = createAdminClient();
@@ -83,9 +97,13 @@ export async function POST(request: NextRequest) {
         status: "active",
         is_active: false,
         prize_amount_minor_units: prizeAmountMinorUnits,
+        weekly_prize_minor_units: weeklyPrizeMinorUnits,
+        monthly_prize_minor_units: monthlyPrizeMinorUnits,
         prize_currency: prizeCurrency,
       })
-      .select("id,name,starts_at,ends_at,timezone,status,is_active,prize_amount_minor_units,prize_currency")
+      .select(
+        "id,name,starts_at,ends_at,timezone,status,is_active,prize_amount_minor_units,weekly_prize_minor_units,monthly_prize_minor_units,prize_currency",
+      )
       .single();
 
     if (insertError) throw insertError;
@@ -117,7 +135,9 @@ export async function POST(request: NextRequest) {
 
     const { data: finalEvent, error: readFinalError } = await supabase
       .from("competition_event")
-      .select("id,name,starts_at,ends_at,timezone,status,is_active,prize_amount_minor_units,prize_currency")
+      .select(
+        "id,name,starts_at,ends_at,timezone,status,is_active,prize_amount_minor_units,weekly_prize_minor_units,monthly_prize_minor_units,prize_currency",
+      )
       .eq("id", event.id)
       .single();
     if (readFinalError) throw readFinalError;

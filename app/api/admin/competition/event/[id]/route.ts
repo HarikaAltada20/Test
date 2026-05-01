@@ -88,6 +88,16 @@ export async function PATCH(
       updates.prize_amount_minor_units = prizeAmountMinorUnits;
     }
 
+    const weeklyPrizeMinorUnits = parsePrizeAmountMinorUnits(body?.weeklyPrizeMinorUnits);
+    if (weeklyPrizeMinorUnits !== null) {
+      updates.weekly_prize_minor_units = weeklyPrizeMinorUnits;
+    }
+
+    const monthlyPrizeMinorUnits = parsePrizeAmountMinorUnits(body?.monthlyPrizeMinorUnits);
+    if (monthlyPrizeMinorUnits !== null) {
+      updates.monthly_prize_minor_units = monthlyPrizeMinorUnits;
+    }
+
     const prizeCurrency = parseCurrency(body?.prizeCurrency);
     if (prizeCurrency !== null) {
       updates.prize_currency = prizeCurrency;
@@ -121,7 +131,9 @@ export async function PATCH(
       .from("competition_event")
       .update(updates)
       .eq("id", id)
-      .select("id,name,starts_at,ends_at,timezone,status,is_active,prize_amount_minor_units,prize_currency")
+      .select(
+        "id,name,starts_at,ends_at,timezone,status,is_active,prize_amount_minor_units,weekly_prize_minor_units,monthly_prize_minor_units,prize_currency",
+      )
       .single();
 
     if (updateErr) throw updateErr;
@@ -143,7 +155,9 @@ export async function PATCH(
 
     const { data: finalEvent, error: readFinalError } = await supabase
       .from("competition_event")
-      .select("id,name,starts_at,ends_at,timezone,status,is_active,prize_amount_minor_units,prize_currency")
+      .select(
+        "id,name,starts_at,ends_at,timezone,status,is_active,prize_amount_minor_units,weekly_prize_minor_units,monthly_prize_minor_units,prize_currency",
+      )
       .eq("id", id)
       .single();
     if (readFinalError) throw readFinalError;

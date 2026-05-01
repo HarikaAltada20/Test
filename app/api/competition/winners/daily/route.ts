@@ -10,6 +10,13 @@ function parseDays(value: string | null, fallback = 30): number {
   return Math.min(60, Math.max(1, Math.floor(parsed)));
 }
 
+function parseSnapshotPeriod(value: string | null): "day" | "week" | "month" | null {
+  if (value === "this_week" || value === "last_week" || value === "week") return "week";
+  if (value === "this_month" || value === "last_month" || value === "month") return "month";
+  if (value === "today" || value === "yesterday" || value === "day") return "day";
+  return null;
+}
+
 export async function GET(request: NextRequest) {
   try {
     const supabase = await createClient();
@@ -22,7 +29,8 @@ export async function GET(request: NextRequest) {
 
     const days = parseDays(request.nextUrl.searchParams.get("days"));
     const eventId = request.nextUrl.searchParams.get("event_id");
-    const winners = await getDailyWinnersHistory(days, eventId);
+    const period = parseSnapshotPeriod(request.nextUrl.searchParams.get("period"));
+    const winners = await getDailyWinnersHistory(days, eventId, period);
     return NextResponse.json({ winners });
   } catch (error) {
     console.error("[competition/winners/daily] error", error);

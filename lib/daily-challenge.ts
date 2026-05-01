@@ -55,6 +55,7 @@ type SnapshotOptions = {
   reason?: string;
   allowOverwrite?: boolean;
   useAdminClient?: boolean;
+  period?: CompetitionPeriod;
 };
 
 type DataClientMode = "session" | "admin";
@@ -105,6 +106,109 @@ function getIstWeekStart(date: Date) {
   const day = shifted.getUTCDay(); // 0 Sunday
   const mondayDiff = day === 0 ? -6 : 1 - day;
   return addIstDays(startDay, mondayDiff);
+}
+
+function isCurrentPeriod(period: CompetitionPeriod) {
+  return period === "today" || period === "this_week" || period === "this_month";
+}
+
+function getSnapshotPeriod(period: CompetitionPeriod): "day" | "week" | "month" {
+  if (period === "this_week" || period === "last_week") return "week";
+  if (period === "this_month" || period === "last_month") return "month";
+  return "day";
+}
+
+/** Prize tier used for leaderboard copy and locks (day / week / month window). */
+export function getPrizeTierForCompetitionPeriod(period: CompetitionPeriod): "day" | "week" | "month" {
+  return getSnapshotPeriod(period);
+}
+
+type EventPrizeRow = {
+  prize_amount_minor_units?: number | string | null;
+  weekly_prize_minor_units?: number | string | null;
+  monthly_prize_minor_units?: number | string | null;
+};
+
+export function prizeMinorUnitsForTier(
+  row: EventPrizeRow,
+  tier: "day" | "week" | "month",
+): number {
+  const daily = Math.round(Number(row.prize_amount_minor_units ?? 5000));
+  if (tier === "week") return Math.round(Number(row.weekly_prize_minor_units ?? daily));
+  if (tier === "month") return Math.round(Number(row.monthly_prize_minor_units ?? daily));
+  return daily;
+}
+
+function buildLeaderboardEventPayload(
+  event: {
+    id: string;
+    name: string | null;
+    starts_at: string | null;
+    ends_at: string | null;
+    timezone: string | null;
+    prize_amount_minor_units?: number | string | null;
+    weekly_prize_minor_units?: number | string | null;
+    monthly_prize_minor_units?: number | string | null;
+    prize_currency?: string | null;
+  },
+  period: CompetitionPeriod,
+) {
+  const currency = String(event.prize_currency || "INR");
+  const tier = getPrizeTierForCompetitionPeriod(period);
+  return {
+    id: event.id,
+    name: event.name,
+    startsAt: event.starts_at,
+    endsAt: event.ends_at,
+    timezone: event.timezone,
+    prizeAmountMinorUnits: prizeMinorUnitsForTier(event, "day"),
+    weeklyPrizeMinorUnits: prizeMinorUnitsForTier(event, "week"),
+    monthlyPrizeMinorUnits: prizeMinorUnitsForTier(event, "month"),
+    effectivePrizeMinorUnits: prizeMinorUnitsForTier(event, tier),
+    prizeCurrency: currency,
+  };
+}
+
+/** True when the competition_event row select includes prize columns (for snapshot prize fields). */
+function snapshotPrizeFieldsFromPayloadEvent(
+  ev: ReturnType<typeof buildLeaderboardEventPayload> | null,
+  snapshotTier: "day" | "week" | "month",
+): { prize_minor_units: number; prize_currency: string } {
+  const row: EventPrizeRow = {
+    prize_amount_minor_units: ev?.prizeAmountMinorUnits,
+    weekly_prize_minor_units: ev?.weeklyPrizeMinorUnits,
+    monthly_prize_minor_units: ev?.monthlyPrizeMinorUnits,
+  };
+  return {
+    prize_minor_units: prizeMinorUnitsForTier(row, snapshotTier),
+    prize_currency: String(ev?.prizeCurrency || "INR"),
+  };
+}
+
+/** For cron: IST calendar day-of-month === 1 (e.g. right after IST month rollover when scheduled ~00:xx IST). */
+export function isIstFirstCalendarDay(now = new Date()) {
+  return toIstDateParts(now).day === 1;
+}
+
+function toIstDateKey(date: Date) {
+  const p = toIstDateParts(date);
+  return `${p.year}-${String(p.month + 1).padStart(2, "0")}-${String(p.day).padStart(2, "0")}`;
+}
+
+function clampRangeToEvent(
+  range: { start: Date; end: Date } | null,
+  event?: { starts_at?: string | null; ends_at?: string | null } | null,
+) {
+  const eventStart = event?.starts_at ? new Date(event.starts_at) : null;
+  const eventEnd = event?.ends_at ? new Date(event.ends_at) : null;
+  if (!range) {
+    if (!eventStart || !eventEnd) return null;
+    return { start: eventStart, end: eventEnd };
+  }
+  const start = eventStart && eventStart > range.start ? eventStart : range.start;
+  const end = eventEnd && eventEnd < range.end ? eventEnd : range.end;
+  if (end.getTime() <= start.getTime()) return null;
+  return { start, end };
 }
 
 export function getPeriodRange(period: CompetitionPeriod, now = new Date()) {
@@ -315,9 +419,13 @@ export async function getDailyChallengeLeaderboard(params: {
   configOverride?: EligibilityConfig | null;
 }) {
   const clientMode = params.clientMode ?? "session";
+  const requestedRange = params.rangeOverride ?? getPeriodRange(params.period);
   const config =
     params.configOverride === undefined
-      ? await getActiveEventAndConfig(clientMode)
+      ? await getActiveEventAndConfig(
+          clientMode,
+          isCurrentPeriod(params.period) ? undefined : requestedRange,
+        )
       : params.configOverride;
   if (!config) {
     return {
@@ -328,6 +436,8 @@ export async function getDailyChallengeLeaderboard(params: {
       topCreatorsByReels: [],
       pagination: { page: params.page, limit: params.limit, totalItems: 0, totalPages: 0 },
       me: null,
+      period: params.period,
+      effectiveRange: null,
       generatedAt: new Date().toISOString(),
     };
   }
@@ -335,14 +445,31 @@ export async function getDailyChallengeLeaderboard(params: {
   const supabase = await getDataClient(clientMode);
   const { data: event, error: eventError } = await supabase
     .from("competition_event")
-    .select("id,name,starts_at,ends_at,timezone,prize_amount_minor_units,prize_currency")
+    .select(
+      "id,name,starts_at,ends_at,timezone,prize_amount_minor_units,weekly_prize_minor_units,monthly_prize_minor_units,prize_currency",
+    )
     .eq("id", config.eventId)
     .single();
   if (eventError) {
     throw eventError;
   }
 
-  const range = params.rangeOverride ?? getPeriodRange(params.period);
+  const range = clampRangeToEvent(requestedRange, event);
+  if (!range) {
+    return {
+      hasActiveEvent: false,
+      config,
+      event: event ? buildLeaderboardEventPayload(event, params.period) : null,
+      topCreatorsByViews: [],
+      topCreatorsByReels: [],
+      pagination: { page: params.page, limit: params.limit, totalItems: 0, totalPages: 0 },
+      me: null,
+      period: params.period,
+      effectiveRange: null,
+      generatedAt: new Date().toISOString(),
+    };
+  }
+
   const metricMap = await fetchCreatorMetrics({
     eventStart: event?.starts_at,
     eventEnd: event?.ends_at,
@@ -377,17 +504,12 @@ export async function getDailyChallengeLeaderboard(params: {
   return {
     hasActiveEvent: true,
     config,
-    event: event
-      ? {
-          id: event.id,
-          name: event.name,
-          startsAt: event.starts_at,
-          endsAt: event.ends_at,
-          timezone: event.timezone,
-          prizeAmountMinorUnits: Number(event.prize_amount_minor_units ?? 5000),
-          prizeCurrency: String(event.prize_currency || "INR"),
-        }
-      : null,
+    event: event ? buildLeaderboardEventPayload(event, params.period) : null,
+    period: params.period,
+    effectiveRange: {
+      start: range.start.toISOString(),
+      end: range.end.toISOString(),
+    },
     topCreatorsByViews: pagedViews.map((r) => {
       const eligibility = isEligibleForViews(r, config);
       return {
@@ -444,37 +566,48 @@ export async function getDailyChallengeLeaderboard(params: {
   };
 }
 
-export async function getDailyWinnersHistory(days = 30, eventId?: string | null) {
+export async function getDailyWinnersHistory(
+  limit = 30,
+  eventId?: string | null,
+  period?: "day" | "week" | "month" | null,
+) {
   const supabase = await createClient();
   let resolvedEventId = eventId ?? null;
 
   if (!resolvedEventId) {
-    const { data: latestWithSnapshot, error: eventErr } = await supabase
+    let latestQuery = supabase
       .from("competition_daily_winner_snapshot")
-      .select("event_id,snapshot_date")
+      .select("event_id,period_start,snapshot_date")
+      .order("period_start", { ascending: false })
       .order("snapshot_date", { ascending: false })
-      .limit(1)
-      .maybeSingle();
+      .limit(1);
+    if (period) {
+      latestQuery = latestQuery.eq("period", period);
+    }
+    const { data: latestWithSnapshot, error: eventErr } = await latestQuery.maybeSingle();
     if (eventErr) throw eventErr;
     resolvedEventId = latestWithSnapshot?.event_id ?? null;
   }
 
   if (!resolvedEventId) return [];
 
-  const { data, error } = await supabase
+  let query = supabase
     .from("competition_daily_winner_snapshot")
     .select("*")
     .eq("event_id", resolvedEventId)
+    .order("period_start", { ascending: false })
     .order("snapshot_date", { ascending: false })
-    .limit(Math.max(1, days) * 2);
-  if (error) {
-    throw error;
+    .limit(Math.max(1, limit) * 2);
+  if (period) {
+    query = query.eq("period", period);
   }
+  const { data, error } = await query;
+  if (error) throw error;
   return data || [];
 }
 
-export async function snapshotWinnersForIstDate(
-  snapshotDate: string,
+export async function snapshotWinnersForPeriod(
+  period: CompetitionPeriod,
   options: SnapshotOptions = {},
 ) {
   const mode: DataClientMode = options.useAdminClient ? "admin" : "session";
@@ -482,26 +615,28 @@ export async function snapshotWinnersForIstDate(
   const allowOverwrite = options.allowOverwrite ?? false;
 
   const supabase = await getDataClient(mode);
-  const dayStart = new Date(`${snapshotDate}T00:00:00+05:30`);
-  const dayEnd = new Date(new Date(`${snapshotDate}T00:00:00+05:30`).getTime() + 24 * 60 * 60 * 1000);
-  if (Number.isNaN(dayStart.getTime()) || Number.isNaN(dayEnd.getTime())) {
-    return { ok: false, reason: "invalid_snapshot_date" };
-  }
+  const periodRange = getPeriodRange(period);
+  if (!periodRange) return { ok: false, reason: "invalid_snapshot_period" };
   const config = await getActiveEventAndConfig(mode, {
-    start: dayStart,
-    end: dayEnd,
+    start: periodRange.start,
+    end: periodRange.end,
   });
-  if (!config) return { ok: false, reason: "no_event_for_snapshot_date" };
+  if (!config) return { ok: false, reason: "no_event_for_snapshot_period" };
 
   const payload = await getDailyChallengeLeaderboard({
-    period: "today",
+    period,
     scope: "verified",
     page: 1,
     limit: 200,
-    rangeOverride: { start: dayStart, end: dayEnd },
+    rangeOverride: periodRange,
     clientMode: mode,
     configOverride: config,
   });
+  if (!payload.effectiveRange) return { ok: false, reason: "event_does_not_overlap_period" };
+  const effectiveStart = new Date(payload.effectiveRange.start);
+  const effectiveEnd = new Date(payload.effectiveRange.end);
+  const snapshotDate = toIstDateKey(effectiveStart);
+  const snapshotPeriod = getSnapshotPeriod(period);
 
   const pickWinner = (
     rows: Array<{ eligible?: boolean; rank?: number; creatorId?: string }>,
@@ -516,10 +651,16 @@ export async function snapshotWinnersForIstDate(
   };
   const topViews = pickWinner(payload.topCreatorsByViews);
   const topReels = pickWinner(payload.topCreatorsByReels);
+  const snapPrize = snapshotPrizeFieldsFromPayloadEvent(payload.event, snapshotPeriod);
   const rows = [
     {
       event_id: config.eventId,
       snapshot_date: snapshotDate,
+      period: snapshotPeriod,
+      period_start: effectiveStart.toISOString(),
+      period_end: effectiveEnd.toISOString(),
+      prize_minor_units: snapPrize.prize_minor_units,
+      prize_currency: snapPrize.prize_currency,
       category: "views",
       winner_creator_id: topViews.row?.eligible ? topViews.row.creatorId : null,
       rank_at_snapshot: topViews.row?.rank ?? null,
@@ -539,6 +680,11 @@ export async function snapshotWinnersForIstDate(
     {
       event_id: config.eventId,
       snapshot_date: snapshotDate,
+      period: snapshotPeriod,
+      period_start: effectiveStart.toISOString(),
+      period_end: effectiveEnd.toISOString(),
+      prize_minor_units: snapPrize.prize_minor_units,
+      prize_currency: snapPrize.prize_currency,
       category: "reels",
       winner_creator_id: topReels.row?.eligible ? topReels.row.creatorId : null,
       rank_at_snapshot: topReels.row?.rank ?? null,
@@ -560,27 +706,146 @@ export async function snapshotWinnersForIstDate(
   if (allowOverwrite) {
     const { error } = await supabase
       .from("competition_daily_winner_snapshot")
-      .upsert(rows, { onConflict: "event_id,snapshot_date,category" });
+      .upsert(rows, { onConflict: "event_id,period,period_start,period_end,category" });
     if (error) throw error;
   } else {
     const { error } = await supabase
       .from("competition_daily_winner_snapshot")
       .upsert(rows, {
-        onConflict: "event_id,snapshot_date,category",
+        onConflict: "event_id,period,period_start,period_end,category",
         ignoreDuplicates: true,
       });
     if (error) throw error;
   }
 
-  return { ok: true, snapshotDate, locked: true };
+  return {
+    ok: true,
+    period,
+    snapshotPeriod,
+    snapshotDate,
+    periodStart: effectiveStart.toISOString(),
+    periodEnd: effectiveEnd.toISOString(),
+    locked: true,
+  };
 }
 
-export async function snapshotTodayWinners(reason = "manual_admin_refresh") {
-  const today = toIstDateParts(new Date());
-  const snapshotDate = `${today.year}-${String(today.month + 1).padStart(2, "0")}-${String(
-    today.day,
-  ).padStart(2, "0")}`;
-  return snapshotWinnersForIstDate(snapshotDate, {
+export async function snapshotWinnersForIstDate(
+  snapshotDate: string,
+  options: SnapshotOptions = {},
+) {
+  const mode: DataClientMode = options.useAdminClient ? "admin" : "session";
+  const reason = options.reason || "manual_admin_refresh";
+  const allowOverwrite = options.allowOverwrite ?? false;
+  const dayStart = new Date(`${snapshotDate}T00:00:00+05:30`);
+  const dayEnd = new Date(dayStart.getTime() + 24 * 60 * 60 * 1000);
+  if (Number.isNaN(dayStart.getTime()) || Number.isNaN(dayEnd.getTime())) {
+    return { ok: false, reason: "invalid_snapshot_date" };
+  }
+  const config = await getActiveEventAndConfig(mode, { start: dayStart, end: dayEnd });
+  if (!config) return { ok: false, reason: "no_event_for_snapshot_date" };
+  const payload = await getDailyChallengeLeaderboard({
+    period: "today",
+    scope: "verified",
+    page: 1,
+    limit: 200,
+    rangeOverride: { start: dayStart, end: dayEnd },
+    clientMode: mode,
+    configOverride: config,
+  });
+  if (!payload.effectiveRange) return { ok: false, reason: "event_does_not_overlap_date" };
+
+  const effectiveStart = new Date(payload.effectiveRange.start);
+  const effectiveEnd = new Date(payload.effectiveRange.end);
+  const pickWinner = (
+    rows: Array<{ eligible?: boolean; rank?: number; creatorId?: string }>,
+  ) => {
+    const top = rows[0];
+    if (top?.eligible) return { row: top, promoted: false };
+    if (config.promoteNextEligible) {
+      const promoted = rows.find((row) => row.eligible);
+      if (promoted) return { row: promoted, promoted: true };
+    }
+    return { row: top, promoted: false };
+  };
+  const topViews = pickWinner(payload.topCreatorsByViews);
+  const topReels = pickWinner(payload.topCreatorsByReels);
+  const snapPrize = snapshotPrizeFieldsFromPayloadEvent(payload.event, "day");
+  const rows = [
+    {
+      event_id: config.eventId,
+      snapshot_date: snapshotDate,
+      period: "day",
+      period_start: effectiveStart.toISOString(),
+      period_end: effectiveEnd.toISOString(),
+      prize_minor_units: snapPrize.prize_minor_units,
+      prize_currency: snapPrize.prize_currency,
+      category: "views",
+      winner_creator_id: topViews.row?.eligible ? topViews.row.creatorId : null,
+      rank_at_snapshot: topViews.row?.rank ?? null,
+      is_eligible: Boolean(topViews.row?.eligible),
+      promoted: topViews.promoted,
+      metrics_json: topViews.row || {},
+      rules_json: { ...config, event: payload.event },
+      reason: topViews.row?.eligible
+        ? topViews.promoted
+          ? `${reason}_promoted_next_eligible`
+          : reason
+        : "rank_1_not_eligible",
+    },
+    {
+      event_id: config.eventId,
+      snapshot_date: snapshotDate,
+      period: "day",
+      period_start: effectiveStart.toISOString(),
+      period_end: effectiveEnd.toISOString(),
+      prize_minor_units: snapPrize.prize_minor_units,
+      prize_currency: snapPrize.prize_currency,
+      category: "reels",
+      winner_creator_id: topReels.row?.eligible ? topReels.row.creatorId : null,
+      rank_at_snapshot: topReels.row?.rank ?? null,
+      is_eligible: Boolean(topReels.row?.eligible),
+      promoted: topReels.promoted,
+      metrics_json: topReels.row || {},
+      rules_json: { ...config, event: payload.event },
+      reason: topReels.row?.eligible
+        ? topReels.promoted
+          ? `${reason}_promoted_next_eligible`
+          : reason
+        : "rank_1_not_eligible",
+    },
+  ];
+
+  if (allowOverwrite) {
+    const { error } = await (await getDataClient(mode))
+      .from("competition_daily_winner_snapshot")
+      .upsert(rows, { onConflict: "event_id,period,period_start,period_end,category" });
+    if (error) throw error;
+  } else {
+    const { error } = await (await getDataClient(mode))
+      .from("competition_daily_winner_snapshot")
+      .upsert(rows, {
+        onConflict: "event_id,period,period_start,period_end,category",
+        ignoreDuplicates: true,
+      });
+    if (error) throw error;
+  }
+
+  return {
+    ok: true,
+    period: "today",
+    snapshotPeriod: "day",
+    snapshotDate,
+    periodStart: effectiveStart.toISOString(),
+    periodEnd: effectiveEnd.toISOString(),
+    locked: true,
+  };
+}
+
+export async function snapshotTodayWinners(
+  reason = "manual_admin_refresh",
+  period: CompetitionPeriod = "today",
+) {
+  return snapshotWinnersForPeriod(period, {
     reason,
     allowOverwrite: true,
   });
