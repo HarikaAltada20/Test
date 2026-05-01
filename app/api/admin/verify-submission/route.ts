@@ -11,6 +11,7 @@ import {
 import { MetricsService } from "@/lib/metrics-service";
 import { SUBMISSION_STATUS } from "@/lib/constants-status";
 import { verifyAdminAccess } from "@/utils/admin-auth";
+import { buildMilestoneSubmissionPayoutCentsMap } from "@/lib/milestone-contest-expected-spend";
 
 export async function POST(request: Request) {
   const supabase = await createClient();
@@ -537,59 +538,32 @@ export async function POST(request: Request) {
               : [];
 
             if (milestones.length > 0) {
-              const sortedMilestones = [...milestones].sort(
-                (a: any, b: any) =>
-                  Number(b?.target_views || 0) - Number(a?.target_views || 0),
-              );
-
               const { data: payoutEligibleSubs, error: payoutSubsErr } =
                 await supabaseAdmin
                   .from("submissions")
-                  .select("id, status, views, created_at, deleted_at")
+                  .select(
+                    "id, creator_id, status, views, created_at, platform, other_stats",
+                  )
                   .eq("contest_id", submissionFull.contest_id)
                   .in("status", ["pending", "verified", "paid"])
-                  .is("deleted_at", null)
                   .order("created_at", { ascending: true });
 
               if (!payoutSubsErr && Array.isArray(payoutEligibleSubs)) {
-                const winnerCountsByMilestone = new Map<string, number>();
-                const payoutBySubmissionId = new Map<string, number>();
-
-                for (const sub of payoutEligibleSubs) {
-                  const subViews = Number((sub as any)?.views || 0);
-                  let payoutCents = 0;
-
-                  for (const milestone of sortedMilestones) {
-                    const targetViews = Number(milestone?.target_views || 0);
-                    if (subViews < targetViews) continue;
-
-                    const winnerLimit = milestone?.winner_limit;
-                    const milestoneKey = `${Number(
-                      milestone?.order || 0,
-                    )}:${targetViews}`;
-
-                    if (winnerLimit != null) {
-                      const used = winnerCountsByMilestone.get(milestoneKey) || 0;
-                      if (used >= Number(winnerLimit)) continue;
-                      winnerCountsByMilestone.set(milestoneKey, used + 1);
-                    }
-
-                    payoutCents = Number(milestone?.payout_cents || 0);
-                    break;
-                  }
-
-                  payoutBySubmissionId.set(String((sub as any).id), payoutCents);
-                }
-
+                const records = payoutEligibleSubs.map((sub: any) => ({
+                  id: String(sub.id),
+                  creator_id: sub.creator_id,
+                  created_at: sub.created_at,
+                  status: sub.status,
+                  views: sub.views,
+                  platform: sub.platform,
+                  other_stats: sub.other_stats,
+                }));
+                const payoutBySubmissionId = buildMilestoneSubmissionPayoutCentsMap(
+                  records,
+                  milestones,
+                );
                 rewardAmount =
                   payoutBySubmissionId.get(String(submissionFull.id)) || 0;
-              } else {
-                // Fallback: best milestone by current submission views only
-                const fallbackViews = Number(submissionFull.views || 0);
-                const matchedMilestone = sortedMilestones.find((m: any) => {
-                  return fallbackViews >= Number(m?.target_views || 0);
-                });
-                rewardAmount = Number(matchedMilestone?.payout_cents || 0);
               }
             }
           }

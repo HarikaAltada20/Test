@@ -8,11 +8,38 @@ export type MilestoneBudgetSubmission = {
   status?: string | null;
   deleted_at?: string | null;
   views?: number | null;
+  /** Used with `other_stats` so TikTok milestones match dashboard (view_count vs column). */
+  platform?: string | null;
+  other_stats?: unknown;
   bonus_paid?: boolean | null;
   bonus_amount?: number | null;
   milestone_bonus_paid?: any;
   metadata?: any;
 };
+
+/**
+ * View count used for milestone tiering — mirrors `extractPlatformMetrics` in contest detail
+ * (TikTok prefers `other_stats.tiktok.view_count` when present).
+ */
+export function getMilestoneEligibleViewsFromRow(row: {
+  views?: number | null;
+  platform?: string | null;
+  other_stats?: unknown;
+}): number {
+  const baseViews = Number(row.views || 0);
+  const platform = String(row.platform || "").toLowerCase();
+  if (platform.includes("tiktok")) {
+    const stats = (row.other_stats || {}) as Record<string, unknown>;
+    const t = (stats.tiktok ?? {}) as Record<string, unknown>;
+    const fromStats = Number(t.view_count ?? t.views ?? NaN);
+    // Prefer TikTok payload when it has real views; avoid treating 0 in JSON as truth when `views` is synced higher.
+    if (Number.isFinite(fromStats) && fromStats > 0) {
+      return fromStats;
+    }
+    return Number.isFinite(baseViews) ? Math.max(0, baseViews) : 0;
+  }
+  return Number.isFinite(baseViews) ? Math.max(0, baseViews) : 0;
+}
 
 function normalizeStatus(raw: string | null | undefined): string {
   const t = String(raw || "pending").toLowerCase();
@@ -46,7 +73,11 @@ export function buildMilestoneSubmissionPayoutCentsMap(
       created_at: s.created_at,
       status: normalizeStatus(s.status),
       deleted_at: s.deleted_at,
-      views: Number.isFinite(Number(s.views)) ? Number(s.views) : 0,
+      views: getMilestoneEligibleViewsFromRow({
+        views: s.views,
+        platform: s.platform,
+        other_stats: s.other_stats,
+      }),
     }))
     .filter(
       (s) =>
@@ -208,7 +239,11 @@ export function buildMilestoneMostVerifiedBonusByCreatorMap(
     const st = normalizeStatus(sub.status);
     if (!isVerifiedLike(st)) continue;
 
-    const views = Number(sub.views ?? 0);
+    const views = getMilestoneEligibleViewsFromRow({
+      views: sub.views,
+      platform: sub.platform,
+      other_stats: sub.other_stats,
+    });
     const createdAtMs = Number.isNaN(new Date(sub.created_at).getTime())
       ? Number.POSITIVE_INFINITY
       : new Date(sub.created_at).getTime();

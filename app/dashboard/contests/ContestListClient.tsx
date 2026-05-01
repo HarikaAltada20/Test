@@ -3350,7 +3350,7 @@ export function ContestListClient({
                 </span>
                 <div>
                   <p className={cn("font-semibold", isDark ? "text-white" : "text-slate-900")}>
-                    Automatic Rewards
+                  Payouts Based on Achieved Milestones
                   </p>
                   <p className={cn("mt-1", isDark ? "text-slate-300" : "text-slate-600")}>
                   When a creator reaches a milestone, the payout is calculated and credited based only on the milestones they have actually achieved for that submission.

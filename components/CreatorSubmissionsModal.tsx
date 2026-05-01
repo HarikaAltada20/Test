@@ -320,7 +320,8 @@ export function CreatorSubmissionsModal({
       const status = (s as any).is_twitter_tweet
         ? (s as any).moderation_status || s.status
         : s.status;
-      return status === "verified";
+      const st = String(status || "").toLowerCase();
+      return st === "verified" || st === "approved";
     });
 
     if (verifiedSubs.length === 0) {

@@ -5518,7 +5518,11 @@ export default function ContestDetailClient({
       };
     } else if (platform?.includes("tiktok")) {
       const t = stats.tiktok ?? ({} as Record<string, unknown>);
-      const views = Number(t.view_count ?? t.views ?? baseViews ?? 0);
+      const fromStats = Number(t.view_count ?? t.views ?? NaN);
+      const views =
+        Number.isFinite(fromStats) && fromStats > 0
+          ? fromStats
+          : Math.max(0, Number(baseViews) || 0);
       const likes = Number(t.like_count ?? t.likes ?? 0);
       const comments = Number(t.comment_count ?? t.comments ?? 0);
       const shares = Number(t.share_count ?? t.shares ?? 0);
