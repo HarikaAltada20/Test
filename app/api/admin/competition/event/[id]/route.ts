@@ -7,6 +7,22 @@ export const dynamic = "force-dynamic";
 
 const VALID_STATUS = new Set(["draft", "active", "ended"]);
 
+async function activateEventWithRetry(
+  supabase: ReturnType<typeof createAdminClient>,
+  eventId: string,
+): Promise<{ ok: true } | { ok: false; message: string }> {
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const { error } = await supabase.rpc("competition_set_sole_active", {
+      p_event_id: eventId,
+    });
+    if (!error) return { ok: true };
+    if (error.code !== "23505" || attempt === 1) {
+      return { ok: false, message: error.message };
+    }
+  }
+  return { ok: false, message: "Failed to activate event" };
+}
+
 export async function PATCH(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> },
@@ -88,11 +104,18 @@ export async function PATCH(
     if (updateErr) throw updateErr;
 
     if (shouldMakeSoleActive) {
-      const { error: activateError } = await supabase.rpc(
-        "competition_set_sole_active",
-        { p_event_id: id },
-      );
-      if (activateError) throw activateError;
+      const activationResult = await activateEventWithRetry(supabase, id);
+      if (!activationResult.ok) {
+        return NextResponse.json(
+          {
+            error:
+              "Event update succeeded, but activation conflicted with another concurrent update. Please retry activation once.",
+            details: activationResult.message,
+            eventId: id,
+          },
+          { status: 409 },
+        );
+      }
     }
 
     const { data: finalEvent, error: readFinalError } = await supabase

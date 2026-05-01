@@ -3,10 +3,17 @@ import { getDailyWinnersHistory } from "@/lib/daily-challenge";
 
 export const dynamic = "force-dynamic";
 
+function parseDays(value: string | null, fallback = 30): number {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return fallback;
+  return Math.min(60, Math.max(1, Math.floor(parsed)));
+}
+
 export async function GET(request: NextRequest) {
   try {
-    const days = Math.min(60, Math.max(1, Number(request.nextUrl.searchParams.get("days") || 30)));
-    const winners = await getDailyWinnersHistory(days);
+    const days = parseDays(request.nextUrl.searchParams.get("days"));
+    const eventId = request.nextUrl.searchParams.get("event_id");
+    const winners = await getDailyWinnersHistory(days, eventId);
     return NextResponse.json({ winners });
   } catch (error) {
     console.error("[competition/winners/daily] error", error);

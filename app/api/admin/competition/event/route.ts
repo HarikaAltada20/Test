@@ -11,6 +11,22 @@ function parseIsoDate(value: unknown): Date | null {
   return Number.isNaN(d.getTime()) ? null : d;
 }
 
+async function activateEventWithRetry(
+  supabase: ReturnType<typeof createAdminClient>,
+  eventId: string,
+): Promise<{ ok: true } | { ok: false; message: string }> {
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const { error } = await supabase.rpc("competition_set_sole_active", {
+      p_event_id: eventId,
+    });
+    if (!error) return { ok: true };
+    if (error.code !== "23505" || attempt === 1) {
+      return { ok: false, message: error.message };
+    }
+  }
+  return { ok: false, message: "Failed to activate event" };
+}
+
 export async function POST(request: NextRequest) {
   try {
     const { isAdmin, user } = await verifyAdminAccess();
@@ -69,11 +85,18 @@ export async function POST(request: NextRequest) {
 
     if (configError) throw configError;
 
-    const { error: activateError } = await supabase.rpc(
-      "competition_set_sole_active",
-      { p_event_id: event.id },
-    );
-    if (activateError) throw activateError;
+    const activationResult = await activateEventWithRetry(supabase, event.id);
+    if (!activationResult.ok) {
+      return NextResponse.json(
+        {
+          error:
+            "Event was created but activation conflicted with another concurrent update. Please retry activation once.",
+          details: activationResult.message,
+          eventId: event.id,
+        },
+        { status: 409 },
+      );
+    }
 
     const { data: finalEvent, error: readFinalError } = await supabase
       .from("competition_event")

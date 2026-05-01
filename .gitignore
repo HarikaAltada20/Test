@@ -29,4 +29,3 @@ next-env.d.ts
 public/videos/_originals/
 
 # Generated AI / export diffs — do not commit
-reviews/*.diff

@@ -35,6 +35,10 @@ BEGIN
     RAISE EXCEPTION 'competition event not found: %', p_event_id;
   END IF;
 
+  -- Serialize active-event flips to avoid transient unique-index conflicts
+  -- when multiple admins activate different events concurrently.
+  PERFORM pg_advisory_xact_lock(hashtext('competition_set_sole_active'));
+
   UPDATE public.competition_event
   SET is_active = false, updated_at = now()
   WHERE is_active = true

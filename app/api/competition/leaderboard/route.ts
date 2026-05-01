@@ -30,13 +30,29 @@ const VALID_SCOPES: SubmissionScope[] = ["pending", "verified", "all"];
 
 export const dynamic = "force-dynamic";
 
+function parsePositiveInt(
+  value: string | null,
+  fallback: number,
+  bounds?: { min?: number; max?: number },
+): number {
+  const raw = Number(value);
+  if (!Number.isFinite(raw)) return fallback;
+  const rounded = Math.floor(raw);
+  const min = bounds?.min ?? Number.MIN_SAFE_INTEGER;
+  const max = bounds?.max ?? Number.MAX_SAFE_INTEGER;
+  return Math.min(max, Math.max(min, rounded));
+}
+
 export async function GET(request: NextRequest) {
   try {
     const searchParams = request.nextUrl.searchParams;
     const period = (searchParams.get("period") || "today") as CompetitionPeriod;
     const scope = (searchParams.get("scope") || "verified") as SubmissionScope;
-    const page = Math.max(1, Number(searchParams.get("page") || 1));
-    const limit = Math.min(100, Math.max(5, Number(searchParams.get("limit") || 25)));
+    const page = parsePositiveInt(searchParams.get("page"), 1, { min: 1 });
+    const limit = parsePositiveInt(searchParams.get("limit"), 25, {
+      min: 5,
+      max: 100,
+    });
     const fresh = searchParams.get("fresh") === "1";
 
     const supabase = await createClient();

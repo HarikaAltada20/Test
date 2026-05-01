@@ -31,7 +31,13 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { submission_ids, payment_type, contest_id, creator_id } = body;
+    const {
+      submission_ids,
+      payment_type,
+      contest_id,
+      creator_id,
+      payout_operation_id,
+    } = body;
 
     if (
       !submission_ids ||
@@ -461,29 +467,27 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const breakdownFingerprintItems = [...breakdown]
-      .map((b) => ({
-        submission_id: String(b.submission_id),
-        cpm_amount: b.cpm_amount,
-        bonus_amount: b.bonus_amount,
-      }))
-      .sort((a, b) =>
-        a.submission_id.localeCompare(b.submission_id),
-      );
-
+    // Build idempotency from immutable request intent rather than computed payout breakdown.
+    // This keeps retries stable even if a prior attempt partially updated submission rows.
+    const requestedSubmissionIds = Array.from(
+      new Set(
+        submission_ids.map((value: unknown) => String(value)).filter(Boolean),
+      ),
+    ).sort((a, b) => a.localeCompare(b));
+    const operationSeed =
+      typeof payout_operation_id === "string" && payout_operation_id.trim().length > 0
+        ? payout_operation_id.trim()
+        : JSON.stringify({
+            contest_id,
+            creator_id,
+            payment_type,
+            requested_submission_ids: requestedSubmissionIds,
+            payout_adjustment_percentage: payoutAdjustmentPercentage,
+            payout_adjustment_mode: payoutAdjustmentMode ?? null,
+            contest_refund_count_at_payout: contestRefundCount,
+          });
     const bulkPayIdempotencyKey = `bulk_pay_v2:${createHash("sha256")
-      .update(
-        JSON.stringify({
-          contest_id,
-          creator_id,
-          payment_type,
-          payout_adjustment_percentage: payoutAdjustmentPercentage,
-          payout_adjustment_mode: payoutAdjustmentMode ?? null,
-          items: breakdownFingerprintItems,
-          total_amount: totalAmount,
-          contest_refund_count_at_payout: contestRefundCount,
-        }),
-      )
+      .update(operationSeed)
       .digest("hex")
       .slice(0, 48)}`;
 
@@ -565,10 +569,11 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         {
           error:
-            "Wallet was credited but one or more submission rows failed to update. Retry this request with the same payload to reconcile without duplicating the wallet credit.",
+            "Wallet credit succeeded but one or more submission rows failed to update. Retry this exact request to reconcile; payout credit is deduplicated by operation idempotency key.",
           updateFailures,
           transaction_id: creditResult.transactionId,
           already_applied_idempotent: Boolean(creditResult.alreadyApplied),
+          payout_operation_key: bulkPayIdempotencyKey,
         },
         { status: 500 },
       );
@@ -586,6 +591,7 @@ export async function POST(request: NextRequest) {
         breakdown: breakdown,
         transaction_id: creditResult.transactionId,
         payout_idempotent_retry: Boolean(creditResult.alreadyApplied),
+        payout_operation_key: bulkPayIdempotencyKey,
         cap_reached: maxEarnings ? runningTotal >= maxEarnings : false,
         remaining_cap: maxEarnings
           ? Math.max(0, maxEarnings - runningTotal)
