@@ -29,20 +29,16 @@ export async function POST(request: NextRequest) {
     const promoteNextEligible = Boolean(body?.promoteNextEligible);
 
     const supabase = await createClient();
-    const nowIso = new Date().toISOString();
     const { data: event } = await supabase
       .from("competition_event")
       .select("id")
       .eq("is_active", true)
-      .eq("status", "active")
-      .lte("starts_at", nowIso)
-      .gte("ends_at", nowIso)
       .order("starts_at", { ascending: false })
       .limit(1)
       .maybeSingle();
 
     if (!event?.id) {
-      return NextResponse.json({ error: "No active competition event found" }, { status: 400 });
+      return NextResponse.json({ error: "No selected competition event found" }, { status: 400 });
     }
 
     const { data: configRow, error: configError } = await supabase

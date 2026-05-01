@@ -76,7 +76,6 @@ export async function GET(request: NextRequest) {
       .from("competition_event")
       .select("id")
       .eq("is_active", true)
-      .eq("status", "active")
       .lte("starts_at", nowIso)
       .gte("ends_at", nowIso)
       .order("starts_at", { ascending: false })

@@ -28,11 +28,18 @@ type CreatorMetrics = {
   totalViews: number;
   totalReels: number;
 };
-type AggregateRow = {
+
+type CreatorMetricsRpcRow = {
   creator_id: string | null;
-  status: string | null;
-  sum_views: number | string | null;
-  reels_count: number | string | null;
+  username: string | null;
+  full_name: string | null;
+  profile_picture_url: string | null;
+  pending_views: number | string | null;
+  verified_views: number | string | null;
+  pending_reels: number | string | null;
+  verified_reels: number | string | null;
+  total_views: number | string | null;
+  total_reels: number | string | null;
 };
 
 type EligibilityConfig = {
@@ -153,8 +160,7 @@ async function getActiveEventAndConfig(
   let eventQuery = supabase
     .from("competition_event")
     .select("id")
-    .eq("is_active", true)
-    .eq("status", "active");
+    .eq("is_active", true);
 
   if (activeWindow) {
     eventQuery = eventQuery
@@ -259,108 +265,35 @@ async function fetchCreatorMetrics(
   },
 ): Promise<Map<string, CreatorMetrics>> {
   const supabase = await getDataClient(params.mode);
-  let aggQuery = supabase
-    .from("submissions")
-    .select("creator_id,status,sum_views:views.sum(),reels_count:id.count()")
-    .not("creator_id", "is", null)
-    .in("status", ["pending", "verified", "paid"]);
-
-  if (params.eventStart) aggQuery = aggQuery.gte("created_at", params.eventStart);
-  if (params.eventEnd) aggQuery = aggQuery.lte("created_at", params.eventEnd);
-  if (params.range) {
-    aggQuery = aggQuery
-      .gte("created_at", params.range.start.toISOString())
-      .lt("created_at", params.range.end.toISOString());
-  }
-
-  const { data: aggRowsRaw, error: aggError } = await aggQuery;
-  if (aggError) throw aggError;
-  const aggRows = (aggRowsRaw || []) as AggregateRow[];
-
-  let reelsQuery = supabase
-    .from("submissions")
-    .select("creator_id,status,reels_count:id.count()")
-    .not("creator_id", "is", null)
-    .in("status", ["pending", "verified", "paid"])
-    .gte("views", params.minViewsPerReel);
-  if (params.eventStart) reelsQuery = reelsQuery.gte("created_at", params.eventStart);
-  if (params.eventEnd) reelsQuery = reelsQuery.lte("created_at", params.eventEnd);
-  if (params.range) {
-    reelsQuery = reelsQuery
-      .gte("created_at", params.range.start.toISOString())
-      .lt("created_at", params.range.end.toISOString());
-  }
-  const { data: reelsRowsRaw, error: reelsErr } = await reelsQuery;
-  if (reelsErr) throw reelsErr;
-  const reelsRows = (reelsRowsRaw || []) as AggregateRow[];
-
-  const creatorIds = Array.from(
-    new Set(
-      aggRows
-        .map((r) => (r.creator_id ? String(r.creator_id) : ""))
-        .filter((id) => id.length > 0),
-    ),
+  const { data, error } = await supabase.rpc(
+    "get_daily_challenge_creator_metrics",
+    {
+      p_event_start: params.eventStart ?? null,
+      p_event_end: params.eventEnd ?? null,
+      p_range_start: params.range?.start.toISOString() ?? null,
+      p_range_end: params.range?.end.toISOString() ?? null,
+      p_min_views_per_reel: Math.max(0, params.minViewsPerReel),
+    },
   );
-  if (creatorIds.length === 0) {
-    return new Map();
-  }
 
-  const { data: usersRows, error: usersError } = await supabase
-    .from("users")
-    .select("id,username,full_name,profile_picture_url")
-    .in("id", creatorIds);
-  if (usersError) throw usersError;
-  const usersById = new Map(
-    (usersRows || []).map((u) => [String(u.id), u]),
-  );
+  if (error) throw error;
 
   const metricMap = new Map<string, CreatorMetrics>();
-  for (const id of creatorIds) {
-    const user = usersById.get(id);
+  for (const row of ((data || []) as CreatorMetricsRpcRow[])) {
+    const id = row.creator_id ? String(row.creator_id) : "";
+    if (!id) continue;
     metricMap.set(id, {
       creatorId: id,
-      username: user?.username || user?.full_name || "anonymous",
-      fullName: user?.full_name || null,
-      profilePictureUrl: user?.profile_picture_url || null,
-      pendingViews: 0,
-      verifiedViews: 0,
-      pendingReels: 0,
-      verifiedReels: 0,
-      totalViews: 0,
-      totalReels: 0,
+      username: row.username || row.full_name || "anonymous",
+      fullName: row.full_name || null,
+      profilePictureUrl: row.profile_picture_url || null,
+      pendingViews: asNonNegativeNumber(row.pending_views),
+      verifiedViews: asNonNegativeNumber(row.verified_views),
+      pendingReels: asNonNegativeNumber(row.pending_reels),
+      verifiedReels: asNonNegativeNumber(row.verified_reels),
+      totalViews: asNonNegativeNumber(row.total_views),
+      totalReels: asNonNegativeNumber(row.total_reels),
     });
-  }
-
-  for (const row of aggRows) {
-    const creatorId = row.creator_id ? String(row.creator_id) : "";
-    if (!creatorId) continue;
-    const metrics = metricMap.get(creatorId);
-    if (!metrics) continue;
-    const status = String(row.status || "pending").toLowerCase();
-    const sumViews = asNonNegativeNumber(row.sum_views);
-    const reelsCount = asNonNegativeNumber(row.reels_count);
-
-    if (status === "pending") {
-      metrics.pendingViews += sumViews;
-    } else {
-      metrics.verifiedViews += sumViews;
-    }
-    metrics.totalViews += sumViews;
-    metrics.totalReels += reelsCount;
-  }
-
-  for (const row of reelsRows) {
-    const creatorId = row.creator_id ? String(row.creator_id) : "";
-    if (!creatorId) continue;
-    const metrics = metricMap.get(creatorId);
-    if (!metrics) continue;
-    const status = String(row.status || "pending").toLowerCase();
-    const reelsCount = asNonNegativeNumber(row.reels_count);
-    if (status === "pending") {
-      metrics.pendingReels += reelsCount;
-    } else {
-      metrics.verifiedReels += reelsCount;
-    }
   }
 
   return metricMap;
@@ -390,6 +323,7 @@ export async function getDailyChallengeLeaderboard(params: {
     return {
       hasActiveEvent: false,
       config: null,
+      event: null,
       topCreatorsByViews: [],
       topCreatorsByReels: [],
       pagination: { page: params.page, limit: params.limit, totalItems: 0, totalPages: 0 },
@@ -401,7 +335,7 @@ export async function getDailyChallengeLeaderboard(params: {
   const supabase = await getDataClient(clientMode);
   const { data: event, error: eventError } = await supabase
     .from("competition_event")
-    .select("starts_at,ends_at")
+    .select("id,name,starts_at,ends_at,timezone,prize_amount_minor_units,prize_currency")
     .eq("id", config.eventId)
     .single();
   if (eventError) {
@@ -443,6 +377,17 @@ export async function getDailyChallengeLeaderboard(params: {
   return {
     hasActiveEvent: true,
     config,
+    event: event
+      ? {
+          id: event.id,
+          name: event.name,
+          startsAt: event.starts_at,
+          endsAt: event.ends_at,
+          timezone: event.timezone,
+          prizeAmountMinorUnits: Number(event.prize_amount_minor_units ?? 5000),
+          prizeCurrency: String(event.prize_currency || "INR"),
+        }
+      : null,
     topCreatorsByViews: pagedViews.map((r) => {
       const eligibility = isEligibleForViews(r, config);
       return {
@@ -581,7 +526,10 @@ export async function snapshotWinnersForIstDate(
       is_eligible: Boolean(topViews.row?.eligible),
       promoted: topViews.promoted,
       metrics_json: topViews.row || {},
-      rules_json: config,
+      rules_json: {
+        ...config,
+        event: payload.event,
+      },
       reason: topViews.row?.eligible
         ? topViews.promoted
           ? `${reason}_promoted_next_eligible`
@@ -597,7 +545,10 @@ export async function snapshotWinnersForIstDate(
       is_eligible: Boolean(topReels.row?.eligible),
       promoted: topReels.promoted,
       metrics_json: topReels.row || {},
-      rules_json: config,
+      rules_json: {
+        ...config,
+        event: payload.event,
+      },
       reason: topReels.row?.eligible
         ? topReels.promoted
           ? `${reason}_promoted_next_eligible`

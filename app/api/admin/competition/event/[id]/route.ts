@@ -7,6 +7,19 @@ export const dynamic = "force-dynamic";
 
 const VALID_STATUS = new Set(["draft", "active", "ended"]);
 
+function parsePrizeAmountMinorUnits(value: unknown): number | null {
+  if (value === undefined || value === null || value === "") return null;
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed < 0) return null;
+  return Math.round(parsed);
+}
+
+function parseCurrency(value: unknown): string | null {
+  if (typeof value !== "string" || !value.trim()) return null;
+  const currency = value.trim().toUpperCase().slice(0, 3);
+  return /^[A-Z]{3}$/.test(currency) ? currency : null;
+}
+
 async function activateEventWithRetry(
   supabase: ReturnType<typeof createAdminClient>,
   eventId: string,
@@ -70,6 +83,16 @@ export async function PATCH(
       if (!Number.isNaN(d.getTime())) updates.ends_at = d.toISOString();
     }
 
+    const prizeAmountMinorUnits = parsePrizeAmountMinorUnits(body?.prizeAmountMinorUnits);
+    if (prizeAmountMinorUnits !== null) {
+      updates.prize_amount_minor_units = prizeAmountMinorUnits;
+    }
+
+    const prizeCurrency = parseCurrency(body?.prizeCurrency);
+    if (prizeCurrency !== null) {
+      updates.prize_currency = prizeCurrency;
+    }
+
     const shouldMakeSoleActive =
       body?.makeSoleActive === true || body?.is_active === true;
     if (shouldMakeSoleActive) {
@@ -98,7 +121,7 @@ export async function PATCH(
       .from("competition_event")
       .update(updates)
       .eq("id", id)
-      .select("id,name,starts_at,ends_at,timezone,status,is_active")
+      .select("id,name,starts_at,ends_at,timezone,status,is_active,prize_amount_minor_units,prize_currency")
       .single();
 
     if (updateErr) throw updateErr;
@@ -120,7 +143,7 @@ export async function PATCH(
 
     const { data: finalEvent, error: readFinalError } = await supabase
       .from("competition_event")
-      .select("id,name,starts_at,ends_at,timezone,status,is_active")
+      .select("id,name,starts_at,ends_at,timezone,status,is_active,prize_amount_minor_units,prize_currency")
       .eq("id", id)
       .single();
     if (readFinalError) throw readFinalError;

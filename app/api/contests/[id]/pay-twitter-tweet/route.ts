@@ -224,7 +224,7 @@ export async function POST(
         ] = await Promise.all([
           supabaseAdmin
             .from("money_transactions")
-            .select("amount")
+            .select("amount, metadata")
             .eq("user_id", creatorId)
             .eq("type", "reward")
             .contains("metadata", {
@@ -233,7 +233,7 @@ export async function POST(
             }),
           supabaseAdmin
             .from("money_transactions")
-            .select("amount")
+            .select("amount, metadata, remarks")
             .eq("user_id", creatorId)
             .eq("type", "refund")
             .contains("metadata", {
@@ -242,14 +242,40 @@ export async function POST(
             }),
         ] as any);
 
-        const totalCreatorRewards = (creatorRewards || []).reduce(
-          (sum: number, row: any) => sum + (row.amount || 0),
-          0
-        );
-        const totalCreatorRefunds = (creatorRefunds || []).reduce(
-          (sum: number, row: any) => sum + (row.amount || 0),
-          0
-        );
+        const cpmAmountForHistoryRow = (row: any) => {
+          const metadata = row?.metadata || {};
+          if (metadata.payout_type === "twitter_cpm_bulk") {
+            const totalCpm = Number(metadata.total_cpm);
+            return Number.isFinite(totalCpm) && totalCpm > 0 ? totalCpm : 0;
+          }
+          return Number(row?.amount) || 0;
+        };
+        const isCreatorCpmHistory = (row: any) => {
+          const payoutType = String(row?.metadata?.payout_type || "");
+          return (
+            payoutType === "twitter_cpm_bulk" ||
+            payoutType === "twitter_cpm_tweet" ||
+            payoutType === "twitter_cpm_tweet_custom" ||
+            payoutType === "twitter_cpm_creator" ||
+            payoutType === "standard_cpm"
+          );
+        };
+        const totalCreatorRewards = (creatorRewards || [])
+          .filter(isCreatorCpmHistory)
+          .reduce(
+            (sum: number, row: any) => sum + cpmAmountForHistoryRow(row),
+            0
+          );
+        const totalCreatorRefunds = (creatorRefunds || [])
+          .filter(
+            (row: any) =>
+              (!row.remarks || row.remarks === REVERSAL_TRANSACTION_REMARK) &&
+              isCreatorCpmHistory(row),
+          )
+          .reduce(
+            (sum: number, row: any) => sum + cpmAmountForHistoryRow(row),
+            0
+          );
         const alreadyCredited = Math.max(
           0,
           totalCreatorRewards - totalCreatorRefunds

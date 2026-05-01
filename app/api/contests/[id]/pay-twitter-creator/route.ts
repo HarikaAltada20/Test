@@ -258,11 +258,11 @@ export async function POST(
     }
 
     // Determine payout cycle for idempotency (similar to submissions)
-    const [{ data: existingRewards }, { data: existingRefunds }] =
+    const [{ data: existingRewardsRaw }, { data: existingRefundsRaw }] =
       await Promise.all([
         supabaseAdmin
           .from("money_transactions")
-          .select("id")
+          .select("id, amount, metadata")
           .eq("user_id", creatorId)
           .eq("type", "reward")
           .contains("metadata", {
@@ -271,7 +271,7 @@ export async function POST(
           }),
         supabaseAdmin
           .from("money_transactions")
-          .select("id, remarks")
+          .select("id, amount, remarks, metadata")
           .eq("user_id", creatorId)
           .eq("type", "refund")
           .contains("metadata", {
@@ -280,11 +280,74 @@ export async function POST(
           }),
       ] as any);
 
-    const rewardsCount = (existingRewards || []).length;
+    const isCreatorLevelReward = (row: any) => {
+      const metadata = row?.metadata || {};
+      const payoutType = String(metadata.payout_type || "");
+      return (
+        !metadata.tweet_id &&
+        !metadata.bonus_type &&
+        (payoutType === "twitter_cpm_creator" ||
+          payoutType === "standard" ||
+          payoutType === "custom")
+      );
+    };
+    const isPerTweetOrBulkCpm = (row: any) => {
+      const metadata = row?.metadata || {};
+      const payoutType = String(metadata.payout_type || "");
+      return (
+        Boolean(metadata.tweet_id) ||
+        payoutType === "twitter_cpm_tweet" ||
+        payoutType === "twitter_cpm_tweet_custom" ||
+        payoutType === "twitter_cpm_bulk"
+      );
+    };
+    const cpmAmountForHistoryRow = (row: any) => {
+      const metadata = row?.metadata || {};
+      if (metadata.payout_type === "twitter_cpm_bulk") {
+        const totalCpm = Number(metadata.total_cpm);
+        return Number.isFinite(totalCpm) && totalCpm > 0 ? totalCpm : 0;
+      }
+      return Number(row?.amount) || 0;
+    };
+
+    const existingRewards = (existingRewardsRaw || []).filter(
+      isCreatorLevelReward,
+    );
+    const existingRefunds = (existingRefundsRaw || []).filter(
+      (row: any) =>
+        (!row.remarks || row.remarks === REVERSAL_TRANSACTION_REMARK) &&
+        isCreatorLevelReward(row),
+    );
+
+    if (contest.contest_type === "cpm") {
+      const partialCpmRewards = (existingRewardsRaw || [])
+        .filter(isPerTweetOrBulkCpm)
+        .reduce((sum: number, row: any) => sum + cpmAmountForHistoryRow(row), 0);
+      const partialCpmRefunds = (existingRefundsRaw || [])
+        .filter(
+          (row: any) =>
+            (!row.remarks || row.remarks === REVERSAL_TRANSACTION_REMARK) &&
+            isPerTweetOrBulkCpm(row),
+        )
+        .reduce((sum: number, row: any) => sum + cpmAmountForHistoryRow(row), 0);
+
+      if (
+        Math.max(0, partialCpmRewards - partialCpmRefunds) > 0 &&
+        leaderboardEntry.moderation_status !== "paid"
+      ) {
+        return NextResponse.json(
+          {
+            error:
+              "Creator has existing per-tweet or bulk CPM payouts. Use the tweet/bulk payout flow or reverse those payouts before creator-level payout.",
+          },
+          { status: 400 },
+        );
+      }
+    }
+
+    const rewardsCount = existingRewards.length;
     const refundsCount =
-      (existingRefunds || [])?.filter(
-        (r: any) => !r.remarks || r.remarks === REVERSAL_TRANSACTION_REMARK
-      ).length || 0;
+      existingRefunds.length || 0;
     const nextCycle =
       rewardsCount > refundsCount ? rewardsCount : rewardsCount + 1;
 

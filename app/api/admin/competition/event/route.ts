@@ -11,6 +11,18 @@ function parseIsoDate(value: unknown): Date | null {
   return Number.isNaN(d.getTime()) ? null : d;
 }
 
+function parsePrizeAmountMinorUnits(value: unknown): number {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed < 0) return 5000;
+  return Math.round(parsed);
+}
+
+function parseCurrency(value: unknown): string {
+  const currency =
+    typeof value === "string" ? value.trim().toUpperCase().slice(0, 3) : "INR";
+  return /^[A-Z]{3}$/.test(currency) ? currency : "INR";
+}
+
 async function activateEventWithRetry(
   supabase: ReturnType<typeof createAdminClient>,
   eventId: string,
@@ -56,6 +68,9 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const prizeAmountMinorUnits = parsePrizeAmountMinorUnits(body?.prizeAmountMinorUnits);
+    const prizeCurrency = parseCurrency(body?.prizeCurrency);
+
     const supabase = createAdminClient();
 
     const { data: event, error: insertError } = await supabase
@@ -67,8 +82,10 @@ export async function POST(request: NextRequest) {
         timezone: "Asia/Kolkata",
         status: "active",
         is_active: false,
+        prize_amount_minor_units: prizeAmountMinorUnits,
+        prize_currency: prizeCurrency,
       })
-      .select("id,name,starts_at,ends_at,timezone,status,is_active")
+      .select("id,name,starts_at,ends_at,timezone,status,is_active,prize_amount_minor_units,prize_currency")
       .single();
 
     if (insertError) throw insertError;
@@ -100,7 +117,7 @@ export async function POST(request: NextRequest) {
 
     const { data: finalEvent, error: readFinalError } = await supabase
       .from("competition_event")
-      .select("id,name,starts_at,ends_at,timezone,status,is_active")
+      .select("id,name,starts_at,ends_at,timezone,status,is_active,prize_amount_minor_units,prize_currency")
       .eq("id", event.id)
       .single();
     if (readFinalError) throw readFinalError;

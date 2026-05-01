@@ -138,11 +138,33 @@ type CompetitionEventRow = {
   timezone: string;
   status: string;
   is_active: boolean;
+  prize_amount_minor_units?: number | string | null;
+  prize_currency?: string | null;
   phase: "live" | "upcoming" | "past";
 };
 
 type BoardTab = "views" | "reels";
-const DAILY_WINNER_REWARD_INR = 50;
+
+function formatPrize(amountMinorUnits: number, currency: string) {
+  const normalizedCurrency = currency.trim().toUpperCase();
+  const symbolByCurrency: Record<string, string> = {
+    INR: "₹",
+    USD: "$",
+  };
+  const amount = new Intl.NumberFormat("en-IN", {
+    maximumFractionDigits: amountMinorUnits % 100 === 0 ? 0 : 2,
+  }).format(amountMinorUnits / 100);
+  return `${symbolByCurrency[normalizedCurrency] || `${normalizedCurrency} `}${amount}`;
+}
+
+function getDefaultEventWindow() {
+  const starts = new Date();
+  const ends = new Date(starts.getTime() + 30 * 24 * 60 * 60 * 1000);
+  return {
+    startsLocal: formatForDatetimeLocal(starts),
+    endsLocal: formatForDatetimeLocal(ends),
+  };
+}
 
 export default function DailyChallengeClient({
   isAdmin,
@@ -168,11 +190,12 @@ export default function DailyChallengeClient({
   const [rulesMessage, setRulesMessage] = useState<string | null>(null);
   const [creatingEvent, setCreatingEvent] = useState(false);
   const [eventBootstrapMessage, setEventBootstrapMessage] = useState<string | null>(null);
-  const [eventForm, setEventForm] = useState({
+  const [eventForm, setEventForm] = useState(() => ({
     name: "Daily Challenge",
-    pastDays: "1",
-    durationDays: "30",
-  });
+    ...getDefaultEventWindow(),
+    prizeAmount: "50",
+    prizeCurrency: "INR",
+  }));
   const [competitionEvents, setCompetitionEvents] = useState<CompetitionEventRow[]>([]);
   const [loadingCompetitionEvents, setLoadingCompetitionEvents] = useState(false);
   const [editingEventId, setEditingEventId] = useState<string | null>(null);
@@ -180,8 +203,9 @@ export default function DailyChallengeClient({
     name: string;
     startsLocal: string;
     endsLocal: string;
-    status: string;
     is_active: boolean;
+    prizeAmount: string;
+    prizeCurrency: string;
   } | null>(null);
   const [savingEventId, setSavingEventId] = useState<string | null>(null);
   const [eventsPanelMessage, setEventsPanelMessage] = useState<string | null>(null);
@@ -298,7 +322,16 @@ export default function DailyChallengeClient({
 
   const me = payload?.me;
   const config = payload?.config;
-  const hasActiveEvent = Boolean(payload?.hasActiveEvent && payload?.config);
+  const selectedLiveEvent = competitionEvents.find(
+    (event) =>
+      event.phase === "live" &&
+      event.is_active === true,
+  );
+  const selectedEvent = competitionEvents.find((event) => event.is_active === true);
+  const hasActiveEvent = Boolean(
+    (payload?.hasActiveEvent && payload?.config) || selectedLiveEvent,
+  );
+  const hasSelectedEvent = Boolean(selectedEvent || payload?.event);
   const isDark = mode === "dark";
   const rows = activeBoard === "views" ? payload?.topCreatorsByViews || [] : payload?.topCreatorsByReels || [];
   const pagination = payload?.pagination;
@@ -306,6 +339,16 @@ export default function DailyChallengeClient({
   const totalPages = pagination?.totalPages ?? 1;
   const lastUpdated = fromNow(payload?.generatedAt);
   const endsIn = getHoursUntilIstMidnight();
+  const activeEvent = payload?.event || selectedLiveEvent || selectedEvent || null;
+  const prizeAmountMinorUnits = Number(
+    activeEvent?.prizeAmountMinorUnits ??
+      activeEvent?.prize_amount_minor_units ??
+      5000,
+  );
+  const prizeCurrency = String(
+    activeEvent?.prizeCurrency || activeEvent?.prize_currency || "INR",
+  );
+  const prizeLabel = formatPrize(prizeAmountMinorUnits, prizeCurrency);
   const cooldownMs = isAdmin
     ? DAILY_CHALLENGE_REFRESH_COOLDOWN_MS_ADMIN
     : DAILY_CHALLENGE_REFRESH_COOLDOWN_MS_CREATOR;
@@ -370,12 +413,14 @@ export default function DailyChallengeClient({
     setCreatingEvent(true);
     setEventBootstrapMessage(null);
     try {
-      const past = Math.max(0, Math.floor(Number(eventForm.pastDays) || 0));
-      const duration = Math.max(1, Math.floor(Number(eventForm.durationDays) || 30));
-      const endsAt = new Date();
-      endsAt.setTime(endsAt.getTime() + duration * 24 * 60 * 60 * 1000);
-      const startsAt = new Date();
-      startsAt.setTime(startsAt.getTime() - past * 24 * 60 * 60 * 1000);
+      const startsAt = parseIstDatetimeLocal(eventForm.startsLocal);
+      const endsAt = parseIstDatetimeLocal(eventForm.endsLocal);
+      if (Number.isNaN(startsAt.getTime()) || Number.isNaN(endsAt.getTime())) {
+        throw new Error("Invalid start or end date");
+      }
+      if (endsAt.getTime() <= startsAt.getTime()) {
+        throw new Error("End date must be after start date");
+      }
       const res = await fetch("/api/admin/competition/event", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -383,6 +428,8 @@ export default function DailyChallengeClient({
           name: eventForm.name.trim() || "Daily Challenge",
           startsAt: startsAt.toISOString(),
           endsAt: endsAt.toISOString(),
+          prizeAmountMinorUnits: Math.max(0, Math.round(Number(eventForm.prizeAmount || 0) * 100)),
+          prizeCurrency: eventForm.prizeCurrency,
         }),
       });
       const json = await res.json();
@@ -403,8 +450,9 @@ export default function DailyChallengeClient({
       name: row.name,
       startsLocal: formatForDatetimeLocal(new Date(row.starts_at)),
       endsLocal: formatForDatetimeLocal(new Date(row.ends_at)),
-      status: row.status,
       is_active: row.is_active,
+      prizeAmount: String(Number(row.prize_amount_minor_units ?? 5000) / 100),
+      prizeCurrency: row.prize_currency || "INR",
     });
     setEventsPanelMessage(null);
   };
@@ -431,9 +479,10 @@ export default function DailyChallengeClient({
           name: editEventDraft.name.trim() || "Daily Challenge",
           starts_at: starts.toISOString(),
           ends_at: ends.toISOString(),
-          status: editEventDraft.status,
           is_active: editEventDraft.is_active,
           makeSoleActive: makeSoleActive === true,
+          prizeAmountMinorUnits: Math.max(0, Math.round(Number(editEventDraft.prizeAmount || 0) * 100)),
+          prizeCurrency: editEventDraft.prizeCurrency,
         }),
       });
       const json = await res.json();
@@ -450,7 +499,7 @@ export default function DailyChallengeClient({
   };
 
   const saveEligibilityRules = async () => {
-    if (!isAdmin || savingRules || !hasActiveEvent) return;
+    if (!isAdmin || savingRules || !hasSelectedEvent) return;
     setSavingRules(true);
     setRulesMessage(null);
     try {
@@ -526,9 +575,9 @@ export default function DailyChallengeClient({
             </p>
             <div className="mt-5 grid grid-cols-1 md:grid-cols-3 gap-3">
               <div className={cn("rounded-xl px-3.5 py-3 border", isDark ? "border-violet-500/25 bg-violet-500/10" : "border-violet-200/90 bg-violet-50/80")}>
-                <p className="text-[11px] uppercase tracking-wider text-muted-foreground font-semibold">Daily Winners</p>
+                <p className="text-[11px] uppercase tracking-wider text-muted-foreground font-semibold">Expected Earning</p>
                 <p className="font-semibold flex items-center gap-1.5 mt-1">
-                  <Trophy className="w-4 h-4" /> 2 winners every day
+                  <Trophy className="w-4 h-4" /> 2 winners • {prizeLabel} each
                 </p>
               </div>
               <div className={cn("rounded-xl px-3.5 py-3 border", isDark ? "border-amber-500/25 bg-amber-500/10" : "border-amber-200/90 bg-amber-50/80")}>
@@ -624,9 +673,9 @@ export default function DailyChallengeClient({
             <p className={cn("text-sm mt-1.5 leading-relaxed", isDark ? "text-amber-100/90" : "text-amber-900/85")}>
               {isAdmin ? (
                 <>
-                  There is no competition window in its live date range with status <strong>active</strong> and{" "}
-                  <strong>is_active</strong> on. Use <span className="font-medium">Competition windows</span> below to
-                  create or activate one.
+                  There is no selected competition event whose dates are live right now. Use{" "}
+                  <span className="font-medium">Competition windows</span> below to create one or mark one as selected
+                  for the leaderboard.
                 </>
               ) : (
                 <>
@@ -646,20 +695,19 @@ export default function DailyChallengeClient({
             <div>
               <CardTitle className="text-base">Competition windows</CardTitle>
               <p className="text-xs text-muted-foreground mt-1 font-normal">
-                Set how long the Daily Challenge runs (e.g. 30 days), then manage live / upcoming / past
-                windows below. Creating a new window deactivates other <code className="text-[11px]">is_active</code>{" "}
-                events and attaches default eligibility rules.
+                Launch Daily Challenge events with a start/end date and prize. Only one selected event can drive the
+                creator leaderboard at a time; dates decide whether it is upcoming, live, or ended.
               </p>
             </div>
             <Button type="button" variant="outline" size="sm" onClick={loadCompetitionEvents} disabled={loadingCompetitionEvents}>
-              {loadingCompetitionEvents ? <Loader2 className="w-4 h-4 animate-spin" /> : "Refresh list"}
+              {loadingCompetitionEvents ? <Loader2 className="w-4 h-4 animate-spin" /> : "Reload windows"}
             </Button>
           </CardHeader>
           <CardContent className="pt-1 space-y-6 text-sm">
-            {!hasActiveEvent && (
+            {!hasSelectedEvent && (
               <p className="text-xs text-amber-600 dark:text-amber-400 rounded-lg border border-amber-200/80 dark:border-amber-500/30 bg-amber-50/80 dark:bg-amber-500/10 px-3 py-2">
-                No competition window is currently driving the leaderboard. Create one below, or activate
-                an upcoming window by editing it.
+                No selected event is currently inside its live dates. Create one below, or select an upcoming event by
+                editing it.
               </p>
             )}
 
@@ -671,9 +719,8 @@ export default function DailyChallengeClient({
             >
               <p className="text-sm font-semibold">Create new window</p>
               <p className="text-xs text-muted-foreground">
-                <span className="font-medium text-foreground">Duration</span> is measured from today: end date = today
-                + the number of days you enter (use <span className="font-medium text-foreground">30</span> for a
-                one-month season). Start offset pulls submissions from up to N days before today.
+                Choose when this Daily Challenge event starts and ends. If it is selected for leaderboard and today's
+                date is inside this window, creators will see it as the live Daily Challenge.
               </p>
               <div>
                 <p className="text-xs text-muted-foreground mb-1">Event name</p>
@@ -685,29 +732,48 @@ export default function DailyChallengeClient({
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <p className="text-xs text-muted-foreground mb-1">Start offset (days before today)</p>
+                  <p className="text-xs text-muted-foreground mb-1">Start date & time (IST)</p>
                   <Input
-                    type="number"
-                    min={0}
-                    value={eventForm.pastDays}
-                    onChange={(e) => setEventForm((p) => ({ ...p, pastDays: e.target.value }))}
+                    type="datetime-local"
+                    value={eventForm.startsLocal}
+                    onChange={(e) => setEventForm((p) => ({ ...p, startsLocal: e.target.value }))}
                     className="h-10 text-sm"
                   />
                 </div>
                 <div>
-                  <p className="text-xs text-muted-foreground mb-1">Duration (days from today)</p>
+                  <p className="text-xs text-muted-foreground mb-1">End date & time (IST)</p>
+                  <Input
+                    type="datetime-local"
+                    value={eventForm.endsLocal}
+                    onChange={(e) => setEventForm((p) => ({ ...p, endsLocal: e.target.value }))}
+                    className="h-10 text-sm"
+                  />
+                </div>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-[1fr_160px] gap-3">
+                <div>
+                  <p className="text-xs text-muted-foreground mb-1">Prize amount per winner</p>
                   <Input
                     type="number"
-                    min={1}
-                    value={eventForm.durationDays}
-                    onChange={(e) => setEventForm((p) => ({ ...p, durationDays: e.target.value }))}
+                    min={0}
+                    step="0.01"
+                    value={eventForm.prizeAmount}
+                    onChange={(e) => setEventForm((p) => ({ ...p, prizeAmount: e.target.value }))}
+                    className="h-10 text-sm"
+                  />
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground mb-1">Currency</p>
+                  <Input
+                    value={eventForm.prizeCurrency}
+                    onChange={(e) => setEventForm((p) => ({ ...p, prizeCurrency: e.target.value.toUpperCase().slice(0, 3) }))}
                     className="h-10 text-sm"
                   />
                 </div>
               </div>
               <Button onClick={createCompetitionEvent} disabled={creatingEvent} className="w-full sm:w-auto">
                 {creatingEvent ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : null}
-                Create active competition
+                Launch Daily Challenge event
               </Button>
               {eventBootstrapMessage && (
                 <p
@@ -722,7 +788,7 @@ export default function DailyChallengeClient({
             </div>
 
             <div className="space-y-2">
-              <p className="text-sm font-semibold">All windows</p>
+              <p className="text-sm font-semibold">All events</p>
               {loadingCompetitionEvents ? (
                 <div className="flex items-center gap-2 text-muted-foreground text-sm py-4">
                   <Loader2 className="w-4 h-4 animate-spin" />
@@ -795,32 +861,35 @@ export default function DailyChallengeClient({
                                       />
                                     </div>
                                   </div>
-                                  <div>
-                                    <p className="text-xs text-muted-foreground mb-1">Status</p>
-                                    <Select
-                                      value={editEventDraft.status}
-                                      onValueChange={(v) =>
-                                        setEditEventDraft((d) => (d ? { ...d, status: v } : d))
-                                      }
-                                    >
-                                      <SelectTrigger isDark={isDark} className="h-10 text-sm">
-                                        <SelectValue />
-                                      </SelectTrigger>
-                                      <SelectContent isDark={isDark}>
-                                        <SelectItem value="draft" isDark={isDark}>
-                                          draft
-                                        </SelectItem>
-                                        <SelectItem value="active" isDark={isDark}>
-                                          active
-                                        </SelectItem>
-                                        <SelectItem value="ended" isDark={isDark}>
-                                          ended
-                                        </SelectItem>
-                                      </SelectContent>
-                                    </Select>
+                                  <div className="grid grid-cols-1 sm:grid-cols-[1fr_160px] gap-3">
+                                    <div>
+                                      <p className="text-xs text-muted-foreground mb-1">Prize amount per winner</p>
+                                      <Input
+                                        type="number"
+                                        min={0}
+                                        step="0.01"
+                                        value={editEventDraft.prizeAmount}
+                                        onChange={(e) =>
+                                          setEditEventDraft((d) => (d ? { ...d, prizeAmount: e.target.value } : d))
+                                        }
+                                        className="h-10 text-sm"
+                                      />
+                                    </div>
+                                    <div>
+                                      <p className="text-xs text-muted-foreground mb-1">Currency</p>
+                                      <Input
+                                        value={editEventDraft.prizeCurrency}
+                                        onChange={(e) =>
+                                          setEditEventDraft((d) =>
+                                            d ? { ...d, prizeCurrency: e.target.value.toUpperCase().slice(0, 3) } : d,
+                                          )
+                                        }
+                                        className="h-10 text-sm"
+                                      />
+                                    </div>
                                   </div>
                                   <div className="flex items-center justify-between rounded-lg border px-3 py-2">
-                                    <span className="text-sm">is_active</span>
+                                    <span className="text-sm">Selected for leaderboard</span>
                                     <Switch
                                       checked={editEventDraft.is_active}
                                       onCheckedChange={(c) =>
@@ -845,7 +914,7 @@ export default function DailyChallengeClient({
                                       onClick={() => saveEditedEvent(row.id, true)}
                                       disabled={savingEventId === row.id}
                                     >
-                                      Set as only active — save
+                                      Select as active event
                                     </Button>
                                     <Button size="sm" variant="outline" onClick={cancelEditEvent} type="button">
                                       Cancel
@@ -858,17 +927,19 @@ export default function DailyChallengeClient({
                                     <div className="flex flex-wrap items-center gap-2">
                                       <p className="font-medium truncate">{row.name}</p>
                                       <Badge variant="outline" className="text-[10px] shrink-0">
-                                        {row.phase}
-                                      </Badge>
-                                      <Badge variant="outline" className="text-[10px] shrink-0">
-                                        {row.status}
+                                        {row.phase === "live"
+                                          ? "Live"
+                                          : row.phase === "upcoming"
+                                            ? "Upcoming"
+                                            : "Ended"}
                                       </Badge>
                                       {row.is_active ? (
-                                        <Badge className="text-[10px] shrink-0">active flag</Badge>
+                                        <Badge className="text-[10px] shrink-0">Active</Badge>
                                       ) : null}
                                     </div>
                                     <p className="text-xs text-muted-foreground break-words">
-                                      {fmtEventRange(row.starts_at, row.ends_at)} · {row.timezone}
+                                      {fmtEventRange(row.starts_at, row.ends_at)} · {row.timezone} ·{" "}
+                                      {formatPrize(Number(row.prize_amount_minor_units ?? 5000), row.prize_currency || "INR")} per winner
                                     </p>
                                   </div>
                                   <Button
@@ -909,13 +980,13 @@ export default function DailyChallengeClient({
       {isAdmin && (
         <Card className={panelClass}>
           <CardHeader className="pb-2">
-            <CardTitle className="text-base">Admin Eligibility Settings</CardTitle>
+            <CardTitle className="text-base">Eligibility Rules for Selected Event</CardTitle>
           </CardHeader>
           <CardContent className="pt-1 space-y-3">
             {!hasActiveEvent && (
               <p className="text-xs text-amber-600 dark:text-amber-400">
-                Create or activate a competition window above before saving custom rules (defaults are applied on
-                create).
+                Create or select a Daily Challenge event above before saving event-specific rules. Defaults are applied
+                when an event is created.
               </p>
             )}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -975,7 +1046,7 @@ export default function DailyChallengeClient({
               </p>
               <Button
                 onClick={saveEligibilityRules}
-                disabled={savingRules || !hasActiveEvent}
+                disabled={savingRules || !hasSelectedEvent}
                 className="sm:w-auto w-full"
               >
                 {savingRules ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : null}
@@ -993,7 +1064,7 @@ export default function DailyChallengeClient({
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         {config && (
-          <Card className={panelClass}>
+          <Card className={cn(panelClass, isAdmin ? "lg:col-span-3" : "")}>
             <CardHeader className="pb-2">
               <CardTitle className="text-base flex items-center gap-2">
                 <CheckCircle2 className="w-4 h-4 text-emerald-500" />
@@ -1010,57 +1081,59 @@ export default function DailyChallengeClient({
           </Card>
         )}
 
-        <Card className={cn("lg:col-span-2", panelClass)}>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-base">Your Progress</CardTitle>
-          </CardHeader>
-          <CardContent className="grid md:grid-cols-2 gap-3 text-sm pt-1">
-            {!hasActiveEvent && (
-              <p className="md:col-span-2 text-xs text-muted-foreground rounded-lg border px-3 py-2 bg-muted/30">
-                No live season is configured. Ranks and eligibility below will populate when the next Daily Challenge
-                opens.
-              </p>
-            )}
-            <div className={cn("rounded-xl border p-3.5", isDark ? "border-white/10" : "border-gray-200")}>
-              <p className="font-semibold">Views Board Rank #{me?.viewsRank ?? "-"}</p>
-              <p className="text-muted-foreground mt-1">
-                {me?.remaining?.views || "Submit and verify reels to see your progress."}
-              </p>
-              <Badge
-                variant={String(me?.remaining?.views || "").toLowerCase().includes("eligible") ? "default" : "outline"}
-                className="mt-2 text-[10px]"
-              >
-                {String(me?.remaining?.views || "").toLowerCase().includes("eligible")
-                  ? "Eligible"
-                  : "Needs more"}
-              </Badge>
-              {typeof me?.viewsRank === "number" && me.viewsRank > 3 && rows[2] && activeBoard === "views" && (
-                <p className="text-xs mt-2.5 text-violet-600">
-                  You need {number(Math.max(0, (rows[2].totalViews || 0) - (me.views || 0)))} more views to reach #3.
+        {!isAdmin && (
+          <Card className={cn("lg:col-span-2", panelClass)}>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base">Your Progress</CardTitle>
+            </CardHeader>
+            <CardContent className="grid md:grid-cols-2 gap-3 text-sm pt-1">
+              {!hasActiveEvent && (
+                <p className="md:col-span-2 text-xs text-muted-foreground rounded-lg border px-3 py-2 bg-muted/30">
+                  No live season is configured. Ranks and eligibility below will populate when the next Daily Challenge
+                  opens.
                 </p>
               )}
-            </div>
-            <div className={cn("rounded-xl border p-3.5", isDark ? "border-white/10" : "border-gray-200")}>
-              <p className="font-semibold">Reels Board Rank #{me?.reelsRank ?? "-"}</p>
-              <p className="text-muted-foreground mt-1">
-                {me?.remaining?.reels || "Maintain daily consistency to climb faster."}
-              </p>
-              <Badge
-                variant={String(me?.remaining?.reels || "").toLowerCase().includes("eligible") ? "default" : "outline"}
-                className="mt-2 text-[10px]"
-              >
-                {String(me?.remaining?.reels || "").toLowerCase().includes("eligible")
-                  ? "Eligible"
-                  : "Needs more"}
-              </Badge>
-              {typeof me?.reelsRank === "number" && me.reelsRank > 3 && rows[2] && activeBoard === "reels" && (
-                <p className="text-xs mt-2.5 text-violet-600">
-                  You need {number(Math.max(0, (rows[2].totalReels || 0) - (me.reels || 0)))} more reels to reach #3.
+              <div className={cn("rounded-xl border p-3.5", isDark ? "border-white/10" : "border-gray-200")}>
+                <p className="font-semibold">Views Board Rank #{me?.viewsRank ?? "-"}</p>
+                <p className="text-muted-foreground mt-1">
+                  {me?.remaining?.views || "Submit and verify reels to see your progress."}
                 </p>
-              )}
-            </div>
-          </CardContent>
-        </Card>
+                <Badge
+                  variant={String(me?.remaining?.views || "").toLowerCase().includes("eligible") ? "default" : "outline"}
+                  className="mt-2 text-[10px]"
+                >
+                  {String(me?.remaining?.views || "").toLowerCase().includes("eligible")
+                    ? "Eligible"
+                    : "Needs more"}
+                </Badge>
+                {typeof me?.viewsRank === "number" && me.viewsRank > 3 && rows[2] && activeBoard === "views" && (
+                  <p className="text-xs mt-2.5 text-violet-600">
+                    You need {number(Math.max(0, (rows[2].totalViews || 0) - (me.views || 0)))} more views to reach #3.
+                  </p>
+                )}
+              </div>
+              <div className={cn("rounded-xl border p-3.5", isDark ? "border-white/10" : "border-gray-200")}>
+                <p className="font-semibold">Reels Board Rank #{me?.reelsRank ?? "-"}</p>
+                <p className="text-muted-foreground mt-1">
+                  {me?.remaining?.reels || "Maintain daily consistency to climb faster."}
+                </p>
+                <Badge
+                  variant={String(me?.remaining?.reels || "").toLowerCase().includes("eligible") ? "default" : "outline"}
+                  className="mt-2 text-[10px]"
+                >
+                  {String(me?.remaining?.reels || "").toLowerCase().includes("eligible")
+                    ? "Eligible"
+                    : "Needs more"}
+                </Badge>
+                {typeof me?.reelsRank === "number" && me.reelsRank > 3 && rows[2] && activeBoard === "reels" && (
+                  <p className="text-xs mt-2.5 text-violet-600">
+                    You need {number(Math.max(0, (rows[2].totalReels || 0) - (me.reels || 0)))} more reels to reach #3.
+                  </p>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        )}
       </div>
 
       <Card className={panelClass}>
@@ -1162,6 +1235,11 @@ export default function DailyChallengeClient({
                           <Badge className="text-[10px]">
                             <Medal className="w-3 h-3 mr-1" />
                             Winner
+                          </Badge>
+                        )}
+                        {row.rank === 1 && row.trophy && (
+                          <Badge variant="outline" className="text-[10px]">
+                            Expected {prizeLabel}
                           </Badge>
                         )}
                         {row.rank === 1 && !row.trophy && (
@@ -1272,7 +1350,13 @@ export default function DailyChallengeClient({
                       const winnerName = hasWinner
                         ? w?.metrics_json?.username || w?.metrics_json?.fullName || "Winner"
                         : "N/A";
-                      const rewardInr = hasWinner ? DAILY_WINNER_REWARD_INR : 0;
+                      const rowPrizeAmountMinorUnits = Number(
+                        w?.rules_json?.event?.prizeAmountMinorUnits ?? prizeAmountMinorUnits,
+                      );
+                      const rowPrizeCurrency = String(
+                        w?.rules_json?.event?.prizeCurrency || prizeCurrency,
+                      );
+                      const rewardLabel = formatPrize(rowPrizeAmountMinorUnits, rowPrizeCurrency);
                       const statsSuffix =
                         w.category === "views"
                           ? ` • ${number(verifiedViews)} verified views • ${number(verifiedReels)} verified reels`
@@ -1297,7 +1381,7 @@ export default function DailyChallengeClient({
                           </div>
                           <div className="flex items-center gap-2 sm:gap-3 shrink-0">
                             <Badge variant="outline" className="whitespace-nowrap">
-                              ₹{rewardInr}
+                              {hasWinner ? `Earned ${rewardLabel}` : "No earning"}
                             </Badge>
                             <Badge variant={hasWinner ? "default" : "outline"}>
                               {hasWinner ? "Winner Locked" : "No Eligible Winner"}
