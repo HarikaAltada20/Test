@@ -267,11 +267,14 @@ export async function POST(
       }
     }
 
+    const twitterFlatFeeBonusKey = `twitter_flat_fee_bonus:v1:${contestId}:${tweetId}`;
+
     const creditResult = await creditCreatorWithdrawableBalance(
       creatorId,
       flatFeeBonus,
       `Flat fee bonus for Twitter submission - ${contest.title || "Contest"}`,
       {
+        idempotencyKey: twitterFlatFeeBonusKey,
         remarks: "Flat fee bonus credited to creator wallet",
         metadata: {
           contest_id: contestId,

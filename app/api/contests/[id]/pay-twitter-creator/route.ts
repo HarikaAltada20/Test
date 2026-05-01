@@ -298,7 +298,11 @@ export async function POST(
       );
     }
 
-    // Credit creator wallet
+    const twitterCreatorPayKey =
+      customAmount > 0
+        ? `twitter_creator_pay:v1:${contestId}:${creatorId}:cycle:${nextCycle}:amt:${rewardAmount}`
+        : `twitter_creator_pay:v1:${contestId}:${creatorId}:cycle:${nextCycle}`;
+
     const creditRes = await creditCreatorWithdrawableBalance(
       creatorId,
       rewardAmount,
@@ -308,6 +312,7 @@ export async function POST(
         ? `Twitter CPM contest reward - ${contest.title || "Contest"}`
         : `Twitter contest reward - ${contest.title || "Contest"}`,
       {
+        idempotencyKey: twitterCreatorPayKey,
         remarks:
           customRemarks ||
           (customAmount > 0

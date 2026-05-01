@@ -411,7 +411,8 @@ export async function POST(request: Request) {
         }
         // Check if bonus already paid
         if (!submissionFull.bonus_paid) {
-          // Credit bonus to creator wallet
+          const flatFeeBonusIdempotencyKey = `flat_fee_bonus:v1:${submissionId}`;
+
           const creditResult = await creditCreatorWithdrawableBalance(
             submissionFull.creator_id,
             flatFeeBonus,
@@ -419,6 +420,7 @@ export async function POST(request: Request) {
               contest.title || "Contest"
             }`,
             {
+              idempotencyKey: flatFeeBonusIdempotencyKey,
               remarks:
                 paymentDetails?.customRemarks ||
                 "Flat fee bonus credited to creator wallet",
@@ -439,7 +441,6 @@ export async function POST(request: Request) {
             );
           }
 
-          // Update submission bonus_paid status and amount
           const { data: afterBonusUpdate, error: bonusUpdateError } =
             await supabaseAdmin
               .from("submissions")
@@ -459,7 +460,16 @@ export async function POST(request: Request) {
               "Error updating bonus_paid status:",
               bonusUpdateError,
             );
-          } else if (afterBonusUpdate) {
+            return NextResponse.json(
+              {
+                error:
+                  "Bonus was credited but failed to mark submission bonus_paid — retry the same operation; duplicate wallet credits are suppressed by idempotency.",
+                details: bonusUpdateError.message,
+              },
+              { status: 500 },
+            );
+          }
+          if (afterBonusUpdate) {
             Object.assign(updatedSubmission, afterBonusUpdate);
           }
         }
@@ -668,6 +678,10 @@ export async function POST(request: Request) {
               payout_cycle: nextCycle,
             });
 
+          const contestRewardIdempotencyKey = customAmount
+            ? `contest_reward:v1:${submissionId}:cycle:${nextCycle}:amt:${rewardAmount}`
+            : `contest_reward:v1:${submissionId}:cycle:${nextCycle}`;
+
           if (!rewardInThisCycle || rewardInThisCycle.length === 0) {
             const creditRes = await creditCreatorWithdrawableBalance(
               submissionFull.creator_id,
@@ -680,6 +694,7 @@ export async function POST(request: Request) {
                     (contest as any)?.title || "Contest"
                   }`,
               {
+                idempotencyKey: contestRewardIdempotencyKey,
                 remarks:
                   customRemarks ||
                   (customAmount
@@ -701,26 +716,17 @@ export async function POST(request: Request) {
             }
           }
 
-          // Update creator metrics: submission wins and contest wins (+1)
-          try {
-            await MetricsService.incrementSubmissionWin(
-              submissionFull.creator_id,
-              submissionFull.contest_id,
-              submissionId,
-            );
-          } catch (e: any) {
-            console.error("Metrics update (paid) failed:", e);
-          }
-
-          // Ensure reward amount is reflected on the submission for UI display
           const shouldPersistEarnings =
             !!customAmount ||
             contest.contest_type === "milestone" ||
             !submissionFull.earnings ||
             submissionFull.earnings <= 0;
 
+          let paidPersistError:
+            | { message: string; code?: string; details?: unknown }
+            | undefined;
           if (shouldPersistEarnings) {
-            await supabaseAdmin
+            const { error } = await supabaseAdmin
               .from("submissions")
               .update({
                 earnings: rewardAmount,
@@ -728,15 +734,37 @@ export async function POST(request: Request) {
                 paid_at: new Date().toISOString(),
               })
               .eq("id", submissionId);
+            paidPersistError = error ?? undefined;
           } else {
-            // Update paid status even if earnings already set
-            await supabaseAdmin
+            const { error } = await supabaseAdmin
               .from("submissions")
               .update({
                 paid: true,
                 paid_at: new Date().toISOString(),
               })
               .eq("id", submissionId);
+            paidPersistError = error ?? undefined;
+          }
+
+          if (paidPersistError) {
+            return NextResponse.json(
+              {
+                error:
+                  "Reward was credited (or skipped as duplicate) but failed to mark submission paid — retry the same operation; duplicate wallet credits are suppressed by idempotency.",
+                details: paidPersistError.message,
+              },
+              { status: 500 },
+            );
+          }
+
+          try {
+            await MetricsService.incrementSubmissionWin(
+              submissionFull.creator_id,
+              submissionFull.contest_id,
+              submissionId,
+            );
+          } catch (e: unknown) {
+            console.error("Metrics update (paid) failed:", e);
           }
         }
       }
@@ -816,7 +844,6 @@ export async function POST(request: Request) {
           console.error("Metrics update (revert paid) failed:", e);
         }
         // Do NOT delete the original reward transactions. We only add a new explicit reversal entry.
-        // Always log a reversal transaction entry for audit trail
         await logTransactionAsAdmin(
           submissionFull.creator_id,
           "refund",

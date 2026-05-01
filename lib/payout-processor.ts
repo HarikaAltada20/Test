@@ -128,6 +128,10 @@ export async function processQueuedPayouts(batchSize: number = 10): Promise<Payo
 
         if (!rewardInThisCycle || rewardInThisCycle.length === 0) {
           const customRemarks = payload?.customRemarks as string | undefined;
+          const contestRewardIdempotencyKey =
+            payoutType === "custom"
+              ? `contest_reward:v1:${sub.id}:cycle:${nextCycle}:amt:${rewardAmount}`
+              : `contest_reward:v1:${sub.id}:cycle:${nextCycle}`;
           const creditRes = await creditCreatorWithdrawableBalance(
             sub.creator_id,
             rewardAmount,
@@ -135,9 +139,19 @@ export async function processQueuedPayouts(batchSize: number = 10): Promise<Payo
               ? `Custom contest payment credited - ${(contest as any)?.title || 'Contest'}`
               : `Contest reward credited - ${(contest as any)?.title || 'Contest'}`,
             {
-              remarks: customRemarks || (payoutType === 'custom' ? 'Custom payout credited to creator wallet' : 'Standard payout credited to creator wallet'),
-              metadata: { contest_id: sub.contest_id, submission_id: sub.id, payout_type: payoutType, payout_cycle: nextCycle }
-            }
+              idempotencyKey: contestRewardIdempotencyKey,
+              remarks:
+                customRemarks ||
+                (payoutType === "custom"
+                  ? "Custom payout credited to creator wallet"
+                  : "Standard payout credited to creator wallet"),
+              metadata: {
+                contest_id: sub.contest_id,
+                submission_id: sub.id,
+                payout_type: payoutType,
+                payout_cycle: nextCycle,
+              },
+            },
           );
           if (!creditRes.success) {
             throw new Error(`Failed to credit creator wallet: ${creditRes.error}`);

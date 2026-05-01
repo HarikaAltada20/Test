@@ -700,11 +700,17 @@ export async function creditCreatorWithdrawableBalance(
   creatorId: string,
   amountInCents: number,
   description: string,
-  opts?: { remarks?: string; metadata?: any }
+  opts?: {
+    remarks?: string;
+    metadata?: Record<string, unknown> | null;
+    /** When set, duplicate credits with same key are no-ops (returns alreadyApplied). */
+    idempotencyKey?: string | null;
+  },
 ): Promise<{
   success: boolean;
   newBalance?: number;
   transactionId?: string;
+  alreadyApplied?: boolean;
   error?: string;
 }> {
   try {
@@ -712,65 +718,52 @@ export async function creditCreatorWithdrawableBalance(
       return { success: false, error: "Amount must be positive" };
     }
 
-    // Use service role to bypass RLS when crediting other users
     const supabase = createAdminClient();
 
-    // Read current balances
-    const { data: profile, error: readErr } = await supabase
-      .from("creator_profiles")
-      .select("withdrawable_balance, total_money_won")
-      .eq("id", creatorId)
-      .single();
+    const { data: rpcRaw, error: rpcErr } = await supabase.rpc(
+      "creator_payout_credit_atomic",
+      {
+        p_creator_id: creatorId,
+        p_amount_cents: amountInCents,
+        p_description: description,
+        p_remarks: opts?.remarks ?? null,
+        p_metadata: opts?.metadata ?? null,
+        p_idempotency_key: opts?.idempotencyKey ?? null,
+      },
+    );
 
-    if (readErr) {
-      return { success: false, error: readErr.message };
+    if (rpcErr) {
+      return { success: false, error: rpcErr.message };
     }
 
-    const currentBalance = profile?.withdrawable_balance || 0;
-    const currentTotalWon = profile?.total_money_won || 0;
-    const newBalance = currentBalance + amountInCents;
-    const newTotalWon = currentTotalWon + amountInCents;
+    const row = rpcRaw as {
+      new_balance?: number | string;
+      transaction_id?: string;
+      already_applied?: boolean;
+    } | null;
 
-    const { error: updateErr } = await supabase
-      .from("creator_profiles")
-      .update({
-        withdrawable_balance: newBalance,
-        total_money_won: newTotalWon,
-      })
-      .eq("id", creatorId);
-
-    if (updateErr) {
-      return { success: false, error: updateErr.message };
-    }
-
-    // Log reward transaction
-    const supabaseInsert = await supabase
-      .from("money_transactions")
-      .insert({
-        user_id: creatorId,
-        type: "reward",
-        status: "success",
-        amount: amountInCents,
-        description,
-        remarks: opts?.remarks,
-        metadata: opts?.metadata,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      })
-      .select("id")
-      .single();
-
-    if (supabaseInsert.error) {
-      return { success: false, error: supabaseInsert.error.message };
+    const newBalance =
+      row?.new_balance == null ? NaN : Number(row?.new_balance);
+    if (
+      row == null ||
+      !Number.isFinite(newBalance) ||
+      typeof row.transaction_id !== "string"
+    ) {
+      return {
+        success: false,
+        error: "creator_payout_credit_atomic returned unexpected payload",
+      };
     }
 
     return {
       success: true,
       newBalance,
-      transactionId: supabaseInsert.data?.id,
+      transactionId: row.transaction_id,
+      alreadyApplied: Boolean(row.already_applied),
     };
-  } catch (error: any) {
-    return { success: false, error: error?.message || "Unknown error" };
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : "Unknown error";
+    return { success: false, error: message };
   }
 }
 

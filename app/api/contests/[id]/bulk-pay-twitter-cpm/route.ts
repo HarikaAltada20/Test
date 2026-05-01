@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { NextResponse } from "next/server";
 import { createClient } from "@/utils/supabase/server";
 import { createAdminClient } from "@/utils/supabase/admin";
@@ -9,6 +10,7 @@ import {
   REVERSAL_TRANSACTION_REMARK,
 } from "@/lib/payment-utils";
 import { applyPayoutAdjustment } from "@/lib/payout-adjustment";
+import { countRefundsForCreatorContest } from "@/lib/contest-payout-idempotency";
 
 type PaymentType = "standard" | "bonus" | "both";
 
@@ -426,11 +428,48 @@ export async function POST(
       creditMetadata.bonus_type = "flat_fee";
     }
 
+    const {
+      count: contestRefundCount,
+      errorMessage: refundCountErr,
+    } = await countRefundsForCreatorContest(supabaseAdmin, creatorId, contestId);
+
+    if (refundCountErr) {
+      console.error(
+        "[bulk-pay-twitter-cpm] failed to count contest refunds:",
+        refundCountErr,
+      );
+      return NextResponse.json(
+        {
+          error:
+            "Cannot verify refund history for safe payout (idempotency). Try again or contact support.",
+          details: refundCountErr,
+        },
+        { status: 500 },
+      );
+    }
+
+    const twitterBulkFingerprint = createHash("sha256")
+      .update(
+        JSON.stringify({
+          contest_id: contestId,
+          twitter_creator_id: creatorId,
+          payment_type: paymentType,
+          total_amount: totalAmount,
+          tweet_ids_sorted: [...tweetIds].sort(),
+          cpm_breakdown: cpmBreakdown,
+          bonus_breakdown: bonusBreakdown,
+          contest_refund_count_at_payout: contestRefundCount,
+        }),
+      )
+      .digest("hex")
+      .slice(0, 48);
+
     const creditRes = await creditCreatorWithdrawableBalance(
       creatorId,
       totalAmount,
       `Twitter CPM bulk payment — ${contest.title || "Contest"}`,
       {
+        idempotencyKey: `twitter_cpm_bulk_v2:${twitterBulkFingerprint}`,
         remarks: `Twitter CPM bulk (${paymentType})`,
         metadata: creditMetadata,
       }

@@ -1,8 +1,10 @@
+import { createHash } from "node:crypto";
 import { createClient } from "@/utils/supabase/server";
 import { NextRequest, NextResponse } from "next/server";
 import { creditCreatorWithdrawableBalance } from "@/lib/payment-utils";
 import { applyPayoutAdjustment } from "@/lib/payout-adjustment";
 import { buildMilestoneSubmissionPayoutCentsMap } from "@/lib/milestone-contest-expected-spend";
+import { countRefundsForCreatorContest } from "@/lib/contest-payout-idempotency";
 
 export async function POST(request: NextRequest) {
   const supabaseAdmin = await createClient();
@@ -438,7 +440,53 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Credit creator wallet
+    const { count: contestRefundCount, errorMessage: refundCountErr } =
+      await countRefundsForCreatorContest(
+        supabaseAdmin,
+        creator_id,
+        contest_id,
+      );
+    if (refundCountErr) {
+      console.error(
+        "[bulk-payment] failed to count contest refunds for idempotency:",
+        refundCountErr,
+      );
+      return NextResponse.json(
+        {
+          error:
+            "Cannot verify refund history for safe payout (idempotency). Try again or contact support.",
+          details: refundCountErr,
+        },
+        { status: 500 },
+      );
+    }
+
+    const breakdownFingerprintItems = [...breakdown]
+      .map((b) => ({
+        submission_id: String(b.submission_id),
+        cpm_amount: b.cpm_amount,
+        bonus_amount: b.bonus_amount,
+      }))
+      .sort((a, b) =>
+        a.submission_id.localeCompare(b.submission_id),
+      );
+
+    const bulkPayIdempotencyKey = `bulk_pay_v2:${createHash("sha256")
+      .update(
+        JSON.stringify({
+          contest_id,
+          creator_id,
+          payment_type,
+          payout_adjustment_percentage: payoutAdjustmentPercentage,
+          payout_adjustment_mode: payoutAdjustmentMode ?? null,
+          items: breakdownFingerprintItems,
+          total_amount: totalAmount,
+          contest_refund_count_at_payout: contestRefundCount,
+        }),
+      )
+      .digest("hex")
+      .slice(0, 48)}`;
+
     const creditResult = await creditCreatorWithdrawableBalance(
       creator_id,
       totalAmount,
@@ -446,6 +494,7 @@ export async function POST(request: NextRequest) {
         contest.title || "Contest"
       }`,
       {
+        idempotencyKey: bulkPayIdempotencyKey,
         remarks: `Bulk payment: ${payment_type}`,
         metadata: {
           contest_id: contest_id,
@@ -478,9 +527,10 @@ export async function POST(request: NextRequest) {
         payment_type !== "standard" ? new Date().toISOString() : undefined,
     }));
 
+    const updateFailures: { submission_id: string; message: string }[] = [];
     // Update each submission
     for (const update of submissionUpdates) {
-      const updatePayload: any = {};
+      const updatePayload: Record<string, unknown> = {};
 
       // Always update earnings (CPM amount) and status if paying standard or both
       if (payment_type !== "bonus") {
@@ -504,7 +554,24 @@ export async function POST(request: NextRequest) {
 
       if (updateError) {
         console.error(`Failed to update submission ${update.id}:`, updateError);
+        updateFailures.push({
+          submission_id: update.id as string,
+          message: updateError.message,
+        });
       }
+    }
+
+    if (updateFailures.length > 0) {
+      return NextResponse.json(
+        {
+          error:
+            "Wallet was credited but one or more submission rows failed to update. Retry this request with the same payload to reconcile without duplicating the wallet credit.",
+          updateFailures,
+          transaction_id: creditResult.transactionId,
+          already_applied_idempotent: Boolean(creditResult.alreadyApplied),
+        },
+        { status: 500 },
+      );
     }
 
     return NextResponse.json({
@@ -518,6 +585,7 @@ export async function POST(request: NextRequest) {
         skipped_count: skippedCount,
         breakdown: breakdown,
         transaction_id: creditResult.transactionId,
+        payout_idempotent_retry: Boolean(creditResult.alreadyApplied),
         cap_reached: maxEarnings ? runningTotal >= maxEarnings : false,
         remaining_cap: maxEarnings
           ? Math.max(0, maxEarnings - runningTotal)

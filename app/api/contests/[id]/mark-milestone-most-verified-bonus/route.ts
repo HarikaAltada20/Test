@@ -208,6 +208,8 @@ export async function POST(
       );
     }
 
+    const milestoneMvBonusIdempotencyKey = `milestone_mv_bonus:v1:${contestId}:${creatorId}:${track}`;
+
     const creditResult = await creditCreatorWithdrawableBalance(
       creatorId,
       creditCents,
@@ -215,12 +217,11 @@ export async function POST(
         contest.title || "Contest"
       }`,
       {
+        idempotencyKey: milestoneMvBonusIdempotencyKey,
         remarks: `Milestone most_verified_${track} bonus (contest ${contestId})`,
         metadata: {
           contest_id: contestId,
           bonus_type: `milestone_most_verified_${track}`,
-          // Keep a track-specific submission key so this reward does not collide
-          // with normal per-submission reward rows on ux_reward_per_submission_cycle.
           submission_id: `${target.id}:milestone_most_verified_${track}`,
           source_submission_id: target.id,
         },
@@ -289,7 +290,11 @@ export async function POST(
 
     if (updErr) {
       return NextResponse.json(
-        { error: updErr.message || "Failed to update submission bonus fields" },
+        {
+          error:
+            updErr.message ||
+            "Bonus was credited but failed to update submission — retry safely; duplicate wallet credits are suppressed by idempotency.",
+        },
         { status: 500 },
       );
     }

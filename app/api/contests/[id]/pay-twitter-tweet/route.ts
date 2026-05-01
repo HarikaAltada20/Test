@@ -262,6 +262,10 @@ export async function POST(
       }
     }
 
+    const twitterTweetPayKey = useCustomAmount
+      ? `twitter_tweet_pay:v1:${contestId}:${tweetId}:amt:${rewardAmount}`
+      : `twitter_tweet_pay:v1:${contestId}:${tweetId}`;
+
     const creditRes = await creditCreatorWithdrawableBalance(
       creatorId,
       rewardAmount,
@@ -269,6 +273,7 @@ export async function POST(
         ? `Custom tweet payment - ${contest.title || "Contest"}`
         : `Twitter CPM tweet reward - ${contest.title || "Contest"}`,
       {
+        idempotencyKey: twitterTweetPayKey,
         remarks:
           customRemarks?.trim() ||
           (useCustomAmount

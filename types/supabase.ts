@@ -685,6 +685,7 @@ export interface Database {
           payment_intent_id: string | null;
           payment_method: string | null;
           metadata: any | null;
+          idempotency_key: string | null;
         };
         Insert: {
           id?: string;
@@ -708,6 +709,7 @@ export interface Database {
           payment_intent_id?: string | null;
           payment_method?: string | null;
           metadata?: any | null;
+          idempotency_key?: string | null;
         };
         Update: {
           id?: string;
@@ -731,6 +733,7 @@ export interface Database {
           payment_intent_id?: string | null;
           payment_method?: string | null;
           metadata?: any | null;
+          idempotency_key?: string | null;
         };
       };
       coin_transactions: {
