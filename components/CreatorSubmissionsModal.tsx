@@ -320,7 +320,8 @@ export function CreatorSubmissionsModal({
       const status = (s as any).is_twitter_tweet
         ? (s as any).moderation_status || s.status
         : s.status;
-      return status === "verified";
+      const st = String(status || "").toLowerCase();
+      return st === "verified" || st === "approved";
     });
 
     if (verifiedSubs.length === 0) {
@@ -1857,9 +1858,13 @@ export function CreatorSubmissionsModal({
                       const grantedReward = isPaidForGranted
                         ? explicitPaidAmount != null && explicitPaidAmount > 0
                           ? Number(explicitPaidAmount)
-                          : submission.earnings && submission.earnings > 0
-                            ? submission.earnings
-                            : expectedReward
+                          : contest?.contest_type === "milestone"
+                            ? shouldAdjustReward
+                              ? adjustedExpectedReward
+                              : expectedReward
+                            : submission.earnings && submission.earnings > 0
+                              ? submission.earnings
+                              : expectedReward
                         : 0;
                       const expectedBonus =
                         expectedBonusMap.get(submission.id) || 0;

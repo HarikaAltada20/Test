@@ -2972,7 +2972,7 @@ export function ContestListClient({
   }, [isCheckingCpmAccess, router, toast]);
 
   const contestTypeGuideCards = (
-    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
       <Card
         className={cn(
           "shadow-lg",
@@ -3233,6 +3233,141 @@ export function ContestListClient({
               disabled={isCheckingCpmAccess}
             >
               Create CPM Contest
+            </button>
+            <a
+              href="https://calendly.com/guptavishesh2/30min"
+              target="_blank"
+              rel="noopener noreferrer"
+              className={cn(
+                "w-full text-md rounded-lg font-medium py-2 flex items-center justify-center gap-2 border transition-colors",
+                isDark
+                  ? "border-gray-600 text-gray-300 hover:bg-gray-800"
+                  : "border-gray-300 text-gray-600 hover:bg-gray-50",
+              )}
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 13a19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 3.55 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
+              Need Help? Book a Call
+            </a>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card
+        className={cn(
+          "shadow-lg",
+          isDark ? "border border-gray-700 bg-[#07031D]" : "border border-gray-200 bg-white",
+        )}
+      >
+        <div
+          className={cn(
+            "aspect-[16/10] flex items-center justify-center overflow-hidden relative rounded-md border",
+            isDark ? "bg-slate-900 border-gray-700" : "bg-slate-100 border-gray-100",
+          )}
+        >
+          <img
+            src="/images/milestones.avif"
+            alt="Milestone contest preview"
+            className="w-full h-full object-cover transition-transform duration-300 ease-in-out group-hover:scale-105"
+          />
+        </div>
+        <CardHeader className="pb-3">
+          <div className="flex items-center gap-3">
+            <div className="flex-1">
+              <CardTitle className={cn("text-base", isDark ? "text-white" : "text-gray-900")}>Milestone Contest</CardTitle>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent className="pt-0">
+          <div className={cn("space-y-4 text-md leading-6", isDark ? "text-slate-300" : "text-slate-800")}>
+            <div className="rounded-lg">
+              <p className="mt-2">
+                Milestone contests reward creators as they reach specific view targets. This provides guaranteed payouts for creators and guaranteed results for your brand, with full control over the maximum budget.
+              </p>
+            </div>
+
+            <div className="space-y-3">
+              <div
+                className={cn(
+                  "flex items-start gap-3 rounded-lg border p-4 shadow-sm",
+                  isDark ? "border-gray-700 bg-[#0b1020]" : "border-slate-200 bg-white",
+                )}
+              >
+                <span
+                  className={cn(
+                    "inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-semibold",
+                    isDark ? "bg-purple-900/60 text-purple-200" : "bg-purple-100 text-purple-700",
+                  )}
+                >
+                  1
+                </span>
+                <div>
+                  <p className={cn("font-semibold", isDark ? "text-white" : "text-slate-900")}>
+                    Define Milestones
+                  </p>
+                  <p className={cn("mt-1", isDark ? "text-slate-300" : "text-slate-600")}>
+                    Set specific view targets (e.g., 10K, 50K, 100K) and the payout amount for each. You can also set a cap on the number of winners per milestone.
+                  </p>
+                </div>
+              </div>
+
+              <div
+                className={cn(
+                  "flex items-start gap-3 rounded-lg border p-4 shadow-sm",
+                  isDark ? "border-gray-700 bg-[#0b1020]" : "border-slate-200 bg-white",
+                )}
+              >
+                <span
+                  className={cn(
+                    "inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-semibold",
+                    isDark ? "bg-purple-900/60 text-purple-200" : "bg-purple-100 text-purple-700",
+                  )}
+                >
+                  2
+                </span>
+                <div>
+                  <p className={cn("font-semibold", isDark ? "text-white" : "text-slate-900")}>
+                    Creators Participate
+                  </p>
+                  <p className={cn("mt-1", isDark ? "text-slate-300" : "text-slate-600")}>
+                    Creators produce and publish content. As their videos gain organic views, our system tracks their progress towards the milestones you set.
+                  </p>
+                </div>
+              </div>
+
+              <div
+                className={cn(
+                  "flex items-start gap-3 rounded-lg border p-4 shadow-sm",
+                  isDark ? "border-gray-700 bg-[#0b1020]" : "border-slate-200 bg-white",
+                )}
+              >
+                <span
+                  className={cn(
+                    "inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-semibold",
+                    isDark ? "bg-purple-900/60 text-purple-200" : "bg-purple-100 text-purple-700",
+                  )}
+                >
+                  3
+                </span>
+                <div>
+                  <p className={cn("font-semibold", isDark ? "text-white" : "text-slate-900")}>
+                  Payouts Based on Achieved Milestones
+                  </p>
+                  <p className={cn("mt-1", isDark ? "text-slate-300" : "text-slate-600")}>
+                  When a creator reaches a milestone, the payout is calculated and credited based only the milestone they have actually achieved for that submission.
+                  </p>
+                </div>
+              </div>
+            </div>
+            <button
+              type="button"
+              className="w-full bg-purple-600 text-md rounded-lg font-medium text-white py-2 hover:bg-purple-700"
+              onClick={() =>
+                router.push(
+                  "/dashboard/contests/create?new=true&contestType=milestone",
+                )
+              }
+            >
+              Create Milestone Contest
             </button>
             <a
               href="https://calendly.com/guptavishesh2/30min"

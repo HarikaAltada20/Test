@@ -93,7 +93,7 @@ const creatorFaqs = [
     id: "faq-2",
     question: "How do I make money on Game of Creators?",
     answer:
-      "Participate in contests by posting content on your social media. Compete for organic views, and the top performers will win cash prizes.<br><br><strong>Leaderboard contests:</strong> Your ranking matters based on your views.<br><br><strong>CPM contests:</strong> Your views determine your earnings, regardless of your rank.",
+      "Participate in contests by posting content on your social media. Compete for organic views, and the top performers will win cash prizes.<br><br><strong>Leaderboard contests:</strong> Your ranking matters based on your views.<br><br><strong>CPM contests:</strong> Your views determine your earnings, regardless of your rank.<br><br><strong>Milestone contests:</strong> You earn fixed payouts when your content reaches view targets set by the brand (first-come, first-served within any per-tier limits).",
   },
   {
     id: "faq-3",

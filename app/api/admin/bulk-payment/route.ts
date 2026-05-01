@@ -2,6 +2,7 @@ import { createClient } from "@/utils/supabase/server";
 import { NextRequest, NextResponse } from "next/server";
 import { creditCreatorWithdrawableBalance } from "@/lib/payment-utils";
 import { applyPayoutAdjustment } from "@/lib/payout-adjustment";
+import { buildMilestoneSubmissionPayoutCentsMap } from "@/lib/milestone-contest-expected-spend";
 
 export async function POST(request: NextRequest) {
   const supabaseAdmin = await createClient();
@@ -84,10 +85,11 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Filter to verified submissions only
-    const verifiedSubmissions = submissions.filter(
-      (s) => s.status === "verified",
-    );
+    // Filter to verified (or legacy "approved") submissions only — same notion as verify-submission / UI
+    const verifiedSubmissions = submissions.filter((s) => {
+      const st = String(s.status || "").toLowerCase();
+      return st === "verified" || st === "approved";
+    });
 
     if (verifiedSubmissions.length === 0) {
       return NextResponse.json(
@@ -102,10 +104,8 @@ export async function POST(request: NextRequest) {
         new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
     );
 
-    // Milestone payout
- 
+    // Milestone payout — same FCFS + limits + view rules as contest detail / verify-submission
     let milestonePayoutBySubmissionId = new Map<string, number>();
-    let milestoneSortedMilestones: any[] = [];
     if (contest.contest_type === "milestone") {
       const milestoneContest = (contest.contest_based_details as any)
         ?.milestone_contest;
@@ -114,54 +114,41 @@ export async function POST(request: NextRequest) {
         : [];
 
       if (milestones.length > 0) {
-        milestoneSortedMilestones = [...milestones].sort(
-          (a: any, b: any) =>
-            Number(b?.target_views || 0) - Number(a?.target_views || 0),
-        );
-
         const { data: payoutEligibleSubs, error: payoutEligibleErr } =
           await supabaseAdmin
-          .from("submissions")
-          .select("id, status, views, created_at, deleted_at")
-          .eq("contest_id", contest_id)
-          // Use verified/paid only so pending rows do not consume milestone winner slots.
-          .in("status", ["verified", "paid"])
-          .is("deleted_at", null)
-          .order("created_at", { ascending: true });
+            .from("submissions")
+            .select(
+              "id, creator_id, status, views, created_at, platform, other_stats",
+            )
+            .eq("contest_id", contest_id)
+            .in("status", ["pending", "verified", "paid"])
+            .order("created_at", { ascending: true });
 
         if (payoutEligibleErr) {
           console.error(
             "[bulk-payment] milestone payout query failed:",
             payoutEligibleErr,
           );
+          return NextResponse.json(
+            {
+              error: `Milestone allocation failed: ${payoutEligibleErr.message}. Try again or contact support.`,
+            },
+            { status: 500 },
+          );
         } else {
-          const winnerCountsByMilestone = new Map<string, number>();
-          for (const sub of payoutEligibleSubs || []) {
-            const subViews = Number((sub as any)?.views || 0);
-            let payoutCents = 0;
-
-            for (const milestone of milestoneSortedMilestones) {
-              const targetViews = Number(milestone?.target_views || 0);
-              if (subViews < targetViews) continue;
-
-              const winnerLimit = milestone?.winner_limit;
-              const milestoneKey = `${Number(milestone?.order || 0)}:${targetViews}`;
-
-              if (winnerLimit != null) {
-                const used = winnerCountsByMilestone.get(milestoneKey) || 0;
-                if (used >= Number(winnerLimit)) continue;
-                winnerCountsByMilestone.set(milestoneKey, used + 1);
-              }
-
-              payoutCents = Number(milestone?.payout_cents || 0);
-              break;
-            }
-
-            milestonePayoutBySubmissionId.set(
-              String((sub as any).id),
-              payoutCents,
-            );
-          }
+          const records = (payoutEligibleSubs || []).map((sub: any) => ({
+            id: String(sub.id),
+            creator_id: sub.creator_id,
+            created_at: sub.created_at,
+            status: sub.status,
+            views: sub.views,
+            platform: sub.platform,
+            other_stats: sub.other_stats,
+          }));
+          milestonePayoutBySubmissionId = buildMilestoneSubmissionPayoutCentsMap(
+            records,
+            milestones,
+          );
         }
       }
     }
@@ -299,48 +286,44 @@ export async function POST(request: NextRequest) {
       let submissionEarnings = 0;
 
       if (payment_type !== "bonus") {
-        // Use stored earnings or calculate from views
-        submissionEarnings = sub.earnings || 0;
+        if (contest.contest_type === "milestone") {
+          submissionEarnings =
+            milestonePayoutBySubmissionId.get(String(sub.id)) || 0;
+        } else {
+          // Numeric normalize: DB/JSON may send string "0" which is truthy and would skip CPM math below.
+          const storedEarnings = Number((sub as any).earnings);
+          submissionEarnings =
+            Number.isFinite(storedEarnings) && storedEarnings > 0
+              ? storedEarnings
+              : 0;
 
-        // If earnings not stored, calculate dynamically for CPM contests
-        if (!submissionEarnings && contest.contest_type === "cpm") {
-          const cpmConfig = (contest.contest_based_details as any)?.cpm_contest;
-          if (cpmConfig?.cpm_rate_usd) {
-            let effectiveViews = sub.views || 0;
+          // If earnings not stored, calculate dynamically for CPM contests
+          if (!submissionEarnings && contest.contest_type === "cpm") {
+            const cpmConfig = (contest.contest_based_details as any)?.cpm_contest;
+            if (cpmConfig?.cpm_rate_usd) {
+              let effectiveViews = sub.views || 0;
 
-            // Apply min_views threshold
-            if (
-              cpmConfig.min_views != null &&
-              effectiveViews < cpmConfig.min_views
-            ) {
-              effectiveViews = 0;
+              // Apply min_views threshold
+              if (
+                cpmConfig.min_views != null &&
+                effectiveViews < cpmConfig.min_views
+              ) {
+                effectiveViews = 0;
+              }
+
+              // Apply max_views cap
+              if (
+                cpmConfig.max_views != null &&
+                effectiveViews > cpmConfig.max_views
+              ) {
+                effectiveViews = cpmConfig.max_views;
+              }
+
+              // Calculate earnings: (views * CPM rate) / 1000, convert to cents
+              const calculatedEarnings =
+                (effectiveViews * cpmConfig.cpm_rate_usd * 100) / 1000;
+              submissionEarnings = Math.round(calculatedEarnings);
             }
-
-            // Apply max_views cap
-            if (
-              cpmConfig.max_views != null &&
-              effectiveViews > cpmConfig.max_views
-            ) {
-              effectiveViews = cpmConfig.max_views;
-            }
-
-            // Calculate earnings: (views * CPM rate) / 1000, convert to cents
-            const calculatedEarnings =
-              (effectiveViews * cpmConfig.cpm_rate_usd * 100) / 1000;
-            submissionEarnings = Math.round(calculatedEarnings);
-          }
-        } else if (
-          !submissionEarnings &&
-          contest.contest_type === "milestone"
-        ) {
-          submissionEarnings = milestonePayoutBySubmissionId.get(sub.id) || 0;
-          // Safety fallback for missing map entry.
-          if (!submissionEarnings && milestoneSortedMilestones.length > 0) {
-            const subViews = Number(sub.views || 0);
-            const matchedMilestone = milestoneSortedMilestones.find((m: any) => {
-              return subViews >= Number(m?.target_views || 0);
-            });
-            submissionEarnings = Number(matchedMilestone?.payout_cents || 0);
           }
         }
 
@@ -441,10 +424,15 @@ export async function POST(request: NextRequest) {
     const totalBonusPaid = breakdown.reduce((s, b) => s + b.bonus_amount, 0);
 
     if (totalAmount === 0) {
+      const milestoneHint =
+        contest.contest_type === "milestone"
+          ? " Milestone: confirm submissions are not already paid, creator max earnings is not exhausted, and view counts qualify for the ladder (pending entries count toward winner limits)."
+          : "";
       return NextResponse.json(
         {
           error:
-            "No payments to process. All submissions may be already paid or cap reached.",
+            "No payments to process. All submissions may be already paid or cap reached." +
+            milestoneHint,
         },
         { status: 400 },
       );

@@ -11,6 +11,11 @@ import {
 import { MetricsService } from "@/lib/metrics-service";
 import { SUBMISSION_STATUS } from "@/lib/constants-status";
 import { verifyAdminAccess } from "@/utils/admin-auth";
+import {
+  buildMilestoneSubmissionPayoutCentsMap,
+  getMilestoneCappedPayoutCentsForCreatorSubmission,
+} from "@/lib/milestone-contest-expected-spend";
+import { applyPayoutAdjustment } from "@/lib/payout-adjustment";
 
 export async function POST(request: Request) {
   const supabase = await createClient();
@@ -124,7 +129,9 @@ export async function POST(request: Request) {
     // Fetch the contest to check its type and status
     const { data: contest, error: contestError } = await supabase
       .from("contests")
-      .select("title, contest_type, contest_based_details, post_contest_status")
+      .select(
+        "title, contest_type, contest_based_details, post_contest_status, max_earnings_per_creator, payout_adjustment_percentage, payout_adjustment_mode",
+      )
       .eq("id", submission.contest_id)
       .single();
 
@@ -180,7 +187,7 @@ export async function POST(request: Request) {
     const { data: submissionFull, error: submissionFullErr } = await supabase
       .from("submissions")
       .select(
-        "id, contest_id, creator_id, status, earnings, views, paid, paid_at, bonus_paid, bonus_paid_at",
+        "id, contest_id, creator_id, status, earnings, views, paid, paid_at, bonus_paid, bonus_paid_at, created_at",
       )
       .eq("id", submissionId)
       .single();
@@ -492,105 +499,136 @@ export async function POST(request: Request) {
         const customRemarks = (paymentDetails as any)?.customRemarks as
           | string
           | undefined;
-        let rewardAmount =
-          customAmount && customAmount > 0
-            ? customAmount
-            : submissionFull.earnings || 0;
 
-        // Fallback amount computation when earnings are not yet set
-        if ((!rewardAmount || rewardAmount <= 0) && !customAmount) {
-          if (contest.contest_type === "cpm") {
-            const cpm = (contest as any)?.contest_based_details?.cpm_contest;
-            const rate =
-              typeof cpm?.cpm_rate_usd === "number" ? cpm.cpm_rate_usd : 0;
-            let effectiveViews = submissionFull.views || 0;
-            if (
-              typeof cpm?.min_views === "number" &&
-              effectiveViews < cpm.min_views
-            )
-              effectiveViews = 0;
-            if (
-              typeof cpm?.max_views === "number" &&
-              effectiveViews > cpm.max_views
-            )
-              effectiveViews = cpm.max_views;
-            rewardAmount = Math.round(((effectiveViews * rate) / 1000) * 100); // cents
-          } else if (contest.contest_type === "leaderboard") {
-            // Compute prize by rank among verified (and already paid) submissions only
-            const { count: higherViewsCount } = await supabase
-              .from("submissions")
-              .select("id", { count: "exact", head: true })
-              .eq("contest_id", submissionFull.contest_id)
-              .in("status", ["verified", "paid"])
-              .gt("views", submissionFull.views || 0);
-            const rank = (higherViewsCount || 0) + 1;
-            const prizes =
-              (contest as any)?.contest_based_details?.leaderboard_contest
-                ?.prizes || [];
-            const prizeForRank = prizes.find((p: any) => p.position === rank);
-            rewardAmount = prizeForRank?.amount || 0; // already in cents
-          } else if (contest.contest_type === "milestone") {
-            const milestoneDetails = (contest as any)?.contest_based_details
-              ?.milestone_contest;
-            const milestones = Array.isArray(milestoneDetails?.milestones)
-              ? milestoneDetails.milestones
-              : [];
+        const payoutAdjustmentPercentage =
+          typeof (contest as any).payout_adjustment_percentage === "number"
+            ? (contest as any).payout_adjustment_percentage
+            : typeof (contest as any).payout_adjustment_percentage === "string"
+              ? parseFloat((contest as any).payout_adjustment_percentage) || 0
+              : 0;
+        const payoutAdjustmentMode = (contest as any).payout_adjustment_mode as
+          | "cpm_only"
+          | "bonus_only"
+          | "combined"
+          | null;
+        const hasPayoutAdjustment =
+          payoutAdjustmentPercentage > 0 && !!payoutAdjustmentMode;
+        const shouldAdjustReward =
+          hasPayoutAdjustment &&
+          (payoutAdjustmentMode === "combined" ||
+            payoutAdjustmentMode === "cpm_only");
 
-            if (milestones.length > 0) {
-              const sortedMilestones = [...milestones].sort(
-                (a: any, b: any) =>
-                  Number(b?.target_views || 0) - Number(a?.target_views || 0),
+        let rewardAmount = 0;
+
+        if (customAmount && customAmount > 0) {
+          rewardAmount = customAmount;
+        } else if (contest.contest_type === "milestone") {
+          const milestoneDetails = (contest as any)?.contest_based_details
+            ?.milestone_contest;
+          const milestones = Array.isArray(milestoneDetails?.milestones)
+            ? milestoneDetails.milestones
+            : [];
+
+          if (milestones.length > 0) {
+            const { data: payoutEligibleSubs, error: payoutSubsErr } =
+              await supabaseAdmin
+                .from("submissions")
+                .select(
+                  "id, creator_id, status, views, created_at, platform, other_stats",
+                )
+                .eq("contest_id", submissionFull.contest_id)
+                .in("status", ["pending", "verified", "paid"])
+                .order("created_at", { ascending: true });
+
+            if (!payoutSubsErr && Array.isArray(payoutEligibleSubs)) {
+              const records = payoutEligibleSubs.map((sub: any) => ({
+                id: String(sub.id),
+                creator_id: sub.creator_id,
+                created_at: sub.created_at,
+                status: sub.status,
+                views: sub.views,
+                platform: sub.platform,
+                other_stats: sub.other_stats,
+              }));
+              const payoutBySubmissionId = buildMilestoneSubmissionPayoutCentsMap(
+                records,
+                milestones,
               );
 
-              const { data: payoutEligibleSubs, error: payoutSubsErr } =
+              const { data: creatorSubs, error: creatorSubsErr } =
                 await supabaseAdmin
                   .from("submissions")
-                  .select("id, status, views, created_at, deleted_at")
+                  .select("id, created_at")
                   .eq("contest_id", submissionFull.contest_id)
-                  .in("status", ["pending", "verified", "paid"])
-                  .is("deleted_at", null)
-                  .order("created_at", { ascending: true });
+                  .eq("creator_id", submissionFull.creator_id);
 
-              if (!payoutSubsErr && Array.isArray(payoutEligibleSubs)) {
-                const winnerCountsByMilestone = new Map<string, number>();
-                const payoutBySubmissionId = new Map<string, number>();
+              const creatorRows =
+                Array.isArray(creatorSubs) && !creatorSubsErr
+                  ? creatorSubs.map((r: any) => ({
+                      id: String(r.id),
+                      created_at: r.created_at,
+                    }))
+                  : [
+                      {
+                        id: String(submissionFull.id),
+                        created_at:
+                          submissionFull.created_at ||
+                          new Date(0).toISOString(),
+                      },
+                    ];
 
-                for (const sub of payoutEligibleSubs) {
-                  const subViews = Number((sub as any)?.views || 0);
-                  let payoutCents = 0;
+              const cappedBase =
+                getMilestoneCappedPayoutCentsForCreatorSubmission(
+                  payoutBySubmissionId,
+                  creatorRows,
+                  (contest as any).max_earnings_per_creator,
+                  String(submissionFull.id),
+                );
 
-                  for (const milestone of sortedMilestones) {
-                    const targetViews = Number(milestone?.target_views || 0);
-                    if (subViews < targetViews) continue;
+              rewardAmount =
+                shouldAdjustReward && cappedBase > 0
+                  ? applyPayoutAdjustment(
+                      cappedBase,
+                      payoutAdjustmentPercentage,
+                    )
+                  : cappedBase;
+            }
+          }
+        } else {
+          rewardAmount = Number(submissionFull.earnings) || 0;
 
-                    const winnerLimit = milestone?.winner_limit;
-                    const milestoneKey = `${Number(
-                      milestone?.order || 0,
-                    )}:${targetViews}`;
-
-                    if (winnerLimit != null) {
-                      const used = winnerCountsByMilestone.get(milestoneKey) || 0;
-                      if (used >= Number(winnerLimit)) continue;
-                      winnerCountsByMilestone.set(milestoneKey, used + 1);
-                    }
-
-                    payoutCents = Number(milestone?.payout_cents || 0);
-                    break;
-                  }
-
-                  payoutBySubmissionId.set(String((sub as any).id), payoutCents);
-                }
-
-                rewardAmount =
-                  payoutBySubmissionId.get(String(submissionFull.id)) || 0;
-              } else {
-                // Fallback: best milestone by current submission views only
-                const fallbackViews = Number(submissionFull.views || 0);
-                const matchedMilestone = sortedMilestones.find((m: any) => {
-                  return fallbackViews >= Number(m?.target_views || 0);
-                });
-                rewardAmount = Number(matchedMilestone?.payout_cents || 0);
-              }
+          // Fallback amount computation when earnings are not yet set
+          if ((!rewardAmount || rewardAmount <= 0) && !customAmount) {
+            if (contest.contest_type === "cpm") {
+              const cpm = (contest as any)?.contest_based_details?.cpm_contest;
+              const rate =
+                typeof cpm?.cpm_rate_usd === "number" ? cpm.cpm_rate_usd : 0;
+              let effectiveViews = submissionFull.views || 0;
+              if (
+                typeof cpm?.min_views === "number" &&
+                effectiveViews < cpm.min_views
+              )
+                effectiveViews = 0;
+              if (
+                typeof cpm?.max_views === "number" &&
+                effectiveViews > cpm.max_views
+              )
+                effectiveViews = cpm.max_views;
+              rewardAmount = Math.round(((effectiveViews * rate) / 1000) * 100); // cents
+            } else if (contest.contest_type === "leaderboard") {
+              // Compute prize by rank among verified (and already paid) submissions only
+              const { count: higherViewsCount } = await supabase
+                .from("submissions")
+                .select("id", { count: "exact", head: true })
+                .eq("contest_id", submissionFull.contest_id)
+                .in("status", ["verified", "paid"])
+                .gt("views", submissionFull.views || 0);
+              const rank = (higherViewsCount || 0) + 1;
+              const prizes =
+                (contest as any)?.contest_based_details?.leaderboard_contest
+                  ?.prizes || [];
+              const prizeForRank = prizes.find((p: any) => p.position === rank);
+              rewardAmount = prizeForRank?.amount || 0; // already in cents
             }
           }
         }
@@ -675,11 +713,13 @@ export async function POST(request: Request) {
           }
 
           // Ensure reward amount is reflected on the submission for UI display
-          if (
+          const shouldPersistEarnings =
+            !!customAmount ||
+            contest.contest_type === "milestone" ||
             !submissionFull.earnings ||
-            submissionFull.earnings <= 0 ||
-            customAmount
-          ) {
+            submissionFull.earnings <= 0;
+
+          if (shouldPersistEarnings) {
             await supabaseAdmin
               .from("submissions")
               .update({

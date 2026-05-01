@@ -7729,18 +7729,6 @@ export function ContestClientPage({
                                           )?.leaderboard_contest?.flat_fee_bonus ||
                                           0;
 
-                                    const creatorIdMyCard = String(
-                                      myLeaderboardEntry?.creator_id || "",
-                                    );
-                                    const mvvBonusMyCard =
-                                      milestoneDerivedData.creatorMostVerifiedViewsBonusMap.get(
-                                        creatorIdMyCard,
-                                      ) || 0;
-                                    const mvrBonusMyCard =
-                                      milestoneDerivedData.creatorMostVerifiedReelsBonusMap.get(
-                                        creatorIdMyCard,
-                                      ) || 0;
-
                                     const hasPayoutsProcessedMyCard =
                                       contest?.status === "ended" &&
                                       contest?.post_contest_status ===
@@ -7753,11 +7741,10 @@ export function ContestClientPage({
                                         0,
                                     );
 
+                                    // Milestone: only paid bonuses count toward "Earned" (most-verified expected is shown separately).
                                     const bonusAmount =
                                       contestType === "milestone"
-                                        ? hasPayoutsProcessedMyCard
-                                          ? creatorBonusPaidTotalMyCard
-                                          : mvvBonusMyCard + mvrBonusMyCard
+                                        ? creatorBonusPaidTotalMyCard
                                         : flatFeeBonus;
 
                                     const isSubmissionWiseBestPerformanceCard =
@@ -9621,21 +9608,22 @@ export function ContestClientPage({
                                   <div className="font-semibold text-green-600 dark:text-green-400 text-base">
                                     <div className="flex flex-col items-end">
                                       <span>
-                                        {earningsLabel}: {formatMoney(creatorEarnedAmount + (hasPayoutsProcessed ? creatorBonusPaidTotal : (mostVerifiedViewsBonus + mostVerifiedReelsBonus)))}
+                                        {earningsLabel}:{" "}
+                                        {formatMoney(milestoneEarnedAmount)}
                                       </span>
                                       {leaderboardViewMode === "detailed" &&
                                         milestoneBonusTotal > 0 && (
                                           <div className="flex flex-wrap items-center justify-end gap-1.5 text-xs text-slate-600 dark:text-slate-400 bg-green-50 dark:bg-green-900/20 px-2 py-1 rounded-md border border-green-200 dark:border-green-800 mt-1">
                                             <div className="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0" />
                                             <span className="whitespace-nowrap">
-                                              {formatMoney(creatorEarnedAmount)}{" "}
+                                              {formatMoney(milestoneBaseAmount)}{" "}
                                               Milestone
                                             </span>
                                             <span className="text-green-600 dark:text-green-400">
                                               +
                                             </span>
                                             <span className="whitespace-nowrap">
-                                              {formatMoney(hasPayoutsProcessed ? creatorBonusPaidTotal : (mostVerifiedViewsBonus + mostVerifiedReelsBonus))}{" "}
+                                              {formatMoney(milestoneBonusTotal)}{" "}
                                               Bonus
                                             </span>
                                           </div>
