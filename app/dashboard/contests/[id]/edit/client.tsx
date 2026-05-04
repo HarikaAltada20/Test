@@ -99,6 +99,11 @@ import {
   platformSupportsFormat,
   getPlatformConfig,
 } from "@/constants/platforms";
+import {
+  getPoolBudgetCentsFromDetails,
+  isCpmContestType,
+  isMilestoneContestType,
+} from "@/lib/contest-type";
 
 // Dynamically import the Novel editor
 const NovelEditor = dynamic(() => import("@/components/novel-editor"), {
@@ -112,7 +117,7 @@ const REGIONS_AND_COUNTRIES: Record<string, string[]> =
 // Helper function to build region JSONB object from selected regions and countries
 const buildRegionData = (
   selectedRegions: string[],
-  selectedCountries: string[]
+  selectedCountries: string[],
 ): Record<string, string[]> | null => {
   if (selectedRegions.length === 0 && selectedCountries.length === 0) {
     return null;
@@ -130,7 +135,7 @@ const buildRegionData = (
 
     // Filter to only include countries that are actually selected
     const selectedCountriesInRegion = countriesArray.filter((country) =>
-      selectedCountries.includes(country)
+      selectedCountries.includes(country),
     );
 
     // Only add region if it has selected countries
@@ -178,7 +183,7 @@ const buildRegionData = (
 
 // Helper function to extract regions and countries from region JSONB data
 const extractRegionsAndCountries = (
-  regionData: Record<string, string[]> | null
+  regionData: Record<string, string[]> | null,
 ): { regions: string[]; countries: string[] } => {
   if (!regionData || typeof regionData !== "object") {
     return { regions: [], countries: [] };
@@ -252,8 +257,7 @@ type MilestoneFormRow = {
 function createEmptyMilestoneRow(): MilestoneFormRow {
   return {
     id:
-      typeof crypto !== "undefined" &&
-      typeof crypto.randomUUID === "function"
+      typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
         ? crypto.randomUUID()
         : `m-${Date.now()}-${Math.floor(Math.random() * 1e6)}`,
     target_views: "",
@@ -280,7 +284,7 @@ type ContestData = {
   resources: ResourceItem[] | null;
   status: string;
   advertiser_id?: string;
-  contest_type: "leaderboard" | "cpm" | "milestone" | null;
+  contest_type: "leaderboard" | "cpm" | "milestone" | "dual_rewards" | null;
   contest_based_details: {
     cpm_contest?: CpmContestDetails;
     leaderboard_contest?: LeaderboardContestDetails;
@@ -477,7 +481,7 @@ export default function EditContestPage({
   const [mode, setMode] = useState<"light" | "dark">("light");
   // Contest Type and Specific Details
   const [contestType, setContestType] = useState<
-    "leaderboard" | "cpm" | "milestone" | null
+    "leaderboard" | "cpm" | "milestone" | "dual_rewards" | null
   >(null);
 
   // Leaderboard specific
@@ -605,7 +609,7 @@ export default function EditContestPage({
   const [resources, setResources] = useState<ResourceItem[]>([]);
   const [resourceFile, setResourceFile] = useState<File | null>(null);
   const [resourceFilePreview, setResourceFilePreview] = useState<string | null>(
-    null
+    null,
   );
   const [resourceDescription, setResourceDescription] = useState("");
   const [externalResourceDescription, setExternalResourceDescription] =
@@ -636,7 +640,11 @@ export default function EditContestPage({
       const prevPayout = parseMilestonePayout(rows[i - 1].payout_dollars);
       const currentPayout = parseMilestonePayout(rows[i].payout_dollars);
 
-      if (!isNaN(currentViews) && !isNaN(prevViews) && currentViews <= prevViews) {
+      if (
+        !isNaN(currentViews) &&
+        !isNaN(prevViews) &&
+        currentViews <= prevViews
+      ) {
         return `Milestone ${i + 1}: target views must be higher than milestone ${i}.`;
       }
 
@@ -695,7 +703,8 @@ export default function EditContestPage({
       lastMilestoneSequenceToastRef.current = null;
       return;
     }
-    if (lastMilestoneSequenceToastRef.current === milestoneSequenceError) return;
+    if (lastMilestoneSequenceToastRef.current === milestoneSequenceError)
+      return;
     toast({
       title: "Invalid Milestone Sequence",
       description: milestoneSequenceError,
@@ -715,12 +724,12 @@ export default function EditContestPage({
       const mostVerifiedViewsPayload: Record<string, unknown> = {
         min_total_views: Number(milestoneBonusTopViewsMin),
         payout_cents: Math.round(
-          parseFloat(String(milestoneBonusTopViewsPayout)) * 100
+          parseFloat(String(milestoneBonusTopViewsPayout)) * 100,
         ),
       };
       if (milestoneBonusTopViewsMinReels !== "") {
         mostVerifiedViewsPayload.min_verified_reels = Number(
-          milestoneBonusTopViewsMinReels
+          milestoneBonusTopViewsMinReels,
         );
       }
       bonusPayload.most_verified_views = mostVerifiedViewsPayload;
@@ -733,12 +742,12 @@ export default function EditContestPage({
       const mostVerifiedReelsPayload: Record<string, unknown> = {
         min_verified_reels: Number(milestoneBonusTopReelsMin),
         payout_cents: Math.round(
-          parseFloat(String(milestoneBonusTopReelsPayout)) * 100
+          parseFloat(String(milestoneBonusTopReelsPayout)) * 100,
         ),
       };
       if (milestoneBonusTopReelsMinViews !== "") {
         mostVerifiedReelsPayload.min_total_views = Number(
-          milestoneBonusTopReelsMinViews
+          milestoneBonusTopReelsMinViews,
         );
       }
       bonusPayload.most_verified_reels = mostVerifiedReelsPayload;
@@ -769,7 +778,7 @@ export default function EditContestPage({
   const [isDragActive, setIsDragActive] = useState(false);
   const [assetUploadError, setAssetUploadError] = useState<string | null>(null);
   const [externalLinkError, setExternalLinkError] = useState<string | null>(
-    null
+    null,
   );
   const [isUploadingAsset, setIsUploadingAsset] = useState(false);
 
@@ -866,7 +875,7 @@ export default function EditContestPage({
     } catch (error: any) {
       console.error("Error loading subscription plans:", error);
       setError(
-        `Failed to load subscription plans: ${error.message}. Using defaults.`
+        `Failed to load subscription plans: ${error.message}. Using defaults.`,
       );
       setDbSubscriptionPlans([]);
     } finally {
@@ -905,7 +914,7 @@ export default function EditContestPage({
       } else {
         // Default to EXPLORER plan (free plan) if not found or error
         const explorerPlan = subscriptionPlans.find(
-          (p) => p.name === "EXPLORER"
+          (p) => p.name === "EXPLORER",
         );
         const explorerPlanId = explorerPlan?.id || subscriptionPlans[0].id;
         setUserPlan(explorerPlanId);
@@ -970,7 +979,7 @@ export default function EditContestPage({
           if (contestError.code === "PGRST116") {
             // 'PGRST116': Row not found
             setError(
-              "Contest not found or you do not have permission to edit it."
+              "Contest not found or you do not have permission to edit it.",
             );
           } else {
             throw contestError;
@@ -1033,7 +1042,7 @@ export default function EditContestPage({
           if (!canEdit) {
             if (isEnded || data.status === "ended") {
               setError(
-                "This contest has ended and cannot be edited. Contest integrity must be maintained after completion."
+                "This contest has ended and cannot be edited. Contest integrity must be maintained after completion.",
               );
             } else {
               setError("This contest is already live and cannot be edited.");
@@ -1144,14 +1153,14 @@ export default function EditContestPage({
 
             if (data.start_date) {
               const { dateString, timeString } = toLocalDateTimeStrings(
-                data.start_date
+                data.start_date,
               );
               setStartDate(dateString);
               setStartTime(timeString);
             }
             if (data.end_date) {
               const { dateString, timeString } = toLocalDateTimeStrings(
-                data.end_date
+                data.end_date,
               );
               setEndDate(dateString);
               setEndTime(timeString);
@@ -1187,29 +1196,29 @@ export default function EditContestPage({
               const lbDetails = data.contest_based_details?.leaderboard_contest;
               if (lbDetails && Array.isArray(lbDetails.prizes)) {
                 setWinnerCount(
-                  lbDetails.winner_count || lbDetails.prizes.length
+                  lbDetails.winner_count || lbDetails.prizes.length,
                 );
                 const prizes = lbDetails.prizes.map(
-                  (prize: { amount: number }) => prize.amount
+                  (prize: { amount: number }) => prize.amount,
                 );
                 setWinnerAmounts(prizes);
                 // Set original budget for tracking changes (prize pool only)
                 const originalBudgetInCents = prizes.reduce(
                   (sum: number, amount: number) => sum + amount,
-                  0
+                  0,
                 );
                 setOriginalBudget(originalBudgetInCents);
               } else if (Array.isArray(data.prizes)) {
                 // Fallback to old structure if new one not present
                 setWinnerCount(data.winner_count || data.prizes.length);
                 const prizes = data.prizes.map(
-                  (prize: { amount: number }) => prize.amount
+                  (prize: { amount: number }) => prize.amount,
                 );
                 setWinnerAmounts(prizes);
                 // Set original budget for tracking changes (prize pool only)
                 const originalBudgetInCents = prizes.reduce(
                   (sum: number, amount: number) => sum + amount,
-                  0
+                  0,
                 );
                 setOriginalBudget(originalBudgetInCents);
               } else {
@@ -1227,7 +1236,7 @@ export default function EditContestPage({
                 setTotalBudget(
                   cpmDetails.total_budget
                     ? (cpmDetails.total_budget / 100).toString()
-                    : ""
+                    : "",
                 );
                 setTermsConditions(cpmDetails.terms_conditions || "");
                 // Set original budget for tracking changes (cpm budget is stored in cents, prize pool only)
@@ -1236,9 +1245,23 @@ export default function EditContestPage({
                 // Load CPM Points Configuration from twitter_campaign.points_config (multipliers are nested inside comments_weight, retweets_weight, quote_reposts_weight)
                 // Note: This is loaded later when we process twitter_campaign data
               }
-            } else if (resolvedContestType === "milestone") {
+            } else if (
+              data.contest_type === "milestone" ||
+              data.contest_type === "dual_rewards"
+            ) {
               const milestoneDetails =
                 data.contest_based_details?.milestone_contest;
+
+              if (data.contest_type === "dual_rewards") {
+                const cpmDetails = data.contest_based_details?.cpm_contest;
+                if (cpmDetails) {
+                  setCpmRate(cpmDetails.cpm_rate_usd?.toString() || "");
+                  setMinViews(cpmDetails.min_views?.toString() || "");
+                  setMaxViews(cpmDetails.max_views?.toString() || "");
+                  setTermsConditions(cpmDetails.terms_conditions || "");
+                }
+              }
+
               if (
                 milestoneDetails?.milestones &&
                 Array.isArray(milestoneDetails.milestones) &&
@@ -1257,17 +1280,28 @@ export default function EditContestPage({
                       m.winner_limit === null || m.winner_limit === undefined
                         ? ""
                         : m.winner_limit,
-                  }))
+                  })),
                 );
               } else {
                 setMilestoneRows([createEmptyMilestoneRow()]);
               }
 
-              if (
+              if (data.contest_type === "dual_rewards") {
+                const unifiedCents = getPoolBudgetCentsFromDetails(
+                  "dual_rewards",
+                  data.contest_based_details,
+                );
+                if (unifiedCents > 0) {
+                  setTotalBudget((unifiedCents / 100).toString());
+                }
+                setOriginalBudget(unifiedCents);
+              } else if (
                 typeof milestoneDetails?.total_budget_cents === "number" &&
                 milestoneDetails.total_budget_cents > 0
               ) {
-                setTotalBudget((milestoneDetails.total_budget_cents / 100).toString());
+                setTotalBudget(
+                  (milestoneDetails.total_budget_cents / 100).toString(),
+                );
                 setOriginalBudget(milestoneDetails.total_budget_cents);
               }
 
@@ -1284,7 +1318,7 @@ export default function EditContestPage({
                   }
                   if (typeof mv.payout_cents === "number") {
                     setMilestoneBonusTopViewsPayout(
-                      (mv.payout_cents / 100).toString()
+                      (mv.payout_cents / 100).toString(),
                     );
                   }
                 }
@@ -1298,7 +1332,7 @@ export default function EditContestPage({
                   }
                   if (typeof mr.payout_cents === "number") {
                     setMilestoneBonusTopReelsPayout(
-                      (mr.payout_cents / 100).toString()
+                      (mr.payout_cents / 100).toString(),
                     );
                   }
                 }
@@ -1315,11 +1349,9 @@ export default function EditContestPage({
 
             // Load YouTube analytics visibility (brand-side) from contest_based_details
             const ytVisibility =
-              (data.contest_based_details as any)?.youtube_analytics_visibility ||
-              {};
-            setShowBrandCoreAnalytics(
-              ytVisibility.show_core_to_brand ?? true,
-            );
+              (data.contest_based_details as any)
+                ?.youtube_analytics_visibility || {};
+            setShowBrandCoreAnalytics(ytVisibility.show_core_to_brand ?? true);
             setShowBrandTrafficSources(
               ytVisibility.show_traffic_to_brand ?? true,
             );
@@ -1332,7 +1364,7 @@ export default function EditContestPage({
 
             // Load new features (2025-10-01)
             setMultipleSubmissionsEnabled(
-              data.multiple_submissions_enabled || false
+              data.multiple_submissions_enabled || false,
             );
             setMaxSubmissionsPerCreator(data.max_submissions_per_creator || 1);
             setContentType(data.content_type || "other");
@@ -1354,7 +1386,7 @@ export default function EditContestPage({
               }
               if (cpmDetails?.flat_fee_bonus_cap) {
                 setFlatFeeBonusCap(
-                  (cpmDetails.flat_fee_bonus_cap / 100).toString()
+                  (cpmDetails.flat_fee_bonus_cap / 100).toString(),
                 );
               }
             }
@@ -1367,7 +1399,7 @@ export default function EditContestPage({
               setTimeout(() => {
                 if (bonusRichTextEditorRef.current) {
                   bonusRichTextEditorRef.current.setContent(
-                    data.bonus_details.description_json
+                    data.bonus_details.description_json,
                   );
                 }
               }, 100);
@@ -1376,7 +1408,7 @@ export default function EditContestPage({
             // Load max earnings per creator
             if (data.max_earnings_per_creator) {
               setMaxEarningsPerCreator(
-                (data.max_earnings_per_creator / 100).toString()
+                (data.max_earnings_per_creator / 100).toString(),
               );
             }
 
@@ -1417,7 +1449,7 @@ export default function EditContestPage({
             // Load regions and countries from region JSONB column
             if (data.region && typeof data.region === "object") {
               const { regions, countries } = extractRegionsAndCountries(
-                data.region as Record<string, string[]>
+                data.region as Record<string, string[]>,
               );
               setSelectedRegions(regions);
               setSelectedCountries(countries);
@@ -1490,12 +1522,12 @@ export default function EditContestPage({
               // Load requirement modes
               if (twitterCampaign?.keywords_requirement_mode) {
                 setKeywordsRequirementMode(
-                  twitterCampaign.keywords_requirement_mode
+                  twitterCampaign.keywords_requirement_mode,
                 );
               }
               if (twitterCampaign?.mentions_requirement_mode) {
                 setMentionsRequirementMode(
-                  twitterCampaign.mentions_requirement_mode
+                  twitterCampaign.mentions_requirement_mode,
                 );
               }
               if (twitterCampaign?.max_participants) {
@@ -1615,130 +1647,130 @@ export default function EditContestPage({
                     commentsWeightObj.likes_multiplier !== null
                       ? commentsWeightObj.likes_multiplier.toString()
                       : commentWeightIsObject
-                      ? ""
-                      : "0.1", // Empty if checkbox checked but no value, default if checkbox unchecked
+                        ? ""
+                        : "0.1", // Empty if checkbox checked but no value, default if checkbox unchecked
                   comment_replies_multiplier:
                     commentsWeightObj.replies_multiplier !== undefined &&
                     commentsWeightObj.replies_multiplier !== null
                       ? commentsWeightObj.replies_multiplier.toString()
                       : commentWeightIsObject
-                      ? ""
-                      : "1",
+                        ? ""
+                        : "1",
                   comment_impressions_multiplier:
                     commentsWeightObj.impressions_multiplier !== undefined &&
                     commentsWeightObj.impressions_multiplier !== null
                       ? commentsWeightObj.impressions_multiplier.toString()
                       : commentWeightIsObject
-                      ? ""
-                      : "0.001",
+                        ? ""
+                        : "0.001",
                   comment_retweets_multiplier:
                     commentsWeightObj.retweets_multiplier !== undefined &&
                     commentsWeightObj.retweets_multiplier !== null
                       ? commentsWeightObj.retweets_multiplier.toString()
                       : commentWeightIsObject
-                      ? ""
-                      : "0",
+                        ? ""
+                        : "0",
                   comment_quote_reposts_multiplier:
                     commentsWeightObj.quote_reposts_multiplier !== undefined &&
                     commentsWeightObj.quote_reposts_multiplier !== null
                       ? commentsWeightObj.quote_reposts_multiplier.toString()
                       : commentWeightIsObject
-                      ? ""
-                      : "0",
+                        ? ""
+                        : "0",
                   retweet_likes_multiplier:
                     retweetsWeightObj.likes_multiplier !== undefined &&
                     retweetsWeightObj.likes_multiplier !== null
                       ? retweetsWeightObj.likes_multiplier.toString()
                       : retweetWeightIsObject
-                      ? ""
-                      : "0.05",
+                        ? ""
+                        : "0.05",
                   retweet_replies_multiplier:
                     retweetsWeightObj.replies_multiplier !== undefined &&
                     retweetsWeightObj.replies_multiplier !== null
                       ? retweetsWeightObj.replies_multiplier.toString()
                       : retweetWeightIsObject
-                      ? ""
-                      : "0.05",
+                        ? ""
+                        : "0.05",
                   retweet_impressions_multiplier:
                     retweetsWeightObj.impressions_multiplier !== undefined &&
                     retweetsWeightObj.impressions_multiplier !== null
                       ? retweetsWeightObj.impressions_multiplier.toString()
                       : retweetWeightIsObject
-                      ? ""
-                      : "0.001",
+                        ? ""
+                        : "0.001",
                   retweet_retweets_multiplier:
                     retweetsWeightObj.retweets_multiplier !== undefined &&
                     retweetsWeightObj.retweets_multiplier !== null
                       ? retweetsWeightObj.retweets_multiplier.toString()
                       : retweetWeightIsObject
-                      ? ""
-                      : "0.05",
+                        ? ""
+                        : "0.05",
                   retweet_quote_reposts_multiplier:
                     retweetsWeightObj.quote_reposts_multiplier !== undefined &&
                     retweetsWeightObj.quote_reposts_multiplier !== null
                       ? retweetsWeightObj.quote_reposts_multiplier.toString()
                       : retweetWeightIsObject
-                      ? ""
-                      : "0",
+                        ? ""
+                        : "0",
                   quote_repost_likes_multiplier:
                     quoteRepostsWeightObj.likes_multiplier !== undefined &&
                     quoteRepostsWeightObj.likes_multiplier !== null
                       ? quoteRepostsWeightObj.likes_multiplier.toString()
                       : quoteRepostWeightIsObject
-                      ? ""
-                      : "0.1",
+                        ? ""
+                        : "0.1",
                   quote_repost_replies_multiplier:
                     quoteRepostsWeightObj.replies_multiplier !== undefined &&
                     quoteRepostsWeightObj.replies_multiplier !== null
                       ? quoteRepostsWeightObj.replies_multiplier.toString()
                       : quoteRepostWeightIsObject
-                      ? ""
-                      : "0.1",
+                        ? ""
+                        : "0.1",
                   quote_repost_impressions_multiplier:
                     quoteRepostsWeightObj.impressions_multiplier !==
                       undefined &&
                     quoteRepostsWeightObj.impressions_multiplier !== null
                       ? quoteRepostsWeightObj.impressions_multiplier.toString()
                       : quoteRepostWeightIsObject
-                      ? ""
-                      : "0.001",
+                        ? ""
+                        : "0.001",
                   quote_repost_retweets_multiplier:
                     quoteRepostsWeightObj.retweets_multiplier !== undefined &&
                     quoteRepostsWeightObj.retweets_multiplier !== null
                       ? quoteRepostsWeightObj.retweets_multiplier.toString()
                       : quoteRepostWeightIsObject
-                      ? ""
-                      : "0.1",
+                        ? ""
+                        : "0.1",
                   quote_repost_quote_reposts_multiplier:
                     quoteRepostsWeightObj.quote_reposts_multiplier !==
                       undefined &&
                     quoteRepostsWeightObj.quote_reposts_multiplier !== null
                       ? quoteRepostsWeightObj.quote_reposts_multiplier.toString()
                       : quoteRepostWeightIsObject
-                      ? ""
-                      : "0.1",
+                        ? ""
+                        : "0.1",
                 });
 
                 // Set checkbox states from saved flag
                 // We save _showMultipliers flag to track checkbox state
                 setShowCommentMultipliers(
                   commentWeightIsObject &&
-                    commentsWeightObj._showMultipliers === true
+                    commentsWeightObj._showMultipliers === true,
                 );
                 setShowRetweetMultipliers(
                   retweetWeightIsObject &&
-                    retweetsWeightObj._showMultipliers === true
+                    retweetsWeightObj._showMultipliers === true,
                 );
                 setShowQuoteRepostMultipliers(
                   quoteRepostWeightIsObject &&
-                    quoteRepostsWeightObj._showMultipliers === true
+                    quoteRepostsWeightObj._showMultipliers === true,
                 );
               }
             }
           }
         } else {
           setError(
-            "Contest not found or you don't have permission to edit it."
+            "Contest not found or you don't have permission to edit it.",
           );
         }
       } catch (error: any) {
@@ -1807,11 +1839,11 @@ export default function EditContestPage({
             ) {
               // Update winner amounts with latest data from database
               const updatedAmounts = leaderboardData.prizes.map(
-                (prize) => prize.amount
+                (prize) => prize.amount,
               );
               setWinnerAmounts(updatedAmounts);
               setWinnerCount(
-                leaderboardData.winner_count || updatedAmounts.length
+                leaderboardData.winner_count || updatedAmounts.length,
               );
 
               // Update originalBudget with current total from database
@@ -1845,13 +1877,31 @@ export default function EditContestPage({
               });
             }
           } else if (
+            refreshedContest.contest_type === "dual_rewards" &&
+            refreshedContest.contest_based_details.cpm_contest &&
+            refreshedContest.contest_based_details.milestone_contest
+          ) {
+            const unifiedCents = getPoolBudgetCentsFromDetails(
+              "dual_rewards",
+              refreshedContest.contest_based_details,
+            );
+            if (unifiedCents > 0) {
+              setTotalBudget((unifiedCents / 100).toString());
+            }
+            setOriginalBudget(unifiedCents);
+            console.log("🔄 Updated dual rewards budget from database:", {
+              unifiedCents,
+            });
+          } else if (
             refreshedContest.contest_type === "milestone" &&
             refreshedContest.contest_based_details.milestone_contest
           ) {
             const milestoneData =
               refreshedContest.contest_based_details.milestone_contest;
             if (typeof milestoneData.total_budget_cents === "number") {
-              setTotalBudget((milestoneData.total_budget_cents / 100).toString());
+              setTotalBudget(
+                (milestoneData.total_budget_cents / 100).toString(),
+              );
               setOriginalBudget(milestoneData.total_budget_cents);
             }
           }
@@ -1869,7 +1919,7 @@ export default function EditContestPage({
       if (!fileUrl || typeof fileUrl !== "string" || !fileUrl.trim()) {
         console.warn(
           "Invalid file URL provided to deleteFromStorage:",
-          fileUrl
+          fileUrl,
         );
         return;
       }
@@ -1882,7 +1932,7 @@ export default function EditContestPage({
       }
       const pathSegments = url.pathname.split("/");
       const bucketIndex = pathSegments.findIndex(
-        (segment) => segment === "contest-assets"
+        (segment) => segment === "contest-assets",
       );
 
       if (bucketIndex !== -1 && bucketIndex < pathSegments.length - 1) {
@@ -2022,14 +2072,14 @@ export default function EditContestPage({
     const msUntilStart = startDateTime.getTime() - now.getTime();
     const daysUntilStart = Math.floor(msUntilStart / (1000 * 60 * 60 * 24));
     const hoursUntilStart = Math.floor(
-      (msUntilStart % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60)
+      (msUntilStart % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60),
     );
 
     // Calculate contest duration
     const msDuration = endDateTime.getTime() - startDateTime.getTime();
     const durationDays = Math.floor(msDuration / (1000 * 60 * 60 * 24));
     const durationHours = Math.floor(
-      (msDuration % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60)
+      (msDuration % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60),
     );
 
     let startMessage = "";
@@ -2092,7 +2142,7 @@ export default function EditContestPage({
     const startOfToday = new Date(
       today.getFullYear(),
       today.getMonth(),
-      today.getDate()
+      today.getDate(),
     );
     const minStartDate = new Date(startOfToday);
     minStartDate.setDate(minStartDate.getDate() + MIN_DAYS_UNTIL_START);
@@ -2111,9 +2161,9 @@ export default function EditContestPage({
           disallowed[disallowed.length - 1];
 
     return `For example, if today is ${formatDateWithOrdinal(
-      startOfToday
+      startOfToday,
     )}, you can create contests starting from ${formatDateWithOrdinal(
-      minStartDate
+      minStartDate,
     )} (00:00 onwards). ${disallowedText} ${
       disallowed.length > 1 ? "are" : "is"
     } not allowed.`;
@@ -2144,7 +2194,7 @@ export default function EditContestPage({
       const endDateTime = new Date(`${endDate}T${endTime}`);
       const minEndDateTime = new Date(startDateTime);
       minEndDateTime.setDate(
-        minEndDateTime.getDate() + MIN_CONTEST_DURATION_DAYS
+        minEndDateTime.getDate() + MIN_CONTEST_DURATION_DAYS,
       );
 
       if (endDateTime < minEndDateTime) {
@@ -2174,7 +2224,9 @@ export default function EditContestPage({
       // Remove region and all its countries
       setSelectedRegions(selectedRegions.filter((r) => r !== region));
       setSelectedCountries(
-        selectedCountries.filter((country) => !countriesArray.includes(country))
+        selectedCountries.filter(
+          (country) => !countriesArray.includes(country),
+        ),
       );
     }
   };
@@ -2196,7 +2248,7 @@ export default function EditContestPage({
           : [];
         if (countriesArray.includes(country)) {
           const remainingCountries = countriesArray.filter(
-            (c) => c !== country && selectedCountries.includes(c)
+            (c) => c !== country && selectedCountries.includes(c),
           );
           if (remainingCountries.length === 0) {
             setSelectedRegions(selectedRegions.filter((r) => r !== region));
@@ -2217,7 +2269,7 @@ export default function EditContestPage({
     // Remove all countries from this region from selectedCountries
     // Keep the region selected so users can manually select specific countries
     setSelectedCountries(
-      selectedCountries.filter((country) => !countriesArray.includes(country))
+      selectedCountries.filter((country) => !countriesArray.includes(country)),
     );
   };
 
@@ -2300,7 +2352,7 @@ export default function EditContestPage({
       // Skip inspiration links validation for raid campaign type
       if (contentType !== "raid") {
         const validInspirationLinks = inspirationLinks.filter(
-          (link) => link.url.trim() !== ""
+          (link) => link.url.trim() !== "",
         );
         if (validInspirationLinks.length === 0) {
           showError("At least one inspiration link is required.");
@@ -2331,11 +2383,14 @@ export default function EditContestPage({
       if (contestType !== "leaderboard") {
         delete contestBasedDetails.leaderboard_contest;
       }
-      if (contestType !== "cpm") {
+      if (!isCpmContestType(contestType)) {
         delete contestBasedDetails.cpm_contest;
       }
-      if (contestType !== "milestone") {
+      if (!isMilestoneContestType(contestType)) {
         delete contestBasedDetails.milestone_contest;
+      }
+      if (contestType !== "dual_rewards") {
+        delete contestBasedDetails.total_budget_cents;
       }
     }
     let updatePayload: any = {};
@@ -2344,7 +2399,7 @@ export default function EditContestPage({
     if (!datesOnly) {
       // Helper function to process and group subcategories by category
       const processSubcategories = (
-        subcategories: Array<{ category: string; subcategory: string }>
+        subcategories: Array<{ category: string; subcategory: string }>,
       ) => {
         if (!subcategories || subcategories.length === 0) return null;
         const grouped: Record<string, string[]> = {};
@@ -2413,11 +2468,11 @@ export default function EditContestPage({
         const todayOnly = new Date(
           now.getFullYear(),
           now.getMonth(),
-          now.getDate()
+          now.getDate(),
         );
         const daysUntilStart = Math.floor(
           (startDateOnly.getTime() - todayOnly.getTime()) /
-            (1000 * 60 * 60 * 24)
+            (1000 * 60 * 60 * 24),
         );
 
         const originalStartDate = contest?.start_date
@@ -2523,7 +2578,7 @@ export default function EditContestPage({
     if (!datesOnly && contestType === "leaderboard") {
       const currentTotalPrizePool = winnerAmounts.reduce(
         (sum, amount) => sum + (amount || 0),
-        0
+        0,
       );
       if (winnerCount > planFeatures.maxWinnersPerContest) {
         toast({
@@ -2539,7 +2594,7 @@ export default function EditContestPage({
         toast({
           title: "Prize Pool Too Low",
           description: `Your current plan requires a minimum total prize pool of ${formatCurrencyFromCents(
-            planFeatures.minContestBudget
+            planFeatures.minContestBudget,
           )}.`,
           variant: "destructive",
         });
@@ -2554,7 +2609,7 @@ export default function EditContestPage({
             description: `Prize for Winner ${
               i + 1
             } must be at least ${formatCurrencyFromCents(
-              MIN_PRIZE_PER_WINNER
+              MIN_PRIZE_PER_WINNER,
             )}`,
             variant: "destructive",
           });
@@ -2592,288 +2647,334 @@ export default function EditContestPage({
       // Add flat fee bonus if specified (stored in cents)
       if (flatFeeBonus && parseFloat(flatFeeBonus.toString()) > 0) {
         leaderboardDetails.flat_fee_bonus = Math.round(
-          parseFloat(flatFeeBonus.toString()) * 100
+          parseFloat(flatFeeBonus.toString()) * 100,
         );
       }
 
       // Add total budget if specified (stored in cents)
       if (totalBudget && parseFloat(totalBudget.toString()) > 0) {
         leaderboardDetails.total_budget = Math.round(
-          parseFloat(totalBudget.toString()) * 100
+          parseFloat(totalBudget.toString()) * 100,
         );
       }
 
       // Add total budget if specified (stored in cents)
       if (totalBudget && parseFloat(totalBudget.toString()) > 0) {
         leaderboardDetails.total_budget = Math.round(
-          parseFloat(totalBudget.toString()) * 100
+          parseFloat(totalBudget.toString()) * 100,
         );
       }
 
       contestBasedDetails.leaderboard_contest = leaderboardDetails;
-    } else if (!datesOnly && contestType === "milestone") {
-      const effectiveMilestoneRows = milestoneRows.filter(
-        (r) =>
-          r.target_views !== "" ||
-          r.payout_dollars !== "" ||
-          r.winner_limit !== ""
-      );
+    } else if (
+      !datesOnly &&
+      (contestType === "milestone" ||
+        contestType === "dual_rewards" ||
+        contestType === "cpm")
+    ) {
+      const milestonePoolDollars = totalBudget;
 
-      if (effectiveMilestoneRows.length === 0) {
-        toast({
-          title: "Milestones Required",
-          description:
-            "Add at least one milestone with target views and payout amount.",
-          variant: "destructive",
-        });
-        setIsSubmitting(false);
-        if (submitTimeoutId) clearTimeout(submitTimeoutId);
-        return;
-      }
-
-      const milestonesPayload: Array<{
-        order: number;
-        target_views: number;
-        payout_cents: number;
-        winner_limit: number | null;
-      }> = [];
-
-      for (let i = 0; i < effectiveMilestoneRows.length; i++) {
-        const row = effectiveMilestoneRows[i];
-        const tv =
-          row.target_views === "" ? NaN : parseInt(String(row.target_views), 10);
-        const payoutD =
-          row.payout_dollars === ""
-            ? NaN
-            : parseFloat(String(row.payout_dollars));
-        const payoutCents = Math.round((payoutD || 0) * 100);
-        const winnerLimit =
-          row.winner_limit === ""
-            ? null
-            : parseInt(String(row.winner_limit), 10);
-
-        if (isNaN(tv) || tv <= 0) {
+      if (contestType === "milestone" || contestType === "dual_rewards") {
+        if (contest?.contest_format !== "video") {
           toast({
-            title: "Invalid Milestone Target",
-            description: `Milestone ${i + 1}: target views must be greater than 0.`,
-            variant: "destructive",
-          });
-          setIsSubmitting(false);
-          if (submitTimeoutId) clearTimeout(submitTimeoutId);
-          return;
-        }
-        if (isNaN(payoutD) || payoutCents < MIN_MILESTONE_PAYOUT_CENTS) {
-          toast({
-            title: "Invalid Milestone Payout",
-            description: `Milestone ${i + 1}: payout must be at least ${formatCurrencyFromCents(
-              MIN_MILESTONE_PAYOUT_CENTS
-            )}.`,
-            variant: "destructive",
-          });
-          setIsSubmitting(false);
-          if (submitTimeoutId) clearTimeout(submitTimeoutId);
-          return;
-        }
-        if (winnerLimit !== null && (isNaN(winnerLimit) || winnerLimit < 1)) {
-          toast({
-            title: "Invalid Milestone Winner Cap",
-            description: `Milestone ${i + 1}: winner cap must be at least 1, or leave blank for unlimited.`,
-            variant: "destructive",
-          });
-          setIsSubmitting(false);
-          if (submitTimeoutId) clearTimeout(submitTimeoutId);
-          return;
-        }
-
-        milestonesPayload.push({
-          order: i + 1,
-          target_views: tv,
-          payout_cents: payoutCents,
-          winner_limit:
-            winnerLimit !== null && !isNaN(winnerLimit) ? winnerLimit : null,
-        });
-      }
-
-      for (let j = 1; j < milestonesPayload.length; j++) {
-        if (milestonesPayload[j].target_views <= milestonesPayload[j - 1].target_views) {
-          toast({
-            title: "Invalid Milestone Sequence",
+            title: "Invalid Contest Format",
             description:
-              "Milestone target views must be strictly increasing at each tier.",
+              "Milestone and dual-rewards contests require the Video contest format.",
             variant: "destructive",
           });
           setIsSubmitting(false);
           if (submitTimeoutId) clearTimeout(submitTimeoutId);
           return;
         }
-        if (milestonesPayload[j].payout_cents <= milestonesPayload[j - 1].payout_cents) {
-          toast({
-            title: "Invalid Milestone Sequence",
-            description:
-              "Milestone payouts must be strictly increasing at each tier.",
-            variant: "destructive",
-          });
-          setIsSubmitting(false);
-          if (submitTimeoutId) clearTimeout(submitTimeoutId);
-          return;
-        }
-      }
 
-      const totalBudgetCentsMilestone = Math.round(
-        (parseFloat(totalBudget.toString()) || 0) * 100
-      );
-      if (totalBudgetCentsMilestone <= 0) {
-        toast({
-          title: "Invalid Budget",
-          description: "Total contest budget is required for milestone contests.",
-          variant: "destructive",
-        });
-        setIsSubmitting(false);
-        if (submitTimeoutId) clearTimeout(submitTimeoutId);
-        return;
-      }
-
-      const bonusPayload = buildMilestoneBonusPayload();
-
-      contestBasedDetails.milestone_contest = {
-        milestones: milestonesPayload,
-        total_budget_cents: totalBudgetCentsMilestone,
-        ...(bonusPayload ? { bonus: bonusPayload } : {}),
-      };
-    } else if (!datesOnly && contestType === "cpm") {
-      const numCpmRate = parseFloat(cpmRate as string);
-      const numTotalBudget = parseFloat(totalBudget as string);
-      const numMinViews =
-        minViews !== "" && minViews !== null
-          ? parseInt(minViews as string, 10)
-          : null;
-      const numMaxViews =
-        maxViews !== "" && maxViews !== null
-          ? parseInt(maxViews as string, 10)
-          : null;
-
-      if (isNaN(numCpmRate) || numCpmRate <= 0) {
-        toast({
-          title: "Invalid CPM Rate",
-          description: "CPM Rate is required and must be a positive number.",
-          variant: "destructive",
-        });
-        setIsSubmitting(false);
-        if (submitTimeoutId) clearTimeout(submitTimeoutId);
-        return;
-      }
-
-      if (numCpmRate < MIN_CPM_RATE) {
-        toast({
-          title: "CPM Rate Too Low",
-          description: `CPM Rate must be at least $${MIN_CPM_RATE} per 1000 views.`,
-          variant: "destructive",
-        });
-        setIsSubmitting(false);
-        if (submitTimeoutId) clearTimeout(submitTimeoutId);
-        return;
-      }
-
-      if (numCpmRate > MAX_CPM_RATE) {
-        toast({
-          title: "CPM Rate Too High",
-          description: `CPM Rate cannot exceed $${MAX_CPM_RATE} per 1000 views.`,
-          variant: "destructive",
-        });
-        setIsSubmitting(false);
-        if (submitTimeoutId) clearTimeout(submitTimeoutId);
-        return;
-      }
-      if (isNaN(numTotalBudget) || numTotalBudget <= 0) {
-        toast({
-          title: "Invalid Budget",
-          description:
-            "Total Budget is required and must be a positive number.",
-          variant: "destructive",
-        });
-        setIsSubmitting(false);
-        if (submitTimeoutId) clearTimeout(submitTimeoutId);
-        return;
-      }
-      if (numMinViews !== null && (isNaN(numMinViews) || numMinViews < 0)) {
-        toast({
-          title: "Invalid Minimum Views",
-          description:
-            "Minimum Views, if provided, must be a non-negative number.",
-          variant: "destructive",
-        });
-        setIsSubmitting(false);
-        if (submitTimeoutId) clearTimeout(submitTimeoutId);
-        return;
-      }
-      if (numMaxViews !== null && (isNaN(numMaxViews) || numMaxViews < 0)) {
-        toast({
-          title: "Invalid Maximum Views",
-          description:
-            "Maximum Views, if provided, must be a non-negative number.",
-          variant: "destructive",
-        });
-        setIsSubmitting(false);
-        if (submitTimeoutId) clearTimeout(submitTimeoutId);
-        return;
-      }
-      if (
-        numMinViews !== null &&
-        numMaxViews !== null &&
-        numMinViews > numMaxViews
-      ) {
-        toast({
-          title: "Invalid View Range",
-          description: "Minimum Views cannot be greater than Maximum Views.",
-          variant: "destructive",
-        });
-        setIsSubmitting(false);
-        if (submitTimeoutId) clearTimeout(submitTimeoutId);
-        return;
-      }
-      if (!termsConditions || termsConditions.trim() === "") {
-        toast({
-          title: "Missing Terms & Conditions",
-          description: "Terms & Conditions are required for CPM contests.",
-          variant: "destructive",
-        });
-        setIsSubmitting(false);
-        if (submitTimeoutId) clearTimeout(submitTimeoutId);
-        return;
-      }
-      // Build CPM contest details
-      // Check if this is a Twitter CPM contest - exclude min_views and max_views for Twitter
-      const isTwitterCpmContest =
-        (contest?.platform?.toLowerCase() === "twitter" ||
-          contest?.platform?.toLowerCase() === "x") &&
-        contest?.contest_format === "text_image" &&
-        contestType === "cpm";
-
-      const cpmDetails: any = {
-        cpm_rate_usd: numCpmRate,
-        total_budget: numTotalBudget * 100, // Convert dollars to cents
-        terms_conditions: termsConditions,
-        budget_spent:
-          contest?.contest_based_details?.cpm_contest?.budget_spent || 0,
-      };
-
-      // Only include min_views and max_views for non-Twitter CPM contests
-      if (!isTwitterCpmContest) {
-        cpmDetails.min_views = numMinViews;
-        cpmDetails.max_views = numMaxViews;
-      }
-
-      // Add flat fee bonus if specified (stored in cents)
-      if (flatFeeBonus && parseFloat(flatFeeBonus.toString()) > 0) {
-        cpmDetails.flat_fee_bonus = Math.round(
-          parseFloat(flatFeeBonus.toString()) * 100
+        const effectiveMilestoneRows = milestoneRows.filter(
+          (r) =>
+            r.target_views !== "" ||
+            r.payout_dollars !== "" ||
+            r.winner_limit !== "",
         );
+
+        if (effectiveMilestoneRows.length === 0) {
+          toast({
+            title: "Milestones Required",
+            description:
+              "Add at least one milestone with target views and payout amount.",
+            variant: "destructive",
+          });
+          setIsSubmitting(false);
+          if (submitTimeoutId) clearTimeout(submitTimeoutId);
+          return;
+        }
+
+        const milestonesPayload: Array<{
+          order: number;
+          target_views: number;
+          payout_cents: number;
+          winner_limit: number | null;
+        }> = [];
+
+        for (let i = 0; i < effectiveMilestoneRows.length; i++) {
+          const row = effectiveMilestoneRows[i];
+          const tv =
+            row.target_views === ""
+              ? NaN
+              : parseInt(String(row.target_views), 10);
+          const payoutD =
+            row.payout_dollars === ""
+              ? NaN
+              : parseFloat(String(row.payout_dollars));
+          const payoutCents = Math.round((payoutD || 0) * 100);
+          const winnerLimit =
+            row.winner_limit === ""
+              ? null
+              : parseInt(String(row.winner_limit), 10);
+
+          if (isNaN(tv) || tv <= 0) {
+            toast({
+              title: "Invalid Milestone Target",
+              description: `Milestone ${i + 1}: target views must be greater than 0.`,
+              variant: "destructive",
+            });
+            setIsSubmitting(false);
+            if (submitTimeoutId) clearTimeout(submitTimeoutId);
+            return;
+          }
+          if (isNaN(payoutD) || payoutCents < MIN_MILESTONE_PAYOUT_CENTS) {
+            toast({
+              title: "Invalid Milestone Payout",
+              description: `Milestone ${i + 1}: payout must be at least ${formatCurrencyFromCents(
+                MIN_MILESTONE_PAYOUT_CENTS,
+              )}.`,
+              variant: "destructive",
+            });
+            setIsSubmitting(false);
+            if (submitTimeoutId) clearTimeout(submitTimeoutId);
+            return;
+          }
+          if (winnerLimit !== null && (isNaN(winnerLimit) || winnerLimit < 1)) {
+            toast({
+              title: "Invalid Milestone Winner Cap",
+              description: `Milestone ${i + 1}: winner cap must be at least 1, or leave blank for unlimited.`,
+              variant: "destructive",
+            });
+            setIsSubmitting(false);
+            if (submitTimeoutId) clearTimeout(submitTimeoutId);
+            return;
+          }
+
+          milestonesPayload.push({
+            order: i + 1,
+            target_views: tv,
+            payout_cents: payoutCents,
+            winner_limit:
+              winnerLimit !== null && !isNaN(winnerLimit) ? winnerLimit : null,
+          });
+        }
+
+        for (let j = 1; j < milestonesPayload.length; j++) {
+          if (
+            milestonesPayload[j].target_views <=
+            milestonesPayload[j - 1].target_views
+          ) {
+            toast({
+              title: "Invalid Milestone Sequence",
+              description:
+                "Milestone target views must be strictly increasing at each tier.",
+              variant: "destructive",
+            });
+            setIsSubmitting(false);
+            if (submitTimeoutId) clearTimeout(submitTimeoutId);
+            return;
+          }
+          if (
+            milestonesPayload[j].payout_cents <=
+            milestonesPayload[j - 1].payout_cents
+          ) {
+            toast({
+              title: "Invalid Milestone Sequence",
+              description:
+                "Milestone payouts must be strictly increasing at each tier.",
+              variant: "destructive",
+            });
+            setIsSubmitting(false);
+            if (submitTimeoutId) clearTimeout(submitTimeoutId);
+            return;
+          }
+        }
+
+        const totalBudgetCentsMilestone = Math.round(
+          (parseFloat(String(milestonePoolDollars)) || 0) * 100,
+        );
+        if (totalBudgetCentsMilestone <= 0) {
+          toast({
+            title: "Invalid Budget",
+            description:
+              contestType === "dual_rewards"
+                ? "Total contest budget is required for dual-rewards contests."
+                : "Total contest budget is required for milestone contests.",
+            variant: "destructive",
+          });
+          setIsSubmitting(false);
+          if (submitTimeoutId) clearTimeout(submitTimeoutId);
+          return;
+        }
+
+        const bonusPayload = buildMilestoneBonusPayload();
+
+        contestBasedDetails.milestone_contest = {
+          milestones: milestonesPayload,
+          ...(contestType !== "dual_rewards"
+            ? { total_budget_cents: totalBudgetCentsMilestone }
+            : {}),
+          ...(bonusPayload ? { bonus: bonusPayload } : {}),
+        };
+        if (contestType === "dual_rewards") {
+          contestBasedDetails.total_budget_cents = totalBudgetCentsMilestone;
+        }
       }
 
-      // Note: CPM Points Configuration multipliers are saved in twitter_campaign.points_config
-      // (not in cpm_contest.points_config)
+      if (contestType === "cpm" || contestType === "dual_rewards") {
+        const numCpmRate = parseFloat(cpmRate as string);
+        const numTotalBudget = parseFloat(totalBudget as string);
+        const numMinViews =
+          minViews !== "" && minViews !== null
+            ? parseInt(minViews as string, 10)
+            : null;
+        const numMaxViews =
+          maxViews !== "" && maxViews !== null
+            ? parseInt(maxViews as string, 10)
+            : null;
 
-      contestBasedDetails.cpm_contest = cpmDetails;
+        if (isNaN(numCpmRate) || numCpmRate <= 0) {
+          toast({
+            title: "Invalid CPM Rate",
+            description: "CPM Rate is required and must be a positive number.",
+            variant: "destructive",
+          });
+          setIsSubmitting(false);
+          if (submitTimeoutId) clearTimeout(submitTimeoutId);
+          return;
+        }
+
+        if (numCpmRate < MIN_CPM_RATE) {
+          toast({
+            title: "CPM Rate Too Low",
+            description: `CPM Rate must be at least $${MIN_CPM_RATE} per 1000 views.`,
+            variant: "destructive",
+          });
+          setIsSubmitting(false);
+          if (submitTimeoutId) clearTimeout(submitTimeoutId);
+          return;
+        }
+
+        if (numCpmRate > MAX_CPM_RATE) {
+          toast({
+            title: "CPM Rate Too High",
+            description: `CPM Rate cannot exceed $${MAX_CPM_RATE} per 1000 views.`,
+            variant: "destructive",
+          });
+          setIsSubmitting(false);
+          if (submitTimeoutId) clearTimeout(submitTimeoutId);
+          return;
+        }
+        if (isNaN(numTotalBudget) || numTotalBudget <= 0) {
+          toast({
+            title: "Invalid Budget",
+            description:
+              "Total Budget is required and must be a positive number.",
+            variant: "destructive",
+          });
+          setIsSubmitting(false);
+          if (submitTimeoutId) clearTimeout(submitTimeoutId);
+          return;
+        }
+        if (numMinViews !== null && (isNaN(numMinViews) || numMinViews < 0)) {
+          toast({
+            title: "Invalid Minimum Views",
+            description:
+              "Minimum Views, if provided, must be a non-negative number.",
+            variant: "destructive",
+          });
+          setIsSubmitting(false);
+          if (submitTimeoutId) clearTimeout(submitTimeoutId);
+          return;
+        }
+        if (numMaxViews !== null && (isNaN(numMaxViews) || numMaxViews < 0)) {
+          toast({
+            title: "Invalid Maximum Views",
+            description:
+              "Maximum Views, if provided, must be a non-negative number.",
+            variant: "destructive",
+          });
+          setIsSubmitting(false);
+          if (submitTimeoutId) clearTimeout(submitTimeoutId);
+          return;
+        }
+        if (
+          numMinViews !== null &&
+          numMaxViews !== null &&
+          numMinViews > numMaxViews
+        ) {
+          toast({
+            title: "Invalid View Range",
+            description: "Minimum Views cannot be greater than Maximum Views.",
+            variant: "destructive",
+          });
+          setIsSubmitting(false);
+          if (submitTimeoutId) clearTimeout(submitTimeoutId);
+          return;
+        }
+        if (!termsConditions || termsConditions.trim() === "") {
+          toast({
+            title: "Missing Terms & Conditions",
+            description: "Terms & Conditions are required for CPM contests.",
+            variant: "destructive",
+          });
+          setIsSubmitting(false);
+          if (submitTimeoutId) clearTimeout(submitTimeoutId);
+          return;
+        }
+        // Build CPM contest details
+        // Check if this is a Twitter CPM contest - exclude min_views and max_views for Twitter
+        const isTwitterCpmContest =
+          (contest?.platform?.toLowerCase() === "twitter" ||
+            contest?.platform?.toLowerCase() === "x") &&
+          contest?.contest_format === "text_image" &&
+          isCpmContestType(contestType);
+
+        const poolCents = Math.round(numTotalBudget * 100);
+        const cpmDetails: any = {
+          cpm_rate_usd: numCpmRate,
+          ...(contestType !== "dual_rewards"
+            ? { total_budget: poolCents }
+            : {}),
+          terms_conditions: termsConditions,
+          budget_spent:
+            contest?.contest_based_details?.cpm_contest?.budget_spent || 0,
+        };
+
+        // Only include min_views and max_views for non-Twitter CPM contests
+        if (!isTwitterCpmContest) {
+          cpmDetails.min_views = numMinViews;
+          cpmDetails.max_views = numMaxViews;
+        }
+
+        // Add flat fee bonus if specified (stored in cents); dual rewards uses CPM pool only (no flat fee)
+        if (
+          contestType !== "dual_rewards" &&
+          flatFeeBonus &&
+          parseFloat(flatFeeBonus.toString()) > 0
+        ) {
+          cpmDetails.flat_fee_bonus = Math.round(
+            parseFloat(flatFeeBonus.toString()) * 100,
+          );
+        }
+
+        // Note: CPM Points Configuration multipliers are saved in twitter_campaign.points_config
+        // (not in cpm_contest.points_config)
+
+        contestBasedDetails.cpm_contest = cpmDetails;
+      }
     } else if (!datesOnly) {
       toast({
         title: "Invalid Contest Type",
@@ -2947,7 +3048,7 @@ export default function EditContestPage({
       }
 
       // Add Twitter CPM Points config with nested multipliers
-      if (contestType === "cpm") {
+      if (isCpmContestType(contestType)) {
         // Helper function to check if a multiplier value is valid (not blank/empty/NaN)
         const isValidMultiplierValue = (value: number | string): boolean => {
           if (value === null || value === undefined) return false;
@@ -2959,7 +3060,7 @@ export default function EditContestPage({
 
         // Helper function to get multiplier value or undefined if invalid
         const getMultiplierValue = (
-          value: number | string
+          value: number | string,
         ): number | undefined => {
           if (!isValidMultiplierValue(value)) return undefined;
           return parseFloat(value.toString().trim());
@@ -2990,19 +3091,19 @@ export default function EditContestPage({
         if (showCommentMultipliers) {
           // Checkbox is checked - use user values if provided, otherwise use defaults
           const commentLikes = getMultiplierValue(
-            cpmPointsConfig.comment_likes_multiplier
+            cpmPointsConfig.comment_likes_multiplier,
           );
           const commentReplies = getMultiplierValue(
-            cpmPointsConfig.comment_replies_multiplier
+            cpmPointsConfig.comment_replies_multiplier,
           );
           const commentImpressions = getMultiplierValue(
-            cpmPointsConfig.comment_impressions_multiplier
+            cpmPointsConfig.comment_impressions_multiplier,
           );
           const commentRetweets = getMultiplierValue(
-            cpmPointsConfig.comment_retweets_multiplier
+            cpmPointsConfig.comment_retweets_multiplier,
           );
           const commentQuoteReposts = getMultiplierValue(
-            cpmPointsConfig.comment_quote_reposts_multiplier
+            cpmPointsConfig.comment_quote_reposts_multiplier,
           );
 
           commentMultipliers.likes_multiplier =
@@ -3036,19 +3137,19 @@ export default function EditContestPage({
         if (showRetweetMultipliers) {
           // Checkbox is checked - use user values if provided, otherwise use defaults
           const retweetLikes = getMultiplierValue(
-            cpmPointsConfig.retweet_likes_multiplier
+            cpmPointsConfig.retweet_likes_multiplier,
           );
           const retweetReplies = getMultiplierValue(
-            cpmPointsConfig.retweet_replies_multiplier
+            cpmPointsConfig.retweet_replies_multiplier,
           );
           const retweetImpressions = getMultiplierValue(
-            cpmPointsConfig.retweet_impressions_multiplier
+            cpmPointsConfig.retweet_impressions_multiplier,
           );
           const retweetRetweets = getMultiplierValue(
-            cpmPointsConfig.retweet_retweets_multiplier
+            cpmPointsConfig.retweet_retweets_multiplier,
           );
           const retweetQuoteReposts = getMultiplierValue(
-            cpmPointsConfig.retweet_quote_reposts_multiplier
+            cpmPointsConfig.retweet_quote_reposts_multiplier,
           );
 
           retweetMultipliers.likes_multiplier =
@@ -3082,19 +3183,19 @@ export default function EditContestPage({
         if (showQuoteRepostMultipliers) {
           // Checkbox is checked - use user values if provided, otherwise use defaults
           const quoteRepostLikes = getMultiplierValue(
-            cpmPointsConfig.quote_repost_likes_multiplier
+            cpmPointsConfig.quote_repost_likes_multiplier,
           );
           const quoteRepostReplies = getMultiplierValue(
-            cpmPointsConfig.quote_repost_replies_multiplier
+            cpmPointsConfig.quote_repost_replies_multiplier,
           );
           const quoteRepostImpressions = getMultiplierValue(
-            cpmPointsConfig.quote_repost_impressions_multiplier
+            cpmPointsConfig.quote_repost_impressions_multiplier,
           );
           const quoteRepostRetweets = getMultiplierValue(
-            cpmPointsConfig.quote_repost_retweets_multiplier
+            cpmPointsConfig.quote_repost_retweets_multiplier,
           );
           const quoteRepostQuoteReposts = getMultiplierValue(
-            cpmPointsConfig.quote_repost_quote_reposts_multiplier
+            cpmPointsConfig.quote_repost_quote_reposts_multiplier,
           );
 
           quoteRepostMultipliers.likes_multiplier =
@@ -3306,7 +3407,7 @@ export default function EditContestPage({
   };
 
   const handleThumbnailChange = async (
-    e: React.ChangeEvent<HTMLInputElement>
+    e: React.ChangeEvent<HTMLInputElement>,
   ) => {
     if (e.target.files && e.target.files[0]) {
       const file = e.target.files[0];
@@ -3354,7 +3455,7 @@ export default function EditContestPage({
           .list("contest_thumbnails");
         if (existingFiles) {
           const matching = existingFiles.filter((f) =>
-            f.name.startsWith(`${contestId}_`)
+            f.name.startsWith(`${contestId}_`),
           );
           if (matching.length > 0) {
             const paths = matching.map((f) => `contest_thumbnails/${f.name}`);
@@ -3503,11 +3604,11 @@ export default function EditContestPage({
       inspirationLinks.some(
         (link) =>
           link.url === newInspirationUrl &&
-          link.description === newInspirationDescription
+          link.description === newInspirationDescription,
       )
     ) {
       setInspirationError(
-        "This inspiration link and description have already been added. Please use a different link or description."
+        "This inspiration link and description have already been added. Please use a different link or description.",
       );
       toast({
         title: "Duplicate Inspiration Link & Description",
@@ -3520,7 +3621,7 @@ export default function EditContestPage({
     // Duplicate check: same URL
     if (inspirationLinks.some((link) => link.url === newInspirationUrl)) {
       setInspirationError(
-        "This inspiration link has already been added. Please use a different link."
+        "This inspiration link has already been added. Please use a different link.",
       );
       toast({
         title: "Duplicate Inspiration Link",
@@ -3605,7 +3706,7 @@ export default function EditContestPage({
     const maxSize = 20 * 1024 * 1024; // 20MB
     if (resourceFile.size > maxSize) {
       setAssetUploadError(
-        "File must be 20MB or smaller. Please choose a smaller file."
+        "File must be 20MB or smaller. Please choose a smaller file.",
       );
       toast({
         title: "File Too Large",
@@ -3618,7 +3719,7 @@ export default function EditContestPage({
     const resourceName = resourceDescription.trim();
     if (resources.some((r) => r.description === resourceName)) {
       setAssetUploadError(
-        `A resource with the description \"${resourceName}\" already exists. Please use a unique description.`
+        `A resource with the description \"${resourceName}\" already exists. Please use a unique description.`,
       );
       toast({
         title: "Duplicate Description",
@@ -3636,7 +3737,7 @@ export default function EditContestPage({
       // Use per-contest folder
       const fileName = `contest_resources/${contestId}/${resourceFile.name.replace(
         /\s+/g,
-        "_"
+        "_",
       )}`;
       const { data: uploadData, error: uploadError } = await supabase.storage
         .from("contest-assets")
@@ -3713,7 +3814,7 @@ export default function EditContestPage({
       !externalResourceDescription.trim()
     ) {
       setResourceError(
-        "Please provide a description for the external resource."
+        "Please provide a description for the external resource.",
       );
       toast({
         title: "Missing Description",
@@ -3729,11 +3830,11 @@ export default function EditContestPage({
         (r) =>
           r.type === "external" &&
           r.url === newExternalResourceUrl &&
-          r.description === resourceName
+          r.description === resourceName,
       )
     ) {
       setResourceError(
-        "This external link and description have already been added. Please use a different link or description."
+        "This external link and description have already been added. Please use a different link or description.",
       );
       toast({
         title: "Duplicate Link & Description",
@@ -3746,11 +3847,11 @@ export default function EditContestPage({
     // Check if external link with same URL already exists
     if (
       resources.some(
-        (r) => r.type === "external" && r.url === newExternalResourceUrl
+        (r) => r.type === "external" && r.url === newExternalResourceUrl,
       )
     ) {
       setResourceError(
-        "This external link has already been added. Please use a different link."
+        "This external link has already been added. Please use a different link.",
       );
       toast({
         title: "Duplicate Link",
@@ -3791,7 +3892,7 @@ export default function EditContestPage({
     setResources(newResources);
     await updateContestResourcesInDB(newResources);
     setResourceSuccess(
-      `External resource \"${resourceName}\" added successfully!`
+      `External resource \"${resourceName}\" added successfully!`,
     );
     toast({ title: "Success", description: "External resource added!" });
     setNewExternalResourceUrl("");
@@ -3828,14 +3929,14 @@ export default function EditContestPage({
         }
         const pathSegments = url.pathname.split("/");
         const bucketIndex = pathSegments.findIndex(
-          (segment) => segment === "contest-assets"
+          (segment) => segment === "contest-assets",
         );
         if (bucketIndex !== -1 && bucketIndex < pathSegments.length - 1) {
           const filePath = pathSegments.slice(bucketIndex + 1).join("/");
           await supabase.storage.from("contest-assets").remove([filePath]);
         }
         setResourceSuccess(
-          `Resource "${resourceToRemove.description}" deleted successfully!`
+          `Resource "${resourceToRemove.description}" deleted successfully!`,
         );
         toast({
           title: "Success",
@@ -3851,7 +3952,7 @@ export default function EditContestPage({
     } catch (error: any) {
       console.error("Error deleting resource from storage:", error);
       setResourceSuccess(
-        `Resource removed from list but may not have been deleted from storage.`
+        `Resource removed from list but may not have been deleted from storage.`,
       );
       toast({
         title: "Warning",
@@ -3873,7 +3974,7 @@ export default function EditContestPage({
       const content = richTextEditorRef.current.getContent();
       console.log(
         "Captured brief content:",
-        content ? content.html.substring(0, 100) + "..." : content
+        content ? content.html.substring(0, 100) + "..." : content,
       );
       setBriefHtml(content.html);
       setBriefJson(content.json);
@@ -3888,7 +3989,7 @@ export default function EditContestPage({
       const content = rulesRichTextEditorRef.current.getContent();
       console.log(
         "Captured rules content:",
-        content ? content.html.substring(0, 100) + "..." : content
+        content ? content.html.substring(0, 100) + "..." : content,
       );
       setRulesHtml(content.html);
       setRulesJson(content.json);
@@ -3945,7 +4046,7 @@ export default function EditContestPage({
     setIsSubmitting(true);
     try {
       console.log(
-        `💰 Processing refund: ${refundDetails.prizePoolDecrease} cents prize pool + ${refundDetails.commissionRefund} cents commission (${refundDetails.commissionPercentage}%) = ${refundDetails.totalRefund} cents total`
+        `💰 Processing refund: ${refundDetails.prizePoolDecrease} cents prize pool + ${refundDetails.commissionRefund} cents commission (${refundDetails.commissionPercentage}%) = ${refundDetails.totalRefund} cents total`,
       );
 
       // Call refund API endpoint
@@ -3975,16 +4076,16 @@ export default function EditContestPage({
       // Show detailed refund breakdown if available
       const refundMessage = refundResult.breakdown
         ? `Prize pool reduced by $${refundResult.breakdown.prizePoolReduction.toFixed(
-            2
+            2,
           )}. Refunded: $${refundResult.breakdown.prizePoolReduction.toFixed(
-            2
+            2,
           )} + $${refundResult.breakdown.commissionRefund.toFixed(
-            2
+            2,
           )} commission (${
             refundDetails.commissionPercentage
           }%) = $${refundResult.breakdown.totalRefunded.toFixed(2)} total.`
         : `$${(refundDetails.totalRefund / 100).toFixed(
-            2
+            2,
           )} has been refunded to your wallet (using original ${
             refundDetails.commissionPercentage
           }% commission rate)`;
@@ -4022,81 +4123,97 @@ export default function EditContestPage({
     if (!refundDetails) return;
 
     try {
-      const contestBasedDetails =
-        contestType === "leaderboard"
+      const milestoneContestPayload = (
+        poolDollars: number | string,
+        omitPoolCents?: boolean,
+      ) => ({
+        milestones: milestoneRows
+          .filter(
+            (r) =>
+              r.target_views !== "" ||
+              r.payout_dollars !== "" ||
+              r.winner_limit !== "",
+          )
+          .map((row, index) => ({
+            order: index + 1,
+            target_views: parseInt(String(row.target_views), 10),
+            payout_cents: Math.round(
+              parseFloat(String(row.payout_dollars || 0)) * 100,
+            ),
+            winner_limit:
+              row.winner_limit === ""
+                ? null
+                : parseInt(String(row.winner_limit), 10),
+          })),
+        ...(!omitPoolCents
           ? {
-              leaderboard_contest: {
-                prizes: winnerAmounts.map((amount, index) => ({
-                  position: index + 1,
-                  amount: amount,
-                })),
-                total_prize: winnerAmounts.reduce(
-                  (sum, amount) => sum + amount,
-                  0
-                ),
-                winner_count: winnerCount,
-              },
+              total_budget_cents: Math.round(
+                parseFloat(String(poolDollars || "0")) * 100,
+              ),
             }
-          : contestType === "milestone"
-            ? {
-                milestone_contest: {
-                  milestones: milestoneRows
-                    .filter(
-                      (r) =>
-                        r.target_views !== "" ||
-                        r.payout_dollars !== "" ||
-                        r.winner_limit !== ""
-                    )
-                    .map((row, index) => ({
-                      order: index + 1,
-                      target_views: parseInt(String(row.target_views), 10),
-                      payout_cents: Math.round(
-                        parseFloat(String(row.payout_dollars || 0)) * 100
-                      ),
-                      winner_limit:
-                        row.winner_limit === ""
-                          ? null
-                          : parseInt(String(row.winner_limit), 10),
-                    })),
-                  total_budget_cents: Math.round(
-                    parseFloat(totalBudget.toString() || "0") * 100
-                  ),
-                  ...(buildMilestoneBonusPayload()
-                    ? { bonus: buildMilestoneBonusPayload() }
-                    : {}),
-                },
-              }
-          : (() => {
-              // Check if this is a Twitter CPM contest - exclude min_views and max_views for Twitter
-              const isTwitterCpm =
-                (contest?.platform?.toLowerCase() === "twitter" ||
-                  contest?.platform?.toLowerCase() === "x") &&
-                contest?.contest_format === "text_image" &&
-                contestType === "cpm";
+          : {}),
+        ...(buildMilestoneBonusPayload()
+          ? { bonus: buildMilestoneBonusPayload() }
+          : {}),
+      });
 
-              const cpmContestDetails: any = {
-                cpm_rate_usd: parseFloat(cpmRate.toString()),
-                total_budget: Math.round(
-                  parseFloat(totalBudget.toString()) * 100
-                ),
-                terms_conditions: termsConditions,
-              };
+      const buildCpmContestForRefund = () => {
+        const isTwitterCpm =
+          (contest?.platform?.toLowerCase() === "twitter" ||
+            contest?.platform?.toLowerCase() === "x") &&
+          contest?.contest_format === "text_image" &&
+          isCpmContestType(contestType);
 
-              // Only include min_views and max_views for non-Twitter CPM contests
-              if (!isTwitterCpm) {
-                cpmContestDetails.min_views = minViews
-                  ? parseInt(minViews.toString())
-                  : null;
-                cpmContestDetails.max_views = maxViews
-                  ? parseInt(maxViews.toString())
-                  : null;
-              }
+        const poolCents = Math.round(parseFloat(totalBudget.toString()) * 100);
+        const cpmContestDetails: Record<string, unknown> = {
+          cpm_rate_usd: parseFloat(cpmRate.toString()),
+          ...(contestType !== "dual_rewards" ? { total_budget: poolCents } : {}),
+          budget_spent:
+            contest?.contest_based_details?.cpm_contest?.budget_spent ?? 0,
+          terms_conditions: termsConditions,
+        };
 
-              // Note: CPM Points Configuration multipliers are saved in twitter_campaign.points_config
-              // (not in cpm_contest.points_config)
+        if (!isTwitterCpm) {
+          cpmContestDetails.min_views = minViews
+            ? parseInt(minViews.toString())
+            : null;
+          cpmContestDetails.max_views = maxViews
+            ? parseInt(maxViews.toString())
+            : null;
+        }
 
-              return { cpm_contest: cpmContestDetails };
-            })();
+        return cpmContestDetails;
+      };
+
+      let contestBasedDetails: Record<string, unknown>;
+      if (contestType === "leaderboard") {
+        contestBasedDetails = {
+          leaderboard_contest: {
+            prizes: winnerAmounts.map((amount, index) => ({
+              position: index + 1,
+              amount: amount,
+            })),
+            total_prize: winnerAmounts.reduce((sum, amount) => sum + amount, 0),
+            winner_count: winnerCount,
+          },
+        };
+      } else if (contestType === "milestone") {
+        contestBasedDetails = {
+          milestone_contest: milestoneContestPayload(totalBudget),
+        };
+      } else if (contestType === "dual_rewards") {
+        contestBasedDetails = {
+          milestone_contest: milestoneContestPayload(totalBudget, true),
+          total_budget_cents: Math.round(
+            parseFloat(String(totalBudget || "0")) * 100,
+          ),
+          cpm_contest: buildCpmContestForRefund(),
+        };
+      } else if (contestType === "cpm") {
+        contestBasedDetails = { cpm_contest: buildCpmContestForRefund() };
+      } else {
+        contestBasedDetails = {};
+      }
 
       const { error: updateError } = await supabase
         .from("contests")
@@ -4110,7 +4227,7 @@ export default function EditContestPage({
       if (updateError) {
         console.error(
           "Error updating contest details after refund:",
-          updateError
+          updateError,
         );
         throw new Error("Failed to update contest details");
       }
@@ -4127,7 +4244,7 @@ export default function EditContestPage({
     for (let attempt = 1; attempt <= retries; attempt++) {
       try {
         console.log(
-          `Submission attempt ${attempt}/${retries} for contest ${contestId}`
+          `Submission attempt ${attempt}/${retries} for contest ${contestId}`,
         );
 
         const response = await fetch(`/api/contests/${contestId}/moderation`, {
@@ -4195,7 +4312,7 @@ export default function EditContestPage({
     // Skip inspiration links validation for raid campaign type
     if (contentType !== "raid") {
       const validInspirationLinks = inspirationLinks.filter(
-        (link) => link.url.trim() !== ""
+        (link) => link.url.trim() !== "",
       );
       if (validInspirationLinks.length === 0) {
         return "At least one inspiration link is required.";
@@ -4235,10 +4352,10 @@ export default function EditContestPage({
       const todayOnly = new Date(
         now.getFullYear(),
         now.getMonth(),
-        now.getDate()
+        now.getDate(),
       );
       const daysUntilStart = Math.floor(
-        (startDateOnly.getTime() - todayOnly.getTime()) / (1000 * 60 * 60 * 24)
+        (startDateOnly.getTime() - todayOnly.getTime()) / (1000 * 60 * 60 * 24),
       );
 
       const originalStartDate = contest?.start_date
@@ -4282,7 +4399,7 @@ export default function EditContestPage({
       const planFeatures = getPlanFeatures(userPlan);
       const currentTotalPrizePool = winnerAmounts.reduce(
         (sum, amount) => sum + (amount || 0),
-        0
+        0,
       );
 
       if (winnerCount > planFeatures.maxWinnersPerContest) {
@@ -4291,7 +4408,7 @@ export default function EditContestPage({
 
       if (currentTotalPrizePool < planFeatures.minContestBudget) {
         return `Your current plan requires a minimum total prize pool of ${formatCurrencyFromCents(
-          planFeatures.minContestBudget
+          planFeatures.minContestBudget,
         )}.`;
       }
 
@@ -4336,35 +4453,41 @@ export default function EditContestPage({
         (r) =>
           r.target_views !== "" ||
           r.payout_dollars !== "" ||
-          r.winner_limit !== ""
+          r.winner_limit !== "",
       );
 
       if (effectiveMilestoneRows.length === 0) {
         return "Add at least one milestone with target views and payout amount.";
       }
 
-      const parsedRows: Array<{ target_views: number; payout_cents: number }> = [];
+      const parsedRows: Array<{ target_views: number; payout_cents: number }> =
+        [];
       for (let i = 0; i < effectiveMilestoneRows.length; i++) {
         const row = effectiveMilestoneRows[i];
         const targetViews = parseInt(String(row.target_views), 10);
         const payoutDollars = parseFloat(String(row.payout_dollars));
         const payoutCents = Math.round((payoutDollars || 0) * 100);
         const winnerLimit =
-          row.winner_limit === "" ? null : parseInt(String(row.winner_limit), 10);
+          row.winner_limit === ""
+            ? null
+            : parseInt(String(row.winner_limit), 10);
 
         if (isNaN(targetViews) || targetViews <= 0) {
           return `Milestone ${i + 1}: enter a valid target views value (> 0).`;
         }
         if (isNaN(payoutDollars) || payoutCents < MIN_MILESTONE_PAYOUT_CENTS) {
           return `Milestone ${i + 1}: payout must be at least ${formatCurrencyFromCents(
-            MIN_MILESTONE_PAYOUT_CENTS
+            MIN_MILESTONE_PAYOUT_CENTS,
           )}.`;
         }
         if (winnerLimit !== null && (isNaN(winnerLimit) || winnerLimit < 1)) {
           return `Milestone ${i + 1}: winner cap must be at least 1, or leave it blank for unlimited winners.`;
         }
 
-        parsedRows.push({ target_views: targetViews, payout_cents: payoutCents });
+        parsedRows.push({
+          target_views: targetViews,
+          payout_cents: payoutCents,
+        });
       }
 
       for (let j = 1; j < parsedRows.length; j++) {
@@ -4440,7 +4563,7 @@ export default function EditContestPage({
         parsedTotalBudget * 100 < planFeatures.minContestBudget
       ) {
         return `Your current plan requires a minimum total budget of ${formatCurrencyFromCents(
-          planFeatures.minContestBudget
+          planFeatures.minContestBudget,
         )}.`;
       }
 
@@ -4668,7 +4791,7 @@ export default function EditContestPage({
 
         // Update ALL contest data in database after payment (including any edits made)
         console.log(
-          "💾 Updating complete contest data in database after payment..."
+          "💾 Updating complete contest data in database after payment...",
         );
 
         // Check if this is a Twitter CPM contest - exclude min_views and max_views for Twitter
@@ -4688,7 +4811,7 @@ export default function EditContestPage({
                   })),
                   total_prize: winnerAmounts.reduce(
                     (sum, amount) => sum + amount,
-                    0
+                    0,
                   ),
                   winner_count: winnerCount,
                 },
@@ -4701,13 +4824,13 @@ export default function EditContestPage({
                         (r) =>
                           r.target_views !== "" ||
                           r.payout_dollars !== "" ||
-                          r.winner_limit !== ""
+                          r.winner_limit !== "",
                       )
                       .map((row, index) => ({
                         order: index + 1,
                         target_views: parseInt(String(row.target_views), 10),
                         payout_cents: Math.round(
-                          parseFloat(String(row.payout_dollars || 0)) * 100
+                          parseFloat(String(row.payout_dollars || 0)) * 100,
                         ),
                         winner_limit:
                           row.winner_limit === ""
@@ -4715,37 +4838,87 @@ export default function EditContestPage({
                             : parseInt(String(row.winner_limit), 10),
                       })),
                     total_budget_cents: Math.round(
-                      parseFloat(totalBudget.toString() || "0") * 100
+                      parseFloat(totalBudget.toString() || "0") * 100,
                     ),
                     ...(buildMilestoneBonusPayload()
                       ? { bonus: buildMilestoneBonusPayload() }
                       : {}),
                   },
                 }
-            : (() => {
-                const cpmContestDetails: any = {
-                  cpm_rate_usd: parseFloat(cpmRate.toString()),
-                  total_budget: Math.round(
-                    parseFloat(totalBudget.toString()) * 100
-                  ),
-                  terms_conditions: termsConditions,
-                };
+              : contestType === "dual_rewards"
+                ? (() => {
+                    const pool = Math.round(
+                      parseFloat(totalBudget.toString() || "0") * 100,
+                    );
+                    const cpmContestDetails: any = {
+                      cpm_rate_usd: parseFloat(cpmRate.toString()),
+                      terms_conditions: termsConditions,
+                    };
+                    if (!isTwitterCpmForPayment) {
+                      cpmContestDetails.min_views = minViews
+                        ? parseInt(minViews.toString())
+                        : null;
+                      cpmContestDetails.max_views = maxViews
+                        ? parseInt(maxViews.toString())
+                        : null;
+                    }
+                    return {
+                      cpm_contest: cpmContestDetails,
+                      milestone_contest: {
+                        milestones: milestoneRows
+                          .filter(
+                            (r) =>
+                              r.target_views !== "" ||
+                              r.payout_dollars !== "" ||
+                              r.winner_limit !== "",
+                          )
+                          .map((row, index) => ({
+                            order: index + 1,
+                            target_views: parseInt(
+                              String(row.target_views),
+                              10,
+                            ),
+                            payout_cents: Math.round(
+                              parseFloat(String(row.payout_dollars || 0)) *
+                                100,
+                            ),
+                            winner_limit:
+                              row.winner_limit === ""
+                                ? null
+                                : parseInt(String(row.winner_limit), 10),
+                          })),
+                        ...(buildMilestoneBonusPayload()
+                          ? { bonus: buildMilestoneBonusPayload() }
+                          : {}),
+                      },
+                      total_budget_cents: pool,
+                    };
+                  })()
+                : (() => {
+                  const pool = Math.round(
+                    parseFloat(totalBudget.toString()) * 100,
+                  );
+                  const cpmContestDetails: any = {
+                    cpm_rate_usd: parseFloat(cpmRate.toString()),
+                    total_budget: pool,
+                    terms_conditions: termsConditions,
+                  };
 
-                // Only include min_views and max_views for non-Twitter CPM contests
-                if (!isTwitterCpmForPayment) {
-                  cpmContestDetails.min_views = minViews
-                    ? parseInt(minViews.toString())
-                    : null;
-                  cpmContestDetails.max_views = maxViews
-                    ? parseInt(maxViews.toString())
-                    : null;
-                }
+                  // Only include min_views and max_views for non-Twitter CPM contests
+                  if (!isTwitterCpmForPayment) {
+                    cpmContestDetails.min_views = minViews
+                      ? parseInt(minViews.toString())
+                      : null;
+                    cpmContestDetails.max_views = maxViews
+                      ? parseInt(maxViews.toString())
+                      : null;
+                  }
 
-                // Note: CPM Points Configuration multipliers are saved in twitter_campaign.points_config
-                // (not in cpm_contest.points_config)
+                  // Note: CPM Points Configuration multipliers are saved in twitter_campaign.points_config
+                  // (not in cpm_contest.points_config)
 
-                return { cpm_contest: cpmContestDetails };
-              })();
+                  return { cpm_contest: cpmContestDetails };
+                })();
 
         // Add Twitter campaign config to contest_based_details
         // raid: target a specific tweet and do like, comment, retweet, and quote repost around that tweet
@@ -4813,7 +4986,7 @@ export default function EditContestPage({
           if (contestType === "cpm") {
             // Helper function to check if a multiplier value is valid (not blank/empty/NaN)
             const isValidMultiplierValue = (
-              value: number | string
+              value: number | string,
             ): boolean => {
               if (value === null || value === undefined) return false;
               const strValue = value.toString().trim();
@@ -4824,7 +4997,7 @@ export default function EditContestPage({
 
             // Helper function to get multiplier value or undefined if invalid
             const getMultiplierValue = (
-              value: number | string
+              value: number | string,
             ): number | undefined => {
               if (!isValidMultiplierValue(value)) return undefined;
               return parseFloat(value.toString().trim());
@@ -4855,19 +5028,19 @@ export default function EditContestPage({
             if (showCommentMultipliers) {
               const commentMultipliers: any = {};
               const commentLikes = getMultiplierValue(
-                cpmPointsConfig.comment_likes_multiplier
+                cpmPointsConfig.comment_likes_multiplier,
               );
               const commentReplies = getMultiplierValue(
-                cpmPointsConfig.comment_replies_multiplier
+                cpmPointsConfig.comment_replies_multiplier,
               );
               const commentImpressions = getMultiplierValue(
-                cpmPointsConfig.comment_impressions_multiplier
+                cpmPointsConfig.comment_impressions_multiplier,
               );
               const commentRetweets = getMultiplierValue(
-                cpmPointsConfig.comment_retweets_multiplier
+                cpmPointsConfig.comment_retweets_multiplier,
               );
               const commentQuoteReposts = getMultiplierValue(
-                cpmPointsConfig.comment_quote_reposts_multiplier
+                cpmPointsConfig.comment_quote_reposts_multiplier,
               );
 
               if (commentLikes !== undefined)
@@ -4912,19 +5085,19 @@ export default function EditContestPage({
             if (showRetweetMultipliers) {
               const retweetMultipliers: any = {};
               const retweetLikes = getMultiplierValue(
-                cpmPointsConfig.retweet_likes_multiplier
+                cpmPointsConfig.retweet_likes_multiplier,
               );
               const retweetReplies = getMultiplierValue(
-                cpmPointsConfig.retweet_replies_multiplier
+                cpmPointsConfig.retweet_replies_multiplier,
               );
               const retweetImpressions = getMultiplierValue(
-                cpmPointsConfig.retweet_impressions_multiplier
+                cpmPointsConfig.retweet_impressions_multiplier,
               );
               const retweetRetweets = getMultiplierValue(
-                cpmPointsConfig.retweet_retweets_multiplier
+                cpmPointsConfig.retweet_retweets_multiplier,
               );
               const retweetQuoteReposts = getMultiplierValue(
-                cpmPointsConfig.retweet_quote_reposts_multiplier
+                cpmPointsConfig.retweet_quote_reposts_multiplier,
               );
 
               if (retweetLikes !== undefined)
@@ -4969,19 +5142,19 @@ export default function EditContestPage({
             if (showQuoteRepostMultipliers) {
               const quoteRepostMultipliers: any = {};
               const quoteRepostLikes = getMultiplierValue(
-                cpmPointsConfig.quote_repost_likes_multiplier
+                cpmPointsConfig.quote_repost_likes_multiplier,
               );
               const quoteRepostReplies = getMultiplierValue(
-                cpmPointsConfig.quote_repost_replies_multiplier
+                cpmPointsConfig.quote_repost_replies_multiplier,
               );
               const quoteRepostImpressions = getMultiplierValue(
-                cpmPointsConfig.quote_repost_impressions_multiplier
+                cpmPointsConfig.quote_repost_impressions_multiplier,
               );
               const quoteRepostRetweets = getMultiplierValue(
-                cpmPointsConfig.quote_repost_retweets_multiplier
+                cpmPointsConfig.quote_repost_retweets_multiplier,
               );
               const quoteRepostQuoteReposts = getMultiplierValue(
-                cpmPointsConfig.quote_repost_quote_reposts_multiplier
+                cpmPointsConfig.quote_repost_quote_reposts_multiplier,
               );
 
               if (quoteRepostLikes !== undefined)
@@ -5038,7 +5211,7 @@ export default function EditContestPage({
 
         // Helper function to process and group subcategories by category
         const processSubcategories = (
-          subcategories: Array<{ category: string; subcategory: string }>
+          subcategories: Array<{ category: string; subcategory: string }>,
         ) => {
           if (!subcategories || subcategories.length === 0) return null;
           const grouped: Record<string, string[]> = {};
@@ -5078,7 +5251,7 @@ export default function EditContestPage({
               ? null
               : inspirationLinks.filter((link) => link.url.trim() !== ""),
           tracking_links: trackingLinks.filter(
-            (link) => link.url.trim() !== ""
+            (link) => link.url.trim() !== "",
           ),
           resources,
           contest_type: contestType,
@@ -5115,18 +5288,18 @@ export default function EditContestPage({
         if (updateError) {
           console.error(
             "❌ Failed to update complete contest data:",
-            updateError
+            updateError,
           );
           throw new Error(`Failed to update contest: ${updateError.message}`);
         }
 
         console.log(
-          "✅ Complete contest data updated in database after payment"
+          "✅ Complete contest data updated in database after payment",
         );
       } else {
         // No budget change - save all current form data as draft after successful payment
         console.log(
-          "📝 No budget change - saving all form data as draft after payment"
+          "📝 No budget change - saving all form data as draft after payment",
         );
 
         // Check if this is a Twitter CPM contest - exclude min_views and max_views for Twitter
@@ -5147,7 +5320,7 @@ export default function EditContestPage({
                   })),
                   total_prize: winnerAmounts.reduce(
                     (sum, amount) => sum + amount,
-                    0
+                    0,
                   ),
                   winner_count: winnerCount,
                 },
@@ -5160,13 +5333,13 @@ export default function EditContestPage({
                         (r) =>
                           r.target_views !== "" ||
                           r.payout_dollars !== "" ||
-                          r.winner_limit !== ""
+                          r.winner_limit !== "",
                       )
                       .map((row, index) => ({
                         order: index + 1,
                         target_views: parseInt(String(row.target_views), 10),
                         payout_cents: Math.round(
-                          parseFloat(String(row.payout_dollars || 0)) * 100
+                          parseFloat(String(row.payout_dollars || 0)) * 100,
                         ),
                         winner_limit:
                           row.winner_limit === ""
@@ -5174,165 +5347,217 @@ export default function EditContestPage({
                             : parseInt(String(row.winner_limit), 10),
                       })),
                     total_budget_cents: Math.round(
-                      parseFloat(totalBudget.toString() || "0") * 100
+                      parseFloat(totalBudget.toString() || "0") * 100,
                     ),
                     ...(buildMilestoneBonusPayload()
                       ? { bonus: buildMilestoneBonusPayload() }
                       : {}),
                   },
                 }
-            : (() => {
-                const cpmContestDetails: any = {
-                  cpm_rate_usd: parseFloat(cpmRate.toString()),
-                  total_budget: Math.round(
-                    parseFloat(totalBudget.toString()) * 100
-                  ),
-                  terms_conditions: termsConditions,
-                };
-
-                // Only include min_views and max_views for non-Twitter CPM contests
-                if (!isTwitterCpmForDraft) {
-                  cpmContestDetails.min_views = minViews
-                    ? parseInt(minViews.toString())
-                    : null;
-                  cpmContestDetails.max_views = maxViews
-                    ? parseInt(maxViews.toString())
-                    : null;
-                }
-
-                // Add CPM Points Configuration (for Twitter CPM contests only)
-                if (
-                  contestType === "cpm" &&
-                  platform?.toLowerCase() === "twitter"
-                ) {
-                  // Helper function to check if a multiplier value is valid (not blank/empty/NaN)
-                  const isValidMultiplierValue = (
-                    value: number | string
-                  ): boolean => {
-                    if (value === null || value === undefined) return false;
-                    const strValue = value.toString().trim();
-                    if (strValue === "" || strValue === null) return false;
-                    const numValue = parseFloat(strValue);
-                    return !isNaN(numValue);
+              : contestType === "dual_rewards"
+                ? (() => {
+                    const pool = Math.round(
+                      parseFloat(totalBudget.toString() || "0") * 100,
+                    );
+                    const cpmContestDetails: any = {
+                      cpm_rate_usd: parseFloat(cpmRate.toString()),
+                      terms_conditions: termsConditions,
+                    };
+                    if (!isTwitterCpmForDraft) {
+                      cpmContestDetails.min_views = minViews
+                        ? parseInt(minViews.toString())
+                        : null;
+                      cpmContestDetails.max_views = maxViews
+                        ? parseInt(maxViews.toString())
+                        : null;
+                    }
+                    return {
+                      cpm_contest: cpmContestDetails,
+                      milestone_contest: {
+                        milestones: milestoneRows
+                          .filter(
+                            (r) =>
+                              r.target_views !== "" ||
+                              r.payout_dollars !== "" ||
+                              r.winner_limit !== "",
+                          )
+                          .map((row, index) => ({
+                            order: index + 1,
+                            target_views: parseInt(
+                              String(row.target_views),
+                              10,
+                            ),
+                            payout_cents: Math.round(
+                              parseFloat(String(row.payout_dollars || 0)) *
+                                100,
+                            ),
+                            winner_limit:
+                              row.winner_limit === ""
+                                ? null
+                                : parseInt(String(row.winner_limit), 10),
+                          })),
+                        ...(buildMilestoneBonusPayload()
+                          ? { bonus: buildMilestoneBonusPayload() }
+                          : {}),
+                      },
+                      total_budget_cents: pool,
+                    };
+                  })()
+                : (() => {
+                  const pool = Math.round(
+                    parseFloat(totalBudget.toString()) * 100,
+                  );
+                  const cpmContestDetails: any = {
+                    cpm_rate_usd: parseFloat(cpmRate.toString()),
+                    total_budget: pool,
+                    terms_conditions: termsConditions,
                   };
 
-                  // Helper function to get multiplier value or undefined if invalid
-                  const getMultiplierValue = (
-                    value: number | string
-                  ): number | undefined => {
-                    if (!isValidMultiplierValue(value)) return undefined;
-                    return parseFloat(value.toString().trim());
-                  };
-
-                  // Build points_config - only include fields with valid (non-blank) values
-                  const pointsConfig: any = {};
-
-                  if (showCommentMultipliers) {
-                    const commentLikes = getMultiplierValue(
-                      cpmPointsConfig.comment_likes_multiplier
-                    );
-                    const commentReplies = getMultiplierValue(
-                      cpmPointsConfig.comment_replies_multiplier
-                    );
-                    const commentImpressions = getMultiplierValue(
-                      cpmPointsConfig.comment_impressions_multiplier
-                    );
-                    const commentRetweets = getMultiplierValue(
-                      cpmPointsConfig.comment_retweets_multiplier
-                    );
-                    const commentQuoteReposts = getMultiplierValue(
-                      cpmPointsConfig.comment_quote_reposts_multiplier
-                    );
-
-                    if (commentLikes !== undefined)
-                      pointsConfig.comment_likes_multiplier = commentLikes;
-                    if (commentReplies !== undefined)
-                      pointsConfig.comment_replies_multiplier = commentReplies;
-                    if (commentImpressions !== undefined)
-                      pointsConfig.comment_impressions_multiplier =
-                        commentImpressions;
-                    if (commentRetweets !== undefined)
-                      pointsConfig.comment_retweets_multiplier =
-                        commentRetweets;
-                    if (commentQuoteReposts !== undefined)
-                      pointsConfig.comment_quote_reposts_multiplier =
-                        commentQuoteReposts;
+                  // Only include min_views and max_views for non-Twitter CPM contests
+                  if (!isTwitterCpmForDraft) {
+                    cpmContestDetails.min_views = minViews
+                      ? parseInt(minViews.toString())
+                      : null;
+                    cpmContestDetails.max_views = maxViews
+                      ? parseInt(maxViews.toString())
+                      : null;
                   }
 
-                  if (showRetweetMultipliers) {
-                    const retweetLikes = getMultiplierValue(
-                      cpmPointsConfig.retweet_likes_multiplier
-                    );
-                    const retweetReplies = getMultiplierValue(
-                      cpmPointsConfig.retweet_replies_multiplier
-                    );
-                    const retweetImpressions = getMultiplierValue(
-                      cpmPointsConfig.retweet_impressions_multiplier
-                    );
-                    const retweetRetweets = getMultiplierValue(
-                      cpmPointsConfig.retweet_retweets_multiplier
-                    );
-                    const retweetQuoteReposts = getMultiplierValue(
-                      cpmPointsConfig.retweet_quote_reposts_multiplier
-                    );
+                  // Add CPM Points Configuration (for Twitter CPM contests only)
+                  if (
+                    contestType === "cpm" &&
+                    platform?.toLowerCase() === "twitter"
+                  ) {
+                    // Helper function to check if a multiplier value is valid (not blank/empty/NaN)
+                    const isValidMultiplierValue = (
+                      value: number | string,
+                    ): boolean => {
+                      if (value === null || value === undefined) return false;
+                      const strValue = value.toString().trim();
+                      if (strValue === "" || strValue === null) return false;
+                      const numValue = parseFloat(strValue);
+                      return !isNaN(numValue);
+                    };
 
-                    if (retweetLikes !== undefined)
-                      pointsConfig.retweet_likes_multiplier = retweetLikes;
-                    if (retweetReplies !== undefined)
-                      pointsConfig.retweet_replies_multiplier = retweetReplies;
-                    if (retweetImpressions !== undefined)
-                      pointsConfig.retweet_impressions_multiplier =
-                        retweetImpressions;
-                    if (retweetRetweets !== undefined)
-                      pointsConfig.retweet_retweets_multiplier =
-                        retweetRetweets;
-                    if (retweetQuoteReposts !== undefined)
-                      pointsConfig.retweet_quote_reposts_multiplier =
-                        retweetQuoteReposts;
+                    // Helper function to get multiplier value or undefined if invalid
+                    const getMultiplierValue = (
+                      value: number | string,
+                    ): number | undefined => {
+                      if (!isValidMultiplierValue(value)) return undefined;
+                      return parseFloat(value.toString().trim());
+                    };
+
+                    // Build points_config - only include fields with valid (non-blank) values
+                    const pointsConfig: any = {};
+
+                    if (showCommentMultipliers) {
+                      const commentLikes = getMultiplierValue(
+                        cpmPointsConfig.comment_likes_multiplier,
+                      );
+                      const commentReplies = getMultiplierValue(
+                        cpmPointsConfig.comment_replies_multiplier,
+                      );
+                      const commentImpressions = getMultiplierValue(
+                        cpmPointsConfig.comment_impressions_multiplier,
+                      );
+                      const commentRetweets = getMultiplierValue(
+                        cpmPointsConfig.comment_retweets_multiplier,
+                      );
+                      const commentQuoteReposts = getMultiplierValue(
+                        cpmPointsConfig.comment_quote_reposts_multiplier,
+                      );
+
+                      if (commentLikes !== undefined)
+                        pointsConfig.comment_likes_multiplier = commentLikes;
+                      if (commentReplies !== undefined)
+                        pointsConfig.comment_replies_multiplier =
+                          commentReplies;
+                      if (commentImpressions !== undefined)
+                        pointsConfig.comment_impressions_multiplier =
+                          commentImpressions;
+                      if (commentRetweets !== undefined)
+                        pointsConfig.comment_retweets_multiplier =
+                          commentRetweets;
+                      if (commentQuoteReposts !== undefined)
+                        pointsConfig.comment_quote_reposts_multiplier =
+                          commentQuoteReposts;
+                    }
+
+                    if (showRetweetMultipliers) {
+                      const retweetLikes = getMultiplierValue(
+                        cpmPointsConfig.retweet_likes_multiplier,
+                      );
+                      const retweetReplies = getMultiplierValue(
+                        cpmPointsConfig.retweet_replies_multiplier,
+                      );
+                      const retweetImpressions = getMultiplierValue(
+                        cpmPointsConfig.retweet_impressions_multiplier,
+                      );
+                      const retweetRetweets = getMultiplierValue(
+                        cpmPointsConfig.retweet_retweets_multiplier,
+                      );
+                      const retweetQuoteReposts = getMultiplierValue(
+                        cpmPointsConfig.retweet_quote_reposts_multiplier,
+                      );
+
+                      if (retweetLikes !== undefined)
+                        pointsConfig.retweet_likes_multiplier = retweetLikes;
+                      if (retweetReplies !== undefined)
+                        pointsConfig.retweet_replies_multiplier =
+                          retweetReplies;
+                      if (retweetImpressions !== undefined)
+                        pointsConfig.retweet_impressions_multiplier =
+                          retweetImpressions;
+                      if (retweetRetweets !== undefined)
+                        pointsConfig.retweet_retweets_multiplier =
+                          retweetRetweets;
+                      if (retweetQuoteReposts !== undefined)
+                        pointsConfig.retweet_quote_reposts_multiplier =
+                          retweetQuoteReposts;
+                    }
+
+                    if (showQuoteRepostMultipliers) {
+                      const quoteRepostLikes = getMultiplierValue(
+                        cpmPointsConfig.quote_repost_likes_multiplier,
+                      );
+                      const quoteRepostReplies = getMultiplierValue(
+                        cpmPointsConfig.quote_repost_replies_multiplier,
+                      );
+                      const quoteRepostImpressions = getMultiplierValue(
+                        cpmPointsConfig.quote_repost_impressions_multiplier,
+                      );
+                      const quoteRepostRetweets = getMultiplierValue(
+                        cpmPointsConfig.quote_repost_retweets_multiplier,
+                      );
+                      const quoteRepostQuoteReposts = getMultiplierValue(
+                        cpmPointsConfig.quote_repost_quote_reposts_multiplier,
+                      );
+
+                      if (quoteRepostLikes !== undefined)
+                        pointsConfig.quote_repost_likes_multiplier =
+                          quoteRepostLikes;
+                      if (quoteRepostReplies !== undefined)
+                        pointsConfig.quote_repost_replies_multiplier =
+                          quoteRepostReplies;
+                      if (quoteRepostImpressions !== undefined)
+                        pointsConfig.quote_repost_impressions_multiplier =
+                          quoteRepostImpressions;
+                      if (quoteRepostRetweets !== undefined)
+                        pointsConfig.quote_repost_retweets_multiplier =
+                          quoteRepostRetweets;
+                      if (quoteRepostQuoteReposts !== undefined)
+                        pointsConfig.quote_repost_quote_reposts_multiplier =
+                          quoteRepostQuoteReposts;
+                    }
+
+                    // Only set points_config if there are valid values
+                    if (Object.keys(pointsConfig).length > 0) {
+                      cpmContestDetails.points_config = pointsConfig;
+                    }
                   }
 
-                  if (showQuoteRepostMultipliers) {
-                    const quoteRepostLikes = getMultiplierValue(
-                      cpmPointsConfig.quote_repost_likes_multiplier
-                    );
-                    const quoteRepostReplies = getMultiplierValue(
-                      cpmPointsConfig.quote_repost_replies_multiplier
-                    );
-                    const quoteRepostImpressions = getMultiplierValue(
-                      cpmPointsConfig.quote_repost_impressions_multiplier
-                    );
-                    const quoteRepostRetweets = getMultiplierValue(
-                      cpmPointsConfig.quote_repost_retweets_multiplier
-                    );
-                    const quoteRepostQuoteReposts = getMultiplierValue(
-                      cpmPointsConfig.quote_repost_quote_reposts_multiplier
-                    );
-
-                    if (quoteRepostLikes !== undefined)
-                      pointsConfig.quote_repost_likes_multiplier =
-                        quoteRepostLikes;
-                    if (quoteRepostReplies !== undefined)
-                      pointsConfig.quote_repost_replies_multiplier =
-                        quoteRepostReplies;
-                    if (quoteRepostImpressions !== undefined)
-                      pointsConfig.quote_repost_impressions_multiplier =
-                        quoteRepostImpressions;
-                    if (quoteRepostRetweets !== undefined)
-                      pointsConfig.quote_repost_retweets_multiplier =
-                        quoteRepostRetweets;
-                    if (quoteRepostQuoteReposts !== undefined)
-                      pointsConfig.quote_repost_quote_reposts_multiplier =
-                        quoteRepostQuoteReposts;
-                  }
-
-                  // Only set points_config if there are valid values
-                  if (Object.keys(pointsConfig).length > 0) {
-                    cpmContestDetails.points_config = pointsConfig;
-                  }
-                }
-
-                return { cpm_contest: cpmContestDetails };
-              })();
+                  return { cpm_contest: cpmContestDetails };
+                })();
 
         // Add Twitter campaign config to contest_based_details
         // raid: target a specific tweet and do like, comment, retweet, and quote repost around that tweet
@@ -5400,7 +5625,7 @@ export default function EditContestPage({
           if (contestType === "cpm") {
             // Helper function to check if a multiplier value is valid (not blank/empty/NaN)
             const isValidMultiplierValue = (
-              value: number | string
+              value: number | string,
             ): boolean => {
               if (value === null || value === undefined) return false;
               const strValue = value.toString().trim();
@@ -5411,7 +5636,7 @@ export default function EditContestPage({
 
             // Helper function to get multiplier value or undefined if invalid
             const getMultiplierValue = (
-              value: number | string
+              value: number | string,
             ): number | undefined => {
               if (!isValidMultiplierValue(value)) return undefined;
               return parseFloat(value.toString().trim());
@@ -5442,19 +5667,19 @@ export default function EditContestPage({
             if (showCommentMultipliers) {
               const commentMultipliers: any = {};
               const commentLikes = getMultiplierValue(
-                cpmPointsConfig.comment_likes_multiplier
+                cpmPointsConfig.comment_likes_multiplier,
               );
               const commentReplies = getMultiplierValue(
-                cpmPointsConfig.comment_replies_multiplier
+                cpmPointsConfig.comment_replies_multiplier,
               );
               const commentImpressions = getMultiplierValue(
-                cpmPointsConfig.comment_impressions_multiplier
+                cpmPointsConfig.comment_impressions_multiplier,
               );
               const commentRetweets = getMultiplierValue(
-                cpmPointsConfig.comment_retweets_multiplier
+                cpmPointsConfig.comment_retweets_multiplier,
               );
               const commentQuoteReposts = getMultiplierValue(
-                cpmPointsConfig.comment_quote_reposts_multiplier
+                cpmPointsConfig.comment_quote_reposts_multiplier,
               );
 
               if (commentLikes !== undefined)
@@ -5499,19 +5724,19 @@ export default function EditContestPage({
             if (showRetweetMultipliers) {
               const retweetMultipliers: any = {};
               const retweetLikes = getMultiplierValue(
-                cpmPointsConfig.retweet_likes_multiplier
+                cpmPointsConfig.retweet_likes_multiplier,
               );
               const retweetReplies = getMultiplierValue(
-                cpmPointsConfig.retweet_replies_multiplier
+                cpmPointsConfig.retweet_replies_multiplier,
               );
               const retweetImpressions = getMultiplierValue(
-                cpmPointsConfig.retweet_impressions_multiplier
+                cpmPointsConfig.retweet_impressions_multiplier,
               );
               const retweetRetweets = getMultiplierValue(
-                cpmPointsConfig.retweet_retweets_multiplier
+                cpmPointsConfig.retweet_retweets_multiplier,
               );
               const retweetQuoteReposts = getMultiplierValue(
-                cpmPointsConfig.retweet_quote_reposts_multiplier
+                cpmPointsConfig.retweet_quote_reposts_multiplier,
               );
 
               if (retweetLikes !== undefined)
@@ -5556,19 +5781,19 @@ export default function EditContestPage({
             if (showQuoteRepostMultipliers) {
               const quoteRepostMultipliers: any = {};
               const quoteRepostLikes = getMultiplierValue(
-                cpmPointsConfig.quote_repost_likes_multiplier
+                cpmPointsConfig.quote_repost_likes_multiplier,
               );
               const quoteRepostReplies = getMultiplierValue(
-                cpmPointsConfig.quote_repost_replies_multiplier
+                cpmPointsConfig.quote_repost_replies_multiplier,
               );
               const quoteRepostImpressions = getMultiplierValue(
-                cpmPointsConfig.quote_repost_impressions_multiplier
+                cpmPointsConfig.quote_repost_impressions_multiplier,
               );
               const quoteRepostRetweets = getMultiplierValue(
-                cpmPointsConfig.quote_repost_retweets_multiplier
+                cpmPointsConfig.quote_repost_retweets_multiplier,
               );
               const quoteRepostQuoteReposts = getMultiplierValue(
-                cpmPointsConfig.quote_repost_quote_reposts_multiplier
+                cpmPointsConfig.quote_repost_quote_reposts_multiplier,
               );
 
               if (quoteRepostLikes !== undefined)
@@ -5625,7 +5850,7 @@ export default function EditContestPage({
 
         // Helper function to process and group subcategories by category
         const processSubcategories = (
-          subcategories: Array<{ category: string; subcategory: string }>
+          subcategories: Array<{ category: string; subcategory: string }>,
         ) => {
           if (!subcategories || subcategories.length === 0) return null;
           const grouped: Record<string, string[]> = {};
@@ -5664,7 +5889,7 @@ export default function EditContestPage({
               ? null
               : inspirationLinks.filter((link) => link.url.trim() !== ""),
           tracking_links: trackingLinks.filter(
-            (link) => link.url.trim() !== ""
+            (link) => link.url.trim() !== "",
           ),
           resources,
           contest_type: contestType,
@@ -5700,7 +5925,7 @@ export default function EditContestPage({
         }
 
         console.log(
-          "✅ Contest saved as draft with all form data after payment"
+          "✅ Contest saved as draft with all form data after payment",
         );
       }
 
@@ -5721,17 +5946,16 @@ export default function EditContestPage({
       if (contestType === "leaderboard") {
         const newTotalPrize = winnerAmounts.reduce(
           (sum, amount) => sum + amount,
-          0
+          0,
         );
         setOriginalBudget(newTotalPrize);
-      } else if (contestType === "cpm") {
+      } else if (
+        contestType === "cpm" ||
+        contestType === "milestone" ||
+        contestType === "dual_rewards"
+      ) {
         const newBudgetInCents = Math.round(
-          parseFloat(totalBudget.toString()) * 100
-        );
-        setOriginalBudget(newBudgetInCents);
-      } else if (contestType === "milestone") {
-        const newBudgetInCents = Math.round(
-          parseFloat(totalBudget.toString()) * 100
+          parseFloat(totalBudget.toString()) * 100,
         );
         setOriginalBudget(newBudgetInCents);
       }
@@ -5741,12 +5965,16 @@ export default function EditContestPage({
 
       // Force a re-render by clearing and resetting budget change detection
       console.log(
-        "🔄 Forcing budget change check to clear any residual state..."
+        "🔄 Forcing budget change check to clear any residual state...",
       );
       setTimeout(() => {
         if (contestType === "leaderboard") {
           checkBudgetChange(winnerAmounts);
-        } else if (contestType === "cpm" || contestType === "milestone") {
+        } else if (
+          contestType === "cpm" ||
+          contestType === "milestone" ||
+          contestType === "dual_rewards"
+        ) {
           checkBudgetChange(undefined, totalBudget.toString());
         }
       }, 100);
@@ -5778,7 +6006,7 @@ export default function EditContestPage({
   // Budget change detection helper
   const checkBudgetChange = (
     newWinnerAmounts?: number[],
-    newTotalBudget?: string
+    newTotalBudget?: string,
   ) => {
     let currentPrizePool = 0;
 
@@ -5786,9 +6014,13 @@ export default function EditContestPage({
       const amounts = newWinnerAmounts || winnerAmounts;
       currentPrizePool = amounts.reduce(
         (sum: number, amount: number) => sum + amount,
-        0
+        0,
       );
-    } else if (contestType === "cpm" || contestType === "milestone") {
+    } else if (
+      contestType === "cpm" ||
+      contestType === "milestone" ||
+      contestType === "dual_rewards"
+    ) {
       const budget = newTotalBudget || totalBudget;
       currentPrizePool = Math.round(parseFloat(budget.toString()) * 100); // Convert to cents
     }
@@ -5827,7 +6059,7 @@ export default function EditContestPage({
   // Add async comprehensive validation for edit contest (mirrors creation)
   const validateContestForEdit = async (
     userId: string,
-    planFeatures: any
+    planFeatures: any,
   ): Promise<{ isValid: boolean; error?: string }> => {
     // 1. Field validation (reuse existing logic)
     const error = validateFormForSubmission();
@@ -5836,7 +6068,7 @@ export default function EditContestPage({
       return { isValid: false, error };
     }
     // 2. Plan and contest type checks
-    if (contestType === "cpm") {
+    if (isCpmContestType(contestType)) {
       const hasCpmAccess =
         planFeatures.contestTypes && planFeatures.contestTypes.includes("cpm");
       if (!hasCpmAccess) {
@@ -5914,7 +6146,7 @@ export default function EditContestPage({
     const planFeatures = getPlanFeatures(userPlan);
     const validationResult = await validateContestForEdit(
       user.id,
-      planFeatures
+      planFeatures,
     );
     if (!validationResult.isValid) {
       toast({
@@ -5938,11 +6170,14 @@ export default function EditContestPage({
       if (contestType !== "leaderboard") {
         delete contestBasedDetails.leaderboard_contest;
       }
-      if (contestType !== "cpm") {
+      if (!isCpmContestType(contestType)) {
         delete contestBasedDetails.cpm_contest;
       }
-      if (contestType !== "milestone") {
+      if (!isMilestoneContestType(contestType)) {
         delete contestBasedDetails.milestone_contest;
+      }
+      if (contestType !== "dual_rewards") {
+        delete contestBasedDetails.total_budget_cents;
       }
     }
 
@@ -5980,7 +6215,7 @@ export default function EditContestPage({
             if (paymentDetails.commission_percentage) {
               commissionPercentage = paymentDetails.commission_percentage;
               console.log(
-                `💰 Using original commission percentage from payment details: ${commissionPercentage}%`
+                `💰 Using original commission percentage from payment details: ${commissionPercentage}%`,
               );
             }
           } catch (error) {
@@ -5999,13 +6234,13 @@ export default function EditContestPage({
             // Get plan features from the subscription that was active when contest was created
             // Pass the product_id to getPlanFeatures
             const subscriptionPlanFeatures = getPlanFeatures(
-              subscriptionInfo.product_id
+              subscriptionInfo.product_id,
             );
             if (subscriptionPlanFeatures.commissionPercentage) {
               commissionPercentage =
                 subscriptionPlanFeatures.commissionPercentage;
               console.log(
-                `💰 Using commission percentage from original subscription (product_id: ${subscriptionInfo.product_id}): ${commissionPercentage}%`
+                `💰 Using commission percentage from original subscription (product_id: ${subscriptionInfo.product_id}): ${commissionPercentage}%`,
               );
             }
           } catch (error) {
@@ -6017,12 +6252,12 @@ export default function EditContestPage({
         if (!commissionPercentage) {
           commissionPercentage = getPlanFeatures(userPlan).commissionPercentage;
           console.warn(
-            `💰 Using current plan commission as fallback: ${commissionPercentage}%`
+            `💰 Using current plan commission as fallback: ${commissionPercentage}%`,
           );
         }
 
         const commissionRefund = Math.round(
-          prizePoolDecrease * (commissionPercentage / 100)
+          prizePoolDecrease * (commissionPercentage / 100),
         );
         const totalRefundAmount = prizePoolDecrease + commissionRefund;
 
@@ -6054,7 +6289,7 @@ export default function EditContestPage({
       const planFeatures = getPlanFeatures(userPlan);
       const validationResult = await validateContestForEdit(
         user.id,
-        planFeatures
+        planFeatures,
       );
       if (!validationResult.isValid) {
         toast({
@@ -6129,7 +6364,7 @@ export default function EditContestPage({
   // Modified submit function that accepts a moderation status and skipRedirect option
   const handleSubmitWithStatus = async (
     moderationStatus?: "draft" | "pending_approval",
-    skipRedirect: boolean = false
+    skipRedirect: boolean = false,
   ) => {
     const showError = (message: string) => {
       toast({
@@ -6208,7 +6443,7 @@ export default function EditContestPage({
       // Skip inspiration links validation for raid campaign type
       if (contentType !== "raid") {
         const validInspirationLinks = inspirationLinks.filter(
-          (link) => link.url.trim() !== ""
+          (link) => link.url.trim() !== "",
         );
         if (validInspirationLinks.length === 0) {
           showError("At least one inspiration link is required.");
@@ -6240,7 +6475,7 @@ export default function EditContestPage({
     if (!datesOnly) {
       // Helper function to process and group subcategories by category
       const processSubcategories = (
-        subcategories: Array<{ category: string; subcategory: string }>
+        subcategories: Array<{ category: string; subcategory: string }>,
       ) => {
         if (!subcategories || subcategories.length === 0) return null;
         const grouped: Record<string, string[]> = {};
@@ -6322,11 +6557,11 @@ export default function EditContestPage({
         const todayOnly = new Date(
           now.getFullYear(),
           now.getMonth(),
-          now.getDate()
+          now.getDate(),
         );
         const daysUntilStart = Math.floor(
           (startDateOnly.getTime() - todayOnly.getTime()) /
-            (1000 * 60 * 60 * 24)
+            (1000 * 60 * 60 * 24),
         );
 
         const originalStartDate = contest?.start_date
@@ -6432,7 +6667,7 @@ export default function EditContestPage({
     if (!datesOnly && contestType === "leaderboard") {
       const currentTotalPrizePool = winnerAmounts.reduce(
         (sum, amount) => sum + (amount || 0),
-        0
+        0,
       );
 
       // Validation only for non-draft mode
@@ -6451,7 +6686,7 @@ export default function EditContestPage({
           toast({
             title: "Prize Pool Too Low",
             description: `Your current plan requires a minimum total prize pool of ${formatCurrencyFromCents(
-              planFeatures.minContestBudget
+              planFeatures.minContestBudget,
             )}.`,
             variant: "destructive",
           });
@@ -6466,7 +6701,7 @@ export default function EditContestPage({
               description: `Prize for Winner ${
                 i + 1
               } must be at least ${formatCurrencyFromCents(
-                MIN_PRIZE_PER_WINNER
+                MIN_PRIZE_PER_WINNER,
               )}`,
               variant: "destructive",
             });
@@ -6498,7 +6733,7 @@ export default function EditContestPage({
 
           if (!totalBudget || parseFloat(totalBudget.toString()) <= 0) {
             showError(
-              "Total Budget is required when Flat Fee Bonus is enabled. Please enter a budget amount."
+              "Total Budget is required when Flat Fee Bonus is enabled. Please enter a budget amount.",
             );
             setIsSubmitting(false);
             if (submitTimeoutId) clearTimeout(submitTimeoutId);
@@ -6529,14 +6764,14 @@ export default function EditContestPage({
       // Add flat fee bonus if specified (stored in cents)
       if (flatFeeBonus && parseFloat(flatFeeBonus.toString()) > 0) {
         leaderboardDetails.flat_fee_bonus = Math.round(
-          parseFloat(flatFeeBonus.toString()) * 100
+          parseFloat(flatFeeBonus.toString()) * 100,
         );
       }
 
       // Add total budget if specified (stored in cents)
       if (totalBudget && parseFloat(totalBudget.toString()) > 0) {
         leaderboardDetails.total_budget = Math.round(
-          parseFloat(totalBudget.toString()) * 100
+          parseFloat(totalBudget.toString()) * 100,
         );
       }
 
@@ -6545,235 +6780,260 @@ export default function EditContestPage({
       updatePayload.contest_based_details = contestBasedDetails;
     }
 
-    if (!datesOnly && contestType === "milestone") {
-      const effectiveMilestoneRows = milestoneRows.filter(
-        (r) =>
-          r.target_views !== "" ||
-          r.payout_dollars !== "" ||
-          r.winner_limit !== ""
-      );
+    if (
+      !datesOnly &&
+      (contestType === "milestone" ||
+        contestType === "dual_rewards" ||
+        contestType === "cpm")
+    ) {
+      const milestonePoolDollars = totalBudget;
 
-      if (effectiveMilestoneRows.length === 0) {
-        showError("Add at least one milestone with target views and payout amount.");
-        setIsSubmitting(false);
-        if (submitTimeoutId) clearTimeout(submitTimeoutId);
-        return;
-      }
-
-      const milestonesPayload: Array<{
-        order: number;
-        target_views: number;
-        payout_cents: number;
-        winner_limit: number | null;
-      }> = [];
-
-      for (let i = 0; i < effectiveMilestoneRows.length; i++) {
-        const row = effectiveMilestoneRows[i];
-        const tv =
-          row.target_views === "" ? NaN : parseInt(String(row.target_views), 10);
-        const payoutD =
-          row.payout_dollars === ""
-            ? NaN
-            : parseFloat(String(row.payout_dollars));
-        const payoutCents = Math.round((payoutD || 0) * 100);
-        const winnerLimit =
-          row.winner_limit === ""
-            ? null
-            : parseInt(String(row.winner_limit), 10);
-
-        if (isNaN(tv) || tv <= 0) {
-          showError(`Milestone ${i + 1}: target views must be greater than 0.`);
-          setIsSubmitting(false);
-          if (submitTimeoutId) clearTimeout(submitTimeoutId);
-          return;
-        }
-        if (!isDraftMode && (isNaN(payoutD) || payoutCents < MIN_MILESTONE_PAYOUT_CENTS)) {
+      if (contestType === "milestone" || contestType === "dual_rewards") {
+        if (contest?.contest_format !== "video") {
           showError(
-            `Milestone ${i + 1}: payout must be at least ${formatCurrencyFromCents(
-              MIN_MILESTONE_PAYOUT_CENTS
-            )}.`
-          );
-          setIsSubmitting(false);
-          if (submitTimeoutId) clearTimeout(submitTimeoutId);
-          return;
-        }
-        if (winnerLimit !== null && (isNaN(winnerLimit) || winnerLimit < 1)) {
-          showError(
-            `Milestone ${i + 1}: winner cap must be at least 1, or leave blank for unlimited.`
+            "Milestone and dual-rewards contests require the Video contest format.",
           );
           setIsSubmitting(false);
           if (submitTimeoutId) clearTimeout(submitTimeoutId);
           return;
         }
 
-        milestonesPayload.push({
-          order: i + 1,
-          target_views: tv,
-          payout_cents: isNaN(payoutCents) ? 0 : payoutCents,
-          winner_limit:
-            winnerLimit !== null && !isNaN(winnerLimit) ? winnerLimit : null,
-        });
-      }
+        const effectiveMilestoneRows = milestoneRows.filter(
+          (r) =>
+            r.target_views !== "" ||
+            r.payout_dollars !== "" ||
+            r.winner_limit !== "",
+        );
 
-      if (!isDraftMode) {
-        for (let j = 1; j < milestonesPayload.length; j++) {
-          if (
-            milestonesPayload[j].target_views <=
-            milestonesPayload[j - 1].target_views
-          ) {
+        if (effectiveMilestoneRows.length === 0) {
+          showError(
+            "Add at least one milestone with target views and payout amount.",
+          );
+          setIsSubmitting(false);
+          if (submitTimeoutId) clearTimeout(submitTimeoutId);
+          return;
+        }
+
+        const milestonesPayload: Array<{
+          order: number;
+          target_views: number;
+          payout_cents: number;
+          winner_limit: number | null;
+        }> = [];
+
+        for (let i = 0; i < effectiveMilestoneRows.length; i++) {
+          const row = effectiveMilestoneRows[i];
+          const tv =
+            row.target_views === ""
+              ? NaN
+              : parseInt(String(row.target_views), 10);
+          const payoutD =
+            row.payout_dollars === ""
+              ? NaN
+              : parseFloat(String(row.payout_dollars));
+          const payoutCents = Math.round((payoutD || 0) * 100);
+          const winnerLimit =
+            row.winner_limit === ""
+              ? null
+              : parseInt(String(row.winner_limit), 10);
+
+          if (isNaN(tv) || tv <= 0) {
             showError(
-              "Milestone target views must be strictly increasing at each tier."
+              `Milestone ${i + 1}: target views must be greater than 0.`,
             );
             setIsSubmitting(false);
             if (submitTimeoutId) clearTimeout(submitTimeoutId);
             return;
           }
           if (
-            milestonesPayload[j].payout_cents <=
-            milestonesPayload[j - 1].payout_cents
+            !isDraftMode &&
+            (isNaN(payoutD) || payoutCents < MIN_MILESTONE_PAYOUT_CENTS)
           ) {
-            showError("Milestone payouts must be strictly increasing at each tier.");
+            showError(
+              `Milestone ${i + 1}: payout must be at least ${formatCurrencyFromCents(
+                MIN_MILESTONE_PAYOUT_CENTS,
+              )}.`,
+            );
             setIsSubmitting(false);
             if (submitTimeoutId) clearTimeout(submitTimeoutId);
             return;
           }
+          if (winnerLimit !== null && (isNaN(winnerLimit) || winnerLimit < 1)) {
+            showError(
+              `Milestone ${i + 1}: winner cap must be at least 1, or leave blank for unlimited.`,
+            );
+            setIsSubmitting(false);
+            if (submitTimeoutId) clearTimeout(submitTimeoutId);
+            return;
+          }
+
+          milestonesPayload.push({
+            order: i + 1,
+            target_views: tv,
+            payout_cents: isNaN(payoutCents) ? 0 : payoutCents,
+            winner_limit:
+              winnerLimit !== null && !isNaN(winnerLimit) ? winnerLimit : null,
+          });
+        }
+
+        if (!isDraftMode) {
+          for (let j = 1; j < milestonesPayload.length; j++) {
+            if (
+              milestonesPayload[j].target_views <=
+              milestonesPayload[j - 1].target_views
+            ) {
+              showError(
+                "Milestone target views must be strictly increasing at each tier.",
+              );
+              setIsSubmitting(false);
+              if (submitTimeoutId) clearTimeout(submitTimeoutId);
+              return;
+            }
+            if (
+              milestonesPayload[j].payout_cents <=
+              milestonesPayload[j - 1].payout_cents
+            ) {
+              showError(
+                "Milestone payouts must be strictly increasing at each tier.",
+              );
+              setIsSubmitting(false);
+              if (submitTimeoutId) clearTimeout(submitTimeoutId);
+              return;
+            }
+          }
+        }
+
+        const totalBudgetCentsMilestone = Math.round(
+          (parseFloat(String(milestonePoolDollars)) || 0) * 100,
+        );
+        if (!isDraftMode && totalBudgetCentsMilestone <= 0) {
+          showError(
+            contestType === "dual_rewards"
+              ? "Total contest budget is required for dual-rewards contests."
+              : "Total contest budget is required for milestone contests.",
+          );
+          setIsSubmitting(false);
+          if (submitTimeoutId) clearTimeout(submitTimeoutId);
+          return;
+        }
+
+        const bonusPayload = buildMilestoneBonusPayload();
+
+        contestBasedDetails.milestone_contest = {
+          milestones: milestonesPayload,
+          ...(contestType !== "dual_rewards"
+            ? { total_budget_cents: totalBudgetCentsMilestone }
+            : {}),
+          ...(bonusPayload ? { bonus: bonusPayload } : {}),
+        };
+        if (contestType === "dual_rewards") {
+          contestBasedDetails.total_budget_cents = totalBudgetCentsMilestone;
         }
       }
 
-      const totalBudgetCentsMilestone = Math.round(
-        (parseFloat(totalBudget.toString()) || 0) * 100
-      );
-      if (!isDraftMode && totalBudgetCentsMilestone <= 0) {
-        showError("Total contest budget is required for milestone contests.");
-        setIsSubmitting(false);
-        if (submitTimeoutId) clearTimeout(submitTimeoutId);
-        return;
-      }
+      if (
+        !datesOnly &&
+        (contestType === "cpm" || contestType === "dual_rewards")
+      ) {
+        const parsedCpmRate =
+          typeof cpmRate === "string" ? parseFloat(cpmRate) : cpmRate;
+        const parsedMinViews = minViews
+          ? typeof minViews === "string"
+            ? parseInt(minViews)
+            : minViews
+          : null;
+        const parsedMaxViews = maxViews
+          ? typeof maxViews === "string"
+            ? parseInt(maxViews)
+            : maxViews
+          : null;
+        const parsedTotalBudget =
+          typeof totalBudget === "string"
+            ? parseFloat(totalBudget)
+            : totalBudget;
 
-      const bonusPayload = buildMilestoneBonusPayload();
+        if (!isDraftMode) {
+          if (!parsedCpmRate || parsedCpmRate <= 0) {
+            toast({
+              title: "Invalid CPM Rate",
+              description: "CPM rate must be a positive number.",
+              variant: "destructive",
+            });
+            setIsSubmitting(false);
+            if (submitTimeoutId) clearTimeout(submitTimeoutId);
+            return;
+          }
 
-      contestBasedDetails.milestone_contest = {
-        milestones: milestonesPayload,
-        total_budget_cents: totalBudgetCentsMilestone,
-        ...(bonusPayload ? { bonus: bonusPayload } : {}),
-      };
-      updatePayload.contest_type = "milestone";
-      updatePayload.contest_based_details = contestBasedDetails;
-    }
+          if (parsedCpmRate < MIN_CPM_RATE) {
+            toast({
+              title: "CPM Rate Too Low",
+              description: `CPM rate must be at least $${MIN_CPM_RATE} per 1000 views.`,
+              variant: "destructive",
+            });
+            setIsSubmitting(false);
+            if (submitTimeoutId) clearTimeout(submitTimeoutId);
+            return;
+          }
 
-    if (!datesOnly && contestType === "cpm") {
-      const parsedCpmRate =
-        typeof cpmRate === "string" ? parseFloat(cpmRate) : cpmRate;
-      const parsedMinViews = minViews
-        ? typeof minViews === "string"
-          ? parseInt(minViews)
-          : minViews
-        : null;
-      const parsedMaxViews = maxViews
-        ? typeof maxViews === "string"
-          ? parseInt(maxViews)
-          : maxViews
-        : null;
-      const parsedTotalBudget =
-        typeof totalBudget === "string" ? parseFloat(totalBudget) : totalBudget;
+          if (parsedCpmRate > MAX_CPM_RATE) {
+            toast({
+              title: "CPM Rate Too High",
+              description: `CPM rate cannot exceed $${MAX_CPM_RATE} per 1000 views.`,
+              variant: "destructive",
+            });
+            setIsSubmitting(false);
+            if (submitTimeoutId) clearTimeout(submitTimeoutId);
+            return;
+          }
 
-      if (!isDraftMode) {
-        if (!parsedCpmRate || parsedCpmRate <= 0) {
-          toast({
-            title: "Invalid CPM Rate",
-            description: "CPM rate must be a positive number.",
-            variant: "destructive",
-          });
-          setIsSubmitting(false);
-          if (submitTimeoutId) clearTimeout(submitTimeoutId);
-          return;
-        }
+          if (
+            !parsedTotalBudget ||
+            parsedTotalBudget * 100 < planFeatures.minContestBudget
+          ) {
+            toast({
+              title: "Budget Too Low",
+              description: `Your current plan requires a minimum total budget of ${formatCurrencyFromCents(
+                planFeatures.minContestBudget,
+              )}.`,
+              variant: "destructive",
+            });
+            setIsSubmitting(false);
+            if (submitTimeoutId) clearTimeout(submitTimeoutId);
+            return;
+          }
 
-        if (parsedCpmRate < MIN_CPM_RATE) {
-          toast({
-            title: "CPM Rate Too Low",
-            description: `CPM rate must be at least $${MIN_CPM_RATE} per 1000 views.`,
-            variant: "destructive",
-          });
-          setIsSubmitting(false);
-          if (submitTimeoutId) clearTimeout(submitTimeoutId);
-          return;
-        }
+          if (
+            parsedMinViews &&
+            parsedMaxViews &&
+            parsedMinViews >= parsedMaxViews
+          ) {
+            toast({
+              title: "Invalid View Range",
+              description: "Minimum views must be less than maximum views.",
+              variant: "destructive",
+            });
+            setIsSubmitting(false);
+            if (submitTimeoutId) clearTimeout(submitTimeoutId);
+            return;
+          }
 
-        if (parsedCpmRate > MAX_CPM_RATE) {
-          toast({
-            title: "CPM Rate Too High",
-            description: `CPM rate cannot exceed $${MAX_CPM_RATE} per 1000 views.`,
-            variant: "destructive",
-          });
-          setIsSubmitting(false);
-          if (submitTimeoutId) clearTimeout(submitTimeoutId);
-          return;
-        }
+          if (!termsConditions || termsConditions.trim() === "") {
+            toast({
+              title: "Missing Terms & Conditions",
+              description:
+                "Terms and conditions are required for CPM contests.",
+              variant: "destructive",
+            });
+            setIsSubmitting(false);
+            if (submitTimeoutId) clearTimeout(submitTimeoutId);
+            return;
+          }
 
-        if (
-          !parsedTotalBudget ||
-          parsedTotalBudget * 100 < planFeatures.minContestBudget
-        ) {
-          toast({
-            title: "Budget Too Low",
-            description: `Your current plan requires a minimum total budget of ${formatCurrencyFromCents(
-              planFeatures.minContestBudget
-            )}.`,
-            variant: "destructive",
-          });
-          setIsSubmitting(false);
-          if (submitTimeoutId) clearTimeout(submitTimeoutId);
-          return;
-        }
-
-        if (
-          parsedMinViews &&
-          parsedMaxViews &&
-          parsedMinViews >= parsedMaxViews
-        ) {
-          toast({
-            title: "Invalid View Range",
-            description: "Minimum views must be less than maximum views.",
-            variant: "destructive",
-          });
-          setIsSubmitting(false);
-          if (submitTimeoutId) clearTimeout(submitTimeoutId);
-          return;
-        }
-
-        if (!termsConditions || termsConditions.trim() === "") {
-          toast({
-            title: "Missing Terms & Conditions",
-            description: "Terms and conditions are required for CPM contests.",
-            variant: "destructive",
-          });
-          setIsSubmitting(false);
-          if (submitTimeoutId) clearTimeout(submitTimeoutId);
-          return;
-        }
-
-        // Validate: Total Budget is mandatory for CPM contests
-        if (!parsedTotalBudget || parsedTotalBudget <= 0) {
-          toast({
-            title: "Total Budget Required",
-            description: "Total Budget is mandatory for CPM contests.",
-            variant: "destructive",
-          });
-          setIsSubmitting(false);
-          if (submitTimeoutId) clearTimeout(submitTimeoutId);
-          return;
-        }
-
-        // Validate: Flat fee bonus selected but total budget missing
-        const flatFeeBonusValue =
-          flatFeeBonus && parseFloat(flatFeeBonus.toString()) > 0;
-        if (flatFeeBonusValue) {
+          // Validate: Total Budget is mandatory for CPM contests
           if (!parsedTotalBudget || parsedTotalBudget <= 0) {
             toast({
               title: "Total Budget Required",
-              description:
-                "Total Budget is required when Flat Fee Bonus is enabled.",
+              description: "Total Budget is mandatory for CPM contests.",
               variant: "destructive",
             });
             setIsSubmitting(false);
@@ -6781,137 +7041,173 @@ export default function EditContestPage({
             return;
           }
 
-          // Validate: Flat Fee Bonus Cap is required when flat fee bonus is enabled (CPM)
-          if (!flatFeeBonusCap || parseFloat(flatFeeBonusCap.toString()) <= 0) {
-            toast({
-              title: "Flat Fee Bonus Cap Required",
-              description:
-                "Flat Fee Bonus Cap is required when Flat Fee Bonus is enabled for CPM contests.",
-              variant: "destructive",
-            });
-            setIsSubmitting(false);
-            if (submitTimeoutId) clearTimeout(submitTimeoutId);
-            return;
+          // Validate: Flat fee bonus selected but total budget missing (not used for dual rewards)
+          const flatFeeBonusValue =
+            contestType !== "dual_rewards" &&
+            flatFeeBonus &&
+            parseFloat(flatFeeBonus.toString()) > 0;
+          if (flatFeeBonusValue) {
+            if (!parsedTotalBudget || parsedTotalBudget <= 0) {
+              toast({
+                title: "Total Budget Required",
+                description:
+                  "Total Budget is required when Flat Fee Bonus is enabled.",
+                variant: "destructive",
+              });
+              setIsSubmitting(false);
+              if (submitTimeoutId) clearTimeout(submitTimeoutId);
+              return;
+            }
+
+            // Validate: Flat Fee Bonus Cap is required when flat fee bonus is enabled (CPM)
+            if (
+              !flatFeeBonusCap ||
+              parseFloat(flatFeeBonusCap.toString()) <= 0
+            ) {
+              toast({
+                title: "Flat Fee Bonus Cap Required",
+                description:
+                  "Flat Fee Bonus Cap is required when Flat Fee Bonus is enabled for CPM contests.",
+                variant: "destructive",
+              });
+              setIsSubmitting(false);
+              if (submitTimeoutId) clearTimeout(submitTimeoutId);
+              return;
+            }
+          }
+
+          // Parse cap once for subsequent validations
+          const flatFeeBonusCapValue =
+            flatFeeBonusCap && parseFloat(flatFeeBonusCap.toString()) > 0;
+
+          // Validate: Flat Fee Bonus Cap must be greater than or equal to Flat Fee Bonus (CPM)
+          if (flatFeeBonusValue && flatFeeBonusCapValue) {
+            const bonusDollars = parseFloat(flatFeeBonus.toString());
+            const capDollars = parseFloat(flatFeeBonusCap.toString());
+            if (capDollars < bonusDollars) {
+              toast({
+                title: "Flat Fee Bonus Cap Too Low",
+                description:
+                  "Flat Fee Bonus Cap must be greater than or equal to the Flat Fee Bonus amount.",
+                variant: "destructive",
+              });
+              setIsSubmitting(false);
+              if (submitTimeoutId) clearTimeout(submitTimeoutId);
+              return;
+            }
+          }
+
+          // Validate: Flat Fee Bonus Cap must not exceed Total Budget (CPM)
+          if (flatFeeBonusCapValue && parsedTotalBudget) {
+            const capInDollars = parseFloat(flatFeeBonusCap.toString());
+            if (capInDollars > parsedTotalBudget) {
+              toast({
+                title: "Flat Fee Bonus Cap Exceeds Budget",
+                description: "Flat Fee Bonus Cap cannot exceed Total Budget.",
+                variant: "destructive",
+              });
+              setIsSubmitting(false);
+              if (submitTimeoutId) clearTimeout(submitTimeoutId);
+              return;
+            }
+          }
+
+          // Validate: Prevent contest creation if total money a single creator can earn > total budget
+          if (parsedTotalBudget) {
+            const totalBudgetCents = parsedTotalBudget * 100;
+            let maxCreatorEarnings = 0;
+
+            // Add max earnings per creator if set
+            if (
+              maxEarningsPerCreator &&
+              parseFloat(maxEarningsPerCreator.toString()) > 0
+            ) {
+              maxCreatorEarnings +=
+                parseFloat(maxEarningsPerCreator.toString()) * 100;
+            }
+
+            // Add flat fee bonus cap if set (for CPM)
+            if (flatFeeBonusCapValue) {
+              maxCreatorEarnings +=
+                parseFloat(flatFeeBonusCap.toString()) * 100;
+            } else if (flatFeeBonusValue) {
+              // If no cap but flat fee bonus exists, calculate potential max
+              // (flat fee bonus * max submissions per creator)
+              const maxSubmissions = multipleSubmissionsEnabled
+                ? maxSubmissionsPerCreator
+                : 1;
+              const flatFeeBonusCents =
+                parseFloat(flatFeeBonus.toString()) * 100;
+              maxCreatorEarnings += flatFeeBonusCents * maxSubmissions;
+            }
+
+            if (maxCreatorEarnings > totalBudgetCents) {
+              toast({
+                title: "Creator Earnings Exceed Budget",
+                description:
+                  "The maximum amount a single creator can earn exceeds the total budget. Please adjust the budget or reduce creator earnings limits.",
+                variant: "destructive",
+              });
+              setIsSubmitting(false);
+              if (submitTimeoutId) clearTimeout(submitTimeoutId);
+              return;
+            }
           }
         }
 
-        // Parse cap once for subsequent validations
-        const flatFeeBonusCapValue =
-          flatFeeBonusCap && parseFloat(flatFeeBonusCap.toString()) > 0;
+        // Check if this is a Twitter CPM contest - exclude min_views and max_views for Twitter
+        const isTwitterCpmContest =
+          (contest?.platform?.toLowerCase() === "twitter" ||
+            contest?.platform?.toLowerCase() === "x") &&
+          contest?.contest_format === "text_image" &&
+          isCpmContestType(contestType);
 
-        // Validate: Flat Fee Bonus Cap must be greater than or equal to Flat Fee Bonus (CPM)
-        if (flatFeeBonusValue && flatFeeBonusCapValue) {
-          const bonusDollars = parseFloat(flatFeeBonus.toString());
-          const capDollars = parseFloat(flatFeeBonusCap.toString());
-          if (capDollars < bonusDollars) {
-            toast({
-              title: "Flat Fee Bonus Cap Too Low",
-              description:
-                "Flat Fee Bonus Cap must be greater than or equal to the Flat Fee Bonus amount.",
-              variant: "destructive",
-            });
-            setIsSubmitting(false);
-            if (submitTimeoutId) clearTimeout(submitTimeoutId);
-            return;
-          }
+        const poolCents = parsedTotalBudget
+          ? Math.round(parsedTotalBudget * 100)
+          : 0;
+        const cpmDetails: any = {
+          cpm_rate_usd: parsedCpmRate || 0,
+          ...(contestType !== "dual_rewards" ? { total_budget: poolCents } : {}),
+          budget_spent:
+            contest?.contest_based_details?.cpm_contest?.budget_spent || 0,
+          terms_conditions: (termsConditions || "").trim(),
+        };
+
+        // Only include min_views and max_views for non-Twitter CPM contests
+        if (!isTwitterCpmContest) {
+          cpmDetails.min_views = parsedMinViews;
+          cpmDetails.max_views = parsedMaxViews;
         }
 
-        // Validate: Flat Fee Bonus Cap must not exceed Total Budget (CPM)
-        if (flatFeeBonusCapValue && parsedTotalBudget) {
-          const capInDollars = parseFloat(flatFeeBonusCap.toString());
-          if (capInDollars > parsedTotalBudget) {
-            toast({
-              title: "Flat Fee Bonus Cap Exceeds Budget",
-              description: "Flat Fee Bonus Cap cannot exceed Total Budget.",
-              variant: "destructive",
-            });
-            setIsSubmitting(false);
-            if (submitTimeoutId) clearTimeout(submitTimeoutId);
-            return;
-          }
+        // Add flat fee bonus if specified (stored in cents); dual rewards has no CPM flat fee
+        if (
+          contestType !== "dual_rewards" &&
+          flatFeeBonus &&
+          parseFloat(flatFeeBonus.toString()) > 0
+        ) {
+          cpmDetails.flat_fee_bonus = Math.round(
+            parseFloat(flatFeeBonus.toString()) * 100,
+          );
         }
 
-        // Validate: Prevent contest creation if total money a single creator can earn > total budget
-        if (parsedTotalBudget) {
-          const totalBudgetCents = parsedTotalBudget * 100;
-          let maxCreatorEarnings = 0;
+        // Note: CPM Points Configuration multipliers are saved in twitter_campaign.points_config
+        // (not in cpm_contest.points_config)
 
-          // Add max earnings per creator if set
-          if (
-            maxEarningsPerCreator &&
-            parseFloat(maxEarningsPerCreator.toString()) > 0
-          ) {
-            maxCreatorEarnings +=
-              parseFloat(maxEarningsPerCreator.toString()) * 100;
-          }
-
-          // Add flat fee bonus cap if set (for CPM)
-          if (flatFeeBonusCapValue) {
-            maxCreatorEarnings += parseFloat(flatFeeBonusCap.toString()) * 100;
-          } else if (flatFeeBonusValue) {
-            // If no cap but flat fee bonus exists, calculate potential max
-            // (flat fee bonus * max submissions per creator)
-            const maxSubmissions = multipleSubmissionsEnabled
-              ? maxSubmissionsPerCreator
-              : 1;
-            const flatFeeBonusCents = parseFloat(flatFeeBonus.toString()) * 100;
-            maxCreatorEarnings += flatFeeBonusCents * maxSubmissions;
-          }
-
-          if (maxCreatorEarnings > totalBudgetCents) {
-            toast({
-              title: "Creator Earnings Exceed Budget",
-              description:
-                "The maximum amount a single creator can earn exceeds the total budget. Please adjust the budget or reduce creator earnings limits.",
-              variant: "destructive",
-            });
-            setIsSubmitting(false);
-            if (submitTimeoutId) clearTimeout(submitTimeoutId);
-            return;
-          }
+        // Add flat fee bonus cap if specified (stored in cents) - required for CPM contests with flat fee bonus
+        if (
+          contestType !== "dual_rewards" &&
+          flatFeeBonusCap &&
+          parseFloat(flatFeeBonusCap.toString()) > 0
+        ) {
+          cpmDetails.flat_fee_bonus_cap = Math.round(
+            parseFloat(flatFeeBonusCap.toString()) * 100,
+          );
         }
+
+        contestBasedDetails.cpm_contest = cpmDetails;
       }
 
-      // Check if this is a Twitter CPM contest - exclude min_views and max_views for Twitter
-      const isTwitterCpmContest =
-        (contest?.platform?.toLowerCase() === "twitter" ||
-          contest?.platform?.toLowerCase() === "x") &&
-        contest?.contest_format === "text_image" &&
-        contestType === "cpm";
-
-      const cpmDetails: any = {
-        cpm_rate_usd: parsedCpmRate || 0,
-        total_budget: parsedTotalBudget ? parsedTotalBudget * 100 : 0, // cents
-        budget_spent:
-          contest?.contest_based_details?.cpm_contest?.budget_spent || 0,
-        terms_conditions: (termsConditions || "").trim(),
-      };
-
-      // Only include min_views and max_views for non-Twitter CPM contests
-      if (!isTwitterCpmContest) {
-        cpmDetails.min_views = parsedMinViews;
-        cpmDetails.max_views = parsedMaxViews;
-      }
-
-      // Add flat fee bonus if specified (stored in cents)
-      if (flatFeeBonus && parseFloat(flatFeeBonus.toString()) > 0) {
-        cpmDetails.flat_fee_bonus = Math.round(
-          parseFloat(flatFeeBonus.toString()) * 100
-        );
-      }
-
-      // Note: CPM Points Configuration multipliers are saved in twitter_campaign.points_config
-      // (not in cpm_contest.points_config)
-
-      // Add flat fee bonus cap if specified (stored in cents) - required for CPM contests with flat fee bonus
-      if (flatFeeBonusCap && parseFloat(flatFeeBonusCap.toString()) > 0) {
-        cpmDetails.flat_fee_bonus_cap = Math.round(
-          parseFloat(flatFeeBonusCap.toString()) * 100
-        );
-      }
-
-      contestBasedDetails.cpm_contest = cpmDetails;
-      updatePayload.contest_type = "cpm";
+      updatePayload.contest_type = contestType;
       updatePayload.contest_based_details = contestBasedDetails;
     }
 
@@ -6948,7 +7244,7 @@ export default function EditContestPage({
 
       // CPM-based Twitter contests (Points Model): configure metric weights
       // Stored in contest_based_details.twitter_campaign.points_config
-      if (contestType === "cpm") {
+      if (isCpmContestType(contestType)) {
         // Helper function to check if a multiplier value is valid (not blank/empty/NaN)
         const isValidMultiplierValue = (value: number | string): boolean => {
           if (value === null || value === undefined) return false;
@@ -6960,7 +7256,7 @@ export default function EditContestPage({
 
         // Helper function to get multiplier value or undefined if invalid
         const getMultiplierValue = (
-          value: number | string
+          value: number | string,
         ): number | undefined => {
           if (!isValidMultiplierValue(value)) return undefined;
           return parseFloat(value.toString().trim());
@@ -6989,19 +7285,19 @@ export default function EditContestPage({
         if (showCommentMultipliers) {
           const commentMultipliers: any = {};
           const commentLikes = getMultiplierValue(
-            cpmPointsConfig.comment_likes_multiplier
+            cpmPointsConfig.comment_likes_multiplier,
           );
           const commentReplies = getMultiplierValue(
-            cpmPointsConfig.comment_replies_multiplier
+            cpmPointsConfig.comment_replies_multiplier,
           );
           const commentImpressions = getMultiplierValue(
-            cpmPointsConfig.comment_impressions_multiplier
+            cpmPointsConfig.comment_impressions_multiplier,
           );
           const commentRetweets = getMultiplierValue(
-            cpmPointsConfig.comment_retweets_multiplier
+            cpmPointsConfig.comment_retweets_multiplier,
           );
           const commentQuoteReposts = getMultiplierValue(
-            cpmPointsConfig.comment_quote_reposts_multiplier
+            cpmPointsConfig.comment_quote_reposts_multiplier,
           );
 
           if (commentLikes !== undefined)
@@ -7045,19 +7341,19 @@ export default function EditContestPage({
         if (showRetweetMultipliers) {
           const retweetMultipliers: any = {};
           const retweetLikes = getMultiplierValue(
-            cpmPointsConfig.retweet_likes_multiplier
+            cpmPointsConfig.retweet_likes_multiplier,
           );
           const retweetReplies = getMultiplierValue(
-            cpmPointsConfig.retweet_replies_multiplier
+            cpmPointsConfig.retweet_replies_multiplier,
           );
           const retweetImpressions = getMultiplierValue(
-            cpmPointsConfig.retweet_impressions_multiplier
+            cpmPointsConfig.retweet_impressions_multiplier,
           );
           const retweetRetweets = getMultiplierValue(
-            cpmPointsConfig.retweet_retweets_multiplier
+            cpmPointsConfig.retweet_retweets_multiplier,
           );
           const retweetQuoteReposts = getMultiplierValue(
-            cpmPointsConfig.retweet_quote_reposts_multiplier
+            cpmPointsConfig.retweet_quote_reposts_multiplier,
           );
 
           if (retweetLikes !== undefined)
@@ -7101,19 +7397,19 @@ export default function EditContestPage({
         if (showQuoteRepostMultipliers) {
           const quoteRepostMultipliers: any = {};
           const quoteRepostLikes = getMultiplierValue(
-            cpmPointsConfig.quote_repost_likes_multiplier
+            cpmPointsConfig.quote_repost_likes_multiplier,
           );
           const quoteRepostReplies = getMultiplierValue(
-            cpmPointsConfig.quote_repost_replies_multiplier
+            cpmPointsConfig.quote_repost_replies_multiplier,
           );
           const quoteRepostImpressions = getMultiplierValue(
-            cpmPointsConfig.quote_repost_impressions_multiplier
+            cpmPointsConfig.quote_repost_impressions_multiplier,
           );
           const quoteRepostRetweets = getMultiplierValue(
-            cpmPointsConfig.quote_repost_retweets_multiplier
+            cpmPointsConfig.quote_repost_retweets_multiplier,
           );
           const quoteRepostQuoteReposts = getMultiplierValue(
-            cpmPointsConfig.quote_repost_quote_reposts_multiplier
+            cpmPointsConfig.quote_repost_quote_reposts_multiplier,
           );
 
           if (quoteRepostLikes !== undefined)
@@ -7372,7 +7668,7 @@ export default function EditContestPage({
       const imageValidation = validateImageFile(file);
       if (!imageValidation.isValid) {
         setAssetUploadError(
-          imageValidation.error || "Please upload a valid image file."
+          imageValidation.error || "Please upload a valid image file.",
         );
         return;
       }
@@ -7390,7 +7686,7 @@ export default function EditContestPage({
           .list("contest_thumbnails");
         if (existingFiles) {
           const matching = existingFiles.filter((f) =>
-            f.name.startsWith(`${contestId}_`)
+            f.name.startsWith(`${contestId}_`),
           );
           if (matching.length > 0) {
             const paths = matching.map((f) => `contest_thumbnails/${f.name}`);
@@ -7447,7 +7743,7 @@ export default function EditContestPage({
       }
       if (resources.some((r) => r.description === description.trim())) {
         setResourceError(
-          `A resource with the description \"${description.trim()}\" already exists. Please use a unique description.`
+          `A resource with the description \"${description.trim()}\" already exists. Please use a unique description.`,
         );
         return;
       }
@@ -7456,7 +7752,7 @@ export default function EditContestPage({
         // Use per-contest folder
         const fileName = `contest_resources/${contestId}/${file.name.replace(
           /\s+/g,
-          "_"
+          "_",
         )}`;
         const { error: uploadError } = await supabase.storage
           .from("contest-assets")
@@ -7482,7 +7778,7 @@ export default function EditContestPage({
         setResources(newResources);
         await updateContestResourcesInDB(newResources);
         setResourceSuccess(
-          `Asset \"${description.trim()}\" uploaded successfully!`
+          `Asset \"${description.trim()}\" uploaded successfully!`,
         );
       } catch (error: any) {
         console.error("Error uploading resource:", error);
@@ -7533,7 +7829,7 @@ export default function EditContestPage({
               router.push(
                 contestId
                   ? `/dashboard/contests/${contestId}`
-                  : "/dashboard/contests"
+                  : "/dashboard/contests",
               )
             }
             className="bg-rose-600 hover:bg-rose-700 text-white"
@@ -7580,7 +7876,7 @@ export default function EditContestPage({
   const planFeatures = getPlanFeatures(userPlan);
   const totalPrizePool = winnerAmounts.reduce(
     (sum, amount) => sum + (amount || 0),
-    0
+    0,
   );
   const isDark = mode === "dark";
 
@@ -7617,7 +7913,7 @@ export default function EditContestPage({
               "mb-6",
               isDark
                 ? "border-amber-600 bg-yellow-800/30 text-amber-300"
-                : "border-amber-300 bg-amber-50 text-amber-900"
+                : "border-amber-300 bg-amber-50 text-amber-900",
             )}
           >
             <AlertTriangle className="h-4 w-4" />
@@ -7638,7 +7934,7 @@ export default function EditContestPage({
             "mb-6",
             isDark
               ? "bg-[#C9A7FF26] border border-[#C9A7FF] text-white"
-              : "border-[#7F39EC] bg-[#D9C0FF26] text-black"
+              : "border-[#7F39EC] bg-[#D9C0FF26] text-black",
           )}
         >
           <Info className="h-4 w-4" />
@@ -7657,7 +7953,7 @@ export default function EditContestPage({
             "border px-4 py-4 rounded-lg",
             isDark
               ? "bg-[#C9A7FF26] border border-[#C9A7FF] text-white"
-              : "border-[#7F39EC] bg-[#D9C0FF26] text-black"
+              : "border-[#7F39EC] bg-[#D9C0FF26] text-black",
           )}
         >
           <AlertDescription className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
@@ -7665,7 +7961,7 @@ export default function EditContestPage({
               <Crown
                 className={cn(
                   "h-5 w-5",
-                  isDark ? "text-[#C9A7FF]" : "text-[#7F39EC]"
+                  isDark ? "text-[#C9A7FF]" : "text-[#7F39EC]",
                 )}
               />
 
@@ -7700,7 +7996,7 @@ export default function EditContestPage({
               "mb-6 w-full",
               isDark
                 ? "bg-[#C9A7FF26] border border-[#C9A7FF] text-white"
-                : "border-[#7F39EC] bg-[#D9C0FF26] text-black"
+                : "border-[#7F39EC] bg-[#D9C0FF26] text-black",
             )}
           >
             <Info className="h-4 w-4 flex-shrink-0" />
@@ -7720,19 +8016,19 @@ export default function EditContestPage({
       <div
         className={cn(
           "mx-auto rounded-xl shadow-lg py-4 transition-colors duration-200",
-          isDark ? "bg-[#170337]" : "bg-white"
+          isDark ? "bg-[#170337]" : "bg-white",
         )}
       >
         <div
           className={cn(
             "py-2 px-6 border-b transition-colors duration-200",
-            isDark ? "border-gray-600" : "border-[#D0D0D0]"
+            isDark ? "border-gray-600" : "border-[#D0D0D0]",
           )}
         >
           <CardTitle
             className={cn(
               "text-[20px]",
-              isDark ? "text-white" : "text-purple-500"
+              isDark ? "text-white" : "text-purple-500",
             )}
           >
             Edit Contest Details
@@ -7745,6 +8041,7 @@ export default function EditContestPage({
               <div className="space-y-2">
                 <Label className="text-xl font-semibold">Contest Format</Label>
                 <div className="flex flex-col sm:flex-row gap-2 pt-2">
+                  {contestType !== "dual_rewards" && (
                   <Button
                     type="button"
                     variant={
@@ -7755,7 +8052,7 @@ export default function EditContestPage({
                     className={cn(
                       "flex-1 justify-center",
                       contest?.contest_format === "text_image" &&
-                        "bg-[#7F39EC] text-white"
+                        "bg-[#7F39EC] text-white",
                     )}
                     onClick={async () => {
                       // Auto-switch platform if needed (like create client)
@@ -7787,6 +8084,7 @@ export default function EditContestPage({
                   >
                     Text/Image Contest
                   </Button>
+                  )}
                   <Button
                     type="button"
                     variant={
@@ -7797,14 +8095,17 @@ export default function EditContestPage({
                     className={cn(
                       "flex-1 justify-center",
                       contest?.contest_format === "video" &&
-                        "bg-[#7F39EC] text-white"
+                        "bg-[#7F39EC] text-white",
                     )}
                     onClick={async () => {
                       // Auto-switch platform if needed (like create client)
                       const updates: any = { contest_format: "video" };
                       const hasMilestoneConfig =
                         !!contest?.contest_based_details?.milestone_contest;
-                      if (hasMilestoneConfig) {
+                      if (contestType === "dual_rewards") {
+                        updates.contest_type = "dual_rewards";
+                        setContestType("dual_rewards");
+                      } else if (hasMilestoneConfig) {
                         // Restore milestone type when returning to video format.
                         updates.contest_type = "milestone";
                         setContestType("milestone");
@@ -7845,7 +8146,7 @@ export default function EditContestPage({
                   placeholder="Game Of Creators! Get Paid to Create"
                   className={cn(
                     "transition-colors duration-200",
-                    isDark ? "bg-[#180438] border border-gray-600" : "bg-white"
+                    isDark ? "bg-[#180438] border border-gray-600" : "bg-white",
                   )}
                   required
                 />
@@ -7867,7 +8168,7 @@ export default function EditContestPage({
                     className={cn(
                       isDark
                         ? "bg-[#180438] border border-gray-600"
-                        : "bg-white"
+                        : "bg-white",
                     )}
                   >
                     <SelectValue placeholder="Select contest platform" />
@@ -7909,7 +8210,7 @@ export default function EditContestPage({
                   <SelectTrigger
                     id="contentType"
                     className={cn(
-                      isDark ? "border-gray-600" : "border-gray-300"
+                      isDark ? "border-gray-600" : "border-gray-300",
                     )}
                   >
                     <SelectValue placeholder="Select content type (optional)" />
@@ -7955,7 +8256,7 @@ export default function EditContestPage({
                     className={cn(
                       isDark
                         ? "bg-[#180438] border border-gray-600"
-                        : "bg-white"
+                        : "bg-white",
                     )}
                   >
                     <SelectValue placeholder="Select category" />
@@ -8028,14 +8329,14 @@ export default function EditContestPage({
                     className={cn(
                       isDark
                         ? "border-gray-400 data-[state=checked]:bg-purple-600 data-[state=checked]:text-white"
-                        : "border-gray-400 data-[state=checked]:bg-purple-600"
+                        : "border-gray-400 data-[state=checked]:bg-purple-600",
                     )}
                   />
                   <label
                     htmlFor="show-targeting-sections"
                     className={cn(
                       "text-sm font-medium cursor-pointer",
-                      isDark ? "text-gray-300" : "text-gray-700"
+                      isDark ? "text-gray-300" : "text-gray-700",
                     )}
                   >
                     Target specific creators by selecting categories,
@@ -8057,14 +8358,14 @@ export default function EditContestPage({
                         "rounded-lg border",
                         isDark
                           ? "bg-[#180438] border-gray-300"
-                          : "bg-white border-gray-300"
+                          : "bg-white border-gray-300",
                       )}
                     >
                       <div className="relative">
                         <CollapsibleTrigger
                           className={cn(
                             "w-full flex items-center justify-between p-4 pr-12 hover:bg-opacity-80 transition-colors",
-                            isDark ? "" : "hover:bg-gray-50"
+                            isDark ? "" : "hover:bg-gray-50",
                           )}
                         >
                           <div className="flex items-center gap-2">
@@ -8080,7 +8381,7 @@ export default function EditContestPage({
                                   "text-xs px-2 py-0.5 rounded-full",
                                   isDark
                                     ? "bg-purple-600 text-white"
-                                    : "bg-purple-100 text-purple-700"
+                                    : "bg-purple-100 text-purple-700",
                                 )}
                               >
                                 {contestCategories.length} selected
@@ -8102,7 +8403,7 @@ export default function EditContestPage({
                             className={cn(
                               isDark
                                 ? "border-gray-400 data-[state=checked]:bg-purple-600 data-[state=checked]:text-white"
-                                : "border-gray-400 data-[state=checked]:bg-purple-600"
+                                : "border-gray-400 data-[state=checked]:bg-purple-600",
                             )}
                           />
                         </div>
@@ -8111,7 +8412,7 @@ export default function EditContestPage({
                         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                           {CONTENT_TYPE_CATEGORIES.map((cat) => {
                             const isChecked = contestCategories.includes(
-                              cat.id
+                              cat.id,
                             );
                             return (
                               <div
@@ -8134,21 +8435,21 @@ export default function EditContestPage({
                                           (subcategory) => ({
                                             category: cat.id,
                                             subcategory: subcategory,
-                                          })
+                                          }),
                                         );
                                       // Add subcategories that aren't already in the list
                                       setContestSubcategories((prev) => {
                                         const existing = new Set(
                                           prev.map(
                                             (item) =>
-                                              `${item.category}:${item.subcategory}`
-                                          )
+                                              `${item.category}:${item.subcategory}`,
+                                          ),
                                         );
                                         const toAdd = newSubcategories.filter(
                                           (item) =>
                                             !existing.has(
-                                              `${item.category}:${item.subcategory}`
-                                            )
+                                              `${item.category}:${item.subcategory}`,
+                                            ),
                                         );
                                         return [...prev, ...toAdd];
                                       });
@@ -8156,27 +8457,27 @@ export default function EditContestPage({
                                       // Remove category and all its subcategories
                                       setContestCategories(
                                         contestCategories.filter(
-                                          (id) => id !== cat.id
-                                        )
+                                          (id) => id !== cat.id,
+                                        ),
                                       );
                                       setContestSubcategories(
                                         contestSubcategories.filter(
-                                          (item) => item.category !== cat.id
-                                        )
+                                          (item) => item.category !== cat.id,
+                                        ),
                                       );
                                     }
                                   }}
                                   className={cn(
                                     isDark
                                       ? "border-gray-400 data-[state=checked]:bg-purple-600 data-[state=checked]:text-white"
-                                      : "border-gray-400 data-[state=checked]:bg-purple-600"
+                                      : "border-gray-400 data-[state=checked]:bg-purple-600",
                                   )}
                                 />
                                 <label
                                   htmlFor={`edit-category-${cat.id}`}
                                   className={cn(
                                     "text-sm font-normal cursor-pointer",
-                                    isDark ? "text-gray-300" : "text-gray-700"
+                                    isDark ? "text-gray-300" : "text-gray-700",
                                   )}
                                 >
                                   {cat.name}
@@ -8190,7 +8491,7 @@ export default function EditContestPage({
                             <p
                               className={cn(
                                 "text-xs",
-                                isDark ? "text-gray-400" : "text-gray-500"
+                                isDark ? "text-gray-400" : "text-gray-500",
                               )}
                             >
                               {contestCategories.length} selected
@@ -8208,7 +8509,7 @@ export default function EditContestPage({
                                 "h-7 px-2 text-xs",
                                 isDark
                                   ? "border-gray-400 text-gray-300"
-                                  : "border-gray-400 text-gray-700 hover:bg-gray-100"
+                                  : "border-gray-400 text-gray-700 hover:bg-gray-100",
                               )}
                             >
                               <RotateCcw className="h-3 w-3" />
@@ -8234,14 +8535,14 @@ export default function EditContestPage({
                         "rounded-lg border",
                         isDark
                           ? "bg-[#180438] border-gray-300"
-                          : "bg-white border-gray-300"
+                          : "bg-white border-gray-300",
                       )}
                     >
                       <div className="relative">
                         <CollapsibleTrigger
                           className={cn(
                             "w-full flex items-center justify-between p-4 pr-12 hover:bg-opacity-80 transition-colors",
-                            isDark ? "" : "hover:bg-gray-50"
+                            isDark ? "" : "hover:bg-gray-50",
                           )}
                         >
                           <div className="flex items-center gap-2">
@@ -8254,7 +8555,7 @@ export default function EditContestPage({
                                   "text-xs px-2 py-0.5 rounded-full",
                                   isDark
                                     ? "bg-purple-600 text-white"
-                                    : "bg-purple-100 text-purple-700"
+                                    : "bg-purple-100 text-purple-700",
                                 )}
                               >
                                 {contestSubcategories.length} selected
@@ -8276,7 +8577,7 @@ export default function EditContestPage({
                             className={cn(
                               isDark
                                 ? "border-gray-400 data-[state=checked]:bg-purple-600 data-[state=checked]:text-white"
-                                : "border-gray-400 data-[state=checked]:bg-purple-600"
+                                : "border-gray-400 data-[state=checked]:bg-purple-600",
                             )}
                           />
                         </div>
@@ -8287,7 +8588,7 @@ export default function EditContestPage({
                             // Get selected subcategories for this category
                             const selectedSubcategoriesForCategory =
                               contestSubcategories.filter(
-                                (item) => item.category === category.id
+                                (item) => item.category === category.id,
                               );
                             const selectedCount =
                               selectedSubcategoriesForCategory.length;
@@ -8301,7 +8602,7 @@ export default function EditContestPage({
                                 <AccordionTrigger
                                   className={cn(
                                     "text-sm font-medium hover:no-underline py-3",
-                                    isDark ? "text-gray-300" : "text-gray-700"
+                                    isDark ? "text-gray-300" : "text-gray-700",
                                   )}
                                 >
                                   <div className="flex items-center gap-2">
@@ -8312,7 +8613,7 @@ export default function EditContestPage({
                                           "text-xs px-2 py-0.5 rounded-full",
                                           isDark
                                             ? "bg-purple-600 text-white"
-                                            : "bg-purple-100 text-purple-700"
+                                            : "bg-purple-100 text-purple-700",
                                         )}
                                       >
                                         {selectedCount} selected
@@ -8328,7 +8629,7 @@ export default function EditContestPage({
                                           contestSubcategories.some(
                                             (item) =>
                                               item.category === category.id &&
-                                              item.subcategory === subcategory
+                                              item.subcategory === subcategory,
                                           );
                                         return (
                                           <div
@@ -8357,15 +8658,15 @@ export default function EditContestPage({
                                                             category.id &&
                                                           item.subcategory ===
                                                             subcategory
-                                                        )
-                                                    )
+                                                        ),
+                                                    ),
                                                   );
                                                 }
                                               }}
                                               className={cn(
                                                 isDark
                                                   ? "border-gray-400 data-[state=checked]:bg-purple-600 data-[state=checked]:text-white"
-                                                  : "border-gray-400 data-[state=checked]:bg-purple-600"
+                                                  : "border-gray-400 data-[state=checked]:bg-purple-600",
                                               )}
                                             />
                                             <label
@@ -8374,14 +8675,14 @@ export default function EditContestPage({
                                                 "text-sm font-normal cursor-pointer",
                                                 isDark
                                                   ? "text-gray-300"
-                                                  : "text-gray-700"
+                                                  : "text-gray-700",
                                               )}
                                             >
                                               {subcategory}
                                             </label>
                                           </div>
                                         );
-                                      }
+                                      },
                                     )}
                                   </div>
                                 </AccordionContent>
@@ -8394,7 +8695,7 @@ export default function EditContestPage({
                             <p
                               className={cn(
                                 "text-xs",
-                                isDark ? "text-gray-400" : "text-gray-500"
+                                isDark ? "text-gray-400" : "text-gray-500",
                               )}
                             >
                               {contestSubcategories.length} subcategories
@@ -8410,7 +8711,7 @@ export default function EditContestPage({
                                 "h-7 px-2 text-xs",
                                 isDark
                                   ? "border-gray-400 text-gray-300"
-                                  : "border-gray-400 text-gray-700 hover:bg-gray-100"
+                                  : "border-gray-400 text-gray-700 hover:bg-gray-100",
                               )}
                             >
                               <RotateCcw className="h-3 w-3" />
@@ -8436,14 +8737,14 @@ export default function EditContestPage({
                         "rounded-lg border",
                         isDark
                           ? "bg-[#180438] border-gray-300"
-                          : "bg-white border-gray-300"
+                          : "bg-white border-gray-300",
                       )}
                     >
                       <div className="relative">
                         <CollapsibleTrigger
                           className={cn(
                             "w-full flex items-center justify-between p-4 pr-12 hover:bg-opacity-80 transition-colors",
-                            isDark ? "" : "hover:bg-gray-50"
+                            isDark ? "" : "hover:bg-gray-50",
                           )}
                         >
                           <div className="flex items-center gap-2">
@@ -8456,7 +8757,7 @@ export default function EditContestPage({
                                   "text-xs px-2 py-0.5 rounded-full",
                                   isDark
                                     ? "bg-purple-600 text-white"
-                                    : "bg-purple-100 text-purple-700"
+                                    : "bg-purple-100 text-purple-700",
                                 )}
                               >
                                 {contestInterests.length} selected
@@ -8478,7 +8779,7 @@ export default function EditContestPage({
                             className={cn(
                               isDark
                                 ? "border-gray-400 data-[state=checked]:bg-purple-600 data-[state=checked]:text-white"
-                                : "border-gray-400 data-[state=checked]:bg-purple-600"
+                                : "border-gray-400 data-[state=checked]:bg-purple-600",
                             )}
                           />
                         </div>
@@ -8506,22 +8807,22 @@ export default function EditContestPage({
                                     } else {
                                       setContestInterests(
                                         contestInterests.filter(
-                                          (item) => item !== interest
-                                        )
+                                          (item) => item !== interest,
+                                        ),
                                       );
                                     }
                                   }}
                                   className={cn(
                                     isDark
                                       ? "border-gray-400 data-[state=checked]:bg-purple-600 data-[state=checked]:text-white"
-                                      : "border-gray-400 data-[state=checked]:bg-purple-600"
+                                      : "border-gray-400 data-[state=checked]:bg-purple-600",
                                   )}
                                 />
                                 <label
                                   htmlFor={`edit-interest-${interest}`}
                                   className={cn(
                                     "text-sm font-normal cursor-pointer",
-                                    isDark ? "text-gray-300" : "text-gray-700"
+                                    isDark ? "text-gray-300" : "text-gray-700",
                                   )}
                                 >
                                   {interest}
@@ -8535,7 +8836,7 @@ export default function EditContestPage({
                             <p
                               className={cn(
                                 "text-xs",
-                                isDark ? "text-gray-400" : "text-gray-500"
+                                isDark ? "text-gray-400" : "text-gray-500",
                               )}
                             >
                               {contestInterests.length} interests selected
@@ -8550,7 +8851,7 @@ export default function EditContestPage({
                                 "h-7 px-2 text-xs",
                                 isDark
                                   ? "border-gray-400 text-gray-300"
-                                  : "border-gray-400 text-gray-700 hover:bg-gray-100"
+                                  : "border-gray-400 text-gray-700 hover:bg-gray-100",
                               )}
                             >
                               <RotateCcw className="h-3 w-3" />
@@ -8573,14 +8874,14 @@ export default function EditContestPage({
                         "rounded-lg border",
                         isDark
                           ? "bg-[#180438] border-gray-300"
-                          : "bg-white border-gray-300"
+                          : "bg-white border-gray-300",
                       )}
                     >
                       <div className="relative">
                         <CollapsibleTrigger
                           className={cn(
                             "w-full flex items-center justify-between p-4 pr-12 hover:bg-opacity-80 transition-colors",
-                            isDark ? "" : "hover:bg-gray-50"
+                            isDark ? "" : "hover:bg-gray-50",
                           )}
                         >
                           <div className="flex items-center gap-2">
@@ -8593,7 +8894,7 @@ export default function EditContestPage({
                                   "text-xs px-2 py-0.5 rounded-full",
                                   isDark
                                     ? "bg-purple-600 text-white"
-                                    : "bg-purple-100 text-purple-700"
+                                    : "bg-purple-100 text-purple-700",
                                 )}
                               >
                                 {selectedCountries.length} selected
@@ -8615,7 +8916,7 @@ export default function EditContestPage({
                             className={cn(
                               isDark
                                 ? "border-gray-400 data-[state=checked]:bg-purple-600 data-[state=checked]:text-white"
-                                : "border-gray-400 data-[state=checked]:bg-purple-600"
+                                : "border-gray-400 data-[state=checked]:bg-purple-600",
                             )}
                           />
                         </div>
@@ -8640,7 +8941,7 @@ export default function EditContestPage({
                               REGIONS_AND_COUNTRIES[regionKey];
                             if (!regionCountries) return null;
                             const countriesArray: string[] = Array.isArray(
-                              regionCountries
+                              regionCountries,
                             )
                               ? regionCountries.map((c) => String(c))
                               : [];
@@ -8648,7 +8949,7 @@ export default function EditContestPage({
                               selectedRegions.includes(region);
                             const selectedCountriesInRegion =
                               countriesArray.filter((country) =>
-                                selectedCountries.includes(country)
+                                selectedCountries.includes(country),
                               );
                             const isPartiallySelected =
                               selectedCountriesInRegion.length > 0 &&
@@ -8668,13 +8969,13 @@ export default function EditContestPage({
                                       onCheckedChange={(checked) => {
                                         handleRegionToggle(
                                           region,
-                                          checked as boolean
+                                          checked as boolean,
                                         );
                                       }}
                                       className={cn(
                                         isDark
                                           ? "border-gray-400 data-[state=checked]:bg-purple-600 data-[state=checked]:text-white"
-                                          : "border-gray-400 data-[state=checked]:bg-purple-600"
+                                          : "border-gray-400 data-[state=checked]:bg-purple-600",
                                       )}
                                     />
                                     <label
@@ -8683,7 +8984,7 @@ export default function EditContestPage({
                                         "text-sm font-semibold cursor-pointer flex items-center gap-2",
                                         isDark
                                           ? "text-gray-300"
-                                          : "text-gray-700"
+                                          : "text-gray-700",
                                       )}
                                     >
                                       <span>{region}</span>
@@ -8693,7 +8994,7 @@ export default function EditContestPage({
                                             "text-xs px-2 py-0.5 rounded-full",
                                             isDark
                                               ? "bg-purple-600 text-white"
-                                              : "bg-purple-100 text-purple-700"
+                                              : "bg-purple-100 text-purple-700",
                                           )}
                                         >
                                           {selectedCountriesInRegion.length}{" "}
@@ -8710,7 +9011,7 @@ export default function EditContestPage({
                                       onClick={(e) => {
                                         e.stopPropagation();
                                         handleUncheckAllCountriesInRegion(
-                                          region
+                                          region,
                                         );
                                       }}
                                       disabled={isSubmitting}
@@ -8718,7 +9019,7 @@ export default function EditContestPage({
                                         "h-7 px-2 text-xs",
                                         isDark
                                           ? "text-gray-400 hover:text-gray-300 hover:bg-gray-800"
-                                          : "text-gray-600 hover:text-gray-900 hover:bg-gray-100"
+                                          : "text-gray-600 hover:text-gray-900 hover:bg-gray-100",
                                       )}
                                     >
                                       Uncheck all
@@ -8742,13 +9043,13 @@ export default function EditContestPage({
                                             onCheckedChange={(checked) => {
                                               handleCountryToggle(
                                                 country,
-                                                checked as boolean
+                                                checked as boolean,
                                               );
                                             }}
                                             className={cn(
                                               isDark
                                                 ? "border-gray-400 data-[state=checked]:bg-purple-600 data-[state=checked]:text-white"
-                                                : "border-gray-400 data-[state=checked]:bg-purple-600"
+                                                : "border-gray-400 data-[state=checked]:bg-purple-600",
                                             )}
                                           />
                                           <label
@@ -8757,7 +9058,7 @@ export default function EditContestPage({
                                               "text-sm font-normal cursor-pointer",
                                               isDark
                                                 ? "text-gray-300"
-                                                : "text-gray-700"
+                                                : "text-gray-700",
                                             )}
                                           >
                                             {country}
@@ -8776,7 +9077,7 @@ export default function EditContestPage({
                             <p
                               className={cn(
                                 "text-xs",
-                                isDark ? "text-gray-400" : "text-gray-500"
+                                isDark ? "text-gray-400" : "text-gray-500",
                               )}
                             >
                               {selectedCountries.length} countries selected
@@ -8794,7 +9095,7 @@ export default function EditContestPage({
                                 "h-7 px-2 text-xs",
                                 isDark
                                   ? "border-gray-400 text-gray-300"
-                                  : "border-gray-400 text-gray-700 hover:bg-gray-100"
+                                  : "border-gray-400 text-gray-700 hover:bg-gray-100",
                               )}
                             >
                               <RotateCcw className="h-3 w-3" />
@@ -8817,8 +9118,8 @@ export default function EditContestPage({
                     isDragActive
                       ? "border-rose-500 bg-rose-50 dark:bg-rose-900/20"
                       : isDark
-                      ? "border-slate-600 bg-[#170337]"
-                      : "border-gray-300 bg-white"
+                        ? "border-slate-600 bg-[#170337]"
+                        : "border-gray-300 bg-white"
                   }`}
                   onClick={() => fileInputRef.current?.click()}
                   onDragOver={handleDragOver}
@@ -8844,7 +9145,7 @@ export default function EditContestPage({
                           {thumbnail?.name || "Saved thumbnail"}
                           {thumbnail?.size
                             ? ` · ${(thumbnail.size / (1024 * 1024)).toFixed(
-                                2
+                                2,
                               )}MB`
                             : ""}
                         </p>
@@ -9007,7 +9308,7 @@ export default function EditContestPage({
                         <p
                           className={cn(
                             "text-xs",
-                            isDark ? "text-gray-300" : "text-gray-500"
+                            isDark ? "text-gray-300" : "text-gray-500",
                           )}
                         >
                           Add search keywords and hashtags (e.g. product name,
@@ -9031,7 +9332,7 @@ export default function EditContestPage({
                               className={cn(
                                 isDark
                                   ? "bg-[#180438] border border-gray-600"
-                                  : "bg-white"
+                                  : "bg-white",
                               )}
                             />
                             {keywords.length > 1 && (
@@ -9041,7 +9342,7 @@ export default function EditContestPage({
                                 size="icon"
                                 onClick={() => {
                                   const next = keywords.filter(
-                                    (_, i) => i !== index
+                                    (_, i) => i !== index,
                                   );
                                   setKeywords(next.length ? next : [""]);
                                 }}
@@ -9061,7 +9362,7 @@ export default function EditContestPage({
                           "mt-1 border-dashed",
                           isDark
                             ? "border-gray-500 text-gray-200"
-                            : "border-gray-400 text-gray-700"
+                            : "border-gray-400 text-gray-700",
                         )}
                         onClick={() => setKeywords([...keywords, ""])}
                       >
@@ -9078,7 +9379,7 @@ export default function EditContestPage({
                         <p
                           className={cn(
                             "text-xs",
-                            isDark ? "text-gray-300" : "text-gray-500"
+                            isDark ? "text-gray-300" : "text-gray-500",
                           )}
                         >
                           Add up to 3 @mentions to track (e.g. @brandname,
@@ -9100,7 +9401,7 @@ export default function EditContestPage({
                               className={cn(
                                 isDark
                                   ? "bg-[#180438] border border-gray-600"
-                                  : "bg-white"
+                                  : "bg-white",
                               )}
                             />
                             {mentions.length > 1 && (
@@ -9110,7 +9411,7 @@ export default function EditContestPage({
                                 size="icon"
                                 onClick={() => {
                                   const next = mentions.filter(
-                                    (_, i) => i !== index
+                                    (_, i) => i !== index,
                                   );
                                   setMentions(next.length ? next : [""]);
                                 }}
@@ -9132,7 +9433,7 @@ export default function EditContestPage({
                             "opacity-50 cursor-not-allowed",
                           isDark
                             ? "border-gray-500 text-gray-200"
-                            : "border-gray-400 text-gray-700"
+                            : "border-gray-400 text-gray-700",
                         )}
                         disabled={mentions.length >= 3}
                         onClick={() => {
@@ -9156,7 +9457,7 @@ export default function EditContestPage({
                         <p
                           className={cn(
                             "text-xs",
-                            isDark ? "text-gray-300" : "text-gray-500"
+                            isDark ? "text-gray-300" : "text-gray-500",
                           )}
                         >
                           Optional: Limit the maximum number of participants for
@@ -9170,14 +9471,14 @@ export default function EditContestPage({
                         onChange={(e) => {
                           const value = e.target.value;
                           setMaxParticipants(
-                            value === "" ? "" : parseInt(value, 10)
+                            value === "" ? "" : parseInt(value, 10),
                           );
                         }}
                         placeholder="No limit (leave empty)"
                         className={cn(
                           isDark
                             ? "bg-[#180438] border border-gray-600"
-                            : "bg-white"
+                            : "bg-white",
                         )}
                       />
                     </div>
@@ -9254,7 +9555,7 @@ export default function EditContestPage({
                     onChange={(html: string, json: any) => {
                       console.log(
                         "Rules editor onChange - html:",
-                        html?.substring(0, 50)
+                        html?.substring(0, 50),
                       );
                       console.log("Rules editor onChange - json:", json);
                       setRulesHtml(html);
@@ -9293,8 +9594,8 @@ export default function EditContestPage({
                       isDragActive
                         ? "border-rose-500 bg-rose-50 dark:bg-rose-900/20"
                         : isDark
-                        ? "border-slate-600 bg-[#170337]"
-                        : "border-gray-300 bg-white"
+                          ? "border-slate-600 bg-[#170337]"
+                          : "border-gray-300 bg-white"
                     }`}
                     onClick={() => resourceFileRef.current?.click()}
                     onDragOver={handleDragOver}
@@ -9398,7 +9699,7 @@ export default function EditContestPage({
                           className={cn(
                             isDark
                               ? "bg-[#180438] border border-gray-600"
-                              : "bg-white"
+                              : "bg-white",
                           )}
                           value={resourceDescription}
                           onChange={(e) =>
@@ -9450,7 +9751,7 @@ export default function EditContestPage({
                       className={cn(
                         isDark
                           ? "bg-[#180438] border border-gray-600"
-                          : "bg-white"
+                          : "bg-white",
                       )}
                     />
                   </div>
@@ -9469,7 +9770,7 @@ export default function EditContestPage({
                       className={cn(
                         isDark
                           ? "bg-[#180438] border border-gray-600"
-                          : "bg-white"
+                          : "bg-white",
                       )}
                     />
                   </div>
@@ -9502,29 +9803,29 @@ export default function EditContestPage({
                   <ul className="space-y-3">
                     {resources.map((resource, idx) => {
                       const isSupabaseUrl = resource.url.includes(
-                        "supabase.co/storage"
+                        "supabase.co/storage",
                       );
                       const isInternal = resource.type === "internal";
 
                       // Enhanced file type detection using URL extension
                       const isImage =
                         /\.(jpg|jpeg|png|gif|jfif|webp|svg|bmp)(\?|$)/i.test(
-                          resource.url
+                          resource.url,
                         );
                       const isPdf = /\.pdf(\?|$)/i.test(resource.url);
                       const isVideo =
                         /\.(mp4|mov|avi|webm|mkv|flv|wmv)(\?|$)/i.test(
-                          resource.url
+                          resource.url,
                         );
                       const isAudio = /\.(mp3|wav|flac|aac|ogg)(\?|$)/i.test(
-                        resource.url
+                        resource.url,
                       );
                       const isDocument =
                         /\.(doc|docx|xls|xlsx|ppt|pptx|txt|rtf)(\?|$)/i.test(
-                          resource.url
+                          resource.url,
                         );
                       const isArchive = /\.(zip|rar|7z|tar|gz)(\?|$)/i.test(
-                        resource.url
+                        resource.url,
                       );
 
                       return (
@@ -9534,7 +9835,7 @@ export default function EditContestPage({
                             "flex flex-col sm:flex-row sm:items-center gap-4 border rounded-xl p-4 shadow-sm",
                             isDark
                               ? "bg-[#180438] border-gray-600"
-                              : "bg-white dark:bg-gray-800 border border-gray-200"
+                              : "bg-white dark:bg-gray-800 border border-gray-200",
                           )}
                         >
                           {/* File Type Icons */}
@@ -9808,7 +10109,7 @@ export default function EditContestPage({
                                 "rounded-full flex items-center justify-center w-12 h-12",
                                 isDark
                                   ? "bg-[#FFFFFF36] text-white"
-                                  : "text-[#4A00BE] bg-[#D8C3FF]"
+                                  : "text-[#4A00BE] bg-[#D8C3FF]",
                               )}
                             >
                               <ExternalLink className="w-6= h-6" />
@@ -9823,7 +10124,7 @@ export default function EditContestPage({
                               <span
                                 className={cn(
                                   "text-sm",
-                                  isDark ? "text-white" : "text-gray-600"
+                                  isDark ? "text-white" : "text-gray-600",
                                 )}
                               >
                                 {resource.type === "internal"
@@ -9841,7 +10142,7 @@ export default function EditContestPage({
                                 rel="noopener noreferrer"
                                 className={cn(
                                   "text-sm hover:underline break-all",
-                                  isDark ? "text-purple-500" : "text-blue-600"
+                                  isDark ? "text-purple-500" : "text-blue-600",
                                 )}
                               >
                                 {resource.url}
@@ -9895,7 +10196,7 @@ export default function EditContestPage({
                               "p-3 rounded-full flex-shrink-0 self-end sm:self-auto",
                               isDark
                                 ? "bg-[#FFFFFF36] text-white"
-                                : "text-[#4A00BE] bg-[#D8C3FF]"
+                                : "text-[#4A00BE] bg-[#D8C3FF]",
                             )}
                           >
                             <Trash className="h-4 w-4" />
@@ -9921,7 +10222,7 @@ export default function EditContestPage({
                 <p
                   className={cn(
                     "text-sm",
-                    isDark ? "text-gray-300" : "text-gray-500"
+                    isDark ? "text-gray-300" : "text-gray-500",
                   )}
                 >
                   Set soft targets for engagement on the target tweet.
@@ -9937,7 +10238,7 @@ export default function EditContestPage({
                       onChange={(e) => {
                         const v = e.target.value;
                         setTargetLikes(
-                          v === "" ? "" : Math.max(0, Number(v) || 0)
+                          v === "" ? "" : Math.max(0, Number(v) || 0),
                         );
                       }}
                       placeholder="e.g. 500"
@@ -9945,7 +10246,7 @@ export default function EditContestPage({
                         "text-sm",
                         isDark
                           ? "bg-[#180438] border border-gray-600 text-white"
-                          : "bg-white text-black"
+                          : "bg-white text-black",
                       )}
                     />
                   </div>
@@ -9959,7 +10260,7 @@ export default function EditContestPage({
                       onChange={(e) => {
                         const v = e.target.value;
                         setTargetReplies(
-                          v === "" ? "" : Math.max(0, Number(v) || 0)
+                          v === "" ? "" : Math.max(0, Number(v) || 0),
                         );
                       }}
                       placeholder="e.g. 50"
@@ -9967,7 +10268,7 @@ export default function EditContestPage({
                         "text-sm",
                         isDark
                           ? "bg-[#180438] border border-gray-600 text-white"
-                          : "bg-white text-black"
+                          : "bg-white text-black",
                       )}
                     />
                   </div>
@@ -9983,7 +10284,7 @@ export default function EditContestPage({
                       onChange={(e) => {
                         const v = e.target.value;
                         setTargetRetweets(
-                          v === "" ? "" : Math.max(0, Number(v) || 0)
+                          v === "" ? "" : Math.max(0, Number(v) || 0),
                         );
                       }}
                       placeholder="e.g. 100"
@@ -9991,7 +10292,7 @@ export default function EditContestPage({
                         "text-sm",
                         isDark
                           ? "bg-[#180438] border border-gray-600 text-white"
-                          : "bg-white text-black"
+                          : "bg-white text-black",
                       )}
                     />
                   </div>
@@ -10007,7 +10308,7 @@ export default function EditContestPage({
                       onChange={(e) => {
                         const v = e.target.value;
                         setTargetQuoteReposts(
-                          v === "" ? "" : Math.max(0, Number(v) || 0)
+                          v === "" ? "" : Math.max(0, Number(v) || 0),
                         );
                       }}
                       placeholder="e.g. 50"
@@ -10015,7 +10316,7 @@ export default function EditContestPage({
                         "text-sm",
                         isDark
                           ? "bg-[#180438] border border-gray-600 text-white"
-                          : "bg-white text-black"
+                          : "bg-white text-black",
                       )}
                     />
                   </div>
@@ -10067,7 +10368,7 @@ export default function EditContestPage({
                       className={cn(
                         isDark
                           ? "bg-[#180438] border border-gray-600 text-white"
-                          : "bg-white text-black"
+                          : "bg-white text-black",
                       )}
                     />
                     <Label htmlFor="twitterTargetDescriptionInput">
@@ -10083,7 +10384,7 @@ export default function EditContestPage({
                       className={cn(
                         isDark
                           ? "bg-[#180438] border border-gray-600 text-white"
-                          : "bg-white text-black"
+                          : "bg-white text-black",
                       )}
                     />
                   </div>
@@ -10108,7 +10409,7 @@ export default function EditContestPage({
                         className={cn(
                           isDark
                             ? "bg-[#180438] border border-gray-600 text-white"
-                            : "bg-white text-black"
+                            : "bg-white text-black",
                         )}
                       />
                       <Label htmlFor="inspirationDescriptionInput">
@@ -10125,7 +10426,7 @@ export default function EditContestPage({
                         className={cn(
                           isDark
                             ? "bg-[#180438] border border-gray-600 text-white"
-                            : "bg-white text-black"
+                            : "bg-white text-black",
                         )}
                       />
                       <Button
@@ -10156,7 +10457,7 @@ export default function EditContestPage({
                             "flex flex-col sm:flex-row sm:items-center gap-4 border rounded-xl p-4 shadow-sm",
                             isDark
                               ? "bg-[#180438] border-gray-600"
-                              : "bg-white dark:bg-gray-800 border border-gray-200"
+                              : "bg-white dark:bg-gray-800 border border-gray-200",
                           )}
                         >
                           <div
@@ -10164,7 +10465,7 @@ export default function EditContestPage({
                               "rounded-full flex items-center justify-center w-12 h-12",
                               isDark
                                 ? "bg-[#FFFFFF36] text-white"
-                                : "text-[#4A00BE] bg-[#D8C3FF]"
+                                : "text-[#4A00BE] bg-[#D8C3FF]",
                             )}
                           >
                             <ExternalLink className="w-6 h-6" />
@@ -10176,7 +10477,7 @@ export default function EditContestPage({
                               rel="noopener noreferrer"
                               className={cn(
                                 "font-medium hover:underline break-all",
-                                isDark ? "text-purple-500" : "text-blue-600"
+                                isDark ? "text-purple-500" : "text-blue-600",
                               )}
                             >
                               {item.url}
@@ -10184,7 +10485,7 @@ export default function EditContestPage({
                             <div
                               className={cn(
                                 "text-xs mt-1",
-                                isDark ? "text-white" : "text-gray-600"
+                                isDark ? "text-white" : "text-gray-600",
                               )}
                             >
                               {item.description}
@@ -10196,7 +10497,7 @@ export default function EditContestPage({
                               "p-3 rounded-full flex-shrink-0 self-end sm:self-auto",
                               isDark
                                 ? "bg-[#FFFFFF36] text-white"
-                                : "text-[#4A00BE] bg-[#D8C3FF]"
+                                : "text-[#4A00BE] bg-[#D8C3FF]",
                             )}
                           >
                             <Trash className="h-4 w-4" />
@@ -10222,7 +10523,7 @@ export default function EditContestPage({
                     type="button"
                     className={cn(
                       "w-full text-left flex items-center justify-between rounded-lg border px-4 py-3 text-md font-semibold hover:bg-accent/50 transition",
-                      isDark ? "border-gray-600" : "border-gray-400"
+                      isDark ? "border-gray-600" : "border-gray-400",
                     )}
                   >
                     <span className={cn(isDark ? "text-white" : "text-black")}>
@@ -10248,7 +10549,7 @@ export default function EditContestPage({
                       className={cn(
                         isDark
                           ? "bg-[#180438] border border-gray-600 text-white"
-                          : "bg-white text-black"
+                          : "bg-white text-black",
                       )}
                     />
                   </div>
@@ -10266,7 +10567,7 @@ export default function EditContestPage({
                       className={cn(
                         isDark
                           ? "bg-[#180438] border border-gray-600 text-white"
-                          : "bg-white text-black"
+                          : "bg-white text-black",
                       )}
                     />
                   </div>
@@ -10287,7 +10588,7 @@ export default function EditContestPage({
                             "flex items-center gap-3 rounded-lg p-4 shadow-sm",
                             isDark
                               ? "bg-[#180438] border border-gray-600"
-                              : "bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700"
+                              : "bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700",
                           )}
                         >
                           <div
@@ -10295,7 +10596,7 @@ export default function EditContestPage({
                               "rounded-full flex items-center justify-center w-12 h-12",
                               isDark
                                 ? "bg-[#FFFFFF36] text-white"
-                                : "text-[#4A00BE] bg-[#D8C3FF]"
+                                : "text-[#4A00BE] bg-[#D8C3FF]",
                             )}
                           >
                             <ExternalLink className="w-6 h-6" />
@@ -10306,7 +10607,7 @@ export default function EditContestPage({
                                 item.url.includes("[creator]")
                                   ? item.url.replace(
                                       /\[creator\]/gi,
-                                      encodeURIComponent(currentUserFirstName)
+                                      encodeURIComponent(currentUserFirstName),
                                     )
                                   : item.url
                               }
@@ -10314,20 +10615,20 @@ export default function EditContestPage({
                               rel="noopener noreferrer"
                               className={cn(
                                 "font-medium hover:underline break-all",
-                                isDark ? "text-purple-500" : "text-blue-600"
+                                isDark ? "text-purple-500" : "text-blue-600",
                               )}
                             >
                               {item.url.includes("[creator]")
                                 ? item.url.replace(
                                     /\[creator\]/gi,
-                                    currentUserFirstName
+                                    currentUserFirstName,
                                   )
                                 : item.url}
                             </a>
                             <div
                               className={cn(
                                 "text-xs mt-1",
-                                isDark ? "text-white" : "text-gray-600"
+                                isDark ? "text-white" : "text-gray-600",
                               )}
                             >
                               {item.description}
@@ -10339,7 +10640,7 @@ export default function EditContestPage({
                               "p-3 rounded-full flex-shrink-0 self-end sm:self-auto",
                               isDark
                                 ? "bg-[#FFFFFF36] text-white"
-                                : "text-[#4A00BE] bg-[#D8C3FF]"
+                                : "text-[#4A00BE] bg-[#D8C3FF]",
                             )}
                           >
                             <Trash className="h-4 w-4" />
@@ -10365,15 +10666,17 @@ export default function EditContestPage({
                   contestType === "cpm"
                     ? "CPM Based"
                     : contestType === "milestone"
-                    ? "Milestone Based"
-                    : "Leaderboard Based"
+                      ? "Milestone Based"
+                      : contestType === "dual_rewards"
+                        ? "Dual Rewards (CPM + Milestone)"
+                        : "Leaderboard Based"
                 }
                 readOnly
                 className={cn(
                   "cursor-not-allowed",
                   isDark
                     ? "bg-[#180438] border border-gray-600 text-gray-400"
-                    : "bg-gray-100"
+                    : "bg-gray-100",
                 )}
               />
             </div>
@@ -10393,7 +10696,7 @@ export default function EditContestPage({
                     "w-full",
                     isDark
                       ? "bg-[#180438] border border-gray-600 [&::-webkit-calendar-picker-indicator]:invert"
-                      : "bg-white [&::-webkit-calendar-picker-indicator]:filter-none"
+                      : "bg-white [&::-webkit-calendar-picker-indicator]:filter-none",
                   )}
                   onChange={(e) => setStartDate(e.target.value)}
                   min={getMinDateTime()}
@@ -10410,7 +10713,7 @@ export default function EditContestPage({
                     "w-full",
                     isDark
                       ? "bg-[#180438] border border-gray-600 [&::-webkit-calendar-picker-indicator]:invert"
-                      : "bg-white [&::-webkit-calendar-picker-indicator]:filter-none"
+                      : "bg-white [&::-webkit-calendar-picker-indicator]:filter-none",
                   )}
                 />
               </div>
@@ -10426,7 +10729,7 @@ export default function EditContestPage({
                     "w-full",
                     isDark
                       ? "bg-[#180438] border border-gray-600 [&::-webkit-calendar-picker-indicator]:invert"
-                      : "bg-white [&::-webkit-calendar-picker-indicator]:filter-none"
+                      : "bg-white [&::-webkit-calendar-picker-indicator]:filter-none",
                   )}
                 />
               </div>
@@ -10444,7 +10747,7 @@ export default function EditContestPage({
                     "w-full",
                     isDark
                       ? "bg-[#180438] border border-gray-600 [&::-webkit-calendar-picker-indicator]:invert"
-                      : "bg-white [&::-webkit-calendar-picker-indicator]:filter-none"
+                      : "bg-white [&::-webkit-calendar-picker-indicator]:filter-none",
                   )}
                 />
               </div>
@@ -10456,7 +10759,7 @@ export default function EditContestPage({
                   "mt-2 border",
                   isDark
                     ? "bg-[#C9A7FF26] border border-[#C9A7FF]"
-                    : "bg-green-50 border-green-200 text-green-700"
+                    : "bg-green-50 border-green-200 text-green-700",
                 )}
               >
                 <AlertDescription>{getContestDuration()}</AlertDescription>
@@ -10465,7 +10768,7 @@ export default function EditContestPage({
             <p
               className={cn(
                 "text-sm mt-1",
-                isDark ? "text-white" : "text-gray-600"
+                isDark ? "text-white" : "text-gray-600",
               )}
             >
               <strong>Start Date Rule:</strong> Contest must start at least{" "}
@@ -10491,7 +10794,7 @@ export default function EditContestPage({
                     "flex items-center gap-2  px-4 py-2 rounded-full",
                     isDark
                       ? "bg-[#180438] text-purple-400"
-                      : "bg-gray-100 text-black"
+                      : "bg-gray-100 text-black",
                   )}
                 >
                   <span className="text-sm font-medium">Total Prize Pool:</span>
@@ -10509,7 +10812,7 @@ export default function EditContestPage({
                     "border px-4 py-3 rounded-lg",
                     isDark
                       ? "bg-[#C9A7FF26] border-[#C9A7FF]"
-                      : "border-[#7F39EC] bg-[#D9C0FF26] text-black "
+                      : "border-[#7F39EC] bg-[#D9C0FF26] text-black ",
                   )}
                 >
                   <AlertDescription className="flex items-center justify-between">
@@ -10520,7 +10823,7 @@ export default function EditContestPage({
                         Minimum total prize pool:{" "}
                         <strong>
                           {formatCurrencyFromCents(
-                            planFeatures.minContestBudget
+                            planFeatures.minContestBudget,
                           )}
                         </strong>
                       </span>
@@ -10557,7 +10860,7 @@ export default function EditContestPage({
 
               <div
                 className={cn(
-                  isDark ? "bg-[#180438] p-4" : "bg-gray-50 p-4 rounded-lg"
+                  isDark ? "bg-[#180438] p-4" : "bg-gray-50 p-4 rounded-lg",
                 )}
               >
                 <div className="flex items-center gap-4 mb-4">
@@ -10577,7 +10880,7 @@ export default function EditContestPage({
                           setWinnerCount(newCount);
                           const newAmounts = [...winnerAmounts].slice(
                             0,
-                            newCount
+                            newCount,
                           );
                           setWinnerAmounts(newAmounts);
                           updateBudgetTracking(newAmounts);
@@ -10603,7 +10906,7 @@ export default function EditContestPage({
                           newAmounts.push(
                             DEFAULT_PRIZE_ALLOCATIONS[
                               position as keyof typeof DEFAULT_PRIZE_ALLOCATIONS
-                            ] || MIN_PRIZE_PER_WINNER
+                            ] || MIN_PRIZE_PER_WINNER,
                           );
                           setWinnerAmounts(newAmounts);
                           updateBudgetTracking(newAmounts);
@@ -10627,7 +10930,7 @@ export default function EditContestPage({
                   <div
                     className={cn(
                       "text-sm",
-                      isDark ? "text-white" : "text-gray-600"
+                      isDark ? "text-white" : "text-gray-600",
                     )}
                   >
                     <span>Max: {planFeatures.maxWinnersPerContest}</span>
@@ -10674,7 +10977,7 @@ export default function EditContestPage({
                             toast({
                               title: "Prize Amount Too Low",
                               description: `Prize amount cannot be less than ${formatCurrencyFromCents(
-                                MIN_PRIZE_PER_WINNER
+                                MIN_PRIZE_PER_WINNER,
                               )}`,
                               variant: "destructive",
                             });
@@ -10682,7 +10985,7 @@ export default function EditContestPage({
                             toast({
                               title: "Prize Amount Too High",
                               description: `Prize amount cannot exceed ${formatCurrencyFromCents(
-                                MAX_PRIZE_PER_WINNER
+                                MAX_PRIZE_PER_WINNER,
                               )}`,
                               variant: "destructive",
                             });
@@ -10694,13 +10997,13 @@ export default function EditContestPage({
                         "w-full sm:w-40 md:w-48",
                         isDark
                           ? "bg-[#180438] border border-gray-600 [&::-webkit-calendar-picker-indicator]:invert"
-                          : "bg-white [&::-webkit-calendar-picker-indicator]:filter-none"
+                          : "bg-white [&::-webkit-calendar-picker-indicator]:filter-none",
                       )}
                     />
                     <div
                       className={cn(
                         "text-xs sm:text-sm",
-                        isDark ? "text-gray-300" : "text-gray-600"
+                        isDark ? "text-gray-300" : "text-gray-600",
                       )}
                     >
                       <span>
@@ -10725,387 +11028,413 @@ export default function EditContestPage({
           )}
 
           {/* Milestone Configuration - Conditional for Milestone */}
-          {!datesOnly && contestType === "milestone" && (
-            <div className="space-y-6 py-4 px-1">
-              <h3 className="text-lg font-medium">Milestone contest configuration</h3>
-              <Alert
-                className={cn(
-                  "border",
-                  isDark
-                    ? "bg-[#C9A7FF26] border-[#C9A7FF] text-white"
-                    : "bg-[#F0E7FD] border-[#4A00BE] text-purple-800"
-                )}
-              >
-                <AlertDescription>
-                  <strong>Non-cumulative payouts:</strong> each creator receives
-                  only the reward for the <strong>highest</strong> milestone they
-                  reach (not the sum of all tiers below it). Each tier payout
-                  must be at least{" "}
-                  {formatCurrencyFromCents(MIN_MILESTONE_PAYOUT_CENTS)}.
-                </AlertDescription>
-              </Alert>
-              <div className="space-y-4">
-                {milestoneRows.map((row, idx) => {
-                  const winnerLimitValue =
-                    row.winner_limit === ""
-                      ? NaN
-                      : parseInt(String(row.winner_limit), 10);
-                  const payoutDollarsValue = parseFloat(
-                    String(row.payout_dollars)
-                  );
-                  const estimatedPayoutCents =
-                    !isNaN(winnerLimitValue) &&
-                    winnerLimitValue > 0 &&
-                    !isNaN(payoutDollarsValue) &&
-                    payoutDollarsValue > 0
-                      ? Math.round(payoutDollarsValue * 100 * winnerLimitValue)
-                      : null;
+          {!datesOnly &&
+            (contestType === "milestone" || contestType === "dual_rewards") && (
+              <div className="space-y-6 py-4 px-1">
+                <h3 className="text-lg font-medium">
+                  Milestone contest configuration
+                </h3>
+                <Alert
+                  className={cn(
+                    "border",
+                    isDark
+                      ? "bg-[#C9A7FF26] border-[#C9A7FF] text-white"
+                      : "bg-[#F0E7FD] border-[#4A00BE] text-purple-800",
+                  )}
+                >
+                  <AlertDescription>
+                    <strong>Non-cumulative payouts:</strong> each creator
+                    receives only the reward for the <strong>highest</strong>{" "}
+                    milestone they reach (not the sum of all tiers below it).
+                    Each tier payout must be at least{" "}
+                    {formatCurrencyFromCents(MIN_MILESTONE_PAYOUT_CENTS)}.
+                  </AlertDescription>
+                </Alert>
+                <div className="space-y-4">
+                  {milestoneRows.map((row, idx) => {
+                    const winnerLimitValue =
+                      row.winner_limit === ""
+                        ? NaN
+                        : parseInt(String(row.winner_limit), 10);
+                    const payoutDollarsValue = parseFloat(
+                      String(row.payout_dollars),
+                    );
+                    const estimatedPayoutCents =
+                      !isNaN(winnerLimitValue) &&
+                      winnerLimitValue > 0 &&
+                      !isNaN(payoutDollarsValue) &&
+                      payoutDollarsValue > 0
+                        ? Math.round(
+                            payoutDollarsValue * 100 * winnerLimitValue,
+                          )
+                        : null;
 
-                  return (
-                  <div
-                    key={row.id}
-                    className={cn(
-                      "grid gap-3 md:grid-cols-12 md:items-end p-4 border rounded-lg",
-                      isDark ? "border-gray-600" : "border-gray-300"
-                    )}
-                  >
-                    <div className="md:col-span-12">
-                      <h4 className="text-sm font-semibold">Milestone {idx + 1}</h4>
-                    </div>
-                    <div className="md:col-span-3 space-y-2">
-                      <Label>Target views</Label>
-                      <Input
-                        type="number"
-                        min={1}
-                        value={row.target_views}
-                        onChange={(e) => {
-                          const v = e.target.value;
-                          const updatedRows = milestoneRows.map((r) =>
-                            r.id === row.id
-                              ? { ...r, target_views: v === "" ? "" : v }
-                              : r
-                          );
-                          setMilestoneRows(updatedRows);
-                          updateMilestoneRowsWithValidation(updatedRows);
-                        }}
+                    return (
+                      <div
+                        key={row.id}
                         className={cn(
-                          isDark
-                            ? "bg-[#180438] border border-gray-600"
-                            : ""
+                          "grid gap-3 md:grid-cols-12 md:items-end p-4 border rounded-lg",
+                          isDark ? "border-gray-600" : "border-gray-300",
                         )}
-                        placeholder="e.g. 1000"
-                      />
-                    </div>
-                    <div className="md:col-span-3 space-y-2">
-                      <Label>Payout (USD)</Label>
-                      <Input
-                        type="number"
-                        min={MIN_MILESTONE_PAYOUT_CENTS / 100}
-                        step="0.01"
-                        value={row.payout_dollars}
-                        onChange={(e) => {
-                          const updatedRows = milestoneRows.map((r) =>
-                            r.id === row.id
-                              ? { ...r, payout_dollars: e.target.value }
-                              : r
-                          );
-                          setMilestoneRows(updatedRows);
-                          updateMilestoneRowsWithValidation(updatedRows);
-                        }}
-                        className={cn(
-                          isDark
-                            ? "bg-[#180438] border border-gray-600"
-                            : ""
-                        )}
-                        placeholder="e.g. 5.00"
-                      />
-                    </div>
-                    <div className="md:col-span-3 space-y-2">
-                    <p className="text-xs">
+                      >
+                        <div className="md:col-span-12">
+                          <h4 className="text-sm font-semibold">
+                            Milestone {idx + 1}
+                          </h4>
+                        </div>
+                        <div className="md:col-span-3 space-y-2">
+                          <Label>Target views</Label>
+                          <Input
+                            type="number"
+                            min={1}
+                            value={row.target_views}
+                            onChange={(e) => {
+                              const v = e.target.value;
+                              const updatedRows = milestoneRows.map((r) =>
+                                r.id === row.id
+                                  ? { ...r, target_views: v === "" ? "" : v }
+                                  : r,
+                              );
+                              setMilestoneRows(updatedRows);
+                              updateMilestoneRowsWithValidation(updatedRows);
+                            }}
+                            className={cn(
+                              isDark
+                                ? "bg-[#180438] border border-gray-600"
+                                : "",
+                            )}
+                            placeholder="e.g. 1000"
+                          />
+                        </div>
+                        <div className="md:col-span-3 space-y-2">
+                          <Label>Payout (USD)</Label>
+                          <Input
+                            type="number"
+                            min={MIN_MILESTONE_PAYOUT_CENTS / 100}
+                            step="0.01"
+                            value={row.payout_dollars}
+                            onChange={(e) => {
+                              const updatedRows = milestoneRows.map((r) =>
+                                r.id === row.id
+                                  ? { ...r, payout_dollars: e.target.value }
+                                  : r,
+                              );
+                              setMilestoneRows(updatedRows);
+                              updateMilestoneRowsWithValidation(updatedRows);
+                            }}
+                            className={cn(
+                              isDark
+                                ? "bg-[#180438] border border-gray-600"
+                                : "",
+                            )}
+                            placeholder="e.g. 5.00"
+                          />
+                        </div>
+                        <div className="md:col-span-3 space-y-2">
+                          <p className="text-xs">
                             <span className="font-medium">
                               Winner cap (optional):
                             </span>{" "}
                             <span className="text-muted-foreground">
-                              First N creators to reach this tier, or leave blank
-                              for everyone who qualifies.
+                              First N creators to reach this tier, or leave
+                              blank for everyone who qualifies.
                             </span>
                           </p>
-                      <Input
-                        type="number"
-                        min={1}
-                        value={row.winner_limit}
-                        onChange={(e) =>
-                          setMilestoneRows((prev) =>
-                            prev.map((r) =>
-                              r.id === row.id
-                                ? { ...r, winner_limit: e.target.value }
-                                : r
-                            )
-                          )
-                        }
-                        className={cn(
-                          isDark
-                            ? "bg-[#180438] border border-gray-600"
-                            : ""
-                        )}
-                        placeholder="Unlimited if empty"
-                      />
-                    </div>
-                    <div className="md:col-span-2 space-y-2">
-                      {estimatedPayoutCents !== null && (
-                        <>
-                          <Label>Estimated payout</Label>
-                          <div
+                          <Input
+                            type="number"
+                            min={1}
+                            value={row.winner_limit}
+                            onChange={(e) =>
+                              setMilestoneRows((prev) =>
+                                prev.map((r) =>
+                                  r.id === row.id
+                                    ? { ...r, winner_limit: e.target.value }
+                                    : r,
+                                ),
+                              )
+                            }
                             className={cn(
-                              "h-10 rounded-md border px-3 flex items-center text-sm",
                               isDark
-                                ? "bg-[#180438] border-gray-600 text-white"
-                                : "bg-muted/40 border-input"
+                                ? "bg-[#180438] border border-gray-600"
+                                : "",
                             )}
+                            placeholder="Unlimited if empty"
+                          />
+                        </div>
+                        <div className="md:col-span-2 space-y-2">
+                          {estimatedPayoutCents !== null && (
+                            <>
+                              <Label>Estimated payout</Label>
+                              <div
+                                className={cn(
+                                  "h-10 rounded-md border px-3 flex items-center text-sm",
+                                  isDark
+                                    ? "bg-[#180438] border-gray-600 text-white"
+                                    : "bg-muted/40 border-input",
+                                )}
+                              >
+                                {formatCurrencyFromCents(estimatedPayoutCents)}
+                              </div>
+                            </>
+                          )}
+                        </div>
+                        <div className="md:col-span-1 flex md:justify-end">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="icon"
+                            className="shrink-0"
+                            disabled={milestoneRows.length <= 1}
+                            onClick={() => {
+                              const updatedRows = milestoneRows.filter(
+                                (r) => r.id !== row.id,
+                              );
+                              setMilestoneRows(updatedRows);
+                              updateMilestoneRowsWithValidation(updatedRows);
+                            }}
+                            aria-label={`Remove milestone ${idx + 1}`}
                           >
-                            {formatCurrencyFromCents(estimatedPayoutCents)}
-                          </div>
-                        </>
-                      )}
-                    </div>
-                    <div className="md:col-span-1 flex md:justify-end">
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="icon"
-                        className="shrink-0"
-                        disabled={milestoneRows.length <= 1}
-                        onClick={() => {
-                          const updatedRows = milestoneRows.filter(
-                            (r) => r.id !== row.id
-                          );
-                          setMilestoneRows(updatedRows);
-                          updateMilestoneRowsWithValidation(updatedRows);
-                        }}
-                        aria-label={`Remove milestone ${idx + 1}`}
-                      >
-                        <Trash className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  </div>
-                );
-                })}
-                {milestoneSequenceError && (
-                  <Alert variant="destructive">
-                    <AlertDescription>{milestoneSequenceError}</AlertDescription>
-                  </Alert>
-                )}
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  disabled={!canAddNextMilestone(milestoneRows)}
-                  onClick={handleAddMilestoneRow}
-                >
-                  Add milestone
-                </Button>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="milestoneTotalBudget">
-                  Total contest budget (USD) <span className="text-red-500">*</span>
-                </Label>
-                <Input
-                  id="milestoneTotalBudget"
-                  type="number"
-                  value={totalBudget}
-                  onChange={(e) => {
-                    setTotalBudget(e.target.value);
-                    checkBudgetChange(undefined, e.target.value);
-                  }}
-                  min="1"
-                  step="0.01"
-                  className={cn(
-                    isDark
-                      ? "bg-[#180438] border border-gray-600 text-white"
-                      : "bg-white"
+                            <Trash className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                  {milestoneSequenceError && (
+                    <Alert variant="destructive">
+                      <AlertDescription>
+                        {milestoneSequenceError}
+                      </AlertDescription>
+                    </Alert>
                   )}
-                  placeholder="Maximum amount reserved for this contest"
-                />
-                <p className="text-xs text-muted-foreground">
-                  This is the pool you fund upfront (similar to a CPM budget).
-                  Payouts are drawn from it as creators hit milestones.
-                </p>
-              </div>
-
-              <div
-                className={cn(
-                  "space-y-4 p-4 border rounded-lg",
-                  isDark ? "border-gray-600" : "border-gray-300"
-                )}
-              >
-                <div className="flex items-center gap-2">
-                  <Checkbox
-                    id="milestoneBonusToggle"
-                    checked={milestoneBonusEnabled}
-                    onCheckedChange={(c) => setMilestoneBonusEnabled(c === true)}
-                  />
-                  <Label
-                    htmlFor="milestoneBonusToggle"
-                    className="cursor-pointer text-md font-medium"
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    disabled={!canAddNextMilestone(milestoneRows)}
+                    onClick={handleAddMilestoneRow}
                   >
-                    Creator Bonus (verified creators)
-                  </Label>
+                    Add milestone
+                  </Button>
                 </div>
-                {milestoneBonusEnabled && (
-                  <div className="space-y-4 pl-1">
-                    <p className="text-sm text-muted-foreground">
-                      Optional extras for top performers. Configure at least one
-                      category when bonus is enabled.
+
+                {contestType !== "dual_rewards" && (
+                  <div className="space-y-2">
+                    <Label htmlFor="milestoneTotalBudget">
+                      Total contest budget (USD){" "}
+                      <span className="text-red-500">*</span>
+                    </Label>
+                    <Input
+                      id="milestoneTotalBudget"
+                      type="number"
+                      value={totalBudget}
+                      onChange={(e) => {
+                        setTotalBudget(e.target.value);
+                        checkBudgetChange(undefined, e.target.value);
+                      }}
+                      min="1"
+                      step="0.01"
+                      className={cn(
+                        isDark
+                          ? "bg-[#180438] border border-gray-600 text-white"
+                          : "bg-white",
+                      )}
+                      placeholder="Maximum amount reserved for this contest"
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      This is the pool you fund upfront (similar to a CPM budget).
+                      Payouts are drawn from it as creators hit milestones.
                     </p>
-                    <h4 className="text-sm font-semibold">
-                      Most Verified Views 
-                    </h4>
-                    <div className="grid gap-3 md:grid-cols-3">
-                      <div className="space-y-2">
-                        <Label> Minimum total verified views</Label>
-                        <Input
-                          type="number"
-                          min={1}
-                          value={milestoneBonusTopViewsMin}
-                          onChange={(e) =>
-                            setMilestoneBonusTopViewsMin(
-                              e.target.value === ""
-                                ? ""
-                                : parseInt(e.target.value, 10)
-                            )
-                          }
-                          className={cn(
-                            isDark ? "bg-[#180438] border border-gray-600" : ""
-                          )}
-                          placeholder="e.g. 200000"
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <Label> Minimum verified reels</Label>
-                        <Input
-                          type="number"
-                          min={1}
-                          value={milestoneBonusTopViewsMinReels}
-                          onChange={(e) =>
-                            setMilestoneBonusTopViewsMinReels(
-                              e.target.value === ""
-                                ? ""
-                                : parseInt(e.target.value, 10)
-                            )
-                          }
-                          className={cn(
-                            isDark ? "bg-[#180438] border border-gray-600" : ""
-                          )}
-                          placeholder="e.g. 5"
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <Label>Winner bonus (USD)</Label>
-                        <Input
-                          type="number"
-                          step="0.01"
-                          min={MIN_MILESTONE_PAYOUT_CENTS / 100}
-                          value={milestoneBonusTopViewsPayout}
-                          onChange={(e) =>
-                            setMilestoneBonusTopViewsPayout(e.target.value)
-                          }
-                          className={cn(
-                            isDark ? "bg-[#180438] border border-gray-600" : ""
-                          )}
-                          placeholder="e.g. 100"
-                        />
-                      </div>
-                    </div>
-                    <h4 className="text-sm font-semibold">
-                      Most Verified Reels 
-                    </h4>
-                    <div className="grid gap-3 md:grid-cols-3">
-                      <div className="space-y-2">
-                        <Label> Minimum total verified views</Label>
-                        <Input
-                          type="number"
-                          min={1}
-                          value={milestoneBonusTopReelsMinViews}
-                          onChange={(e) =>
-                            setMilestoneBonusTopReelsMinViews(
-                              e.target.value === ""
-                                ? ""
-                                : parseInt(e.target.value, 10)
-                            )
-                          }
-                          className={cn(
-                            isDark ? "bg-[#180438] border border-gray-600" : ""
-                          )}
-                          placeholder="e.g. 200000"
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <Label>Minimum verified reels</Label>
-                        <Input
-                          type="number"
-                          min={1}
-                          value={milestoneBonusTopReelsMin}
-                          onChange={(e) =>
-                            setMilestoneBonusTopReelsMin(
-                              e.target.value === ""
-                                ? ""
-                                : parseInt(e.target.value, 10)
-                            )
-                          }
-                          className={cn(
-                            isDark ? "bg-[#180438] border border-gray-600" : ""
-                          )}
-                          placeholder="e.g. 5"
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <Label>Winner bonus (USD)</Label>
-                        <Input
-                          type="number"
-                          step="0.01"
-                          min={MIN_MILESTONE_PAYOUT_CENTS / 100}
-                          value={milestoneBonusTopReelsPayout}
-                          onChange={(e) =>
-                            setMilestoneBonusTopReelsPayout(e.target.value)
-                          }
-                          className={cn(
-                            isDark ? "bg-[#180438] border border-gray-600" : ""
-                          )}
-                          placeholder="e.g. 50"
-                        />
-                      </div>
-                    </div>
                   </div>
                 )}
+
+                <div
+                  className={cn(
+                    "space-y-4 p-4 border rounded-lg",
+                    isDark ? "border-gray-600" : "border-gray-300",
+                  )}
+                >
+                  <div className="flex items-center gap-2">
+                    <Checkbox
+                      id="milestoneBonusToggle"
+                      checked={milestoneBonusEnabled}
+                      onCheckedChange={(c) =>
+                        setMilestoneBonusEnabled(c === true)
+                      }
+                    />
+                    <Label
+                      htmlFor="milestoneBonusToggle"
+                      className="cursor-pointer text-md font-medium"
+                    >
+                      Creator Bonus (verified creators)
+                    </Label>
+                  </div>
+                  {milestoneBonusEnabled && (
+                    <div className="space-y-4 pl-1">
+                      <p className="text-sm text-muted-foreground">
+                        Optional extras for top performers. Configure at least
+                        one category when bonus is enabled.
+                      </p>
+                      <h4 className="text-sm font-semibold">
+                        Most Verified Views
+                      </h4>
+                      <div className="grid gap-3 md:grid-cols-3">
+                        <div className="space-y-2">
+                          <Label> Minimum total verified views</Label>
+                          <Input
+                            type="number"
+                            min={1}
+                            value={milestoneBonusTopViewsMin}
+                            onChange={(e) =>
+                              setMilestoneBonusTopViewsMin(
+                                e.target.value === ""
+                                  ? ""
+                                  : parseInt(e.target.value, 10),
+                              )
+                            }
+                            className={cn(
+                              isDark
+                                ? "bg-[#180438] border border-gray-600"
+                                : "",
+                            )}
+                            placeholder="e.g. 200000"
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label> Minimum verified reels</Label>
+                          <Input
+                            type="number"
+                            min={1}
+                            value={milestoneBonusTopViewsMinReels}
+                            onChange={(e) =>
+                              setMilestoneBonusTopViewsMinReels(
+                                e.target.value === ""
+                                  ? ""
+                                  : parseInt(e.target.value, 10),
+                              )
+                            }
+                            className={cn(
+                              isDark
+                                ? "bg-[#180438] border border-gray-600"
+                                : "",
+                            )}
+                            placeholder="e.g. 5"
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label>Winner bonus (USD)</Label>
+                          <Input
+                            type="number"
+                            step="0.01"
+                            min={MIN_MILESTONE_PAYOUT_CENTS / 100}
+                            value={milestoneBonusTopViewsPayout}
+                            onChange={(e) =>
+                              setMilestoneBonusTopViewsPayout(e.target.value)
+                            }
+                            className={cn(
+                              isDark
+                                ? "bg-[#180438] border border-gray-600"
+                                : "",
+                            )}
+                            placeholder="e.g. 100"
+                          />
+                        </div>
+                      </div>
+                      <h4 className="text-sm font-semibold">
+                        Most Verified Reels
+                      </h4>
+                      <div className="grid gap-3 md:grid-cols-3">
+                        <div className="space-y-2">
+                          <Label> Minimum total verified views</Label>
+                          <Input
+                            type="number"
+                            min={1}
+                            value={milestoneBonusTopReelsMinViews}
+                            onChange={(e) =>
+                              setMilestoneBonusTopReelsMinViews(
+                                e.target.value === ""
+                                  ? ""
+                                  : parseInt(e.target.value, 10),
+                              )
+                            }
+                            className={cn(
+                              isDark
+                                ? "bg-[#180438] border border-gray-600"
+                                : "",
+                            )}
+                            placeholder="e.g. 200000"
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label>Minimum verified reels</Label>
+                          <Input
+                            type="number"
+                            min={1}
+                            value={milestoneBonusTopReelsMin}
+                            onChange={(e) =>
+                              setMilestoneBonusTopReelsMin(
+                                e.target.value === ""
+                                  ? ""
+                                  : parseInt(e.target.value, 10),
+                              )
+                            }
+                            className={cn(
+                              isDark
+                                ? "bg-[#180438] border border-gray-600"
+                                : "",
+                            )}
+                            placeholder="e.g. 5"
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label>Winner bonus (USD)</Label>
+                          <Input
+                            type="number"
+                            step="0.01"
+                            min={MIN_MILESTONE_PAYOUT_CENTS / 100}
+                            value={milestoneBonusTopReelsPayout}
+                            onChange={(e) =>
+                              setMilestoneBonusTopReelsPayout(e.target.value)
+                            }
+                            className={cn(
+                              isDark
+                                ? "bg-[#180438] border border-gray-600"
+                                : "",
+                            )}
+                            placeholder="e.g. 50"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {parseFloat(totalBudget.toString() || "0") * 100 <
+                  planFeatures.minContestBudget &&
+                  (totalBudget.toString() || "0").length > 0 && (
+                    <Alert
+                      className={cn(
+                        "border",
+                        isDark
+                          ? "bg-[#C9A7FF26] border-[#C9A7FF] text-white"
+                          : "bg-[#F0E7FD] border-[#4A00BE] text-purple-700",
+                      )}
+                    >
+                      <AlertDescription>
+                        The minimum contest budget for your{" "}
+                        {subscriptionPlans.find((p) => p.id === userPlan)
+                          ?.name || "current"}{" "}
+                        plan is{" "}
+                        {formatCurrencyFromCents(planFeatures.minContestBudget)}
+                        . Please increase your total budget.
+                      </AlertDescription>
+                    </Alert>
+                  )}
               </div>
+            )}
 
-              {parseFloat(totalBudget.toString() || "0") * 100 <
-                planFeatures.minContestBudget &&
-                (totalBudget.toString() || "0").length > 0 && (
-                  <Alert
-                    className={cn(
-                      "border",
-                      isDark
-                        ? "bg-[#C9A7FF26] border-[#C9A7FF] text-white"
-                        : "bg-[#F0E7FD] border-[#4A00BE] text-purple-700"
-                    )}
-                  >
-                    <AlertDescription>
-                      The minimum contest budget for your{" "}
-                      {subscriptionPlans.find((p) => p.id === userPlan)?.name ||
-                        "current"}{" "}
-                      plan is{" "}
-                      {formatCurrencyFromCents(planFeatures.minContestBudget)}.
-                      Please increase your total budget.
-                    </AlertDescription>
-                  </Alert>
-                )}
-            </div>
-          )}
-
-          {/* CPM Configuration - Conditional for CPM */}
-          {!datesOnly && contestType === "cpm" && (
+          {/* CPM Configuration — CPM and dual rewards */}
+          {!datesOnly && isCpmContestType(contestType) && (
             <div className="space-y-6">
               {/* <Separator /> */}
               <div className="space-y-6 py-4 px-1">
@@ -11127,7 +11456,7 @@ export default function EditContestPage({
                       className={cn(
                         isDark
                           ? "bg-[#180438] border border-gray-600 text-white"
-                          : "bg-white"
+                          : "bg-white",
                       )}
                       value={cpmRate}
                       onChange={(e) => setCpmRate(e.target.value)}
@@ -11178,7 +11507,10 @@ export default function EditContestPage({
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="totalBudget">
-                      Total Budget (USD) <span className="text-red-500">*</span>
+                      {contestType === "dual_rewards"
+                        ? "Total contest budget (USD)"
+                        : "Total Budget (USD)"}{" "}
+                      <span className="text-red-500">*</span>
                     </Label>
                     <Input
                       id="totalBudget"
@@ -11187,15 +11519,21 @@ export default function EditContestPage({
                       className={cn(
                         isDark
                           ? "bg-[#180438] border border-gray-600"
-                          : "bg-white"
+                          : "bg-white",
                       )}
                       onChange={(e) => {
-                        setTotalBudget(e.target.value);
-                        checkBudgetChange(undefined, e.target.value);
+                        const v = e.target.value;
+                        setTotalBudget(v);
+                        checkBudgetChange(undefined, v);
                       }}
                       placeholder={`e.g., ${FORM_PLACEHOLDER_SMALL_AMOUNT}`}
                       step="0.01"
                     />
+                    <p className="text-xs text-muted-foreground">
+                      {contestType === "dual_rewards"
+                        ? "One funded amount: the same budget backs both per-view (CPM) payouts and milestone payouts."
+                        : "Required: The maximum total amount to be paid out for CPM earnings in this contest."}
+                    </p>
                   </div>
                 </div>
 
@@ -11232,7 +11570,7 @@ export default function EditContestPage({
                               className={cn(
                                 isDark
                                   ? "bg-[#180438] border border-gray-600 text-white"
-                                  : "bg-white"
+                                  : "bg-white",
                               )}
                             />
                           </div>
@@ -11260,7 +11598,7 @@ export default function EditContestPage({
                               className={cn(
                                 isDark
                                   ? "bg-[#180438] border border-gray-600 text-white"
-                                  : "bg-white"
+                                  : "bg-white",
                               )}
                             />
                           </div>
@@ -11308,7 +11646,7 @@ export default function EditContestPage({
                                   className={cn(
                                     isDark
                                       ? "bg-[#180438] border border-gray-600 text-white"
-                                      : "bg-white"
+                                      : "bg-white",
                                   )}
                                 />
                               </div>
@@ -11334,7 +11672,7 @@ export default function EditContestPage({
                                   className={cn(
                                     isDark
                                       ? "bg-[#180438] border border-gray-600 text-white"
-                                      : "bg-white"
+                                      : "bg-white",
                                   )}
                                 />
                               </div>
@@ -11360,7 +11698,7 @@ export default function EditContestPage({
                                   className={cn(
                                     isDark
                                       ? "bg-[#180438] border border-gray-600 text-white"
-                                      : "bg-white"
+                                      : "bg-white",
                                   )}
                                 />
                               </div>
@@ -11386,7 +11724,7 @@ export default function EditContestPage({
                                   className={cn(
                                     isDark
                                       ? "bg-[#180438] border border-gray-600 text-white"
-                                      : "bg-white"
+                                      : "bg-white",
                                   )}
                                 />
                               </div>
@@ -11412,7 +11750,7 @@ export default function EditContestPage({
                                   className={cn(
                                     isDark
                                       ? "bg-[#180438] border border-gray-600 text-white"
-                                      : "bg-white"
+                                      : "bg-white",
                                   )}
                                 />
                               </div>
@@ -11442,7 +11780,7 @@ export default function EditContestPage({
                               className={cn(
                                 isDark
                                   ? "bg-[#180438] border border-gray-600 text-white"
-                                  : "bg-white"
+                                  : "bg-white",
                               )}
                             />
                           </div>
@@ -11490,7 +11828,7 @@ export default function EditContestPage({
                                   className={cn(
                                     isDark
                                       ? "bg-[#180438] border border-gray-600 text-white"
-                                      : "bg-white"
+                                      : "bg-white",
                                   )}
                                 />
                               </div>
@@ -11516,7 +11854,7 @@ export default function EditContestPage({
                                   className={cn(
                                     isDark
                                       ? "bg-[#180438] border border-gray-600 text-white"
-                                      : "bg-white"
+                                      : "bg-white",
                                   )}
                                 />
                               </div>
@@ -11542,7 +11880,7 @@ export default function EditContestPage({
                                   className={cn(
                                     isDark
                                       ? "bg-[#180438] border border-gray-600 text-white"
-                                      : "bg-white"
+                                      : "bg-white",
                                   )}
                                 />
                               </div>
@@ -11568,7 +11906,7 @@ export default function EditContestPage({
                                   className={cn(
                                     isDark
                                       ? "bg-[#180438] border border-gray-600 text-white"
-                                      : "bg-white"
+                                      : "bg-white",
                                   )}
                                 />
                               </div>
@@ -11594,7 +11932,7 @@ export default function EditContestPage({
                                   className={cn(
                                     isDark
                                       ? "bg-[#180438] border border-gray-600 text-white"
-                                      : "bg-white"
+                                      : "bg-white",
                                   )}
                                 />
                               </div>
@@ -11624,7 +11962,7 @@ export default function EditContestPage({
                               className={cn(
                                 isDark
                                   ? "bg-[#180438] border border-gray-600 text-white"
-                                  : "bg-white"
+                                  : "bg-white",
                               )}
                             />
                           </div>
@@ -11673,7 +12011,7 @@ export default function EditContestPage({
                                   className={cn(
                                     isDark
                                       ? "bg-[#180438] border border-gray-600 text-white"
-                                      : "bg-white"
+                                      : "bg-white",
                                   )}
                                 />
                               </div>
@@ -11699,7 +12037,7 @@ export default function EditContestPage({
                                   className={cn(
                                     isDark
                                       ? "bg-[#180438] border border-gray-600 text-white"
-                                      : "bg-white"
+                                      : "bg-white",
                                   )}
                                 />
                               </div>
@@ -11725,7 +12063,7 @@ export default function EditContestPage({
                                   className={cn(
                                     isDark
                                       ? "bg-[#180438] border border-gray-600 text-white"
-                                      : "bg-white"
+                                      : "bg-white",
                                   )}
                                 />
                               </div>
@@ -11751,7 +12089,7 @@ export default function EditContestPage({
                                   className={cn(
                                     isDark
                                       ? "bg-[#180438] border border-gray-600 text-white"
-                                      : "bg-white"
+                                      : "bg-white",
                                   )}
                                 />
                               </div>
@@ -11777,7 +12115,7 @@ export default function EditContestPage({
                                   className={cn(
                                     isDark
                                       ? "bg-[#180438] border border-gray-600 text-white"
-                                      : "bg-white"
+                                      : "bg-white",
                                   )}
                                 />
                               </div>
@@ -11807,7 +12145,7 @@ export default function EditContestPage({
                               className={cn(
                                 isDark
                                   ? "bg-[#180438] border border-gray-600 text-white"
-                                  : "bg-white"
+                                  : "bg-white",
                               )}
                             />
                           </div>
@@ -11824,7 +12162,7 @@ export default function EditContestPage({
                       "border",
                       isDark
                         ? "bg-[#C9A7FF26] border-[#C9A7FF] text-white"
-                        : "bg-[#F0E7FD] border-[#4A00BE] text-purple-700"
+                        : "bg-[#F0E7FD] border-[#4A00BE] text-purple-700",
                     )}
                   >
                     <AlertDescription>
@@ -11844,7 +12182,7 @@ export default function EditContestPage({
                         className={cn(
                           isDark
                             ? "bg-[#180438] border border-gray-600"
-                            : "bg-white"
+                            : "bg-white",
                         )}
                         onChange={(e) => {
                           const value = e.target.value;
@@ -11916,7 +12254,7 @@ export default function EditContestPage({
                         className={cn(
                           isDark
                             ? "bg-[#180438] border border-gray-600"
-                            : "bg-white"
+                            : "bg-white",
                         )}
                         onChange={(e) => {
                           const value = e.target.value;
@@ -11990,7 +12328,7 @@ export default function EditContestPage({
                     className={cn(
                       isDark
                         ? "bg-[#180438] border border-gray-600"
-                        : "bg-white"
+                        : "bg-white",
                     )}
                     onChange={(e) => setTermsConditions(e.target.value)}
                     placeholder="Outline the specific terms and conditions for creators participating in this CPM contest..."
@@ -12000,6 +12338,31 @@ export default function EditContestPage({
                     These terms will be shown to creators. Be clear and concise.
                   </p>
                 </div>
+
+                {parseFloat(totalBudget.toString() || "0") * 100 <
+                  planFeatures.minContestBudget &&
+                  (totalBudget.toString() || "0").length > 0 && (
+                    <Alert
+                      className={cn(
+                        "border",
+                        isDark
+                          ? "bg-[#C9A7FF26] border-[#C9A7FF] text-white"
+                          : "bg-[#F0E7FD] border-[#4A00BE] text-purple-700",
+                      )}
+                    >
+                      <AlertDescription>
+                        The minimum contest budget for your{" "}
+                        {subscriptionPlans.find((p) => p.id === userPlan)
+                          ?.name || "current"}{" "}
+                        plan is{" "}
+                        {formatCurrencyFromCents(planFeatures.minContestBudget)}
+                        . Please increase your{" "}
+                        {contestType === "dual_rewards"
+                          ? "total contest budget."
+                          : "CPM pool budget."}
+                      </AlertDescription>
+                    </Alert>
+                  )}
               </div>
             </div>
           )}
@@ -12053,7 +12416,7 @@ export default function EditContestPage({
                   "space-y-3 rounded-lg border p-4",
                   isDark
                     ? "border-purple-600/50 bg-purple-900/20"
-                    : "border-purple-200 bg-purple-100/30"
+                    : "border-purple-200 bg-purple-100/30",
                 )}
               >
                 <div className="flex items-center justify-between">
@@ -12062,7 +12425,7 @@ export default function EditContestPage({
                       htmlFor="multiple-submissions"
                       className={cn(
                         "text-base font-medium",
-                        isDark ? "text-white" : "text-black"
+                        isDark ? "text-white" : "text-black",
                       )}
                     >
                       Allow Multiple Submissions
@@ -12070,7 +12433,7 @@ export default function EditContestPage({
                     <p
                       className={cn(
                         "text-sm text-muted-foreground mt-1",
-                        isDark ? "text-white" : "text-black"
+                        isDark ? "text-white" : "text-black",
                       )}
                     >
                       Enable creators to submit multiple entries to this
@@ -12116,7 +12479,7 @@ export default function EditContestPage({
                         className={cn(
                           isDark
                             ? "bg-purple-900/20 border border-gray-600 text-white"
-                            : "bg-white text-black"
+                            : "bg-white text-black",
                         )}
                         placeholder="e.g., 5"
                       />
@@ -12143,7 +12506,7 @@ export default function EditContestPage({
                         className={cn(
                           isDark
                             ? "bg-purple-900/20 border border-gray-600 text-white"
-                            : "bg-white text-black"
+                            : "bg-white text-black",
                         )}
                         placeholder="e.g., 500"
                       />
@@ -12162,63 +12525,69 @@ export default function EditContestPage({
                 <>
                   {contestType !== "milestone" && (
                     <>
-                      {/* Flat Fee Bonus */}
-                      <div className="space-y-2">
-                        <Label htmlFor="flat-fee-bonus">
-                          Flat Fee Bonus Per Verified Submission (Optional)
-                        </Label>
-                        <Input
-                          id="flat-fee-bonus"
-                          type="number"
-                          step="0.01"
-                          min="0"
-                          value={flatFeeBonus}
-                          className={cn(
-                            isDark
-                              ? "bg-[#180438] border border-gray-600 text-white"
-                              : "bg-white text-black"
-                          )}
-                          onChange={(e) => setFlatFeeBonus(e.target.value)}
-                          placeholder="e.g., 10.00"
-                        />
-                        <p className="text-xs text-muted-foreground">
-                          🎁 Guaranteed payment for EVERY verified submission,
-                          regardless of views or ranking. Paid after contest ends.
-                          Great motivator for creators!
-                        </p>
-                      </div>
-                      {/* Flat Fee Bonus Cap (Only for CPM contests) */}
-                      {contestType === "cpm" &&
-                        flatFeeBonus &&
-                        parseFloat(flatFeeBonus.toString()) > 0 && (
+                      {contestType !== "dual_rewards" && (
+                        <>
+                          {/* Flat Fee Bonus — hidden for dual (CPM + milestone pools only) */}
                           <div className="space-y-2">
-                            <Label htmlFor="flat-fee-bonus-cap">
-                              Flat Fee Bonus Cap{" "}
-                              <span className="text-red-500">*</span>
+                            <Label htmlFor="flat-fee-bonus">
+                              Flat Fee Bonus Per Verified Submission (Optional)
                             </Label>
                             <Input
-                              id="flat-fee-bonus-cap"
+                              id="flat-fee-bonus"
                               type="number"
                               step="0.01"
                               min="0"
-                              required
-                              value={flatFeeBonusCap}
+                              value={flatFeeBonus}
                               className={cn(
                                 isDark
                                   ? "bg-[#180438] border border-gray-600 text-white"
-                                  : "bg-white text-black"
+                                  : "bg-white text-black",
                               )}
-                              onChange={(e) => setFlatFeeBonusCap(e.target.value)}
-                              placeholder="e.g., 20.00"
+                              onChange={(e) => setFlatFeeBonus(e.target.value)}
+                              placeholder="e.g., 10.00"
                             />
                             <p className="text-xs text-muted-foreground">
-                              💰 Maximum total flat fee bonus to distribute across
-                              all creators. Once this cap is reached, no more flat
-                              fee bonuses will be given. Must not exceed Total
-                              Budget.
+                              🎁 Guaranteed payment for EVERY verified
+                              submission, regardless of views or ranking. Paid
+                              after contest ends. Great motivator for creators!
                             </p>
                           </div>
-                        )}
+                          {/* Flat Fee Bonus Cap (Only for CPM contests) */}
+                          {contestType === "cpm" &&
+                            flatFeeBonus &&
+                            parseFloat(flatFeeBonus.toString()) > 0 && (
+                              <div className="space-y-2">
+                                <Label htmlFor="flat-fee-bonus-cap">
+                                  Flat Fee Bonus Cap{" "}
+                                  <span className="text-red-500">*</span>
+                                </Label>
+                                <Input
+                                  id="flat-fee-bonus-cap"
+                                  type="number"
+                                  step="0.01"
+                                  min="0"
+                                  required
+                                  value={flatFeeBonusCap}
+                                  className={cn(
+                                    isDark
+                                      ? "bg-[#180438] border border-gray-600 text-white"
+                                      : "bg-white text-black",
+                                  )}
+                                  onChange={(e) =>
+                                    setFlatFeeBonusCap(e.target.value)
+                                  }
+                                  placeholder="e.g., 20.00"
+                                />
+                                <p className="text-xs text-muted-foreground">
+                                  💰 Maximum total flat fee bonus to distribute
+                                  across all creators. Once this cap is reached,
+                                  no more flat fee bonuses will be given. Must
+                                  not exceed Total Budget.
+                                </p>
+                              </div>
+                            )}
+                        </>
+                      )}
 
                       {/* Total Budget for Bonuses (Only for Leaderboard contests with flat fee bonus) */}
                       {contestType === "leaderboard" &&
@@ -12241,7 +12610,7 @@ export default function EditContestPage({
                               className={cn(
                                 isDark
                                   ? "bg-[#180438] border border-gray-600 text-white"
-                                  : "bg-white text-black"
+                                  : "bg-white text-black",
                               )}
                             />
                             <p className="text-xs text-muted-foreground">
@@ -12270,7 +12639,7 @@ export default function EditContestPage({
                       "space-y-3 rounded-lg border p-4",
                       isDark
                         ? "border-[#C9A7FF] bg-[#C9A7FF26]"
-                        : "border-amber-200 bg-amber-100/30"
+                        : "border-amber-200 bg-amber-100/30",
                     )}
                   >
                     <div className="flex items-center justify-between">
@@ -12284,7 +12653,7 @@ export default function EditContestPage({
                         <p
                           className={cn(
                             "text-sm mt-1",
-                            isDark ? "text-gray-400" : "text-gray-600"
+                            isDark ? "text-gray-400" : "text-gray-600",
                           )}
                         >
                           Describe other bonuses (top creator rewards, affiliate
@@ -12325,7 +12694,7 @@ export default function EditContestPage({
                               "text-sm font-semibold",
                               isDark
                                 ? "bg-[#7F39EC] text-white"
-                                : "border border-[#4A00BE] text-[#4A00BE]"
+                                : "border border-[#4A00BE] text-[#4A00BE]",
                             )}
                           >
                             {showBonusPreview ? "Edit" : "Preview"}
@@ -12337,10 +12706,12 @@ export default function EditContestPage({
                               "prose max-w-none p-4 border rounded-lg min-h-[200px]",
                               isDark
                                 ? "bg-[#180438] border-gray-700 prose-invert prose-headings:text-white prose-p:text-white prose-strong:text-white prose-em:text-white prose-code:text-white"
-                                : "bg-white border-gray-200"
+                                : "bg-white border-gray-200",
                             )}
                           >
-                            <div dangerouslySetInnerHTML={{ __html: bonusHtml }} />
+                            <div
+                              dangerouslySetInnerHTML={{ __html: bonusHtml }}
+                            />
                           </div>
                         ) : (
                           <div
@@ -12348,7 +12719,7 @@ export default function EditContestPage({
                               "rounded-lg border",
                               isDark
                                 ? "bg-gray-900 border-gray-700"
-                                : "bg-white border-gray-200"
+                                : "bg-white border-gray-200",
                             )}
                           >
                             <NovelEditor
@@ -12367,7 +12738,7 @@ export default function EditContestPage({
                         <p
                           className={cn(
                             "text-xs",
-                            isDark ? "text-gray-400" : "text-gray-600"
+                            isDark ? "text-gray-400" : "text-gray-600",
                           )}
                         >
                           ℹ️ These bonuses are visible to creators but handled
@@ -12432,8 +12803,8 @@ export default function EditContestPage({
                       YouTube Analytics visibility (Brand view)
                     </h4>
                     <p className="text-sm text-muted-foreground">
-                      Choose which advanced YouTube analytics are visible to the advertiser on
-                      this campaign. Admins always see everything.
+                      Choose which advanced YouTube analytics are visible to the
+                      advertiser on this campaign. Admins always see everything.
                     </p>
                   </div>
                   <div className="space-y-2">
@@ -12453,7 +12824,8 @@ export default function EditContestPage({
                           Show Core Analytics
                         </Label>
                         <p className="text-xs text-muted-foreground">
-                          Avg view %, watch time, engaged views, shares, subscribers, playlists and bot score.
+                          Avg view %, watch time, engaged views, shares,
+                          subscribers, playlists and bot score.
                         </p>
                       </div>
                     </div>
@@ -12473,7 +12845,8 @@ export default function EditContestPage({
                           Show Traffic Sources
                         </Label>
                         <p className="text-xs text-muted-foreground">
-                          Breakdown of Shorts feed, search, external links and other traffic sources.
+                          Breakdown of Shorts feed, search, external links and
+                          other traffic sources.
                         </p>
                       </div>
                     </div>
@@ -12493,7 +12866,8 @@ export default function EditContestPage({
                           Show Demographics
                         </Label>
                         <p className="text-xs text-muted-foreground">
-                          Age groups, gender split and top countries for each submission.
+                          Age groups, gender split and top countries for each
+                          submission.
                         </p>
                       </div>
                     </div>
@@ -12520,14 +12894,14 @@ export default function EditContestPage({
                   <div className="text-sm mt-1 break-words">
                     {budgetDifference > 0
                       ? `Prize pool increased by ${formatCurrencyFromCents(
-                          budgetDifference
+                          budgetDifference,
                         )}. Original: ${formatCurrencyFromCents(
-                          originalBudget
+                          originalBudget,
                         )} → New Total: ${formatCurrencyFromCents(
-                          originalBudget + budgetDifference
+                          originalBudget + budgetDifference,
                         )}. Additional payment (including commission) will be required.`
                       : `Prize pool decreased by ${formatCurrencyFromCents(
-                          Math.abs(budgetDifference)
+                          Math.abs(budgetDifference),
                         )}. You will be refunded this amount plus commission.`}
                   </div>
                 </div>
@@ -12545,7 +12919,7 @@ export default function EditContestPage({
                 "border font-semibold px-4 py-2 rounded-lg text-md w-full sm:w-auto",
                 isDark
                   ? "text-white border-gray-400"
-                  : "border-[#4A00BE] bg-white text-[#4A00BE]"
+                  : "border-[#4A00BE] bg-white text-[#4A00BE]",
               )}
             >
               Cancel
@@ -12560,7 +12934,7 @@ export default function EditContestPage({
                   disabled={isSubmitting || !!validationError}
                   className={cn(
                     "border text-white h-[38px] font-semibold px-3 sm:px-4 py-2 rounded-lg text-sm w-full sm:w-auto flex-shrink-0 whitespace-nowrap",
-                    isDark ? "bg-[#7F39EC]" : "bg-[#4A00BE]"
+                    isDark ? "bg-[#7F39EC]" : "bg-[#4A00BE]",
                   )}
                 >
                   {isSubmitting ? (
@@ -12581,7 +12955,7 @@ export default function EditContestPage({
                         "border h-[38px] font-semibold px-3 sm:px-4 py-2 rounded-lg text-sm w-full sm:w-auto flex-shrink-0 whitespace-nowrap",
                         isDark
                           ? "text-white border-gray-400"
-                          : "border-[#4A00BE] bg-white text-[#4A00BE]"
+                          : "border-[#4A00BE] bg-white text-[#4A00BE]",
                       )}
                       onClick={handleSaveAsDraft}
                       disabled={isSubmitting || !!validationError}
@@ -12600,7 +12974,7 @@ export default function EditContestPage({
                       disabled={isSubmitting || !!validationError}
                       className={cn(
                         "border h-[38px] font-semibold px-3 sm:px-4 py-2 rounded-lg text-sm w-full sm:w-auto flex-shrink-0 whitespace-nowrap",
-                        isDark ? "bg-[#7F39EC]" : "bg-[#4A00BE]"
+                        isDark ? "bg-[#7F39EC]" : "bg-[#4A00BE]",
                       )}
                     >
                       {isSubmitting ? (
@@ -12666,13 +13040,13 @@ export default function EditContestPage({
         <div
           className={cn(
             "fixed inset-0 bg-opacity-65 flex items-center justify-center p-2 sm:p-4 z-50",
-            isDark ? "bg-[#100A33]" : "bg-black"
+            isDark ? "bg-[#100A33]" : "bg-black",
           )}
         >
           <div
             className={cn(
               "rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto",
-              isDark ? "bg-[#06021D] border border-gray-800" : "bg-white"
+              isDark ? "bg-[#06021D] border border-gray-800" : "bg-white",
             )}
           >
             <div className="p-6">
@@ -12680,7 +13054,7 @@ export default function EditContestPage({
                 <h2
                   className={cn(
                     "text-2xl font-bold mb-2",
-                    isDark ? "text-white" : "text-gray-900"
+                    isDark ? "text-white" : "text-gray-900",
                   )}
                 >
                   Refund Preview
@@ -12688,7 +13062,7 @@ export default function EditContestPage({
                 <p
                   className={cn(
                     "text-gray-600",
-                    isDark ? "text-white" : "text-gray-600"
+                    isDark ? "text-white" : "text-gray-600",
                   )}
                 >
                   Review the refund details before proceeding
@@ -12701,7 +13075,7 @@ export default function EditContestPage({
                     "mb-4 border",
                     isDark
                       ? "bg-[#C9A7FF26] border-[#C9A7FF] text-white"
-                      : "border-green-200 bg-green-50"
+                      : "border-green-200 bg-green-50",
                   )}
                 >
                   <CheckCircle2 className="h-4 w-4" />
@@ -12720,13 +13094,13 @@ export default function EditContestPage({
                     "p-4 rounded-lg space-y-3",
                     isDark
                       ? "bg-[#1F0944] text-white"
-                      : "bg-gray-50 text-gray-800"
+                      : "bg-gray-50 text-gray-800",
                   )}
                 >
                   <h3
                     className={cn(
                       "font-semibold text-gray-900 mb-3",
-                      isDark ? "text-white" : "text-gray-900"
+                      isDark ? "text-white" : "text-gray-900",
                     )}
                   >
                     Refund Breakdown
@@ -12737,12 +13111,12 @@ export default function EditContestPage({
                       <span>Prize Pool Reduction:</span>
                       <span className="font-medium">
                         {formatCurrencyFromCents(
-                          refundDetails.prizePoolDecrease
+                          refundDetails.prizePoolDecrease,
                         )}
                       </span>
                       <span className="font-medium">
                         {formatCurrencyFromCents(
-                          refundDetails.prizePoolDecrease
+                          refundDetails.prizePoolDecrease,
                         )}
                       </span>
                     </div>
@@ -12754,7 +13128,7 @@ export default function EditContestPage({
                       </span>
                       <span className="font-medium">
                         {formatCurrencyFromCents(
-                          refundDetails.commissionRefund
+                          refundDetails.commissionRefund,
                         )}
                       </span>
                       <span>
@@ -12763,7 +13137,7 @@ export default function EditContestPage({
                       </span>
                       <span className="font-medium">
                         {formatCurrencyFromCents(
-                          refundDetails.commissionRefund
+                          refundDetails.commissionRefund,
                         )}
                       </span>
                     </div>
@@ -12787,7 +13161,7 @@ export default function EditContestPage({
                     "mt-4 p-3 rounded-lg border",
                     isDark
                       ? "bg-[#FDD36F5C] border-[#FDD36F5C] text-[#FDD36F]"
-                      : "border border-blue-200 text-blue-800"
+                      : "border border-blue-200 text-blue-800",
                   )}
                 >
                   <p className="text-sm ">
@@ -12806,7 +13180,7 @@ export default function EditContestPage({
                     "w-full text-md rounded-full py-3 flex items-center justify-center",
                     isDark
                       ? "bg-[#7F39EC] text-white"
-                      : " bg-[#D9C0FF61] text-[#7F39EC] "
+                      : " bg-[#D9C0FF61] text-[#7F39EC] ",
                   )}
                 >
                   {isSubmitting ? (
@@ -12831,7 +13205,7 @@ export default function EditContestPage({
                     "w-full text-md rounded-full py-3",
                     isDark
                       ? "border border-[#FF5353] text-[#FF5353]"
-                      : "bg-[#FF323224] text-[#E50000]"
+                      : "bg-[#FF323224] text-[#E50000]",
                   )}
                   disabled={isSubmitting}
                 >
@@ -12848,7 +13222,7 @@ export default function EditContestPage({
         <div
           className={cn(
             "fixed inset-0 bg-black bg-opacity-65 flex items-center justify-center p-2 sm:p-4 z-50",
-            isDark ? "bg-[#100A33]" : "bg-black"
+            isDark ? "bg-[#100A33]" : "bg-black",
           )}
         >
           <div
@@ -12856,7 +13230,7 @@ export default function EditContestPage({
               "rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto",
               isDark
                 ? "bg-[#06021D] border border-gray-800 text-white"
-                : "bg-white text-gray-900 "
+                : "bg-white text-gray-900 ",
             )}
           >
             <div className="p-6">
@@ -12876,10 +13250,6 @@ export default function EditContestPage({
                       created with a {contestCommissionRate}% commission rate.
                       Your current plan has a {currentPlanCommissionRate}%
                       commission rate.
-                      <strong>Commission Rate Notice:</strong> This contest was
-                      created with a {contestCommissionRate}% commission rate.
-                      Your current plan has a {currentPlanCommissionRate}%
-                      commission rate.
                       <br />
                       <span className="text-sm">
                         If you want to use your new plan's commission rate,
@@ -12895,7 +13265,7 @@ export default function EditContestPage({
                     "mb-4 w-full border",
                     isDark
                       ? "bg-[#C9A7FF26] border-[#C9A7FF] text-white"
-                      : "bg-[#D9C0FF26] border-[#7F39EC] text-gray-900"
+                      : "bg-[#D9C0FF26] border-[#7F39EC] text-gray-900",
                   )}
                 >
                   <AlertTriangle className="h-4 w-4 flex-shrink-0" />
@@ -12907,7 +13277,7 @@ export default function EditContestPage({
                       Original: {formatCurrencyFromCents(originalBudget)} → New
                       Total:{" "}
                       {formatCurrencyFromCents(
-                        originalBudget + budgetDifference
+                        originalBudget + budgetDifference,
                       )}
                     </span>
                     <br />
@@ -12921,60 +13291,60 @@ export default function EditContestPage({
                   budgetChanged && budgetDifference > 0
                     ? budgetDifference / 100 // Prize pool increase amount in dollars
                     : contestType === "leaderboard"
-                    ? (() => {
-                        // For leaderboard contests, charge prize pool + total budget (if flat fee bonus is enabled)
-                        const prizePoolDollars =
-                          winnerAmounts.reduce(
-                            (sum, amount) => sum + (amount || 0),
-                            0
-                          ) / 100;
-                        const flatFeeBonusEnabled =
-                          flatFeeBonus &&
-                          parseFloat(flatFeeBonus.toString()) > 0;
-                        const totalBudgetDollars =
-                          flatFeeBonusEnabled &&
-                          totalBudget &&
-                          parseFloat(totalBudget.toString()) > 0
-                            ? parseFloat(totalBudget.toString())
-                            : 0;
-                        return prizePoolDollars + totalBudgetDollars;
-                      })()
-                    : parseFloat(totalBudget.toString()) || 0
+                      ? (() => {
+                          // For leaderboard contests, charge prize pool + total budget (if flat fee bonus is enabled)
+                          const prizePoolDollars =
+                            winnerAmounts.reduce(
+                              (sum, amount) => sum + (amount || 0),
+                              0,
+                            ) / 100;
+                          const flatFeeBonusEnabled =
+                            flatFeeBonus &&
+                            parseFloat(flatFeeBonus.toString()) > 0;
+                          const totalBudgetDollars =
+                            flatFeeBonusEnabled &&
+                            totalBudget &&
+                            parseFloat(totalBudget.toString()) > 0
+                              ? parseFloat(totalBudget.toString())
+                              : 0;
+                          return prizePoolDollars + totalBudgetDollars;
+                        })()
+                      : parseFloat(totalBudget.toString()) || 0
                 } // Budget is already in dollars
                 prizePoolAmount={
                   budgetChanged && budgetDifference > 0
                     ? budgetDifference / 100
                     : contestType === "leaderboard"
-                    ? winnerAmounts.reduce(
-                        (sum, amount) => sum + (amount || 0),
-                        0
-                      ) / 100
-                    : undefined
+                      ? winnerAmounts.reduce(
+                          (sum, amount) => sum + (amount || 0),
+                          0,
+                        ) / 100
+                      : undefined
                 }
                 bonusBudgetAmount={
                   budgetChanged && budgetDifference > 0
                     ? 0
                     : contestType === "leaderboard"
-                    ? (() => {
-                        const flatFeeBonusEnabled =
-                          flatFeeBonus &&
-                          parseFloat(flatFeeBonus.toString()) > 0;
-                        const totalBudgetDollars =
-                          flatFeeBonusEnabled &&
-                          totalBudget &&
-                          parseFloat(totalBudget.toString()) > 0
-                            ? parseFloat(totalBudget.toString())
-                            : 0;
-                        return totalBudgetDollars || undefined;
-                      })()
-                    : undefined
+                      ? (() => {
+                          const flatFeeBonusEnabled =
+                            flatFeeBonus &&
+                            parseFloat(flatFeeBonus.toString()) > 0;
+                          const totalBudgetDollars =
+                            flatFeeBonusEnabled &&
+                            totalBudget &&
+                            parseFloat(totalBudget.toString()) > 0
+                              ? parseFloat(totalBudget.toString())
+                              : 0;
+                          return totalBudgetDollars || undefined;
+                        })()
+                      : undefined
                 }
                 contestTitle={title || "Untitled Contest"}
                 contestId={contestId}
                 commissionPercentage={
                   contestCommissionRate !== null
                     ? contestCommissionRate
-                    : getPlanFeatures(userPlan).commissionPercentage ?? 0
+                    : (getPlanFeatures(userPlan).commissionPercentage ?? 0)
                 }
                 onPaymentSuccess={handlePaymentSuccess}
                 onPaymentError={handlePaymentError}
@@ -12989,7 +13359,7 @@ export default function EditContestPage({
                     "w-full text-md rounded-full",
                     isDark
                       ? "py-3 border border-[#FF5353] bg-[#06021D] text-[#FF5353]"
-                      : "bg-[#FF323224] text-[#E50000] py-4"
+                      : "bg-[#FF323224] text-[#E50000] py-4",
                   )}
                   onClick={() => setShowPayment(false)}
                   disabled={isSubmitting}

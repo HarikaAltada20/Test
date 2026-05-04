@@ -42,6 +42,7 @@ import {
   calculateTwitterCpmBudgetSpent,
   Submission,
 } from "@/lib/contest-utils-client";
+import { getPoolBudgetCentsFromDetails } from "@/lib/contest-type";
 import { computeMilestoneContestExpectedSpendCents } from "@/lib/milestone-contest-expected-spend";
 import { getPlatformIconWithFallback } from "@/lib/platform-icons";
 import { cn } from "@/lib/utils";
@@ -1223,6 +1224,14 @@ export default function OpportunitiesPage({
           ) {
             valueA =
               a.contest_based_details.milestone_contest.total_budget_cents;
+          } else if (
+            a.contest_type === "dual_rewards" &&
+            a.contest_based_details
+          ) {
+            valueA = getPoolBudgetCentsFromDetails(
+              a.contest_type,
+              a.contest_based_details,
+            );
           }
           if (
             b.contest_type === "leaderboard" &&
@@ -1240,6 +1249,14 @@ export default function OpportunitiesPage({
           ) {
             valueB =
               b.contest_based_details.milestone_contest.total_budget_cents;
+          } else if (
+            b.contest_type === "dual_rewards" &&
+            b.contest_based_details
+          ) {
+            valueB = getPoolBudgetCentsFromDetails(
+              b.contest_type,
+              b.contest_based_details,
+            );
           }
           if (sortOption === "value_desc") {
             return valueB - valueA;

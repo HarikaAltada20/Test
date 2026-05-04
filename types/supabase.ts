@@ -299,7 +299,7 @@ export interface Database {
           tracking_links: { url: string; description: string }[] | null;
           created_at: string;
           updated_at: string;
-          contest_type: "leaderboard" | "cpm" | "milestone";
+          contest_type: "leaderboard" | "cpm" | "milestone" | "dual_rewards";
           contest_based_details: Json | null;
           post_contest_status:
             | "pending_review"
@@ -354,7 +354,11 @@ export interface Database {
           tracking_links?: { url: string; description: string }[] | null;
           created_at?: string;
           updated_at?: string;
-          contest_type?: "leaderboard" | "cpm" | "milestone";
+          contest_type?:
+            | "leaderboard"
+            | "cpm"
+            | "milestone"
+            | "dual_rewards";
           contest_based_details?: Json | null;
           post_contest_status?:
             | "pending_review"
@@ -407,7 +411,11 @@ export interface Database {
           inspiration_links?: { url: string; description: string }[] | null;
           created_at?: string;
           updated_at?: string;
-          contest_type?: "leaderboard" | "cpm" | "milestone";
+          contest_type?:
+            | "leaderboard"
+            | "cpm"
+            | "milestone"
+            | "dual_rewards";
           contest_based_details?: Json | null;
           post_contest_status?:
             | "pending_review"
@@ -876,7 +884,12 @@ export interface Database {
           tracking_links: { url: string; description: string }[] | null;
           created_at: string | null;
           updated_at: string | null;
-          contest_type: "leaderboard" | "cpm" | "milestone" | null;
+          contest_type:
+            | "leaderboard"
+            | "cpm"
+            | "milestone"
+            | "dual_rewards"
+            | null;
           contest_based_details: Json | null;
           post_contest_status:
             | "pending_review"

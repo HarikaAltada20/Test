@@ -57,6 +57,7 @@ import {
   getEndedOpportunityPhaseLabel,
 } from "@/lib/contest-ended-phase-display";
 import { formatCurrencyFromCents as formatMoney } from "@/lib/currency-utils";
+import { getPoolBudgetCentsFromDetails } from "@/lib/contest-type";
 import {
   calculateLeaderboardBudgetSpent,
   Submission,
@@ -352,6 +353,15 @@ const getContestValueForSort = (contest: Contest): number => {
   ) {
     return contest.contest_based_details.milestone_contest.total_budget_cents;
   }
+  if (
+    contest.contest_type === "dual_rewards" &&
+    contest.contest_based_details
+  ) {
+    return getPoolBudgetCentsFromDetails(
+      contest.contest_type,
+      contest.contest_based_details,
+    );
+  }
   return 0;
 };
 
@@ -366,9 +376,15 @@ const getContestPrimaryFinancialText = (contest: Contest): string => {
       contest.contest_based_details?.milestone_contest?.total_budget_cents || 0,
     )}`;
   }
-  return `Budget: ${formatMoney(
-    contest.contest_based_details?.cpm_contest?.total_budget || 0,
-  )}`;
+  if (contest.contest_type === "cpm" || contest.contest_type === "dual_rewards") {
+    return `Budget: ${formatMoney(
+      getPoolBudgetCentsFromDetails(
+        contest.contest_type,
+        contest.contest_based_details,
+      ),
+    )}`;
+  }
+  return `Budget: ${formatMoney(0)}`;
 };
 
 export function ContestListClient({
@@ -1378,18 +1394,22 @@ export function ContestListClient({
                     </span>
                   </div>
                 )}
-              {contest.contest_type === "cpm" &&
-                contest.contest_based_details?.cpm_contest?.total_budget !=
-                  null &&
-                contest.contest_based_details.cpm_contest.total_budget > 0 && (
+              {(contest.contest_type === "cpm" ||
+                contest.contest_type === "dual_rewards") &&
+                getPoolBudgetCentsFromDetails(
+                  contest.contest_type,
+                  contest.contest_based_details,
+                ) > 0 && (
                   <div className="flex items-center">
                     <DollarSign className="h-4 w-4 mr-2 flex-shrink-0" />
                     <span>
                       Total Budget:{" "}
                       <span className="font-medium ">
                         {formatMoney(
-                          contest.contest_based_details.cpm_contest
-                            .total_budget,
+                          getPoolBudgetCentsFromDetails(
+                            contest.contest_type,
+                            contest.contest_based_details,
+                          ),
                         )}
                       </span>
                     </span>
@@ -1451,17 +1471,22 @@ export function ContestListClient({
                 )}
             </div>
 
-            {/* Budget Spent Progress Bar for CPM contests */}
-            {contest.contest_type === "cpm" &&
-              contest.contest_based_details?.cpm_contest?.total_budget !=
-                null &&
-              contest.contest_based_details.cpm_contest.total_budget > 0 &&
+            {/* Budget Spent Progress Bar for CPM and dual contests */}
+            {(contest.contest_type === "cpm" ||
+              contest.contest_type === "dual_rewards") &&
+              getPoolBudgetCentsFromDetails(
+                contest.contest_type,
+                contest.contest_based_details,
+              ) > 0 &&
               (() => {
-                const totalBudget =
-                  contest.contest_based_details.cpm_contest.total_budget;
+                const totalBudget = getPoolBudgetCentsFromDetails(
+                  contest.contest_type,
+                  contest.contest_based_details,
+                );
                 // Use real-time updated budget_spent field
                 const budgetSpent =
-                  contest.contest_based_details.cpm_contest.budget_spent || 0;
+                  contest.contest_based_details?.cpm_contest
+                    ?.budget_spent ?? 0;
                 const percentage = (budgetSpent / totalBudget) * 100;
                 const remaining = totalBudget - budgetSpent;
 
@@ -2261,11 +2286,12 @@ export function ContestListClient({
                       </span>
                     </div>
                   )}
-                {contest.contest_type === "cpm" &&
-                  contest.contest_based_details?.cpm_contest?.total_budget !=
-                    null &&
-                  contest.contest_based_details.cpm_contest.total_budget >
-                    0 && (
+                {(contest.contest_type === "cpm" ||
+                  contest.contest_type === "dual_rewards") &&
+                  getPoolBudgetCentsFromDetails(
+                    contest.contest_type,
+                    contest.contest_based_details,
+                  ) > 0 && (
                     <div className="flex items-center">
                       <DollarSign className="h-4 w-4 mr-2 flex-shrink-0" />
                       <span
@@ -2277,8 +2303,10 @@ export function ContestListClient({
                         Total Budget:{" "}
                         <span className="font-medium">
                           {formatMoney(
-                            contest.contest_based_details.cpm_contest
-                              .total_budget,
+                            getPoolBudgetCentsFromDetails(
+                              contest.contest_type,
+                              contest.contest_based_details,
+                            ),
                           )}
                         </span>
                       </span>
@@ -2332,16 +2360,21 @@ export function ContestListClient({
                   )}
               </div>
 
-              {/* Budget Spent Progress Bar for CPM contests */}
-              {contest.contest_type === "cpm" &&
-                contest.contest_based_details?.cpm_contest?.total_budget !=
-                  null &&
-                contest.contest_based_details.cpm_contest.total_budget > 0 &&
+              {/* Budget Spent Progress Bar for CPM and dual contests */}
+              {(contest.contest_type === "cpm" ||
+                contest.contest_type === "dual_rewards") &&
+                getPoolBudgetCentsFromDetails(
+                  contest.contest_type,
+                  contest.contest_based_details,
+                ) > 0 &&
                 (() => {
-                  const totalBudget =
-                    contest.contest_based_details.cpm_contest.total_budget;
+                  const totalBudget = getPoolBudgetCentsFromDetails(
+                    contest.contest_type,
+                    contest.contest_based_details,
+                  );
                   const budgetSpent =
-                    contest.contest_based_details.cpm_contest.budget_spent || 0;
+                    contest.contest_based_details?.cpm_contest
+                      ?.budget_spent ?? 0;
                   const percentage = (budgetSpent / totalBudget) * 100;
                   const remaining = totalBudget - budgetSpent;
 
@@ -2855,10 +2888,19 @@ export function ContestListClient({
           ) {
             valueA = a.contest_based_details.leaderboard_contest.total_prize;
           } else if (
-            a.contest_type === "cpm" &&
-            a.contest_based_details?.cpm_contest?.total_budget
+            a.contest_type === "milestone" &&
+            a.contest_based_details?.milestone_contest?.total_budget_cents
           ) {
-            valueA = a.contest_based_details.cpm_contest.total_budget;
+            valueA =
+              a.contest_based_details.milestone_contest.total_budget_cents;
+          } else if (
+            (a.contest_type === "cpm" || a.contest_type === "dual_rewards") &&
+            a.contest_based_details
+          ) {
+            valueA = getPoolBudgetCentsFromDetails(
+              a.contest_type,
+              a.contest_based_details,
+            );
           }
           if (
             b.contest_type === "leaderboard" &&
@@ -2866,10 +2908,19 @@ export function ContestListClient({
           ) {
             valueB = b.contest_based_details.leaderboard_contest.total_prize;
           } else if (
-            b.contest_type === "cpm" &&
-            b.contest_based_details?.cpm_contest?.total_budget
+            b.contest_type === "milestone" &&
+            b.contest_based_details?.milestone_contest?.total_budget_cents
           ) {
-            valueB = b.contest_based_details.cpm_contest.total_budget;
+            valueB =
+              b.contest_based_details.milestone_contest.total_budget_cents;
+          } else if (
+            (b.contest_type === "cpm" || b.contest_type === "dual_rewards") &&
+            b.contest_based_details
+          ) {
+            valueB = getPoolBudgetCentsFromDetails(
+              b.contest_type,
+              b.contest_based_details,
+            );
           }
           return sortOption === "value_desc"
             ? valueB - valueA

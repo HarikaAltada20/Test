@@ -13,6 +13,7 @@ import {
   clearContestsCache,
 } from "@/lib/cache-utils";
 import { computeMilestoneContestExpectedSpendCents } from "@/lib/milestone-contest-expected-spend";
+import { isCpmContestType, isMilestoneContestType } from "@/lib/contest-type";
 
 type ContestWithDetails = {
   id: string;
@@ -73,7 +74,7 @@ async function enrichContestWithCalculatedBudgets(
   supabase: SupabaseClient,
 ) {
   const cacheKey = getContestDetailsCacheKey(contest.id);
-  const isMilestone = contest.contest_type === "milestone";
+  const isMilestone = isMilestoneContestType(contest.contest_type);
   // Milestone budget_spent is derived from live submissions; do not serve stale cached rows.
   if (!isMilestone) {
     const cachedData = contestDetailsCache.get<ContestWithDetails>(cacheKey);
@@ -275,7 +276,7 @@ async function enrichContestWithCalculatedBudgets(
         },
       },
     };
-  } else if (contest.contest_type === "cpm" && hasCpmRate) {
+  } else if (isCpmContestType(contest.contest_type) && hasCpmRate) {
     const { data: submissions, error: submissionsError } = await supabase
       .from("submissions")
       .select(
@@ -363,7 +364,7 @@ async function enrichContestWithCalculatedBudgets(
   const milestoneContestDetails =
     normalizeContestDetails(updatedContest).milestone_contest;
   if (
-    contest.contest_type === "milestone" &&
+    isMilestoneContestType(contest.contest_type) &&
     milestoneContestDetails &&
     Array.isArray(milestoneContestDetails.milestones) &&
     milestoneContestDetails.milestones.length > 0

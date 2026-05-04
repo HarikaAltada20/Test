@@ -4,6 +4,10 @@ import { REVERSAL_TRANSACTION_REMARK } from "@/lib/payment-utils";
 import { redirect } from "next/navigation";
 import ContestDetailClient from "./contest-detail-client"; // Import the new client component
 import { TooltipProvider } from "@/components/ui/tooltip";
+import {
+  isCpmContestType,
+  isMilestoneContestType,
+} from "@/lib/contest-type";
 
 /** Load all matching twitter_campaign_tweets in chunks (SSR). Default 50-row cap hid tweets from UI. */
 async function fetchTwitterTweetsAllPages(
@@ -635,7 +639,7 @@ export default async function ContestDetailPage({
     string,
     { viewsPaidCents: number; reelsPaidCents: number }
   > = {};
-  if (contestData.contest_type === "milestone") {
+  if (isMilestoneContestType(contestData.contest_type)) {
     try {
       const supabaseAdmin = createAdminClient();
       const [{ data: milestoneRewards }, { data: milestoneRefunds }] =
@@ -782,7 +786,7 @@ export default async function ContestDetailPage({
 
       // Get moderation_status (default to "pending" if column doesn't exist)
       const moderationStatus = (tweet as any).moderation_status || "pending";
-      const isCpm = contestData.contest_type === "cpm";
+      const isCpm = isCpmContestType(contestData.contest_type);
       const cpmRate =
         (contestData.contest_based_details as any)?.cpm_contest
           ?.cpm_rate_usd || 0;

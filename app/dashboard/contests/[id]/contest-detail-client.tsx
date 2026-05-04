@@ -156,6 +156,12 @@ import {
   Columns2,
 } from "lucide-react";
 import { CONTENT_TYPE_CATEGORIES } from "@/constants/contentCategories";
+import {
+  getPoolBudgetCentsFromDetails,
+  isCpmContestType,
+  isDualRewardsContestType,
+  isMilestoneContestType,
+} from "@/lib/contest-type";
 
 // YouTube submissions table: configurable column ids (for "Modify headers" feature)
 const YT_TABLE_COLUMNS = [
@@ -232,7 +238,12 @@ interface Contest {
     | "verification_complete"
     | "payouts_processed"
     | null;
-  contest_type?: "leaderboard" | "cpm" | "milestone" | null;
+  contest_type?:
+    | "leaderboard"
+    | "cpm"
+    | "milestone"
+    | "dual_rewards"
+    | null;
   thumbnail_url?: string | null;
   brief_html?: string | null;
   platform?: string | null;
@@ -865,7 +876,7 @@ export default function ContestDetailClient({
     currentContest.platform?.toLowerCase() === "twitter" ||
     currentContest.platform?.toLowerCase() === "x";
   const isTwitterCpmCampaign =
-    currentContest?.contest_type === "cpm" &&
+    isCpmContestType(currentContest?.contest_type) &&
     isTwitterPlatform &&
     currentContest?.contest_format === "text_image";
 
@@ -1085,7 +1096,7 @@ export default function ContestDetailClient({
     if (!creatorId) return;
 
     const isTwitterCpm =
-      currentContest?.contest_type === "cpm" &&
+      isCpmContestType(currentContest?.contest_type) &&
       (currentContest?.platform?.toLowerCase() === "twitter" ||
         currentContest?.platform?.toLowerCase() === "x") &&
       currentContest?.contest_format === "text_image";
@@ -1450,7 +1461,7 @@ export default function ContestDetailClient({
     labelMap: Map<string, string>;
     winnerCountsByMilestone: Map<number, number>;
   }>(() => {
-    if (currentContest?.contest_type !== "milestone") {
+    if (!isMilestoneContestType(currentContest?.contest_type)) {
       return {
         payoutMap: new Map<string, number>(),
         labelMap: new Map<string, string>(),
@@ -1639,7 +1650,7 @@ export default function ContestDetailClient({
 
             // DEBUG: Log each submission's base points contribution for Twitter CPM
             if (
-              currentContest?.contest_type === "cpm" &&
+              isCpmContestType(currentContest?.contest_type) &&
               currentContest?.platform === "twitter"
             ) {
               console.log(
@@ -1785,7 +1796,7 @@ export default function ContestDetailClient({
           current_rank: leaderboardData.current_rank || null,
           paid:
             leaderboardData.moderation_status === "paid" ||
-            (currentContest?.contest_type === "cpm" &&
+            (isCpmContestType(currentContest?.contest_type) &&
               creatorSubmissions.some(
                 (s: any) =>
                   (s as any).paid || (s as any).moderation_status === "paid",
@@ -2052,17 +2063,21 @@ export default function ContestDetailClient({
 
         // Get flat_fee_bonus from the correct nested location
         const flatFeeBonus =
-          currentContest?.contest_type === "cpm"
+          isCpmContestType(currentContest?.contest_type)
             ? (currentContest?.contest_based_details as any)?.cpm_contest
                 ?.flat_fee_bonus || 0
             : (currentContest?.contest_based_details as any)
                 ?.leaderboard_contest?.flat_fee_bonus || 0;
 
         // Calculate bonus with budget constraints (include paid so Bonus Expected is not 0 after grant)
-        if (flatFeeBonus > 0) {
+        // Dual rewards: pool covers CPM + milestones; no per-submission flat fee bonus here.
+        if (
+          flatFeeBonus > 0 &&
+          !isDualRewardsContestType(currentContest?.contest_type)
+        ) {
           // Check budget constraints before adding expected bonus
           const totalBudget =
-            currentContest?.contest_type === "cpm"
+            isCpmContestType(currentContest?.contest_type)
               ? (currentContest?.contest_based_details as any)?.cpm_contest
                   ?.total_budget || 0
               : (currentContest?.contest_based_details as any)
@@ -2070,7 +2085,7 @@ export default function ContestDetailClient({
 
           // For CPM contests, check flat_fee_bonus_cap if configured
           const bonusBudget =
-            currentContest?.contest_type === "cpm"
+            isCpmContestType(currentContest?.contest_type)
               ? (currentContest?.contest_based_details as any)?.cpm_contest
                   ?.flat_fee_bonus_cap || totalBudget
               : totalBudget;
@@ -2104,12 +2119,16 @@ export default function ContestDetailClient({
       if (submission.bonus_paid) {
         // Use actual bonus_amount from database if available
         const flatFeeBonus =
-          currentContest?.contest_type === "cpm"
+          isCpmContestType(currentContest?.contest_type)
             ? (currentContest?.contest_based_details as any)?.cpm_contest
                 ?.flat_fee_bonus || 0
             : (currentContest?.contest_based_details as any)
                 ?.leaderboard_contest?.flat_fee_bonus || 0;
-        const actualBonus = (submission as any).bonus_amount || flatFeeBonus;
+        const actualBonus = isDualRewardsContestType(
+          currentContest?.contest_type,
+        )
+          ? Number((submission as any).bonus_amount) || 0
+          : (submission as any).bonus_amount || flatFeeBonus;
         group.bonus.granted += actualBonus;
       }
 
@@ -2138,7 +2157,7 @@ export default function ContestDetailClient({
         group.metrics.tweet_manual_points_adjustment += submissionManualPoints;
 
         if (
-          currentContest?.contest_type === "cpm" &&
+          isCpmContestType(currentContest?.contest_type) &&
           currentContest?.platform === "twitter"
         ) {
           console.log(
@@ -2194,10 +2213,15 @@ export default function ContestDetailClient({
 
       if (!isTwitterTweet) {
         // Use formula-only expected so "Expected Reward" column does not become equal to "Reward Granted" after payment
-        const submissionEarnings =
-          currentContest?.contest_type === "milestone"
-            ? (milestoneSubmissionExpectedPayoutCents.get(submission.id) ?? 0)
-            : calculateSubmissionExpectedEarnings(submission, false);
+        const milestoneCents = isMilestoneContestType(
+          currentContest?.contest_type,
+        )
+          ? (milestoneSubmissionExpectedPayoutCents.get(submission.id) ?? 0)
+          : 0;
+        const cpmCents = isCpmContestType(currentContest?.contest_type)
+          ? calculateSubmissionExpectedEarnings(submission, false)
+          : 0;
+        const submissionEarnings = milestoneCents + cpmCents;
         group.earnings.expected += submissionEarnings;
         if (isSubmissionPaidForGrantedReward(submission)) {
           const storedGrantedEarnings =
@@ -2260,7 +2284,7 @@ export default function ContestDetailClient({
           (group.metrics.manual_points_adjustment || 0);
 
         if (
-          currentContest?.contest_type === "cpm" &&
+          isCpmContestType(currentContest?.contest_type) &&
           currentContest?.platform?.toLowerCase() === "twitter"
         ) {
           console.log(
@@ -2332,7 +2356,7 @@ export default function ContestDetailClient({
       (currentContest?.platform?.toLowerCase() === "twitter" ||
         currentContest?.platform?.toLowerCase() === "x") &&
       currentContest?.contest_format === "text_image" &&
-      currentContest?.contest_type === "cpm";
+      isCpmContestType(currentContest?.contest_type);
 
     if (isTwitterCpmContest) {
       const cpmConfig = (currentContest?.contest_based_details as any)
@@ -2400,8 +2424,11 @@ export default function ContestDetailClient({
       }
     }
 
-    // Calculate bonus for Twitter CPM contests based on flat_fee_bonus
-    if (isTwitterCpmContest) {
+    // Calculate bonus for Twitter CPM contests based on flat_fee_bonus (not used for dual rewards)
+    if (
+      isTwitterCpmContest &&
+      !isDualRewardsContestType(currentContest?.contest_type)
+    ) {
       const cpmConfig = (currentContest?.contest_based_details as any)
         ?.cpm_contest;
       const flatFeeBonus = cpmConfig?.flat_fee_bonus || 0;
@@ -2522,7 +2549,10 @@ export default function ContestDetailClient({
       }
     }
 
-    if (currentContest?.contest_type === "milestone") {
+    if (
+      isMilestoneContestType(currentContest?.contest_type) &&
+      !isCpmContestType(currentContest?.contest_type)
+    ) {
       const milestoneDetails =
         currentContest?.contest_based_details?.milestone_contest;
       const milestones = milestoneDetails?.milestones || [];
@@ -2728,30 +2758,30 @@ export default function ContestDetailClient({
   }, [showRejectionReasonColumn, currentContest?.platform]);
 
   const milestoneMostVerifiedReelsConfig =
-    currentContest?.contest_type === "milestone"
+    isMilestoneContestType(currentContest?.contest_type)
       ? (currentContest?.contest_based_details as any)?.milestone_contest?.bonus
           ?.most_verified_reels
       : null;
   const milestoneMostVerifiedViewsConfig =
-    currentContest?.contest_type === "milestone"
+    isMilestoneContestType(currentContest?.contest_type)
       ? (currentContest?.contest_based_details as any)?.milestone_contest?.bonus
           ?.most_verified_views
       : null;
   const showMostVerifiedViewsBonusColumns = Boolean(
-    currentContest?.contest_type === "milestone" &&
+    isMilestoneContestType(currentContest?.contest_type) &&
     (currentContest?.contest_based_details as any)?.milestone_contest?.bonus
       ?.enabled &&
     milestoneMostVerifiedViewsConfig,
   );
   const showMostVerifiedReelsCreatorColumn = Boolean(
-    currentContest?.contest_type === "milestone" &&
+    isMilestoneContestType(currentContest?.contest_type) &&
     (currentContest?.contest_based_details as any)?.milestone_contest?.bonus
       ?.enabled &&
     milestoneMostVerifiedReelsConfig,
   );
   const showCreatorMilestoneVerifiedBonusActions =
     Boolean(isAdminView) &&
-    currentContest?.contest_type === "milestone" &&
+    isMilestoneContestType(currentContest?.contest_type) &&
     currentContest?.post_contest_status === "verification_complete" &&
     (showMostVerifiedViewsBonusColumns || showMostVerifiedReelsCreatorColumn);
 
@@ -2803,7 +2833,7 @@ export default function ContestDetailClient({
 
   /** Sum of expected milestone cents for verified/paid submissions only (pending excluded — matches budget liability) */
   const milestoneBudgetExpectedPayoutCents = useMemo(() => {
-    if (currentContest?.contest_type !== "milestone") return 0;
+    if (!isMilestoneContestType(currentContest?.contest_type)) return 0;
     const payoutMap = milestoneSubmissionExpectedPayoutCents;
     let sum = 0;
     for (const sub of currentSubmissions || []) {
@@ -2822,7 +2852,7 @@ export default function ContestDetailClient({
 
   /** Creator bonus (views + reels tracks) expected / paid — same numbers as creator-wise bonus columns */
   const milestoneCreatorBonusExpectedCentsFromMap = useMemo(() => {
-    if (currentContest?.contest_type !== "milestone") return 0;
+    if (!isMilestoneContestType(currentContest?.contest_type)) return 0;
     let sum = 0;
     milestoneReelsBonusByCreator.forEach((row) => {
       sum +=
@@ -2833,7 +2863,7 @@ export default function ContestDetailClient({
   }, [currentContest?.contest_type, milestoneReelsBonusByCreator]);
 
   const milestoneCreatorBonusPaidCentsFromMap = useMemo(() => {
-    if (currentContest?.contest_type !== "milestone") return 0;
+    if (!isMilestoneContestType(currentContest?.contest_type)) return 0;
     let sum = 0;
     milestoneReelsBonusByCreator.forEach((row) => {
       sum += (Number(row.viewsPaidCents) || 0) + (Number(row.paidCents) || 0);
@@ -2910,7 +2940,7 @@ export default function ContestDetailClient({
   const statusFilterFinancialTotals = useMemo(() => {
     const isLeaderboardOrCpm =
       currentContest?.contest_type === "leaderboard" ||
-      currentContest?.contest_type === "cpm";
+      isCpmContestType(currentContest?.contest_type);
     if (!isLeaderboardOrCpm || !filteredCreatorGroups?.length) {
       return {
         totalExpectedReward: 0,
@@ -2980,7 +3010,7 @@ export default function ContestDetailClient({
       currentContest?.platform?.toLowerCase() === "x";
     const isTwitterCpmOrLeaderboard =
       isTwitter &&
-      (currentContest?.contest_type === "cpm" ||
+      (isCpmContestType(currentContest?.contest_type) ||
         currentContest?.contest_type === "leaderboard");
     if (
       !isTwitterCpmOrLeaderboard ||
@@ -3477,7 +3507,7 @@ export default function ContestDetailClient({
         setIsLoadingSubmission((prev) => ({ ...prev, [submissionId]: true }));
         try {
           const isCpm =
-            currentContest?.contest_type === "cpm" &&
+            isCpmContestType(currentContest?.contest_type) &&
             (currentContest?.platform?.toLowerCase() === "twitter" ||
               currentContest?.platform?.toLowerCase() === "x");
           if (isCpm) {
@@ -4115,7 +4145,7 @@ export default function ContestDetailClient({
       }
 
       const isCpmTwitter =
-        currentContest?.contest_type === "cpm" &&
+        isCpmContestType(currentContest?.contest_type) &&
         (currentContest?.platform?.toLowerCase() === "twitter" ||
           currentContest?.platform?.toLowerCase() === "x");
       if (isCpmTwitter) {
@@ -5633,7 +5663,7 @@ export default function ContestDetailClient({
     let expectedEarnings =
       useStoredEarnings && submission.earnings ? submission.earnings : 0;
 
-    if (!expectedEarnings && currentContest?.contest_type === "cpm") {
+    if (!expectedEarnings && isCpmContestType(currentContest?.contest_type)) {
       const cpmConfig = (currentContest?.contest_based_details as any)
         ?.cpm_contest;
       if (cpmConfig?.cpm_rate_usd) {
@@ -5837,7 +5867,7 @@ export default function ContestDetailClient({
               : null;
             earningsCents = fallbackPrize?.amount ?? 0;
           }
-        } else if (currentContest?.contest_type === "cpm") {
+        } else if (isCpmContestType(currentContest?.contest_type)) {
           const cpmConfig = (currentContest?.contest_based_details as any)
             ?.cpm_contest;
           const cpmRate = cpmConfig?.cpm_rate_usd || 0;
@@ -5988,7 +6018,7 @@ export default function ContestDetailClient({
     try {
       // CPM: reverse each paid tweet and then set action per tweet via moderate-submission
       const isCpmTwitter =
-        currentContest?.contest_type === "cpm" &&
+        isCpmContestType(currentContest?.contest_type) &&
         (currentContest?.platform?.toLowerCase() === "twitter" ||
           currentContest?.platform?.toLowerCase() === "x");
 
@@ -6142,7 +6172,7 @@ export default function ContestDetailClient({
       try {
         // CPM: reject (and reverse) each tweet via moderate-submission, then update creator/leaderboard via moderate-creator
         if (
-          currentContest?.contest_type === "cpm" &&
+          isCpmContestType(currentContest?.contest_type) &&
           (currentContest?.platform?.toLowerCase() === "twitter" ||
             currentContest?.platform?.toLowerCase() === "x")
         ) {
@@ -6430,9 +6460,9 @@ export default function ContestDetailClient({
                         : "bg-purple-50 text-purple-900 border-purple-200",
                     )}
                   >
-                    {currentContest.contest_type === "cpm"
+                    {isCpmContestType(currentContest.contest_type)
                       ? "CPM"
-                      : currentContest.contest_type === "milestone"
+                      : isMilestoneContestType(currentContest.contest_type)
                         ? "Milestone"
                         : "Leaderboard"}
                   </Badge>
@@ -7194,9 +7224,11 @@ export default function ContestDetailClient({
             return null;
           })()}
 
-          {currentContest.contest_type === "cpm" &&
-            currentContest.contest_based_details?.cpm_contest?.total_budget !=
-              null && (
+          {isCpmContestType(currentContest.contest_type) &&
+            getPoolBudgetCentsFromDetails(
+              currentContest.contest_type,
+              currentContest.contest_based_details,
+            ) > 0 && (
               <div
                 className={cn(
                   "group rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 overflow-hidden relative",
@@ -7242,8 +7274,10 @@ export default function ContestDetailClient({
                         )}
                       >
                         {formatMoney(
-                          currentContest.contest_based_details.cpm_contest
-                            .total_budget,
+                          getPoolBudgetCentsFromDetails(
+                            currentContest.contest_type,
+                            currentContest.contest_based_details,
+                          ),
                         )}
                       </p>
                     </div>
@@ -7257,12 +7291,25 @@ export default function ContestDetailClient({
                           : "text-gray-600",
                       )}
                     >
-                      $
-                      {
-                        currentContest.contest_based_details.cpm_contest
-                          .cpm_rate_usd
-                      }{" "}
-                      CPM
+                      {isDualRewardsContestType(currentContest.contest_type) ? (
+                        <>
+                          $
+                          {
+                            currentContest.contest_based_details.cpm_contest
+                              .cpm_rate_usd
+                          }{" "}
+                          CPM 
+                        </>
+                      ) : (
+                        <>
+                          $
+                          {
+                            currentContest.contest_based_details.cpm_contest
+                              .cpm_rate_usd
+                          }{" "}
+                          CPM
+                        </>
+                      )}
                     </p>
                   </div>
                   <div
@@ -7305,7 +7352,7 @@ export default function ContestDetailClient({
               // </Card>
             )}
 
-          {currentContest.contest_type === "milestone" &&
+          {isMilestoneContestType(currentContest.contest_type) &&
             currentContest.contest_based_details?.milestone_contest
               ?.total_budget_cents != null &&
             currentContest.contest_based_details.milestone_contest
@@ -7455,10 +7502,11 @@ export default function ContestDetailClient({
         </div>
 
         {/* Budget Progress Tracker - Two-Color Visualization (CPM) */}
-        {currentContest.contest_type === "cpm" &&
-          currentContest.contest_based_details?.cpm_contest?.total_budget !=
-            null &&
-          currentContest.contest_based_details.cpm_contest.total_budget > 0 && (
+        {isCpmContestType(currentContest.contest_type) &&
+          getPoolBudgetCentsFromDetails(
+            currentContest.contest_type,
+            currentContest.contest_based_details,
+          ) > 0 && (
             <div
               className={cn(
                 "group rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 overflow-hidden relative",
@@ -7509,9 +7557,10 @@ export default function ContestDetailClient({
                 </div>
                 <BudgetProgress
                   contest={{
-                    total_budget:
-                      currentContest.contest_based_details.cpm_contest
-                        .total_budget,
+                    total_budget: getPoolBudgetCentsFromDetails(
+                      currentContest.contest_type,
+                      currentContest.contest_based_details,
+                    ),
                     contest_based_details: currentContest.contest_based_details,
                     contest_type: currentContest.contest_type,
                     max_earnings_per_creator:
@@ -7521,6 +7570,21 @@ export default function ContestDetailClient({
                   showDetailed={true}
                   creatorManualPointsAdjustments={
                     creatorManualPointsAdjustments
+                  }
+                  milestoneExpectedPayoutCents={
+                    isDualRewardsContestType(currentContest.contest_type)
+                      ? milestoneBudgetExpectedPayoutCents
+                      : undefined
+                  }
+                  milestoneCreatorBonusExpectedCents={
+                    isDualRewardsContestType(currentContest.contest_type)
+                      ? milestoneCreatorBonusExpectedCentsFromMap
+                      : undefined
+                  }
+                  milestoneCreatorBonusPaidCents={
+                    isDualRewardsContestType(currentContest.contest_type)
+                      ? milestoneCreatorBonusPaidCentsFromMap
+                      : undefined
                   }
                 />
               </div>
@@ -7593,8 +7657,9 @@ export default function ContestDetailClient({
             </div>
           )}
 
-        {/* Budget Progress Tracker - For Milestone contests */}
-        {currentContest.contest_type === "milestone" &&
+        {/* Budget Progress Tracker - For Milestone contests (not dual — dual uses CPM tracker above) */}
+        {isMilestoneContestType(currentContest.contest_type) &&
+          !isDualRewardsContestType(currentContest.contest_type) &&
           currentContest.contest_based_details?.milestone_contest
             ?.total_budget_cents != null &&
           currentContest.contest_based_details.milestone_contest
@@ -8165,7 +8230,7 @@ export default function ContestDetailClient({
                     </div>
                   )}
 
-                {currentContest.contest_type === "cpm" &&
+                {isCpmContestType(currentContest.contest_type) &&
                   currentContest.contest_based_details?.cpm_contest && (
                     <div className="space-y-3">
                       <h3 className="font-semibold text-lg text-foreground">
@@ -8195,27 +8260,29 @@ export default function ContestDetailClient({
                             per 1000 {isTwitterCpmCampaign ? "points" : "views"}
                           </span>
                         </div>
-                        <div
-                          className={cn(
-                            "flex justify-between items-center p-3 rounded-md border",
-                            isDark ? "border-gray-600" : "border-gray-400",
-                          )}
-                        >
-                          <span
+                        {!isDualRewardsContestType(currentContest.contest_type) && (
+                          <div
                             className={cn(
-                              "text-md font-medium tracking-wide",
-                              isDark ? "text-white" : "text-black",
+                              "flex justify-between items-center p-3 rounded-md border",
+                              isDark ? "border-gray-600" : "border-gray-400",
                             )}
                           >
-                            Total Budget:
-                          </span>
-                          <span className="font-semibold text-md text-foreground">
-                            {formatMoney(
-                              currentContest.contest_based_details.cpm_contest
-                                .total_budget,
-                            )}
-                          </span>
-                        </div>
+                            <span
+                              className={cn(
+                                "text-md font-medium tracking-wide",
+                                isDark ? "text-white" : "text-black",
+                              )}
+                            >
+                              Total Budget:
+                            </span>
+                            <span className="font-semibold text-md text-foreground">
+                              {formatMoney(
+                                currentContest.contest_based_details.cpm_contest
+                                  .total_budget,
+                              )}
+                            </span>
+                          </div>
+                        )}
                         {currentContest.contest_based_details.cpm_contest
                           .min_views != null && (
                           <div
@@ -8281,7 +8348,7 @@ export default function ContestDetailClient({
                     </div>
                   )}
 
-                {currentContest.contest_type === "milestone" &&
+                {isMilestoneContestType(currentContest.contest_type) &&
                   currentContest.contest_based_details?.milestone_contest && (
                     <div className="space-y-6">
                       {/* Milestone Ladder */}
@@ -8592,38 +8659,40 @@ export default function ContestDetailClient({
                         </div>
                       )}
 
-                      {/* Budget Status */}
-                      <div
-                        className={cn(
-                          "mt-6 p-4 rounded-xl border flex items-center justify-between",
-                          isDark
-                            ? "bg-gray-900/30 border-gray-600"
-                            : "bg-gray-50 border-gray-200",
-                        )}
-                      >
-                        <div className="flex items-center gap-3">
-                          <Wallet className="h-5 w-5 text-emerald-500" />
-                          <span
-                            className={cn(
-                              "text-sm font-medium",
-                              isDark ? "text-gray-300" : "text-gray-600",
-                            )}
-                          >
-                            Total Budget
-                          </span>
-                        </div>
-                        <span
+                      {/* Budget Status — hidden for dual rewards (single pool shown in overview) */}
+                      {!isDualRewardsContestType(currentContest.contest_type) && (
+                        <div
                           className={cn(
-                            "text-lg font-bold",
-                            isDark ? "text-white" : "text-gray-900",
+                            "mt-6 p-4 rounded-xl border flex items-center justify-between",
+                            isDark
+                              ? "bg-gray-900/30 border-gray-600"
+                              : "bg-gray-50 border-gray-200",
                           )}
                         >
-                          {formatMoney(
-                            currentContest.contest_based_details
-                              .milestone_contest.total_budget_cents,
-                          )}
-                        </span>
-                      </div>
+                          <div className="flex items-center gap-3">
+                            <Wallet className="h-5 w-5 text-emerald-500" />
+                            <span
+                              className={cn(
+                                "text-sm font-medium",
+                                isDark ? "text-gray-300" : "text-gray-600",
+                              )}
+                            >
+                              Total Budget
+                            </span>
+                          </div>
+                          <span
+                            className={cn(
+                              "text-lg font-bold",
+                              isDark ? "text-white" : "text-gray-900",
+                            )}
+                          >
+                            {formatMoney(
+                              currentContest.contest_based_details
+                                .milestone_contest.total_budget_cents,
+                            )}
+                          </span>
+                        </div>
+                      )}
                     </div>
                   )}
 
@@ -10322,6 +10391,46 @@ export default function ContestDetailClient({
                   </div>
                 )}
 
+                {isDualRewardsContestType(currentContest.contest_type) &&
+                  getPoolBudgetCentsFromDetails(
+                    currentContest.contest_type,
+                    currentContest.contest_based_details,
+                  ) > 0 && (
+                    <div className="space-y-3">
+                     
+                      <div
+                        className={cn(
+                          "rounded-xl border p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2",
+                          isDark
+                            ? "bg-gray-900/30 border-gray-600"
+                            : "bg-gray-50 border-gray-200",
+                        )}
+                      >
+                        <h2
+                          className={cn(
+                            "text-md font-semibold",
+                            isDark ? "text-gray-300" : "text-gray-700",
+                          )}
+                        >
+                         Total budget (CPM + Milestone)
+                        </h2>
+                        <span
+                          className={cn(
+                            "text-xl font-bold tabular-nums shrink-0",
+                            isDark ? "text-white" : "text-gray-900",
+                          )}
+                        >
+                          {formatMoney(
+                            getPoolBudgetCentsFromDetails(
+                              currentContest.contest_type,
+                              currentContest.contest_based_details,
+                            ),
+                          )}
+                        </span>
+                      </div>
+                    </div>
+                  )}
+
                 {(currentContest as any).rules_html && (
                   <div className="space-y-3">
                     <h3 className="font-semibold text-lg text-foreground">
@@ -10630,10 +10739,11 @@ export default function ContestDetailClient({
                   )}
 
                 {/* Flat Fee Bonus Section */}
-                {(currentContest.contest_based_details?.cpm_contest
-                  ?.flat_fee_bonus ||
-                  currentContest.contest_based_details?.leaderboard_contest
-                    ?.flat_fee_bonus) && (
+                {!isDualRewardsContestType(currentContest.contest_type) &&
+                  (currentContest.contest_based_details?.cpm_contest
+                    ?.flat_fee_bonus ||
+                    currentContest.contest_based_details?.leaderboard_contest
+                      ?.flat_fee_bonus) && (
                   <div className="space-y-3">
                     <h3 className="font-semibold text-lg text-foreground flex items-center gap-2">
                       <Gift className="h-5 w-5 text-green-600" />
@@ -10677,7 +10787,7 @@ export default function ContestDetailClient({
                         Paid after the contest ends along with other earnings.
                       </p>
                       {/* Flat Fee Bonus Cap (for CPM contests) */}
-                      {currentContest.contest_type === "cpm" &&
+                      {isCpmContestType(currentContest.contest_type) &&
                         (
                           currentContest.contest_based_details
                             ?.cpm_contest as any
@@ -11533,7 +11643,7 @@ export default function ContestDetailClient({
                               )}
                             >
                               <option value="cpm_only">
-                                {currentContest.contest_type === "milestone"
+                                {isMilestoneContestType(currentContest.contest_type)
                                   ? "Milestone only"
                                   : "CPM only"}
                               </option>
@@ -12748,10 +12858,10 @@ export default function ContestDetailClient({
 
                 {/* Financial totals for selected status tab (leaderboard/CPM only) */}
                 {(currentContest?.contest_type === "leaderboard" ||
-                  currentContest?.contest_type === "cpm") &&
+                  isCpmContestType(currentContest?.contest_type)) &&
                   (() => {
                     const flatFeeBonus =
-                      currentContest?.contest_type === "cpm"
+                      isCpmContestType(currentContest?.contest_type)
                         ? ((currentContest?.contest_based_details as any)
                             ?.cpm_contest?.flat_fee_bonus ?? 0)
                         : ((currentContest?.contest_based_details as any)
@@ -13481,8 +13591,8 @@ export default function ContestDetailClient({
                                     "x") &&
                                 currentContest.contest_format ===
                                   "text_image") ||
-                              currentContest.contest_type === "cpm" ||
-                              currentContest.contest_type === "milestone" ? (
+                              isCpmContestType(currentContest.contest_type) ||
+                              isMilestoneContestType(currentContest.contest_type) ? (
                                 <>
                                   {(currentContest.platform
                                     ?.toLowerCase()
@@ -13495,8 +13605,9 @@ export default function ContestDetailClient({
                                       Expected Reward
                                     </TableHead>
                                   )}
-                                  {currentContest.contest_type ===
-                                    "milestone" && (
+                                  {isMilestoneContestType(
+                                    currentContest.contest_type,
+                                  ) && (
                                     <TableHead className="text-center min-w-[170px]">
                                       Milestone
                                     </TableHead>
@@ -13636,13 +13747,32 @@ export default function ContestDetailClient({
                                     className: "text-slate-500",
                                   };
                                 }
-                                if (currentContest.contest_type === "cpm") {
+                                if (
+                                  isCpmContestType(
+                                    currentContest.contest_type,
+                                  ) ||
+                                  isMilestoneContestType(
+                                    currentContest.contest_type,
+                                  )
+                                ) {
+                                  const milestoneCentsExpected =
+                                    isMilestoneContestType(
+                                      currentContest.contest_type,
+                                    )
+                                      ? (milestoneSubmissionExpectedPayoutCents.get(
+                                          submission.id,
+                                        ) ?? 0)
+                                      : 0;
                                   const cpmConfig =
                                     currentContest.contest_based_details
                                       ?.cpm_contest;
-                                  if (cpmConfig?.cpm_rate_usd) {
-                                    // For Twitter CPM contests, use total points
-                                    // For other platforms, use views
+                                  let cpmDollars = 0;
+                                  if (
+                                    isCpmContestType(
+                                      currentContest.contest_type,
+                                    ) &&
+                                    cpmConfig?.cpm_rate_usd
+                                  ) {
                                     const isTwitterCpm =
                                       isTwitterTweet &&
                                       (currentContest.platform?.toLowerCase() ===
@@ -13653,24 +13783,15 @@ export default function ContestDetailClient({
                                         "text_image";
 
                                     if (isTwitterCpm) {
-                                      // Calculate total points: base_points + manual_points_adjustment
                                       const totalPoints =
                                         (submission.other_stats?.base_points ||
                                           0) +
                                         ((submission as any)
                                           .manual_points_adjustment || 0);
-                                      // Calculate expected reward: total points * cpm rate / 1000
-                                      const calculatedEarnings =
+                                      cpmDollars =
                                         (totalPoints * cpmConfig.cpm_rate_usd) /
                                         1000;
-                                      return {
-                                        amount: calculatedEarnings,
-                                        label: "Expected",
-                                        className:
-                                          "text-slate-700 font-semibold",
-                                      };
                                     } else {
-                                      // For non-Twitter CPM contests, use views
                                       const views = submission.views || 0;
                                       let effectiveViews = views;
                                       if (
@@ -13684,50 +13805,46 @@ export default function ContestDetailClient({
                                       ) {
                                         effectiveViews = cpmConfig.max_views;
                                       }
-                                      const calculatedEarnings =
+                                      cpmDollars =
                                         (effectiveViews *
                                           cpmConfig.cpm_rate_usd) /
                                         1000;
-                                      return {
-                                        amount: calculatedEarnings,
-                                        label: "Expected",
-                                        className:
-                                          "text-slate-700 font-semibold",
-                                      };
                                     }
+                                  }
+                                  const milestoneDollars =
+                                    centsToDollars(milestoneCentsExpected);
+                                  const totalDollars =
+                                    cpmDollars + milestoneDollars;
+                                  if (totalDollars > 0) {
+                                    return {
+                                      amount: totalDollars,
+                                      label: "Expected",
+                                      className:
+                                        "text-slate-700 font-semibold",
+                                    };
+                                  }
+                                  if (cpmConfig?.cpm_rate_usd) {
+                                    return {
+                                      amount: 0,
+                                      label: "Expected",
+                                      className:
+                                        "text-slate-700 font-semibold",
+                                    };
+                                  }
+                                  if (
+                                    isMilestoneContestType(
+                                      currentContest.contest_type,
+                                    )
+                                  ) {
+                                    return {
+                                      amount: 0,
+                                      label: "Expected",
+                                      className: "text-slate-500",
+                                    };
                                   }
                                   return {
                                     amount: 0,
                                     label: "N/A",
-                                    className: "text-slate-500",
-                                  };
-                                }
-                                if (
-                                  currentContest.contest_type === "milestone"
-                                ) {
-                                  const milestones =
-                                    currentContest.contest_based_details
-                                      ?.milestone_contest?.milestones;
-                                  if (
-                                    Array.isArray(milestones) &&
-                                    milestones.length > 0
-                                  ) {
-                                    const cents =
-                                      milestoneSubmissionExpectedPayoutCents.get(
-                                        submission.id,
-                                      ) ?? 0;
-                                    if (cents > 0) {
-                                      return {
-                                        amount: centsToDollars(cents),
-                                        label: "Expected",
-                                        className:
-                                          "text-slate-700 font-semibold",
-                                      };
-                                    }
-                                  }
-                                  return {
-                                    amount: 0,
-                                    label: "Expected",
                                     className: "text-slate-500",
                                   };
                                 }
@@ -13748,7 +13865,7 @@ export default function ContestDetailClient({
                                 }
 
                                 if (
-                                  currentContest.contest_type === "milestone"
+                                  isMilestoneContestType(currentContest.contest_type)
                                 ) {
                                   const milestoneCents =
                                     milestoneSubmissionExpectedPayoutCents.get(
@@ -13866,7 +13983,7 @@ export default function ContestDetailClient({
                               const expectedInfo = getExpectedReward();
                               const grantedInfo = getGrantedReward();
                               const milestoneAssignmentLabel =
-                                currentContest.contest_type === "milestone"
+                                isMilestoneContestType(currentContest.contest_type)
                                   ? (milestoneSubmissionAssignedLabelBySubmissionId.get(
                                       submission.id,
                                     ) ?? "—")
@@ -15228,9 +15345,10 @@ export default function ContestDetailClient({
                                         "x") &&
                                     currentContest.contest_format ===
                                       "text_image") ||
-                                  currentContest.contest_type === "cpm" ||
-                                  currentContest.contest_type ===
-                                    "milestone" ? (
+                                  isCpmContestType(currentContest.contest_type) ||
+                                  isMilestoneContestType(
+                                    currentContest.contest_type,
+                                  ) ? (
                                     <>
                                       {(currentContest.platform
                                         ?.toLowerCase()
@@ -15279,8 +15397,9 @@ export default function ContestDetailClient({
                                           </div>
                                         </TableCell>
                                       )}
-                                      {currentContest.contest_type ===
-                                        "milestone" && (
+                                      {isMilestoneContestType(
+                                        currentContest.contest_type,
+                                      ) && (
                                         <TableCell className="text-center">
                                           {milestoneAssignmentLabel === "—" ? (
                                             <span
@@ -16122,7 +16241,7 @@ export default function ContestDetailClient({
                                   ) ||
                                   ((currentContest.contest_type ===
                                     "leaderboard" ||
-                                    currentContest.contest_type === "cpm") &&
+                                    isCpmContestType(currentContest.contest_type)) &&
                                     (currentContest.platform?.toLowerCase() ===
                                       "twitter" ||
                                       currentContest.platform?.toLowerCase() ===
@@ -16141,8 +16260,9 @@ export default function ContestDetailClient({
                                           <TableHead className="text-center">
                                             Expected Reward
                                           </TableHead>
-                                          {currentContest.contest_type ===
-                                            "milestone" && (
+                                          {isMilestoneContestType(
+                                            currentContest.contest_type,
+                                          ) && (
                                             <TableHead className="text-center min-w-[170px]">
                                               Milestone
                                             </TableHead>
@@ -16164,7 +16284,7 @@ export default function ContestDetailClient({
                                   ) : null}
                                   {(() => {
                                     const flatFeeBonus =
-                                      currentContest.contest_type === "cpm"
+                                      isCpmContestType(currentContest.contest_type)
                                         ? (
                                             currentContest.contest_based_details as any
                                           )?.cpm_contest?.flat_fee_bonus
@@ -16212,8 +16332,9 @@ export default function ContestDetailClient({
                                       "text_image" &&
                                     (currentContest.contest_type ===
                                       "leaderboard" ||
-                                      currentContest.contest_type ===
-                                        "cpm") && (
+                                      isCpmContestType(
+                                        currentContest.contest_type,
+                                      )) && (
                                       <>
                                         <TableHead className="text-center">
                                           Creator Manual Points Adjustment
@@ -16249,8 +16370,9 @@ export default function ContestDetailClient({
                                     <TableCell
                                       colSpan={
                                         12 +
-                                        (currentContest.contest_type ===
-                                        "milestone"
+                                        (isMilestoneContestType(
+                                          currentContest.contest_type,
+                                        )
                                           ? 1
                                           : 0) +
                                         (showMostVerifiedViewsBonusColumns
@@ -16957,10 +17079,12 @@ export default function ContestDetailClient({
                                           {/* Show reward columns for leaderboard, CPM, and milestone contests */}
                                           {(currentContest.contest_type ===
                                             "leaderboard" ||
-                                            currentContest.contest_type ===
-                                              "cpm" ||
-                                            currentContest.contest_type ===
-                                              "milestone") && (
+                                            isCpmContestType(
+                                              currentContest.contest_type,
+                                            ) ||
+                                            isMilestoneContestType(
+                                              currentContest.contest_type,
+                                            )) && (
                                             <>
                                               {(currentContest.platform
                                                 ?.toLowerCase()
@@ -16990,8 +17114,9 @@ export default function ContestDetailClient({
                                                       )}
                                                     </div>
                                                   </TableCell>
-                                                  {currentContest.contest_type ===
-                                                    "milestone" && (
+                                                  {isMilestoneContestType(
+                                                    currentContest.contest_type,
+                                                  ) && (
                                                     <TableCell className="text-center font-medium min-w-[170px]">
                                                       {(() => {
                                                         const counts =
@@ -17131,8 +17256,9 @@ export default function ContestDetailClient({
                                           )}
                                           {(() => {
                                             const flatFeeBonus =
-                                              currentContest.contest_type ===
-                                              "cpm"
+                                              isCpmContestType(
+                                                currentContest.contest_type,
+                                              )
                                                 ? (
                                                     currentContest.contest_based_details as any
                                                   )?.cpm_contest?.flat_fee_bonus
@@ -17203,8 +17329,9 @@ export default function ContestDetailClient({
                                               "text_image" &&
                                             (currentContest.contest_type ===
                                               "leaderboard" ||
-                                              currentContest.contest_type ===
-                                                "cpm") && (
+                                              isCpmContestType(
+                                                currentContest.contest_type,
+                                              )) && (
                                               <>
                                                 <TableCell className="text-center">
                                                   <div className="flex flex-col items-center">
@@ -17768,8 +17895,9 @@ export default function ContestDetailClient({
                                                           isAdminView &&
                                                           (currentContest.contest_type ===
                                                             "leaderboard" ||
-                                                            currentContest.contest_type ===
-                                                              "cpm") && (
+                                                            isCpmContestType(
+                                                              currentContest.contest_type,
+                                                            )) && (
                                                             <>
                                                               <DropdownMenuSeparator />
                                                               <DropdownMenuItem
@@ -17893,8 +18021,9 @@ export default function ContestDetailClient({
                                                               </DropdownMenuItem>
                                                               {(() => {
                                                                 const flatFeeBonus =
-                                                                  currentContest.contest_type ===
-                                                                  "cpm"
+                                                                  isCpmContestType(
+                                                                    currentContest.contest_type,
+                                                                  )
                                                                     ? (
                                                                         currentContest.contest_based_details as any
                                                                       )
@@ -18200,7 +18329,7 @@ export default function ContestDetailClient({
                           currentContest?.platform?.toLowerCase() === "x") &&
                         currentContest?.contest_format === "text_image" &&
                         (currentContest?.contest_type === "leaderboard" ||
-                          currentContest?.contest_type === "cpm");
+                          isCpmContestType(currentContest?.contest_type));
 
                       // Track creator ids present in the filtered submissions
                       const filteredCreatorIds = new Set<string>();
@@ -20067,9 +20196,10 @@ export default function ContestDetailClient({
                                         0;
                                       return formatMoney(totalPrize);
                                     } else if (
-                                      currentContest.contest_type === "cpm" ||
-                                      currentContest.contest_type ===
-                                        "milestone"
+                                      isCpmContestType(currentContest.contest_type) ||
+                                      isMilestoneContestType(
+                                        currentContest.contest_type,
+                                      )
                                     ) {
                                       // Calculate total paid for CPM/Milestone contest
                                       const totalPaid =
@@ -20221,9 +20351,10 @@ export default function ContestDetailClient({
                                           ?.leaderboard_contest?.total_prize ||
                                         0;
                                     } else if (
-                                      currentContest.contest_type === "cpm" ||
-                                      currentContest.contest_type ===
-                                        "milestone"
+                                      isCpmContestType(currentContest.contest_type) ||
+                                      isMilestoneContestType(
+                                        currentContest.contest_type,
+                                      )
                                     ) {
                                       totalCost =
                                         filteredAnalyticsSubmissions
@@ -20267,7 +20398,7 @@ export default function ContestDetailClient({
                         </div>
 
                         {/* CPM Contest Specific Metrics */}
-                        {currentContest.contest_type === "cpm" && (
+                        {isCpmContestType(currentContest.contest_type) && (
                           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             {/* CPM Rate */}
                             <div
@@ -20440,8 +20571,8 @@ export default function ContestDetailClient({
                                       currentContest.contest_based_details
                                         ?.leaderboard_contest?.total_prize || 0;
                                   } else if (
-                                    currentContest.contest_type === "cpm" ||
-                                    currentContest.contest_type === "milestone"
+                                    isCpmContestType(currentContest.contest_type) ||
+                                    isMilestoneContestType(currentContest.contest_type)
                                   ) {
                                     totalCost =
                                       filteredAnalyticsSubmissions
@@ -20478,7 +20609,13 @@ export default function ContestDetailClient({
                                   isDark ? "text-white" : "text-gray-800",
                                 )}
                               >
-                                {currentContest.contest_type} Contest
+                                {currentContest.contest_type === "dual_rewards"
+                                  ? "Dual rewards"
+                                  : `${currentContest.contest_type}`.replace(
+                                      /_/g,
+                                      " ",
+                                    )}{" "}
+                                contest
                               </p>
                             </div>
                           </div>
@@ -20981,12 +21118,12 @@ export default function ContestDetailClient({
             creatorRankingMap.get(selectedCreatorForModal) ?? undefined
           }
           milestoneExpectedPayoutBySubmissionId={
-            currentContest?.contest_type === "milestone"
+            isMilestoneContestType(currentContest?.contest_type)
               ? milestoneSubmissionExpectedPayoutCents
               : undefined
           }
           milestoneAssignedLabelBySubmissionId={
-            currentContest?.contest_type === "milestone"
+            isMilestoneContestType(currentContest?.contest_type)
               ? milestoneSubmissionAssignedLabelBySubmissionId
               : undefined
           }

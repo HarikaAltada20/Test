@@ -57,6 +57,7 @@ import {
   isContestEnded,
 } from "@/lib/utils";
 import { formatCurrencyFromCents as formatMoney } from "@/lib/currency-utils";
+import { getPoolBudgetCentsFromDetails } from "@/lib/contest-type";
 import { renderStatusBadge } from "@/lib/status-badges";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -2671,7 +2672,8 @@ export function ContestClientPage({
                   <div className="bg-white/20 backdrop-blur-xl rounded-3xl p-8 border border-white/30 shadow-2xl hover:shadow-3xl transition-all duration-300 hover:scale-105">
                     <div className="text-white/90 text-sm font-bold mb-3 uppercase tracking-wider">
                       {contest.contest_type === "cpm" ||
-                      contest.contest_type === "milestone"
+                      contest.contest_type === "milestone" ||
+                      contest.contest_type === "dual_rewards"
                         ? "Total Budget"
                         : "Prize Pool"}
                     </div>
@@ -2682,21 +2684,30 @@ export function ContestClientPage({
                             contest.contest_based_details.cpm_contest
                               .total_budget,
                           )
-                        : contest.contest_type === "milestone" &&
-                            contest.contest_based_details?.milestone_contest
+                        : contest.contest_type === "dual_rewards" &&
+                            contest.contest_based_details
                           ? formatMoney(
-                              contest.contest_based_details.milestone_contest
-                                .total_budget_cents || 0,
+                              getPoolBudgetCentsFromDetails(
+                                contest.contest_type,
+                                contest.contest_based_details,
+                              ),
                             )
-                          : contest.contest_type === "leaderboard" &&
-                              contest.contest_based_details?.leaderboard_contest
+                          : contest.contest_type === "milestone" &&
+                              contest.contest_based_details?.milestone_contest
                             ? formatMoney(
-                                contest.contest_based_details
-                                  .leaderboard_contest.total_prize,
+                                contest.contest_based_details.milestone_contest
+                                  .total_budget_cents || 0,
                               )
-                            : contest.total_prize
-                              ? formatMoney(contest.total_prize || 0)
-                              : "$0.00"}
+                            : contest.contest_type === "leaderboard" &&
+                                contest.contest_based_details
+                                  ?.leaderboard_contest
+                              ? formatMoney(
+                                  contest.contest_based_details
+                                    .leaderboard_contest.total_prize,
+                                )
+                              : contest.total_prize
+                                ? formatMoney(contest.total_prize || 0)
+                                : "$0.00"}
                     </div>
                     {contest.contest_type === "leaderboard" &&
                       contest.contest_based_details?.leaderboard_contest
@@ -3285,7 +3296,8 @@ export function ContestClientPage({
                   )}
                 >
                   {contest.contest_type === "cpm" ||
-                  contest.contest_type === "milestone"
+                  contest.contest_type === "milestone" ||
+                  contest.contest_type === "dual_rewards"
                     ? "Total Budget"
                     : "Prize Pool"}
                 </p>
@@ -3301,21 +3313,29 @@ export function ContestClientPage({
                     ? formatMoney(
                         contest.contest_based_details.cpm_contest.total_budget,
                       )
-                    : contest.contest_type === "milestone" &&
-                        contest.contest_based_details?.milestone_contest
+                    : contest.contest_type === "dual_rewards" &&
+                        contest.contest_based_details
                       ? formatMoney(
-                          contest.contest_based_details.milestone_contest
-                            .total_budget_cents || 0,
+                          getPoolBudgetCentsFromDetails(
+                            contest.contest_type,
+                            contest.contest_based_details,
+                          ),
                         )
-                      : contest.contest_type === "leaderboard" &&
-                          contest.contest_based_details?.leaderboard_contest
+                      : contest.contest_type === "milestone" &&
+                          contest.contest_based_details?.milestone_contest
                         ? formatMoney(
-                            contest.contest_based_details.leaderboard_contest
-                              .total_prize,
+                            contest.contest_based_details.milestone_contest
+                              .total_budget_cents || 0,
                           )
-                        : contest.total_prize // Fallback to old field if necessary for older data
-                          ? formatMoney(contest.total_prize || 0)
-                          : "$0.00"}
+                        : contest.contest_type === "leaderboard" &&
+                            contest.contest_based_details?.leaderboard_contest
+                          ? formatMoney(
+                              contest.contest_based_details.leaderboard_contest
+                                .total_prize,
+                            )
+                          : contest.total_prize // Fallback to old field if necessary for older data
+                            ? formatMoney(contest.total_prize || 0)
+                            : "$0.00"}
                 </p>
                 <p
                   className={cn(
@@ -3900,7 +3920,8 @@ export function ContestClientPage({
                           >
                             {contest.contest_type === "cpm"
                               ? "Pay Rate"
-                              : contest.contest_type === "milestone"
+                              : contest.contest_type === "milestone" ||
+                                  contest.contest_type === "dual_rewards"
                                 ? "Total Budget"
                                 : "Prize Pool"}
                           </span>
@@ -3917,22 +3938,31 @@ export function ContestClientPage({
                                 contest.contest_based_details.cpm_contest
                                   .cpm_rate_usd * 100,
                               )
-                            : contest.contest_type === "milestone" &&
-                                contest.contest_based_details?.milestone_contest
+                            : contest.contest_type === "dual_rewards" &&
+                                contest.contest_based_details
                               ? formatMoney(
-                                  contest.contest_based_details
-                                    .milestone_contest.total_budget_cents || 0,
+                                  getPoolBudgetCentsFromDetails(
+                                    contest.contest_type,
+                                    contest.contest_based_details,
+                                  ),
                                 )
-                              : contest.contest_type === "leaderboard" &&
-                                  contest.contest_based_details
-                                    ?.leaderboard_contest
+                              : contest.contest_type === "milestone" &&
+                                  contest.contest_based_details?.milestone_contest
                                 ? formatMoney(
                                     contest.contest_based_details
-                                      .leaderboard_contest.total_prize,
+                                      .milestone_contest.total_budget_cents ||
+                                      0,
                                   )
-                                : contest.total_prize
-                                  ? formatMoney(contest.total_prize || 0)
-                                  : "$0.00"}
+                                : contest.contest_type === "leaderboard" &&
+                                    contest.contest_based_details
+                                      ?.leaderboard_contest
+                                  ? formatMoney(
+                                      contest.contest_based_details
+                                        .leaderboard_contest.total_prize,
+                                    )
+                                  : contest.total_prize
+                                    ? formatMoney(contest.total_prize || 0)
+                                    : "$0.00"}
                         </div>
                         <div
                           className={cn(
@@ -10303,17 +10333,45 @@ export function ContestClientPage({
                                   : milestoneTrackBonusesPaidCents > 0
                                     ? milestoneTrackBonusesPaidCents
                                     : 0;
-                              const paidPlusBonus =
-                                submissionPaidCents + totalBonusCents;
-                              const earnedAmount =
-                                paidPlusBonus > 0
-                                  ? paidPlusBonus
+                           // Submission-wise: "Earned" is milestone slot payout only (bonuses are separate).
+                           const submissionEarnedCents =
+                           submissionPaidCents > 0
+                             ? submissionPaidCents
                                   : Number(entry.earnings) > 0
                                     ? Number(entry.earnings)
+                                    : totalBonusCents > 0
+                                    ? 0
                                     : expectedReward;
-                              prizeDisplay = (
+                            prizeDisplay =
+                              leaderboardViewMode === "detailed" &&
+                              totalBonusCents > 0 ? (
+                                <div className="space-y-1">
+                                  <div className="font-semibold text-green-600 dark:text-green-400 text-base">
+                                    Earned:{" "}
+                                    {formatMoney(submissionEarnedCents)}
+                                  </div>
+                                  <div className="flex flex-wrap items-center gap-1.5 text-xs text-slate-600 dark:text-slate-400 bg-green-50 dark:bg-green-900/20 px-2 py-1.5 rounded-md border border-green-200 dark:border-green-800">
+                                    <div className="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0" />
+                                    {submissionEarnedCents > 0 ? (
+                                      <>
+                                        <span className="whitespace-nowrap">
+                                          {formatMoney(submissionEarnedCents)}{" "}
+                                          Milestone
+                                        </span>
+                                        <span className="text-green-600 dark:text-green-400">
+                                          +
+                                        </span>
+                                      </>
+                                    ) : null}
+                                    <span className="whitespace-nowrap">
+                                      {formatMoney(totalBonusCents)} Bonus
+                                    </span>
+                                  </div>
+                                </div>
+                              ) : (
                                 <div className="font-semibold text-green-600 dark:text-green-400 text-base">
-                                  Earned: {formatMoney(earnedAmount)}
+                                  Earned:{" "}
+                                  {formatMoney(submissionEarnedCents)}
                                 </div>
                               );
                             }
