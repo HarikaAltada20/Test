@@ -7657,6 +7657,9 @@ export default function ContestDetailClient({
                   milestoneExpectedPayoutCents={
                     milestoneBudgetExpectedPayoutCents
                   }
+                  milestoneExpectedPayoutBySubmissionId={
+                    milestoneSubmissionExpectedPayoutCents
+                  }
                   milestoneCreatorBonusExpectedCents={
                     milestoneCreatorBonusExpectedCentsFromMap
                   }
@@ -20030,11 +20033,20 @@ export default function ContestDetailClient({
                         <ChevronDown className="h-5 w-5 text-gray-500 group-open:rotate-180 transition-transform" />
                       </summary>
                       <div className="mt-4 space-y-6">
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                        <div
+                          className={cn(
+                            "grid grid-cols-1 md:grid-cols-2 gap-4",
+                            currentContest.contest_type === "cpm"
+                              ? ""
+                              : "lg:grid-cols-3",
+                          )}
+                        >
                           {/* Total Investment */}
                           <div
                             className={cn(
                               "rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-4",
+                              currentContest.contest_type === "cpm" &&
+                                "md:order-3",
                               isDark
                                 ? "bg-[#170337] border border-gray-600"
                                 : "bg-white",
@@ -20048,7 +20060,10 @@ export default function ContestDetailClient({
                                     isDark ? "text-white" : "text-gray-600",
                                   )}
                                 >
-                                  Total Investment
+                                  {currentContest.post_contest_status ===
+                                  "payouts_processed"
+                                    ? "Total Investment (Expected)"
+                                    : "Total Investment"}
                                 </p>
                                 <p
                                   className={cn(
@@ -20057,6 +20072,52 @@ export default function ContestDetailClient({
                                   )}
                                 >
                                   {(() => {
+                                    if (
+                                      currentContest.post_contest_status ===
+                                      "payouts_processed"
+                                    ) {
+                                      const expectedCents =
+                                        filteredAnalyticsSubmissions?.reduce(
+                                          (sum, s) => {
+                                            if (
+                                              currentContest.contest_type ===
+                                              "milestone"
+                                            ) {
+                                              return (
+                                                sum +
+                                                (milestoneSubmissionExpectedPayoutCents.get(
+                                                  s.id,
+                                                ) ?? Number(s.earnings || 0))
+                                              );
+                                            }
+                                            if (
+                                              currentContest.contest_type ===
+                                              "leaderboard"
+                                            ) {
+                                              return (
+                                                sum +
+                                                Number((s as any).earnings || 0)
+                                              );
+                                            }
+                                            if (
+                                              currentContest.contest_type ===
+                                              "cpm"
+                                            ) {
+                                              return (
+                                                sum +
+                                                calculateSubmissionExpectedEarnings(
+                                                  s,
+                                                  false,
+                                                )
+                                              );
+                                            }
+                                            return sum;
+                                          },
+                                          0,
+                                        ) || 0;
+                                      return formatMoney(expectedCents);
+                                    }
+
                                     if (
                                       currentContest.contest_type ===
                                       "leaderboard"
@@ -20090,9 +20151,13 @@ export default function ContestDetailClient({
                                     isDark ? "text-white" : "text-gray-500",
                                   )}
                                 >
-                                  {currentContest.contest_type === "leaderboard"
-                                    ? "Prize Pool"
-                                    : "Total Paid"}
+                                  {currentContest.post_contest_status ===
+                                  "payouts_processed"
+                                    ? "Expected Reward"
+                                    : currentContest.contest_type ===
+                                          "leaderboard"
+                                      ? "Prize Pool"
+                                      : "Total Paid"}
                                 </p>
                               </div>
                               <div
@@ -20112,6 +20177,8 @@ export default function ContestDetailClient({
                           <div
                             className={cn(
                               "rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-4",
+                              currentContest.contest_type === "cpm" &&
+                                "md:order-1",
                               isDark
                                 ? "bg-[#170337] border border-gray-600"
                                 : "bg-white",
@@ -20164,6 +20231,56 @@ export default function ContestDetailClient({
                                                 ? "Verified/Paid"
                                                 : "Filtered"}
                                 </p>
+                                {(currentContest.contest_type === "cpm" ||
+                                  currentContest.contest_type === "milestone" ||
+                                  currentContest.contest_type ===
+                                    "leaderboard") && (
+                                  <p
+                                    className={cn(
+                                      "text-xs mt-1",
+                                      isDark ? "text-white/80" : "text-gray-600",
+                                    )}
+                                  >
+                                    Expected Reward:{" "}
+                                    {formatMoney(
+                                      filteredAnalyticsSubmissions?.reduce(
+                                        (sum, s) => {
+                                          if (activeAnalyticsTab === "paid") {
+                                            return sum + Number(s.earnings || 0);
+                                          }
+
+                                          if (
+                                            currentContest.contest_type ===
+                                            "milestone"
+                                          ) {
+                                            return (
+                                              sum +
+                                              (milestoneSubmissionExpectedPayoutCents.get(
+                                                s.id,
+                                              ) ?? Number(s.earnings || 0))
+                                            );
+                                          }
+
+                                          if (
+                                            currentContest.contest_type ===
+                                            "leaderboard"
+                                          ) {
+                                            return sum + Number(s.earnings || 0);
+                                          }
+
+                                          return (
+                                            sum +
+                                            calculateSubmissionExpectedEarnings(
+                                              s,
+                                              false,
+                                            )
+                                          );
+                                        },
+                                        0,
+                                      ) || 0,
+                                    )}
+                                  </p>
+                                )}
                               </div>
                               <div
                                 className={cn(
@@ -20178,10 +20295,12 @@ export default function ContestDetailClient({
                             </div>
                           </div>
 
-                          {/* Cost Per View */}
+                          {/* Cost Per View / Expected CPM */}
                           <div
                             className={cn(
                               "rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-4",
+                              currentContest.contest_type === "cpm" &&
+                                "md:order-2",
                               isDark
                                 ? "bg-[#170337] border border-gray-600"
                                 : "bg-white",
@@ -20195,7 +20314,11 @@ export default function ContestDetailClient({
                                     isDark ? "text-white" : "text-gray-600",
                                   )}
                                 >
-                                  Cost Per View
+                                  {currentContest.contest_type === "cpm" ||
+                                  currentContest.contest_type === "milestone" ||
+                                  currentContest.contest_type === "leaderboard"
+                                    ? "Expected CPM"
+                                    : "Cost Per View"}
                                 </p>
                                 <p
                                   className={cn(
@@ -20203,43 +20326,81 @@ export default function ContestDetailClient({
                                     isDark ? "text-white" : "text-gray-900",
                                   )}
                                 >
-                                  {(() => {
-                                    const totalViews =
-                                      filteredAnalyticsSubmissions?.reduce(
-                                        (sum, s) => sum + (s.views || 0),
-                                        0,
-                                      ) || 0;
-                                    if (totalViews === 0) return "$0.00";
-
-                                    let totalCost = 0;
-                                    if (
-                                      currentContest.contest_type ===
-                                      "leaderboard"
-                                    ) {
-                                      totalCost =
-                                        currentContest.contest_based_details
-                                          ?.leaderboard_contest?.total_prize ||
-                                        0;
-                                    } else if (
-                                      currentContest.contest_type === "cpm" ||
-                                      currentContest.contest_type ===
-                                        "milestone"
-                                    ) {
-                                      totalCost =
-                                        filteredAnalyticsSubmissions
-                                          ?.filter((s) => s.status === "paid")
-                                          .reduce(
-                                            (sum, s) => sum + (s.earnings || 0),
+                                  {currentContest.contest_type === "cpm" ||
+                                  currentContest.contest_type === "milestone" ||
+                                  currentContest.contest_type === "leaderboard"
+                                    ? (() => {
+                                        const totalViews =
+                                          filteredAnalyticsSubmissions?.reduce(
+                                            (sum, s) => sum + (s.views || 0),
                                             0,
                                           ) || 0;
-                                    }
+                                        if (totalViews === 0) return "$0.00";
 
-                                    // Convert cents to dollars for calculation
-                                    const totalCostDollars = totalCost / 100;
-                                    const costPerView =
-                                      totalCostDollars / totalViews;
-                                    return `$${costPerView.toFixed(4)}`;
-                                  })()}
+                                        const expectedPayoutCents =
+                                          filteredAnalyticsSubmissions?.reduce(
+                                            (sum, s) => {
+                                              if (activeAnalyticsTab === "paid") {
+                                                return (
+                                                  sum + Number(s.earnings || 0)
+                                                );
+                                              }
+
+                                              if (
+                                                currentContest.contest_type ===
+                                                "milestone"
+                                              ) {
+                                                return (
+                                                  sum +
+                                                  (milestoneSubmissionExpectedPayoutCents.get(
+                                                    s.id,
+                                                  ) ?? Number(s.earnings || 0))
+                                                );
+                                              }
+
+                                              if (
+                                                currentContest.contest_type ===
+                                                "leaderboard"
+                                              ) {
+                                                return (
+                                                  sum +
+                                                  Number((s as any).earnings || 0)
+                                                );
+                                              }
+
+                                              return (
+                                                sum +
+                                                calculateSubmissionExpectedEarnings(
+                                                  s,
+                                                  false,
+                                                )
+                                              );
+                                            },
+                                            0,
+                                          ) || 0;
+
+                                        const expectedEffectiveCpm =
+                                          ((expectedPayoutCents / 100) /
+                                            totalViews) *
+                                          1000;
+                                        return `$${expectedEffectiveCpm.toFixed(3)}`;
+                                      })()
+                                    : (() => {
+                                        const totalViews =
+                                          filteredAnalyticsSubmissions?.reduce(
+                                            (sum, s) => sum + (s.views || 0),
+                                            0,
+                                          ) || 0;
+                                        if (totalViews === 0) return "$0.00";
+
+                                        const totalCost = 0;
+
+                                        // Convert cents to dollars for calculation
+                                        const totalCostDollars = totalCost / 100;
+                                        const costPerView =
+                                          totalCostDollars / totalViews;
+                                        return `$${costPerView.toFixed(4)}`;
+                                      })()}
                                 </p>
                                 <p
                                   className={cn(
@@ -20247,8 +20408,12 @@ export default function ContestDetailClient({
                                     isDark ? "text-white" : "text-gray-500",
                                   )}
                                 >
-                                  {currentContest.contest_type === "leaderboard"
-                                    ? "Prize Pool ÷ Views"
+                                  {currentContest.contest_type === "cpm" ||
+                                  currentContest.contest_type === "milestone" ||
+                                  currentContest.contest_type === "leaderboard"
+                                    ? activeAnalyticsTab === "paid"
+                                      ? "Paid amount ÷ paid views × 1000"
+                                      : "Expected reward ÷ views × 1000"
                                     : "Paid ÷ Views"}
                                 </p>
                               </div>
@@ -20264,67 +20429,12 @@ export default function ContestDetailClient({
                               </div>
                             </div>
                           </div>
-                        </div>
-
-                        {/* CPM Contest Specific Metrics */}
-                        {currentContest.contest_type === "cpm" && (
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            {/* CPM Rate */}
+                          {currentContest.contest_type === "cpm" &&
+                            currentContest.post_contest_status !==
+                              "payouts_processed" && (
                             <div
                               className={cn(
-                                "rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-4",
-                                isDark
-                                  ? "bg-[#170337] border border-gray-600"
-                                  : "bg-white",
-                              )}
-                            >
-                              <div className="flex items-center justify-between">
-                                <div>
-                                  <p
-                                    className={cn(
-                                      "text-sm font-medium",
-                                      isDark ? "text-white" : "text-gray-600",
-                                    )}
-                                  >
-                                    CPM Rate
-                                  </p>
-                                  <p
-                                    className={cn(
-                                      "text-2xl font-bold",
-                                      isDark ? "text-white" : "text-gray-900",
-                                    )}
-                                  >
-                                    $
-                                    {currentContest.contest_based_details?.cpm_contest?.cpm_rate_usd?.toFixed(
-                                      2,
-                                    ) || "0.00"}
-                                  </p>
-                                  <p
-                                    className={cn(
-                                      "text-xs text-gray-500 mt-1",
-                                      isDark ? "text-white" : "text-gray-500",
-                                    )}
-                                  >
-                                    Per 1,000 views
-                                  </p>
-                                </div>
-                                <div
-                                  className={cn(
-                                    "w-10 h-10 flex items-center justify-center rounded-full",
-                                    isDark
-                                      ? "bg-purple-900/50 text-purple-300"
-                                      : "bg-purple-100 text-purple-600",
-                                  )}
-                                >
-                                  <TrendingUp className="h-5 w-5" />
-                                </div>
-                              </div>
-                            </div>
-
-                            {/* Effective CPM */}
-                            <div
-                              className={cn(
-                                "rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-4",
+                                "rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-4 md:order-4",
                                 isDark
                                   ? "bg-[#170337] border border-gray-600"
                                   : "bg-white",
@@ -20361,11 +20471,10 @@ export default function ContestDetailClient({
                                           ) || 0;
 
                                       if (totalViews === 0) return "$0.00";
-                                      // Convert cents to dollars for calculation
                                       const totalPaidDollars = totalPaid / 100;
                                       const effectiveCPM =
                                         (totalPaidDollars / totalViews) * 1000;
-                                      return `$${effectiveCPM.toFixed(2)}`;
+                                      return `$${effectiveCPM.toFixed(3)}`;
                                     })()}
                                   </p>
                                   <p
@@ -20374,7 +20483,7 @@ export default function ContestDetailClient({
                                       isDark ? "text-white" : "text-gray-500",
                                     )}
                                   >
-                                    Actual rate achieved
+                                    When paid (actual)
                                   </p>
                                 </div>
                                 <div
@@ -20389,8 +20498,218 @@ export default function ContestDetailClient({
                                 </div>
                               </div>
                             </div>
-                          </div>
-                        )}
+                          )}
+
+                          {(currentContest.contest_type === "cpm" ||
+                            currentContest.contest_type === "milestone" ||
+                            currentContest.contest_type === "leaderboard") &&
+                            currentContest.post_contest_status ===
+                              "payouts_processed" && (
+                              <>
+                                {(() => {
+                                  const paidStats =
+                                    filteredAnalyticsSubmissions?.reduce(
+                                      (acc, s) => {
+                                        acc.tabViews += Number(s.views || 0);
+
+                                        const status = getStatus(s);
+                                        const isPaid =
+                                          status === "paid" ||
+                                          Boolean((s as any).paid_at) ||
+                                          (s as any).paid === true;
+                                        if (!isPaid) return acc;
+
+                                        acc.paidViews += Number(s.views || 0);
+                                        acc.actualPaidCents +=
+                                          Number((s as any).earnings || 0) +
+                                          Number((s as any).bonus_amount || 0);
+                                        return acc;
+                                      },
+                                      { actualPaidCents: 0, paidViews: 0, tabViews: 0 },
+                                    ) || {
+                                      actualPaidCents: 0,
+                                      paidViews: 0,
+                                      tabViews: 0,
+                                    };
+
+                                  const paidCpm =
+                                    paidStats.tabViews > 0
+                                      ? ((paidStats.actualPaidCents / 100) /
+                                          paidStats.tabViews) *
+                                        1000
+                                      : 0;
+
+                                  return (
+                                    <>
+                                      <div
+                                        className={cn(
+                                          "rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-4 md:order-5",
+                                          isDark
+                                            ? "bg-[#170337] border border-gray-600"
+                                            : "bg-white",
+                                        )}
+                                      >
+                                        <div className="flex items-center justify-between">
+                                          <div>
+                                            <p
+                                              className={cn(
+                                                "text-sm font-medium",
+                                                isDark
+                                                  ? "text-white"
+                                                  : "text-gray-600",
+                                              )}
+                                            >
+                                              Total Amount Paid
+                                            </p>
+                                            <p
+                                              className={cn(
+                                                "text-2xl font-bold",
+                                                isDark
+                                                  ? "text-white"
+                                                  : "text-gray-900",
+                                              )}
+                                            >
+                                              {formatMoney(
+                                                paidStats.actualPaidCents,
+                                              )}
+                                            </p>
+                                            <p
+                                              className={cn(
+                                                "text-xs text-gray-500 mt-1",
+                                                isDark
+                                                  ? "text-white"
+                                                  : "text-gray-500",
+                                              )}
+                                            >
+                                              Paid + Bonus
+                                            </p>
+                                          </div>
+                                          <div
+                                            className={cn(
+                                              "w-10 h-10 flex items-center justify-center rounded-full",
+                                              isDark
+                                                ? "bg-red-900/50 text-red-300"
+                                                : "bg-red-100 text-red-600",
+                                            )}
+                                          >
+                                            <DollarSign className="h-5 w-5" />
+                                          </div>
+                                        </div>
+                                      </div>
+
+                                      <div
+                                        className={cn(
+                                          "rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-4 md:order-6",
+                                          isDark
+                                            ? "bg-[#170337] border border-gray-600"
+                                            : "bg-white",
+                                        )}
+                                      >
+                                        <div className="flex items-center justify-between">
+                                          <div>
+                                            <p
+                                              className={cn(
+                                                "text-sm font-medium",
+                                                isDark
+                                                  ? "text-white"
+                                                  : "text-gray-600",
+                                              )}
+                                            >
+                                              Selected Tab Views
+                                            </p>
+                                            <p
+                                              className={cn(
+                                                "text-2xl font-bold",
+                                                isDark
+                                                  ? "text-white"
+                                                  : "text-gray-900",
+                                              )}
+                                            >
+                                              {paidStats.tabViews.toLocaleString()}
+                                            </p>
+                                            <p
+                                              className={cn(
+                                                "text-xs text-gray-500 mt-1",
+                                                isDark
+                                                  ? "text-white"
+                                                  : "text-gray-500",
+                                              )}
+                                            >
+                                              Views in Current Tab
+                                            </p>
+                                          </div>
+                                          <div
+                                            className={cn(
+                                              "w-10 h-10 flex items-center justify-center rounded-full",
+                                              isDark
+                                                ? "bg-blue-900/50 text-blue-300"
+                                                : "bg-blue-100 text-blue-600",
+                                            )}
+                                          >
+                                            <Eye className="h-5 w-5" />
+                                          </div>
+                                        </div>
+                                      </div>
+
+                                      <div
+                                        className={cn(
+                                          "rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-4 md:order-7",
+                                          isDark
+                                            ? "bg-[#170337] border border-gray-600"
+                                            : "bg-white",
+                                        )}
+                                      >
+                                        <div className="flex items-center justify-between">
+                                          <div>
+                                            <p
+                                              className={cn(
+                                                "text-sm font-medium",
+                                                isDark
+                                                  ? "text-white"
+                                                  : "text-gray-600",
+                                              )}
+                                            >
+                                              Effective CPM (Paid)
+                                            </p>
+                                            <p
+                                              className={cn(
+                                                "text-2xl font-bold",
+                                                isDark
+                                                  ? "text-white"
+                                                  : "text-gray-900",
+                                              )}
+                                            >
+                                              ${paidCpm.toFixed(3)}
+                                            </p>
+                                            <p
+                                              className={cn(
+                                                "text-xs text-gray-500 mt-1",
+                                                isDark
+                                                  ? "text-white"
+                                                  : "text-gray-500",
+                                              )}
+                                            >
+                                              Paid amount ÷ selected tab views x 1000
+                                            </p>
+                                          </div>
+                                          <div
+                                            className={cn(
+                                              "w-10 h-10 flex items-center justify-center rounded-full",
+                                              isDark
+                                                ? "bg-orange-900/50 text-orange-300"
+                                                : "bg-orange-100 text-orange-600",
+                                            )}
+                                          >
+                                            <BarChart3 className="h-5 w-5" />
+                                          </div>
+                                        </div>
+                                      </div>
+                                    </>
+                                  );
+                                })()}
+                              </>
+                            )}
+                        </div>
 
                         {/* Summary Card */}
                         <div

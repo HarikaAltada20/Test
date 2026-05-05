@@ -116,7 +116,7 @@ interface CreatorSubmissionsModalProps {
   creator: Creator;
   submissions: Submission[];
   contest: any;
-  onVerify: (submissionIds: string[]) => void;
+  onVerify: (submissionIds: string[]) => Promise<void> | void;
   onReject: (submissionIds: string[]) => void;
   onSetPending: (submissionIds: string[]) => void;
   onPayment: (
@@ -160,6 +160,7 @@ export function CreatorSubmissionsModal({
     "views-desc" | "views-asc" | "date-desc" | "date-asc"
   >("date-desc");
   const [mode, setMode] = useState<"light" | "dark">("light");
+  const [bulkVerifyLoading, setBulkVerifyLoading] = useState(false);
   const [bulkPaymentLoading, setBulkPaymentLoading] = useState(false);
   const [downloadingSubmissionId, setDownloadingSubmissionId] = useState<
     string | null
@@ -294,10 +295,19 @@ export function CreatorSubmissionsModal({
     setSelectedSubmissions(newSet);
   };
 
-  const handleBulkAction = (action: "verify" | "reject" | "pending") => {
+  const handleBulkAction = async (
+    action: "verify" | "reject" | "pending",
+  ) => {
     const selectedIds = Array.from(selectedSubmissions);
     if (action === "verify") {
-      onVerify(selectedIds);
+      setBulkVerifyLoading(true);
+      try {
+        await onVerify(selectedIds);
+        setSelectedSubmissions(new Set());
+      } finally {
+        setBulkVerifyLoading(false);
+      }
+      return;
     } else if (action === "reject") {
       onReject(selectedIds);
     } else {
@@ -1191,6 +1201,8 @@ export function CreatorSubmissionsModal({
                           <Button
                             size="sm"
                             onClick={() => handleBulkAction("verify")}
+                            loading={bulkVerifyLoading}
+                            loadingText="Verifying submissions..."
                             className={cn(
                               "whitespace-nowrap rounded-md",
                               isDark
@@ -1204,6 +1216,7 @@ export function CreatorSubmissionsModal({
                           <Button
                             size="sm"
                             onClick={() => handleBulkAction("reject")}
+                            disabled={bulkVerifyLoading}
                             className={cn(
                               "whitespace-nowrap rounded-md",
                               isDark
@@ -1217,6 +1230,7 @@ export function CreatorSubmissionsModal({
                           <Button
                             size="sm"
                             onClick={() => handleBulkAction("pending")}
+                            disabled={bulkVerifyLoading}
                             className={cn(
                               "whitespace-nowrap rounded-md",
                               isDark
@@ -1227,6 +1241,16 @@ export function CreatorSubmissionsModal({
                             <Clock className="h-4 w-4 mr-1" />
                             Mark as Pending
                           </Button>
+                          {bulkVerifyLoading && (
+                            <span
+                              className={cn(
+                                "text-xs self-center whitespace-nowrap",
+                                isDark ? "text-blue-200" : "text-blue-700",
+                              )}
+                            >
+                              Verifying submissions...
+                            </span>
+                          )}
                         </>
                       )}
                     {contest?.post_contest_status === "verification_complete" &&

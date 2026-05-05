@@ -5,10 +5,13 @@ import { cn } from "@/lib/utils";
 import { useEffect, useMemo, useState } from "react";
 
 interface Submission {
+  id?: string;
   paid: boolean;
   earnings: number | null;
   bonus_paid: boolean;
   bonus_amount?: number;
+  paid_at?: string | null;
+  status?: string;
 }
 
 interface Contest {
@@ -29,6 +32,8 @@ interface BudgetProgressProps {
   milestoneCreatorBonusExpectedCents?: number | null;
   /** Cents — creator bonus actually marked paid on submissions (subset of expected) */
   milestoneCreatorBonusPaidCents?: number | null;
+  /** Per-submission expected payout cents for milestone logic */
+  milestoneExpectedPayoutBySubmissionId?: Map<string, number> | null;
 }
 
 export function BudgetProgress({
@@ -39,6 +44,7 @@ export function BudgetProgress({
   milestoneExpectedPayoutCents = null,
   milestoneCreatorBonusExpectedCents = null,
   milestoneCreatorBonusPaidCents = null,
+  milestoneExpectedPayoutBySubmissionId = null,
 }: BudgetProgressProps) {
   const [mode, setMode] = useState<"light" | "dark">("light");
   // Get contest config outside useMemo so it's available in the component
@@ -136,14 +142,44 @@ export function BudgetProgress({
           ? calculateMilestoneBudgetSpent(subsForMilestone as any, milestones)
           : 0;
       const aggregateMilestoneCents = Math.round(milestoneDollars * 100);
+      const expectedBySubmissionMap =
+        milestoneExpectedPayoutBySubmissionId instanceof Map
+          ? milestoneExpectedPayoutBySubmissionId
+          : null;
 
+      // Paid-first model:
+      // - If a submission is paid and has stored earnings, use paid amount.
+      // - Otherwise use expected payout.
+      let blendedMilestonePayoutCents = 0;
+      for (const s of submissions) {
+        const st = normalizeMilestoneStatus((s as any).status).toLowerCase();
+        if (st !== "verified" && st !== "paid") continue;
+        if (twitterExcluded(s)) continue;
+
+        const isPaidSubmission =
+          st === "paid" || Boolean((s as any).paid_at) || (s as any).paid === true;
+        const paidEarningsCents = Number((s as any).earnings || 0);
+        const expectedCents =
+          expectedBySubmissionMap?.get(String((s as any).id || "")) ?? 0;
+
+        if (isPaidSubmission && paidEarningsCents > 0) {
+          blendedMilestonePayoutCents += paidEarningsCents;
+        } else {
+          blendedMilestonePayoutCents += expectedCents;
+        }
+      }
+
+      const hasBlendedMilestone =
+        expectedBySubmissionMap != null || blendedMilestonePayoutCents > 0;
       const useDetailMilestone =
         typeof milestoneExpectedPayoutCents === "number" &&
         !Number.isNaN(milestoneExpectedPayoutCents) &&
         milestoneExpectedPayoutCents >= 0;
-      const cpmPaid = useDetailMilestone
-        ? Math.round(milestoneExpectedPayoutCents)
-        : aggregateMilestoneCents;
+      const cpmPaid = hasBlendedMilestone
+        ? blendedMilestonePayoutCents
+        : useDetailMilestone
+          ? Math.round(milestoneExpectedPayoutCents)
+          : aggregateMilestoneCents;
 
       let bonusPaidFromSubmissions = 0;
       for (const s of submissions) {
@@ -171,11 +207,16 @@ export function BudgetProgress({
         ? Math.round(milestoneCreatorBonusPaidCents)
         : null;
 
-      const bonusPaidCents = useDetailBonusExpected
-        ? bonusExpectedCents
-        : bonusPaidFromMap !== null && bonusPaidFromMap > 0
+      // Paid-first for bonus as well:
+      // actual paid bonus + expected unpaid remainder.
+      const actualPaidBonusCents =
+        bonusPaidFromMap !== null && bonusPaidFromMap > 0
           ? bonusPaidFromMap
           : bonusPaidFromSubmissions;
+      const unpaidExpectedBonusCents = useDetailBonusExpected
+        ? Math.max(bonusExpectedCents - actualPaidBonusCents, 0)
+        : 0;
+      const bonusPaidCents = actualPaidBonusCents + unpaidExpectedBonusCents;
 
       const totalSpent = cpmPaid + bonusPaidCents;
       const cpmPercentage =
