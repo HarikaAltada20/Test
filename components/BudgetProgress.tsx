@@ -245,6 +245,8 @@ export function BudgetProgress({
       }
     });
 
+    const isDualRewards = contest.contest_type === "dual_rewards";
+
     for (const sub of sortedSubmissions) {
       const creatorId = (sub as any).creator_id;
       if (!creatorEarnings.has(creatorId)) {
@@ -268,7 +270,7 @@ export function BudgetProgress({
             2
           )}`
         );
-      } else if (sub.paid && sub.earnings != null) {
+      } else if (!isDualRewards && sub.paid && sub.earnings != null) {
         // Use actual paid earnings from database for non-Twitter platforms (YouTube, Instagram)
         submissionEarnings = sub.earnings / 100; // Convert cents to dollars
         console.log(
@@ -277,7 +279,10 @@ export function BudgetProgress({
           } Paid] earnings=${submissionEarnings.toFixed(2)}`
         );
       } else {
-        // Calculate expected earnings for verified unpaid (YouTube, Instagram)
+        // Calculate expected earnings from CPM formula.
+        // For dual rewards we intentionally keep CPM contribution formula-based
+        // (not from custom paid amount), so CPM + milestone tracker never drops
+        // after paying one component.
         let views = (sub as any).views || 0;
         if (minViews != null && views < minViews) views = 0;
         if (maxViews != null && views > maxViews) views = maxViews;

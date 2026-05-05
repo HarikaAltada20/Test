@@ -42,7 +42,11 @@ import {
   calculateTwitterCpmBudgetSpent,
   Submission,
 } from "@/lib/contest-utils-client";
-import { getPoolBudgetCentsFromDetails } from "@/lib/contest-type";
+import {
+  getPoolBudgetCentsFromDetails,
+  isCpmContestType,
+  isMilestoneContestType,
+} from "@/lib/contest-type";
 import { computeMilestoneContestExpectedSpendCents } from "@/lib/milestone-contest-expected-spend";
 import { getPlatformIconWithFallback } from "@/lib/platform-icons";
 import { cn } from "@/lib/utils";
@@ -80,7 +84,12 @@ type PlatformFilterType =
   | "instagram"
   | "twitter"
   | "tiktok"; // Scalable: add more platforms as needed
-type ContestTypeFilterType = "all" | "leaderboard" | "cpm" | "milestone";
+type ContestTypeFilterType =
+  | "all"
+  | "leaderboard"
+  | "cpm"
+  | "milestone"
+  | "dual_rewards";
 type SortOptionType =
   | "relevance_desc"
   | "start_date_desc"
@@ -105,6 +114,33 @@ const getBudgetTrackerValues = (
 
   return { spent: clampedSpent, percentage, remaining };
 };
+
+/**
+ * Dual rewards often store a single pool at `contest_based_details.total_budget_cents`
+ * without nested `cpm_contest.total_budget` / `milestone_contest.total_budget_cents`.
+ * Spend is still computed per-side into `budget_spent` on those nested objects.
+ */
+function getDualUnifiedBudgetMeta(contest: any): {
+  total: number;
+  spent: number;
+} | null {
+  if (contest?.contest_type !== "dual_rewards") return null;
+  const details = contest.contest_based_details;
+  if (!details) return null;
+  const total = getPoolBudgetCentsFromDetails("dual_rewards", details);
+  if (total <= 0) return null;
+  const hasNestedCpmBudget =
+    typeof details.cpm_contest?.total_budget === "number" &&
+    details.cpm_contest.total_budget > 0;
+  const hasNestedMilestoneBudget =
+    typeof details.milestone_contest?.total_budget_cents === "number" &&
+    details.milestone_contest.total_budget_cents > 0;
+  if (hasNestedCpmBudget || hasNestedMilestoneBudget) return null;
+  const spent =
+    (details.cpm_contest?.budget_spent || 0) +
+    (details.milestone_contest?.budget_spent || 0);
+  return { total, spent };
+}
 
 // Helper function to get contests filtered by media type
 const getContestsByMediaType = (contests: any[], mediaType: string) => {
@@ -613,7 +649,8 @@ export default function OpportunitiesPage({
               contest.contest_format === "text_image";
 
             const manualAdjustmentMap =
-              contest.contest_type === "cpm"
+              contest.contest_type === "cpm" ||
+              contest.contest_type === "dual_rewards"
                 ? await fetchTwitterLeaderboardManualAdjustments(contest.id)
                 : {};
 
@@ -699,8 +736,14 @@ export default function OpportunitiesPage({
                   },
                 },
               };
-            } else if (
-              contest.contest_type === "cpm" &&
+            }
+
+            const treatAsCpmPool = isCpmContestType(contest.contest_type);
+            const treatAsMilestonePool =
+              isMilestoneContestType(contest.contest_type);
+
+            if (
+              treatAsCpmPool &&
               contest.platform === "twitter" &&
               contest.contest_based_details?.cpm_contest?.cpm_rate_usd > 0
             ) {
@@ -762,8 +805,10 @@ export default function OpportunitiesPage({
                   },
                 },
               };
-            } else if (
-              contest.contest_type === "cpm" &&
+            }
+
+            if (
+              treatAsCpmPool &&
               contest.contest_based_details?.cpm_contest?.cpm_rate_usd > 0 &&
               !["twitter", "x"].includes((contest.platform || "").toLowerCase())
             ) {
@@ -817,8 +862,10 @@ export default function OpportunitiesPage({
                   },
                 },
               };
-            } else if (
-              contest.contest_type === "milestone" &&
+            }
+
+            if (
+              treatAsMilestonePool &&
               contest.contest_based_details?.milestone_contest
             ) {
               const { data: submissions } = await supabase
@@ -1214,24 +1261,19 @@ export default function OpportunitiesPage({
           ) {
             valueA = a.contest_based_details.leaderboard_contest.total_prize;
           } else if (
-            a.contest_type === "cpm" &&
-            a.contest_based_details?.cpm_contest?.total_budget
-          ) {
-            valueA = a.contest_based_details.cpm_contest.total_budget; // Assuming budget is in cents
-          } else if (
-            a.contest_type === "milestone" &&
-            a.contest_based_details?.milestone_contest?.total_budget_cents
-          ) {
-            valueA =
-              a.contest_based_details.milestone_contest.total_budget_cents;
-          } else if (
-            a.contest_type === "dual_rewards" &&
+            isCpmContestType(a.contest_type) &&
             a.contest_based_details
           ) {
             valueA = getPoolBudgetCentsFromDetails(
               a.contest_type,
               a.contest_based_details,
             );
+          } else if (
+            a.contest_type === "milestone" &&
+            a.contest_based_details?.milestone_contest?.total_budget_cents
+          ) {
+            valueA =
+              a.contest_based_details.milestone_contest.total_budget_cents;
           }
           if (
             b.contest_type === "leaderboard" &&
@@ -1239,24 +1281,19 @@ export default function OpportunitiesPage({
           ) {
             valueB = b.contest_based_details.leaderboard_contest.total_prize;
           } else if (
-            b.contest_type === "cpm" &&
-            b.contest_based_details?.cpm_contest?.total_budget
-          ) {
-            valueB = b.contest_based_details.cpm_contest.total_budget; // Assuming budget is in cents
-          } else if (
-            b.contest_type === "milestone" &&
-            b.contest_based_details?.milestone_contest?.total_budget_cents
-          ) {
-            valueB =
-              b.contest_based_details.milestone_contest.total_budget_cents;
-          } else if (
-            b.contest_type === "dual_rewards" &&
+            isCpmContestType(b.contest_type) &&
             b.contest_based_details
           ) {
             valueB = getPoolBudgetCentsFromDetails(
               b.contest_type,
               b.contest_based_details,
             );
+          } else if (
+            b.contest_type === "milestone" &&
+            b.contest_based_details?.milestone_contest?.total_budget_cents
+          ) {
+            valueB =
+              b.contest_based_details.milestone_contest.total_budget_cents;
           }
           if (sortOption === "value_desc") {
             return valueB - valueA;
@@ -1266,12 +1303,12 @@ export default function OpportunitiesPage({
         case "cpm_rate_desc":
         case "cpm_rate_asc":
           const rateA =
-            a.contest_type === "cpm" &&
+            isCpmContestType(a.contest_type) &&
             a.contest_based_details?.cpm_contest?.cpm_rate_usd
               ? a.contest_based_details.cpm_contest.cpm_rate_usd
               : -1; // Use -1 to sort contests without CPM rate last
           const rateB =
-            b.contest_type === "cpm" &&
+            isCpmContestType(b.contest_type) &&
             b.contest_based_details?.cpm_contest?.cpm_rate_usd
               ? b.contest_based_details.cpm_contest.cpm_rate_usd
               : -1;
@@ -1336,6 +1373,7 @@ export default function OpportunitiesPage({
 
   // Render list view item for opportunities
   const renderOpportunityListItem = (contest: any) => {
+    const dualUnifiedBudget = getDualUnifiedBudgetMeta(contest);
     return (
       <Card
         key={contest.id}
@@ -1695,14 +1733,16 @@ export default function OpportunitiesPage({
                         ? "Leaderboard"
                         : contest.contest_type === "milestone"
                           ? "Milestone"
-                          : contest.contest_type
-                            ? contest.contest_type.charAt(0).toUpperCase() +
-                              contest.contest_type.slice(1)
-                            : "N/A"}
+                          : contest.contest_type === "dual_rewards"
+                            ? "Dual Rewards"
+                            : contest.contest_type
+                              ? contest.contest_type.charAt(0).toUpperCase() +
+                                contest.contest_type.slice(1)
+                              : "N/A"}
                   </span>
                 </span>
               </div>
-              {contest.contest_type === "cpm" &&
+              {isCpmContestType(contest.contest_type) &&
                 contest.contest_based_details?.cpm_contest?.cpm_rate_usd !=
                   null && (
                   <div className="flex items-center">
@@ -1730,28 +1770,30 @@ export default function OpportunitiesPage({
                     </span>
                   </div>
                 )}
-              {contest.contest_type === "cpm" &&
-                contest.contest_based_details?.cpm_contest?.total_budget !=
-                  null &&
-                contest.contest_based_details.cpm_contest.total_budget > 0 && (
-                  <div className="flex items-center">
-                    <DollarSign className="h-4 w-4 mr-2 flex-shrink-0" />
-                    <span
-                      style={{
-                        color: isDark ? "white" : "#475569",
-                        transition: "none",
-                      }}
-                    >
-                      Total Budget:{" "}
-                      <span className="font-medium">
-                        {formatMoney(
-                          contest.contest_based_details.cpm_contest
-                            .total_budget,
-                        )}
+              {isCpmContestType(contest.contest_type) &&
+                (() => {
+                  const poolCents = getPoolBudgetCentsFromDetails(
+                    contest.contest_type,
+                    contest.contest_based_details,
+                  );
+                  if (poolCents <= 0) return null;
+                  return (
+                    <div className="flex items-center">
+                      <DollarSign className="h-4 w-4 mr-2 flex-shrink-0" />
+                      <span
+                        style={{
+                          color: isDark ? "white" : "#475569",
+                          transition: "none",
+                        }}
+                      >
+                        Total Budget:{" "}
+                        <span className="font-medium">
+                          {formatMoney(poolCents)}
+                        </span>
                       </span>
-                    </span>
-                  </div>
-                )}
+                    </div>
+                  );
+                })()}
               {contest.contest_type === "leaderboard" &&
                 contest.contest_based_details?.leaderboard_contest
                   ?.total_prize != null &&
@@ -1806,19 +1848,14 @@ export default function OpportunitiesPage({
                 )}
             </div>
 
-            {/* Budget Spent Progress Bar for CPM contests */}
-            {contest.contest_type === "cpm" &&
-              contest.contest_based_details?.cpm_contest?.total_budget !=
-                null &&
-              contest.contest_based_details.cpm_contest.total_budget > 0 &&
+            {/* Unified pool (typical dual rewards: root total_budget_cents only) */}
+            {dualUnifiedBudget &&
               (() => {
-                const totalBudget =
-                  contest.contest_based_details.cpm_contest.total_budget;
-                const budgetSpent =
-                  contest.contest_based_details.cpm_contest.budget_spent || 0;
-                const percentage = (budgetSpent / totalBudget) * 100;
-                const remaining = totalBudget - budgetSpent;
-
+                const { total, spent } = dualUnifiedBudget;
+                const { percentage, remaining } = getBudgetTrackerValues(
+                  total,
+                  spent,
+                );
                 return (
                   <div className="mt-3">
                     <div
@@ -1829,6 +1866,63 @@ export default function OpportunitiesPage({
                       }}
                     >
                       <span className="font-medium">Budget Tracker</span>
+                      <span className="font-semibold">
+                        {formatMoney(spent)} / {formatMoney(total)}
+                      </span>
+                    </div>
+                    <div
+                      className={cn(
+                        "relative w-full bg-slate-200 dark:bg-slate-700 rounded-full h-3 overflow-hidden",
+                        isDark ? "bg-[#FFFFFF42]" : "bg-slate-200",
+                      )}
+                    >
+                      <div
+                        className="absolute h-full bg-gradient-to-r from-purple-500 to-purple-600 rounded-full transition-all duration-500 ease-out"
+                        style={{ width: `${Math.min(percentage, 100)}%` }}
+                      ></div>
+                    </div>
+                    <div
+                      className="flex justify-between text-xs mt-1.5"
+                      style={{
+                        color: isDark ? "#d1d5db" : "#64748b",
+                        transition: "none",
+                      }}
+                    >
+                      <span>{percentage.toFixed(1)}% used</span>
+                      <span>{formatMoney(remaining)} remaining</span>
+                    </div>
+                  </div>
+                );
+              })()}
+
+            {/* Budget Spent Progress Bar for CPM contests (and dual rewards CPM pool) */}
+            {!dualUnifiedBudget &&
+              isCpmContestType(contest.contest_type) &&
+              contest.contest_based_details?.cpm_contest?.total_budget !=
+                null &&
+              contest.contest_based_details.cpm_contest.total_budget > 0 &&
+              (() => {
+                const totalBudget =
+                  contest.contest_based_details.cpm_contest.total_budget;
+                const budgetSpent =
+                  contest.contest_based_details.cpm_contest.budget_spent || 0;
+                const percentage = (budgetSpent / totalBudget) * 100;
+                const remaining = totalBudget - budgetSpent;
+                const trackerLabel =
+                  contest.contest_type === "dual_rewards"
+                    ? "CPM pool"
+                    : "Budget Tracker";
+
+                return (
+                  <div className="mt-3">
+                    <div
+                      className="flex justify-between text-sm mb-2"
+                      style={{
+                        color: isDark ? "#d1d5db" : "#374151",
+                        transition: "none",
+                      }}
+                    >
+                      <span className="font-medium">{trackerLabel}</span>
                       <span className="font-semibold">
                         {formatMoney(budgetSpent)} / {formatMoney(totalBudget)}
                       </span>
@@ -1859,7 +1953,8 @@ export default function OpportunitiesPage({
               })()}
 
             {/* Milestone budget_spent: computeMilestoneContestExpectedSpendCents in fetchData */}
-            {contest.contest_type === "milestone" &&
+            {!dualUnifiedBudget &&
+              isMilestoneContestType(contest.contest_type) &&
               contest.contest_based_details?.milestone_contest
                 ?.total_budget_cents != null &&
               contest.contest_based_details.milestone_contest
@@ -1875,6 +1970,10 @@ export default function OpportunitiesPage({
                   totalBudget,
                   budgetSpent,
                 );
+                const trackerLabel =
+                  contest.contest_type === "dual_rewards"
+                    ? "Milestone pool"
+                    : "Budget Tracker";
 
                 return (
                   <div className="mt-3">
@@ -1885,7 +1984,7 @@ export default function OpportunitiesPage({
                         transition: "none",
                       }}
                     >
-                      <span className="font-medium">Budget Tracker</span>
+                      <span className="font-medium">{trackerLabel}</span>
                       <span className="font-semibold">
                         {formatMoney(budgetSpent)} / {formatMoney(totalBudget)}
                       </span>
@@ -2351,6 +2450,9 @@ export default function OpportunitiesPage({
             <SelectItem value="milestone" isDark={isDark}>
               Milestone
             </SelectItem>
+            <SelectItem value="dual_rewards" isDark={isDark}>
+              Dual rewards
+            </SelectItem>
           </SelectContent>
         </Select>
 
@@ -2413,7 +2515,9 @@ export default function OpportunitiesPage({
         {displayViewMode === "grid" ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {paginatedContests && paginatedContests.length > 0 ? (
-              paginatedContests.map((contest) => (
+              paginatedContests.map((contest) => {
+                const dualUnifiedBudget = getDualUnifiedBudgetMeta(contest);
+                return (
                 <Card
                   key={contest.id}
                   onClick={() => handleViewDetails(contest.id)}
@@ -2791,16 +2895,18 @@ export default function OpportunitiesPage({
                                 ? "Leaderboard"
                                 : contest.contest_type === "milestone"
                                   ? "Milestone"
-                                  : contest.contest_type
-                                    ? contest.contest_type
-                                        .charAt(0)
-                                        .toUpperCase() +
-                                      contest.contest_type.slice(1)
-                                    : "N/A"}
+                                  : contest.contest_type === "dual_rewards"
+                                    ? "Dual Rewards"
+                                    : contest.contest_type
+                                      ? contest.contest_type
+                                          .charAt(0)
+                                          .toUpperCase() +
+                                        contest.contest_type.slice(1)
+                                      : "N/A"}
                           </span>
                         </span>
                       </div>
-                      {contest.contest_type === "cpm" &&
+                      {isCpmContestType(contest.contest_type) &&
                         contest.contest_based_details?.cpm_contest
                           ?.cpm_rate_usd != null && (
                           <div className="flex items-center">
@@ -2829,29 +2935,30 @@ export default function OpportunitiesPage({
                             </span>
                           </div>
                         )}
-                      {contest.contest_type === "cpm" &&
-                        contest.contest_based_details?.cpm_contest
-                          ?.total_budget != null &&
-                        contest.contest_based_details.cpm_contest.total_budget >
-                          0 && (
-                          <div className="flex items-center">
-                            <DollarSign className="h-4 w-4 mr-2 flex-shrink-0" />
-                            <span>
-                              Total Budget:{" "}
-                              <span
-                                className={cn(
-                                  "font-medium",
-                                  isDark ? "text-white" : "text-slate-700",
-                                )}
-                              >
-                                {formatMoney(
-                                  contest.contest_based_details.cpm_contest
-                                    .total_budget,
-                                )}
+                      {isCpmContestType(contest.contest_type) &&
+                        (() => {
+                          const poolCents = getPoolBudgetCentsFromDetails(
+                            contest.contest_type,
+                            contest.contest_based_details,
+                          );
+                          if (poolCents <= 0) return null;
+                          return (
+                            <div className="flex items-center">
+                              <DollarSign className="h-4 w-4 mr-2 flex-shrink-0" />
+                              <span>
+                                Total Budget:{" "}
+                                <span
+                                  className={cn(
+                                    "font-medium",
+                                    isDark ? "text-white" : "text-slate-700",
+                                  )}
+                                >
+                                  {formatMoney(poolCents)}
+                                </span>
                               </span>
-                            </span>
-                          </div>
-                        )}
+                            </div>
+                          );
+                        })()}
                       {contest.contest_type === "leaderboard" &&
                         contest.contest_based_details?.leaderboard_contest
                           ?.total_prize != null &&
@@ -2928,8 +3035,61 @@ export default function OpportunitiesPage({
                         )}
                     </div>
 
-                    {/* Budget Spent Progress Bar for CPM contests */}
-                    {contest.contest_type === "cpm" &&
+                    {/* Unified pool (typical dual rewards: root total_budget_cents only) */}
+                    {dualUnifiedBudget &&
+                      (() => {
+                        const { total, spent } = dualUnifiedBudget;
+                        const { percentage, remaining } =
+                          getBudgetTrackerValues(total, spent);
+                        return (
+                          <div className="mt-3 mb-3">
+                            <div
+                              className="flex justify-between text-sm mb-2"
+                              style={{
+                                color: isDark ? "#d1d5db" : "#374151",
+                                transition: "none",
+                              }}
+                            >
+                              <span className="font-medium">
+                                Budget Tracker
+                              </span>
+                              <span className="font-semibold">
+                                {formatMoney(spent)} / {formatMoney(total)}
+                              </span>
+                            </div>
+                            <div
+                              className={cn(
+                                "relative w-full bg-slate-200 dark:bg-slate-700 rounded-full h-3 overflow-hidden",
+                                isDark ? "bg-[#FFFFFF42]" : "bg-slate-200",
+                              )}
+                              title={`Total Budget Spent: ${formatMoney(
+                                spent,
+                              )}`}
+                            >
+                              <div
+                                className="absolute h-full bg-gradient-to-r from-purple-500 to-purple-600 rounded-full transition-all duration-500 ease-out"
+                                style={{
+                                  width: `${Math.min(percentage, 100)}%`,
+                                }}
+                              ></div>
+                            </div>
+                            <div
+                              className="flex justify-between text-xs mt-1.5"
+                              style={{
+                                color: isDark ? "#d1d5db" : "#64748b",
+                                transition: "none",
+                              }}
+                            >
+                              <span>{percentage.toFixed(1)}% used</span>
+                              <span>{formatMoney(remaining)} remaining</span>
+                            </div>
+                          </div>
+                        );
+                      })()}
+
+                    {/* Budget Spent Progress Bar for CPM contests (and dual rewards CPM pool) */}
+                    {!dualUnifiedBudget &&
+                      isCpmContestType(contest.contest_type) &&
                       contest.contest_based_details?.cpm_contest
                         ?.total_budget != null &&
                       contest.contest_based_details.cpm_contest.total_budget >
@@ -2944,6 +3104,10 @@ export default function OpportunitiesPage({
                             .budget_spent || 0;
                         const percentage = (budgetSpent / totalBudget) * 100;
                         const remaining = totalBudget - budgetSpent;
+                        const trackerLabel =
+                          contest.contest_type === "dual_rewards"
+                            ? "CPM pool"
+                            : "Budget Tracker";
 
                         return (
                           <div className="mt-3 mb-3">
@@ -2955,7 +3119,7 @@ export default function OpportunitiesPage({
                               }}
                             >
                               <span className="font-medium">
-                                Budget Tracker
+                                {trackerLabel}
                               </span>
                               <span className="font-semibold">
                                 {formatMoney(budgetSpent)} /{" "}
@@ -3056,8 +3220,9 @@ export default function OpportunitiesPage({
                         );
                       })()}
 
-                    {/* Budget Spent Progress Bar for Milestone contests */}
-                    {contest.contest_type === "milestone" &&
+                    {/* Budget Spent Progress Bar for Milestone contests (and dual rewards milestone pool) */}
+                    {!dualUnifiedBudget &&
+                      isMilestoneContestType(contest.contest_type) &&
                       contest.contest_based_details?.milestone_contest
                         ?.total_budget_cents != null &&
                       contest.contest_based_details.milestone_contest
@@ -3071,6 +3236,10 @@ export default function OpportunitiesPage({
                             .budget_spent || 0;
                         const { percentage, remaining } =
                           getBudgetTrackerValues(totalBudget, budgetSpent);
+                        const trackerLabel =
+                          contest.contest_type === "dual_rewards"
+                            ? "Milestone pool"
+                            : "Budget Tracker";
 
                         return (
                           <div className="mt-3 mb-3">
@@ -3082,7 +3251,7 @@ export default function OpportunitiesPage({
                               }}
                             >
                               <span className="font-medium">
-                                Budget Tracker
+                                {trackerLabel}
                               </span>
                               <span className="font-semibold">
                                 {formatMoney(budgetSpent)} /{" "}
@@ -3144,7 +3313,8 @@ export default function OpportunitiesPage({
                     </button>
                   </CardContent>
                 </Card>
-              ))
+                );
+              })
             ) : (
               <div className="col-span-full text-center py=-12">
                 <Trophy className="h-12 w-12 mx-auto text-gray-400 mb-4" />

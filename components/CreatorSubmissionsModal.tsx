@@ -346,6 +346,39 @@ export function CreatorSubmissionsModal({
         contest.contest_type === "cpm" &&
         (contest.platform?.toLowerCase() === "twitter" ||
           contest.platform?.toLowerCase() === "x");
+      const isDual = contest.contest_type === "dual_rewards";
+
+      if (isDual) {
+        let successCount = 0;
+        let failCount = 0;
+        const component = type === "standard" ? "cpm" : type === "bonus" ? "milestone" : "both";
+        for (const sub of sortedSubs) {
+          try {
+            await handleDualSubmissionPayment(sub, component, { skipReload: true });
+            successCount++;
+          } catch (error) {
+            console.error(`Failed dual payment for submission ${sub.id}:`, error);
+            failCount++;
+          }
+        }
+        if (failCount > 0) {
+          toast({
+            title: "Payment completed with errors",
+            description: `✓ ${successCount} paid, ✗ ${failCount} failed`,
+            variant: "destructive",
+          });
+        } else {
+          toast({
+            title: "Success",
+            description: `Successfully paid ${successCount} submission(s).`,
+            variant: "default",
+          });
+          setSelectedSubmissions(new Set());
+        }
+        window.location.reload();
+        return;
+      }
+
       const useInstagramBulkApi = isBulkTransaction && !hasTwitterTweets;
       const useTwitterCpmBulkApi =
         isBulkTransaction && hasTwitterTweets && isTwitterCpm;
@@ -501,7 +534,75 @@ export function CreatorSubmissionsModal({
     return `$${(cents / 100).toFixed(2)}`;
   };
 
+  const handleDualSubmissionPayment = async (
+    submission: Submission,
+    component: "cpm" | "milestone" | "both",
+    options?: { skipReload?: boolean },
+  ) => {
+    const cpmExpected = calculateSubmissionCpmExpectedReward(submission);
+    const milestoneExpected = Math.max(
+      Number(milestoneExpectedPayoutBySubmissionId?.get(submission.id) || 0),
+      0,
+    );
+    const amountInCents =
+      component === "cpm"
+        ? cpmExpected
+        : component === "milestone"
+          ? milestoneExpected
+          : cpmExpected + milestoneExpected;
+    if (amountInCents <= 0) {
+      throw new Error("Computed payout is 0 for selected component");
+    }
+    const res = await fetch("/api/admin/verify-submission", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        submissionId: submission.id,
+        action: "paid",
+        paymentDetails: {
+          amountInCents,
+          isCustom: true,
+          customRemarks: `dual_component:${component}`,
+        },
+      }),
+    });
+    const result = await res.json();
+    if (!res.ok) throw new Error(result?.error || "Failed to pay submission");
+
+    if (!options?.skipReload) {
+      setTimeout(() => window.location.reload(), 800);
+    }
+  };
+
   /** Base expected reward. When useStoredEarnings is false, always compute from formula so Expected column does not equal Granted after payment. */
+  const calculateSubmissionCpmExpectedReward = (submission: Submission) => {
+    const cpmConfig = (contest?.contest_based_details as any)?.cpm_contest;
+    const cpmRateUsd = cpmConfig?.cpm_rate_usd;
+    if (!cpmRateUsd) return 0;
+
+    const platform = (submission.platform || "").toLowerCase();
+    const isTwitterSubmission =
+      submission.is_twitter_tweet === true ||
+      platform === "twitter" ||
+      platform === "x";
+
+    if (isTwitterSubmission) {
+      const basePoints = submission.other_stats?.base_points || 0;
+      const manualAdjustment = submission.manual_points_adjustment || 0;
+      const totalPoints = Math.max(basePoints + manualAdjustment, 0);
+      return Math.max(Math.round((totalPoints * cpmRateUsd * 100) / 1000), 0);
+    }
+
+    let effectiveViews = submission.views || 0;
+    if (cpmConfig?.min_views != null && effectiveViews < cpmConfig.min_views) {
+      effectiveViews = 0;
+    }
+    if (cpmConfig?.max_views != null && effectiveViews > cpmConfig.max_views) {
+      effectiveViews = cpmConfig.max_views;
+    }
+    return Math.max(Math.round((effectiveViews * cpmRateUsd * 100) / 1000), 0);
+  };
+
   const calculateSubmissionBaseExpectedReward = (
     submission: Submission,
     useStoredEarnings = true,
@@ -537,40 +638,12 @@ export function CreatorSubmissionsModal({
       return Math.max(Number(milestonePayout) || 0, 0);
     }
 
-    if (contest?.contest_type === "cpm" && !baseExpectedReward) {
-      const cpmConfig = (contest?.contest_based_details as any)?.cpm_contest;
-      const cpmRateUsd = cpmConfig?.cpm_rate_usd;
-      if (cpmRateUsd) {
-        const platform = (submission.platform || "").toLowerCase();
-        const isTwitterSubmission =
-          submission.is_twitter_tweet === true ||
-          platform === "twitter" ||
-          platform === "x";
-
-        if (isTwitterSubmission) {
-          const basePoints = submission.other_stats?.base_points || 0;
-          const manualAdjustment = submission.manual_points_adjustment || 0;
-          const totalPoints = Math.max(basePoints + manualAdjustment, 0);
-          const calculatedEarnings = (totalPoints * cpmRateUsd * 100) / 1000;
-          baseExpectedReward = Math.round(calculatedEarnings);
-        } else {
-          let effectiveViews = submission.views || 0;
-          if (
-            cpmConfig?.min_views != null &&
-            effectiveViews < cpmConfig.min_views
-          ) {
-            effectiveViews = 0;
-          }
-          if (
-            cpmConfig?.max_views != null &&
-            effectiveViews > cpmConfig.max_views
-          ) {
-            effectiveViews = cpmConfig.max_views;
-          }
-          const calculatedEarnings = (effectiveViews * cpmRateUsd * 100) / 1000;
-          baseExpectedReward = Math.round(calculatedEarnings);
-        }
-      }
+    if (
+      (contest?.contest_type === "cpm" ||
+        contest?.contest_type === "dual_rewards") &&
+      !baseExpectedReward
+    ) {
+      baseExpectedReward = calculateSubmissionCpmExpectedReward(submission);
     }
 
     return Math.max(baseExpectedReward, 0);
@@ -626,6 +699,7 @@ export function CreatorSubmissionsModal({
     (contest?.platform?.toLowerCase() === "twitter" ||
       contest?.platform?.toLowerCase() === "x") &&
     contest?.contest_format === "text_image";
+  const isDualRewardsContest = contest?.contest_type === "dual_rewards";
 
   // Check if this is a Twitter text_image contest
   const isTwitterTextImageContest =
@@ -1247,7 +1321,9 @@ export function CreatorSubmissionsModal({
                             ) : (
                               <DollarSign className="h-4 w-4 mr-1" />
                             )}
-                            Mark as Paid
+                            {isDualRewardsContest
+                              ? "Mark as Paid (CPM)"
+                              : "Mark as Paid"}
                           </Button>
                           <Button
                             size="sm"
@@ -1260,11 +1336,13 @@ export function CreatorSubmissionsModal({
                             ) : (
                               <DollarSign className="h-4 w-4 mr-1" />
                             )}
-                            Mark as Paid (Bulk)
+                            {isDualRewardsContest
+                              ? "Mark as Paid Bulk (CPM)"
+                              : "Mark as Paid (Bulk)"}
                           </Button>
-                          {hasFlatFeeBonus && (
+                          {(hasFlatFeeBonus || isDualRewardsContest) && (
                             <>
-                              {!isTwitterCpmContest && (
+                              {(!isTwitterCpmContest || isDualRewardsContest) && (
                                 <>
                                   <Button
                                     size="sm"
@@ -1279,7 +1357,9 @@ export function CreatorSubmissionsModal({
                                     ) : (
                                       <DollarSign className="h-4 w-4 mr-1" />
                                     )}
-                                    Mark Bonus as Paid
+                                    {isDualRewardsContest
+                                      ? "Mark as Paid (Milestone)"
+                                      : "Mark Bonus as Paid"}
                                   </Button>
                                   <Button
                                     size="sm"
@@ -1294,7 +1374,9 @@ export function CreatorSubmissionsModal({
                                     ) : (
                                       <DollarSign className="h-4 w-4 mr-1" />
                                     )}
-                                    Mark Bonus as Paid (Bulk)
+                                    {isDualRewardsContest
+                                      ? "Mark as Paid Bulk (Milestone)"
+                                      : "Mark Bonus as Paid (Bulk)"}
                                   </Button>
                                 </>
                               )}
@@ -1309,7 +1391,9 @@ export function CreatorSubmissionsModal({
                                 ) : (
                                   <DollarSign className="h-4 w-4 mr-1" />
                                 )}
-                                Mark Both as Paid
+                                {isDualRewardsContest
+                                  ? "Mark Both Paid (CPM+Milestone)"
+                                  : "Mark Both as Paid"}
                               </Button>
                               <Button
                                 size="sm"
@@ -1322,7 +1406,9 @@ export function CreatorSubmissionsModal({
                                 ) : (
                                   <DollarSign className="h-4 w-4 mr-1" />
                                 )}
-                                Mark Both as Paid (Bulk)
+                                {isDualRewardsContest
+                                  ? "Mark Both Paid Bulk (CPM+Milestone)"
+                                  : "Mark Both as Paid (Bulk)"}
                               </Button>
                             </>
                           )}
@@ -1465,16 +1551,60 @@ export function CreatorSubmissionsModal({
                             isDark ? "bg-[#391A6A] " : "bg-gray-50",
                           )}
                         >
-                          Expected Reward
+                          {contest?.contest_type === "dual_rewards"
+                            ? "Total Expected Reward"
+                            : "Expected Reward"}
                         </TableHead>
+                        {contest?.contest_type === "dual_rewards" && (
+                          <>
+                            <TableHead
+                              className={cn(
+                                "text-center",
+                                isDark ? "bg-[#391A6A] " : "bg-gray-50",
+                              )}
+                            >
+                              Expected Reward (CPM)
+                            </TableHead>
+                            <TableHead
+                              className={cn(
+                                "text-center",
+                                isDark ? "bg-[#391A6A] " : "bg-gray-50",
+                              )}
+                            >
+                              Expected Reward (Milestone)
+                            </TableHead>
+                          </>
+                        )}
                         <TableHead
                           className={cn(
                             "text-center",
                             isDark ? "bg-[#391A6A] " : "bg-gray-50",
                           )}
                         >
-                          Reward Granted
+                          {contest?.contest_type === "dual_rewards"
+                            ? "Total Reward Granted"
+                            : "Reward Granted"}
                         </TableHead>
+                        {contest?.contest_type === "dual_rewards" && (
+                          <>
+                            <TableHead
+                              className={cn(
+                                "text-center",
+                                isDark ? "bg-[#391A6A] " : "bg-gray-50",
+                              )}
+                            >
+                              Reward Granted (CPM)
+                            </TableHead>
+                            <TableHead
+                              className={cn(
+                                "text-center",
+                                isDark ? "bg-[#391A6A] " : "bg-gray-50",
+                              )}
+                            >
+                              Reward Granted (Milestone)
+                            </TableHead>
+                          </>
+                        )}
                         <TableHead
                           className={cn(
                             "text-center",
@@ -1604,9 +1734,32 @@ export function CreatorSubmissionsModal({
                             isDark ? "bg-[#391A6A] " : "bg-gray-50",
                           )}
                         >
-                          Expected Reward
+                          {contest?.contest_type === "dual_rewards"
+                            ? "Total Expected Reward"
+                            : "Expected Reward"}
                         </TableHead>
-                        {contest?.contest_type === "milestone" && (
+                        {contest?.contest_type === "dual_rewards" && (
+                          <>
+                            <TableHead
+                              className={cn(
+                                "text-center",
+                                isDark ? "bg-[#391A6A] " : "bg-gray-50",
+                              )}
+                            >
+                              Expected Reward (CPM)
+                            </TableHead>
+                            <TableHead
+                              className={cn(
+                                "text-center",
+                                isDark ? "bg-[#391A6A] " : "bg-gray-50",
+                              )}
+                            >
+                              Expected Reward (Milestone)
+                            </TableHead>
+                          </>
+                        )}
+                        {(contest?.contest_type === "milestone" ||
+                          contest?.contest_type === "dual_rewards") && (
                           <TableHead
                             className={cn(
                               "text-center min-w-[170px]",
@@ -1622,8 +1775,30 @@ export function CreatorSubmissionsModal({
                             isDark ? "bg-[#391A6A] " : "bg-gray-50",
                           )}
                         >
-                          Reward Granted
+                          {contest?.contest_type === "dual_rewards"
+                            ? "Total Reward Granted"
+                            : "Reward Granted"}
                         </TableHead>
+                        {contest?.contest_type === "dual_rewards" && (
+                          <>
+                            <TableHead
+                              className={cn(
+                                "text-center",
+                                isDark ? "bg-[#391A6A] " : "bg-gray-50",
+                              )}
+                            >
+                              Reward Granted (CPM)
+                            </TableHead>
+                            <TableHead
+                              className={cn(
+                                "text-center",
+                                isDark ? "bg-[#391A6A] " : "bg-gray-50",
+                              )}
+                            >
+                              Reward Granted (Milestone)
+                            </TableHead>
+                          </>
+                        )}
                       </>
                     )}
                     {/* Bonus columns */}
@@ -1708,7 +1883,15 @@ export function CreatorSubmissionsModal({
                       <TableCell
                         colSpan={
                           isTwitterTextImageContest
-                            ? 18 // Checkbox, #, Tweet, Total Points, Base Points, Manual Points, Likes, Replies, Retweets, Quote Reposts, Impressions, Expected Reward, Reward Granted, Manual Points Reason, Status, Rejection reason, Submitted, Actions
+                            ? 18 + // Checkbox, #, Tweet, Total Points, Base Points, Manual Points, Likes, Replies, Retweets, Quote Reposts, Impressions, Expected Reward, Reward Granted, Manual Points Reason, Status, Rejection reason, Submitted, Actions
+                              (contest?.contest_type === "dual_rewards"
+                                ? 4
+                                : 0) // Dual: Expected/Granted CPM + Milestone
+                              +
+                              ((contest?.contest_type === "milestone" ||
+                                contest?.contest_type === "dual_rewards")
+                                ? 1
+                                : 0) // Milestone column
                             : 3 + // Checkbox, #, Content
                               3 + // Views, Likes, Comments
                               (isInstagramContest || isTikTokContest
@@ -1717,7 +1900,11 @@ export function CreatorSubmissionsModal({
                                   : 6
                                 : 0) + // TT: Shares + total engagement + engagement rate; IG: +Saves, Reach, Interactions, Avg/Total watch
                               2 + // Expected Reward, Reward Granted
-                              (contest?.contest_type === "milestone" ? 1 : 0) + // Milestone
+                              (contest?.contest_type === "dual_rewards" ? 4 : 0) + // Dual: Expected/Granted CPM + Milestone
+                              ((contest?.contest_type === "milestone" ||
+                                contest?.contest_type === "dual_rewards")
+                                ? 1
+                                : 0) + // Milestone
                               (hasFlatFeeBonus ? 2 : 0) + // Bonus Expected, Bonus Granted
                               (isAdminView &&
                               (isInstagramContest ||
@@ -1842,6 +2029,29 @@ export function CreatorSubmissionsModal({
                         }
                       }
 
+                      const milestoneExpectedForDual =
+                        contest?.contest_type === "dual_rewards"
+                          ? Math.max(
+                              Number(
+                                milestoneExpectedPayoutBySubmissionId?.get(
+                                  submission.id,
+                                ) || 0,
+                              ),
+                              0,
+                            )
+                          : 0;
+                      const cpmExpectedForDual =
+                        contest?.contest_type === "dual_rewards"
+                          ? Math.max(
+                              calculateSubmissionCpmExpectedReward(submission),
+                              0,
+                            )
+                          : 0;
+                      const totalExpectedForDual =
+                        contest?.contest_type === "dual_rewards"
+                          ? cpmExpectedForDual + milestoneExpectedForDual
+                          : 0;
+
                       // Use ACTUAL earnings for granted reward (includes custom pay amount)
                       // For Twitter CPM: treat as paid when paid flag or moderation_status is 'paid'
                       // Prefer: explicit paid/granted amount (custom pay) > submission.earnings > expected reward
@@ -1866,6 +2076,47 @@ export function CreatorSubmissionsModal({
                               ? submission.earnings
                               : expectedReward
                         : 0;
+                      const isDualPaid =
+                        contest?.contest_type === "dual_rewards" &&
+                        isPaidForGranted;
+                      const dualPaidComponent = String(
+                        (submission as any)?.metadata?.customRemarks || "",
+                      ).includes("dual_component:")
+                        ? String((submission as any)?.metadata?.customRemarks || "")
+                            .split("dual_component:")[1]
+                            ?.trim()
+                        : "";
+                      const totalGrantedForDual =
+                        contest?.contest_type === "dual_rewards"
+                          ? grantedReward
+                          : 0;
+                      const milestoneGrantedForDual =
+                        contest?.contest_type === "dual_rewards"
+                          ? dualPaidComponent === "milestone"
+                            ? totalGrantedForDual
+                            : dualPaidComponent === "both"
+                              ? Math.min(
+                                  milestoneExpectedForDual,
+                                  totalGrantedForDual,
+                                )
+                              : isDualPaid && !dualPaidComponent
+                                ? Math.min(
+                                    milestoneExpectedForDual,
+                                    totalGrantedForDual,
+                                  )
+                                : 0
+                          : 0;
+                      const cpmGrantedForDual =
+                        contest?.contest_type === "dual_rewards"
+                          ? dualPaidComponent === "cpm"
+                            ? totalGrantedForDual
+                            : dualPaidComponent === "milestone"
+                              ? 0
+                              : Math.max(
+                                  totalGrantedForDual - milestoneGrantedForDual,
+                                  0,
+                                )
+                          : 0;
                       const expectedBonus =
                         expectedBonusMap.get(submission.id) || 0;
                       const adjustedExpectedBonus = shouldAdjustBonus
@@ -1888,7 +2139,8 @@ export function CreatorSubmissionsModal({
                       const isSubmissionPending =
                         normalizedStatus === "pending";
                       const milestoneAssignmentLabel =
-                        contest?.contest_type === "milestone"
+                        contest?.contest_type === "milestone" ||
+                        contest?.contest_type === "dual_rewards"
                           ? (milestoneAssignedLabelBySubmissionId?.get(
                               submission.id,
                             ) ?? "Not eligible")
@@ -2216,13 +2468,78 @@ export function CreatorSubmissionsModal({
                                 </div>
                               </TableCell>
                               <TableCell className="text-center font-medium text-sm">
-                                {formatCurrency(expectedRewardForDisplay)}
+                                {contest?.contest_type === "dual_rewards"
+                                  ? formatCurrency(totalExpectedForDual)
+                                  : formatCurrency(expectedRewardForDisplay)}
                               </TableCell>
+                              {(contest?.contest_type === "milestone" ||
+                                contest?.contest_type === "dual_rewards") && (
+                                <TableCell className="text-center">
+                                  {milestoneAssignmentLabel === "—" ? (
+                                    <span
+                                      className={cn(
+                                        "text-xs font-medium",
+                                        isDark
+                                          ? "text-slate-400"
+                                          : "text-slate-500",
+                                      )}
+                                    >
+                                      —
+                                    </span>
+                                  ) : (
+                                    <div className="flex flex-col items-center gap-1">
+                                      <span className="inline-flex items-center rounded-full bg-violet-100 text-violet-700 px-2 py-0.5 text-[10px] font-semibold">
+                                        {milestonePrimaryLabel}
+                                      </span>
+                                      <span
+                                        className={cn(
+                                          "text-xs font-medium whitespace-nowrap",
+                                          isDark
+                                            ? "text-slate-200"
+                                            : "text-slate-700",
+                                        )}
+                                      >
+                                        {milestoneViewsLabel}
+                                      </span>
+                                    </div>
+                                  )}
+                                </TableCell>
+                              )}
+                              {contest?.contest_type === "dual_rewards" && (
+                                <>
+                                  <TableCell className="text-center font-medium text-sm">
+                                    {formatCurrency(cpmExpectedForDual)}
+                                  </TableCell>
+                                  <TableCell className="text-center font-medium text-sm">
+                                    {formatCurrency(milestoneExpectedForDual)}
+                                  </TableCell>
+                                </>
+                              )}
                               <TableCell className="text-center font-medium text-green-600">
-                                {grantedReward > 0
-                                  ? formatCurrency(grantedReward)
+                                {(contest?.contest_type === "dual_rewards"
+                                  ? totalGrantedForDual
+                                  : grantedReward) > 0
+                                  ? formatCurrency(
+                                      contest?.contest_type === "dual_rewards"
+                                        ? totalGrantedForDual
+                                        : grantedReward,
+                                    )
                                   : "-"}
                               </TableCell>
+                              {contest?.contest_type === "dual_rewards" && (
+                                <>
+                                  <TableCell className="text-center font-medium text-green-600">
+                                    {cpmGrantedForDual > 0
+                                      ? formatCurrency(cpmGrantedForDual)
+                                      : "-"}
+                                  </TableCell>
+                                  <TableCell className="text-center font-medium text-green-600">
+                                    {milestoneGrantedForDual > 0
+                                      ? formatCurrency(milestoneGrantedForDual)
+                                      : "-"}
+                                  </TableCell>
+                                </>
+                              )}
                               {/* Manual Points Reason */}
                               <TableCell className="text-center">
                                 {submission.manual_points_reason ? (
@@ -2414,7 +2731,9 @@ export function CreatorSubmissionsModal({
                               {!isTwitterTextImageContest && (
                                 <>
                                   <TableCell className="text-center font-medium">
-                                    {hasPayoutAdjustment && shouldAdjustReward
+                                    {contest?.contest_type === "dual_rewards"
+                                      ? formatCurrency(totalExpectedForDual)
+                                      : hasPayoutAdjustment && shouldAdjustReward
                                       ? `${formatCurrency(
                                           expectedReward,
                                         )} → ${formatCurrency(
@@ -2422,7 +2741,20 @@ export function CreatorSubmissionsModal({
                                         )}`
                                       : formatCurrency(expectedReward)}
                                   </TableCell>
-                                  {contest?.contest_type === "milestone" && (
+                                  {contest?.contest_type === "dual_rewards" && (
+                                    <>
+                                      <TableCell className="text-center font-medium">
+                                        {formatCurrency(cpmExpectedForDual)}
+                                      </TableCell>
+                                      <TableCell className="text-center font-medium">
+                                        {formatCurrency(
+                                          milestoneExpectedForDual,
+                                        )}
+                                      </TableCell>
+                                    </>
+                                  )}
+                                  {(contest?.contest_type === "milestone" ||
+                                    contest?.contest_type === "dual_rewards") && (
                                     <TableCell className="text-center">
                                       {milestoneAssignmentLabel === "—" ? (
                                         <span
@@ -2455,10 +2787,33 @@ export function CreatorSubmissionsModal({
                                     </TableCell>
                                   )}
                                   <TableCell className="text-center font-medium text-green-600">
-                                    {grantedReward > 0
-                                      ? formatCurrency(grantedReward)
+                                    {(contest?.contest_type === "dual_rewards"
+                                      ? totalGrantedForDual
+                                      : grantedReward) > 0
+                                      ? formatCurrency(
+                                          contest?.contest_type ===
+                                            "dual_rewards"
+                                            ? totalGrantedForDual
+                                            : grantedReward,
+                                        )
                                       : "-"}
                                   </TableCell>
+                                  {contest?.contest_type === "dual_rewards" && (
+                                    <>
+                                      <TableCell className="text-center font-medium text-green-600">
+                                        {cpmGrantedForDual > 0
+                                          ? formatCurrency(cpmGrantedForDual)
+                                          : "-"}
+                                      </TableCell>
+                                      <TableCell className="text-center font-medium text-green-600">
+                                        {milestoneGrantedForDual > 0
+                                          ? formatCurrency(
+                                              milestoneGrantedForDual,
+                                            )
+                                          : "-"}
+                                      </TableCell>
+                                    </>
+                                  )}
                                 </>
                               )}
                             </>
@@ -2663,49 +3018,87 @@ export function CreatorSubmissionsModal({
                                       <DropdownMenuSeparator />
                                       <DropdownMenuItem
                                         onClick={() =>
-                                          onPayment(submission.id, "standard")
+                                          isDualRewardsContest
+                                            ? handleDualSubmissionPayment(
+                                                submission,
+                                                "cpm",
+                                              )
+                                            : onPayment(submission.id, "standard")
                                         }
                                       >
                                         <DollarSign className="h-4 w-4 mr-2" />
-                                        Mark as Paid
+                                        {isDualRewardsContest
+                                          ? "Mark as Paid (CPM)"
+                                          : "Mark as Paid"}
                                       </DropdownMenuItem>
-                                      {hasFlatFeeBonus &&
+                                      {(hasFlatFeeBonus ||
+                                        isDualRewardsContest) &&
                                         !submission.bonus_paid && (
                                           <>
-                                            {!isTwitterCpmContest && (
+                                            {(!isTwitterCpmContest ||
+                                              isDualRewardsContest) && (
                                               <DropdownMenuItem
                                                 onClick={() =>
-                                                  onPayment(
-                                                    submission.id,
-                                                    "bonus",
-                                                  )
+                                                  isDualRewardsContest
+                                                    ? handleDualSubmissionPayment(
+                                                        submission,
+                                                        "milestone",
+                                                      )
+                                                    : onPayment(
+                                                        submission.id,
+                                                        "bonus",
+                                                      )
                                                 }
                                               >
                                                 <DollarSign className="h-4 w-4 mr-2" />
-                                                Mark Bonus as Paid
+                                                {isDualRewardsContest
+                                                  ? "Mark as Paid (Milestone)"
+                                                  : "Mark Bonus as Paid"}
                                               </DropdownMenuItem>
                                             )}
                                             <DropdownMenuItem
                                               onClick={() =>
-                                                onPayment(submission.id, "both")
+                                                isDualRewardsContest
+                                                  ? handleDualSubmissionPayment(
+                                                      submission,
+                                                      "both",
+                                                    )
+                                                  : onPayment(
+                                                      submission.id,
+                                                      "both",
+                                                    )
                                               }
                                             >
                                               <DollarSign className="h-4 w-4 mr-2" />
-                                              Mark Both as Paid
+                                              {isDualRewardsContest
+                                                ? "Mark Both Paid (CPM+Milestone)"
+                                                : "Mark Both as Paid"}
                                             </DropdownMenuItem>
                                           </>
                                         )}
-                                      {hasFlatFeeBonus &&
+                                      {(hasFlatFeeBonus ||
+                                        isDualRewardsContest) &&
                                         !submission.bonus_paid &&
                                         submission.paid &&
-                                        !isTwitterCpmContest && (
+                                        (!isTwitterCpmContest ||
+                                          isDualRewardsContest) && (
                                           <DropdownMenuItem
                                             onClick={() =>
-                                              onPayment(submission.id, "bonus")
+                                              isDualRewardsContest
+                                                ? handleDualSubmissionPayment(
+                                                    submission,
+                                                    "milestone",
+                                                  )
+                                                : onPayment(
+                                                    submission.id,
+                                                    "bonus",
+                                                  )
                                             }
                                           >
                                             <DollarSign className="h-4 w-4 mr-2" />
-                                            Mark Bonus as Paid
+                                            {isDualRewardsContest
+                                              ? "Mark as Paid (Milestone)"
+                                              : "Mark Bonus as Paid"}
                                           </DropdownMenuItem>
                                         )}
                                     </>

@@ -176,15 +176,17 @@ export async function POST(request: Request) {
       );
     }
 
-    // Allow status updates for leaderboard, CPM, and milestone contests
+    // Allow status updates for leaderboard, CPM, milestone, and dual rewards contests
     if (
       !contest.contest_type ||
-      !["leaderboard", "cpm", "milestone"].includes(contest.contest_type)
+      !["leaderboard", "cpm", "milestone", "dual_rewards"].includes(
+        contest.contest_type,
+      )
     ) {
       return NextResponse.json(
         {
           error:
-            "Invalid contest type. Only leaderboard, CPM, and milestone contests are supported",
+            "Invalid contest type. Only leaderboard, CPM, milestone, and dual rewards contests are supported",
         },
         { status: 400 },
       );
@@ -357,7 +359,8 @@ export async function POST(request: Request) {
     if (action === "mark_bonus_paid" || action === "mark_both_paid") {
       // Get flat fee bonus from contest details based on contest type
       const contestDetails =
-        contest.contest_type === "cpm"
+        contest.contest_type === "cpm" ||
+        contest.contest_type === "dual_rewards"
           ? (contest.contest_based_details as any)?.cpm_contest
           : (contest.contest_based_details as any)?.leaderboard_contest;
 
@@ -396,8 +399,12 @@ export async function POST(request: Request) {
           }
         }
 
-        // For CPM contests with flat_fee_bonus_cap, check if cap would be exceeded
-        if (contest.contest_type === "cpm" && flatFeeBonusCap) {
+        // For CPM / dual rewards contests with flat_fee_bonus_cap, check if cap would be exceeded
+        if (
+          (contest.contest_type === "cpm" ||
+            contest.contest_type === "dual_rewards") &&
+          flatFeeBonusCap
+        ) {
           if (currentBonusSpent + flatFeeBonus > flatFeeBonusCap) {
             return NextResponse.json(
               {
@@ -648,7 +655,10 @@ export async function POST(request: Request) {
 
           // Fallback amount computation when earnings are not yet set
           if ((!rewardAmount || rewardAmount <= 0) && !customAmount) {
-            if (contest.contest_type === "cpm") {
+            if (
+              contest.contest_type === "cpm" ||
+              contest.contest_type === "dual_rewards"
+            ) {
               const cpm = (contest as any)?.contest_based_details?.cpm_contest;
               const rate =
                 typeof cpm?.cpm_rate_usd === "number" ? cpm.cpm_rate_usd : 0;

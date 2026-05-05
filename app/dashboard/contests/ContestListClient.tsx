@@ -57,7 +57,11 @@ import {
   getEndedOpportunityPhaseLabel,
 } from "@/lib/contest-ended-phase-display";
 import { formatCurrencyFromCents as formatMoney } from "@/lib/currency-utils";
-import { getPoolBudgetCentsFromDetails } from "@/lib/contest-type";
+import {
+  getPoolBudgetCentsFromDetails,
+  isCpmContestType,
+  isMilestoneContestType,
+} from "@/lib/contest-type";
 import {
   calculateLeaderboardBudgetSpent,
   Submission,
@@ -101,6 +105,8 @@ type Contest = {
       total_budget_cents?: number;
       budget_spent?: number;
     };
+    /** Dual rewards unified pool (cents); nested CPM/milestone totals may be omitted */
+    total_budget_cents?: number;
     twitter_campaign?: {
       campaign_type?: "raid" | "awareness";
       keywords?: string[];
@@ -330,9 +336,20 @@ const getContestTypeLabel = (contestType: string | null | undefined) => {
   if (contestType === "cpm") return "CPM Based";
   if (contestType === "leaderboard") return "Leaderboard";
   if (contestType === "milestone") return "Milestone";
+  if (contestType === "dual_rewards") return "Dual Rewards";
   if (!contestType) return "N/A";
   return contestType.charAt(0).toUpperCase() + contestType.slice(1);
 };
+
+/** Unified pool tracker spend: dual splits spend across CPM + milestone nested objects */
+function getPoolBudgetSpentForTrackerDisplay(contest: Contest): number {
+  const cpm =
+    contest.contest_based_details?.cpm_contest?.budget_spent ?? 0;
+  if (contest.contest_type !== "dual_rewards") return cpm;
+  const milestone =
+    contest.contest_based_details?.milestone_contest?.budget_spent ?? 0;
+  return cpm + milestone;
+}
 
 const getContestValueForSort = (contest: Contest): number => {
   if (
@@ -1006,12 +1023,12 @@ export function ContestListClient({
         case "cpm_rate_desc":
         case "cpm_rate_asc":
           const rateA =
-            a.contest_type === "cpm" &&
+            isCpmContestType(a.contest_type) &&
             a.contest_based_details?.cpm_contest?.cpm_rate_usd
               ? a.contest_based_details.cpm_contest.cpm_rate_usd
               : -1;
           const rateB =
-            b.contest_type === "cpm" &&
+            isCpmContestType(b.contest_type) &&
             b.contest_based_details?.cpm_contest?.cpm_rate_usd
               ? b.contest_based_details.cpm_contest.cpm_rate_usd
               : -1;
@@ -1371,7 +1388,7 @@ export function ContestListClient({
                   </span>
                 </span>
               </div>
-              {contest.contest_type === "cpm" &&
+              {isCpmContestType(contest.contest_type) &&
                 contest.contest_based_details?.cpm_contest?.cpm_rate_usd !=
                   null && (
                   <div className="flex items-center">
@@ -1394,8 +1411,7 @@ export function ContestListClient({
                     </span>
                   </div>
                 )}
-              {(contest.contest_type === "cpm" ||
-                contest.contest_type === "dual_rewards") &&
+              {isCpmContestType(contest.contest_type) &&
                 getPoolBudgetCentsFromDetails(
                   contest.contest_type,
                   contest.contest_based_details,
@@ -1451,7 +1467,7 @@ export function ContestListClient({
                     </span>
                   </div>
                 )}
-              {contest.contest_type === "milestone" &&
+              {isMilestoneContestType(contest.contest_type) &&
                 contest.contest_based_details?.milestone_contest
                   ?.total_budget_cents != null &&
                 contest.contest_based_details.milestone_contest
@@ -1472,8 +1488,7 @@ export function ContestListClient({
             </div>
 
             {/* Budget Spent Progress Bar for CPM and dual contests */}
-            {(contest.contest_type === "cpm" ||
-              contest.contest_type === "dual_rewards") &&
+            {isCpmContestType(contest.contest_type) &&
               getPoolBudgetCentsFromDetails(
                 contest.contest_type,
                 contest.contest_based_details,
@@ -1483,10 +1498,8 @@ export function ContestListClient({
                   contest.contest_type,
                   contest.contest_based_details,
                 );
-                // Use real-time updated budget_spent field
                 const budgetSpent =
-                  contest.contest_based_details?.cpm_contest
-                    ?.budget_spent ?? 0;
+                  getPoolBudgetSpentForTrackerDisplay(contest);
                 const percentage = (budgetSpent / totalBudget) * 100;
                 const remaining = totalBudget - budgetSpent;
 
@@ -2258,7 +2271,7 @@ export function ContestListClient({
                     </span>
                   </span>
                 </div>
-                {contest.contest_type === "cpm" &&
+                {isCpmContestType(contest.contest_type) &&
                   contest.contest_based_details?.cpm_contest?.cpm_rate_usd !=
                     null && (
                     <div className="flex items-center">
@@ -2286,8 +2299,7 @@ export function ContestListClient({
                       </span>
                     </div>
                   )}
-                {(contest.contest_type === "cpm" ||
-                  contest.contest_type === "dual_rewards") &&
+                {isCpmContestType(contest.contest_type) &&
                   getPoolBudgetCentsFromDetails(
                     contest.contest_type,
                     contest.contest_based_details,
@@ -2335,7 +2347,7 @@ export function ContestListClient({
                       </span>
                     </div>
                   )}
-                {contest.contest_type === "milestone" &&
+                {isMilestoneContestType(contest.contest_type) &&
                   contest.contest_based_details?.milestone_contest
                     ?.total_budget_cents != null &&
                   contest.contest_based_details.milestone_contest
@@ -2361,8 +2373,7 @@ export function ContestListClient({
               </div>
 
               {/* Budget Spent Progress Bar for CPM and dual contests */}
-              {(contest.contest_type === "cpm" ||
-                contest.contest_type === "dual_rewards") &&
+              {isCpmContestType(contest.contest_type) &&
                 getPoolBudgetCentsFromDetails(
                   contest.contest_type,
                   contest.contest_based_details,
@@ -2373,8 +2384,7 @@ export function ContestListClient({
                     contest.contest_based_details,
                   );
                   const budgetSpent =
-                    contest.contest_based_details?.cpm_contest
-                      ?.budget_spent ?? 0;
+                    getPoolBudgetSpentForTrackerDisplay(contest);
                   const percentage = (budgetSpent / totalBudget) * 100;
                   const remaining = totalBudget - budgetSpent;
 
@@ -2894,7 +2904,7 @@ export function ContestListClient({
             valueA =
               a.contest_based_details.milestone_contest.total_budget_cents;
           } else if (
-            (a.contest_type === "cpm" || a.contest_type === "dual_rewards") &&
+            isCpmContestType(a.contest_type) &&
             a.contest_based_details
           ) {
             valueA = getPoolBudgetCentsFromDetails(
@@ -2914,7 +2924,7 @@ export function ContestListClient({
             valueB =
               b.contest_based_details.milestone_contest.total_budget_cents;
           } else if (
-            (b.contest_type === "cpm" || b.contest_type === "dual_rewards") &&
+            isCpmContestType(b.contest_type) &&
             b.contest_based_details
           ) {
             valueB = getPoolBudgetCentsFromDetails(
@@ -2927,20 +2937,22 @@ export function ContestListClient({
             : valueA - valueB;
         case "cpm_rate_desc":
         case "cpm_rate_asc":
-          const rateA =
-            a.contest_type === "cpm" &&
+          const rateSortA =
+            isCpmContestType(a.contest_type) &&
             a.contest_based_details?.cpm_contest?.cpm_rate_usd
               ? a.contest_based_details.cpm_contest.cpm_rate_usd
               : -1;
-          const rateB =
-            b.contest_type === "cpm" &&
+          const rateSortB =
+            isCpmContestType(b.contest_type) &&
             b.contest_based_details?.cpm_contest?.cpm_rate_usd
               ? b.contest_based_details.cpm_contest.cpm_rate_usd
               : -1;
-          if (rateA === -1 && rateB === -1) return 0;
-          if (rateA === -1) return 1; // a (no rate) comes after b (has rate)
-          if (rateB === -1) return -1; // b (no rate) comes after a (has rate)
-          return sortOption === "cpm_rate_desc" ? rateB - rateA : rateA - rateB;
+          if (rateSortA === -1 && rateSortB === -1) return 0;
+          if (rateSortA === -1) return 1; // a (no rate) comes after b (has rate)
+          if (rateSortB === -1) return -1; // b (no rate) comes after a (has rate)
+          return sortOption === "cpm_rate_desc"
+            ? rateSortB - rateSortA
+            : rateSortA - rateSortB;
         case "submissions_desc":
         case "submissions_asc":
           const countA = a.live_submission_count ?? -1;
@@ -3726,6 +3738,9 @@ export function ContestListClient({
                   </SelectItem>
                   <SelectItem isDark={isDark} value="milestone">
                     Milestone
+                  </SelectItem>
+                  <SelectItem isDark={isDark} value="dual_rewards">
+                    Dual rewards
                   </SelectItem>
                 </SelectContent>
               </Select>
