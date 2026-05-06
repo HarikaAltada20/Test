@@ -6,6 +6,9 @@ export type MilestoneBudgetSubmission = {
   creator_id?: string | null;
   created_at: string;
   status?: string | null;
+  paid?: boolean | null;
+  paid_at?: string | null;
+  earnings?: number | null;
   deleted_at?: string | null;
   views?: number | null;
   /** Used with `other_stats` so TikTok milestones match dashboard (view_count vs column). */
@@ -449,7 +452,25 @@ export function computeMilestoneContestExpectedSpendCents(
   if (!milestones?.length) return 0;
 
   const map = buildMilestoneSubmissionPayoutCentsMap(submissions, milestones);
-  const ladder = sumMilestoneVerifiedExpectedPayoutCents(map, submissions);
+  // Paid-first blending for milestone ladder:
+  // - If submission is paid and has stored earnings, use paid amount.
+  // - Otherwise use expected milestone payout.
+  let ladder = 0;
+  for (const sub of submissions) {
+    if (sub.deleted_at != null && sub.deleted_at !== "") continue;
+    const st = normalizeStatus(sub.status);
+    if (st !== "verified" && st !== "paid") continue;
+
+    const isPaidLike =
+      st === "paid" || sub.paid === true || Boolean(sub.paid_at);
+    const paidEarningsCents = Number(sub.earnings || 0);
+
+    if (isPaidLike && paidEarningsCents > 0) {
+      ladder += paidEarningsCents;
+    } else {
+      ladder += map.get(sub.id) ?? 0;
+    }
+  }
   const bonus = computeMilestoneCreatorBonusExpectedCents(
     submissions,
     milestoneContest?.bonus,

@@ -372,7 +372,7 @@ async function enrichContestWithCalculatedBudgets(
       await supabase
         .from("submissions")
         .select(
-          "id, creator_id, created_at, status, views, platform, other_stats, bonus_paid, bonus_amount, metadata, milestone_bonus_paid",
+          "id, creator_id, created_at, status, paid, paid_at, earnings, views, platform, other_stats, bonus_paid, bonus_amount, metadata, milestone_bonus_paid",
         )
         .eq("contest_id", contest.id)
         .in("status", ["pending", "verified", "paid"])
@@ -384,6 +384,9 @@ async function enrichContestWithCalculatedBudgets(
         creator_id: s.creator_id,
         created_at: s.created_at,
         status: s.status,
+        paid: s.paid,
+        paid_at: s.paid_at,
+        earnings: s.earnings,
         views: s.views,
         platform: s.platform,
         other_stats: s.other_stats,

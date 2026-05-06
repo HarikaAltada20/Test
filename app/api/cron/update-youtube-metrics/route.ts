@@ -111,44 +111,25 @@ async function fetchYouTubeStats(
           // carry them forward so the daily run does not remove them.
           const existingYT = (sub.other_stats?.youtube || sub.other_stats || {}) as Record<string, any>;
 
-          const youtubeMetrics: Record<string, any> = {
+          // Preserve every existing YouTube analytics key and only overwrite
+          // basic fields refreshed by Data API in this cron path.
+          const cleanMetrics: Record<string, any> = {
+            ...(existingYT || {}),
             views: rawViews,
             likes: rawLikes,
             comments: rawComments,
-            // Carry forward previously fetched analytics data if it exists
-            estimated_minutes_watched:
-              existingYT.estimated_minutes_watched || undefined,
-            avg_view_duration_seconds:
-              existingYT.avg_view_duration_seconds || undefined,
-            avg_view_percentage: existingYT.avg_view_percentage || undefined,
-            engaged_views: existingYT.engaged_views || undefined,
-            dislikes: existingYT.dislikes || undefined,
-            shares: existingYT.shares || undefined,
-            subscribers_gained: existingYT.subscribers_gained || undefined,
-            subscribers_lost: existingYT.subscribers_lost || undefined,
-            videos_added_to_playlists:
-              existingYT.videos_added_to_playlists || undefined,
-            videos_removed_from_playlists:
-              existingYT.videos_removed_from_playlists || undefined,
-            traffic_sources: existingYT.traffic_sources || undefined,
-            last_traffic_update: existingYT.last_traffic_update || undefined,
-            demographics: existingYT.demographics || undefined,
-            last_demographics_update: existingYT.last_demographics_update || undefined,
-            bot_score: existingYT.bot_score ?? undefined,
-            bot_flags: existingYT.bot_flags || undefined,
             analytics_needs_reauth: existingYT.analytics_needs_reauth || false,
             last_basic_update: now,
           };
 
-          // Strip undefined keys to keep JSONB clean
-          const cleanMetrics = Object.fromEntries(
-            Object.entries(youtubeMetrics).filter(([, v]) => v !== undefined)
-          );
-
           updates.push({
             id: sub.id,
             views: rawViews,
-            newOtherStats: { youtube: cleanMetrics },
+            // Preserve non-YouTube root keys too (if any) while updating youtube branch.
+            newOtherStats: {
+              ...(sub.other_stats || {}),
+              youtube: cleanMetrics,
+            },
             insightsStatus: "ok",
           });
         }

@@ -171,14 +171,35 @@ export function calculateTwitterCpmBudgetSpent(
       creatorData.cpmTotal += submissionEarnings;
     }
 
-    // Include flat fee bonus for verified submissions (cap respected across contest)
-    if (flatFeeBonusInDollars > 0) {
+    // Include flat fee bonus using paid-first model (cap respected across contest):
+    // - If bonus was paid, use actual paid bonus from DB.
+    // - Otherwise use expected flat fee bonus.
+    if (sub.bonus_paid && sub.bonus_amount != null) {
+      const actualBonusInDollars = sub.bonus_amount / 100;
+      if (actualBonusInDollars > 0) {
+        if (
+          bonusCapInDollars === null ||
+          totalBonusSpentSoFar + actualBonusInDollars <= bonusCapInDollars
+        ) {
+          creatorData.bonusTotal += actualBonusInDollars;
+          totalBonusSpentSoFar += actualBonusInDollars;
+        } else if (bonusCapInDollars > totalBonusSpentSoFar) {
+          const remaining = bonusCapInDollars - totalBonusSpentSoFar;
+          creatorData.bonusTotal += remaining;
+          totalBonusSpentSoFar += remaining;
+        }
+      }
+    } else if (flatFeeBonusInDollars > 0) {
       if (
         bonusCapInDollars === null ||
         totalBonusSpentSoFar + flatFeeBonusInDollars <= bonusCapInDollars
       ) {
         creatorData.bonusTotal += flatFeeBonusInDollars;
         totalBonusSpentSoFar += flatFeeBonusInDollars;
+      } else if (bonusCapInDollars > totalBonusSpentSoFar) {
+        const remaining = bonusCapInDollars - totalBonusSpentSoFar;
+        creatorData.bonusTotal += remaining;
+        totalBonusSpentSoFar += remaining;
       }
     }
   }

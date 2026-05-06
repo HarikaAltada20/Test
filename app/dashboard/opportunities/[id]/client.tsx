@@ -384,10 +384,20 @@ export function ContestClientPage({
     useState<number>(0);
   const [twitterMetricsRunElapsedSeconds, setTwitterMetricsRunElapsedSeconds] =
     useState<number | null>(null);
+  const RUN_DISABLE_WINDOW_MS = 5 * 60 * 1000;
 
-  const twitterMetricsRunActive =
+  const isRunWithinDisableWindow = (
+    run: TwitterMetricsRefreshRunSummary | null | undefined,
+  ) => {
+    if (!run || run.status !== "running" || !run.started_at) return false;
+    const startedAtMs = new Date(run.started_at).getTime();
+    if (!Number.isFinite(startedAtMs)) return false;
+    return Date.now() - startedAtMs < RUN_DISABLE_WINDOW_MS;
+  };
+
+  const twitterMetricsRunActiveWithinWindow =
     twitterMetricsRun?.status === "pending" ||
-    twitterMetricsRun?.status === "running";
+    isRunWithinDisableWindow(twitterMetricsRun);
 
   const twitterMetricsTargetProgressRef = useRef<number | null>(null);
   const twitterMetricsStartedAtMsRef = useRef<number | null>(null);
@@ -906,19 +916,6 @@ export function ContestClientPage({
       return st;
     };
 
-    const submissionIsPaidForMilestone = (s: any) => {
-      const st = normalizeMilestoneStatus(s?.status);
-      if (st === "paid") return true;
-      if (s?.paid === true) return true;
-      if (Boolean(s?.paid_at)) return true;
-      const explicit =
-        s?.granted_amount_cents ??
-        s?.paid_amount_cents ??
-        s?.other_stats?.paid_amount_cents ??
-        s?.other_stats?.granted_amount_cents;
-      return explicit != null && Number(explicit) > 0;
-    };
-
     const eligibleSubmissions = uniqueSubmissions
       .filter((s: any) => {
         const st = normalizeMilestoneStatus(s?.status);
@@ -930,9 +927,13 @@ export function ContestClientPage({
         return at - bt;
       });
 
-    // Do not treat already-paid rows as still "expected" for milestone slots / amounts
+    // Winner-limit and expected payout assignment:
+    // count only verified/paid submissions (pending does not consume slots).
     const eligibleForExpectedPayout = eligibleSubmissions.filter(
-      (s: any) => !submissionIsPaidForMilestone(s),
+      (s: any) => {
+        const st = normalizeMilestoneStatus(s?.status);
+        return st === "verified" || st === "paid";
+      },
     );
 
     const winnerCountsByMilestone = new Map<string, number>();
@@ -1316,14 +1317,15 @@ export function ContestClientPage({
 
     const isDisabled =
       isRefreshingMetrics ||
-      twitterMetricsRunActive ||
+      twitterMetricsRunActiveWithinWindow ||
       !cooldownInfo.canRefresh ||
       isLocked ||
       contestHasEnded;
 
     let disabledReason = "";
-    if (isRefreshingMetrics || twitterMetricsRunActive) {
-      disabledReason = "Refreshing metrics...";
+    if (isRefreshingMetrics || twitterMetricsRunActiveWithinWindow) {
+      disabledReason =
+        "A refresh run is already in progress. Please wait up to 5 minutes.";
     } else if (contestHasEnded) {
       disabledReason = "Contest has ended";
     } else if (isLocked) {
@@ -8471,7 +8473,8 @@ export function ContestClientPage({
                         contest?.platform?.toLowerCase() === "twitter" ||
                         contest?.platform?.toLowerCase() === "x";
                       const isButtonBusy =
-                        isRefreshingMetrics || twitterMetricsRunActive;
+                        isRefreshingMetrics ||
+                        twitterMetricsRunActiveWithinWindow;
                       const busyPct = twitterMetricsRunProgress
                         ? Math.max(
                             1,
