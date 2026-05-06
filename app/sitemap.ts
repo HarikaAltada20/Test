@@ -1,5 +1,43 @@
 import { MetadataRoute } from "next";
-import { createClient } from "@/utils/supabase/server";
+import { unstable_cache } from "next/cache";
+import { createPublicServerClient } from "@/utils/supabase/public-server";
+
+/** Built at request time so `next build` never blocks 60s+ on DB pool contention. */
+export const dynamic = "force-dynamic";
+
+async function fetchBlogPostsForSitemap(siteUrl: string): Promise<MetadataRoute.Sitemap> {
+  const supabase = createPublicServerClient();
+  const { data: posts, error } = await supabase
+    .from("blog_posts")
+    .select("id, published_at, updated_at")
+    .eq("status", "published")
+    .not("published_at", "is", null)
+    .order("published_at", { ascending: false });
+
+  if (error || !posts) return [];
+
+  return posts.map((post) => ({
+    url: `${siteUrl}/blog/${post.id}`,
+    lastModified: post.updated_at
+      ? new Date(post.updated_at)
+      : post.published_at
+        ? new Date(post.published_at)
+        : new Date(),
+    changeFrequency: "weekly" as const,
+    priority: 0.8,
+  }));
+}
+
+/** Module-scoped wrapper so the cache is shared across sitemap invocations. */
+const getCachedBlogSitemapPosts = unstable_cache(
+  async () => {
+    const base = process.env.NEXT_PUBLIC_APP_URL;
+    if (!base) return [];
+    return fetchBlogPostsForSitemap(base);
+  },
+  ["sitemap-blog-posts-v1", process.env.NEXT_PUBLIC_APP_URL ?? ""],
+  { revalidate: 3600, tags: ["sitemap-blog"] },
+);
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const siteUrl = process.env.NEXT_PUBLIC_APP_URL;
@@ -101,32 +139,11 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     },
   ];
 
-  // Fetch published blog posts
   let blogPosts: MetadataRoute.Sitemap = [];
   try {
-    const supabase = await createClient();
-    const { data: posts, error } = await supabase
-      .from("blog_posts")
-      .select("id, published_at, updated_at")
-      .eq("status", "published")
-      .not("published_at", "is", null)
-      .order("published_at", { ascending: false });
-
-    if (!error && posts) {
-      blogPosts = posts.map((post) => ({
-        url: `${siteUrl}/blog/${post.id}`,
-        lastModified: post.updated_at
-          ? new Date(post.updated_at)
-          : post.published_at
-          ? new Date(post.published_at)
-          : new Date(),
-        changeFrequency: "weekly" as const,
-        priority: 0.8,
-      }));
-    }
+    blogPosts = await getCachedBlogSitemapPosts();
   } catch (error) {
     console.error("Error fetching blog posts for sitemap:", error);
-    // Continue without blog posts if there's an error
   }
 
   return [...staticPages, ...blogPosts];

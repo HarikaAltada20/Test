@@ -3,10 +3,16 @@ import type { SupabaseClient, User } from '@supabase/supabase-js'
 import { NextResponse, type NextRequest } from 'next/server'
 import { isRefreshTokenError } from './auth-server'
 
+export type MiddlewareUserProfile = {
+  username: string | null
+  user_type: string | null
+}
+
 export type UpdateSessionResult = {
   response: NextResponse
   user: User | null
   supabase: SupabaseClient
+  profile: MiddlewareUserProfile | null
 }
 
 export async function updateSession(request: NextRequest): Promise<UpdateSessionResult> {
@@ -91,10 +97,20 @@ export async function updateSession(request: NextRequest): Promise<UpdateSession
         if (!isPublicAuthPath && !isPublicMarketingHome) {
             const signInUrl = new URL('/auth/signin', request.url)
             signInUrl.searchParams.set('next', currentPath)
-            return { response: NextResponse.redirect(signInUrl), user: null, supabase }
+            return {
+              response: NextResponse.redirect(signInUrl),
+              user: null,
+              supabase,
+              profile: null,
+            }
         }
         // If it's an allowed public auth path (or /choose-username for direct nav), let unauthenticated user proceed.
-        return { response: supabaseResponse, user: null, supabase };
+        return {
+          response: supabaseResponse,
+          user: null,
+          supabase,
+          profile: null,
+        }
     }
 
     // --- Handle Authenticated Users (User Exists) ---
@@ -106,22 +122,36 @@ export async function updateSession(request: NextRequest): Promise<UpdateSession
 
     const { data: userProfile, error: profileError } = await supabase
         .from('users')
-        .select('username')
+        .select('username, user_type')
         .eq('id', user.id)
         .maybeSingle();
 
     if (profileError && profileError.code !== 'PGRST116') { // PGRST116: "No rows found"
         console.error(`Middleware: Error fetching profile for user ${user.id}:`, profileError.message);
         // Allow request to proceed to avoid blocking user for a temporary DB issue. Error is logged.
-        return { response: supabaseResponse, user, supabase };
+        return {
+          response: supabaseResponse,
+          user,
+          supabase,
+          profile: null,
+        }
     }
 
-    const hasUsername = userProfile?.username;
+    const profile: MiddlewareUserProfile = {
+      username: userProfile?.username ?? null,
+      user_type: userProfile?.user_type ?? null,
+    }
+    const hasUsername = profile.username;
 
     // Scenario 1: User has a username but is trying to access /choose-username again.
     if (hasUsername && currentPath.startsWith('/choose-username')) {
         console.log(`Middleware: User ${user.id} has username, redirecting from /choose-username to /dashboard.`);
-        return { response: NextResponse.redirect(new URL('/dashboard', request.url)), user, supabase };
+        return {
+          response: NextResponse.redirect(new URL('/dashboard', request.url)),
+          user,
+          supabase,
+          profile,
+        };
     }
 
     // Scenario 2: User does NOT have a username and is on a protected path
@@ -132,9 +162,14 @@ export async function updateSession(request: NextRequest): Promise<UpdateSession
         !currentPath.startsWith('/auth')) {
         // This implies they are on a /dashboard/* path without a username.
         console.log(`Middleware: User ${user.id} has no username, path: ${currentPath}. Redirecting to /choose-username.`);
-        return { response: NextResponse.redirect(new URL('/choose-username', request.url)), user, supabase };
+        return {
+          response: NextResponse.redirect(new URL('/choose-username', request.url)),
+          user,
+          supabase,
+          profile,
+        };
     }
 
     // All other cases for authenticated user (e.g., has username and is on dashboard), let them proceed.
-    return { response: supabaseResponse, user, supabase };
+    return { response: supabaseResponse, user, supabase, profile };
 }

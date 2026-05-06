@@ -25,22 +25,21 @@ export const getCachedCreatorsLandingData = unstable_cache(
   async () => {
     const supabase = createPublicServerClient();
 
-    const [totalViews, totalMoneyCreditedCents, contestsResult] =
-      await Promise.all([
-        getTotalSubmissionViews(supabase),
-        getTotalCreatorMoneyWonCents(supabase),
-        supabase
-          .from("contests_with_status")
-          .select(
-            `
+    // Sequential (not parallel) so each prerender bursts at most one DB request at a time —
+    // helps avoid PGRST003 when many routes prerender alongside /creators.
+    const totalViews = await getTotalSubmissionViews(supabase);
+    const totalMoneyCreditedCents = await getTotalCreatorMoneyWonCents(supabase);
+    const contestsResult = await supabase
+      .from("contests_with_status")
+      .select(
+        `
       *,
       contest_based_details
     `,
-          )
-          .eq("moderation_status", "published")
-          .not("status", "eq", "incomplete")
-          .order("created_at", { ascending: false }),
-      ]);
+      )
+      .eq("moderation_status", "published")
+      .not("status", "eq", "incomplete")
+      .order("created_at", { ascending: false });
 
     if (contestsResult.error) {
       console.error("Error fetching contests:", contestsResult.error);
