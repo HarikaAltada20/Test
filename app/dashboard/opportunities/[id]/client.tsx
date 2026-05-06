@@ -91,6 +91,7 @@ import { PageLoadingSpinner } from "@/components/loading/LoadingSpinner";
 import { CONTENT_TYPE_CATEGORIES } from "@/constants/contentCategories";
 import { TwitterFeed } from "@/components/twitter-feed";
 import { getTwitterSubmissionActionKind } from "@/lib/twitter/analytics-twitter-submission-kind";
+import { buildMilestoneMostVerifiedBonusByCreatorMap } from "@/lib/milestone-contest-expected-spend";
 // --- START DUMMY DATA CONFIGURATION ---
 const USE_DUMMY_DATA_FOR_LEADERBOARD = false; // SWITCHED OFF FOR PRODUCTION
 const DUMMY_ENTRIES_COUNT = 250; // Total number of dummy entries to generate
@@ -337,6 +338,8 @@ export function ContestClientPage({
   const [totalLeaderboardPages, setTotalLeaderboardPages] = useState(0);
   const [creatorTotalEntries, setCreatorTotalEntries] = useState(0);
   const [creatorTotalPages, setCreatorTotalPages] = useState(0);
+  const [allMilestoneBonusSubmissions, setAllMilestoneBonusSubmissions] =
+    useState<any[]>([]);
 
   // State for logged-in user's submission and rank
   const [myLeaderboardEntry, setMyLeaderboardEntry] = useState<
@@ -860,6 +863,78 @@ export function ContestClientPage({
     creatorWiseLeaderboard,
   ]);
 
+  const shouldLoadMilestoneBonusSubmissions = Boolean(
+    contestId &&
+      contest?.contest_type === "milestone" &&
+      (contest?.contest_based_details as any)?.milestone_contest?.bonus?.enabled,
+  );
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadAllMilestoneBonusSubmissions = async () => {
+      if (!shouldLoadMilestoneBonusSubmissions || !contestId) {
+        setAllMilestoneBonusSubmissions([]);
+        return;
+      }
+
+      try {
+        const pageLimit = 1000;
+        let page = 1;
+        let totalPages = 1;
+        const allRows: any[] = [];
+
+        while (page <= totalPages) {
+          const response = await fetch(
+            `/api/leaderboard/${contestId}?page=${page}&limit=${pageLimit}&fresh=1`,
+          );
+          const data = await response.json();
+
+          if (!response.ok) {
+            throw new Error(
+              data?.error || "Failed to load milestone bonus submissions",
+            );
+          }
+
+          const pageRows = Array.isArray(data?.leaderboard)
+            ? data.leaderboard
+            : [];
+          allRows.push(...pageRows);
+
+          const resolvedTotalPages = Number(data?.totalPages || 1);
+          totalPages = Number.isFinite(resolvedTotalPages)
+            ? Math.max(0, resolvedTotalPages)
+            : 1;
+          if (totalPages === 0) break;
+          page += 1;
+        }
+
+        if (cancelled) return;
+
+        const seen = new Set<string>();
+        const deduped = allRows.filter((row: any) => {
+          const id = String(row?.id || "");
+          if (!id || seen.has(id)) return false;
+          seen.add(id);
+          return true;
+        });
+        setAllMilestoneBonusSubmissions(deduped);
+      } catch (error) {
+        console.error(
+          "Error loading full milestone bonus submissions for leaderboard:",
+          error,
+        );
+        if (!cancelled) setAllMilestoneBonusSubmissions([]);
+      }
+    };
+
+    loadAllMilestoneBonusSubmissions();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [contestId, shouldLoadMilestoneBonusSubmissions]);
+
   const milestoneDerivedData = useMemo<{
     submissionExpectedRewardMap: Map<string, number>;
     creatorMostVerifiedViewsBonusMap: Map<string, number>;
@@ -890,6 +965,9 @@ export function ContestClientPage({
     );
 
     const allSubmissionCandidates: any[] = [
+      ...(Array.isArray(allMilestoneBonusSubmissions)
+        ? allMilestoneBonusSubmissions
+        : []),
       ...(Array.isArray(leaderboard) ? leaderboard : []),
       ...((groupedLeaderboardByCreator || []).flatMap((g: any) =>
         Array.isArray(g?.submissions) ? g.submissions : [],
@@ -976,80 +1054,43 @@ export function ContestClientPage({
       }
     });
 
-    const verifiedStatsByCreator = new Map<
-      string,
-      { verifiedViews: number; verifiedReels: number }
-    >();
-    eligibleSubmissions.forEach((sub: any) => {
-      const st = normalizeMilestoneStatus(sub?.status);
-      if (st !== "verified" && st !== "paid") return;
-      const creatorId = String(sub?.creator_id || "");
-      if (!creatorId) return;
-      const views = Number(sub?.views || 0);
-      const prev = verifiedStatsByCreator.get(creatorId) || {
-        verifiedViews: 0,
-        verifiedReels: 0,
-      };
-      verifiedStatsByCreator.set(creatorId, {
-        verifiedViews:
-          prev.verifiedViews + (Number.isFinite(views) ? views : 0),
-        verifiedReels: prev.verifiedReels + 1,
-      });
-    });
-
     const creatorMostVerifiedViewsBonusMap = new Map<string, number>();
     const creatorMostVerifiedReelsBonusMap = new Map<string, number>();
-
     const bonus = milestoneContest?.bonus;
-    const viewsCfg = bonus?.most_verified_views;
-    if (viewsCfg) {
-      const minViews = Number(viewsCfg?.min_total_views || 0);
-      const minReels = Number(viewsCfg?.min_verified_reels || 0);
-      const payout = Number(viewsCfg?.payout_cents || 0);
-      const winner = Array.from(verifiedStatsByCreator.entries())
-        .filter(([, stats]) => {
-          return (
-            stats.verifiedViews >= minViews && stats.verifiedReels >= minReels
-          );
-        })
-        .sort((a, b) => {
-          if (b[1].verifiedViews !== a[1].verifiedViews) {
-            return b[1].verifiedViews - a[1].verifiedViews;
-          }
-          if (b[1].verifiedReels !== a[1].verifiedReels) {
-            return b[1].verifiedReels - a[1].verifiedReels;
-          }
-          return a[0].localeCompare(b[0]);
-        })[0];
-      if (winner && payout > 0) {
-        creatorMostVerifiedViewsBonusMap.set(winner[0], payout);
-      }
-    }
+    const mostVerifiedBonusByCreator = buildMilestoneMostVerifiedBonusByCreatorMap(
+      uniqueSubmissions.map((sub: any) => ({
+        id: String(sub?.id || ""),
+        creator_id: String(sub?.creator_id || ""),
+        created_at: String(sub?.created_at || ""),
+        status: normalizeMilestoneStatus(sub?.status),
+        deleted_at: sub?.deleted_at ?? null,
+        views: Number(sub?.views || 0),
+        bonus_paid: Boolean(sub?.bonus_paid),
+        bonus_amount:
+          sub?.bonus_amount != null ? Number(sub?.bonus_amount || 0) : null,
+        milestone_bonus_paid:
+          sub?.milestone_bonus_paid ?? sub?.metadata?.milestone_bonus_paid,
+        metadata: sub?.metadata ?? null,
+        platform: contest?.platform ?? null,
+        other_stats: sub?.other_stats ?? null,
+      })),
+      bonus,
+    );
 
-    const reelsCfg = bonus?.most_verified_reels;
-    if (reelsCfg) {
-      const minReels = Number(reelsCfg?.min_verified_reels || 0);
-      const minViews = Number(reelsCfg?.min_total_views || 0);
-      const payout = Number(reelsCfg?.payout_cents || 0);
-      const winner = Array.from(verifiedStatsByCreator.entries())
-        .filter(([, stats]) => {
-          return (
-            stats.verifiedReels >= minReels && stats.verifiedViews >= minViews
-          );
-        })
-        .sort((a, b) => {
-          if (b[1].verifiedReels !== a[1].verifiedReels) {
-            return b[1].verifiedReels - a[1].verifiedReels;
-          }
-          if (b[1].verifiedViews !== a[1].verifiedViews) {
-            return b[1].verifiedViews - a[1].verifiedViews;
-          }
-          return a[0].localeCompare(b[0]);
-        })[0];
-      if (winner && payout > 0) {
-        creatorMostVerifiedReelsBonusMap.set(winner[0], payout);
+    mostVerifiedBonusByCreator.forEach((row, creatorId) => {
+      if (Number(row.viewsExpectedCents || 0) > 0) {
+        creatorMostVerifiedViewsBonusMap.set(
+          creatorId,
+          Number(row.viewsExpectedCents || 0),
+        );
       }
-    }
+      if (Number(row.expectedCents || 0) > 0) {
+        creatorMostVerifiedReelsBonusMap.set(
+          creatorId,
+          Number(row.expectedCents || 0),
+        );
+      }
+    });
 
     return {
       submissionExpectedRewardMap,
@@ -1061,6 +1102,7 @@ export function ContestClientPage({
   }, [
     contest?.contest_type,
     contest?.contest_based_details,
+    allMilestoneBonusSubmissions,
     leaderboard,
     groupedLeaderboardByCreator,
     mySubmissionsListFromApi,
@@ -8797,7 +8839,8 @@ export function ContestClientPage({
                             {/* Summary Cards */}
                             {(() => {
                               if (loadingCreatorVideosModal) return null;
-                              if (contest?.contest_type !== "milestone") return null;
+                              if (!isMilestoneContestType(contest?.contest_type))
+                                return null;
                               
                               const isTwitter = contest?.platform?.toLowerCase() === "twitter" || contest?.platform?.toLowerCase() === "x";
                               

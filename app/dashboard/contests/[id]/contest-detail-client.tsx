@@ -5715,7 +5715,12 @@ export default function ContestDetailClient({
     const isPaid =
       (submission?.status || "").toLowerCase() === "paid" ||
       submission?.paid === true;
-    const totalCents = storedCents > 0 ? storedCents : isPaid ? cpmExpectedCents + milestoneExpectedCents : 0;
+    const totalCents =
+      storedCents > 0
+        ? storedCents
+        : isPaid
+          ? cpmExpectedCents + milestoneExpectedCents
+          : 0;
     if (!isPaid && storedCents <= 0) {
       return { totalCents: 0, cpmCents: 0, milestoneCents: 0, isPaid: false };
     }
@@ -11678,14 +11683,20 @@ export default function ContestDetailClient({
                               placeholder="%"
                             />
                             <select
-                              value={
-                                ((currentContest as any)
-                                  ?.payout_adjustment_mode as
-                                  | "cpm_only"
-                                  | "bonus_only"
-                                  | "combined"
-                                  | null) ?? "combined"
-                              }
+                              value={(() => {
+                                const rawMode =
+                                  ((currentContest as any)
+                                    ?.payout_adjustment_mode as
+                                    | "cpm_only"
+                                    | "bonus_only"
+                                    | "combined"
+                                    | "dual_rewards_only"
+                                    | null) ?? "combined";
+                                if (rawMode === "dual_rewards_only") {
+                                  return "combined";
+                                }
+                                return rawMode;
+                              })()}
                               onChange={(e) => {
                                 const value = e.target.value as
                                   | "cpm_only"
@@ -11706,15 +11717,29 @@ export default function ContestDetailClient({
                                   : "border-purple-400 text-purple-900",
                               )}
                             >
-                              <option value="cpm_only">
-                                {isMilestoneContestType(
-                                  currentContest.contest_type,
-                                )
-                                  ? "Milestone only"
-                                  : "CPM only"}
-                              </option>
-                              <option value="bonus_only">Bonus only</option>
-                              <option value="combined">Both</option>
+                              {isDualRewardsContestType(
+                                currentContest.contest_type,
+                              ) ? (
+                                <>
+                                  <option value="cpm_only">CPM only</option>
+                                  <option value="bonus_only">
+                                    Milestone only
+                                  </option>
+                                  <option value="combined">Both</option>
+                                </>
+                              ) : (
+                                <>
+                                  <option value="cpm_only">
+                                    {isMilestoneContestType(
+                                      currentContest.contest_type,
+                                    )
+                                      ? "Milestone only"
+                                      : "CPM only"}
+                                  </option>
+                                  <option value="bonus_only">Bonus only</option>
+                                  <option value="combined">Both</option>
+                                </>
+                              )}
                             </select>
                             <Button
                               size="sm"
@@ -11733,7 +11758,12 @@ export default function ContestDetailClient({
                                     | "cpm_only"
                                     | "bonus_only"
                                     | "combined"
+                                    | "dual_rewards_only"
                                     | null) ?? "combined";
+                                const normalizedMode =
+                                  mode === "dual_rewards_only"
+                                    ? "combined"
+                                    : mode;
                                 try {
                                   const resp = await fetch(
                                     `/api/admin/contests/${contestId}/update`,
@@ -11747,7 +11777,7 @@ export default function ContestDetailClient({
                                           pct != null
                                             ? Math.round(pct * 100) / 100
                                             : null,
-                                        payout_adjustment_mode: mode,
+                                        payout_adjustment_mode: normalizedMode,
                                       }),
                                     },
                                   );
@@ -17443,10 +17473,37 @@ export default function ContestDetailClient({
                                                     <>
                                                       <TableCell className="text-center font-medium">
                                                         {formatMoney(
-                                                          Number(
-                                                            group.earnings
-                                                              ?.expected ?? 0,
-                                                          ),
+                                                          (() => {
+                                                            const milestoneExpectedCents =
+                                                              (
+                                                                group.submissions ||
+                                                                []
+                                                              ).reduce(
+                                                                (
+                                                                  sum: number,
+                                                                  sub: any,
+                                                                ) =>
+                                                                  sum +
+                                                                  (milestoneSubmissionExpectedPayoutCents.get(
+                                                                    sub.id,
+                                                                  ) ?? 0),
+                                                                0,
+                                                              );
+                                                            const cpmExpectedCents =
+                                                              Math.max(
+                                                                Number(
+                                                                  group.earnings
+                                                                    ?.expected ??
+                                                                    0,
+                                                                ) -
+                                                                  milestoneExpectedCents,
+                                                                0,
+                                                              );
+                                                            return (
+                                                              cpmExpectedCents +
+                                                              milestoneExpectedCents
+                                                            );
+                                                          })(),
                                                         )}
                                                       </TableCell>
                                                       <TableCell className="text-center font-medium">

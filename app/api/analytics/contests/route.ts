@@ -1,5 +1,6 @@
 import { createClient } from "@/utils/supabase/server";
 import { NextRequest, NextResponse } from "next/server";
+import { getPoolBudgetCentsFromDetails } from "@/lib/contest-type";
 
 export async function GET(request: NextRequest) {
   try {
@@ -27,7 +28,12 @@ export async function GET(request: NextRequest) {
     const contestId = searchParams.get("contestId");
     const contestTypeFilter = (searchParams.get("type") ?? "all")
       .trim()
-      .toLowerCase() as "all" | "leaderboard" | "cpm";
+      .toLowerCase() as
+      | "all"
+      | "leaderboard"
+      | "cpm"
+      | "milestone"
+      | "dual_rewards";
     const contentType = (searchParams.get("contentType") ?? "video")
       .trim()
       .toLowerCase() as "video" | "text_image";
@@ -106,6 +112,10 @@ export async function GET(request: NextRequest) {
         details?.cpm_contest?.total_budget
       ) {
         totalSpent = details.cpm_contest.total_budget;
+      } else if (contest.contest_type === "milestone") {
+        totalSpent = getPoolBudgetCentsFromDetails("milestone", details);
+      } else if (contest.contest_type === "dual_rewards") {
+        totalSpent = getPoolBudgetCentsFromDetails("dual_rewards", details);
       }
 
       const avgViewsPerSubmission =
@@ -440,6 +450,10 @@ export async function GET(request: NextRequest) {
             details?.cpm_contest?.total_budget
           ) {
             totalSpent = details.cpm_contest.total_budget;
+          } else if (contest.contest_type === "milestone") {
+            totalSpent = getPoolBudgetCentsFromDetails("milestone", details);
+          } else if (contest.contest_type === "dual_rewards") {
+            totalSpent = getPoolBudgetCentsFromDetails("dual_rewards", details);
           }
 
           const avgViewsPerSubmission =

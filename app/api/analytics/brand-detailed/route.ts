@@ -1,6 +1,7 @@
 import { createClient } from "@/utils/supabase/server";
 import { createAdminClient } from "@/utils/supabase/admin";
 import { NextRequest, NextResponse } from "next/server";
+import { getPoolBudgetCentsFromDetails } from "@/lib/contest-type";
 
 export async function GET(request: NextRequest) {
   try {
@@ -618,12 +619,10 @@ export async function GET(request: NextRequest) {
         return sum + (details.cpm_contest.total_budget || 0);
       }
       if (c.contest_type === "milestone") {
-        return (
-          sum +
-          (Number(details?.milestone_contest?.total_budget_cents) ||
-            Number(details?.milestone_contest?.total_budget) ||
-            0)
-        );
+        return sum + getPoolBudgetCentsFromDetails("milestone", details);
+      }
+      if (c.contest_type === "dual_rewards") {
+        return sum + getPoolBudgetCentsFromDetails("dual_rewards", details);
       }
       return sum;
     }, 0);
@@ -653,12 +652,10 @@ export async function GET(request: NextRequest) {
         return sum + (details.cpm_contest.total_budget || 0);
       }
       if (c.contest_type === "milestone") {
-        return (
-          sum +
-          (Number(details?.milestone_contest?.total_budget_cents) ||
-            Number(details?.milestone_contest?.total_budget) ||
-            0)
-        );
+        return sum + getPoolBudgetCentsFromDetails("milestone", details);
+      }
+      if (c.contest_type === "dual_rewards") {
+        return sum + getPoolBudgetCentsFromDetails("dual_rewards", details);
       }
       return sum;
     }, 0);
@@ -740,6 +737,16 @@ export async function GET(request: NextRequest) {
               details?.cpm_contest?.total_budget
             ) {
               acc[key].spent += details.cpm_contest.total_budget;
+          } else if (contest.contest_type === "milestone") {
+            acc[key].spent += getPoolBudgetCentsFromDetails(
+              "milestone",
+              details,
+            );
+          } else if (contest.contest_type === "dual_rewards") {
+            acc[key].spent += getPoolBudgetCentsFromDetails(
+              "dual_rewards",
+              details,
+            );
             }
           }
         } else if (contest.submissions.length > 0) {
@@ -778,10 +785,12 @@ export async function GET(request: NextRequest) {
           ) {
             contestSpent = details.cpm_contest.total_budget;
           } else if (contest.contest_type === "milestone") {
-            contestSpent =
-              Number(details?.milestone_contest?.total_budget_cents) ||
-              Number(details?.milestone_contest?.total_budget) ||
-              0;
+            contestSpent = getPoolBudgetCentsFromDetails("milestone", details);
+          } else if (contest.contest_type === "dual_rewards") {
+            contestSpent = getPoolBudgetCentsFromDetails(
+              "dual_rewards",
+              details,
+            );
           }
           acc[key].spent += contestSpent;
         }
@@ -823,10 +832,15 @@ export async function GET(request: NextRequest) {
           ) {
             acc[type].spent += details.cpm_contest.total_budget;
           } else if (contest.contest_type === "milestone") {
-            acc[type].spent +=
-              Number(details?.milestone_contest?.total_budget_cents) ||
-              Number(details?.milestone_contest?.total_budget) ||
-              0;
+            acc[type].spent += getPoolBudgetCentsFromDetails(
+              "milestone",
+              details,
+            );
+          } else if (contest.contest_type === "dual_rewards") {
+            acc[type].spent += getPoolBudgetCentsFromDetails(
+              "dual_rewards",
+              details,
+            );
           }
         }
         return acc;

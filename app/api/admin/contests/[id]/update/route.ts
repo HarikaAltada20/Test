@@ -70,7 +70,12 @@ export async function POST(
     }
 
     // Validate payout adjustment fields when present
-    const validPayoutModes = ["cpm_only", "bonus_only", "combined"];
+    const validPayoutModes = [
+      "cpm_only",
+      "bonus_only",
+      "combined",
+      "dual_rewards_only",
+    ];
     if (updateData.payout_adjustment_mode !== undefined) {
       const mode = updateData.payout_adjustment_mode;
       if (mode != null && !validPayoutModes.includes(mode)) {

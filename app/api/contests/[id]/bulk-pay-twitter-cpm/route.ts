@@ -128,16 +128,19 @@ export async function POST(
       | "cpm_only"
       | "bonus_only"
       | "combined"
+      | "dual_rewards_only"
       | null;
     const hasPayoutAdjustment =
       payoutAdjustmentPercentage > 0 && !!payoutAdjustmentMode;
     const shouldAdjustReward =
       hasPayoutAdjustment &&
       (payoutAdjustmentMode === "combined" ||
+        payoutAdjustmentMode === "dual_rewards_only" ||
         payoutAdjustmentMode === "cpm_only");
     const shouldAdjustBonus =
       hasPayoutAdjustment &&
       (payoutAdjustmentMode === "combined" ||
+        payoutAdjustmentMode === "dual_rewards_only" ||
         payoutAdjustmentMode === "bonus_only");
 
     const supabaseAdmin = createAdminClient();

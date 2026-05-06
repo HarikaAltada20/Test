@@ -351,13 +351,19 @@ export function CreatorSubmissionsModal({
       if (isDual) {
         let successCount = 0;
         let failCount = 0;
-        const component = type === "standard" ? "cpm" : type === "bonus" ? "milestone" : "both";
+        const component =
+          type === "standard" ? "cpm" : type === "bonus" ? "milestone" : "both";
         for (const sub of sortedSubs) {
           try {
-            await handleDualSubmissionPayment(sub, component, { skipReload: true });
+            await handleDualSubmissionPayment(sub, component, {
+              skipReload: true,
+            });
             successCount++;
           } catch (error) {
-            console.error(`Failed dual payment for submission ${sub.id}:`, error);
+            console.error(
+              `Failed dual payment for submission ${sub.id}:`,
+              error,
+            );
             failCount++;
           }
         }
@@ -539,11 +545,30 @@ export function CreatorSubmissionsModal({
     component: "cpm" | "milestone" | "both",
     options?: { skipReload?: boolean },
   ) => {
-    const cpmExpected = calculateSubmissionCpmExpectedReward(submission);
-    const milestoneExpected = Math.max(
+    const cpmExpectedRaw = calculateSubmissionCpmExpectedReward(submission);
+    const milestoneExpectedRaw = Math.max(
       Number(milestoneExpectedPayoutBySubmissionId?.get(submission.id) || 0),
       0,
     );
+    const shouldAdjustDualCpmComponent =
+      hasPayoutAdjustment &&
+      (payoutAdjustmentMode === "combined" ||
+        payoutAdjustmentMode === "dual_rewards_only" ||
+        payoutAdjustmentMode === "cpm_only");
+    const shouldAdjustDualMilestoneComponent =
+      hasPayoutAdjustment &&
+      (payoutAdjustmentMode === "combined" ||
+        payoutAdjustmentMode === "dual_rewards_only" ||
+        payoutAdjustmentMode === "bonus_only");
+    const cpmExpected = shouldAdjustDualCpmComponent
+      ? applyPayoutAdjustment(cpmExpectedRaw, payoutAdjustmentPercentage)
+      : cpmExpectedRaw;
+    const milestoneExpected = shouldAdjustDualMilestoneComponent
+      ? applyPayoutAdjustment(
+          milestoneExpectedRaw,
+          payoutAdjustmentPercentage,
+        )
+      : milestoneExpectedRaw;
     const amountInCents =
       component === "cpm"
         ? cpmExpected
@@ -676,16 +701,19 @@ export function CreatorSubmissionsModal({
     | "cpm_only"
     | "bonus_only"
     | "combined"
+    | "dual_rewards_only"
     | null;
   const hasPayoutAdjustment =
     payoutAdjustmentPercentage > 0 && !!payoutAdjustmentMode;
   const shouldAdjustReward =
     hasPayoutAdjustment &&
     (payoutAdjustmentMode === "combined" ||
+      payoutAdjustmentMode === "dual_rewards_only" ||
       payoutAdjustmentMode === "cpm_only");
   const shouldAdjustBonus =
     hasPayoutAdjustment &&
     (payoutAdjustmentMode === "combined" ||
+      payoutAdjustmentMode === "dual_rewards_only" ||
       payoutAdjustmentMode === "bonus_only");
 
   const isTwitterLeaderboardContest =
@@ -1342,7 +1370,8 @@ export function CreatorSubmissionsModal({
                           </Button>
                           {(hasFlatFeeBonus || isDualRewardsContest) && (
                             <>
-                              {(!isTwitterCpmContest || isDualRewardsContest) && (
+                              {(!isTwitterCpmContest ||
+                                isDualRewardsContest) && (
                                 <>
                                   <Button
                                     size="sm"
@@ -1886,10 +1915,9 @@ export function CreatorSubmissionsModal({
                             ? 18 + // Checkbox, #, Tweet, Total Points, Base Points, Manual Points, Likes, Replies, Retweets, Quote Reposts, Impressions, Expected Reward, Reward Granted, Manual Points Reason, Status, Rejection reason, Submitted, Actions
                               (contest?.contest_type === "dual_rewards"
                                 ? 4
-                                : 0) // Dual: Expected/Granted CPM + Milestone
-                              +
-                              ((contest?.contest_type === "milestone" ||
-                                contest?.contest_type === "dual_rewards")
+                                : 0) + // Dual: Expected/Granted CPM + Milestone
+                              (contest?.contest_type === "milestone" ||
+                              contest?.contest_type === "dual_rewards"
                                 ? 1
                                 : 0) // Milestone column
                             : 3 + // Checkbox, #, Content
@@ -1900,9 +1928,11 @@ export function CreatorSubmissionsModal({
                                   : 6
                                 : 0) + // TT: Shares + total engagement + engagement rate; IG: +Saves, Reach, Interactions, Avg/Total watch
                               2 + // Expected Reward, Reward Granted
-                              (contest?.contest_type === "dual_rewards" ? 4 : 0) + // Dual: Expected/Granted CPM + Milestone
-                              ((contest?.contest_type === "milestone" ||
-                                contest?.contest_type === "dual_rewards")
+                              (contest?.contest_type === "dual_rewards"
+                                ? 4
+                                : 0) + // Dual: Expected/Granted CPM + Milestone
+                              (contest?.contest_type === "milestone" ||
+                              contest?.contest_type === "dual_rewards"
                                 ? 1
                                 : 0) + // Milestone
                               (hasFlatFeeBonus ? 2 : 0) + // Bonus Expected, Bonus Granted
@@ -2047,9 +2077,35 @@ export function CreatorSubmissionsModal({
                               0,
                             )
                           : 0;
+                      const dualAdjustCpm =
+                        contest?.contest_type === "dual_rewards" &&
+                        hasPayoutAdjustment &&
+                        (payoutAdjustmentMode === "combined" ||
+                          payoutAdjustmentMode === "dual_rewards_only" ||
+                          payoutAdjustmentMode === "cpm_only");
+                      const dualAdjustMilestone =
+                        contest?.contest_type === "dual_rewards" &&
+                        hasPayoutAdjustment &&
+                        (payoutAdjustmentMode === "combined" ||
+                          payoutAdjustmentMode === "dual_rewards_only" ||
+                          payoutAdjustmentMode === "bonus_only");
+                      const adjustedCpmExpectedForDual = dualAdjustCpm
+                        ? applyPayoutAdjustment(
+                            cpmExpectedForDual,
+                            payoutAdjustmentPercentage,
+                          )
+                        : cpmExpectedForDual;
+                      const adjustedMilestoneExpectedForDual =
+                        dualAdjustMilestone
+                          ? applyPayoutAdjustment(
+                              milestoneExpectedForDual,
+                              payoutAdjustmentPercentage,
+                            )
+                          : milestoneExpectedForDual;
                       const totalExpectedForDual =
                         contest?.contest_type === "dual_rewards"
-                          ? cpmExpectedForDual + milestoneExpectedForDual
+                          ? adjustedCpmExpectedForDual +
+                            adjustedMilestoneExpectedForDual
                           : 0;
 
                       // Use ACTUAL earnings for granted reward (includes custom pay amount)
@@ -2082,7 +2138,9 @@ export function CreatorSubmissionsModal({
                       const dualPaidComponent = String(
                         (submission as any)?.metadata?.customRemarks || "",
                       ).includes("dual_component:")
-                        ? String((submission as any)?.metadata?.customRemarks || "")
+                        ? String(
+                            (submission as any)?.metadata?.customRemarks || "",
+                          )
                             .split("dual_component:")[1]
                             ?.trim()
                         : "";
@@ -2096,12 +2154,12 @@ export function CreatorSubmissionsModal({
                             ? totalGrantedForDual
                             : dualPaidComponent === "both"
                               ? Math.min(
-                                  milestoneExpectedForDual,
+                                  adjustedMilestoneExpectedForDual,
                                   totalGrantedForDual,
                                 )
                               : isDualPaid && !dualPaidComponent
                                 ? Math.min(
-                                    milestoneExpectedForDual,
+                                    adjustedMilestoneExpectedForDual,
                                     totalGrantedForDual,
                                   )
                                 : 0
@@ -2508,10 +2566,22 @@ export function CreatorSubmissionsModal({
                               {contest?.contest_type === "dual_rewards" && (
                                 <>
                                   <TableCell className="text-center font-medium text-sm">
-                                    {formatCurrency(cpmExpectedForDual)}
+                                    {hasPayoutAdjustment && dualAdjustCpm
+                                      ? `${formatCurrency(cpmExpectedForDual)} → ${formatCurrency(
+                                          adjustedCpmExpectedForDual,
+                                        )}`
+                                      : formatCurrency(
+                                          adjustedCpmExpectedForDual,
+                                        )}
                                   </TableCell>
                                   <TableCell className="text-center font-medium text-sm">
-                                    {formatCurrency(milestoneExpectedForDual)}
+                                    {hasPayoutAdjustment && dualAdjustMilestone
+                                      ? `${formatCurrency(milestoneExpectedForDual)} → ${formatCurrency(
+                                          adjustedMilestoneExpectedForDual,
+                                        )}`
+                                      : formatCurrency(
+                                          adjustedMilestoneExpectedForDual,
+                                        )}
                                   </TableCell>
                                 </>
                               )}
@@ -2732,29 +2802,47 @@ export function CreatorSubmissionsModal({
                                 <>
                                   <TableCell className="text-center font-medium">
                                     {contest?.contest_type === "dual_rewards"
-                                      ? formatCurrency(totalExpectedForDual)
-                                      : hasPayoutAdjustment && shouldAdjustReward
-                                      ? `${formatCurrency(
-                                          expectedReward,
-                                        )} → ${formatCurrency(
-                                          adjustedExpectedReward,
-                                        )}`
-                                      : formatCurrency(expectedReward)}
+                                      ? hasPayoutAdjustment &&
+                                        (dualAdjustCpm || dualAdjustMilestone)
+                                        ? `${formatCurrency(cpmExpectedForDual + milestoneExpectedForDual)} → ${formatCurrency(
+                                            totalExpectedForDual,
+                                          )}`
+                                        : formatCurrency(totalExpectedForDual)
+                                      : hasPayoutAdjustment &&
+                                          shouldAdjustReward
+                                        ? `${formatCurrency(
+                                            expectedReward,
+                                          )} → ${formatCurrency(
+                                            adjustedExpectedReward,
+                                          )}`
+                                        : formatCurrency(expectedReward)}
                                   </TableCell>
                                   {contest?.contest_type === "dual_rewards" && (
                                     <>
                                       <TableCell className="text-center font-medium">
-                                        {formatCurrency(cpmExpectedForDual)}
+                                        {hasPayoutAdjustment && dualAdjustCpm
+                                          ? `${formatCurrency(cpmExpectedForDual)} → ${formatCurrency(
+                                              adjustedCpmExpectedForDual,
+                                            )}`
+                                          : formatCurrency(
+                                              adjustedCpmExpectedForDual,
+                                            )}
                                       </TableCell>
                                       <TableCell className="text-center font-medium">
-                                        {formatCurrency(
-                                          milestoneExpectedForDual,
-                                        )}
+                                        {hasPayoutAdjustment &&
+                                        dualAdjustMilestone
+                                          ? `${formatCurrency(milestoneExpectedForDual)} → ${formatCurrency(
+                                              adjustedMilestoneExpectedForDual,
+                                            )}`
+                                          : formatCurrency(
+                                              adjustedMilestoneExpectedForDual,
+                                            )}
                                       </TableCell>
                                     </>
                                   )}
                                   {(contest?.contest_type === "milestone" ||
-                                    contest?.contest_type === "dual_rewards") && (
+                                    contest?.contest_type ===
+                                      "dual_rewards") && (
                                     <TableCell className="text-center">
                                       {milestoneAssignmentLabel === "—" ? (
                                         <span
@@ -3023,7 +3111,10 @@ export function CreatorSubmissionsModal({
                                                 submission,
                                                 "cpm",
                                               )
-                                            : onPayment(submission.id, "standard")
+                                            : onPayment(
+                                                submission.id,
+                                                "standard",
+                                              )
                                         }
                                       >
                                         <DollarSign className="h-4 w-4 mr-2" />

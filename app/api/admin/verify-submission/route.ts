@@ -566,12 +566,14 @@ export async function POST(request: Request) {
           | "cpm_only"
           | "bonus_only"
           | "combined"
+          | "dual_rewards_only"
           | null;
         const hasPayoutAdjustment =
           payoutAdjustmentPercentage > 0 && !!payoutAdjustmentMode;
         const shouldAdjustReward =
           hasPayoutAdjustment &&
           (payoutAdjustmentMode === "combined" ||
+            payoutAdjustmentMode === "dual_rewards_only" ||
             payoutAdjustmentMode === "cpm_only");
 
         let rewardAmount = 0;
