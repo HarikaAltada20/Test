@@ -35,6 +35,9 @@ import {
   Loader2,
   ThumbsUp,
   MessageCircle,
+  ThumbsDown,
+  Share2,
+  BarChart2,
 } from "lucide-react";
 import {
   Select,
@@ -51,6 +54,7 @@ import {
 import { cn } from "@/lib/utils";
 import { toast } from "@/hooks/use-toast";
 import { applyPayoutAdjustment } from "@/lib/payout-adjustment";
+import { YouTubeAnalyticsPanel } from "@/components/youtube/YouTubeAnalyticsPanel";
 import {
   formatMetadataTimestamp,
   parseSubmissionMetadata,
@@ -132,6 +136,11 @@ interface CreatorSubmissionsModalProps {
   milestoneExpectedPayoutBySubmissionId?: Map<string, number>;
   /** For milestone contests: precomputed milestone label per submission from normal view logic */
   milestoneAssignedLabelBySubmissionId?: Map<string, string>;
+  ytVisibleColumns?: string[];
+  canSeeCore?: boolean;
+  canSeeTraffic?: boolean;
+  /** Match submission-wise YouTube analytics: demographics when admin or brand allowed */
+  canSeeDemographics?: boolean;
 }
 
 export function CreatorSubmissionsModal({
@@ -149,6 +158,10 @@ export function CreatorSubmissionsModal({
   creatorRank,
   milestoneExpectedPayoutBySubmissionId,
   milestoneAssignedLabelBySubmissionId,
+  ytVisibleColumns,
+  canSeeCore = true,
+  canSeeTraffic = true,
+  canSeeDemographics = false,
 }: CreatorSubmissionsModalProps) {
   const [selectedSubmissions, setSelectedSubmissions] = useState<Set<string>>(
     new Set(),
@@ -651,6 +664,66 @@ export function CreatorSubmissionsModal({
 
   const isYouTubeContest =
     contest?.platform?.toLowerCase().includes("youtube") ?? false;
+  const ytVisibleColumnsEffective =
+    ytVisibleColumns && ytVisibleColumns.length > 0
+      ? ytVisibleColumns
+      : [
+          "views",
+          "likes",
+          "comments",
+          "dislikes",
+          "shares",
+          "avg_view_pct",
+          "watch_time",
+          "avg_duration",
+          "engaged_views",
+          "subs_gained",
+          "bot_score",
+          "analytics",
+          "top_traffic_source",
+          "insights_status",
+          "expected_reward",
+          "reward_granted",
+          "status",
+          "submitted",
+        ];
+  const showYtColumn = (columnId: string) => {
+    if (!isYouTubeContest) return false;
+    if (!ytVisibleColumnsEffective.includes(columnId)) return false;
+    if (
+      [
+        "dislikes",
+        "shares",
+        "avg_view_pct",
+        "watch_time",
+        "avg_duration",
+        "engaged_views",
+        "subs_gained",
+        "bot_score",
+        "analytics",
+      ].includes(columnId)
+    ) {
+      return canSeeCore;
+    }
+    if (columnId === "top_traffic_source") return canSeeTraffic;
+    return true;
+  };
+  const YT_TRAFFIC_SOURCE_LABELS: Record<string, string> = {
+    SHORTS: "Shorts",
+    YT_SEARCH: "YouTube Search",
+    RELATED_VIDEO: "Related",
+    YT_CHANNEL: "Channel",
+    SUBSCRIBER: "Subscriber",
+    EXT_URL: "External",
+    NO_LINK_OTHER: "Direct",
+    YT_OTHER_PAGE: "Other YT",
+    PLAYLIST: "Playlist",
+    NOTIFICATION: "Notifications",
+    END_SCREEN: "End Screen",
+    HASHTAGS: "Hashtags",
+    SOUND_PAGE: "Sound",
+    NO_LINK_EMBEDDED: "Embedded",
+  };
 
   const getInsightsMeta = (
     status: Submission["insights_status"],
@@ -1510,30 +1583,137 @@ export function CreatorSubmissionsModal({
                       </>
                     ) : (
                       <>
-                        <TableHead
-                          className={cn(
-                            "text-center",
-                            isDark ? "bg-[#391A6A] " : "bg-gray-50",
+                        {(!isYouTubeContest || showYtColumn("views")) && (
+                          <TableHead
+                            className={cn(
+                              "text-center",
+                              isDark ? "bg-[#391A6A] " : "bg-gray-50",
+                            )}
+                          >
+                            Views
+                          </TableHead>
+                        )}
+                        {(!isYouTubeContest || showYtColumn("likes")) && (
+                          <TableHead
+                            className={cn(
+                              "text-center",
+                              isDark ? "bg-[#391A6A] " : "bg-gray-50",
+                            )}
+                          >
+                            Likes
+                          </TableHead>
+                        )}
+                        {(!isYouTubeContest || showYtColumn("comments")) && (
+                          <TableHead
+                            className={cn(
+                              "text-center",
+                              isDark ? "bg-[#391A6A] " : "bg-gray-50",
+                            )}
+                          >
+                            Comments
+                          </TableHead>
+                        )}
+                        {isYouTubeContest && showYtColumn("dislikes") && (
+                          <TableHead
+                            className={cn(
+                              "text-center",
+                              isDark ? "bg-[#391A6A] " : "bg-gray-50",
+                            )}
+                          >
+                            Dislikes
+                          </TableHead>
+                        )}
+                        {isYouTubeContest && showYtColumn("shares") && (
+                          <TableHead
+                            className={cn(
+                              "text-center",
+                              isDark ? "bg-[#391A6A] " : "bg-gray-50",
+                            )}
+                          >
+                            Shares
+                          </TableHead>
+                        )}
+                        {isYouTubeContest && showYtColumn("avg_view_pct") && (
+                          <TableHead
+                            className={cn(
+                              "text-center",
+                              isDark ? "bg-[#391A6A] " : "bg-gray-50",
+                            )}
+                          >
+                            Avg View %
+                          </TableHead>
+                        )}
+                        {isYouTubeContest && showYtColumn("watch_time") && (
+                          <TableHead
+                            className={cn(
+                              "text-center",
+                              isDark ? "bg-[#391A6A] " : "bg-gray-50",
+                            )}
+                          >
+                            Watch Time
+                          </TableHead>
+                        )}
+                        {isYouTubeContest && showYtColumn("avg_duration") && (
+                          <TableHead
+                            className={cn(
+                              "text-center",
+                              isDark ? "bg-[#391A6A] " : "bg-gray-50",
+                            )}
+                          >
+                            Avg Duration
+                          </TableHead>
+                        )}
+                        {isYouTubeContest && showYtColumn("engaged_views") && (
+                          <TableHead
+                            className={cn(
+                              "text-center",
+                              isDark ? "bg-[#391A6A] " : "bg-gray-50",
+                            )}
+                          >
+                            Engaged Views
+                          </TableHead>
+                        )}
+                        {isYouTubeContest && showYtColumn("subs_gained") && (
+                          <TableHead
+                            className={cn(
+                              "text-center",
+                              isDark ? "bg-[#391A6A] " : "bg-gray-50",
+                            )}
+                          >
+                            Subs Gained
+                          </TableHead>
+                        )}
+                        {isYouTubeContest && showYtColumn("bot_score") && (
+                          <TableHead
+                            className={cn(
+                              "text-center",
+                              isDark ? "bg-[#391A6A] " : "bg-gray-50",
+                            )}
+                          >
+                            Bot Score
+                          </TableHead>
+                        )}
+                        {isYouTubeContest && showYtColumn("analytics") && (
+                          <TableHead
+                            className={cn(
+                              "text-center",
+                              isDark ? "bg-[#391A6A] " : "bg-gray-50",
+                            )}
+                          >
+                            Analytics
+                          </TableHead>
+                        )}
+                        {isYouTubeContest &&
+                          showYtColumn("top_traffic_source") && (
+                            <TableHead
+                              className={cn(
+                                "text-center",
+                                isDark ? "bg-[#391A6A] " : "bg-gray-50",
+                              )}
+                            >
+                              Top Traffic Source
+                            </TableHead>
                           )}
-                        >
-                          Views
-                        </TableHead>
-                        <TableHead
-                          className={cn(
-                            "text-center",
-                            isDark ? "bg-[#391A6A] " : "bg-gray-50",
-                          )}
-                        >
-                          Likes
-                        </TableHead>
-                        <TableHead
-                          className={cn(
-                            "text-center",
-                            isDark ? "bg-[#391A6A] " : "bg-gray-50",
-                          )}
-                        >
-                          Comments
-                        </TableHead>
                         {(isInstagramContest || isTikTokContest) && (
                           <>
                             <TableHead
@@ -1622,14 +1802,16 @@ export function CreatorSubmissionsModal({
                     {/* Hide reward columns for Twitter text_image contests */}
                     {!isTwitterTextImageContest && (
                       <>
-                        <TableHead
-                          className={cn(
-                            "text-center",
-                            isDark ? "bg-[#391A6A] " : "bg-gray-50",
-                          )}
-                        >
-                          Expected Reward
-                        </TableHead>
+                        {(!isYouTubeContest || showYtColumn("expected_reward")) && (
+                          <TableHead
+                            className={cn(
+                              "text-center",
+                              isDark ? "bg-[#391A6A] " : "bg-gray-50",
+                            )}
+                          >
+                            Expected Reward
+                          </TableHead>
+                        )}
                         {contest?.contest_type === "milestone" && (
                           <TableHead
                             className={cn(
@@ -1640,14 +1822,16 @@ export function CreatorSubmissionsModal({
                             Milestone
                           </TableHead>
                         )}
-                        <TableHead
-                          className={cn(
-                            "text-center",
-                            isDark ? "bg-[#391A6A] " : "bg-gray-50",
-                          )}
-                        >
-                          Reward Granted
-                        </TableHead>
+                        {(!isYouTubeContest || showYtColumn("reward_granted")) && (
+                          <TableHead
+                            className={cn(
+                              "text-center",
+                              isDark ? "bg-[#391A6A] " : "bg-gray-50",
+                            )}
+                          >
+                            Reward Granted
+                          </TableHead>
+                        )}
                       </>
                     )}
                     {/* Bonus columns */}
@@ -1672,6 +1856,7 @@ export function CreatorSubmissionsModal({
                       </>
                     )}
                     {isAdminView &&
+                      (!isYouTubeContest || showYtColumn("insights_status")) &&
                       (isInstagramContest ||
                         isTikTokContest ||
                         isYouTubeContest) && (
@@ -1684,14 +1869,16 @@ export function CreatorSubmissionsModal({
                           Insights status
                         </TableHead>
                       )}
-                    <TableHead
-                      className={cn(
-                        "text-center",
-                        isDark ? "bg-[#391A6A] " : "bg-gray-50",
-                      )}
-                    >
-                      Status
-                    </TableHead>
+                    {(!isYouTubeContest || showYtColumn("status")) && (
+                      <TableHead
+                        className={cn(
+                          "text-center",
+                          isDark ? "bg-[#391A6A] " : "bg-gray-50",
+                        )}
+                      >
+                        Status
+                      </TableHead>
+                    )}
                     {/* <TableHead
                     className={cn(
                       "min-w-[180px]",
@@ -1708,14 +1895,16 @@ export function CreatorSubmissionsModal({
                     >
                       Rejection reason
                     </TableHead>
-                    <TableHead
-                      className={cn(
-                        "min-w-[180px]",
-                        isDark ? "bg-[#391A6A] " : "bg-gray-50",
-                      )}
-                    >
-                      Submitted
-                    </TableHead>
+                    {(!isYouTubeContest || showYtColumn("submitted")) && (
+                      <TableHead
+                        className={cn(
+                          "min-w-[180px]",
+                          isDark ? "bg-[#391A6A] " : "bg-gray-50",
+                        )}
+                      >
+                        Submitted
+                      </TableHead>
+                    )}
                     <TableHead
                       className={cn(
                         "text-center",
@@ -1730,27 +1919,7 @@ export function CreatorSubmissionsModal({
                   {sortedSubmissions.length === 0 ? (
                     <TableRow>
                       <TableCell
-                        colSpan={
-                          isTwitterTextImageContest
-                            ? 18 // Checkbox, #, Tweet, Total Points, Base Points, Manual Points, Likes, Replies, Retweets, Quote Reposts, Impressions, Expected Reward, Reward Granted, Manual Points Reason, Status, Rejection reason, Submitted, Actions
-                            : 3 + // Checkbox, #, Content
-                              3 + // Views, Likes, Comments
-                              (isInstagramContest || isTikTokContest
-                                ? isTikTokContest
-                                  ? 3
-                                  : 6
-                                : 0) + // TT: Shares + total engagement + engagement rate; IG: +Saves, Reach, Interactions, Avg/Total watch
-                              2 + // Expected Reward, Reward Granted
-                              (contest?.contest_type === "milestone" ? 1 : 0) + // Milestone
-                              (hasFlatFeeBonus ? 2 : 0) + // Bonus Expected, Bonus Granted
-                              (isAdminView &&
-                              (isInstagramContest ||
-                                isTikTokContest ||
-                                isYouTubeContest)
-                                ? 1
-                                : 0) + // Insights status (admin only)
-                              4 // Status, Rejection reason, Submitted, Actions
-                        }
+                        colSpan={40}
                         className={cn(
                           "text-center py-8",
                           isDark ? "text-gray-400" : "text-gray-600",
@@ -1791,6 +1960,8 @@ export function CreatorSubmissionsModal({
                         submission.other_stats?.tiktok ||
                         submission.other_stats ||
                         {};
+                      const youtubeStats = (submission.other_stats as any)
+                        ?.youtube || {};
                       const shares = isTikTokRow
                         ? Number(tt?.share_count ?? tt?.shares ?? 0)
                         : Number(
@@ -1809,6 +1980,23 @@ export function CreatorSubmissionsModal({
                         (platformStats as any)?.avg_watch_time_ms || 0;
                       const totalWatchTimeMs =
                         (platformStats as any)?.total_watch_time_ms || 0;
+                      const ytDislikes = Number(youtubeStats.dislikes ?? 0);
+                      const ytShares = Number(youtubeStats.shares ?? 0);
+                      const ytAvgViewPct = Number(
+                        youtubeStats.avg_view_percentage ?? 0,
+                      );
+                      const ytWatchTimeMinutes = Number(
+                        youtubeStats.estimated_minutes_watched ?? 0,
+                      );
+                      const ytAvgDurationSeconds = Number(
+                        youtubeStats.avg_view_duration_seconds ?? 0,
+                      );
+                      const ytEngagedViews = Number(
+                        youtubeStats.engaged_views ?? 0,
+                      );
+                      const ytSubsGained = Number(
+                        youtubeStats.subscribers_gained ?? 0,
+                      );
 
                       const tiktokViewsForRate =
                         isTikTokContest && !isTwitterTweet
@@ -2347,18 +2535,224 @@ export function CreatorSubmissionsModal({
                                 </div>
                               </TableCell>
                               {/* Views, Likes, Comments for non-Twitter submissions */}
-                              <TableCell className="text-center font-mono">
-                                {(isTikTokContest && !isTwitterTweet
-                                  ? effectiveTikTokSubmissionViews(submission)
-                                  : Number(submission.views ?? 0)
-                                ).toLocaleString()}
-                              </TableCell>
-                              <TableCell className="text-center font-mono">
-                                {likes.toLocaleString()}
-                              </TableCell>
-                              <TableCell className="text-center font-mono">
-                                {comments.toLocaleString()}
-                              </TableCell>
+                              {(!isYouTubeContest || showYtColumn("views")) && (
+                                <TableCell className="text-center font-mono">
+                                  {(isTikTokContest && !isTwitterTweet
+                                    ? effectiveTikTokSubmissionViews(submission)
+                                    : Number(submission.views ?? 0)
+                                  ).toLocaleString()}
+                                </TableCell>
+                              )}
+                              {(!isYouTubeContest || showYtColumn("likes")) && (
+                                <TableCell className="text-center font-mono">
+                                  {likes.toLocaleString()}
+                                </TableCell>
+                              )}
+                              {(!isYouTubeContest || showYtColumn("comments")) && (
+                                <TableCell className="text-center font-mono">
+                                  {comments.toLocaleString()}
+                                </TableCell>
+                              )}
+                              {/* YouTube-specific metrics for non-Twitter submissions */}
+                              {isYouTubeContest && showYtColumn("dislikes") && (
+                                <TableCell className="text-center font-mono">
+                                  {formatMetricValue(ytDislikes)}
+                                </TableCell>
+                              )}
+                              {isYouTubeContest && showYtColumn("shares") && (
+                                <TableCell className="text-center font-mono">
+                                  {ytShares > 0 ? formatMetricValue(ytShares) : "—"}
+                                </TableCell>
+                              )}
+                              {isYouTubeContest && showYtColumn("avg_view_pct") && (
+                                <TableCell className="text-center font-mono">
+                                  {ytAvgViewPct > 0
+                                    ? `${ytAvgViewPct.toFixed(1)}%`
+                                    : "—"}
+                                </TableCell>
+                              )}
+                              {isYouTubeContest && showYtColumn("watch_time") && (
+                                <TableCell className="text-center font-mono">
+                                  {ytWatchTimeMinutes > 0
+                                    ? formatWatchTime(ytWatchTimeMinutes * 60 * 1000)
+                                    : "—"}
+                                </TableCell>
+                              )}
+                              {isYouTubeContest && showYtColumn("avg_duration") && (
+                                <TableCell className="text-center font-mono">
+                                  {ytAvgDurationSeconds > 0
+                                    ? `${ytAvgDurationSeconds}s`
+                                    : "—"}
+                                </TableCell>
+                              )}
+                              {isYouTubeContest && showYtColumn("engaged_views") && (
+                                <TableCell className="text-center font-mono">
+                                  {ytEngagedViews > 0
+                                    ? formatMetricValue(ytEngagedViews)
+                                    : "—"}
+                                </TableCell>
+                              )}
+                              {isYouTubeContest && showYtColumn("subs_gained") && (
+                                <TableCell className="text-center font-mono text-sm">
+                                  {youtubeStats.subscribers_gained != null ? (
+                                    <span
+                                      className={cn(
+                                        "font-bold",
+                                        Number(youtubeStats.subscribers_gained) > 0
+                                          ? "text-green-600"
+                                          : isDark
+                                            ? "text-slate-400"
+                                            : "text-slate-600",
+                                      )}
+                                    >
+                                      {Number(youtubeStats.subscribers_gained) > 0
+                                        ? "+"
+                                        : ""}
+                                      {youtubeStats.subscribers_gained}
+                                    </span>
+                                  ) : (
+                                    <span
+                                      className={cn(
+                                        "text-xs",
+                                        isDark ? "text-slate-500" : "text-slate-400",
+                                      )}
+                                    >
+                                      —
+                                    </span>
+                                  )}
+                                </TableCell>
+                              )}
+                              {isYouTubeContest && showYtColumn("bot_score") && (
+                                <TableCell className="text-center">
+                                  {youtubeStats.bot_score !== null &&
+                                  youtubeStats.bot_score !== undefined ? (
+                                    <div className="flex flex-col items-center gap-0.5">
+                                      <span
+                                        className={cn(
+                                          "inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold border",
+                                          Number(youtubeStats.bot_score) >= 60
+                                            ? "bg-red-100 text-red-700 border-red-300"
+                                            : Number(youtubeStats.bot_score) >= 30
+                                              ? "bg-yellow-100 text-yellow-700 border-yellow-300"
+                                              : "bg-green-100 text-green-600 border-green-300",
+                                        )}
+                                        title={
+                                          Array.isArray(youtubeStats.bot_flags)
+                                            ? youtubeStats.bot_flags.join("\n")
+                                            : "No flags"
+                                        }
+                                      >
+                                        {Number(youtubeStats.bot_score) >= 60 ? "⚠ " : ""}
+                                        {youtubeStats.bot_score}
+                                        /100
+                                      </span>
+                                      {youtubeStats.bot_flags &&
+                                        youtubeStats.bot_flags.length > 0 && (
+                                          <span
+                                            className={cn(
+                                              "text-xs",
+                                              isDark
+                                                ? "text-slate-400"
+                                                : "text-slate-500",
+                                            )}
+                                          >
+                                            {youtubeStats.bot_flags.length} flag
+                                            {youtubeStats.bot_flags.length !== 1
+                                              ? "s"
+                                              : ""}
+                                          </span>
+                                        )}
+                                    </div>
+                                  ) : (
+                                    <span
+                                      className={cn(
+                                        "text-xs",
+                                        isDark ? "text-slate-500" : "text-slate-400",
+                                      )}
+                                    >
+                                      No data
+                                    </span>
+                                  )}
+                                </TableCell>
+                              )}
+                              {isYouTubeContest && showYtColumn("analytics") && (
+                                <TableCell className="text-center">
+                                  <YouTubeAnalyticsPanel
+                                    metrics={{
+                                      views: youtubeStats.views ?? submission.views ?? 0,
+                                      likes: youtubeStats.likes ?? 0,
+                                      dislikes: youtubeStats.dislikes ?? 0,
+                                      comments: youtubeStats.comments ?? 0,
+                                      shares: youtubeStats.shares ?? 0,
+                                      subscribers_gained:
+                                        youtubeStats.subscribers_gained ?? 0,
+                                      subscribers_lost:
+                                        youtubeStats.subscribers_lost ?? 0,
+                                      videos_added_to_playlists:
+                                        youtubeStats.videos_added_to_playlists ?? 0,
+                                      videos_removed_from_playlists:
+                                        youtubeStats.videos_removed_from_playlists ?? 0,
+                                      estimated_minutes_watched:
+                                        youtubeStats.estimated_minutes_watched ?? 0,
+                                      avg_view_duration_seconds:
+                                        youtubeStats.avg_view_duration_seconds ?? 0,
+                                      avg_view_percentage:
+                                        youtubeStats.avg_view_percentage ?? 0,
+                                      engaged_views: youtubeStats.engaged_views ?? 0,
+                                      traffic_sources:
+                                        youtubeStats.traffic_sources ?? null,
+                                      demographics: youtubeStats.demographics ?? null,
+                                      bot_score: youtubeStats.bot_score ?? null,
+                                      bot_flags: youtubeStats.bot_flags ?? [],
+                                      analytics_needs_reauth:
+                                        youtubeStats.analytics_needs_reauth ?? false,
+                                      last_basic_update:
+                                        youtubeStats.last_basic_update ?? null,
+                                      last_traffic_update:
+                                        youtubeStats.last_traffic_update ?? null,
+                                      last_demographics_update:
+                                        youtubeStats.last_demographics_update ?? null,
+                                    }}
+                                    isDark={isDark}
+                                    showCore={canSeeCore}
+                                    showTraffic={canSeeTraffic}
+                                    showDemographics={canSeeDemographics}
+                                  >
+                                    <button
+                                      className={cn(
+                                        "inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs transition-colors",
+                                        isDark
+                                          ? "bg-slate-800 hover:bg-slate-700 text-slate-300"
+                                          : "bg-slate-100 hover:bg-purple-100 text-slate-600 hover:text-purple-700",
+                                      )}
+                                    >
+                                      <BarChart2 className="h-3 w-3" />
+                                      Details
+                                    </button>
+                                  </YouTubeAnalyticsPanel>
+                                </TableCell>
+                              )}
+                              {isYouTubeContest &&
+                                showYtColumn("top_traffic_source") && (
+                                  <TableCell className="text-center font-mono text-xs">
+                                    {(() => {
+                                      const ts = youtubeStats.traffic_sources as
+                                        | Record<string, number>
+                                        | undefined;
+                                      if (!ts || Object.keys(ts).length === 0)
+                                        return "—";
+                                      const entries = Object.entries(ts);
+                                      const top = entries.reduce(
+                                        (best, [k, v]) =>
+                                          v > best.pct ? { key: k, pct: v } : best,
+                                        { key: entries[0][0], pct: entries[0][1] },
+                                      );
+                                      const label =
+                                        YT_TRAFFIC_SOURCE_LABELS[top.key] || top.key;
+                                      return `${label} ${top.pct.toFixed(1)}%`;
+                                    })()}
+                                  </TableCell>
+                                )}
                               {/* Instagram-specific metrics for non-Twitter submissions */}
                               {(isInstagramContest || isTikTokContest) && (
                                 <>
@@ -2437,15 +2831,18 @@ export function CreatorSubmissionsModal({
                               {/* Expected Reward and Reward Granted (only for non-Twitter) */}
                               {!isTwitterTextImageContest && (
                                 <>
-                                  <TableCell className="text-center font-medium">
-                                    {hasPayoutAdjustment && shouldAdjustReward
-                                      ? `${formatCurrency(
-                                          expectedReward,
-                                        )} → ${formatCurrency(
-                                          adjustedExpectedReward,
-                                        )}`
-                                      : formatCurrency(expectedReward)}
-                                  </TableCell>
+                                  {(!isYouTubeContest ||
+                                    showYtColumn("expected_reward")) && (
+                                    <TableCell className="text-center font-medium">
+                                      {hasPayoutAdjustment && shouldAdjustReward
+                                        ? `${formatCurrency(
+                                            expectedReward,
+                                          )} → ${formatCurrency(
+                                            adjustedExpectedReward,
+                                          )}`
+                                        : formatCurrency(expectedReward)}
+                                    </TableCell>
+                                  )}
                                   {contest?.contest_type === "milestone" && (
                                     <TableCell className="text-center">
                                       {milestoneAssignmentLabel === "—" ? (
@@ -2478,11 +2875,14 @@ export function CreatorSubmissionsModal({
                                       )}
                                     </TableCell>
                                   )}
-                                  <TableCell className="text-center font-medium text-green-600">
-                                    {grantedReward > 0
-                                      ? formatCurrency(grantedReward)
-                                      : "-"}
-                                  </TableCell>
+                                  {(!isYouTubeContest ||
+                                    showYtColumn("reward_granted")) && (
+                                    <TableCell className="text-center font-medium text-green-600">
+                                      {grantedReward > 0
+                                        ? formatCurrency(grantedReward)
+                                        : "-"}
+                                    </TableCell>
+                                  )}
                                 </>
                               )}
                             </>
@@ -2514,6 +2914,8 @@ export function CreatorSubmissionsModal({
                             </>
                           )}
                           {isAdminView &&
+                            (!isYouTubeContest ||
+                              showYtColumn("insights_status")) &&
                             (isInstagramContest ||
                               isTikTokContest ||
                               isYouTubeContest) && (
@@ -2555,9 +2957,11 @@ export function CreatorSubmissionsModal({
                                 })()}
                               </TableCell>
                             )}
-                          <TableCell>
-                            {getStatusBadge(normalizedStatus, submission.paid)}
-                          </TableCell>
+                          {(!isYouTubeContest || showYtColumn("status")) && (
+                            <TableCell>
+                              {getStatusBadge(normalizedStatus, submission.paid)}
+                            </TableCell>
+                          )}
                           <TableCell
                             className={cn(
                               "text-center text-xs max-w-[220px]",
@@ -2618,14 +3022,16 @@ export function CreatorSubmissionsModal({
                               </span>
                             )}
                           </TableCell>
-                          <TableCell
-                            className={cn(
-                              "text-sm",
-                              isDark ? "text-gray-400" : "text-gray-600",
-                            )}
-                          >
-                            {formatDate(submission.created_at)}
-                          </TableCell>
+                          {(!isYouTubeContest || showYtColumn("submitted")) && (
+                            <TableCell
+                              className={cn(
+                                "text-sm",
+                                isDark ? "text-gray-400" : "text-gray-600",
+                              )}
+                            >
+                              {formatDate(submission.created_at)}
+                            </TableCell>
+                          )}
                           <TableCell className="text-right">
                             <DropdownMenu>
                               <DropdownMenuTrigger asChild>

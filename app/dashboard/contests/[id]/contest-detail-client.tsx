@@ -21795,6 +21795,10 @@ export default function ContestDetailClient({
             setPaymentModalOpen(true);
           }}
           isAdminView={isAdminView}
+          ytVisibleColumns={ytVisibleColumns}
+          canSeeCore={canSeeCore}
+          canSeeTraffic={canSeeTraffic}
+          canSeeDemographics={canSeeDemo}
         />
       )}
 
