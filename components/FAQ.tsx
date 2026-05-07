@@ -39,7 +39,7 @@ const homeFaqs = [
   {
     id: "faq-home-7",
     question: "What are the prizes or rewards for the winners?",
-    answer: `<strong>🏆 Leaderboard-based contests:</strong> Prizes are distributed based on rankings.<br><br><strong>Example:</strong> $1000 prize pool with five winners:<br>• <strong>Rank 1:</strong> $500<br>• <strong>Rank 2:</strong> $250<br>• <strong>Rank 3:</strong> $150<br>• <strong>Rank 4:</strong> $75<br>• <strong>Rank 5:</strong> $25<br><br><strong>📊 CPM-based contests:</strong> Paid based on views, for example, $1 per 1000 views, with minimum and maximum view limits.`,
+    answer: `<strong>🏆 Leaderboard-based contests:</strong> Prizes are distributed based on rankings.<br><br><strong>Example:</strong> $1000 prize pool with five winners:<br>• <strong>Rank 1:</strong> $500<br>• <strong>Rank 2:</strong> $250<br>• <strong>Rank 3:</strong> $150<br>• <strong>Rank 4:</strong> $75<br>• <strong>Rank 5:</strong> $25<br><br><strong>📊 CPM-based contests:</strong> Paid based on views, for example, $1 per 1000 views, with minimum and maximum view limits.<br><br><strong>🎯 Milestone-based contests:</strong> Creators earn fixed payouts when their content hits view milestones set by the brand (often first-come, first-served within tier limits).<br><br><strong>⚡ Dual rewards contests:</strong> A hybrid model where creators can earn from both CPM performance and milestone payouts in the same contest.`,
   },
   {
     id: "faq-home-8",
@@ -93,7 +93,7 @@ const creatorFaqs = [
     id: "faq-2",
     question: "How do I make money on Game of Creators?",
     answer:
-      "Participate in contests by posting content on your social media. Compete for organic views, and the top performers will win cash prizes.<br><br><strong>Leaderboard contests:</strong> Your ranking matters based on your views.<br><br><strong>CPM contests:</strong> Your views determine your earnings, regardless of your rank.<br><br><strong>Milestone contests:</strong> You earn fixed payouts when your content reaches view targets set by the brand (first-come, first-served within any per-tier limits).",
+      "Participate in contests by posting content on your social media. Compete for organic views, and the top performers will win cash prizes.<br><br><strong>Leaderboard contests:</strong> Your ranking matters based on your views.<br><br><strong>CPM contests:</strong> Your views determine your earnings, regardless of your rank.<br><br><strong>Milestone contests:</strong> You earn fixed payouts when your content reaches view targets set by the brand (first-come, first-served within any per-tier limits).<br><br><strong>Dual rewards contests:</strong> You can earn from both CPM performance and milestone payouts within the same contest.",
   },
   {
     id: "faq-3",
