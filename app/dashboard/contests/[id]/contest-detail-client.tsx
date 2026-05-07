@@ -11688,6 +11688,7 @@ export default function ContestDetailClient({
                                   ((currentContest as any)
                                     ?.payout_adjustment_mode as
                                     | "cpm_only"
+                                    | "milestone_only"
                                     | "bonus_only"
                                     | "combined"
                                     | "dual_rewards_only"
@@ -11695,11 +11696,15 @@ export default function ContestDetailClient({
                                 if (rawMode === "dual_rewards_only") {
                                   return "combined";
                                 }
+                                if (rawMode === "milestone_only") {
+                                  return "milestone_only";
+                                }
                                 return rawMode;
                               })()}
                               onChange={(e) => {
                                 const value = e.target.value as
                                   | "cpm_only"
+                                  | "milestone_only"
                                   | "bonus_only"
                                   | "combined";
                                 setCurrentContest(
@@ -11729,7 +11734,15 @@ export default function ContestDetailClient({
                                 </>
                               ) : (
                                 <>
-                                  <option value="cpm_only">
+                                  <option
+                                    value={
+                                      isMilestoneContestType(
+                                        currentContest.contest_type,
+                                      )
+                                        ? "milestone_only"
+                                        : "cpm_only"
+                                    }
+                                  >
                                     {isMilestoneContestType(
                                       currentContest.contest_type,
                                     )
@@ -11756,6 +11769,7 @@ export default function ContestDetailClient({
                                   ((currentContest as any)
                                     ?.payout_adjustment_mode as
                                     | "cpm_only"
+                                    | "milestone_only"
                                     | "bonus_only"
                                     | "combined"
                                     | "dual_rewards_only"

@@ -10,6 +10,7 @@ import {
   buildMilestoneMostVerifiedBonusByCreatorMap,
   type MilestoneBudgetSubmission,
 } from "@/lib/milestone-contest-expected-spend";
+import { isMilestoneContestType } from "@/lib/contest-type";
 
 function normalizeStatus(raw: string | null | undefined): string {
   const t = String(raw || "pending").toLowerCase();
@@ -66,9 +67,9 @@ export async function POST(
       return NextResponse.json({ error: "Contest not found" }, { status: 404 });
     }
 
-    if (contest.contest_type !== "milestone") {
+    if (!isMilestoneContestType(contest.contest_type)) {
       return NextResponse.json(
-        { error: "Contest is not a milestone contest" },
+        { error: "Contest is not a milestone or dual rewards contest" },
         { status: 400 },
       );
     }

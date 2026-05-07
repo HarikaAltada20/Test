@@ -564,6 +564,7 @@ export async function POST(request: Request) {
               : 0;
         const payoutAdjustmentMode = (contest as any).payout_adjustment_mode as
           | "cpm_only"
+          | "milestone_only"
           | "bonus_only"
           | "combined"
           | "dual_rewards_only"
@@ -574,7 +575,8 @@ export async function POST(request: Request) {
           hasPayoutAdjustment &&
           (payoutAdjustmentMode === "combined" ||
             payoutAdjustmentMode === "dual_rewards_only" ||
-            payoutAdjustmentMode === "cpm_only");
+            payoutAdjustmentMode === "cpm_only" ||
+            payoutAdjustmentMode === "milestone_only");
 
         let rewardAmount = 0;
 

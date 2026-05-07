@@ -72,6 +72,7 @@ export async function POST(
     // Validate payout adjustment fields when present
     const validPayoutModes = [
       "cpm_only",
+      "milestone_only",
       "bonus_only",
       "combined",
       "dual_rewards_only",
@@ -101,6 +102,24 @@ export async function POST(
     }
 
     const admin = createAdminClient();
+    if (
+      updateData.payout_adjustment_mode === "cpm_only" &&
+      updateData.contest_type === "milestone"
+    ) {
+      updateData.payout_adjustment_mode = "milestone_only";
+    }
+
+    if (updateData.payout_adjustment_mode === "cpm_only") {
+      const { data: existingContest } = await admin
+        .from("contests")
+        .select("contest_type")
+        .eq("id", contestId)
+        .maybeSingle();
+      if (existingContest?.contest_type === "milestone") {
+        updateData.payout_adjustment_mode = "milestone_only";
+      }
+    }
+
     const { data, error } = await admin
       .from("contests")
       .update(updateData)

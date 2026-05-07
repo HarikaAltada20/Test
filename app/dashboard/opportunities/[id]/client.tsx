@@ -865,7 +865,7 @@ export function ContestClientPage({
 
   const shouldLoadMilestoneBonusSubmissions = Boolean(
     contestId &&
-      contest?.contest_type === "milestone" &&
+      isMilestoneContestType(contest?.contest_type) &&
       (contest?.contest_based_details as any)?.milestone_contest?.bonus?.enabled,
   );
 
@@ -950,7 +950,7 @@ export function ContestClientPage({
       winnerCountsByMilestone: new Map<string, number>(),
     };
 
-    if (contest?.contest_type !== "milestone") return empty;
+    if (!isMilestoneContestType(contest?.contest_type)) return empty;
 
     const milestoneContest = (contest?.contest_based_details as any)
       ?.milestone_contest;
@@ -9597,8 +9597,9 @@ export function ContestClientPage({
                             let prizeDisplay = null;
                             let milestoneCreatorExpectedDisplay: React.ReactNode =
                               null;
-                            const isMilestoneContest =
-                              contest?.contest_type === "milestone";
+                            const isMilestoneContest = isMilestoneContestType(
+                              contest?.contest_type,
+                            );
                             const isTwitter =
                               contest?.platform === "twitter" ||
                               contest?.platform === "x";
@@ -10413,8 +10414,9 @@ export function ContestClientPage({
                             index +
                             1;
                           let prizeDisplay = null;
-                          const isMilestoneContest =
-                            contest?.contest_type === "milestone";
+                          const isMilestoneContest = isMilestoneContestType(
+                            contest?.contest_type,
+                          );
 
                           if (isMilestoneContest) {
                             const hasPayoutsProcessed =

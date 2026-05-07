@@ -554,7 +554,8 @@ export function CreatorSubmissionsModal({
       hasPayoutAdjustment &&
       (payoutAdjustmentMode === "combined" ||
         payoutAdjustmentMode === "dual_rewards_only" ||
-        payoutAdjustmentMode === "cpm_only");
+        payoutAdjustmentMode === "cpm_only" ||
+        payoutAdjustmentMode === "milestone_only");
     const shouldAdjustDualMilestoneComponent =
       hasPayoutAdjustment &&
       (payoutAdjustmentMode === "combined" ||
@@ -699,6 +700,7 @@ export function CreatorSubmissionsModal({
   );
   const payoutAdjustmentMode = (contest as any)?.payout_adjustment_mode as
     | "cpm_only"
+    | "milestone_only"
     | "bonus_only"
     | "combined"
     | "dual_rewards_only"
@@ -709,7 +711,8 @@ export function CreatorSubmissionsModal({
     hasPayoutAdjustment &&
     (payoutAdjustmentMode === "combined" ||
       payoutAdjustmentMode === "dual_rewards_only" ||
-      payoutAdjustmentMode === "cpm_only");
+      payoutAdjustmentMode === "cpm_only" ||
+      payoutAdjustmentMode === "milestone_only");
   const shouldAdjustBonus =
     hasPayoutAdjustment &&
     (payoutAdjustmentMode === "combined" ||
@@ -2082,7 +2085,8 @@ export function CreatorSubmissionsModal({
                         hasPayoutAdjustment &&
                         (payoutAdjustmentMode === "combined" ||
                           payoutAdjustmentMode === "dual_rewards_only" ||
-                          payoutAdjustmentMode === "cpm_only");
+                          payoutAdjustmentMode === "cpm_only" ||
+                          payoutAdjustmentMode === "milestone_only");
                       const dualAdjustMilestone =
                         contest?.contest_type === "dual_rewards" &&
                         hasPayoutAdjustment &&

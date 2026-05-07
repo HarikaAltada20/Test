@@ -126,6 +126,7 @@ export async function POST(
           : 0;
     const payoutAdjustmentMode = contest.payout_adjustment_mode as
       | "cpm_only"
+      | "milestone_only"
       | "bonus_only"
       | "combined"
       | "dual_rewards_only"
@@ -136,7 +137,8 @@ export async function POST(
       hasPayoutAdjustment &&
       (payoutAdjustmentMode === "combined" ||
         payoutAdjustmentMode === "dual_rewards_only" ||
-        payoutAdjustmentMode === "cpm_only");
+        payoutAdjustmentMode === "cpm_only" ||
+        payoutAdjustmentMode === "milestone_only");
     const shouldAdjustBonus =
       hasPayoutAdjustment &&
       (payoutAdjustmentMode === "combined" ||
