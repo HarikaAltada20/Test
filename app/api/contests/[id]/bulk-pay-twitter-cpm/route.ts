@@ -11,6 +11,10 @@ import {
 } from "@/lib/payment-utils";
 import { applyPayoutAdjustment } from "@/lib/payout-adjustment";
 import { countRefundsForCreatorContest } from "@/lib/contest-payout-idempotency";
+import {
+  sumBonusRewards,
+  sumBonusRefunds,
+} from "@/lib/twitter-bonus-accounting";
 
 type PaymentType = "standard" | "bonus" | "both";
 
@@ -145,15 +149,30 @@ export async function POST(
     const { data: tweets, error: tweetsError } = await supabaseAdmin
       .from("twitter_campaign_tweets")
       .select(
-        "id, creator_id, points, manual_points_adjustment, moderation_status, tweet_created_at"
+        "id, creator_id, points, manual_points_adjustment, moderation_status, tweet_created_at, bonus_paid, bonus_paid_at, bonus_amount"
       )
       .eq("contest_id", contestId)
       .in("id", tweetIds);
 
-    if (tweetsError || !tweets?.length) {
+    if (tweetsError) {
+      console.error("[bulk-pay-twitter-cpm] tweet fetch error:", tweetsError);
       return NextResponse.json(
-        { error: "Failed to fetch tweets for this contest" },
+        {
+          error: "Failed to fetch tweets for this contest",
+          details: tweetsError.message,
+          hint:
+            "If this references missing bonus columns, run the migration that adds bonus_paid / bonus_paid_at / bonus_amount to twitter_campaign_tweets.",
+        },
         { status: 500 }
+      );
+    }
+    if (!tweets?.length) {
+      return NextResponse.json(
+        {
+          error:
+            "No matching tweets found for the selected IDs in this contest. Ensure selected rows are Twitter tweet UUIDs for this contest.",
+        },
+        { status: 400 }
       );
     }
 
@@ -255,15 +274,13 @@ export async function POST(
         .contains("metadata", { contest_id: contestId, bonus_type: "flat_fee" }),
     ] as any);
 
-    const contestBonusRewardSum = (contestBonusRewards || []).reduce(
-      (s: number, r: any) => s + (Number(r.amount) || 0),
-      0
-    );
-    const contestBonusRefundSum = (contestBonusRefunds || [])
-      .filter(
-        (r: any) => !r.remarks || r.remarks === REVERSAL_TRANSACTION_REMARK
-      )
-      .reduce((s: number, r: any) => s + (Number(r.amount) || 0), 0);
+    // Bulk transactions store CPM + bonus combined in `amount`; the bonus-only
+    // slice lives in metadata.total_bonus. Summing `amount` here would double-
+    // count CPM toward the flat-fee bonus cap, falsely "exhausting" it.
+    const contestBonusRewardSum = sumBonusRewards(contestBonusRewards || []);
+    const contestBonusRefundSum = sumBonusRefunds(contestBonusRefunds || [], {
+      reversalRemark: REVERSAL_TRANSACTION_REMARK,
+    });
     let contestBonusSpentNet = Math.max(
       0,
       contestBonusRewardSum - contestBonusRefundSum
@@ -301,6 +318,7 @@ export async function POST(
 
     const cpmBreakdown: Record<string, number> = {};
     const bonusBreakdown: Record<string, number> = {};
+    const finalBonusAmountByTweetId: Record<string, number> = {};
     let skippedCount = 0;
 
     for (const tweet of sorted) {
@@ -308,7 +326,16 @@ export async function POST(
         skippedCount++;
         continue;
       }
-      if (
+      if (paymentType === "bonus") {
+        if (tweet.moderation_status !== "paid") {
+          skippedCount++;
+          continue;
+        }
+        if ((tweet as any).bonus_paid === true) {
+          skippedCount++;
+          continue;
+        }
+      } else if (
         tweet.moderation_status !== "verified" &&
         tweet.moderation_status !== "paid"
       ) {
@@ -394,6 +421,7 @@ export async function POST(
           if (adjustedBonus > 0) {
             bonusBreakdown[String(tweetId)] =
               (bonusBreakdown[String(tweetId)] || 0) + adjustedBonus;
+            finalBonusAmountByTweetId[String(tweetId)] = existingBonus + adjustedBonus;
             contestBonusSpentNet += adjustedBonus;
           } else if (paymentType === "bonus") {
             skippedCount++;
@@ -412,6 +440,15 @@ export async function POST(
     const totalAmount = totalCpm + totalBonus;
 
     if (totalAmount <= 0) {
+      if (paymentType === "bonus") {
+        return NextResponse.json(
+          {
+            error:
+              "No bonus payments to process. Select tweets that are paid and still have unpaid bonus.",
+          },
+          { status: 400 }
+        );
+      }
       return NextResponse.json(
         {
           error:
@@ -474,10 +511,20 @@ export async function POST(
       .digest("hex")
       .slice(0, 48);
 
+    const contestTitle = contest.title || "Contest";
+    const bulkPaymentDescription =
+      totalBonus > 0
+        ? `Twitter CPM bulk payment with bonus — ${contestTitle}`
+        : `Twitter CPM bulk payment — ${contestTitle}`;
+    const bulkRollbackDescription =
+      totalBonus > 0
+        ? `Rollback: Twitter CPM bulk payment with bonus (DB update failed) — ${contestTitle}`
+        : `Rollback: Twitter CPM bulk payment (DB update failed) — ${contestTitle}`;
+
     const creditRes = await creditCreatorWithdrawableBalance(
       creatorId,
       totalAmount,
-      `Twitter CPM bulk payment — ${contest.title || "Contest"}`,
+      bulkPaymentDescription,
       {
         idempotencyKey: `twitter_cpm_bulk_v2:${twitterBulkFingerprint}`,
         remarks: `Twitter CPM bulk (${paymentType})`,
@@ -543,13 +590,12 @@ export async function POST(
             );
           }
 
-          const contestTitle = contest.title || "Contest";
           const logged = await logTransactionAsAdmin(
             creatorId,
             "refund",
             totalAmount,
             "success",
-            `Rollback: Twitter CPM bulk payment (DB update failed) — ${contestTitle}`,
+            bulkRollbackDescription,
             {
               remarks: REVERSAL_TRANSACTION_REMARK,
               paymentMethod: "refund",
@@ -560,6 +606,17 @@ export async function POST(
                 rollback_reason: "tweet_row_update_failed",
                 failed_tweet_id: tid,
                 original_reward_transaction_id: creditRes.transactionId,
+                total_cpm: totalCpm,
+                total_bonus: totalBonus,
+                ...(totalBonus > 0
+                  ? {
+                      bonus_type: "flat_fee",
+                      twitter_bulk_bonus_breakdown:
+                        Object.keys(bonusBreakdown).length > 0
+                          ? bonusBreakdown
+                          : undefined,
+                    }
+                  : {}),
               },
             }
           );
@@ -588,6 +645,158 @@ export async function POST(
         );
       }
       cpmTweetIdsUpdated.push(tid);
+    }
+
+    const bonusRowBeforeById = new Map<
+      string,
+      { bonus_paid: boolean | null; bonus_paid_at: string | null; bonus_amount: number | null }
+    >(
+      (tweets || []).map((t: any) => [
+        String(t.id),
+        {
+          bonus_paid: t.bonus_paid ?? null,
+          bonus_paid_at: t.bonus_paid_at ?? null,
+          bonus_amount: t.bonus_amount ?? null,
+        },
+      ]),
+    );
+    const bonusTweetIdsUpdated: string[] = [];
+    for (const [tid, cents] of Object.entries(bonusBreakdown)) {
+      const nextBonusAmount =
+        Number(finalBonusAmountByTweetId[String(tid)] ?? cents) || 0;
+      const { data: updatedBonusRows, error: bonusUpErr } = await supabaseAdmin
+        .from("twitter_campaign_tweets")
+        .update({
+          bonus_paid: true,
+          bonus_paid_at: new Date().toISOString(),
+          bonus_amount: nextBonusAmount,
+        })
+        .eq("id", tid)
+        .eq("contest_id", contestId)
+        .select("id")
+        .limit(1);
+
+      if (bonusUpErr || !updatedBonusRows?.length) {
+        console.error(
+          "[bulk-pay-twitter-cpm] Bonus update failed:",
+          tid,
+          bonusUpErr,
+        );
+
+        // Revert any previously updated bonus rows first.
+        for (const rid of bonusTweetIdsUpdated) {
+          const before = bonusRowBeforeById.get(String(rid));
+          const { error: bonusRevErr } = await supabaseAdmin
+            .from("twitter_campaign_tweets")
+            .update({
+              bonus_paid: before?.bonus_paid ?? null,
+              bonus_paid_at: before?.bonus_paid_at ?? null,
+              bonus_amount: before?.bonus_amount ?? null,
+            })
+            .eq("id", rid)
+            .eq("contest_id", contestId);
+          if (bonusRevErr) {
+            console.error(
+              "[bulk-pay-twitter-cpm] CRITICAL: Failed to revert bonus row after pay failure:",
+              rid,
+              bonusRevErr,
+            );
+          }
+        }
+
+        // Revert CPM rows if they were already updated.
+        for (const rid of cpmTweetIdsUpdated) {
+          const { error: revErr } = await supabaseAdmin
+            .from("twitter_campaign_tweets")
+            .update({ moderation_status: "verified", earnings: null })
+            .eq("id", rid)
+            .eq("contest_id", contestId);
+          if (revErr) {
+            console.error(
+              "[bulk-pay-twitter-cpm] CRITICAL: Failed to revert tweet after bonus update failure:",
+              rid,
+              revErr,
+            );
+          }
+        }
+
+        // Only roll back wallet if this request actually credited fresh funds.
+        if (!creditRes.alreadyApplied) {
+          const debitRes = await debitCreatorWithdrawableBalance(
+            creatorId,
+            totalAmount,
+          );
+          if (!debitRes.success) {
+            console.error(
+              "[bulk-pay-twitter-cpm] CRITICAL: Wallet rollback failed after bonus update error:",
+              debitRes.error,
+            );
+            return NextResponse.json(
+              {
+                error:
+                  "Bonus payment could not be saved and automatic wallet rollback failed. Contact support immediately.",
+                details: { tweet_id: tid, rollback_error: debitRes.error },
+              },
+              { status: 500 },
+            );
+          }
+
+          const logged = await logTransactionAsAdmin(
+            creatorId,
+            "refund",
+            totalAmount,
+            "success",
+            bulkRollbackDescription,
+            {
+              remarks: REVERSAL_TRANSACTION_REMARK,
+              paymentMethod: "refund",
+              metadata: {
+                contest_id: contestId,
+                twitter_creator_id: creatorId,
+                payout_type: "twitter_cpm_bulk",
+                rollback_reason: "bonus_row_update_failed",
+                failed_tweet_id: tid,
+                original_reward_transaction_id: creditRes.transactionId,
+                total_cpm: totalCpm,
+                total_bonus: totalBonus,
+                ...(totalBonus > 0
+                  ? {
+                      bonus_type: "flat_fee",
+                      twitter_bulk_bonus_breakdown:
+                        Object.keys(bonusBreakdown).length > 0
+                          ? bonusBreakdown
+                          : undefined,
+                    }
+                  : {}),
+              },
+            },
+          );
+          if (!logged) {
+            console.error(
+              "[bulk-pay-twitter-cpm] CRITICAL: Wallet rolled back but refund row insert failed for creator:",
+              creatorId,
+            );
+          }
+        }
+
+        return NextResponse.json(
+          {
+            error: creditRes.alreadyApplied
+              ? "Bonus rows could not be updated. This request reused a prior payout idempotency key (no new credit). Partial tweet updates were reverted where possible. Retry or contact support if state is inconsistent."
+              : "Wallet credit was rolled back because bonus rows could not be updated. You can retry bulk pay.",
+            details: {
+              tweet_id: tid,
+              message:
+                bonusUpErr?.message ||
+                "Bonus row was not updated due to a concurrent write.",
+              idempotent_retry: Boolean(creditRes.alreadyApplied),
+            },
+          },
+          { status: 500 },
+        );
+      }
+
+      bonusTweetIdsUpdated.push(tid);
     }
 
     if (totalCpm > 0) {

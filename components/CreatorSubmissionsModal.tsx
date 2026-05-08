@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -38,6 +38,7 @@ import {
   ThumbsDown,
   Share2,
   BarChart2,
+  CircleHelp,
 } from "lucide-react";
 import {
   Select,
@@ -54,6 +55,7 @@ import {
 import { cn } from "@/lib/utils";
 import { toast } from "@/hooks/use-toast";
 import { applyPayoutAdjustment } from "@/lib/payout-adjustment";
+import { buildFlatFeeBonusExpectedCentsBySubmissionId } from "@/lib/twitter-cpm-bonus-expected";
 import { YouTubeAnalyticsPanel } from "@/components/youtube/YouTubeAnalyticsPanel";
 import {
   formatMetadataTimestamp,
@@ -338,18 +340,45 @@ export function CreatorSubmissionsModal({
     // Get selected submissions
     const selectedSubs = submissions.filter((s) => selectedIds.includes(s.id));
 
-    // Filter to verified submissions only (Twitter: use moderation_status)
-    const verifiedSubs = selectedSubs.filter((s) => {
-      const status = (s as any).is_twitter_tweet
-        ? (s as any).moderation_status || s.status
-        : s.status;
-      const st = String(status || "").toLowerCase();
-      return st === "verified" || st === "approved";
-    });
+    const hasTwitterTweetsSelected = selectedSubs.some(
+      (s) => (s as any).is_twitter_tweet === true,
+    );
+    const isTwitterCpmContestFlag =
+      contest.contest_type === "cpm" &&
+      (contest.platform?.toLowerCase() === "twitter" ||
+        contest.platform?.toLowerCase() === "x");
 
-    if (verifiedSubs.length === 0) {
+    // Standard/both: verified only.
+    // Twitter CPM bonus-only: only already-paid tweets with unpaid bonus.
+    let paySubs: typeof selectedSubs;
+    if (
+      type === "bonus" &&
+      hasTwitterTweetsSelected &&
+      isTwitterCpmContestFlag
+    ) {
+      paySubs = selectedSubs.filter((s) => {
+        if (!(s as any).is_twitter_tweet) return false;
+        const st = getNormalizedSubmissionStatus(s);
+        if (s.bonus_paid) return false;
+        return st === "paid" || s.paid === true;
+      });
+    } else {
+      paySubs = selectedSubs.filter((s) => {
+        const status = (s as any).is_twitter_tweet
+          ? (s as any).moderation_status || s.status
+          : s.status;
+        const st = String(status || "").toLowerCase();
+        return st === "verified" || st === "approved";
+      });
+    }
+
+    if (paySubs.length === 0) {
       alert(
-        "No verified submissions selected. Only verified submissions can be paid.",
+        type === "bonus" &&
+          hasTwitterTweetsSelected &&
+          isTwitterCpmContestFlag
+          ? "No selected paid tweets with unpaid bonus found."
+          : "No verified submissions selected. Only verified submissions can be paid.",
       );
       return;
     }
@@ -357,7 +386,7 @@ export function CreatorSubmissionsModal({
     setBulkPaymentLoading(true);
     try {
       // Sort by submission time (earliest first)
-      const sortedSubs = [...verifiedSubs].sort(
+      const sortedSubs = [...paySubs].sort(
         (a, b) =>
           new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
       );
@@ -858,63 +887,10 @@ export function CreatorSubmissionsModal({
   const maxEarningsPerCreator =
     (contest as any)?.max_earnings_per_creator || null;
 
-  // Pre-calculate expected bonuses with budget constraints
-  const expectedBonusMap = new Map<string, number>();
-
-  if (hasFlatFeeBonus) {
-    // Get budget information
-    const totalBudget =
-      contest?.contest_type === "cpm"
-        ? (contest?.contest_based_details as any)?.cpm_contest?.total_budget ||
-          0
-        : (contest?.contest_based_details as any)?.leaderboard_contest
-            ?.total_budget || 0;
-
-    const bonusBudget =
-      contest?.contest_type === "cpm"
-        ? (contest?.contest_based_details as any)?.cpm_contest
-            ?.flat_fee_bonus_cap || totalBudget
-        : totalBudget;
-
-    // Sort submissions by created_at to process in order
-    const submissionsByTime = [...submissions].sort((a, b) => {
-      return (
-        new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
-      );
-    });
-
-    let currentTotalExpectedBonus = 0;
-
-    submissionsByTime.forEach((sub) => {
-      const normalizedStatus = getNormalizedSubmissionStatus(sub);
-      const isBonusStatus =
-        normalizedStatus === "verified" ||
-        normalizedStatus === "paid" ||
-        sub.paid === true;
-      const isEligibleForBonus = hasFlatFeeBonus && isBonusStatus;
-
-      if (isEligibleForBonus) {
-        // Calculate remaining budget for bonuses
-        const remainingBudget = bonusBudget - currentTotalExpectedBonus;
-
-        if (remainingBudget > 0) {
-          if (remainingBudget >= flatFeeBonus) {
-            // Full bonus can be granted
-            expectedBonusMap.set(sub.id, flatFeeBonus);
-            currentTotalExpectedBonus += flatFeeBonus;
-          } else {
-            // Only partial bonus remaining - distribute the remaining amount
-            expectedBonusMap.set(sub.id, remainingBudget);
-            currentTotalExpectedBonus += remainingBudget;
-          }
-        } else {
-          expectedBonusMap.set(sub.id, 0);
-        }
-      } else {
-        expectedBonusMap.set(sub.id, 0);
-      }
-    });
-  }
+  const expectedBonusMap = useMemo(
+    () => buildFlatFeeBonusExpectedCentsBySubmissionId(contest, submissions),
+    [contest, submissions],
+  );
 
   let creatorCapApplied = false;
   let cappedTwitterSubmissionId: string | null = null;
@@ -1239,193 +1215,260 @@ export function CreatorSubmissionsModal({
             {selectedSubmissions.size > 0 && (
               <div
                 className={cn(
-                  "p-4 border-b",
+                  "border-b p-2 sm:p-3",
                   isDark ? "bg-blue-900/20" : "bg-blue-50",
                 )}
               >
-                <div className="flex items-center gap-3 mb-3">
-                  <span
-                    className={cn(
-                      "font-medium",
-                      isDark ? "text-blue-300" : "text-blue-900",
-                    )}
-                  >
-                    {selectedSubmissions.size} selected
-                  </span>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={() => setSelectedSubmissions(new Set())}
-                    className={cn(
-                      "text-sm",
-                      isDark ? "text-white" : "text-gray-600",
-                    )}
-                  >
-                    Clear
-                  </Button>
-                </div>
-
-                {/* Scrollable buttons container */}
-                <div className="overflow-x-auto pb-2 -mx-1 px-1">
-                  <div className="flex gap-2 min-w-max">
-                    {contest?.post_contest_status !== "verification_complete" &&
-                      contest?.post_contest_status !== "payments_processed" && (
-                        <>
-                          <Button
-                            size="sm"
-                            onClick={() => handleBulkAction("verify")}
-                            loading={bulkVerifyLoading}
-                            loadingText="Verifying submissions..."
-                            className={cn(
-                              "whitespace-nowrap rounded-md",
-                              isDark
-                                ? "border bg-green-900/30 text-green-400 border-green-500"
-                                : "bg-green-600 text-white hover:bg-green-700 ",
-                            )}
-                          >
-                            <CheckCircle className="h-4 w-4 mr-1" />
-                            Mark as Verified
-                          </Button>
-                          <Button
-                            size="sm"
-                            onClick={() => handleBulkAction("reject")}
-                            disabled={bulkVerifyLoading}
-                            className={cn(
-                              "whitespace-nowrap rounded-md",
-                              isDark
-                                ? "border bg-red-900/30 text-red-400 border-red-500"
-                                : "bg-red-600 text-white hover:bg-red-700 ",
-                            )}
-                          >
-                            <XCircle className="h-4 w-4 mr-1" />
-                            Mark as Rejected
-                          </Button>
-                          <Button
-                            size="sm"
-                            onClick={() => handleBulkAction("pending")}
-                            disabled={bulkVerifyLoading}
-                            className={cn(
-                              "whitespace-nowrap rounded-md",
-                              isDark
-                                ? "border bg-yellow-900/30 text-yellow-400 border-yellow-500"
-                                : "bg-yellow-600 text-white hover:bg-yellow-700 ",
-                            )}
-                          >
-                            <Clock className="h-4 w-4 mr-1" />
-                            Mark as Pending
-                          </Button>
-                          {bulkVerifyLoading && (
-                            <span
-                              className={cn(
-                                "text-xs self-center whitespace-nowrap",
-                                isDark ? "text-blue-200" : "text-blue-700",
-                              )}
-                            >
-                              Verifying submissions...
-                            </span>
-                          )}
-                        </>
+                <div className="flex flex-wrap items-center gap-x-2 gap-y-2">
+                  <div className="flex shrink-0 items-center gap-2">
+                    <span
+                      className={cn(
+                        "text-sm font-medium",
+                        isDark ? "text-blue-300" : "text-blue-900",
                       )}
-                    {contest?.post_contest_status === "verification_complete" &&
-                      contest?.post_contest_status !== "payments_processed" &&
-                      isAdminView &&
-                      // Hide all payment buttons for Twitter leaderboard contests
-                      !isTwitterLeaderboardContest && (
-                        <>
-                          <div className="border-l border-gray-300 dark:border-gray-600 h-6 mx-2"></div>
-                          <Button
-                            size="sm"
-                            onClick={() => handleBulkPayment("standard", false)}
-                            disabled={bulkPaymentLoading}
-                            className="bg-blue-600 hover:bg-blue-700 text-white whitespace-nowrap"
-                          >
-                            {bulkPaymentLoading ? (
-                              <Loader2 className="h-4 w-4 mr-1 animate-spin" />
-                            ) : (
-                              <DollarSign className="h-4 w-4 mr-1" />
-                            )}
-                            Mark as Paid
-                          </Button>
-                          <Button
-                            size="sm"
-                            onClick={() => handleBulkPayment("standard", true)}
-                            disabled={bulkPaymentLoading}
-                            className="bg-blue-500 hover:bg-blue-600 text-white whitespace-nowrap"
-                          >
-                            {bulkPaymentLoading ? (
-                              <Loader2 className="h-4 w-4 mr-1 animate-spin" />
-                            ) : (
-                              <DollarSign className="h-4 w-4 mr-1" />
-                            )}
-                            Mark as Paid (Bulk)
-                          </Button>
-                          {hasFlatFeeBonus && (
-                            <>
-                              {!isTwitterCpmContest && (
-                                <>
-                                  <Button
-                                    size="sm"
-                                    onClick={() =>
-                                      handleBulkPayment("bonus", false)
-                                    }
-                                    disabled={bulkPaymentLoading}
-                                    className="bg-green-600 hover:bg-green-700 text-white whitespace-nowrap"
-                                  >
-                                    {bulkPaymentLoading ? (
-                                      <Loader2 className="h-4 w-4 mr-1 animate-spin" />
-                                    ) : (
-                                      <DollarSign className="h-4 w-4 mr-1" />
-                                    )}
-                                    Mark Bonus as Paid
-                                  </Button>
-                                  <Button
-                                    size="sm"
-                                    onClick={() =>
-                                      handleBulkPayment("bonus", true)
-                                    }
-                                    disabled={bulkPaymentLoading}
-                                    className="bg-green-500 hover:bg-green-600 text-white whitespace-nowrap"
-                                  >
-                                    {bulkPaymentLoading ? (
-                                      <Loader2 className="h-4 w-4 mr-1 animate-spin" />
-                                    ) : (
-                                      <DollarSign className="h-4 w-4 mr-1" />
-                                    )}
-                                    Mark Bonus as Paid (Bulk)
-                                  </Button>
-                                </>
-                              )}
-                              <Button
-                                size="sm"
-                                onClick={() => handleBulkPayment("both", false)}
-                                disabled={bulkPaymentLoading}
-                                className="bg-purple-600 hover:bg-purple-700 text-white whitespace-nowrap"
-                              >
-                                {bulkPaymentLoading ? (
-                                  <Loader2 className="h-4 w-4 mr-1 animate-spin" />
-                                ) : (
-                                  <DollarSign className="h-4 w-4 mr-1" />
-                                )}
-                                Mark Both as Paid
-                              </Button>
-                              <Button
-                                size="sm"
-                                onClick={() => handleBulkPayment("both", true)}
-                                disabled={bulkPaymentLoading}
-                                className="bg-purple-500 hover:bg-purple-600 text-white whitespace-nowrap"
-                              >
-                                {bulkPaymentLoading ? (
-                                  <Loader2 className="h-4 w-4 mr-1 animate-spin" />
-                                ) : (
-                                  <DollarSign className="h-4 w-4 mr-1" />
-                                )}
-                                Mark Both as Paid (Bulk)
-                              </Button>
-                            </>
-                          )}
-                        </>
+                    >
+                      {selectedSubmissions.size} selected
+                    </span>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => setSelectedSubmissions(new Set())}
+                      className={cn(
+                        "h-8 text-sm",
+                        isDark ? "text-white" : "text-gray-600",
                       )}
+                    >
+                      Clear
+                    </Button>
                   </div>
+
+                  {contest?.post_contest_status !== "verification_complete" &&
+                    contest?.post_contest_status !== "payments_processed" && (
+                      <>
+                        <Button
+                          size="sm"
+                          onClick={() => handleBulkAction("verify")}
+                          loading={bulkVerifyLoading}
+                          loadingText="Verifying submissions..."
+                          className={cn(
+                            "h-8 shrink-0 whitespace-nowrap rounded-md",
+                            isDark
+                              ? "border bg-green-900/30 text-green-400 border-green-500"
+                              : "bg-green-600 text-white hover:bg-green-700 ",
+                          )}
+                        >
+                          <CheckCircle className="h-4 w-4 mr-1" />
+                          Mark as Verified
+                        </Button>
+                        <Button
+                          size="sm"
+                          onClick={() => handleBulkAction("reject")}
+                          disabled={bulkVerifyLoading}
+                          className={cn(
+                            "h-8 shrink-0 whitespace-nowrap rounded-md",
+                            isDark
+                              ? "border bg-red-900/30 text-red-400 border-red-500"
+                              : "bg-red-600 text-white hover:bg-red-700 ",
+                          )}
+                        >
+                          <XCircle className="h-4 w-4 mr-1" />
+                          Mark as Rejected
+                        </Button>
+                        <Button
+                          size="sm"
+                          onClick={() => handleBulkAction("pending")}
+                          disabled={bulkVerifyLoading}
+                          className={cn(
+                            "h-8 shrink-0 whitespace-nowrap rounded-md",
+                            isDark
+                              ? "border bg-yellow-900/30 text-yellow-400 border-yellow-500"
+                              : "bg-yellow-600 text-white hover:bg-yellow-700 ",
+                          )}
+                        >
+                          <Clock className="h-4 w-4 mr-1" />
+                          Mark as Pending
+                        </Button>
+                        {bulkVerifyLoading && (
+                          <span
+                            className={cn(
+                              "text-xs self-center whitespace-nowrap",
+                              isDark ? "text-blue-200" : "text-blue-700",
+                            )}
+                          >
+                            Verifying submissions...
+                          </span>
+                        )}
+                      </>
+                    )}
+
+                  {contest?.post_contest_status === "verification_complete" &&
+                    contest?.post_contest_status !== "payments_processed" &&
+                    isAdminView &&
+                    !isTwitterLeaderboardContest && (
+                      <>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <button
+                              type="button"
+                              className={cn(
+                                "shrink-0 rounded p-1",
+                                isDark
+                                  ? "text-blue-300/90 hover:bg-white/10"
+                                  : "text-blue-800/80 hover:bg-blue-100/80",
+                              )}
+                              aria-label="How payout works"
+                            >
+                              <CircleHelp className="h-4 w-4" />
+                            </button>
+                          </TooltipTrigger>
+                          <TooltipContent
+                            side="bottom"
+                            className="max-w-[min(100vw-2rem,22rem)] text-left text-xs leading-snug"
+                          >
+                            Left group: one payment per checked row. (Bulk)
+                            buttons: same checked rows, one combined payout
+                            request. Only verified rows qualify.
+                          </TooltipContent>
+                        </Tooltip>
+                        <div className="-mx-1 flex min-h-9 min-w-0 max-w-full flex-[1_1_200px] items-center overflow-x-auto overscroll-x-contain px-1 [-webkit-overflow-scrolling:touch]">
+                          <div className="flex w-max items-center gap-1.5 py-0.5">
+                            {!hasFlatFeeBonus ? (
+                              <>
+                                <Button
+                                  size="sm"
+                                  onClick={() =>
+                                    handleBulkPayment("standard", false)
+                                  }
+                                  disabled={bulkPaymentLoading}
+                                  className="h-8 shrink-0 bg-blue-600 text-white hover:bg-blue-700"
+                                >
+                                  {bulkPaymentLoading ? (
+                                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                  ) : (
+                                    <DollarSign className="h-3.5 w-3.5" />
+                                  )}
+                                  Mark as Paid
+                                </Button>
+                                <span
+                                  className={cn(
+                                    "hidden h-6 w-px shrink-0 self-center sm:block",
+                                    isDark ? "bg-white/15" : "bg-border",
+                                  )}
+                                  aria-hidden
+                                />
+                                <Button
+                                  size="sm"
+                                  onClick={() =>
+                                    handleBulkPayment("standard", true)
+                                  }
+                                  disabled={bulkPaymentLoading}
+                                  className="h-8 shrink-0 border border-blue-500/80 bg-blue-500/10 text-blue-700 hover:bg-blue-500/20 dark:text-blue-300"
+                                >
+                                  {bulkPaymentLoading ? (
+                                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                  ) : (
+                                    <DollarSign className="h-3.5 w-3.5" />
+                                  )}
+                                  Mark as Paid (Bulk)
+                                </Button>
+                              </>
+                            ) : (
+                              <>
+                                <Button
+                                  size="sm"
+                                  onClick={() =>
+                                    handleBulkPayment("standard", false)
+                                  }
+                                  disabled={bulkPaymentLoading}
+                                  className="h-8 shrink-0 bg-blue-600 text-white hover:bg-blue-700"
+                                >
+                                  {bulkPaymentLoading ? (
+                                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                  ) : (
+                                    <DollarSign className="h-3.5 w-3.5" />
+                                  )}
+                                  Mark as Paid
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  onClick={() => handleBulkPayment("bonus", false)}
+                                  disabled={bulkPaymentLoading}
+                                  className="h-8 shrink-0 bg-green-600 text-white hover:bg-green-700"
+                                >
+                                  {bulkPaymentLoading ? (
+                                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                  ) : (
+                                    <DollarSign className="h-3.5 w-3.5" />
+                                  )}
+                                  Mark Bonus as Paid
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  onClick={() => handleBulkPayment("both", false)}
+                                  disabled={bulkPaymentLoading}
+                                  className="h-8 shrink-0 bg-purple-600 text-white hover:bg-purple-700"
+                                >
+                                  {bulkPaymentLoading ? (
+                                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                  ) : (
+                                    <DollarSign className="h-3.5 w-3.5" />
+                                  )}
+                                  Mark Both as Paid
+                                </Button>
+                                <span
+                                  className={cn(
+                                    "hidden h-6 w-px shrink-0 self-center sm:block",
+                                    isDark ? "bg-white/15" : "bg-border",
+                                  )}
+                                  aria-hidden
+                                />
+                                <Button
+                                  size="sm"
+                                  onClick={() =>
+                                    handleBulkPayment("standard", true)
+                                  }
+                                  disabled={bulkPaymentLoading}
+                                  className="h-8 shrink-0 border border-blue-500/80 bg-blue-500/10 text-blue-700 hover:bg-blue-500/20 dark:text-blue-300"
+                                >
+                                  {bulkPaymentLoading ? (
+                                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                  ) : (
+                                    <DollarSign className="h-3.5 w-3.5" />
+                                  )}
+                                  Mark as Paid (Bulk)
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  onClick={() => handleBulkPayment("bonus", true)}
+                                  disabled={bulkPaymentLoading}
+                                  className="h-8 shrink-0 border border-green-500/80 bg-green-500/10 text-green-700 hover:bg-green-500/20 dark:text-green-300"
+                                >
+                                  {bulkPaymentLoading ? (
+                                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                  ) : (
+                                    <DollarSign className="h-3.5 w-3.5" />
+                                  )}
+                                  Mark Bonus as Paid (Bulk)
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  onClick={() => handleBulkPayment("both", true)}
+                                  disabled={bulkPaymentLoading}
+                                  className="h-8 shrink-0 border border-purple-500/80 bg-purple-500/10 text-purple-700 hover:bg-purple-500/20 dark:text-purple-300"
+                                >
+                                  {bulkPaymentLoading ? (
+                                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                  ) : (
+                                    <DollarSign className="h-3.5 w-3.5" />
+                                  )}
+                                  Mark Both as Paid (Bulk)
+                                </Button>
+                              </>
+                            )}
+                          </div>
+                        </div>
+                      </>
+                    )}
                 </div>
               </div>
             )}
@@ -2086,10 +2129,15 @@ export function CreatorSubmissionsModal({
                             payoutAdjustmentPercentage,
                           )
                         : expectedBonus;
-                      // Use actual bonus_amount from database if available
-                      const grantedBonus = submission.bonus_paid
-                        ? (submission as any).bonus_amount || flatFeeBonus
-                        : 0;
+                      // Use actual bonus_amount from database if available.
+                      // Twitter CPM: only count granted bonus when tweet is paid.
+                      const grantedBonus =
+                        submission.bonus_paid &&
+                        (contest?.contest_type !== "cpm" ||
+                          !isTwitterTweet ||
+                          statusForGranted === "paid")
+                          ? (submission as any).bonus_amount || flatFeeBonus
+                          : 0;
 
                       const normalizedStatus =
                         getNormalizedSubmissionStatus(submission);
@@ -3125,19 +3173,28 @@ export function CreatorSubmissionsModal({
                                             </DropdownMenuItem>
                                           </>
                                         )}
-                                      {hasFlatFeeBonus &&
-                                        !submission.bonus_paid &&
-                                        submission.paid &&
-                                        !isTwitterCpmContest && (
-                                          <DropdownMenuItem
-                                            onClick={() =>
-                                              onPayment(submission.id, "bonus")
-                                            }
-                                          >
-                                            <DollarSign className="h-4 w-4 mr-2" />
-                                            Mark Bonus as Paid
-                                          </DropdownMenuItem>
-                                        )}
+                                    </>
+                                  )}
+
+                                {contest?.post_contest_status ===
+                                  "verification_complete" &&
+                                  isAdminView &&
+                                  !isTwitterLeaderboardContest &&
+                                  isTwitterCpmContest &&
+                                  isTwitterTweet &&
+                                  hasFlatFeeBonus &&
+                                  !submission.bonus_paid &&
+                                  isPaidForGranted && (
+                                    <>
+                                      <DropdownMenuSeparator />
+                                      <DropdownMenuItem
+                                        onClick={() =>
+                                          onPayment(submission.id, "bonus")
+                                        }
+                                      >
+                                        <DollarSign className="h-4 w-4 mr-2" />
+                                        Mark Bonus as Paid
+                                      </DropdownMenuItem>
                                     </>
                                   )}
 

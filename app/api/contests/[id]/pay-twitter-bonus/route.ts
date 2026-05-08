@@ -6,6 +6,10 @@ import {
   creditCreatorWithdrawableBalance,
   REVERSAL_TRANSACTION_REMARK,
 } from "@/lib/payment-utils";
+import {
+  sumBonusRewards,
+  sumBonusRefunds,
+} from "@/lib/twitter-bonus-accounting";
 
 /**
  * POST /api/contests/[id]/pay-twitter-bonus
@@ -117,12 +121,9 @@ export async function POST(
       );
     }
 
-    if (
-      tweet.moderation_status !== "verified" &&
-      tweet.moderation_status !== "paid"
-    ) {
+    if (tweet.moderation_status !== "paid") {
       return NextResponse.json(
-        { error: "Tweet must be verified or paid before paying bonus" },
+        { error: "Tweet must be paid before paying bonus" },
         { status: 400 },
       );
     }
@@ -168,7 +169,7 @@ export async function POST(
         }),
       supabaseAdmin
         .from("money_transactions")
-        .select("amount")
+        .select("amount, metadata")
         .eq("user_id", creatorId)
         .eq("type", "reward")
         .contains("metadata", {
@@ -177,7 +178,7 @@ export async function POST(
         }),
       supabaseAdmin
         .from("money_transactions")
-        .select("id, amount, remarks")
+        .select("id, amount, metadata, remarks")
         .eq("user_id", creatorId)
         .eq("type", "refund")
         .contains("metadata", {
@@ -187,7 +188,7 @@ export async function POST(
         }),
       supabaseAdmin
         .from("money_transactions")
-        .select("amount")
+        .select("amount, metadata")
         .eq("type", "reward")
         .contains("metadata", {
           contest_id: contestId,
@@ -195,7 +196,7 @@ export async function POST(
         }),
       supabaseAdmin
         .from("money_transactions")
-        .select("amount, remarks")
+        .select("amount, metadata, remarks")
         .eq("type", "refund")
         .contains("metadata", {
           contest_id: contestId,
@@ -212,15 +213,13 @@ export async function POST(
         (r: any) => !r.remarks || r.remarks === REVERSAL_TRANSACTION_REMARK
       )
       .reduce((s: number, r: any) => s + (r.amount || 0), 0);
-    const creatorRewardSum = (creatorBonusRewards || []).reduce(
-      (s: number, r: any) => s + (r.amount || 0),
-      0
-    );
-    const creatorRefundSum = (creatorBonusRefunds || [])
-      .filter(
-        (r: any) => !r.remarks || r.remarks === REVERSAL_TRANSACTION_REMARK
-      )
-      .reduce((s: number, r: any) => s + (r.amount || 0), 0);
+    // Use bonus-only accounting so bulk twitter_cpm_bulk transactions (which
+    // store CPM + bonus combined in `amount`) only contribute their bonus
+    // portion to creator-level cap math.
+    const creatorRewardSum = sumBonusRewards(creatorBonusRewards || []);
+    const creatorRefundSum = sumBonusRefunds(creatorBonusRefunds || [], {
+      reversalRemark: REVERSAL_TRANSACTION_REMARK,
+    });
     // Creator-level reversal (e.g. moderate-creator "Mark both paid" then reject): one refund row, no tweet_id
     const creatorBonusFullyReversed =
       creatorRefundSum > 0 && creatorRefundSum >= creatorRewardSum;
@@ -229,25 +228,21 @@ export async function POST(
       : Math.max(0, tweetRewardSum - tweetRefundSum);
 
     if (netBonusForTweet >= flatFeeBonus) {
-      return NextResponse.json(
-        {
-          error: "Bonus for this tweet has already been paid",
-          alreadyPaid: true,
-        },
-        { status: 400 }
-      );
+      // Idempotent success: bonus already credited for this tweet.
+      return NextResponse.json({
+        success: true,
+        alreadyPaid: true,
+        message: "Bonus for this tweet has already been paid",
+        amount: netBonusForTweet,
+      });
     }
 
-    // Current bonus spent for this contest (net: rewards - refunds) so reversals free budget/cap
-    const contestRewardSum = (contestBonusRewards || []).reduce(
-      (s: number, r: any) => s + (r.amount || 0),
-      0
-    );
-    const contestRefundSum = (contestBonusRefunds || [])
-      .filter(
-        (r: any) => !r.remarks || r.remarks === REVERSAL_TRANSACTION_REMARK
-      )
-      .reduce((s: number, r: any) => s + (r.amount || 0), 0);
+    // Current bonus spent for this contest (net: rewards - refunds) so reversals free budget/cap.
+    // Bulk twitter_cpm_bulk rows mix CPM + bonus in `amount`; sum only the bonus slice.
+    const contestRewardSum = sumBonusRewards(contestBonusRewards || []);
+    const contestRefundSum = sumBonusRefunds(contestBonusRefunds || [], {
+      reversalRemark: REVERSAL_TRANSACTION_REMARK,
+    });
     const currentBonusSpent = Math.max(0, contestRewardSum - contestRefundSum);
 
     if (contest.contest_type === "leaderboard" && totalBudget != null) {
@@ -312,6 +307,37 @@ export async function POST(
     if (!creditResult.success) {
       return NextResponse.json(
         { error: `Failed to credit bonus: ${creditResult.error}` },
+        { status: 500 }
+      );
+    }
+
+    const paidAt = new Date().toISOString();
+    const { data: updatedRows, error: tweetBonusUpdateErr } = await supabaseAdmin
+      .from("twitter_campaign_tweets")
+      .update({
+        bonus_paid: true,
+        bonus_paid_at: paidAt,
+        bonus_amount: flatFeeBonus,
+      })
+      .eq("id", tweetId)
+      .eq("contest_id", contestId)
+      .select("id")
+      .limit(1);
+
+    if (tweetBonusUpdateErr || !updatedRows?.length) {
+      console.error(
+        "[pay-twitter-bonus] CRITICAL: Wallet credited but tweet bonus columns not updated:",
+        tweetBonusUpdateErr,
+        { tweetId, contestId },
+      );
+      return NextResponse.json(
+        {
+          error:
+            "Bonus was credited to the creator wallet but could not be saved on the tweet row. Run DB migration for twitter_campaign_tweets bonus columns or contact support.",
+          details: tweetBonusUpdateErr?.message,
+          amount: flatFeeBonus,
+          transactionId: creditResult.transactionId,
+        },
         { status: 500 }
       );
     }

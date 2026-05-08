@@ -92,6 +92,7 @@ import {
   buildMilestoneMostVerifiedBonusByCreatorMap,
   type MilestoneMostVerifiedBonusPaidByCreator,
 } from "@/lib/milestone-contest-expected-spend";
+import { buildFlatFeeBonusExpectedCentsBySubmissionId } from "@/lib/twitter-cpm-bonus-expected";
 import { YouTubeAnalyticsPanel } from "@/components/youtube/YouTubeAnalyticsPanel";
 import { YT_ANALYTICS_DEFAULT_WINDOW_DAYS } from "@/lib/youtube-constants";
 import { PaginationControls } from "@/components/ui/pagination-controls";
@@ -732,6 +733,80 @@ function formatDurationSeconds(sec: number): string {
   return mm > 0 ? `${h}h ${mm}m` : `${h}h`;
 }
 
+type TwitterModerateSubmissionRefund = {
+  cpmCents: number;
+  bonusCents: number;
+  totalCents: number;
+};
+
+type TwitterModerateCreatorRefund = {
+  mainCents: number;
+  bonusCents: number;
+  totalCents: number;
+};
+
+function accumulateTwitterModerationRefund(
+  acc: { rewardCents: number; bonusCents: number },
+  refund:
+    | TwitterModerateSubmissionRefund
+    | TwitterModerateCreatorRefund
+    | null
+    | undefined,
+) {
+  if (!refund || refund.totalCents <= 0) return;
+  if ("cpmCents" in refund) {
+    acc.rewardCents += refund.cpmCents;
+    acc.bonusCents += refund.bonusCents;
+  } else {
+    acc.rewardCents += refund.mainCents;
+    acc.bonusCents += refund.bonusCents;
+  }
+}
+
+function formatTwitterRefundToastDescription(
+  rewardCents: number,
+  bonusCents: number,
+  formatCents: (cents: number) => string,
+): string {
+  const lines: string[] = [];
+  if (rewardCents > 0) {
+    lines.push(`Reward: ${formatCents(rewardCents)}`);
+  }
+  if (bonusCents > 0) {
+    lines.push(`Bonus: ${formatCents(bonusCents)}`);
+  }
+  const total = rewardCents + bonusCents;
+  if (total > 0) {
+    lines.push(`Total: ${formatCents(total)}`);
+  }
+  return lines.join("\n");
+}
+
+/** Twitter CPM: show bonus granted only when the tweet is moderation paid (avoids inconsistent bonus_paid flags). */
+function twitterCpmBonusGrantedDisplay(
+  submission: {
+    bonus_paid?: boolean;
+    moderation_status?: string;
+    status?: string;
+    is_twitter_tweet?: boolean;
+    platform?: string;
+  },
+  contestType: string | null | undefined,
+): boolean {
+  if (!submission.bonus_paid) return false;
+  if (contestType !== "cpm") return true;
+  const isTwitter =
+    submission.is_twitter_tweet === true ||
+    String(submission.platform || "").toLowerCase() === "twitter";
+  if (!isTwitter) return true;
+  const st = (
+    submission.moderation_status ||
+    submission.status ||
+    ""
+  ).toLowerCase();
+  return st === "paid";
+}
+
 export default function ContestDetailClient({
   contest,
   initialSubmissions,
@@ -818,6 +893,30 @@ export default function ContestDetailClient({
   const [showYoutubeRunPopup, setShowYoutubeRunPopup] = useState(false);
   const [youtubeRunCompleted, setYoutubeRunCompleted] = useState(false);
   const notifiedYoutubeRunIds = useRef<Set<string>>(new Set());
+  const [postRefreshReloadPending, setPostRefreshReloadPending] = useState(false);
+  const postRefreshReloadPendingRef = useRef(false);
+  const previousInstagramRunRef = useRef<{ id: string; status: string } | null>(null);
+  const previousTwitterRunRef = useRef<{ id: string; status: string } | null>(null);
+  const previousTiktokRunRef = useRef<{ id: string; status: string } | null>(null);
+  const previousYoutubeRunRef = useRef<{ id: string; status: string } | null>(null);
+  const REFRESH_RELOAD_DELAY_MS = 1500;
+  const isTerminalRefreshStatus = (status: string | null | undefined) =>
+    status === "completed" || status === "failed" || status === "cancelled";
+  const isInFlightRefreshStatus = (status: string | null | undefined) =>
+    status === "pending" || status === "running";
+  const shouldReloadAfterHydratedRun = (
+    previous: { id: string; status: string } | null,
+    run: { id: string; status: string },
+  ) =>
+    previous?.id === run.id &&
+    isInFlightRefreshStatus(previous.status) &&
+    isTerminalRefreshStatus(run.status);
+  const schedulePostRefreshReload = useCallback(() => {
+    if (postRefreshReloadPendingRef.current) return;
+    postRefreshReloadPendingRef.current = true;
+    setPostRefreshReloadPending(true);
+    setTimeout(() => window.location.reload(), REFRESH_RELOAD_DELAY_MS);
+  }, []);
   const [refreshElapsedSeconds, setRefreshElapsedSeconds] = useState<
     number | null
   >(null);
@@ -1051,6 +1150,11 @@ export default function ContestDetailClient({
         if (!run) return;
 
         setYoutubeRun(run);
+        const shouldReloadWhenComplete = shouldReloadAfterHydratedRun(
+          previousYoutubeRunRef.current,
+          run,
+        );
+        previousYoutubeRunRef.current = { id: run.id, status: run.status };
 
         if (run.status === "pending" || run.status === "running") {
           setYoutubeRunCompleted(false);
@@ -1065,6 +1169,9 @@ export default function ContestDetailClient({
         ) {
           setYoutubeRunCompleted(true);
           setShowYoutubeRunPopup(false);
+          if (shouldReloadWhenComplete) {
+            schedulePostRefreshReload();
+          }
           if (timer) {
             clearInterval(timer);
             timer = null;
@@ -1115,6 +1222,11 @@ export default function ContestDetailClient({
           const run = data?.run as InstagramInsightsRefreshRunSummary | null;
           if (!run) return;
           setInstagramRun(run);
+          const shouldReloadWhenComplete = shouldReloadAfterHydratedRun(
+            previousInstagramRunRef.current,
+            run,
+          );
+          previousInstagramRunRef.current = { id: run.id, status: run.status };
           if (run.status === "pending" || run.status === "running") {
             setInstagramRunCompleted(false);
             setShowInstagramRunPopup(true);
@@ -1127,6 +1239,9 @@ export default function ContestDetailClient({
           ) {
             setInstagramRunCompleted(true);
             setShowInstagramRunPopup(false);
+            if (shouldReloadWhenComplete) {
+              schedulePostRefreshReload();
+            }
             if (timer) {
               clearInterval(timer);
               timer = null;
@@ -1144,6 +1259,11 @@ export default function ContestDetailClient({
           const run = data?.run as TwitterMetricsRefreshRunSummary | null;
           if (!run) return;
           setTwitterRun(run);
+          const shouldReloadWhenComplete = shouldReloadAfterHydratedRun(
+            previousTwitterRunRef.current,
+            run,
+          );
+          previousTwitterRunRef.current = { id: run.id, status: run.status };
           if (run.status === "pending" || run.status === "running") {
             setTwitterRunCompleted(false);
             setShowTwitterRunPopup(true);
@@ -1156,6 +1276,9 @@ export default function ContestDetailClient({
           ) {
             setTwitterRunCompleted(true);
             setShowTwitterRunPopup(false);
+            if (shouldReloadWhenComplete) {
+              schedulePostRefreshReload();
+            }
             if (timer) {
               clearInterval(timer);
               timer = null;
@@ -1173,6 +1296,11 @@ export default function ContestDetailClient({
           const run = data?.run as TikTokMetricsRefreshRunSummary | null;
           if (!run) return;
           setTiktokRun(run);
+          const shouldReloadWhenComplete = shouldReloadAfterHydratedRun(
+            previousTiktokRunRef.current,
+            run,
+          );
+          previousTiktokRunRef.current = { id: run.id, status: run.status };
           if (run.status === "pending" || run.status === "running") {
             setTiktokRunCompleted(false);
             setShowTiktokRunPopup(true);
@@ -1185,6 +1313,9 @@ export default function ContestDetailClient({
           ) {
             setTiktokRunCompleted(true);
             setShowTiktokRunPopup(false);
+            if (shouldReloadWhenComplete) {
+              schedulePostRefreshReload();
+            }
             if (timer) {
               clearInterval(timer);
               timer = null;
@@ -1624,6 +1755,25 @@ export default function ContestDetailClient({
   const paginatedSubmissions = sortedSubmissions.slice(
     (currentPage - 1) * itemsPerPage,
     currentPage * itemsPerPage,
+  );
+
+  const showTwitterCpmNormalViewBonusColumns = useMemo(
+    () =>
+      isTwitterCpmCampaign &&
+      (Number(
+        (currentContest.contest_based_details as any)?.cpm_contest
+          ?.flat_fee_bonus,
+      ) || 0) > 0,
+    [isTwitterCpmCampaign, currentContest],
+  );
+
+  const twitterCpmFlatFeeBonusExpectedCentsBySubmissionId = useMemo(
+    () =>
+      buildFlatFeeBonusExpectedCentsBySubmissionId(
+        currentContest,
+        filteredSubmissions as any[],
+      ),
+    [currentContest, filteredSubmissions],
   );
 
   const milestonePayoutEligibleSubmissions = useMemo(() => {
@@ -2108,7 +2258,12 @@ export default function ContestDetailClient({
       Object.values(grouped).forEach((group: any) => {
         const subs = group.submissions || [];
         subs.forEach((sub: any) => {
-          if ((sub as any).bonus_paid === true || sub.bonus_paid === true) {
+          if (
+            twitterCpmBonusGrantedDisplay(
+              sub as any,
+              currentContest?.contest_type,
+            )
+          ) {
             const actualBonus =
               Number((sub as any).bonus_amount) || leaderboardFlatFeeForGranted;
             if (actualBonus > 0) {
@@ -2301,7 +2456,12 @@ export default function ContestDetailClient({
         // Track rejected submissions at creator level (used in creator-wise badges)
         group.statusCounts.rejected++;
       }
-      if (submission.bonus_paid) {
+      if (
+        twitterCpmBonusGrantedDisplay(
+          submission as any,
+          currentContest?.contest_type,
+        )
+      ) {
         // Use actual bonus_amount from database if available
         const flatFeeBonus =
           currentContest?.contest_type === "cpm"
@@ -2594,68 +2754,6 @@ export default function ContestDetailClient({
               maxEarningsPerCreator: maxEarningsPerCreator,
               finalExpectedEarnings: finalExpectedEarnings,
               isCapped: group.isCapped,
-            },
-          );
-        });
-      }
-    }
-
-    // Calculate bonus for Twitter CPM contests based on flat_fee_bonus
-    if (isTwitterCpmContest) {
-      const cpmConfig = (currentContest?.contest_based_details as any)
-        ?.cpm_contest;
-      const flatFeeBonus = cpmConfig?.flat_fee_bonus || 0;
-      const totalBudget = cpmConfig?.total_budget || 0;
-      const bonusBudget = cpmConfig?.flat_fee_bonus_cap || totalBudget;
-
-      if (flatFeeBonus > 0) {
-        // Calculate current total expected bonuses across all creators
-        let currentTotalExpectedBonus = 0;
-        Object.values(grouped).forEach((group: any) => {
-          currentTotalExpectedBonus += group.bonus.expected;
-        });
-
-        // Calculate remaining budget for bonuses
-        const remainingBudget = bonusBudget - currentTotalExpectedBonus;
-
-        // Assign bonus to verified creators only
-        Object.values(grouped).forEach((group: any) => {
-          // For Twitter CPM contests, check if creator has verified/paid submissions
-          // so Bonus Expected is shown even after bonus is granted
-          const hasVerifiedSubmissions = group.statusCounts.verified > 0;
-          const hasPaidSubmissions = group.statusCounts.paid > 0;
-          const isVerified =
-            hasVerifiedSubmissions ||
-            hasPaidSubmissions ||
-            group.creator_moderation_status === "verified" ||
-            group.creator_moderation_status === "paid";
-
-          if (isVerified && remainingBudget > 0) {
-            if (remainingBudget >= flatFeeBonus) {
-              // Full bonus can be granted
-              group.bonus.expected = flatFeeBonus;
-              currentTotalExpectedBonus += flatFeeBonus;
-            } else {
-              // Only partial bonus remaining - distribute the remaining amount
-              group.bonus.expected = remainingBudget;
-              currentTotalExpectedBonus = 0; // Budget exhausted
-            }
-          }
-
-          // DEBUG: Log bonus calculation for Twitter CPM
-          console.log(
-            `[contest-detail-client] Calculated bonus for Twitter CPM creator ${group.creator.id}:`,
-            {
-              creatorId: group.creator.id,
-              creatorStatus: group.creator_moderation_status,
-              hasVerifiedSubmissions: hasVerifiedSubmissions,
-              isVerified: isVerified,
-              statusCounts: group.statusCounts,
-              flatFeeBonus: flatFeeBonus,
-              totalBudget: totalBudget,
-              bonusBudget: bonusBudget,
-              remainingBudget: remainingBudget,
-              expectedBonus: group.bonus.expected,
             },
           );
         });
@@ -3188,7 +3286,11 @@ export default function ContestDetailClient({
     setCurrentContest(contest);
   }, [contest]);
 
-  // Hydrate Twitter bonus status from API so Bonus Granted is correct for CPM and leaderboard (modal + creator-wise)
+  // Hydrate Twitter bonus fields from DB (twitter-bonus-status) for modal + creator-wise views.
+  // SSR (page.tsx) now selects bonus_paid/bonus_paid_at/bonus_amount directly from
+  // twitter_campaign_tweets, so this fetch is a fallback for legacy DBs / rows where the
+  // server didn't populate them. Skipping when SSR already filled the fields prevents the
+  // "Bonus Granted blanks out on tab refocus" flash and an unnecessary round-trip.
   useEffect(() => {
     const isTwitter =
       currentContest?.platform?.toLowerCase() === "twitter" ||
@@ -3204,15 +3306,18 @@ export default function ContestDetailClient({
     ) {
       return;
     }
-    const twitterTweetIds = currentSubmissions
-      .filter(
-        (s: any) =>
-          s.is_twitter_tweet === true ||
-          s.platform?.toLowerCase() === "twitter",
-      )
-      .map((s) => s.id)
-      .filter(Boolean);
+    const twitterRows = currentSubmissions.filter(
+      (s: any) =>
+        s.is_twitter_tweet === true ||
+        s.platform?.toLowerCase() === "twitter",
+    );
+    const twitterTweetIds = twitterRows.map((s) => s.id).filter(Boolean);
     if (twitterTweetIds.length === 0) return;
+    // If SSR populated bonus_paid for every Twitter row, skip the round-trip.
+    const allHydratedFromSSR = twitterRows.every(
+      (s: any) => typeof s.bonus_paid === "boolean",
+    );
+    if (allHydratedFromSSR) return;
 
     let cancelled = false;
     (async () => {
@@ -4118,6 +4223,7 @@ export default function ContestDetailClient({
       let hasError = false;
       let errorMessage = "";
       let totalProcessed = 0;
+      const refundAggregate = { rewardCents: 0, bonusCents: 0 };
 
       // Update state internally
       const updatedSubmissionsMap = new Map();
@@ -4136,6 +4242,10 @@ export default function ContestDetailClient({
               updatedSubmissionsMap.set(item.id, data.submission);
               totalProcessed++;
             } else if (data?.success) {
+              accumulateTwitterModerationRefund(
+                refundAggregate,
+                data.refund as TwitterModerateSubmissionRefund | undefined,
+              );
               // Update twitter statuses based on action
               const twitterAction =
                 action === "verified" || action === "approve"
@@ -4216,6 +4326,19 @@ export default function ContestDetailClient({
           description: `Successfully ${actionText} ${totalProcessed} submissions.`,
           variant: bulkVariant,
         });
+        const bulkRefundTotal =
+          refundAggregate.rewardCents + refundAggregate.bonusCents;
+        if (bulkRefundTotal > 0) {
+          toast({
+            title: "Refund processed",
+            description: formatTwitterRefundToastDescription(
+              refundAggregate.rewardCents,
+              refundAggregate.bonusCents,
+              formatMoney,
+            ),
+            variant: "default",
+          });
+        }
       }
 
       // Refresh UI to sync database states completely
@@ -4993,11 +5116,9 @@ export default function ContestDetailClient({
                       variant: "success",
                     });
                   }
-                  // Keep popup visible for 10 seconds, then hide and reload
-                  setTimeout(() => {
-                    setShowInstagramRunPopup(false);
-                    window.location.reload();
-                  }, 10000);
+                  // Hide the popup and reload shortly so the cooldown timestamp is fresh.
+                  setShowInstagramRunPopup(false);
+                  schedulePostRefreshReload();
                 } else {
                   window.location.reload();
                 }
@@ -5044,10 +5165,8 @@ export default function ContestDetailClient({
                       variant: "destructive",
                     });
                   }
-                  setTimeout(() => {
-                    setShowTwitterRunPopup(false);
-                    window.location.reload();
-                  }, 10000);
+                  setShowTwitterRunPopup(false);
+                  schedulePostRefreshReload();
                 } else {
                   window.location.reload();
                 }
@@ -5087,10 +5206,8 @@ export default function ContestDetailClient({
                       variant: "success",
                     });
                   }
-                  setTimeout(() => {
-                    setShowTiktokRunPopup(false);
-                    window.location.reload();
-                  }, 10000);
+                  setShowTiktokRunPopup(false);
+                  schedulePostRefreshReload();
                 } else {
                   window.location.reload();
                 }
@@ -5140,10 +5257,8 @@ export default function ContestDetailClient({
                       });
                     }
                   }
-                  setTimeout(() => {
-                    setShowYoutubeRunPopup(false);
-                    window.location.reload();
-                  }, 10000);
+                  setShowYoutubeRunPopup(false);
+                  schedulePostRefreshReload();
                 } else {
                   window.location.reload();
                 }
@@ -5212,6 +5327,16 @@ export default function ContestDetailClient({
   ) => {
     const isContestLevel = !opts?.submissionId && !opts?.creatorId;
     const key = opts?.submissionId || opts?.creatorId || "contest";
+
+    if (!cooldownInfo.canRefresh) {
+      toast({
+        title: "Please Wait",
+        description: `You can refresh again in ${cooldownInfo.remainingMinutes
+          } minute${cooldownInfo.remainingMinutes !== 1 ? "s" : ""}`,
+        variant: "destructive",
+      });
+      return;
+    }
 
     if (isContestLevel) {
       if (type === "core" || type === "all") setIsRefreshingCore(true);
@@ -5302,10 +5427,8 @@ export default function ContestDetailClient({
                     });
                   }
                 }
-                setTimeout(() => {
-                  setShowYoutubeRunPopup(false);
-                  window.location.reload();
-                }, 9000);
+                setShowYoutubeRunPopup(false);
+                schedulePostRefreshReload();
               }
             } catch {
               // ignore
@@ -5451,10 +5574,8 @@ export default function ContestDetailClient({
                   });
                 }
               }
-              setTimeout(() => {
-                setShowYoutubeRunPopup(false);
-                window.location.reload();
-              }, 9000);
+              setShowYoutubeRunPopup(false);
+              schedulePostRefreshReload();
             }
           } catch {
             // ignore
@@ -5619,12 +5740,15 @@ export default function ContestDetailClient({
 
     const isDisabled =
       isRefreshingMetrics ||
+      postRefreshReloadPending ||
       !cooldownInfo.canRefresh ||
       isLocked ||
       hasRecentRunningRun;
 
     let disabledReason = "";
-    if (isRefreshingMetrics) {
+    if (postRefreshReloadPending) {
+      disabledReason = "Reloading with fresh metrics...";
+    } else if (isRefreshingMetrics) {
       disabledReason = "Refreshing metrics...";
     } else if (hasRecentRunningRun) {
       disabledReason =
@@ -6151,6 +6275,22 @@ export default function ContestDetailClient({
         variant: tweetModerationVariant,
       });
 
+      const submissionRefund = result.refund as
+        | TwitterModerateSubmissionRefund
+        | null
+        | undefined;
+      if (submissionRefund && submissionRefund.totalCents > 0) {
+        toast({
+          title: "Refund processed",
+          description: formatTwitterRefundToastDescription(
+            submissionRefund.cpmCents,
+            submissionRefund.bonusCents,
+            formatMoney,
+          ),
+          variant: "default",
+        });
+      }
+
       try {
         console.log(
           "[contest-detail-client] Calling clear cache API before contests:refresh (Twitter moderation)...",
@@ -6216,6 +6356,7 @@ export default function ContestDetailClient({
           currentContest?.platform?.toLowerCase() === "x");
 
       if (isCpmTwitter) {
+        const refundAcc = { rewardCents: 0, bonusCents: 0 };
         const creatorTweets = (currentSubmissions || []).filter(
           (s: any) =>
             (s as any).creator_id === creatorId &&
@@ -6239,10 +6380,16 @@ export default function ContestDetailClient({
                 }),
               },
             );
+            const pendingData = await res.json();
             if (!res.ok) {
-              const err = await res.json();
-              throw new Error(err.error || "Failed to reverse tweet payment");
+              throw new Error(
+                pendingData.error || "Failed to reverse tweet payment",
+              );
             }
+            accumulateTwitterModerationRefund(
+              refundAcc,
+              pendingData.refund as TwitterModerateSubmissionRefund | undefined,
+            );
           }
         }
         // Then set each tweet to the target action (approve → verified, etc.)
@@ -6262,9 +6409,11 @@ export default function ContestDetailClient({
               }),
             },
           );
+          const stepData = await res.json();
           if (!res.ok) {
-            const err = await res.json();
-            throw new Error(err.error || `Failed to ${action} tweet`);
+            throw new Error(
+              stepData.error || `Failed to ${action} tweet`,
+            );
           }
         }
         if (action === "approve") {
@@ -6282,15 +6431,30 @@ export default function ContestDetailClient({
             }),
           },
         );
+        const lbData = await leaderboardRes.json();
         if (!leaderboardRes.ok) {
-          const err = await leaderboardRes.json();
-          throw new Error(err.error || `Failed to update creator status`);
+          throw new Error(lbData.error || `Failed to update creator status`);
         }
+        accumulateTwitterModerationRefund(
+          refundAcc,
+          lbData.refund as TwitterModerateCreatorRefund | undefined,
+        );
         toast({
           title: "Success",
           description: `Creator ${action === "approve" ? "approved" : "rejected"
             } and payment reversed successfully`,
         });
+        if (refundAcc.rewardCents + refundAcc.bonusCents > 0) {
+          toast({
+            title: "Refund processed",
+            description: formatTwitterRefundToastDescription(
+              refundAcc.rewardCents,
+              refundAcc.bonusCents,
+              formatMoney,
+            ),
+            variant: "default",
+          });
+        }
       } else {
         const response = await fetch(
           `/api/contests/${contestId}/moderate-creator`,
@@ -6304,9 +6468,9 @@ export default function ContestDetailClient({
           },
         );
 
+        const mcData = await response.json();
         if (!response.ok) {
-          const error = await response.json();
-          throw new Error(error.error || `Failed to ${action} creator`);
+          throw new Error(mcData.error || `Failed to ${action} creator`);
         }
 
         if (action === "approve") {
@@ -6318,6 +6482,18 @@ export default function ContestDetailClient({
           description: `Creator ${action === "approve" ? "approved" : "rejected"
             } and payment reversed successfully`,
         });
+        const cr = mcData.refund as TwitterModerateCreatorRefund | undefined;
+        if (cr && cr.totalCents > 0) {
+          toast({
+            title: "Refund processed",
+            description: formatTwitterRefundToastDescription(
+              cr.mainCents,
+              cr.bonusCents,
+              formatMoney,
+            ),
+            variant: "default",
+          });
+        }
       }
 
       setTimeout(() => {
@@ -6367,6 +6543,7 @@ export default function ContestDetailClient({
           (currentContest?.platform?.toLowerCase() === "twitter" ||
             currentContest?.platform?.toLowerCase() === "x")
         ) {
+          const rejectRefundAcc = { rewardCents: 0, bonusCents: 0 };
           const creatorTweets = (currentSubmissions || []).filter(
             (s: any) =>
               (s as any).creator_id === creatorId &&
@@ -6386,10 +6563,14 @@ export default function ContestDetailClient({
                 }),
               },
             );
+            const rejData = await res.json();
             if (!res.ok) {
-              const err = await res.json();
-              throw new Error(err.error || "Failed to reject tweet");
+              throw new Error(rejData.error || "Failed to reject tweet");
             }
+            accumulateTwitterModerationRefund(
+              rejectRefundAcc,
+              rejData.refund as TwitterModerateSubmissionRefund | undefined,
+            );
           }
           // Update creator/leaderboard row so creator-wise view shows rejected (no extra reversal; CPM uses per-tweet paid, not creator-level moderation_status paid)
           const leaderboardRes = await fetch(
@@ -6404,15 +6585,30 @@ export default function ContestDetailClient({
               }),
             },
           );
+          const rejLb = await leaderboardRes.json();
           if (!leaderboardRes.ok) {
-            const err = await leaderboardRes.json();
-            throw new Error(err.error || "Failed to update creator status");
+            throw new Error(rejLb.error || "Failed to update creator status");
           }
+          accumulateTwitterModerationRefund(
+            rejectRefundAcc,
+            rejLb.refund as TwitterModerateCreatorRefund | undefined,
+          );
           toast({
             title: "Success",
             description: `Creator @${pendingTwitterRejection.creatorUsername || "creator"
               } and all tweets have been rejected (payments reversed where applicable).`,
           });
+          if (rejectRefundAcc.rewardCents + rejectRefundAcc.bonusCents > 0) {
+            toast({
+              title: "Refund processed",
+              description: formatTwitterRefundToastDescription(
+                rejectRefundAcc.rewardCents,
+                rejectRefundAcc.bonusCents,
+                formatMoney,
+              ),
+              variant: "default",
+            });
+          }
         } else {
           // Leaderboard: use creator-level moderation API
           const response = await fetch(
@@ -6428,9 +6624,9 @@ export default function ContestDetailClient({
             },
           );
 
+          const lbRejectData = await response.json();
           if (!response.ok) {
-            const error = await response.json();
-            throw new Error(error.error || "Failed to reject creator");
+            throw new Error(lbRejectData.error || "Failed to reject creator");
           }
 
           toast({
@@ -6438,6 +6634,18 @@ export default function ContestDetailClient({
             description: `Creator @${pendingTwitterRejection.creatorUsername || "creator"
               } has been rejected`,
           });
+          const lr = lbRejectData.refund as TwitterModerateCreatorRefund | undefined;
+          if (lr && lr.totalCents > 0) {
+            toast({
+              title: "Refund processed",
+              description: formatTwitterRefundToastDescription(
+                lr.mainCents,
+                lr.bonusCents,
+                formatMoney,
+              ),
+              variant: "default",
+            });
+          }
         }
 
         setTimeout(() => {
@@ -11705,7 +11913,7 @@ export default function ContestDetailClient({
                                 ) : (
                                   <RefreshCw className="h-4 w-4" />
                                 )}
-                                {isRefreshingMetrics
+                                {isRefreshingMetrics || postRefreshReloadPending
                                   ? "Updating..."
                                   : !cooldownInfo.canRefresh
                                     ? `Wait ${cooldownInfo.remainingMinutes}m`
@@ -11912,7 +12120,7 @@ export default function ContestDetailClient({
                                 ) : (
                                   <RefreshCw className="h-4 w-4" />
                                 )}
-                                {isRefreshingMetrics
+                                {isRefreshingMetrics || postRefreshReloadPending
                                   ? "Updating..."
                                   : !cooldownInfo.canRefresh
                                     ? `Wait ${cooldownInfo.remainingMinutes}m`
@@ -11944,7 +12152,22 @@ export default function ContestDetailClient({
                           const anyRefreshInProgress =
                             isRefreshingMetrics ||
                             disabledDetail ||
-                            hasRecentRunningRun;
+                            hasRecentRunningRun ||
+                            postRefreshReloadPending;
+                          const cooldownDisabled = !cooldownInfo.canRefresh;
+                          const cooldownLabel = `Wait ${cooldownInfo.remainingMinutes}m`;
+                          const reloadPendingLabel = "Updating...";
+                          const detailedRefreshDisabled =
+                            anyRefreshInProgress ||
+                            ytPostContestLocked ||
+                            cooldownDisabled;
+                          const detailedRefreshTitle = ytPostContestLocked
+                            ? "Locked after contest review begins"
+                            : postRefreshReloadPending
+                              ? "Reloading with fresh metrics..."
+                              : cooldownDisabled
+                                ? disabledReason
+                                : undefined;
                           const basicTs = currentContest.last_metrics_updated;
                           const ts = [
                             basicTs,
@@ -12027,6 +12250,8 @@ export default function ContestDetailClient({
                                     title={
                                       ytPostContestLocked
                                         ? "Metrics are locked after contest review begins"
+                                        : cooldownDisabled
+                                          ? disabledReason
                                         : "Refresh basic metrics, core analytics, traffic sources, and demographics for all submissions"
                                     }
                                   >
@@ -12035,8 +12260,10 @@ export default function ContestDetailClient({
                                     ) : (
                                       <RefreshCw className="h-3.5 w-3.5" />
                                     )}
-                                    {isRefreshingAll
-                                      ? "Refreshing all..."
+                                    {isRefreshingAll || postRefreshReloadPending
+                                      ? reloadPendingLabel
+                                      : cooldownDisabled
+                                        ? cooldownLabel
                                       : "Refresh all metrics"}
                                   </button>
                                   <span className={muteClass}>
@@ -12100,20 +12327,17 @@ export default function ContestDetailClient({
                                         handleRefreshDetailedAnalytics("core")
                                       }
                                       disabled={
-                                        anyRefreshInProgress ||
-                                        ytPostContestLocked
+                                        detailedRefreshDisabled
                                       }
                                       className={cn(
                                         btnClass,
-                                        anyRefreshInProgress ||
-                                          ytPostContestLocked
+                                        detailedRefreshDisabled
                                           ? "border-gray-400 text-gray-400 cursor-not-allowed opacity-60"
                                           : "border-[#6C43D0] text-[#6C43D0] hover:bg-[#6C43D0] hover:text-white",
                                       )}
                                       title={
-                                        ytPostContestLocked
-                                          ? "Locked after contest review begins"
-                                          : "Watch time, avg view %, shares, subscribers, bot score"
+                                        detailedRefreshTitle ||
+                                        "Watch time, avg view %, shares, subscribers, bot score"
                                       }
                                     >
                                       {isRefreshingCore ? (
@@ -12121,8 +12345,10 @@ export default function ContestDetailClient({
                                       ) : (
                                         <BarChart2 className="h-3.5 w-3.5" />
                                       )}
-                                      {isRefreshingCore
-                                        ? "Fetching..."
+                                      {isRefreshingCore || postRefreshReloadPending
+                                        ? reloadPendingLabel
+                                        : cooldownDisabled
+                                          ? cooldownLabel
                                         : "Refresh Core Analytics"}
                                     </button>
                                     <span className={muteClass}>
@@ -12147,20 +12373,17 @@ export default function ContestDetailClient({
                                         )
                                       }
                                       disabled={
-                                        anyRefreshInProgress ||
-                                        ytPostContestLocked
+                                        detailedRefreshDisabled
                                       }
                                       className={cn(
                                         btnClass,
-                                        anyRefreshInProgress ||
-                                          ytPostContestLocked
+                                        detailedRefreshDisabled
                                           ? "border-gray-400 text-gray-400 cursor-not-allowed opacity-60"
                                           : "border-[#6C43D0] text-[#6C43D0] hover:bg-[#6C43D0] hover:text-white",
                                       )}
                                       title={
-                                        ytPostContestLocked
-                                          ? "Locked after contest review begins"
-                                          : "Traffic source breakdown (used for bot detection)"
+                                        detailedRefreshTitle ||
+                                        "Traffic source breakdown (used for bot detection)"
                                       }
                                     >
                                       {isRefreshingTraffic ? (
@@ -12168,8 +12391,10 @@ export default function ContestDetailClient({
                                       ) : (
                                         <TrendingUp className="h-3.5 w-3.5" />
                                       )}
-                                      {isRefreshingTraffic
-                                        ? "Fetching..."
+                                      {isRefreshingTraffic || postRefreshReloadPending
+                                        ? reloadPendingLabel
+                                        : cooldownDisabled
+                                          ? cooldownLabel
                                         : "Refresh Traffic Sources"}
                                     </button>
                                     <span className={muteClass}>
@@ -12194,20 +12419,17 @@ export default function ContestDetailClient({
                                         )
                                       }
                                       disabled={
-                                        anyRefreshInProgress ||
-                                        ytPostContestLocked
+                                        detailedRefreshDisabled
                                       }
                                       className={cn(
                                         btnClass,
-                                        anyRefreshInProgress ||
-                                          ytPostContestLocked
+                                        detailedRefreshDisabled
                                           ? "border-gray-400 text-gray-400 cursor-not-allowed opacity-60"
                                           : "border-[#6C43D0] text-[#6C43D0] hover:bg-[#6C43D0] hover:text-white",
                                       )}
                                       title={
-                                        ytPostContestLocked
-                                          ? "Locked after contest review begins"
-                                          : "Audience age/gender breakdown"
+                                        detailedRefreshTitle ||
+                                        "Audience age/gender breakdown"
                                       }
                                     >
                                       {isRefreshingDemographics ? (
@@ -12215,8 +12437,10 @@ export default function ContestDetailClient({
                                       ) : (
                                         <Users className="h-3.5 w-3.5" />
                                       )}
-                                      {isRefreshingDemographics
-                                        ? "Fetching..."
+                                      {isRefreshingDemographics || postRefreshReloadPending
+                                        ? reloadPendingLabel
+                                        : cooldownDisabled
+                                          ? cooldownLabel
                                         : "Refresh Demographics data"}
                                     </button>
                                     <span className={muteClass}>
@@ -13960,6 +14184,16 @@ export default function ContestDetailClient({
                                         Reward Granted
                                       </TableHead>
                                     )}
+                                  {showTwitterCpmNormalViewBonusColumns && (
+                                    <>
+                                      <TableHead className="text-center">
+                                        Bonus Expected
+                                      </TableHead>
+                                      <TableHead className="text-center">
+                                        Bonus Granted
+                                      </TableHead>
+                                    </>
+                                  )}
                                 </>
                               ) : null}
                               {(currentContest.platform
@@ -15860,6 +16094,47 @@ export default function ContestDetailClient({
                                             </div>
                                           </TableCell>
                                         )}
+                                      {showTwitterCpmNormalViewBonusColumns && (
+                                        <>
+                                          <TableCell className="text-center font-medium">
+                                            {(() => {
+                                              const cents =
+                                                twitterCpmFlatFeeBonusExpectedCentsBySubmissionId.get(
+                                                  submission.id,
+                                                ) || 0;
+                                              return cents > 0
+                                                ? formatMoney(cents)
+                                                : "—";
+                                            })()}
+                                          </TableCell>
+                                          <TableCell
+                                            className={cn(
+                                              "text-center font-medium",
+                                              isDark
+                                                ? "text-green-400"
+                                                : "text-green-600",
+                                            )}
+                                          >
+                                            {twitterCpmBonusGrantedDisplay(
+                                              submission as any,
+                                              currentContest?.contest_type,
+                                            )
+                                              ? formatMoney(
+                                                  Number(
+                                                    (submission as any)
+                                                      .bonus_amount,
+                                                  ) ||
+                                                    (Number(
+                                                      (
+                                                        currentContest.contest_based_details as any
+                                                      )?.cpm_contest
+                                                        ?.flat_fee_bonus,
+                                                    ) || 0),
+                                                )
+                                              : "—"}
+                                          </TableCell>
+                                        </>
+                                      )}
                                     </>
                                   ) : null}
                                   {(currentContest.platform
@@ -18029,13 +18304,15 @@ export default function ContestDetailClient({
                                                       </DropdownMenuContent>
                                                     </DropdownMenu>
                                                   )}
-                                                {/* Creator moderation and payment options for Twitter campaigns */}
+                                                {/* Creator moderation and payment options for Twitter leaderboard only (CPM uses per-tweet flows). */}
                                                 {(currentContest.platform?.toLowerCase() ===
                                                   "twitter" ||
                                                   currentContest.platform?.toLowerCase() ===
                                                   "x") &&
                                                   currentContest.contest_format ===
-                                                  "text_image" && (
+                                                  "text_image" &&
+                                                  currentContest.contest_type ===
+                                                  "leaderboard" && (
                                                     <DropdownMenu>
                                                       <DropdownMenuTrigger
                                                         asChild
@@ -18207,17 +18484,13 @@ export default function ContestDetailClient({
                                                               Reject Creator
                                                             </DropdownMenuItem>
                                                           )}
-                                                        {/* Payment options for Twitter creators (leaderboard and CPM) - hide for rejected */}
+                                                        {/* Payment options for Twitter leaderboard creators — hide for rejected */}
                                                         {currentContest.post_contest_status ===
                                                           "verification_complete" &&
                                                           !group.paid &&
                                                           group.creator_moderation_status !==
                                                           "rejected" &&
-                                                          isAdminView &&
-                                                          (currentContest.contest_type ===
-                                                            "leaderboard" ||
-                                                            currentContest.contest_type ===
-                                                            "cpm") && (
+                                                          isAdminView && (
                                                             <>
                                                               <DropdownMenuSeparator />
                                                               <DropdownMenuItem
@@ -18341,18 +18614,11 @@ export default function ContestDetailClient({
                                                               </DropdownMenuItem>
                                                               {(() => {
                                                                 const flatFeeBonus =
-                                                                  currentContest.contest_type ===
-                                                                    "cpm"
-                                                                    ? (
-                                                                      currentContest.contest_based_details as any
-                                                                    )
-                                                                      ?.cpm_contest
-                                                                      ?.flat_fee_bonus
-                                                                    : (
-                                                                      currentContest.contest_based_details as any
-                                                                    )
-                                                                      ?.leaderboard_contest
-                                                                      ?.flat_fee_bonus;
+                                                                  (
+                                                                    currentContest.contest_based_details as any
+                                                                  )
+                                                                    ?.leaderboard_contest
+                                                                    ?.flat_fee_bonus;
                                                                 return (
                                                                   flatFeeBonus >
                                                                   0

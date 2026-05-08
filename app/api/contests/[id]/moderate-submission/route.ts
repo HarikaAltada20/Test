@@ -85,6 +85,12 @@ export async function POST(
 
     const supabaseAdmin = createAdminClient();
 
+    let refund: {
+      cpmCents: number;
+      bonusCents: number;
+      totalCents: number;
+    } | null = null;
+
     // Fetch current tweet state before any update (for per-tweet reversal)
     const { data: currentTweet, error: tweetFetchError } = await supabaseAdmin
       .from("twitter_campaign_tweets")
@@ -216,7 +222,7 @@ export async function POST(
             "refund",
             cpmReversalCents,
             "success",
-            `Reversal of Twitter CPM tweet reward - ${contestTitle}`,
+            `Reversal of Twitter CPM tweet reward — ${contestTitle}`,
             {
               remarks: REVERSAL_TRANSACTION_REMARK,
               paymentMethod: "refund",
@@ -252,7 +258,7 @@ export async function POST(
             "refund",
             bonusReversalAmount,
             "success",
-            `Reversal of Twitter contest flat-fee bonus - ${contestTitle}`,
+            `Reversal of Twitter CPM tweet bonus — ${contestTitle}`,
             {
               remarks: REVERSAL_TRANSACTION_REMARK,
               paymentMethod: "refund",
@@ -305,6 +311,12 @@ export async function POST(
             );
           }
         }
+
+        refund = {
+          cpmCents: cpmReversalCents,
+          bonusCents: bonusReversalAmount,
+          totalCents: cpmReversalCents + bonusReversalAmount,
+        };
       }
     }
 
@@ -390,6 +402,7 @@ export async function POST(
     return NextResponse.json({
       success: true,
       message: `Tweet ${actionMessage} successfully`,
+      refund,
     });
   } catch (error: any) {
     console.error("[moderate-submission] Error:", error);
