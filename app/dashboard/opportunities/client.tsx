@@ -1906,8 +1906,10 @@ export default function OpportunitiesPage({
                   contest.contest_based_details.cpm_contest.total_budget;
                 const budgetSpent =
                   contest.contest_based_details.cpm_contest.budget_spent || 0;
-                const percentage = (budgetSpent / totalBudget) * 100;
-                const remaining = totalBudget - budgetSpent;
+                const { percentage, remaining } = getBudgetTrackerValues(
+                  totalBudget,
+                  budgetSpent,
+                );
                 const trackerLabel =
                   contest.contest_type === "dual_rewards"
                     ? "CPM pool"
@@ -1935,7 +1937,7 @@ export default function OpportunitiesPage({
                     >
                       <div
                         className="absolute h-full bg-gradient-to-r from-purple-500 to-purple-600 rounded-full transition-all duration-500 ease-out"
-                        style={{ width: `${Math.min(percentage, 100)}%` }}
+                        style={{ width: `${percentage}%` }}
                       ></div>
                     </div>
                     <div
@@ -3069,7 +3071,7 @@ export default function OpportunitiesPage({
                               <div
                                 className="absolute h-full bg-gradient-to-r from-purple-500 to-purple-600 rounded-full transition-all duration-500 ease-out"
                                 style={{
-                                  width: `${Math.min(percentage, 100)}%`,
+                                  width: `${percentage}%`,
                                 }}
                               ></div>
                             </div>
@@ -3102,8 +3104,10 @@ export default function OpportunitiesPage({
                         const budgetSpent =
                           contest.contest_based_details.cpm_contest
                             .budget_spent || 0;
-                        const percentage = (budgetSpent / totalBudget) * 100;
-                        const remaining = totalBudget - budgetSpent;
+                        const { percentage, remaining } = getBudgetTrackerValues(
+                          totalBudget,
+                          budgetSpent,
+                        );
                         const trackerLabel =
                           contest.contest_type === "dual_rewards"
                             ? "CPM pool"
@@ -3138,7 +3142,7 @@ export default function OpportunitiesPage({
                               <div
                                 className="absolute h-full bg-gradient-to-r from-purple-500 to-purple-600 rounded-full transition-all duration-500 ease-out"
                                 style={{
-                                  width: `${Math.min(percentage, 100)}%`,
+                                  width: `${percentage}%`,
                                 }}
                               ></div>
                             </div>
@@ -3202,7 +3206,7 @@ export default function OpportunitiesPage({
                               <div
                                 className="absolute h-full bg-gradient-to-r from-green-500 to-green-600 rounded-full transition-all duration-500 ease-out"
                                 style={{
-                                  width: `${Math.min(percentage, 100)}%`,
+                                  width: `${percentage}%`,
                                 }}
                               ></div>
                             </div>
@@ -3270,7 +3274,7 @@ export default function OpportunitiesPage({
                               <div
                                 className="absolute h-full bg-gradient-to-r from-purple-500 to-purple-600 rounded-full transition-all duration-500 ease-out"
                                 style={{
-                                  width: `${Math.min(percentage, 100)}%`,
+                                  width: `${percentage}%`,
                                 }}
                               ></div>
                             </div>

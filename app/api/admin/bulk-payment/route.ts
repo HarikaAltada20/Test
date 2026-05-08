@@ -199,7 +199,10 @@ export async function POST(request: NextRequest) {
     const totalBudget = contestDetails?.total_budget || null;
     const flatFeeBonusCap = contestDetails?.flat_fee_bonus_cap || null;
 
-    const maxEarnings = contest.max_earnings_per_creator || null;
+    const maxEarnings =
+      contest.max_earnings_per_creator ||
+      contestDetails?.max_earnings_per_creator ||
+      null;
 
     // Simple contest-level payout adjustment (percentage + mode)
     const payoutAdjustmentPercentage =

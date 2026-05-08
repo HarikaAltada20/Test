@@ -76,6 +76,7 @@ import {
   centsToDollars,
   formatCurrencyFromCents as formatMoney,
 } from "@/lib/currency-utils";
+import { applyPayoutAdjustment } from "@/lib/payout-adjustment";
 import {
   parseSubmissionMetadata,
   formatMetadataTimestamp,
@@ -275,6 +276,8 @@ interface Contest {
   approved_by?: string | null;
   published_at?: string | null;
   rejection_reason?: string | null;
+  payout_adjustment_percentage?: number | null;
+  payout_adjustment_mode?: string | null;
 }
 
 interface Submission {
@@ -874,6 +877,24 @@ export default function ContestDetailClient({
     isCpmContestType(currentContest?.contest_type) &&
     isTwitterPlatform &&
     currentContest?.contest_format === "text_image";
+
+  // Contest-level payout adjustment for dual_rewards granted display
+  const contestPayoutAdjPct =
+    Number(currentContest.payout_adjustment_percentage) || 0;
+  const contestPayoutAdjMode =
+    (currentContest.payout_adjustment_mode as string) || "";
+  const hasContestPayoutAdj = contestPayoutAdjPct > 0 && !!contestPayoutAdjMode;
+  const dualAdjustCpmForDisplay =
+    hasContestPayoutAdj &&
+    (contestPayoutAdjMode === "combined" ||
+      contestPayoutAdjMode === "dual_rewards_only" ||
+      contestPayoutAdjMode === "cpm_only" ||
+      contestPayoutAdjMode === "milestone_only");
+  const dualAdjustMilestoneForDisplay =
+    hasContestPayoutAdj &&
+    (contestPayoutAdjMode === "combined" ||
+      contestPayoutAdjMode === "dual_rewards_only" ||
+      contestPayoutAdjMode === "bonus_only");
 
   // YouTube analytics visibility (brand-side per contest)
   const ytVisibility =
@@ -2218,10 +2239,16 @@ export default function ContestDetailClient({
         group.earnings.expected += submissionEarnings;
         if (isSubmissionPaidForGrantedReward(submission)) {
           if (isDualRewardsContestType(currentContest?.contest_type)) {
+            const adjCpmCents = dualAdjustCpmForDisplay
+              ? applyPayoutAdjustment(cpmCents, contestPayoutAdjPct)
+              : cpmCents;
+            const adjMilestoneCents = dualAdjustMilestoneForDisplay
+              ? applyPayoutAdjustment(milestoneCents, contestPayoutAdjPct)
+              : milestoneCents;
             const grantedBreakdown = getDualGrantedBreakdown(
               submission as any,
-              cpmCents,
-              milestoneCents,
+              adjCpmCents,
+              adjMilestoneCents,
             );
             group.earnings.granted += grantedBreakdown.totalCents;
           } else {
@@ -2592,7 +2619,13 @@ export default function ContestDetailClient({
     }
 
     // Apply earnings cap per creator for expected earnings display (for non-CPM contests)
-    const maxEarnings = currentContest?.max_earnings_per_creator;
+    const maxEarnings =
+      currentContest?.max_earnings_per_creator ??
+      (currentContest?.contest_based_details as any)?.cpm_contest
+        ?.max_earnings_per_creator ??
+      (currentContest?.contest_based_details as any)?.leaderboard_contest
+        ?.max_earnings_per_creator ??
+      null;
     if (maxEarnings && maxEarnings > 0 && !isTwitterCpmContest) {
       Object.values(grouped).forEach((group: any) => {
         if (group.earnings.expected > maxEarnings) {
@@ -2944,32 +2977,49 @@ export default function ContestDetailClient({
   const statusFilterFinancialTotals = useMemo(() => {
     const isLeaderboardOrCpm =
       currentContest?.contest_type === "leaderboard" ||
-      isCpmContestType(currentContest?.contest_type);
+      isCpmContestType(currentContest?.contest_type) ||
+      isMilestoneContestType(currentContest?.contest_type);
     if (!isLeaderboardOrCpm || !filteredCreatorGroups?.length) {
       return {
         totalExpectedReward: 0,
         totalRewardGranted: 0,
         totalBonusExpected: 0,
         totalBonusGranted: 0,
+        totalMostVerifiedViewsBonusExpected: 0,
+        totalMostVerifiedReelsBonusExpected: 0,
       };
     }
     let totalExpectedReward = 0;
     let totalRewardGranted = 0;
     let totalBonusExpected = 0;
     let totalBonusGranted = 0;
+    let totalMostVerifiedViewsBonusExpected = 0;
+    let totalMostVerifiedReelsBonusExpected = 0;
     filteredCreatorGroups.forEach((group: any) => {
       totalExpectedReward += Number(group.earnings?.expected ?? 0);
       totalRewardGranted += Number(group.earnings?.granted ?? 0);
       totalBonusExpected += Number(group.bonus?.expected ?? 0);
       totalBonusGranted += Number(group.bonus?.granted ?? 0);
+
+      const creatorId = group.creator?.id;
+      if (creatorId && milestoneReelsBonusByCreator) {
+        const row = milestoneReelsBonusByCreator.get(creatorId);
+        if (row) {
+          totalMostVerifiedViewsBonusExpected += Number(row.viewsExpectedCents || 0);
+          totalMostVerifiedReelsBonusExpected += Number(row.expectedCents || 0);
+          totalBonusExpected += Number(row.viewsExpectedCents || 0) + Number(row.expectedCents || 0);
+        }
+      }
     });
     return {
       totalExpectedReward,
       totalRewardGranted,
       totalBonusExpected,
       totalBonusGranted,
+      totalMostVerifiedViewsBonusExpected,
+      totalMostVerifiedReelsBonusExpected,
     };
-  }, [currentContest?.contest_type, filteredCreatorGroups]);
+  }, [currentContest?.contest_type, filteredCreatorGroups, milestoneReelsBonusByCreator]);
 
   // Watch for theme changes from parent layout
   useEffect(() => {
@@ -3766,14 +3816,26 @@ export default function ContestDetailClient({
             };
           case "mark_bonus_paid":
             return {
-              title: "🎁 Bonus Paid",
-              description: "Flat fee bonus marked as paid",
+              title: isDualRewardsContestType(currentContest?.contest_type)
+                ? "🎯 Milestone Paid"
+                : "🎁 Bonus Paid",
+              description: isDualRewardsContestType(
+                currentContest?.contest_type,
+              )
+                ? "Milestone reward marked as paid"
+                : "Flat fee bonus marked as paid",
               variant: "payment" as const,
             };
           case "mark_both_paid":
             return {
-              title: "💰 Payment & Bonus Paid",
-              description: "Standard reward and bonus paid together",
+              title: isDualRewardsContestType(currentContest?.contest_type)
+                ? "💰 Payment Confirmed"
+                : "💰 Payment & Bonus Paid",
+              description: isDualRewardsContestType(
+                currentContest?.contest_type,
+              )
+                ? "Payment has been processed and confirmed"
+                : "Standard reward and bonus paid together",
               variant: "payment" as const,
             };
           default:
@@ -3840,6 +3902,12 @@ export default function ContestDetailClient({
       } else if (error.message?.includes("not found")) {
         errorTitle = "🔍 Not Found";
         errorDescription = "Submission could not be found";
+      } else if (
+        error.message?.toLowerCase().includes("already been paid") ||
+        error.message?.toLowerCase().includes("already paid")
+      ) {
+        errorTitle = "⚠️ Already Paid";
+        errorDescription = error.message;
       } else if (
         error.message?.includes("network") ||
         error.message?.includes("fetch")
@@ -5712,20 +5780,89 @@ export default function ContestDetailClient({
     milestoneExpectedCents: number,
   ) {
     const storedCents = Number(submission?.earnings) || 0;
-    const isPaid =
+    const hasMainPaid =
       (submission?.status || "").toLowerCase() === "paid" ||
       submission?.paid === true;
+    const hasMilestonePaid =
+      submission?.bonus_paid === true ||
+      submission?.milestone_bonus_paid === true;
+    const componentFromMetadata = getDualPaidComponent(submission);
+    const milestonePaidFromDb =
+      Number(submission?.bonus_amount) ||
+      Number(submission?.milestone_bonus_paid?.amount_cents) ||
+      0;
+
+    // Payments via "paid" action store total in earnings, set paid=true, leave bonus_paid=false.
+    // Detect the exact component paid via metadata so we can split CPM vs Milestone correctly.
+    const isPaidAsMainWithMilestoneComponent =
+      hasMainPaid && !hasMilestonePaid && componentFromMetadata === "milestone";
+    const isPaidAsBothViaMainAction =
+      hasMainPaid && !hasMilestonePaid && componentFromMetadata === "both";
+
+    const mainPaidCents =
+      storedCents > 0 ? storedCents : hasMainPaid ? cpmExpectedCents : 0;
+    const milestonePaidCents = hasMilestonePaid
+      ? milestonePaidFromDb > 0
+        ? milestonePaidFromDb
+        : milestoneExpectedCents
+      : isPaidAsMainWithMilestoneComponent
+        ? storedCents > 0
+          ? storedCents
+          : milestoneExpectedCents
+        : 0;
+    const inferredComponent: "cpm" | "milestone" | "both" | null =
+      hasMainPaid && hasMilestonePaid
+        ? "both"
+        : isPaidAsBothViaMainAction
+          ? "both"
+          : isPaidAsMainWithMilestoneComponent
+            ? "milestone"
+            : hasMainPaid
+              ? "cpm"
+              : hasMilestonePaid
+                ? "milestone"
+                : (componentFromMetadata ?? null);
+    const isPaid = hasMainPaid || hasMilestonePaid;
+
+    // "Both" paid via single "paid" action: storedCents is the combined total.
+    // Split by expected amounts so each column shows the correct part, respecting the total cap.
+    if (isPaidAsBothViaMainAction) {
+      const total =
+        storedCents > 0
+          ? storedCents
+          : cpmExpectedCents + milestoneExpectedCents;
+      
+      let cpmSplit = cpmExpectedCents;
+      let milestoneSplit = milestoneExpectedCents;
+      
+      // If a capped total is stored, correctly allocate to milestone first, then CPM remainder
+      if (storedCents > 0 && storedCents !== cpmExpectedCents + milestoneExpectedCents) {
+        milestoneSplit = Math.min(milestoneExpectedCents, storedCents);
+        cpmSplit = Math.max(0, storedCents - milestoneSplit);
+      }
+
+      return {
+        totalCents: total,
+        cpmCents: cpmSplit,
+        milestoneCents: milestoneSplit,
+        isPaid: true,
+      };
+    }
+
     const totalCents =
-      storedCents > 0
-        ? storedCents
-        : isPaid
-          ? cpmExpectedCents + milestoneExpectedCents
-          : 0;
-    if (!isPaid && storedCents <= 0) {
+      inferredComponent === "both"
+        ? mainPaidCents + milestonePaidCents
+        : inferredComponent === "cpm"
+          ? mainPaidCents
+          : inferredComponent === "milestone"
+            ? milestonePaidCents
+            : storedCents > 0
+              ? storedCents
+              : 0;
+    if (!isPaid && totalCents <= 0) {
       return { totalCents: 0, cpmCents: 0, milestoneCents: 0, isPaid: false };
     }
-    const component = getDualPaidComponent(submission);
-    if (component === "cpm") {
+    if (inferredComponent === "cpm") {
       return {
         totalCents,
         cpmCents: totalCents,
@@ -5733,7 +5870,7 @@ export default function ContestDetailClient({
         isPaid,
       };
     }
-    if (component === "milestone") {
+    if (inferredComponent === "milestone") {
       return {
         totalCents,
         cpmCents: 0,
@@ -5741,9 +5878,35 @@ export default function ContestDetailClient({
         isPaid,
       };
     }
-    const milestoneCents = Math.min(milestoneExpectedCents, totalCents);
-    const cpmCents = Math.max(totalCents - milestoneCents, 0);
-    return { totalCents, cpmCents, milestoneCents, isPaid };
+    if (inferredComponent === "both") {
+      return {
+        totalCents,
+        cpmCents: mainPaidCents,
+        milestoneCents: milestonePaidCents,
+        isPaid,
+      };
+    }
+    const fallbackTotalCents =
+      storedCents > 0
+        ? storedCents
+        : inferredComponent === "both"
+          ? cpmExpectedCents + milestoneExpectedCents
+          : inferredComponent === "cpm"
+            ? cpmExpectedCents
+            : inferredComponent === "milestone"
+              ? milestoneExpectedCents
+              : 0;
+    if (!isPaid && fallbackTotalCents <= 0) {
+      return { totalCents: 0, cpmCents: 0, milestoneCents: 0, isPaid: false };
+    }
+    const milestoneCents = Math.min(milestoneExpectedCents, fallbackTotalCents);
+    const cpmCents = Math.max(fallbackTotalCents - milestoneCents, 0);
+    return {
+      totalCents: fallbackTotalCents,
+      cpmCents,
+      milestoneCents,
+      isPaid,
+    };
   }
 
   const formatMetricValue = (value: any, isRate = false) => {
@@ -10939,26 +11102,32 @@ export default function ContestDetailClient({
                         engagement. Min/max view requirements (if any) apply to
                         ALL submissions.
                       </p>
-                      {(currentContest as any).max_earnings_per_creator && (
-                        <div
-                          className={cn(
-                            "mt-3 pt-3 border-t",
-                            isDark
-                              ? "border-purple-700/50"
-                              : "border-purple-200",
-                          )}
-                        >
-                          <p
+                      {(() => {
+                        const contestMaxEarnings =
+                          (currentContest as any)?.max_earnings_per_creator ??
+                          (currentContest as any)?.contest_based_details
+                            ?.cpm_contest?.max_earnings_per_creator ??
+                          (currentContest as any)?.contest_based_details
+                            ?.leaderboard_contest?.max_earnings_per_creator;
+
+                        return contestMaxEarnings ? (
+                          <div
                             className={cn(
-                              "text-sm font-medium",
-                              isDark ? "text-purple-200" : "text-purple-800",
+                              "mt-3 pt-3 border-t",
+                              isDark
+                                ? "border-purple-700/50"
+                                : "border-purple-200",
                             )}
                           >
-                            💡 Earnings Cap for This Contest:{" "}
-                            {formatMoney(
-                              (currentContest as any).max_earnings_per_creator,
-                            )}
-                          </p>
+                            <p
+                              className={cn(
+                                "text-sm font-medium",
+                                isDark ? "text-purple-200" : "text-purple-800",
+                              )}
+                            >
+                              💡 Earnings Cap for This Contest:{" "}
+                              {formatMoney(contestMaxEarnings)}
+                            </p>
                           <p
                             className={cn(
                               "text-xs mt-1",
@@ -10970,8 +11139,9 @@ export default function ContestDetailClient({
                             cap doesn't affect their earnings from other
                             contests!
                           </p>
-                        </div>
-                      )}
+                          </div>
+                        ) : null;
+                      })()}
                     </div>
                   </div>
                 )}
@@ -12966,9 +13136,10 @@ export default function ContestDetailClient({
                   </div>
                 )}
 
-                {/* Financial totals for selected status tab (leaderboard/CPM only) */}
+                {/* Financial totals for selected status tab (leaderboard/CPM/milestone only) */}
                 {(currentContest?.contest_type === "leaderboard" ||
-                  isCpmContestType(currentContest?.contest_type)) &&
+                  isCpmContestType(currentContest?.contest_type) ||
+                  isMilestoneContestType(currentContest?.contest_type)) &&
                   (() => {
                     const flatFeeBonus = isCpmContestType(
                       currentContest?.contest_type,
@@ -13030,6 +13201,7 @@ export default function ContestDetailClient({
                               <p className={valueClass()}>
                                 {formatMoney(tot.totalBonusExpected)}
                               </p>
+                          
                             </div>
                             <div className={cardClass}>
                               <p className={labelClass}>Bonus Granted</p>
@@ -14092,13 +14264,27 @@ export default function ContestDetailClient({
                                     milestoneSubmissionExpectedPayoutCents.get(
                                       submission.id,
                                     ) ?? 0;
+                                  const adjCpmCentsExpected =
+                                    dualAdjustCpmForDisplay
+                                      ? applyPayoutAdjustment(
+                                          cpmCentsExpected,
+                                          contestPayoutAdjPct,
+                                        )
+                                      : cpmCentsExpected;
+                                  const adjMilestoneCentsExpected =
+                                    dualAdjustMilestoneForDisplay
+                                      ? applyPayoutAdjustment(
+                                          milestoneCentsExpected,
+                                          contestPayoutAdjPct,
+                                        )
+                                      : milestoneCentsExpected;
                                   const storedCents =
                                     Number(submission.earnings) || 0;
                                   const grantedBreakdown =
                                     getDualGrantedBreakdown(
                                       submission as any,
-                                      cpmCentsExpected,
-                                      milestoneCentsExpected,
+                                      adjCpmCentsExpected,
+                                      adjMilestoneCentsExpected,
                                     );
                                   const grantedCents =
                                     grantedBreakdown.totalCents;
@@ -16173,32 +16359,74 @@ export default function ContestDetailClient({
                                         {/* Show payment options only when contest status is verification_complete */}
                                         {/* Note: For Twitter, payments are handled at creator level in creator-wise view, not here */}
                                         {!isTwitterTweet &&
-                                          submission.status !== "paid" &&
                                           isAdminView &&
                                           currentContest.post_contest_status ===
-                                            "verification_complete" && (
+                                            "verification_complete" &&
+                                          submission.status !== "paid" && (
                                             <>
-                                              <DropdownMenuItem
-                                                disabled={isLoading}
-                                                onClick={() =>
-                                                  handleUpdateSubmissionStatus(
-                                                    submission.id,
-                                                    "paid",
-                                                  )
-                                                }
-                                              >
-                                                Mark as Paid
-                                              </DropdownMenuItem>
-                                              <DropdownMenuItem
-                                                disabled={isLoading}
-                                                onClick={() =>
-                                                  handleMarkAsPaid(
-                                                    submission.id,
-                                                  )
-                                                }
-                                              >
-                                                Mark as Custom Paid
-                                              </DropdownMenuItem>
+                                              {isDualRewardsContestType(
+                                                currentContest.contest_type,
+                                              ) ? (
+                                                <>
+                                                  <DropdownMenuItem
+                                                    disabled={isLoading}
+                                                    onClick={() =>
+                                                      handleUpdateSubmissionStatus(
+                                                        submission.id,
+                                                        "paid",
+                                                      )
+                                                    }
+                                                  >
+                                                    Mark as Paid (CPM)
+                                                  </DropdownMenuItem>
+                                                  <DropdownMenuItem
+                                                    disabled={isLoading}
+                                                    onClick={() =>
+                                                      handleUpdateSubmissionStatus(
+                                                        submission.id,
+                                                        "mark_bonus_paid",
+                                                      )
+                                                    }
+                                                  >
+                                                    Mark as Paid (Milestone)
+                                                  </DropdownMenuItem>
+                                                  <DropdownMenuItem
+                                                    disabled={isLoading}
+                                                    onClick={() =>
+                                                      handleUpdateSubmissionStatus(
+                                                        submission.id,
+                                                        "mark_both_paid",
+                                                      )
+                                                    }
+                                                  >
+                                                    Mark Both as Paid (CPM+Milestone)
+                                                  </DropdownMenuItem>
+                                                </>
+                                              ) : (
+                                                <>
+                                                  <DropdownMenuItem
+                                                    disabled={isLoading}
+                                                    onClick={() =>
+                                                      handleUpdateSubmissionStatus(
+                                                        submission.id,
+                                                        "paid",
+                                                      )
+                                                    }
+                                                  >
+                                                    Mark as Paid
+                                                  </DropdownMenuItem>
+                                                  <DropdownMenuItem
+                                                    disabled={isLoading}
+                                                    onClick={() =>
+                                                      handleMarkAsPaid(
+                                                        submission.id,
+                                                      )
+                                                    }
+                                                  >
+                                                    Mark as Custom Paid
+                                                  </DropdownMenuItem>
+                                                </>
+                                              )}
                                             </>
                                           )}
                                         {currentContest.post_contest_status !==
@@ -17486,39 +17714,55 @@ export default function ContestDetailClient({
                                                   ) ? (
                                                     <>
                                                       <TableCell className="text-center font-medium">
-                                                        {formatMoney(
-                                                          (() => {
-                                                            const milestoneExpectedCents =
-                                                              (
-                                                                group.submissions ||
-                                                                []
-                                                              ).reduce(
+                                                        <div className="flex items-center justify-center gap-1">
+                                                          {formatMoney(
+                                                            (() => {
+                                                              const milestoneExpectedCents =
                                                                 (
-                                                                  sum: number,
-                                                                  sub: any,
-                                                                ) =>
-                                                                  sum +
-                                                                  (milestoneSubmissionExpectedPayoutCents.get(
-                                                                    sub.id,
-                                                                  ) ?? 0),
-                                                                0,
+                                                                  group.submissions ||
+                                                                  []
+                                                                ).reduce(
+                                                                  (
+                                                                    sum: number,
+                                                                    sub: any,
+                                                                  ) =>
+                                                                    sum +
+                                                                    (milestoneSubmissionExpectedPayoutCents.get(
+                                                                      sub.id,
+                                                                    ) ?? 0),
+                                                                  0,
+                                                                );
+                                                              const cpmExpectedCents =
+                                                                Math.max(
+                                                                  Number(
+                                                                    group.earnings
+                                                                      ?.expected ??
+                                                                      0,
+                                                                  ) -
+                                                                    milestoneExpectedCents,
+                                                                  0,
+                                                                );
+                                                              return (
+                                                                cpmExpectedCents +
+                                                                milestoneExpectedCents
                                                               );
-                                                            const cpmExpectedCents =
-                                                              Math.max(
-                                                                Number(
-                                                                  group.earnings
-                                                                    ?.expected ??
-                                                                    0,
-                                                                ) -
-                                                                  milestoneExpectedCents,
-                                                                0,
-                                                              );
-                                                            return (
-                                                              cpmExpectedCents +
-                                                              milestoneExpectedCents
-                                                            );
-                                                          })(),
-                                                        )}
+                                                            })(),
+                                                          )}
+                                                          {group.isCapped && (
+                                                            <span
+                                                              className="text-amber-600 cursor-help"
+                                                              title={`Capped at ${formatMoney(
+                                                                currentContest.max_earnings_per_creator ??
+                                                                (currentContest.contest_based_details as any)?.cpm_contest?.max_earnings_per_creator ??
+                                                                (currentContest.contest_based_details as any)?.leaderboard_contest?.max_earnings_per_creator,
+                                                              )}. Original: ${formatMoney(
+                                                                group.earningsBeforeCap,
+                                                              )}`}
+                                                            >
+                                                              ⚠️
+                                                            </span>
+                                                          )}
+                                                        </div>
                                                       </TableCell>
                                                       <TableCell className="text-center font-medium">
                                                         {(() => {
@@ -17912,11 +18156,25 @@ export default function ContestDetailClient({
                                                                   milestoneSubmissionExpectedPayoutCents.get(
                                                                     sub.id,
                                                                   ) ?? 0;
+                                                                const adjCpm =
+                                                                  dualAdjustCpmForDisplay
+                                                                    ? applyPayoutAdjustment(
+                                                                        cpmExpected,
+                                                                        contestPayoutAdjPct,
+                                                                      )
+                                                                    : cpmExpected;
+                                                                const adjMilestone =
+                                                                  dualAdjustMilestoneForDisplay
+                                                                    ? applyPayoutAdjustment(
+                                                                        milestoneExpected,
+                                                                        contestPayoutAdjPct,
+                                                                      )
+                                                                    : milestoneExpected;
                                                                 const breakdown =
                                                                   getDualGrantedBreakdown(
                                                                     sub,
-                                                                    cpmExpected,
-                                                                    milestoneExpected,
+                                                                    adjCpm,
+                                                                    adjMilestone,
                                                                   );
                                                                 return (
                                                                   sum +
@@ -17950,11 +18208,25 @@ export default function ContestDetailClient({
                                                                   milestoneSubmissionExpectedPayoutCents.get(
                                                                     sub.id,
                                                                   ) ?? 0;
+                                                                const adjCpm =
+                                                                  dualAdjustCpmForDisplay
+                                                                    ? applyPayoutAdjustment(
+                                                                        cpmExpected,
+                                                                        contestPayoutAdjPct,
+                                                                      )
+                                                                    : cpmExpected;
+                                                                const adjMilestone =
+                                                                  dualAdjustMilestoneForDisplay
+                                                                    ? applyPayoutAdjustment(
+                                                                        milestoneExpected,
+                                                                        contestPayoutAdjPct,
+                                                                      )
+                                                                    : milestoneExpected;
                                                                 const breakdown =
                                                                   getDualGrantedBreakdown(
                                                                     sub,
-                                                                    cpmExpected,
-                                                                    milestoneExpected,
+                                                                    adjCpm,
+                                                                    adjMilestone,
                                                                   );
                                                                 return (
                                                                   sum +

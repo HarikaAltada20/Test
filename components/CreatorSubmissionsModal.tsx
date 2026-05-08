@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -601,7 +601,7 @@ export function CreatorSubmissionsModal({
   };
 
   /** Base expected reward. When useStoredEarnings is false, always compute from formula so Expected column does not equal Granted after payment. */
-  const calculateSubmissionCpmExpectedReward = (submission: Submission) => {
+  const calculateRawSubmissionCpmExpectedReward = (submission: Submission) => {
     const cpmConfig = (contest?.contest_based_details as any)?.cpm_contest;
     const cpmRateUsd = cpmConfig?.cpm_rate_usd;
     if (!cpmRateUsd) return 0;
@@ -627,6 +627,52 @@ export function CreatorSubmissionsModal({
       effectiveViews = cpmConfig.max_views;
     }
     return Math.max(Math.round((effectiveViews * cpmRateUsd * 100) / 1000), 0);
+  };
+
+  const cpmCappedExpectedPayoutBySubmissionId = useMemo(() => {
+    const map = new Map<string, number>();
+    const maxEarningsPerCreator =
+      contest?.max_earnings_per_creator ??
+      (contest?.contest_based_details as any)?.cpm_contest?.max_earnings_per_creator ??
+      (contest?.contest_based_details as any)?.leaderboard_contest?.max_earnings_per_creator ??
+      null;
+
+    if (!maxEarningsPerCreator) {
+      submissions.forEach(sub => map.set(sub.id, calculateRawSubmissionCpmExpectedReward(sub)));
+      return map;
+    }
+
+    // Sort submissions by created_at ascending to apply cap sequentially
+    const sortedSubs = [...submissions].sort(
+      (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+    );
+
+    let runningTotal = 0;
+    
+    // First: For dual rewards, milestone takes precedence for the cap budget.
+    // Add ALL expected milestone payouts to running total first.
+    // We only use expected milestones because we are computing EXPECTED CPM.
+    if (contest?.contest_type === "dual_rewards") {
+      for (const sub of sortedSubs) {
+        runningTotal += Number(milestoneExpectedPayoutBySubmissionId?.get(sub.id) || 0);
+      }
+    }
+
+    // Finally: Allocate remaining cap budget sequentially to expected CPM payouts
+    for (const sub of sortedSubs) {
+      const rawCpm = calculateRawSubmissionCpmExpectedReward(sub);
+      let cappedCpm = rawCpm;
+      if (runningTotal + rawCpm > maxEarningsPerCreator) {
+        cappedCpm = Math.max(0, maxEarningsPerCreator - runningTotal);
+      }
+      map.set(sub.id, cappedCpm);
+      runningTotal += cappedCpm;
+    }
+    return map;
+  }, [submissions, contest]);
+
+  const calculateSubmissionCpmExpectedReward = (submission: Submission) => {
+    return cpmCappedExpectedPayoutBySubmissionId.get(submission.id) ?? 0;
   };
 
   const calculateSubmissionBaseExpectedReward = (
@@ -1424,7 +1470,7 @@ export function CreatorSubmissionsModal({
                                   <DollarSign className="h-4 w-4 mr-1" />
                                 )}
                                 {isDualRewardsContest
-                                  ? "Mark Both Paid (CPM+Milestone)"
+                                  ? "Mark Both as Paid (CPM+Milestone)"
                                   : "Mark Both as Paid"}
                               </Button>
                               <Button
@@ -1439,7 +1485,7 @@ export function CreatorSubmissionsModal({
                                   <DollarSign className="h-4 w-4 mr-1" />
                                 )}
                                 {isDualRewardsContest
-                                  ? "Mark Both Paid Bulk (CPM+Milestone)"
+                                  ? "Mark Both as Paid Bulk (CPM+Milestone)"
                                   : "Mark Both as Paid (Bulk)"}
                               </Button>
                             </>
@@ -3166,7 +3212,7 @@ export function CreatorSubmissionsModal({
                                             >
                                               <DollarSign className="h-4 w-4 mr-2" />
                                               {isDualRewardsContest
-                                                ? "Mark Both Paid (CPM+Milestone)"
+                                                ? "Mark Both as Paid (CPM+Milestone)"
                                                 : "Mark Both as Paid"}
                                             </DropdownMenuItem>
                                           </>

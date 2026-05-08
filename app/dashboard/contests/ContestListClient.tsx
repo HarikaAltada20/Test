@@ -1502,8 +1502,10 @@ export function ContestListClient({
                 );
                 const budgetSpent =
                   getPoolBudgetSpentForTrackerDisplay(contest);
-                const percentage = (budgetSpent / totalBudget) * 100;
-                const remaining = totalBudget - budgetSpent;
+                const { percentage, remaining } = getBudgetTrackerValues(
+                  totalBudget,
+                  budgetSpent,
+                );
 
                 return (
                   <div className="mt-3 mb-3">
@@ -1528,7 +1530,7 @@ export function ContestListClient({
                     >
                       <div
                         className="absolute h-full bg-gradient-to-r from-purple-500 to-purple-600 rounded-full transition-all duration-500 ease-out"
-                        style={{ width: `${Math.min(percentage, 100)}%` }}
+                        style={{ width: `${percentage}%` }}
                       ></div>
                     </div>
                     <div
@@ -1648,7 +1650,7 @@ export function ContestListClient({
                     >
                       <div
                         className="absolute h-full bg-gradient-to-r from-purple-500 to-purple-600 rounded-full transition-all duration-500 ease-out"
-                        style={{ width: `${Math.min(percentage, 100)}%` }}
+                        style={{ width: `${percentage}%` }}
                       ></div>
                     </div>
                     <div
@@ -2387,8 +2389,10 @@ export function ContestListClient({
                   );
                   const budgetSpent =
                     getPoolBudgetSpentForTrackerDisplay(contest);
-                  const percentage = (budgetSpent / totalBudget) * 100;
-                  const remaining = totalBudget - budgetSpent;
+                  const { percentage, remaining } = getBudgetTrackerValues(
+                    totalBudget,
+                    budgetSpent,
+                  );
 
                   return (
                     <div className="mt-3">
@@ -2413,7 +2417,7 @@ export function ContestListClient({
                       >
                         <div
                           className="absolute h-full bg-gradient-to-r from-purple-500 to-purple-600 rounded-full transition-all duration-500 ease-out"
-                          style={{ width: `${Math.min(percentage, 100)}%` }}
+                          style={{ width: `${percentage}%` }}
                         ></div>
                       </div>
                       <div
@@ -2526,7 +2530,7 @@ export function ContestListClient({
                       >
                         <div
                           className="absolute h-full bg-gradient-to-r from-purple-500 to-purple-600 rounded-full transition-all duration-500 ease-out"
-                          style={{ width: `${Math.min(percentage, 100)}%` }}
+                          style={{ width: `${percentage}%` }}
                         ></div>
                       </div>
                       <div
