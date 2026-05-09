@@ -554,13 +554,12 @@ export function CreatorSubmissionsModal({
       hasPayoutAdjustment &&
       (payoutAdjustmentMode === "combined" ||
         payoutAdjustmentMode === "dual_rewards_only" ||
-        payoutAdjustmentMode === "cpm_only" ||
-        payoutAdjustmentMode === "milestone_only");
+        payoutAdjustmentMode === "cpm_only");
     const shouldAdjustDualMilestoneComponent =
       hasPayoutAdjustment &&
       (payoutAdjustmentMode === "combined" ||
         payoutAdjustmentMode === "dual_rewards_only" ||
-        payoutAdjustmentMode === "bonus_only");
+        payoutAdjustmentMode === "milestone_only");
     const cpmExpected = shouldAdjustDualCpmComponent
       ? applyPayoutAdjustment(cpmExpectedRaw, payoutAdjustmentPercentage)
       : cpmExpectedRaw;
@@ -2131,14 +2130,13 @@ export function CreatorSubmissionsModal({
                         hasPayoutAdjustment &&
                         (payoutAdjustmentMode === "combined" ||
                           payoutAdjustmentMode === "dual_rewards_only" ||
-                          payoutAdjustmentMode === "cpm_only" ||
-                          payoutAdjustmentMode === "milestone_only");
+                          payoutAdjustmentMode === "cpm_only");
                       const dualAdjustMilestone =
                         contest?.contest_type === "dual_rewards" &&
                         hasPayoutAdjustment &&
                         (payoutAdjustmentMode === "combined" ||
                           payoutAdjustmentMode === "dual_rewards_only" ||
-                          payoutAdjustmentMode === "bonus_only");
+                          payoutAdjustmentMode === "milestone_only");
                       const adjustedCpmExpectedForDual = dualAdjustCpm
                         ? applyPayoutAdjustment(
                             cpmExpectedForDual,
@@ -2174,12 +2172,12 @@ export function CreatorSubmissionsModal({
                       const grantedReward = isPaidForGranted
                         ? explicitPaidAmount != null && explicitPaidAmount > 0
                           ? Number(explicitPaidAmount)
-                          : contest?.contest_type === "milestone"
-                            ? shouldAdjustReward
-                              ? adjustedExpectedReward
-                              : expectedReward
-                            : submission.earnings && submission.earnings > 0
-                              ? submission.earnings
+                          : submission.earnings && submission.earnings > 0
+                            ? submission.earnings
+                            : contest?.contest_type === "milestone"
+                              ? shouldAdjustReward
+                                ? adjustedExpectedReward
+                                : expectedReward
                               : expectedReward
                         : 0;
                       const isDualPaid =
