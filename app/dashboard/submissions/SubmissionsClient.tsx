@@ -40,6 +40,7 @@ import React from "react";
 import { centsToDollars, formatCurrencyFromCents as formatMoney } from "@/lib/currency-utils";
 import { getFullRejectionDetails } from "@/lib/submission-metadata";
 import { cn } from "@/lib/utils";
+import { adjustRewardCents, parsePayoutAdjustment } from "@/lib/payout-rules";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Calendar } from "@/components/ui/calendar";
@@ -324,6 +325,30 @@ export default function SubmissionsClient({
     return Number(matchedMilestone?.payoutCents || 0);
   };
 
+  const getPlatformEffectiveViews = (submission: SubmissionWithContest) => {
+    const platform = String(submission.platform || "").toLowerCase();
+    if (platform.includes("tiktok")) {
+      return Number(
+        (submission.other_stats as any)?.tiktok?.view_count ??
+          (submission.other_stats as any)?.tiktok?.views ??
+          submission.views ??
+          0,
+      );
+    }
+    return Number(submission.views ?? 0);
+  };
+
+  const applyContestRewardAdjustment = (amountCents: number, contest: any) => {
+    const adjustment = parsePayoutAdjustment(
+      contest?.payout_adjustment_percentage,
+      contest?.payout_adjustment_mode,
+    );
+    return adjustRewardCents(amountCents, {
+      shouldAdjustReward: adjustment.shouldAdjustReward,
+      percentage: adjustment.percentage,
+    });
+  };
+
   const getSubmissionEarningsAmount = (submission: SubmissionWithContest) => {
     const contest = submission.contests;
     const subStatus = (submission.status as string || "").toLowerCase();
@@ -347,21 +372,25 @@ export default function SubmissionsClient({
           "cpm_contest" in (contest.contest_based_details as any)
           ? ((contest.contest_based_details as any).cpm_contest as unknown as CpmContestDetails)
           : null;
-      const views = submission.views ?? 0;
+      const views = getPlatformEffectiveViews(submission);
       let effectiveViews = views;
       if (cpmConfig?.min_views != null && views < cpmConfig.min_views) effectiveViews = 0;
       else if (cpmConfig?.max_views != null && views > cpmConfig.max_views) effectiveViews = cpmConfig.max_views;
       const rateUsd = cpmConfig?.cpm_rate_usd ?? 0;
-      return Math.round((effectiveViews * rateUsd) / 10);
+      const rawAmount = Math.round((effectiveViews * rateUsd) / 10);
+      return applyContestRewardAdjustment(rawAmount, contest);
     }
 
     if (contest?.contest_type === "milestone") {
       if (subStatus === "rejected") return 0;
-      return getMilestoneEstimatedEarningsCents(submission, contest);
+      return applyContestRewardAdjustment(
+        getMilestoneEstimatedEarningsCents(submission, contest),
+        contest,
+      );
     }
 
     const data = calculateLeaderboardEarnings(submission, contest);
-    return data.amount;
+    return applyContestRewardAdjustment(data.amount, contest);
   };
 
   // For UI display only (cards/modals). This can show CPM estimates for
@@ -404,12 +433,13 @@ export default function SubmissionsClient({
           "cpm_contest" in (contest.contest_based_details as any)
           ? ((contest.contest_based_details as any).cpm_contest as unknown as CpmContestDetails)
           : null;
-      const views = submission.views ?? 0;
+      const views = getPlatformEffectiveViews(submission);
       let effectiveViews = views;
       if (cpmConfig?.min_views != null && views < cpmConfig.min_views) effectiveViews = 0;
       else if (cpmConfig?.max_views != null && views > cpmConfig.max_views) effectiveViews = cpmConfig.max_views;
       const rateUsd = cpmConfig?.cpm_rate_usd ?? 0;
-      return Math.round((effectiveViews * rateUsd) / 10);
+      const rawAmount = Math.round((effectiveViews * rateUsd) / 10);
+      return applyContestRewardAdjustment(rawAmount, contest);
     }
 
     if (contest?.contest_type === "milestone") {
@@ -425,12 +455,15 @@ export default function SubmissionsClient({
         if (!isConfirmed) return 0;
       }
 
-      return getMilestoneEstimatedEarningsCents(submission, contest);
+      return applyContestRewardAdjustment(
+        getMilestoneEstimatedEarningsCents(submission, contest),
+        contest,
+      );
     }
 
     // Non-CPM: share the same logic as stats helper.
     const data = calculateLeaderboardEarnings(submission, contest);
-    return data.amount;
+    return applyContestRewardAdjustment(data.amount, contest);
   };
 
   const getSubmissionBonusAmount = (submission: SubmissionWithContest) => {

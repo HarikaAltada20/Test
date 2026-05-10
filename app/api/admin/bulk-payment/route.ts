@@ -7,9 +7,15 @@ import {
   logTransactionAsAdmin,
   REVERSAL_TRANSACTION_REMARK,
 } from "@/lib/payment-utils";
-import { applyPayoutAdjustment } from "@/lib/payout-adjustment";
+import {
+  adjustBonusCents,
+  adjustRewardCents,
+  parsePayoutAdjustment,
+} from "@/lib/payout-rules";
+import { allocateFlatFeeBonusCents } from "@/lib/bonus-allocation";
 import { buildMilestoneSubmissionPayoutCentsMap } from "@/lib/milestone-contest-expected-spend";
 import { countRefundsForCreatorContest } from "@/lib/contest-payout-idempotency";
+import { buildFlatFeeBonusExpectedCentsBySubmissionId } from "@/lib/twitter-cpm-bonus-expected";
 
 export async function POST(request: NextRequest) {
   const supabaseAdmin = await createClient();
@@ -201,95 +207,12 @@ export async function POST(request: NextRequest) {
 
     const maxEarnings = contest.max_earnings_per_creator || null;
 
-    // Simple contest-level payout adjustment (percentage + mode)
-    const payoutAdjustmentPercentage =
-      typeof contest.payout_adjustment_percentage === "number"
-        ? contest.payout_adjustment_percentage
-        : typeof contest.payout_adjustment_percentage === "string"
-          ? parseFloat(contest.payout_adjustment_percentage) || 0
-          : 0;
-    const payoutAdjustmentMode = contest.payout_adjustment_mode as
-      | "cpm_only"
-      | "bonus_only"
-      | "combined"
-      | null;
-    const hasPayoutAdjustment =
-      payoutAdjustmentPercentage > 0 && !!payoutAdjustmentMode;
-    const shouldAdjustReward =
-      hasPayoutAdjustment &&
-      (payoutAdjustmentMode === "combined" ||
-        payoutAdjustmentMode === "cpm_only");
-    const shouldAdjustBonus =
-      hasPayoutAdjustment &&
-      (payoutAdjustmentMode === "combined" ||
-        payoutAdjustmentMode === "bonus_only");
-
-    // Check bonus budget/cap before processing
-    if (
-      (payment_type === "bonus" || payment_type === "both") &&
-      flatFeeBonus > 0
-    ) {
-      // Calculate current bonus spending
-      const { data: bonusSpendingData } = await supabaseAdmin
-        .from("submissions")
-        .select("bonus_amount")
-        .eq("contest_id", contest_id)
-        .eq("bonus_paid", true);
-
-      const currentBonusSpent = (bonusSpendingData || []).reduce(
-        (sum, sub) => sum + (sub.bonus_amount || 0),
-        0,
-      );
-
-      // Calculate potential bonus spending for this bulk payment (only unpaid bonuses)
-      const unpaidBonusSubmissions = verifiedSubmissions.filter(
-        (s) => !s.bonus_paid,
-      );
-      const potentialBonusSpending =
-        unpaidBonusSubmissions.length * flatFeeBonus;
-
-      // For leaderboard contests with total_budget, check if budget would be exceeded
-      if (contest.contest_type === "leaderboard" && totalBudget) {
-        if (currentBonusSpent + potentialBonusSpending > totalBudget) {
-          return NextResponse.json(
-            {
-              error: "Total budget would be exceeded",
-              details: {
-                currentSpent: currentBonusSpent,
-                potentialSpending: potentialBonusSpending,
-                budgetLimit: totalBudget,
-                remaining: totalBudget - currentBonusSpent,
-                maxSubmissions: Math.floor(
-                  (totalBudget - currentBonusSpent) / flatFeeBonus,
-                ),
-              },
-            },
-            { status: 400 },
-          );
-        }
-      }
-
-      // For CPM contests with flat_fee_bonus_cap, check if cap would be exceeded
-      if (contest.contest_type === "cpm" && flatFeeBonusCap) {
-        if (currentBonusSpent + potentialBonusSpending > flatFeeBonusCap) {
-          return NextResponse.json(
-            {
-              error: "Flat fee bonus cap would be exceeded",
-              details: {
-                currentSpent: currentBonusSpent,
-                potentialSpending: potentialBonusSpending,
-                capLimit: flatFeeBonusCap,
-                remaining: flatFeeBonusCap - currentBonusSpent,
-                maxSubmissions: Math.floor(
-                  (flatFeeBonusCap - currentBonusSpent) / flatFeeBonus,
-                ),
-              },
-            },
-            { status: 400 },
-          );
-        }
-      }
-    }
+    const payoutAdjustment = parsePayoutAdjustment(
+      contest.payout_adjustment_percentage,
+      contest.payout_adjustment_mode,
+    );
+    const shouldAdjustReward = payoutAdjustment.shouldAdjustReward;
+    const shouldAdjustBonus = payoutAdjustment.shouldAdjustBonus;
 
     // Calculate earnings for each submission
     let runningTotal = 0;
@@ -298,6 +221,35 @@ export async function POST(request: NextRequest) {
     let totalBonus = 0;
     let paidCount = 0;
     let skippedCount = 0;
+    let bonusReasonCounts: Record<string, number> = {};
+    let globalExpectedBonusMap = new Map<string, number>();
+
+    const { data: bonusSpendingData } = await supabaseAdmin
+      .from("submissions")
+      .select("bonus_amount")
+      .eq("contest_id", contest_id)
+      .eq("bonus_paid", true);
+    const currentBonusSpent = (bonusSpendingData || []).reduce(
+      (sum, sub) => sum + (sub.bonus_amount || 0),
+      0,
+    );
+    let runningBonusSpent = currentBonusSpent;
+    if (payment_type !== "standard" && flatFeeBonus > 0) {
+      const { data: contestEligibleSubs } = await supabaseAdmin
+        .from("submissions")
+        .select("id, created_at, status, paid")
+        .eq("contest_id", contest_id)
+        .in("status", ["verified", "paid", "approved"]);
+      globalExpectedBonusMap = buildFlatFeeBonusExpectedCentsBySubmissionId(
+        contest as any,
+        (contestEligibleSubs || []).map((s: any) => ({
+          id: String(s.id),
+          created_at: s.created_at,
+          status: s.status,
+          paid: s.paid === true,
+        })),
+      );
+    }
 
     // Check how much has already been paid to this creator
     const { data: previousSubmissions } = await supabaseAdmin
@@ -379,13 +331,10 @@ export async function POST(request: NextRequest) {
         }
 
         // Apply contest-level adjustment to CPM (reward) if configured
-        const adjustedSubmissionEarnings =
-          shouldAdjustReward && submissionEarnings > 0
-            ? applyPayoutAdjustment(
-                submissionEarnings,
-                payoutAdjustmentPercentage,
-              )
-            : submissionEarnings;
+        const adjustedSubmissionEarnings = adjustRewardCents(submissionEarnings, {
+          shouldAdjustReward,
+          percentage: payoutAdjustment.percentage,
+        });
 
         totalCPM += adjustedSubmissionEarnings;
       }
@@ -393,46 +342,51 @@ export async function POST(request: NextRequest) {
       // Calculate bonus
       let submissionBonus = 0;
       if (payment_type !== "standard" && flatFeeBonus > 0 && !sub.bonus_paid) {
-        // Check if adding this bonus would exceed the cap/budget
-        let wouldExceedCap = false;
-
-        if (contest.contest_type === "leaderboard" && totalBudget) {
-          const remainingBudget = totalBudget - totalBonus;
-          if (flatFeeBonus > remainingBudget) {
-            wouldExceedCap = true;
-          }
-        } else if (contest.contest_type === "cpm" && flatFeeBonusCap) {
-          const remainingCap = flatFeeBonusCap - totalBonus;
-          if (flatFeeBonus > remainingCap) {
-            wouldExceedCap = true;
-          }
-        }
-
-        if (!wouldExceedCap) {
-          submissionBonus = flatFeeBonus;
-          totalBonus += submissionBonus;
+        const expectedBonusForSubmission =
+          globalExpectedBonusMap.get(String(sub.id)) || 0;
+        if (expectedBonusForSubmission <= 0) {
+          bonusReasonCounts.not_expected =
+            (bonusReasonCounts.not_expected || 0) + 1;
+          submissionBonus = 0;
         } else {
-          // Cap reached, skip bonus for remaining submissions
-          skippedCount++;
+        const bonusLimit =
+          contest.contest_type === "leaderboard"
+            ? totalBudget
+            : contest.contest_type === "cpm"
+              ? flatFeeBonusCap
+              : null;
+        const remainingBudget =
+          bonusLimit != null ? Math.max(0, bonusLimit - runningBonusSpent) : null;
+        const bonusAllocation = allocateFlatFeeBonusCents(
+          flatFeeBonus,
+          remainingBudget,
+        );
+        submissionBonus = bonusAllocation.amount;
+        bonusReasonCounts[bonusAllocation.reason] =
+          (bonusReasonCounts[bonusAllocation.reason] || 0) + 1;
+        submissionBonus = Math.min(submissionBonus, expectedBonusForSubmission);
+        if (submissionBonus > 0) {
+          runningBonusSpent += submissionBonus;
+          totalBonus += submissionBonus;
+        }
         }
       }
 
       // Add to breakdown
       const finalCpmAmount =
         payment_type !== "bonus"
-          ? shouldAdjustReward
-            ? applyPayoutAdjustment(
-                submissionEarnings,
-                payoutAdjustmentPercentage,
-              )
-            : submissionEarnings
+          ? adjustRewardCents(submissionEarnings, {
+              shouldAdjustReward,
+              percentage: payoutAdjustment.percentage,
+            })
           : 0;
 
       const finalBonusAmount =
         payment_type !== "standard"
-          ? shouldAdjustBonus
-            ? applyPayoutAdjustment(submissionBonus, payoutAdjustmentPercentage)
-            : submissionBonus
+          ? adjustBonusCents(submissionBonus, {
+              shouldAdjustBonus,
+              percentage: payoutAdjustment.percentage,
+            })
           : 0;
 
       if (finalCpmAmount > 0 || finalBonusAmount > 0) {
@@ -507,8 +461,8 @@ export async function POST(request: NextRequest) {
       creator_id,
       payment_type,
       requested_submission_ids: requestedSubmissionIds,
-      payout_adjustment_percentage: payoutAdjustmentPercentage,
-      payout_adjustment_mode: payoutAdjustmentMode ?? null,
+      payout_adjustment_percentage: payoutAdjustment.percentage,
+      payout_adjustment_mode: payoutAdjustment.mode ?? null,
       contest_refund_count_at_payout: contestRefundCount,
     });
     const bulkPayIdempotencyKey = `bulk_pay_v2:${createHash("sha256")
@@ -533,6 +487,7 @@ export async function POST(request: NextRequest) {
           total_cpm: totalCPMPaid,
           total_bonus: totalBonusPaid,
           cap_reached: maxEarnings ? runningTotal >= maxEarnings : false,
+          bonus_reason_counts: bonusReasonCounts,
         },
       },
     );
@@ -698,6 +653,7 @@ export async function POST(request: NextRequest) {
         payout_idempotent_retry: Boolean(creditResult.alreadyApplied),
         payout_operation_key: bulkPayIdempotencyKey,
         cap_reached: maxEarnings ? runningTotal >= maxEarnings : false,
+        bonus_reason_counts: bonusReasonCounts,
         remaining_cap: maxEarnings
           ? Math.max(0, maxEarnings - runningTotal)
           : null,

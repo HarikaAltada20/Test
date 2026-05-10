@@ -92,7 +92,16 @@ import {
   buildMilestoneMostVerifiedBonusByCreatorMap,
   type MilestoneMostVerifiedBonusPaidByCreator,
 } from "@/lib/milestone-contest-expected-spend";
-import { buildFlatFeeBonusExpectedCentsBySubmissionId } from "@/lib/twitter-cpm-bonus-expected";
+import {
+  buildFlatFeeBonusExpectedCentsBySubmissionId,
+  getFlatFeeBonusCentsFromContest,
+} from "@/lib/twitter-cpm-bonus-expected";
+import {
+  selectionIncludesPaidRow,
+  summarizePaidReversalPreview,
+} from "@/lib/paid-reversal-preview";
+import { applyPayoutAdjustment } from "@/lib/payout-adjustment";
+import { parsePayoutAdjustment } from "@/lib/payout-rules";
 import { YouTubeAnalyticsPanel } from "@/components/youtube/YouTubeAnalyticsPanel";
 import { YT_ANALYTICS_DEFAULT_WINDOW_DAYS } from "@/lib/youtube-constants";
 import { PaginationControls } from "@/components/ui/pagination-controls";
@@ -175,7 +184,10 @@ const YT_TABLE_COLUMNS = [
   { id: "top_traffic_source", label: "Top Traffic Source" },
   { id: "insights_status", label: "Insights status" },
   { id: "expected_reward", label: "Expected Reward" },
+  { id: "adjusted_reward", label: "Adjusted Reward" },
   { id: "reward_granted", label: "Reward Granted" },
+  { id: "bonus_expected", label: "Bonus Expected" },
+  { id: "bonus_granted", label: "Bonus Granted" },
   { id: "status", label: "Status" },
   { id: "submitted", label: "Submitted" },
 ] as const;
@@ -876,6 +888,36 @@ export default function ContestDetailClient({
     Record<string, boolean>
   >({});
   const [currentContest, setCurrentContest] = useState<Contest>(contest);
+  const [persistedPayoutAdjustment, setPersistedPayoutAdjustment] = useState<{
+    percentage: number | null;
+    mode: "cpm_only" | "bonus_only" | "combined" | null;
+  }>({
+    percentage:
+      (contest as any)?.payout_adjustment_percentage != null
+        ? Number((contest as any).payout_adjustment_percentage)
+        : null,
+    mode:
+      ((contest as any)?.payout_adjustment_mode as
+        | "cpm_only"
+        | "bonus_only"
+        | "combined"
+        | null) ?? "combined",
+  });
+  const [draftPayoutAdjustment, setDraftPayoutAdjustment] = useState<{
+    percentage: number | null;
+    mode: "cpm_only" | "bonus_only" | "combined" | null;
+  }>({
+    percentage:
+      (contest as any)?.payout_adjustment_percentage != null
+        ? Number((contest as any).payout_adjustment_percentage)
+        : null,
+    mode:
+      ((contest as any)?.payout_adjustment_mode as
+        | "cpm_only"
+        | "bonus_only"
+        | "combined"
+        | null) ?? "combined",
+  });
   const [instagramRun, setInstagramRun] =
     useState<InstagramInsightsRefreshRunSummary | null>(null);
   const [showInstagramRunPopup, setShowInstagramRunPopup] = useState(false);
@@ -968,6 +1010,11 @@ export default function ContestDetailClient({
     isTwitterPlatform &&
     currentContest?.contest_format === "text_image";
 
+  const showNormalViewFlatFeeBonusColumns = useMemo(
+    () => getFlatFeeBonusCentsFromContest(currentContest) > 0,
+    [currentContest],
+  );
+
   // YouTube analytics visibility (brand-side per contest)
   const ytVisibility =
     (currentContest.contest_based_details as any)
@@ -981,6 +1028,20 @@ export default function ContestDetailClient({
   const canSeeTraffic = isAdminView || brandTrafficAllowed;
   const canSeeDemo = isAdminView || brandDemoAllowed;
 
+  const payoutAdjustmentForUi = useMemo(
+    () =>
+      parsePayoutAdjustment(
+        (currentContest as any)?.payout_adjustment_percentage,
+        (currentContest as any)?.payout_adjustment_mode,
+      ),
+    [
+      (currentContest as any)?.payout_adjustment_percentage,
+      (currentContest as any)?.payout_adjustment_mode,
+    ],
+  );
+  const showAdjustedRewardColumn = payoutAdjustmentForUi.shouldAdjustReward;
+  const payoutAdjustmentPercentageForUi = payoutAdjustmentForUi.percentage;
+
   // Lock YouTube metrics/refresh/modify headers from in_review onward (pending_review still allows refresh before review)
   const ytPostContestLocked =
     currentContest.post_contest_status === "in_review" ||
@@ -990,11 +1051,23 @@ export default function ContestDetailClient({
   // Columns shown in "Modify headers" modal: hide core/traffic options when brand doesn't have access
   const ytColumnsAvailableInModal = useMemo(() => {
     return YT_TABLE_COLUMNS.filter((col) => {
+      if (col.id === "adjusted_reward" && !showAdjustedRewardColumn)
+        return false;
+      if (
+        (col.id === "bonus_expected" || col.id === "bonus_granted") &&
+        !showNormalViewFlatFeeBonusColumns
+      )
+        return false;
       if (YT_CORE_COLUMN_IDS.includes(col.id)) return canSeeCore;
       if (YT_TRAFFIC_COLUMN_IDS.includes(col.id)) return canSeeTraffic;
       return true;
     });
-  }, [canSeeCore, canSeeTraffic]);
+  }, [
+    canSeeCore,
+    canSeeTraffic,
+    showAdjustedRewardColumn,
+    showNormalViewFlatFeeBonusColumns,
+  ]);
   const ytAvailableColumnIds = useMemo(
     () => ytColumnsAvailableInModal.map((c) => c.id),
     [ytColumnsAvailableInModal],
@@ -1494,10 +1567,17 @@ export default function ContestDetailClient({
     return adjustments;
   }, [currentSubmissions, getCreatorManualAdjustment]);
   const [confirmReversal, setConfirmReversal] = useState<{
-    id: string;
+    submissionIds: string[];
     target: "verified" | "pending" | "rejected";
     needRejectionReason?: boolean;
+    /** Set when confirm was opened from Creator Submissions modal */
+    closeCreatorModalOnSuccess?: boolean;
   } | null>(null);
+  const [closeCreatorModalAfterRejectBulk, setCloseCreatorModalAfterRejectBulk] =
+    useState(false);
+  /** Loading shown in Creator Submissions modal while parent completes verify/bulk after paid-reversal confirm */
+  const [creatorModalParentBulkLoading, setCreatorModalParentBulkLoading] =
+    useState(false);
   const [confirmTwitterCreatorReversal, setConfirmTwitterCreatorReversal] =
     useState<{
       creatorId: string;
@@ -1635,6 +1715,61 @@ export default function ContestDetailClient({
     } catch (_) { }
   }, []);
 
+  // Insert Adjusted Reward after Expected for saved YouTube column prefs when contest has reward adjustment
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const isYouTube =
+      currentContest?.platform?.toLowerCase().includes("youtube") ?? false;
+    if (!isYouTube || !showAdjustedRewardColumn) return;
+    setYtVisibleColumns((prev) => {
+      if (!prev.includes("expected_reward")) return prev;
+      if (prev.includes("adjusted_reward")) return prev;
+      const idx = prev.indexOf("expected_reward");
+      const next = [...prev];
+      next.splice(idx + 1, 0, "adjusted_reward");
+      try {
+        localStorage.setItem(
+          YT_VISIBLE_COLUMNS_STORAGE_KEY,
+          JSON.stringify(next),
+        );
+      } catch (_) { }
+      return next;
+    });
+  }, [currentContest?.id, currentContest?.platform, showAdjustedRewardColumn]);
+
+  // Ensure Bonus Expected / Bonus Granted appear after Reward Granted when contest has flat-fee bonus
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const isYouTube =
+      currentContest?.platform?.toLowerCase().includes("youtube") ?? false;
+    if (!isYouTube || !showNormalViewFlatFeeBonusColumns) return;
+    setYtVisibleColumns((prev) => {
+      if (!prev.includes("reward_granted")) return prev;
+      if (prev.includes("bonus_expected") && prev.includes("bonus_granted"))
+        return prev;
+      const rg = prev.indexOf("reward_granted");
+      const next = [...prev];
+      if (!next.includes("bonus_expected")) {
+        next.splice(rg + 1, 0, "bonus_expected");
+      }
+      const beIdx = next.indexOf("bonus_expected");
+      if (!next.includes("bonus_granted")) {
+        next.splice(beIdx + 1, 0, "bonus_granted");
+      }
+      try {
+        localStorage.setItem(
+          YT_VISIBLE_COLUMNS_STORAGE_KEY,
+          JSON.stringify(next),
+        );
+      } catch (_) { }
+      return next;
+    });
+  }, [
+    currentContest?.id,
+    currentContest?.platform,
+    showNormalViewFlatFeeBonusColumns,
+  ]);
+
   const setYtVisibleColumnsAndPersist = useCallback((next: string[]) => {
     setYtVisibleColumns(next);
     try {
@@ -1757,23 +1892,13 @@ export default function ContestDetailClient({
     currentPage * itemsPerPage,
   );
 
-  const showTwitterCpmNormalViewBonusColumns = useMemo(
-    () =>
-      isTwitterCpmCampaign &&
-      (Number(
-        (currentContest.contest_based_details as any)?.cpm_contest
-          ?.flat_fee_bonus,
-      ) || 0) > 0,
-    [isTwitterCpmCampaign, currentContest],
-  );
-
-  const twitterCpmFlatFeeBonusExpectedCentsBySubmissionId = useMemo(
+  const normalViewFlatFeeBonusExpectedCentsBySubmissionId = useMemo(
     () =>
       buildFlatFeeBonusExpectedCentsBySubmissionId(
         currentContest,
-        filteredSubmissions as any[],
+        currentSubmissions as any[],
       ),
-    [currentContest, filteredSubmissions],
+    [currentContest, currentSubmissions],
   );
 
   const milestonePayoutEligibleSubmissions = useMemo(() => {
@@ -2404,51 +2529,6 @@ export default function ContestDetailClient({
           group.statusCounts.verified++;
         }
         if (submission.paid) group.statusCounts.verified_paid++;
-
-        // Get flat_fee_bonus from the correct nested location
-        const flatFeeBonus =
-          currentContest?.contest_type === "cpm"
-            ? (currentContest?.contest_based_details as any)?.cpm_contest
-              ?.flat_fee_bonus || 0
-            : (currentContest?.contest_based_details as any)
-              ?.leaderboard_contest?.flat_fee_bonus || 0;
-
-        // Calculate bonus with budget constraints (include paid so Bonus Expected is not 0 after grant)
-        if (flatFeeBonus > 0) {
-          // Check budget constraints before adding expected bonus
-          const totalBudget =
-            currentContest?.contest_type === "cpm"
-              ? (currentContest?.contest_based_details as any)?.cpm_contest
-                ?.total_budget || 0
-              : (currentContest?.contest_based_details as any)
-                ?.leaderboard_contest?.total_budget || 0;
-
-          // For CPM contests, check flat_fee_bonus_cap if configured
-          const bonusBudget =
-            currentContest?.contest_type === "cpm"
-              ? (currentContest?.contest_based_details as any)?.cpm_contest
-                ?.flat_fee_bonus_cap || totalBudget
-              : totalBudget;
-
-          // Calculate current total expected bonuses across all creators processed so far
-          let currentTotalExpectedBonus = 0;
-          Object.values(acc).forEach((g: any) => {
-            currentTotalExpectedBonus += g.bonus.expected;
-          });
-
-          // Calculate remaining budget for bonuses
-          const remainingBudget = bonusBudget - currentTotalExpectedBonus;
-
-          if (remainingBudget > 0) {
-            if (remainingBudget >= flatFeeBonus) {
-              // Full bonus can be granted
-              group.bonus.expected += flatFeeBonus;
-            } else {
-              // Only partial bonus remaining - distribute the remaining amount
-              group.bonus.expected += remainingBudget;
-            }
-          }
-        }
       } else if (normalizedStatus === "pending") {
         // Track pending submissions at creator level (used in creator-wise badges)
         group.statusCounts.pending++;
@@ -2870,6 +2950,24 @@ export default function ContestDetailClient({
       });
     }
 
+    // Bonus Expected: same FCFS + cap as modal / payout (created_at order over full contest list)
+    const flatFeeBonusCents = getFlatFeeBonusCentsFromContest(currentContest);
+    if (flatFeeBonusCents > 0 && currentSubmissions?.length > 0) {
+      const expectedBonusBySubmissionId =
+        buildFlatFeeBonusExpectedCentsBySubmissionId(
+          currentContest,
+          currentSubmissions,
+        );
+      Object.values(grouped).forEach((group: any) => {
+        const subs = group.submissions || [];
+        group.bonus.expected = subs.reduce(
+          (sum: number, sub: any) =>
+            sum + (expectedBonusBySubmissionId.get(sub.id) || 0),
+          0,
+        );
+      });
+    }
+
     return Object.values(grouped);
   }, [
     filteredSubmissions,
@@ -3284,6 +3382,18 @@ export default function ContestDetailClient({
 
   useEffect(() => {
     setCurrentContest(contest);
+    const nextPercentage =
+      (contest as any)?.payout_adjustment_percentage != null
+        ? Number((contest as any).payout_adjustment_percentage)
+        : null;
+    const nextMode =
+      ((contest as any)?.payout_adjustment_mode as
+        | "cpm_only"
+        | "bonus_only"
+        | "combined"
+        | null) ?? "combined";
+    setPersistedPayoutAdjustment({ percentage: nextPercentage, mode: nextMode });
+    setDraftPayoutAdjustment({ percentage: nextPercentage, mode: nextMode });
   }, [contest]);
 
   // Hydrate Twitter bonus fields from DB (twitter-bonus-status) for modal + creator-wise views.
@@ -3716,7 +3826,7 @@ export default function ContestDetailClient({
       isCustom?: boolean;
       customRemarks?: string;
     },
-    options?: { skipReload?: boolean },
+    options?: { skipReload?: boolean; closeCreatorModalOnSuccess?: boolean },
   ) => {
     console.log("🚀 Starting submission status update:", {
       submissionId,
@@ -4073,8 +4183,37 @@ export default function ContestDetailClient({
       };
 
       const toastConfig = getToastConfig(newStatus);
+      const refundSummary = result?.refund_summary as
+        | {
+            reward_refunded_cents: number;
+            bonus_refunded_cents: number;
+            total_refunded_cents: number;
+          }
+        | undefined;
+      let description = toastConfig.description;
+      if (
+        refundSummary &&
+        (newStatus === "verified" ||
+          newStatus === "pending" ||
+          newStatus === "rejected")
+      ) {
+        const {
+          reward_refunded_cents: rCents,
+          bonus_refunded_cents: bCents,
+          total_refunded_cents: tCents,
+        } = refundSummary;
+        const refundLine =
+          tCents > 0
+            ? `${formatMoney(rCents)} reward reversed, ${formatMoney(bCents)} bonus reversed (${formatMoney(tCents)} total).`
+            : "No wallet debit (nothing on record to refund).";
+        description = `${description} ${refundLine}`;
+      }
       console.log("🎉 Calling toast with config:", toastConfig);
-      toast(toastConfig);
+      toast({ ...toastConfig, description });
+
+      if (options?.closeCreatorModalOnSuccess) {
+        setSelectedCreatorForModal(null);
+      }
 
       // Clear server contest caches first so list/opportunities never read stale budget_spent
       try {
@@ -4150,6 +4289,7 @@ export default function ContestDetailClient({
     submissionIds: string[],
     action: "approve" | "verified" | "reject" | "rejected" | "pending" | "paid",
     reason?: string,
+    options?: { closeCreatorModalOnSuccess?: boolean },
   ) => {
     if (!submissionIds || submissionIds.length === 0) return;
 
@@ -4224,6 +4364,8 @@ export default function ContestDetailClient({
       let errorMessage = "";
       let totalProcessed = 0;
       const refundAggregate = { rewardCents: 0, bonusCents: 0 };
+      let normalRefundRewardCents = 0;
+      let normalRefundBonusCents = 0;
 
       // Update state internally
       const updatedSubmissionsMap = new Map();
@@ -4241,6 +4383,17 @@ export default function ContestDetailClient({
             if (data?.submission) {
               updatedSubmissionsMap.set(item.id, data.submission);
               totalProcessed++;
+              const rs = data?.refund_summary as
+                | {
+                    reward_refunded_cents?: number;
+                    bonus_refunded_cents?: number;
+                  }
+                | undefined;
+              if (rs) {
+                normalRefundRewardCents +=
+                  Number(rs.reward_refunded_cents) || 0;
+                normalRefundBonusCents += Number(rs.bonus_refunded_cents) || 0;
+              }
             } else if (data?.success) {
               accumulateTwitterModerationRefund(
                 refundAggregate,
@@ -4271,8 +4424,16 @@ export default function ContestDetailClient({
         }
         if (result.errors && result.errors.length > 0) {
           hasError = true;
-          errorMessage = "Some updates failed. Check console for details.";
-          console.error("Bulk update errors:", result.errors);
+          const firstErr = result.errors[0] as { id?: string; error?: string };
+          const detail = firstErr?.error || "Unknown error";
+          errorMessage = `Some updates failed (${result.errors.length}). First: ${detail}`;
+          // Avoid console.error here — Next.js dev overlay treats it like a runtime error.
+          console.warn(
+            "[bulk verify] partial failures:",
+            result.errors
+              .map((e: { id?: string; error?: string }) => `${e.id}: ${e.error}`)
+              .join(" | "),
+          );
         }
       }
 
@@ -4317,27 +4478,32 @@ export default function ContestDetailClient({
               : isPaidBulk
                 ? "payment"
                 : "default";
+        const normalRefundTotal =
+          normalRefundRewardCents + normalRefundBonusCents;
+        const twitterRefundTotal =
+          refundAggregate.rewardCents + refundAggregate.bonusCents;
+        let bulkDescription = `Successfully ${actionText} ${totalProcessed} submission(s).`;
+        if (normalRefundTotal > 0) {
+          bulkDescription += ` ${formatMoney(normalRefundRewardCents)} reward reversed, ${formatMoney(normalRefundBonusCents)} bonus reversed (${formatMoney(normalRefundTotal)} total).`;
+        }
+        if (twitterRefundTotal > 0) {
+          bulkDescription += ` ${formatTwitterRefundToastDescription(
+            refundAggregate.rewardCents,
+            refundAggregate.bonusCents,
+            formatMoney,
+          )}`;
+        }
         toast({
           title: isRejectBulk
             ? "Bulk rejection complete"
             : isPendingBulk
               ? "Bulk update complete"
-              : "✅Success",
-          description: `Successfully ${actionText} ${totalProcessed} submissions.`,
+              : "✅ Success",
+          description: bulkDescription,
           variant: bulkVariant,
         });
-        const bulkRefundTotal =
-          refundAggregate.rewardCents + refundAggregate.bonusCents;
-        if (bulkRefundTotal > 0) {
-          toast({
-            title: "Refund processed",
-            description: formatTwitterRefundToastDescription(
-              refundAggregate.rewardCents,
-              refundAggregate.bonusCents,
-              formatMoney,
-            ),
-            variant: "default",
-          });
+        if (options?.closeCreatorModalOnSuccess) {
+          setSelectedCreatorForModal(null);
         }
       }
 
@@ -4378,12 +4544,24 @@ export default function ContestDetailClient({
       ? `${reason}\n\nAdditional Notes: ${additionalNotes}`
       : reason;
 
-    // Use bulk API wrapper for rejection
-    await handleBulkUpdateSubmissionStatus(
-      pendingRejectionSubmissionIds,
-      "rejected",
-      fullReason,
-    );
+    const closeModal = closeCreatorModalAfterRejectBulk;
+    setCloseCreatorModalAfterRejectBulk(false);
+
+    if (closeModal) {
+      setCreatorModalParentBulkLoading(true);
+    }
+    try {
+      await handleBulkUpdateSubmissionStatus(
+        pendingRejectionSubmissionIds,
+        "rejected",
+        fullReason,
+        closeModal ? { closeCreatorModalOnSuccess: true } : undefined,
+      );
+    } finally {
+      if (closeModal) {
+        setCreatorModalParentBulkLoading(false);
+      }
+    }
 
     setRejectionModalOpen(false);
     setPendingRejectionSubmissionIds([]);
@@ -4844,15 +5022,47 @@ export default function ContestDetailClient({
 
   const handleConfirmReversal = async () => {
     if (!confirmReversal) return;
-    const { id, target, needRejectionReason } = confirmReversal;
+    const {
+      submissionIds,
+      target,
+      needRejectionReason,
+      closeCreatorModalOnSuccess,
+    } = confirmReversal;
     setConfirmReversal(null);
     if (needRejectionReason) {
-      // After confirming reversal, open rejection reason modal
-      setPendingRejectionSubmissionIds([id]);
+      setCloseCreatorModalAfterRejectBulk(!!closeCreatorModalOnSuccess);
+      setPendingRejectionSubmissionIds(submissionIds);
       setRejectionModalOpen(true);
       return;
     }
-    await handleUpdateSubmissionStatus(id, target);
+    const closeOpts = closeCreatorModalOnSuccess
+      ? { closeCreatorModalOnSuccess: true }
+      : undefined;
+    if (closeCreatorModalOnSuccess) {
+      setCreatorModalParentBulkLoading(true);
+    }
+    try {
+      if (submissionIds.length === 1) {
+        await handleUpdateSubmissionStatus(
+          submissionIds[0],
+          target,
+          undefined,
+          undefined,
+          closeOpts,
+        );
+      } else {
+        await handleBulkUpdateSubmissionStatus(
+          submissionIds,
+          target,
+          undefined,
+          closeOpts,
+        );
+      }
+    } finally {
+      if (closeCreatorModalOnSuccess) {
+        setCreatorModalParentBulkLoading(false);
+      }
+    }
   };
 
   const handleUpdateContestStatus = async () => {
@@ -5985,7 +6195,13 @@ export default function ContestDetailClient({
       const cpmConfig = (currentContest?.contest_based_details as any)
         ?.cpm_contest;
       if (cpmConfig?.cpm_rate_usd) {
-        let effectiveViews = submission.views || 0;
+        const platform = String(submission.platform || "").toLowerCase();
+        const tiktokViews =
+          Number((submission as any)?.other_stats?.tiktok?.view_count) || 0;
+        let effectiveViews =
+          platform.includes("tiktok") && tiktokViews > 0
+            ? tiktokViews
+            : (submission.views ?? 0);
         if (
           cpmConfig.min_views != null &&
           effectiveViews < cpmConfig.min_views
@@ -6007,6 +6223,64 @@ export default function ContestDetailClient({
 
     return expectedEarnings;
   }
+
+  // Pre-adjustment CPM expectations with creator cap applied in submission order — matches
+  // CreatorSubmissionsModal / payout display (cap raw formula earnings, then apply % for UI).
+  const cappedExpectedRewardBySubmissionId = useMemo(() => {
+    const preAdjustmentCappedMap = new Map<string, number>();
+    const preAdjustmentUncappedMap = new Map<string, number>();
+    if (currentContest?.contest_type !== "cpm") {
+      return { preAdjustmentCappedMap, preAdjustmentUncappedMap };
+    }
+
+    const maxEarningsPerCreator = Number(
+      (currentContest as any)?.max_earnings_per_creator ?? 0,
+    );
+
+    const grouped = new Map<string, Submission[]>();
+    for (const sub of currentSubmissions || []) {
+      const creatorId = String(sub.creator_id || "");
+      if (!creatorId) continue;
+      const list = grouped.get(creatorId) || [];
+      list.push(sub);
+      grouped.set(creatorId, list);
+    }
+
+    for (const list of grouped.values()) {
+      list.sort(
+        (a, b) =>
+          new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
+      );
+      let runningTotal = 0;
+      for (const sub of list) {
+        const baseExpectedReward = Math.max(
+          0,
+          calculateSubmissionExpectedEarnings(sub, false),
+        );
+        preAdjustmentUncappedMap.set(sub.id, baseExpectedReward);
+
+        if (!maxEarningsPerCreator || maxEarningsPerCreator <= 0) {
+          preAdjustmentCappedMap.set(sub.id, baseExpectedReward);
+          continue;
+        }
+
+        const remainingCap = maxEarningsPerCreator - runningTotal;
+        let cappedExpectedReward = baseExpectedReward;
+        if (remainingCap <= 0) {
+          cappedExpectedReward = 0;
+        } else if (baseExpectedReward > remainingCap) {
+          cappedExpectedReward = remainingCap;
+        }
+        preAdjustmentCappedMap.set(sub.id, cappedExpectedReward);
+        const amountApplied = Math.min(
+          baseExpectedReward,
+          Math.max(0, remainingCap),
+        );
+        runningTotal += amountApplied;
+      }
+    }
+    return { preAdjustmentCappedMap, preAdjustmentUncappedMap };
+  }, [currentContest, currentSubmissions]);
 
   const formatMetricValue = (value: any, isRate = false) => {
     if (value === null || value === undefined || value === "") return "-";
@@ -11933,43 +12207,48 @@ export default function ContestDetailClient({
                             <span className="font-semibold">
                               Payout Adjustment
                             </span>
+                            <span
+                              className={cn(
+                                "px-2 py-0.5 rounded-md text-[11px] font-medium",
+                                isDark
+                                  ? "bg-purple-800/60 text-purple-100"
+                                  : "bg-purple-100 text-purple-900",
+                              )}
+                            >
+                              Current:{" "}
+                              {Number(
+                                persistedPayoutAdjustment.percentage ?? 0,
+                              ).toFixed(2)}
+                              %
+                            </span>
                             <input
                               type="number"
                               min={0}
                               max={100}
                               step={0.01}
                               value={
-                                (currentContest as any)
-                                  ?.payout_adjustment_percentage != null
+                                draftPayoutAdjustment.percentage != null
                                   ? String(
-                                    (currentContest as any)
-                                      .payout_adjustment_percentage,
+                                    draftPayoutAdjustment.percentage,
                                   )
                                   : ""
                               }
                               onChange={(e) => {
                                 const raw = e.target.value;
                                 if (raw === "") {
-                                  setCurrentContest(
-                                    (prev) =>
-                                      ({
-                                        ...prev,
-                                        payout_adjustment_percentage: null,
-                                      }) as any,
-                                  );
+                                  setDraftPayoutAdjustment((prev) => ({
+                                    ...prev,
+                                    percentage: null,
+                                  }));
                                   return;
                                 }
                                 const pct = Number.parseFloat(raw);
                                 if (Number.isNaN(pct) || pct < 0 || pct > 100)
                                   return;
-                                setCurrentContest(
-                                  (prev) =>
-                                    ({
-                                      ...prev,
-                                      payout_adjustment_percentage:
-                                        Math.round(pct * 100) / 100,
-                                    }) as any,
-                                );
+                                setDraftPayoutAdjustment((prev) => ({
+                                  ...prev,
+                                  percentage: Math.round(pct * 100) / 100,
+                                }));
                               }}
                               className={cn(
                                 "w-16 px-2 py-1 rounded-md border text-xs bg-transparent",
@@ -11981,25 +12260,17 @@ export default function ContestDetailClient({
                             />
                             <select
                               value={
-                                ((currentContest as any)
-                                  ?.payout_adjustment_mode as
-                                  | "cpm_only"
-                                  | "bonus_only"
-                                  | "combined"
-                                  | null) ?? "combined"
+                                (draftPayoutAdjustment.mode ?? "combined")
                               }
                               onChange={(e) => {
                                 const value = e.target.value as
                                   | "cpm_only"
                                   | "bonus_only"
                                   | "combined";
-                                setCurrentContest(
-                                  (prev) =>
-                                    ({
-                                      ...prev,
-                                      payout_adjustment_mode: value,
-                                    }) as any,
-                                );
+                                setDraftPayoutAdjustment((prev) => ({
+                                  ...prev,
+                                  mode: value,
+                                }));
                               }}
                               className={cn(
                                 "px-2 py-1 rounded-md border text-xs bg-transparent",
@@ -12025,15 +12296,9 @@ export default function ContestDetailClient({
                                   : "bg-purple-600 hover:bg-purple-700 text-white",
                               )}
                               onClick={async () => {
-                                const pct = (currentContest as any)
-                                  ?.payout_adjustment_percentage;
+                                const pct = draftPayoutAdjustment.percentage;
                                 const mode =
-                                  ((currentContest as any)
-                                    ?.payout_adjustment_mode as
-                                    | "cpm_only"
-                                    | "bonus_only"
-                                    | "combined"
-                                    | null) ?? "combined";
+                                  (draftPayoutAdjustment.mode ?? "combined");
                                 try {
                                   const resp = await fetch(
                                     `/api/admin/contests/${contestId}/update`,
@@ -12065,6 +12330,21 @@ export default function ContestDetailClient({
                                       "Payout adjustment saved. It will apply to payouts and persist after refresh.",
                                     variant: "success",
                                   });
+                                  setPersistedPayoutAdjustment({
+                                    percentage:
+                                      pct != null
+                                        ? Math.round(pct * 100) / 100
+                                        : null,
+                                    mode,
+                                  });
+                                  setCurrentContest((prev) => ({
+                                    ...prev,
+                                    payout_adjustment_percentage:
+                                      pct != null
+                                        ? Math.round(pct * 100) / 100
+                                        : null,
+                                    payout_adjustment_mode: mode,
+                                  }));
                                 } catch (err: any) {
                                   console.error(
                                     "Failed to save payout adjustment:",
@@ -14167,6 +14447,18 @@ export default function ContestDetailClient({
                                         Expected Reward
                                       </TableHead>
                                     )}
+                                  {showAdjustedRewardColumn &&
+                                    (currentContest.platform
+                                      ?.toLowerCase()
+                                      .includes("youtube")
+                                      ? ytVisibleColumns.includes(
+                                        "adjusted_reward",
+                                      )
+                                      : true) && (
+                                      <TableHead className="text-center">
+                                        Adjusted Reward
+                                      </TableHead>
+                                    )}
                                   {currentContest.contest_type ===
                                     "milestone" && (
                                       <TableHead className="text-center min-w-[170px]">
@@ -14184,16 +14476,24 @@ export default function ContestDetailClient({
                                         Reward Granted
                                       </TableHead>
                                     )}
-                                  {showTwitterCpmNormalViewBonusColumns && (
-                                    <>
-                                      <TableHead className="text-center">
-                                        Bonus Expected
-                                      </TableHead>
-                                      <TableHead className="text-center">
-                                        Bonus Granted
-                                      </TableHead>
-                                    </>
-                                  )}
+                                  {showNormalViewFlatFeeBonusColumns &&
+                                    (currentContest.platform
+                                      ?.toLowerCase()
+                                      .includes("youtube")
+                                      ? ytVisibleColumns.includes(
+                                        "bonus_expected",
+                                      ) &&
+                                      ytVisibleColumns.includes("bonus_granted")
+                                      : true) && (
+                                      <>
+                                        <TableHead className="text-center">
+                                          Bonus Expected
+                                        </TableHead>
+                                        <TableHead className="text-center">
+                                          Bonus Granted
+                                        </TableHead>
+                                      </>
+                                    )}
                                 </>
                               ) : null}
                               {(currentContest.platform
@@ -14256,6 +14556,24 @@ export default function ContestDetailClient({
 
                               // Compute expected and granted rewards separately
                               const getExpectedReward = () => {
+                                const payoutAdjustmentPercentage = Number(
+                                  (currentContest as any)
+                                    ?.payout_adjustment_percentage ?? 0,
+                                );
+                                const payoutAdjustmentMode = (currentContest as any)
+                                  ?.payout_adjustment_mode as
+                                  | "cpm_only"
+                                  | "bonus_only"
+                                  | "combined"
+                                  | null;
+                                const hasPayoutAdjustment =
+                                  payoutAdjustmentPercentage > 0 &&
+                                  !!payoutAdjustmentMode;
+                                const shouldAdjustReward =
+                                  hasPayoutAdjustment &&
+                                  (payoutAdjustmentMode === "combined" ||
+                                    payoutAdjustmentMode === "cpm_only");
+
                                 if (
                                   currentContest.contest_type === "leaderboard"
                                 ) {
@@ -14295,14 +14613,25 @@ export default function ContestDetailClient({
                                             prize.position === currentRank,
                                         );
                                       if (prizeForRank) {
-                                        const prizeAmount = centsToDollars(
-                                          prizeForRank.amount,
+                                        const preCents = Number(
+                                          prizeForRank.amount || 0,
                                         );
+                                        const postCents = shouldAdjustReward
+                                          ? applyPayoutAdjustment(
+                                              preCents,
+                                              payoutAdjustmentPercentage,
+                                            )
+                                          : preCents;
+                                        const preDollars = centsToDollars(preCents);
+                                        const postDollars =
+                                          centsToDollars(postCents);
                                         return {
-                                          amount: prizeAmount,
+                                          amount: preDollars,
                                           label: "Expected",
                                           className:
                                             "text-slate-700 font-semibold",
+                                          preAdjustmentAmountDollars: preDollars,
+                                          postAdjustmentAmountDollars: postDollars,
                                         };
                                       }
                                     }
@@ -14345,36 +14674,63 @@ export default function ContestDetailClient({
                                       const calculatedEarnings =
                                         (totalPoints * cpmConfig.cpm_rate_usd) /
                                         1000;
+                                      const preCents = Math.round(
+                                        calculatedEarnings * 100,
+                                      );
+                                      const postCents = shouldAdjustReward
+                                        ? applyPayoutAdjustment(
+                                            preCents,
+                                            payoutAdjustmentPercentage,
+                                          )
+                                        : preCents;
                                       return {
                                         amount: calculatedEarnings,
                                         label: "Expected",
                                         className:
                                           "text-slate-700 font-semibold",
+                                        preAdjustmentAmountDollars:
+                                          calculatedEarnings,
+                                        postAdjustmentAmountDollars:
+                                          centsToDollars(postCents),
                                       };
                                     } else {
-                                      // For non-Twitter CPM contests, use views
-                                      const views = submission.views || 0;
-                                      let effectiveViews = views;
-                                      if (
-                                        cpmConfig.min_views != null &&
-                                        views < cpmConfig.min_views
-                                      ) {
-                                        effectiveViews = 0;
-                                      } else if (
-                                        cpmConfig.max_views != null &&
-                                        views > cpmConfig.max_views
-                                      ) {
-                                        effectiveViews = cpmConfig.max_views;
-                                      }
-                                      const calculatedEarnings =
-                                        (effectiveViews *
-                                          cpmConfig.cpm_rate_usd) /
-                                        1000;
+                                      const preCents =
+                                        cappedExpectedRewardBySubmissionId.preAdjustmentCappedMap.get(
+                                          submission.id,
+                                        ) ?? 0;
+                                      const preUncappedCents =
+                                        cappedExpectedRewardBySubmissionId.preAdjustmentUncappedMap.get(
+                                          submission.id,
+                                        ) ?? 0;
+                                      const uncappedAdjusted = shouldAdjustReward
+                                        ? applyPayoutAdjustment(
+                                            preUncappedCents,
+                                            payoutAdjustmentPercentage,
+                                          )
+                                        : preUncappedCents;
+                                      const postCents = shouldAdjustReward
+                                        ? applyPayoutAdjustment(
+                                            preCents,
+                                            payoutAdjustmentPercentage,
+                                          )
+                                        : preCents;
+                                      const isCappedToZeroWithPotential =
+                                        preCents === 0 && uncappedAdjusted > 0;
                                       return {
-                                        amount: calculatedEarnings,
-                                        label: "Expected",
+                                        amount: centsToDollars(preCents),
+                                        label: isCappedToZeroWithPotential
+                                          ? "Capped"
+                                          : "Expected",
                                         className:
                                           "text-slate-700 font-semibold",
+                                        cappedFromCreatorLimit:
+                                          isCappedToZeroWithPotential,
+                                        uncappedAmount:
+                                          centsToDollars(uncappedAdjusted),
+                                        preAdjustmentAmountDollars:
+                                          centsToDollars(preCents),
+                                        postAdjustmentAmountDollars:
+                                          centsToDollars(postCents),
                                       };
                                     }
                                   }
@@ -14399,11 +14755,22 @@ export default function ContestDetailClient({
                                         submission.id,
                                       ) ?? 0;
                                     if (cents > 0) {
+                                      const postCents = shouldAdjustReward
+                                        ? applyPayoutAdjustment(
+                                            cents,
+                                            payoutAdjustmentPercentage,
+                                          )
+                                        : cents;
+                                      const preDollars = centsToDollars(cents);
+                                      const postDollars =
+                                        centsToDollars(postCents);
                                       return {
-                                        amount: centsToDollars(cents),
+                                        amount: preDollars,
                                         label: "Expected",
                                         className:
                                           "text-slate-700 font-semibold",
+                                        preAdjustmentAmountDollars: preDollars,
+                                        postAdjustmentAmountDollars: postDollars,
                                       };
                                     }
                                   }
@@ -15924,29 +16291,62 @@ export default function ContestDetailClient({
                                           <TableCell className="text-center">
                                             <div className="flex flex-col items-center">
                                               <div className="flex flex-col items-center">
-                                                <span
-                                                  className={cn(
-                                                    "text-lg font-bold tracking-wide",
-                                                    expectedInfo.className.includes(
-                                                      "text-slate-500",
-                                                    )
-                                                      ? isDark
-                                                        ? "text-slate-400"
-                                                        : "text-slate-500"
-                                                      : expectedInfo.className.includes(
-                                                        "text-slate-700",
+                                                <div className="inline-flex items-center gap-1">
+                                                  <span
+                                                    className={cn(
+                                                      "text-lg font-bold tracking-wide",
+                                                      expectedInfo.className.includes(
+                                                        "text-slate-500",
                                                       )
                                                         ? isDark
-                                                          ? "text-slate-200"
-                                                          : "text-slate-700"
-                                                        : isDark
-                                                          ? "text-white"
-                                                          : "text-slate-900",
+                                                          ? "text-slate-400"
+                                                          : "text-slate-500"
+                                                        : expectedInfo.className.includes(
+                                                          "text-slate-700",
+                                                        )
+                                                          ? isDark
+                                                            ? "text-slate-200"
+                                                            : "text-slate-700"
+                                                          : isDark
+                                                            ? "text-white"
+                                                            : "text-slate-900",
+                                                    )}
+                                                  >
+                                                    $
+                                                    {expectedInfo.amount.toFixed(
+                                                      2,
+                                                    )}
+                                                  </span>
+                                                  {(expectedInfo as any)
+                                                    ?.cappedFromCreatorLimit && (
+                                                    <Tooltip>
+                                                      <TooltipTrigger asChild>
+                                                        <AlertTriangle className="h-3.5 w-3.5 text-amber-500 cursor-help" />
+                                                      </TooltipTrigger>
+                                                      <TooltipContent className="max-w-[260px] text-left whitespace-pre-line">
+                                                        Creator cap exhausted for expected payout order.
+                                                        {"\n"}
+                                                        {grantedInfo.amount > 0 ? (
+                                                          <>
+                                                            Actual granted amount: $
+                                                            {grantedInfo.amount.toFixed(
+                                                              2,
+                                                            )}
+                                                          </>
+                                                        ) : (
+                                                          <>
+                                                            Else expected reward would be: $
+                                                            {Number(
+                                                              (expectedInfo as any)
+                                                                ?.uncappedAmount ||
+                                                                0,
+                                                            ).toFixed(2)}
+                                                          </>
+                                                        )}
+                                                      </TooltipContent>
+                                                    </Tooltip>
                                                   )}
-                                                >
-                                                  $
-                                                  {expectedInfo.amount.toFixed(2)}
-                                                </span>
+                                                </div>
                                                 <span
                                                   className={cn(
                                                     "text-xs uppercase tracking-wide",
@@ -15958,6 +16358,76 @@ export default function ContestDetailClient({
                                                   {expectedInfo.label}
                                                 </span>
                                               </div>
+                                            </div>
+                                          </TableCell>
+                                        )}
+                                      {showAdjustedRewardColumn &&
+                                        (currentContest.platform
+                                          ?.toLowerCase()
+                                          .includes("youtube")
+                                          ? ytVisibleColumns.includes(
+                                            "adjusted_reward",
+                                          )
+                                          : true) && (
+                                          <TableCell className="text-center">
+                                            <div className="flex flex-col items-center">
+                                              <span
+                                                className={cn(
+                                                  "text-lg font-bold tracking-wide",
+                                                  expectedInfo.className.includes(
+                                                    "text-slate-500",
+                                                  )
+                                                    ? isDark
+                                                      ? "text-slate-400"
+                                                      : "text-slate-500"
+                                                    : expectedInfo.className.includes(
+                                                      "text-slate-700",
+                                                    )
+                                                      ? isDark
+                                                        ? "text-slate-200"
+                                                        : "text-slate-700"
+                                                      : isDark
+                                                        ? "text-white"
+                                                        : "text-slate-900",
+                                                )}
+                                              >
+                                                {(expectedInfo as any)
+                                                  .postAdjustmentAmountDollars !=
+                                                  null &&
+                                                Number.isFinite(
+                                                  (expectedInfo as any)
+                                                    .postAdjustmentAmountDollars,
+                                                ) ? (
+                                                  <>
+                                                    $
+                                                    {Number(
+                                                      (expectedInfo as any)
+                                                        .postAdjustmentAmountDollars,
+                                                    ).toFixed(2)}
+                                                  </>
+                                                ) : (
+                                                  <span
+                                                    className={cn(
+                                                      "text-base font-medium",
+                                                      isDark
+                                                        ? "text-slate-500"
+                                                        : "text-slate-400",
+                                                    )}
+                                                  >
+                                                    —
+                                                  </span>
+                                                )}
+                                              </span>
+                                              <span
+                                                className={cn(
+                                                  "text-xs uppercase tracking-wide",
+                                                  isDark
+                                                    ? "text-white"
+                                                    : "text-slate-800",
+                                                )}
+                                              >
+                                                Adjusted
+                                              </span>
                                             </div>
                                           </TableCell>
                                         )}
@@ -16094,47 +16564,54 @@ export default function ContestDetailClient({
                                             </div>
                                           </TableCell>
                                         )}
-                                      {showTwitterCpmNormalViewBonusColumns && (
-                                        <>
-                                          <TableCell className="text-center font-medium">
-                                            {(() => {
-                                              const cents =
-                                                twitterCpmFlatFeeBonusExpectedCentsBySubmissionId.get(
-                                                  submission.id,
-                                                ) || 0;
-                                              return cents > 0
-                                                ? formatMoney(cents)
-                                                : "—";
-                                            })()}
-                                          </TableCell>
-                                          <TableCell
-                                            className={cn(
-                                              "text-center font-medium",
-                                              isDark
-                                                ? "text-green-400"
-                                                : "text-green-600",
-                                            )}
-                                          >
-                                            {twitterCpmBonusGrantedDisplay(
-                                              submission as any,
-                                              currentContest?.contest_type,
-                                            )
-                                              ? formatMoney(
-                                                  Number(
-                                                    (submission as any)
-                                                      .bonus_amount,
-                                                  ) ||
-                                                    (Number(
-                                                      (
-                                                        currentContest.contest_based_details as any
-                                                      )?.cpm_contest
-                                                        ?.flat_fee_bonus,
-                                                    ) || 0),
-                                                )
-                                              : "—"}
-                                          </TableCell>
-                                        </>
-                                      )}
+                                      {showNormalViewFlatFeeBonusColumns &&
+                                        (currentContest.platform
+                                          ?.toLowerCase()
+                                          .includes("youtube")
+                                          ? ytVisibleColumns.includes(
+                                            "bonus_expected",
+                                          ) &&
+                                          ytVisibleColumns.includes(
+                                            "bonus_granted",
+                                          )
+                                          : true) && (
+                                          <>
+                                            <TableCell className="text-center font-medium">
+                                              {(() => {
+                                                const cents =
+                                                  normalViewFlatFeeBonusExpectedCentsBySubmissionId.get(
+                                                    submission.id,
+                                                  ) || 0;
+                                                return cents > 0
+                                                  ? formatMoney(cents)
+                                                  : "—";
+                                              })()}
+                                            </TableCell>
+                                            <TableCell
+                                              className={cn(
+                                                "text-center font-medium",
+                                                isDark
+                                                  ? "text-green-400"
+                                                  : "text-green-600",
+                                              )}
+                                            >
+                                              {twitterCpmBonusGrantedDisplay(
+                                                submission as any,
+                                                currentContest?.contest_type,
+                                              )
+                                                ? formatMoney(
+                                                    Number(
+                                                      (submission as any)
+                                                        .bonus_amount,
+                                                    ) ||
+                                                      getFlatFeeBonusCentsFromContest(
+                                                        currentContest,
+                                                      ),
+                                                  )
+                                                : "—"}
+                                            </TableCell>
+                                          </>
+                                        )}
                                     </>
                                   ) : null}
                                   {(currentContest.platform
@@ -16348,7 +16825,9 @@ export default function ContestDetailClient({
                                                   disabled={isLoading}
                                                   onClick={() =>
                                                     setConfirmReversal({
-                                                      id: submission.id,
+                                                      submissionIds: [
+                                                        submission.id,
+                                                      ],
                                                       target: "verified",
                                                     })
                                                   }
@@ -16376,7 +16855,9 @@ export default function ContestDetailClient({
                                                   disabled={isLoading}
                                                   onClick={() =>
                                                     setConfirmReversal({
-                                                      id: submission.id,
+                                                      submissionIds: [
+                                                        submission.id,
+                                                      ],
                                                       target: "rejected",
                                                       needRejectionReason: true,
                                                     })
@@ -16408,7 +16889,9 @@ export default function ContestDetailClient({
                                               disabled={isLoading}
                                               onClick={() =>
                                                 setConfirmReversal({
-                                                  id: submission.id,
+                                                  submissionIds: [
+                                                    submission.id,
+                                                  ],
                                                   target: "pending",
                                                 })
                                               }
@@ -16864,6 +17347,18 @@ export default function ContestDetailClient({
                                             <TableHead className="text-center">
                                               Expected Reward
                                             </TableHead>
+                                            {showAdjustedRewardColumn &&
+                                              (currentContest.platform
+                                                ?.toLowerCase()
+                                                .includes("youtube")
+                                                ? ytVisibleColumns.includes(
+                                                  "adjusted_reward",
+                                                )
+                                                : true) && (
+                                                <TableHead className="text-center">
+                                                  Adjusted Reward
+                                                </TableHead>
+                                              )}
                                             {currentContest.contest_type ===
                                               "milestone" && (
                                                 <TableHead className="text-center min-w-[170px]">
@@ -17713,6 +18208,29 @@ export default function ContestDetailClient({
                                                           )}
                                                         </div>
                                                       </TableCell>
+                                                      {showAdjustedRewardColumn &&
+                                                        (currentContest.platform
+                                                          ?.toLowerCase()
+                                                          .includes("youtube")
+                                                          ? ytVisibleColumns.includes(
+                                                            "adjusted_reward",
+                                                          )
+                                                          : true) && (
+                                                          <TableCell className="text-center font-medium">
+                                                            {/*
+                                                              Creator-wise expected is aggregated then creator-capped; per-submission ordering caps in normal view may differ.
+                                                            */}
+                                                            {formatMoney(
+                                                              applyPayoutAdjustment(
+                                                                Number(
+                                                                  group.earnings
+                                                                    .expected || 0,
+                                                                ),
+                                                                payoutAdjustmentPercentageForUi,
+                                                              ),
+                                                            )}
+                                                          </TableCell>
+                                                        )}
                                                       {currentContest.contest_type ===
                                                         "milestone" && (
                                                           <TableCell className="text-center font-medium min-w-[170px]">
@@ -21899,13 +22417,98 @@ export default function ContestDetailClient({
           className={cn("sm:max-w-lg", isDark ? "text-white" : "text-gray-800")}
         >
           <DialogHeader>
-            <DialogTitle>Revert payment and update status?</DialogTitle>
+            <DialogTitle>
+              {confirmReversal
+                ? `Revert payment and move to ${
+                    confirmReversal.target === "verified"
+                      ? "Verified"
+                      : confirmReversal.target === "pending"
+                        ? "Pending"
+                        : "Rejected"
+                  }?`
+                : "Revert payment and update status?"}
+            </DialogTitle>
           </DialogHeader>
           <div className="space-y-3 text-md ">
-            <p>
-              Changing status from Paid will reverse the credited amount from
-              the creator's wallet and remove related reward transactions.
-            </p>
+            {confirmReversal &&
+              (() => {
+                const preview = summarizePaidReversalPreview(
+                  currentSubmissions,
+                  confirmReversal.submissionIds,
+                );
+                const targetLabel =
+                  confirmReversal.target === "verified"
+                    ? "Verified"
+                    : confirmReversal.target === "pending"
+                      ? "Pending"
+                      : "Rejected";
+                return (
+                  <>
+                    <p>
+                      <span className="font-medium">
+                        {preview.updateCount} submission(s)
+                      </span>{" "}
+                      will be updated to{" "}
+                      <span className="font-medium">{targetLabel}</span>.
+                      Moving from Paid reverses credited amounts from the
+                      creator&apos;s wallet (where applicable).
+                    </p>
+                    {(preview.paidNonTwitterCount > 0 ||
+                      preview.paidTwitterCount > 0) && (
+                      <div
+                        className={cn(
+                          "rounded-lg border p-3 text-sm space-y-1.5",
+                          isDark
+                            ? "border-gray-600 bg-gray-900/40"
+                            : "border-slate-200 bg-slate-50",
+                        )}
+                      >
+                        <p className="font-medium">
+                          Estimated refund (from paid rows)
+                        </p>
+                        {preview.paidNonTwitterCount > 0 ? (
+                          <>
+                            <p>
+                              Paid (standard) submissions:{" "}
+                              <span className="font-medium">
+                                {preview.paidNonTwitterCount}
+                              </span>
+                            </p>
+                            <p>
+                              Main reward (CPM):{" "}
+                              {formatMoney(preview.rewardCents)}
+                            </p>
+                            <p>Bonus: {formatMoney(preview.bonusCents)}</p>
+                            <p className="font-semibold">
+                              Total: {formatMoney(preview.totalCents)}
+                            </p>
+                          </>
+                        ) : null}
+                        {preview.paidTwitterCount > 0 ? (
+                          <p className={isDark ? "text-gray-300" : "text-slate-600"}>
+                            Paid Twitter / X row(s):{" "}
+                            <span className="font-medium">
+                              {preview.paidTwitterCount}
+                            </span>
+                            — refund amount follows ledger; shown in the
+                            success message.
+                          </p>
+                        ) : null}
+                        <p
+                          className={cn(
+                            "text-xs pt-1",
+                            isDark ? "text-gray-400" : "text-slate-500",
+                          )}
+                        >
+                          Amounts above are estimates from current row data;
+                          actual debits may differ slightly from ledger
+                          reconciliation.
+                        </p>
+                      </div>
+                    )}
+                  </>
+                );
+              })()}
             <p className="font-medium">This action cannot be undone.</p>
           </div>
           <div className="flex flex-col gap-3 pt-4">
@@ -22021,20 +22624,53 @@ export default function ContestDetailClient({
               : undefined
           }
           onVerify={async (ids: string[]) => {
-            // Handle bulk verify via new API wrapper
-            await handleBulkUpdateSubmissionStatus(ids, "verified");
-            setSelectedCreatorForModal(null);
+            if (
+              currentContest.post_contest_status !== "payouts_processed" &&
+              selectionIncludesPaidRow(currentSubmissions, ids)
+            ) {
+              setConfirmReversal({
+                submissionIds: ids,
+                target: "verified",
+                closeCreatorModalOnSuccess: true,
+              });
+              return;
+            }
+            await handleBulkUpdateSubmissionStatus(ids, "verified", undefined, {
+              closeCreatorModalOnSuccess: true,
+            });
           }}
           onReject={(ids: string[]) => {
-            if (ids.length > 0) {
-              setPendingRejectionSubmissionIds(ids);
-              setRejectionModalOpen(true);
+            if (ids.length === 0) return;
+            if (
+              currentContest.post_contest_status !== "payouts_processed" &&
+              selectionIncludesPaidRow(currentSubmissions, ids)
+            ) {
+              setConfirmReversal({
+                submissionIds: ids,
+                target: "rejected",
+                needRejectionReason: true,
+                closeCreatorModalOnSuccess: true,
+              });
+              return;
             }
+            setPendingRejectionSubmissionIds(ids);
+            setRejectionModalOpen(true);
           }}
           onSetPending={async (ids: string[]) => {
-            // Handle bulk pending via new API wrapper
-            await handleBulkUpdateSubmissionStatus(ids, "pending");
-            setSelectedCreatorForModal(null);
+            if (
+              currentContest.post_contest_status !== "payouts_processed" &&
+              selectionIncludesPaidRow(currentSubmissions, ids)
+            ) {
+              setConfirmReversal({
+                submissionIds: ids,
+                target: "pending",
+                closeCreatorModalOnSuccess: true,
+              });
+              return;
+            }
+            await handleBulkUpdateSubmissionStatus(ids, "pending", undefined, {
+              closeCreatorModalOnSuccess: true,
+            });
           }}
           onPayment={async (
             submissionId: string,
@@ -22065,6 +22701,12 @@ export default function ContestDetailClient({
           canSeeCore={canSeeCore}
           canSeeTraffic={canSeeTraffic}
           canSeeDemographics={canSeeDemo}
+          bonusCapSubmissions={
+            (currentSubmissions || []) as React.ComponentProps<
+              typeof CreatorSubmissionsModal
+            >["bonusCapSubmissions"]
+          }
+          parentBulkActionLoading={creatorModalParentBulkLoading}
         />
       )}
 

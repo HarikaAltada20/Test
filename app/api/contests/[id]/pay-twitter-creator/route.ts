@@ -8,6 +8,7 @@ import {
   logTransactionAsAdmin,
   REVERSAL_TRANSACTION_REMARK,
 } from "@/lib/payment-utils";
+import { adjustRewardCents, parsePayoutAdjustment } from "@/lib/payout-rules";
 
 /** Split total cents across rows by non-negative weights; remainder by largest fractional parts. Equal split when all weights are 0. */
 function distributeCentsByWeights(
@@ -104,7 +105,7 @@ export async function POST(
     const { data: contest, error: contestError } = await supabase
       .from("contests")
       .select(
-        "id, title, advertiser_id, platform, contest_type, contest_based_details, post_contest_status, max_earnings_per_creator"
+        "id, title, advertiser_id, platform, contest_type, contest_based_details, post_contest_status, max_earnings_per_creator, payout_adjustment_percentage, payout_adjustment_mode"
       )
       .eq("id", contestId)
       .single();
@@ -185,6 +186,10 @@ export async function POST(
 
     // Get prize/CPM amount
     const contestDetails = contest.contest_based_details as any;
+    const payoutAdjustment = parsePayoutAdjustment(
+      (contest as any).payout_adjustment_percentage,
+      (contest as any).payout_adjustment_mode,
+    );
     const leaderboardContest = contestDetails?.leaderboard_contest;
     const cpmContest = contestDetails?.cpm_contest;
     const prizes = leaderboardContest?.prizes || [];
@@ -254,6 +259,19 @@ export async function POST(
       return NextResponse.json(
         { error: "Invalid payment amount" },
         { status: 400 }
+      );
+    }
+    if (!isCustom) {
+      rewardAmount = adjustRewardCents(rewardAmount, {
+        shouldAdjustReward: payoutAdjustment.shouldAdjustReward,
+        percentage: payoutAdjustment.percentage,
+      });
+    }
+
+    if (rewardAmount <= 0) {
+      return NextResponse.json(
+        { error: "Reward became zero after payout adjustment" },
+        { status: 400 },
       );
     }
 

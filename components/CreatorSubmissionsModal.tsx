@@ -18,6 +18,7 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
@@ -39,6 +40,7 @@ import {
   Share2,
   BarChart2,
   CircleHelp,
+  AlertTriangle,
 } from "lucide-react";
 import {
   Select,
@@ -143,6 +145,13 @@ interface CreatorSubmissionsModalProps {
   canSeeTraffic?: boolean;
   /** Match submission-wise YouTube analytics: demographics when admin or brand allowed */
   canSeeDemographics?: boolean;
+  /**
+   * Full contest submission list for flat-fee bonus cap (FCFS by created_at).
+   * When omitted, falls back to `submissions` (per-creator only — wrong cap scope).
+   */
+  bonusCapSubmissions?: Submission[];
+  /** True while parent runs bulk/single verify API after paid-reversal confirm (Creator modal stays open). */
+  parentBulkActionLoading?: boolean;
 }
 
 export function CreatorSubmissionsModal({
@@ -164,6 +173,8 @@ export function CreatorSubmissionsModal({
   canSeeCore = true,
   canSeeTraffic = true,
   canSeeDemographics = false,
+  bonusCapSubmissions,
+  parentBulkActionLoading = false,
 }: CreatorSubmissionsModalProps) {
   const [selectedSubmissions, setSelectedSubmissions] = useState<Set<string>>(
     new Set(),
@@ -176,7 +187,28 @@ export function CreatorSubmissionsModal({
   >("date-desc");
   const [mode, setMode] = useState<"light" | "dark">("light");
   const [bulkVerifyLoading, setBulkVerifyLoading] = useState(false);
-  const [bulkPaymentLoading, setBulkPaymentLoading] = useState(false);
+  const bulkStatusActionsBusy =
+    bulkVerifyLoading || parentBulkActionLoading;
+  type BulkPaymentActiveKey =
+    | "standard:0"
+    | "standard:1"
+    | "bonus:0"
+    | "bonus:1"
+    | "both:0"
+    | "both:1";
+  const [bulkPaymentActiveKey, setBulkPaymentActiveKey] = useState<
+    BulkPaymentActiveKey | null
+  >(null);
+  const bulkPayKey = (
+    payType: "standard" | "bonus" | "both",
+    isBulk: boolean,
+  ): BulkPaymentActiveKey =>
+    `${payType}:${isBulk ? "1" : "0"}` as BulkPaymentActiveKey;
+  const isBulkPayBtnLoading = (
+    payType: "standard" | "bonus" | "both",
+    isBulk: boolean,
+  ) => bulkPaymentActiveKey === bulkPayKey(payType, isBulk);
+  const isAnyBulkPaymentBusy = bulkPaymentActiveKey !== null;
   const [downloadingSubmissionId, setDownloadingSubmissionId] = useState<
     string | null
   >(null);
@@ -373,17 +405,20 @@ export function CreatorSubmissionsModal({
     }
 
     if (paySubs.length === 0) {
-      alert(
-        type === "bonus" &&
+      toast({
+        title: "Cannot pay",
+        description:
+          type === "bonus" &&
           hasTwitterTweetsSelected &&
           isTwitterCpmContestFlag
-          ? "No selected paid tweets with unpaid bonus found."
-          : "No verified submissions selected. Only verified submissions can be paid.",
-      );
+            ? "No selected paid tweets with unpaid bonus found."
+            : "No verified submissions selected. Only verified submissions can be paid.",
+        variant: "destructive",
+      });
       return;
     }
 
-    setBulkPaymentLoading(true);
+    setBulkPaymentActiveKey(bulkPayKey(type, isBulkTransaction));
     try {
       // Sort by submission time (earliest first)
       const sortedSubs = [...paySubs].sort(
@@ -428,7 +463,11 @@ export function CreatorSubmissionsModal({
           const result = await response.json();
 
           if (!response.ok) {
-            alert(`Bulk payment failed:\n${result.error || "Unknown error"}`);
+            toast({
+              title: "Bulk payment failed",
+              description: result.error || "Unknown error",
+              variant: "destructive",
+            });
             return;
           }
 
@@ -436,44 +475,44 @@ export function CreatorSubmissionsModal({
 
           const { data } = result;
           const isMilestoneContest = contest.contest_type === "milestone";
-          const message = isMilestoneContest
+          const lines = isMilestoneContest
             ? [
-                `✓ Bulk Payment Successful!`,
-                ``,
                 `Paid items: ${data.paid_count}`,
                 `Skipped: ${data.skipped_count}`,
                 ``,
-
-                `Total Paid: $${(data.total_amount / 100).toFixed(2)}`,
+                `Total paid: $${(data.total_amount / 100).toFixed(2)}`,
               ]
             : [
-                `✓ Bulk Payment Successful!`,
-                ``,
                 `Paid items: ${data.paid_count}`,
                 `Skipped: ${data.skipped_count}`,
                 ``,
-                `CPM Earnings: $${(data.total_cpm / 100).toFixed(2)}`,
-                `Flat Fee Bonus: $${(data.total_bonus / 100).toFixed(2)}`,
-                `Total Paid: $${(data.total_amount / 100).toFixed(2)}`,
+                `CPM earnings: $${(data.total_cpm / 100).toFixed(2)}`,
+                `Flat fee bonus: $${(data.total_bonus / 100).toFixed(2)}`,
+                `Total paid: $${(data.total_amount / 100).toFixed(2)}`,
               ];
 
           if (data.cap_reached) {
-            message.push(``, `⚠️ Earnings cap reached!`);
-            message.push(
-              `Remaining cap: $${(data.remaining_cap / 100).toFixed(2)}`,
+            lines.push(
+              ``,
+              `Earnings cap reached. Remaining cap: $${(data.remaining_cap / 100).toFixed(2)}`,
             );
           }
 
-          alert(message.join("\n"));
+          toast({
+            title: "Bulk payment successful",
+            description: lines.join("\n"),
+            variant: "payment",
+          });
 
-          window.location.reload();
+          setTimeout(() => window.location.reload(), 700);
         } catch (error) {
           console.error("Bulk payment error:", error);
-          alert(
-            `Bulk payment failed:\n${
-              error instanceof Error ? error.message : "Unknown error"
-            }`,
-          );
+          toast({
+            title: "Bulk payment failed",
+            description:
+              error instanceof Error ? error.message : "Unknown error",
+            variant: "destructive",
+          });
         }
       } else {
         // OPTION 1: Individual Transactions (Multiple API calls)
@@ -503,14 +542,14 @@ export function CreatorSubmissionsModal({
           toast({
             title: "Success",
             description: `Successfully paid ${successCount} submission(s).`,
-            variant: "default",
+            variant: "payment",
           });
           setSelectedSubmissions(new Set());
         }
-        window.location.reload();
+        setTimeout(() => window.location.reload(), 700);
       }
     } finally {
-      setBulkPaymentLoading(false);
+      setBulkPaymentActiveKey(null);
     }
   };
 
@@ -606,7 +645,10 @@ export function CreatorSubmissionsModal({
           const calculatedEarnings = (totalPoints * cpmRateUsd * 100) / 1000;
           baseExpectedReward = Math.round(calculatedEarnings);
         } else {
-          let effectiveViews = submission.views || 0;
+          let effectiveViews =
+            isTikTokContest && !isTwitterSubmission
+              ? effectiveTikTokSubmissionViews(submission)
+              : (submission.views ?? 0);
           if (
             cpmConfig?.min_views != null &&
             effectiveViews < cpmConfig.min_views
@@ -712,6 +754,7 @@ export function CreatorSubmissionsModal({
           "top_traffic_source",
           "insights_status",
           "expected_reward",
+          "adjusted_reward",
           "reward_granted",
           "status",
           "submitted",
@@ -888,18 +931,19 @@ export function CreatorSubmissionsModal({
     (contest as any)?.max_earnings_per_creator || null;
 
   const expectedBonusMap = useMemo(
-    () => buildFlatFeeBonusExpectedCentsBySubmissionId(contest, submissions),
-    [contest, submissions],
+    () =>
+      buildFlatFeeBonusExpectedCentsBySubmissionId(
+        contest,
+        bonusCapSubmissions ?? submissions,
+      ),
+    [contest, bonusCapSubmissions, submissions],
   );
-
-  let creatorCapApplied = false;
-  let cappedTwitterSubmissionId: string | null = null;
 
   // For leaderboard, expected reward per tweet = prize for creator's rank (no cap); match normal view
   const isLeaderboard = contest?.contest_type === "leaderboard";
   if (maxEarningsPerCreator && maxEarningsPerCreator > 0 && !isLeaderboard) {
     // Sort by created_at to apply creator cap in submission order
-    const submissionsByTime = [...sortedSubmissions].sort((a, b) => {
+    const submissionsByTime = [...submissions].sort((a, b) => {
       return (
         new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
       );
@@ -928,19 +972,10 @@ export function CreatorSubmissionsModal({
         Math.max(0, remainingCap),
       );
       runningTotal += amountApplied;
-
-      if (
-        !creatorCapApplied &&
-        cappedExpectedReward < baseExpectedReward &&
-        sub.is_twitter_tweet === true
-      ) {
-        creatorCapApplied = true;
-        cappedTwitterSubmissionId = sub.id;
-      }
     });
   } else {
     // No cap (or leaderboard): use formula-only expected per submission
-    sortedSubmissions.forEach((sub) => {
+    submissions.forEach((sub) => {
       const baseExpectedReward = calculateSubmissionBaseExpectedReward(
         sub,
         false,
@@ -990,7 +1025,19 @@ export function CreatorSubmissionsModal({
           <DialogTitle className="sr-only">
             {creator.username}'s Submissions
           </DialogTitle>
-          <div className="flex flex-col h-[98vh] min-h-0 overflow-hidden">
+          <div className="flex flex-col h-[98vh] min-h-0 overflow-hidden relative">
+            {parentBulkActionLoading && (
+              <div
+                className="absolute inset-0 z-50 flex flex-col items-center justify-center gap-3 rounded-lg bg-black/45 px-4"
+                aria-live="polite"
+                aria-busy="true"
+              >
+                <Loader2 className="h-10 w-10 animate-spin text-purple-300" />
+                <p className="text-center text-sm font-medium text-white">
+                  Processing submission updates…
+                </p>
+              </div>
+            )}
             {/* Header */}
             <div
               className={cn(
@@ -1031,6 +1078,7 @@ export function CreatorSubmissionsModal({
                 variant="ghost"
                 size="icon"
                 onClick={onClose}
+                disabled={parentBulkActionLoading}
                 className={cn(
                   isDark ? "text-white" : "text-gray-600 hover:bg-white/50",
                 )}
@@ -1233,6 +1281,7 @@ export function CreatorSubmissionsModal({
                       size="sm"
                       variant="ghost"
                       onClick={() => setSelectedSubmissions(new Set())}
+                      disabled={bulkStatusActionsBusy}
                       className={cn(
                         "h-8 text-sm",
                         isDark ? "text-white" : "text-gray-600",
@@ -1248,8 +1297,12 @@ export function CreatorSubmissionsModal({
                         <Button
                           size="sm"
                           onClick={() => handleBulkAction("verify")}
-                          loading={bulkVerifyLoading}
-                          loadingText="Verifying submissions..."
+                          loading={bulkStatusActionsBusy}
+                          loadingText={
+                            parentBulkActionLoading
+                              ? "Processing updates..."
+                              : "Verifying submissions..."
+                          }
                           className={cn(
                             "h-8 shrink-0 whitespace-nowrap rounded-md",
                             isDark
@@ -1263,7 +1316,7 @@ export function CreatorSubmissionsModal({
                         <Button
                           size="sm"
                           onClick={() => handleBulkAction("reject")}
-                          disabled={bulkVerifyLoading}
+                          disabled={bulkStatusActionsBusy}
                           className={cn(
                             "h-8 shrink-0 whitespace-nowrap rounded-md",
                             isDark
@@ -1277,7 +1330,7 @@ export function CreatorSubmissionsModal({
                         <Button
                           size="sm"
                           onClick={() => handleBulkAction("pending")}
-                          disabled={bulkVerifyLoading}
+                          disabled={bulkStatusActionsBusy}
                           className={cn(
                             "h-8 shrink-0 whitespace-nowrap rounded-md",
                             isDark
@@ -1288,14 +1341,16 @@ export function CreatorSubmissionsModal({
                           <Clock className="h-4 w-4 mr-1" />
                           Mark as Pending
                         </Button>
-                        {bulkVerifyLoading && (
+                        {bulkStatusActionsBusy && (
                           <span
                             className={cn(
                               "text-xs self-center whitespace-nowrap",
                               isDark ? "text-blue-200" : "text-blue-700",
                             )}
                           >
-                            Verifying submissions...
+                            {parentBulkActionLoading
+                              ? "Processing submission updates…"
+                              : "Verifying submissions…"}
                           </span>
                         )}
                       </>
@@ -1339,10 +1394,10 @@ export function CreatorSubmissionsModal({
                                   onClick={() =>
                                     handleBulkPayment("standard", false)
                                   }
-                                  disabled={bulkPaymentLoading}
+                                  disabled={isAnyBulkPaymentBusy}
                                   className="h-8 shrink-0 bg-blue-600 text-white hover:bg-blue-700"
                                 >
-                                  {bulkPaymentLoading ? (
+                                  {isBulkPayBtnLoading("standard", false) ? (
                                     <Loader2 className="h-3.5 w-3.5 animate-spin" />
                                   ) : (
                                     <DollarSign className="h-3.5 w-3.5" />
@@ -1361,10 +1416,10 @@ export function CreatorSubmissionsModal({
                                   onClick={() =>
                                     handleBulkPayment("standard", true)
                                   }
-                                  disabled={bulkPaymentLoading}
+                                  disabled={isAnyBulkPaymentBusy}
                                   className="h-8 shrink-0 border border-blue-500/80 bg-blue-500/10 text-blue-700 hover:bg-blue-500/20 dark:text-blue-300"
                                 >
-                                  {bulkPaymentLoading ? (
+                                  {isBulkPayBtnLoading("standard", true) ? (
                                     <Loader2 className="h-3.5 w-3.5 animate-spin" />
                                   ) : (
                                     <DollarSign className="h-3.5 w-3.5" />
@@ -1379,10 +1434,10 @@ export function CreatorSubmissionsModal({
                                   onClick={() =>
                                     handleBulkPayment("standard", false)
                                   }
-                                  disabled={bulkPaymentLoading}
+                                  disabled={isAnyBulkPaymentBusy}
                                   className="h-8 shrink-0 bg-blue-600 text-white hover:bg-blue-700"
                                 >
-                                  {bulkPaymentLoading ? (
+                                  {isBulkPayBtnLoading("standard", false) ? (
                                     <Loader2 className="h-3.5 w-3.5 animate-spin" />
                                   ) : (
                                     <DollarSign className="h-3.5 w-3.5" />
@@ -1392,10 +1447,10 @@ export function CreatorSubmissionsModal({
                                 <Button
                                   size="sm"
                                   onClick={() => handleBulkPayment("bonus", false)}
-                                  disabled={bulkPaymentLoading}
+                                  disabled={isAnyBulkPaymentBusy}
                                   className="h-8 shrink-0 bg-green-600 text-white hover:bg-green-700"
                                 >
-                                  {bulkPaymentLoading ? (
+                                  {isBulkPayBtnLoading("bonus", false) ? (
                                     <Loader2 className="h-3.5 w-3.5 animate-spin" />
                                   ) : (
                                     <DollarSign className="h-3.5 w-3.5" />
@@ -1405,10 +1460,10 @@ export function CreatorSubmissionsModal({
                                 <Button
                                   size="sm"
                                   onClick={() => handleBulkPayment("both", false)}
-                                  disabled={bulkPaymentLoading}
+                                  disabled={isAnyBulkPaymentBusy}
                                   className="h-8 shrink-0 bg-purple-600 text-white hover:bg-purple-700"
                                 >
-                                  {bulkPaymentLoading ? (
+                                  {isBulkPayBtnLoading("both", false) ? (
                                     <Loader2 className="h-3.5 w-3.5 animate-spin" />
                                   ) : (
                                     <DollarSign className="h-3.5 w-3.5" />
@@ -1427,10 +1482,10 @@ export function CreatorSubmissionsModal({
                                   onClick={() =>
                                     handleBulkPayment("standard", true)
                                   }
-                                  disabled={bulkPaymentLoading}
+                                  disabled={isAnyBulkPaymentBusy}
                                   className="h-8 shrink-0 border border-blue-500/80 bg-blue-500/10 text-blue-700 hover:bg-blue-500/20 dark:text-blue-300"
                                 >
-                                  {bulkPaymentLoading ? (
+                                  {isBulkPayBtnLoading("standard", true) ? (
                                     <Loader2 className="h-3.5 w-3.5 animate-spin" />
                                   ) : (
                                     <DollarSign className="h-3.5 w-3.5" />
@@ -1440,10 +1495,10 @@ export function CreatorSubmissionsModal({
                                 <Button
                                   size="sm"
                                   onClick={() => handleBulkPayment("bonus", true)}
-                                  disabled={bulkPaymentLoading}
+                                  disabled={isAnyBulkPaymentBusy}
                                   className="h-8 shrink-0 border border-green-500/80 bg-green-500/10 text-green-700 hover:bg-green-500/20 dark:text-green-300"
                                 >
-                                  {bulkPaymentLoading ? (
+                                  {isBulkPayBtnLoading("bonus", true) ? (
                                     <Loader2 className="h-3.5 w-3.5 animate-spin" />
                                   ) : (
                                     <DollarSign className="h-3.5 w-3.5" />
@@ -1453,10 +1508,10 @@ export function CreatorSubmissionsModal({
                                 <Button
                                   size="sm"
                                   onClick={() => handleBulkPayment("both", true)}
-                                  disabled={bulkPaymentLoading}
+                                  disabled={isAnyBulkPaymentBusy}
                                   className="h-8 shrink-0 border border-purple-500/80 bg-purple-500/10 text-purple-700 hover:bg-purple-500/20 dark:text-purple-300"
                                 >
-                                  {bulkPaymentLoading ? (
+                                  {isBulkPayBtnLoading("both", true) ? (
                                     <Loader2 className="h-3.5 w-3.5 animate-spin" />
                                   ) : (
                                     <DollarSign className="h-3.5 w-3.5" />
@@ -1607,6 +1662,19 @@ export function CreatorSubmissionsModal({
                         >
                           Expected Reward
                         </TableHead>
+                        {hasPayoutAdjustment &&
+                          shouldAdjustReward &&
+                          (!isYouTubeContest ||
+                            showYtColumn("adjusted_reward")) && (
+                            <TableHead
+                              className={cn(
+                                "text-center",
+                                isDark ? "bg-[#391A6A] " : "bg-gray-50",
+                              )}
+                            >
+                              Adjusted Reward
+                            </TableHead>
+                          )}
                         <TableHead
                           className={cn(
                             "text-center",
@@ -1855,6 +1923,19 @@ export function CreatorSubmissionsModal({
                             Expected Reward
                           </TableHead>
                         )}
+                        {hasPayoutAdjustment &&
+                          shouldAdjustReward &&
+                          (!isYouTubeContest ||
+                            showYtColumn("adjusted_reward")) && (
+                            <TableHead
+                              className={cn(
+                                "text-center",
+                                isDark ? "bg-[#391A6A] " : "bg-gray-50",
+                              )}
+                            >
+                              Adjusted Reward
+                            </TableHead>
+                          )}
                         {contest?.contest_type === "milestone" && (
                           <TableHead
                             className={cn(
@@ -2086,16 +2167,7 @@ export function CreatorSubmissionsModal({
                             payoutAdjustmentPercentage,
                           )
                         : expectedReward;
-                      let expectedRewardForDisplay = expectedReward;
-
-                      if (creatorCapApplied && submission.is_twitter_tweet) {
-                        if (submission.id === cappedTwitterSubmissionId) {
-                          expectedRewardForDisplay =
-                            maxEarningsPerCreator || expectedReward;
-                        } else {
-                          expectedRewardForDisplay = 0;
-                        }
-                      }
+                      const expectedRewardForDisplay = expectedReward;
 
                       // Use ACTUAL earnings for granted reward (includes custom pay amount)
                       // For Twitter CPM: treat as paid when paid flag or moderation_status is 'paid'
@@ -2121,6 +2193,16 @@ export function CreatorSubmissionsModal({
                               ? submission.earnings
                               : expectedReward
                         : 0;
+                      const uncappedExpectedReward =
+                        calculateSubmissionBaseExpectedReward(submission, false);
+                      const uncappedExpectedRewardAdjusted = shouldAdjustReward
+                        ? applyPayoutAdjustment(
+                            uncappedExpectedReward,
+                            payoutAdjustmentPercentage,
+                          )
+                        : uncappedExpectedReward;
+                      const isCappedToZeroWithPotential =
+                        expectedReward === 0 && uncappedExpectedRewardAdjusted > 0;
                       const expectedBonus =
                         expectedBonusMap.get(submission.id) || 0;
                       const adjustedExpectedBonus = shouldAdjustBonus
@@ -2478,6 +2560,14 @@ export function CreatorSubmissionsModal({
                               <TableCell className="text-center font-medium text-sm">
                                 {formatCurrency(expectedRewardForDisplay)}
                               </TableCell>
+                              {hasPayoutAdjustment &&
+                                shouldAdjustReward &&
+                                (!isYouTubeContest ||
+                                  showYtColumn("adjusted_reward")) && (
+                                  <TableCell className="text-center font-medium text-sm">
+                                    {formatCurrency(adjustedExpectedReward)}
+                                  </TableCell>
+                                )}
                               <TableCell className="text-center font-medium text-green-600">
                                 {grantedReward > 0
                                   ? formatCurrency(grantedReward)
@@ -2882,15 +2972,49 @@ export function CreatorSubmissionsModal({
                                   {(!isYouTubeContest ||
                                     showYtColumn("expected_reward")) && (
                                     <TableCell className="text-center font-medium">
-                                      {hasPayoutAdjustment && shouldAdjustReward
-                                        ? `${formatCurrency(
-                                            expectedReward,
-                                          )} → ${formatCurrency(
-                                            adjustedExpectedReward,
-                                          )}`
-                                        : formatCurrency(expectedReward)}
+                                      {isCappedToZeroWithPotential ? (
+                                        <div className="inline-flex items-center gap-1">
+                                          <span>{formatCurrency(0)}</span>
+                                          <Tooltip>
+                                            <TooltipTrigger asChild>
+                                              <AlertTriangle className="h-3.5 w-3.5 text-amber-500 cursor-help" />
+                                            </TooltipTrigger>
+                                            <TooltipContent className="max-w-[260px] text-left">
+                                              Creator cap exhausted for expected payout order.
+                                              <br />
+                                              {grantedReward > 0 ? (
+                                                <>
+                                                  Actual granted amount:{" "}
+                                                  {formatCurrency(grantedReward)}
+                                                </>
+                                              ) : (
+                                                <>
+                                                  Else expected reward would be:{" "}
+                                                  {formatCurrency(
+                                                    uncappedExpectedRewardAdjusted,
+                                                  )}
+                                                </>
+                                              )}
+                                            </TooltipContent>
+                                          </Tooltip>
+                                        </div>
+                                      ) : (
+                                        formatCurrency(expectedReward)
+                                      )}
                                     </TableCell>
                                   )}
+                                  {hasPayoutAdjustment &&
+                                    shouldAdjustReward &&
+                                    (!isYouTubeContest ||
+                                      showYtColumn("adjusted_reward")) && (
+                                      <TableCell className="text-center font-medium">
+                                        {isCappedToZeroWithPotential
+                                          ? formatCurrency(0)
+                                          : formatCurrency(
+                                              adjustedExpectedReward,
+                                            )}
+                                      </TableCell>
+                                    )}
                                   {contest?.contest_type === "milestone" && (
                                     <TableCell className="text-center">
                                       {milestoneAssignmentLabel === "—" ? (
@@ -3126,6 +3250,43 @@ export function CreatorSubmissionsModal({
                                           Set Pending
                                         </DropdownMenuItem>
                                       )}
+                                    </>
+                                  )}
+
+                                {contest?.post_contest_status !==
+                                  "payouts_processed" &&
+                                  isAdminView &&
+                                  normalizedStatus === "paid" && (
+                                    <>
+                                      <DropdownMenuSeparator />
+                                      <DropdownMenuLabel className="text-purple-500">
+                                        Change status (reverses payment)
+                                      </DropdownMenuLabel>
+                                      <DropdownMenuItem
+                                        onClick={() =>
+                                          onVerify([submission.id])
+                                        }
+                                      >
+                                        <CheckCircle className="h-4 w-4 mr-2" />
+                                        Mark as Verified
+                                      </DropdownMenuItem>
+                                      <DropdownMenuItem
+                                        onClick={() =>
+                                          onSetPending([submission.id])
+                                        }
+                                      >
+                                        <Clock className="h-4 w-4 mr-2" />
+                                        Set to Pending
+                                      </DropdownMenuItem>
+                                      <DropdownMenuItem
+                                        className="text-red-600"
+                                        onClick={() =>
+                                          onReject([submission.id])
+                                        }
+                                      >
+                                        <XCircle className="h-4 w-4 mr-2" />
+                                        Mark as Rejected
+                                      </DropdownMenuItem>
                                     </>
                                   )}
 

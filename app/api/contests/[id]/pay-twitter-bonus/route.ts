@@ -10,6 +10,8 @@ import {
   sumBonusRewards,
   sumBonusRefunds,
 } from "@/lib/twitter-bonus-accounting";
+import { allocateFlatFeeBonusCents } from "@/lib/bonus-allocation";
+import { adjustBonusCents, parsePayoutAdjustment } from "@/lib/payout-rules";
 
 /**
  * POST /api/contests/[id]/pay-twitter-bonus
@@ -55,7 +57,7 @@ export async function POST(
     const { data: contest, error: contestError } = await supabase
       .from("contests")
       .select(
-        "id, title, platform, contest_type, contest_based_details, post_contest_status"
+        "id, title, platform, contest_type, contest_based_details, post_contest_status, payout_adjustment_percentage, payout_adjustment_mode"
       )
       .eq("id", contestId)
       .single();
@@ -86,6 +88,10 @@ export async function POST(
       contest.contest_type === "cpm"
         ? (contest.contest_based_details as any)?.cpm_contest
         : (contest.contest_based_details as any)?.leaderboard_contest;
+    const payoutAdjustment = parsePayoutAdjustment(
+      (contest as any).payout_adjustment_percentage,
+      (contest as any).payout_adjustment_mode,
+    );
 
     const flatFeeBonus = contestDetails?.flat_fee_bonus || 0;
     const totalBudget = contestDetails?.total_budget || null;
@@ -245,36 +251,33 @@ export async function POST(
     });
     const currentBonusSpent = Math.max(0, contestRewardSum - contestRefundSum);
 
-    if (contest.contest_type === "leaderboard" && totalBudget != null) {
-      if (currentBonusSpent + flatFeeBonus > totalBudget) {
-        return NextResponse.json(
-          {
-            error: "Total budget exceeded",
-            details: {
-              currentSpent: currentBonusSpent,
-              bonusAmount: flatFeeBonus,
-              budgetLimit: totalBudget,
-            },
-          },
-          { status: 400 }
-        );
-      }
-    }
-
-    if (contest.contest_type === "cpm" && flatFeeBonusCap != null) {
-      if (currentBonusSpent + flatFeeBonus > flatFeeBonusCap) {
-        return NextResponse.json(
-          {
-            error: "Flat fee bonus cap exceeded",
-            details: {
-              currentSpent: currentBonusSpent,
-              bonusAmount: flatFeeBonus,
-              capLimit: flatFeeBonusCap,
-            },
-          },
-          { status: 400 }
-        );
-      }
+    const bonusLimit =
+      contest.contest_type === "leaderboard"
+        ? totalBudget
+        : contest.contest_type === "cpm"
+          ? flatFeeBonusCap
+          : null;
+    const remainingBonusBudget =
+      bonusLimit != null ? Math.max(0, bonusLimit - currentBonusSpent) : null;
+    const rawBonusAllocation = allocateFlatFeeBonusCents(
+      flatFeeBonus,
+      remainingBonusBudget,
+    );
+    const finalBonusAmount = adjustBonusCents(rawBonusAllocation.amount, {
+      shouldAdjustBonus: payoutAdjustment.shouldAdjustBonus,
+      percentage: payoutAdjustment.percentage,
+    });
+    if (finalBonusAmount <= 0) {
+      return NextResponse.json(
+        {
+          success: true,
+          skipped: true,
+          amount: 0,
+          bonus_reason: rawBonusAllocation.reason,
+          message: "Bonus skipped due to cap/budget limits",
+        },
+        { status: 200 },
+      );
     }
 
     const bonusRewardsCount = (tweetBonusRewards || []).length;
@@ -290,7 +293,7 @@ export async function POST(
 
     const creditResult = await creditCreatorWithdrawableBalance(
       creatorId,
-      flatFeeBonus,
+      finalBonusAmount,
       `Flat fee bonus for Twitter submission - ${contest.title || "Contest"}`,
       {
         idempotencyKey: twitterFlatFeeBonusKey,
@@ -300,6 +303,9 @@ export async function POST(
           tweet_id: tweetId,
           bonus_type: "flat_fee",
           payout_cycle: nextBonusCycle,
+          bonus_reason: rawBonusAllocation.reason,
+          original_bonus_amount: flatFeeBonus,
+          adjusted_bonus_amount: finalBonusAmount,
         },
       }
     );
@@ -317,7 +323,7 @@ export async function POST(
       .update({
         bonus_paid: true,
         bonus_paid_at: paidAt,
-        bonus_amount: flatFeeBonus,
+        bonus_amount: finalBonusAmount,
       })
       .eq("id", tweetId)
       .eq("contest_id", contestId)
@@ -335,7 +341,7 @@ export async function POST(
           error:
             "Bonus was credited to the creator wallet but could not be saved on the tweet row. Run DB migration for twitter_campaign_tweets bonus columns or contact support.",
           details: tweetBonusUpdateErr?.message,
-          amount: flatFeeBonus,
+          amount: finalBonusAmount,
           transactionId: creditResult.transactionId,
         },
         { status: 500 }
@@ -345,7 +351,7 @@ export async function POST(
     return NextResponse.json({
       success: true,
       message: "Flat fee bonus paid successfully",
-      amount: flatFeeBonus,
+      amount: finalBonusAmount,
       transactionId: creditResult.transactionId,
     });
   } catch (error: any) {
