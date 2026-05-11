@@ -28,6 +28,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useClientAuth } from "@/hooks/use-client-auth";
 import { createClient } from "@/utils/supabase/client";
 import { formatCurrencyFromCents } from "@/lib/currency-utils";
+import { getPoolBudgetCentsFromDetails } from "@/lib/contest-type";
 import { useIsMobile } from "@/hooks/use-mobile";
 
 import { ContestCreationModal } from "@/components/ContestCreationModal";
@@ -275,6 +276,22 @@ function DashboardPage() {
               ) {
                 return (
                   sum + contest.contest_based_details.cpm_contest.total_budget
+                );
+              } else if (contest.contest_type === "milestone") {
+                return (
+                  sum +
+                  getPoolBudgetCentsFromDetails(
+                    "milestone",
+                    contest.contest_based_details
+                  )
+                );
+              } else if (contest.contest_type === "dual_rewards") {
+                return (
+                  sum +
+                  getPoolBudgetCentsFromDetails(
+                    "dual_rewards",
+                    contest.contest_based_details
+                  )
                 );
               }
               return sum;

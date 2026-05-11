@@ -498,9 +498,12 @@ export async function GET(request: NextRequest) {
     }, 0);
 
     // Calculate additional metrics
-    const avgCostPerView = totalViews > 0 ? totalSpent / totalViews : 0;
+    // totalSpent is in cents; divide by 100 to get dollars so the frontend
+    // (which does value * 100 → formatCurrencyFromCents) receives the correct unit.
+    const totalSpentDollars = totalSpent / 100;
+    const avgCostPerView = totalViews > 0 ? totalSpentDollars / totalViews : 0;
     const avgCostPerSubmission =
-      totalSubmissions > 0 ? totalSpent / totalSubmissions : 0;
+      totalSubmissions > 0 ? totalSpentDollars / totalSubmissions : 0;
     const avgSubmissionsPerContest =
       totalContests > 0 ? totalSubmissions / totalContests : 0;
 

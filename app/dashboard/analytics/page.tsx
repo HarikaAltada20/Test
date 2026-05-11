@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { RouteGuard } from "@/components/guards/RouteGuard";
 import AnalyticsClient from "./AnalyticsClient";
 import { formatCurrencyFromCents } from "@/lib/currency-utils";
+import { getPoolBudgetCentsFromDetails } from "@/lib/contest-type";
 
 export default async function AnalyticsPage() {
   const supabase = await createClient();
@@ -64,6 +65,10 @@ export default async function AnalyticsPage() {
         contest.contest_based_details?.cpm_contest?.total_budget
       ) {
         return sum + contest.contest_based_details.cpm_contest.total_budget;
+      } else if (contest.contest_type === "milestone") {
+        return sum + getPoolBudgetCentsFromDetails("milestone", contest.contest_based_details);
+      } else if (contest.contest_type === "dual_rewards") {
+        return sum + getPoolBudgetCentsFromDetails("dual_rewards", contest.contest_based_details);
       }
       return sum;
     }, 0) || 0;

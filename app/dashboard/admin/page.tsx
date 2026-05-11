@@ -2,6 +2,7 @@ import { createClient } from "@/utils/supabase/server";
 import { redirect } from "next/navigation";
 import { verifyAdminAccess } from "@/utils/admin-auth";
 import AdminDashboardClient from "./AdminDashboardClient";
+import { getPoolBudgetCentsFromDetails } from "@/lib/contest-type";
 
 export default async function AdminDashboardPage({
   searchParams,
@@ -450,12 +451,10 @@ export default async function AdminDashboardPage({
         return sum + (details.cpm_contest.total_budget || 0);
       }
       if (c.contest_type === "milestone") {
-        return (
-          sum +
-          (Number(details?.milestone_contest?.total_budget_cents) ||
-            Number(details?.milestone_contest?.total_budget) ||
-            0)
-        );
+        return sum + getPoolBudgetCentsFromDetails("milestone", details);
+      }
+      if (c.contest_type === "dual_rewards") {
+        return sum + getPoolBudgetCentsFromDetails("dual_rewards", details);
       }
       return sum;
     }, 0);
@@ -474,12 +473,10 @@ export default async function AdminDashboardPage({
         return sum + (details.cpm_contest.total_budget || 0);
       }
       if (c.contest_type === "milestone") {
-        return (
-          sum +
-          (Number(details?.milestone_contest?.total_budget_cents) ||
-            Number(details?.milestone_contest?.total_budget) ||
-            0)
-        );
+        return sum + getPoolBudgetCentsFromDetails("milestone", details);
+      }
+      if (c.contest_type === "dual_rewards") {
+        return sum + getPoolBudgetCentsFromDetails("dual_rewards", details);
       }
       return sum;
     }, 0);
@@ -523,10 +520,9 @@ export default async function AdminDashboardPage({
       ) {
         base = details.cpm_contest.total_budget || 0;
       } else if (c.contest_type === "milestone") {
-        base =
-          Number(details?.milestone_contest?.total_budget_cents) ||
-          Number(details?.milestone_contest?.total_budget) ||
-          0;
+        base = getPoolBudgetCentsFromDetails("milestone", details);
+      } else if (c.contest_type === "dual_rewards") {
+        base = getPoolBudgetCentsFromDetails("dual_rewards", details);
       }
       const pd = parsePayment(c.payment_details);
       if (pd) {

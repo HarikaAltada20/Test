@@ -35,11 +35,10 @@ export function getPoolBudgetCentsFromDetails(
   if (contestType === "dual_rewards") {
     const root = details.total_budget_cents;
     if (typeof root === "number" && root > 0) return root;
-    const ms = details.milestone_contest?.total_budget_cents;
-    if (typeof ms === "number" && ms > 0) return ms;
-    const cpm = details.cpm_contest?.total_budget;
-    if (typeof cpm === "number" && cpm > 0) return cpm;
-    return 0;
+    // For dual rewards, if root is missing, sum the components
+    const ms = details.milestone_contest?.total_budget_cents || 0;
+    const cpm = details.cpm_contest?.total_budget || 0;
+    return ms + cpm;
   }
   if (contestType === "cpm") {
     const cpm = details.cpm_contest?.total_budget;
