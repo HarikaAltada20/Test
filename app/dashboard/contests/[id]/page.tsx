@@ -223,7 +223,10 @@ export default async function ContestDetailPage({
         deleted_at,
         excluded_by_submission_cap,
         first_fetched_at,
-        last_updated_at
+        last_updated_at,
+        bonus_paid,
+        bonus_paid_at,
+        bonus_amount
       `;
 
     const selectBasic = `
@@ -842,17 +845,28 @@ export default async function ContestDetailPage({
         video_title: tweet.tweet_text?.substring(0, 100) || null,
         paid,
         paid_at: paidAt,
+        // Source of truth: twitter_campaign_tweets.bonus_paid / bonus_amount /
+        // bonus_paid_at (set by per-tweet and bulk payout routes). Fall back to
+        // the money_transactions-derived map only if the columns are missing
+        // (legacy DBs without the bonus_columns migration).
         bonus_paid:
-          twitterBonusByTweetId.has(String(tweet.id)) ||
-          twitterBonusByTweetId.has(tweet.id),
+          (tweet as any).bonus_paid === true
+            ? true
+            : (tweet as any).bonus_paid === false
+              ? false
+              : twitterBonusByTweetId.has(String(tweet.id)) ||
+                twitterBonusByTweetId.has(tweet.id),
         bonus_paid_at:
+          (tweet as any).bonus_paid_at ??
           twitterBonusByTweetId.get(String(tweet.id))?.paid_at ??
           twitterBonusByTweetId.get(tweet.id)?.paid_at ??
           null,
         bonus_amount:
-          twitterBonusByTweetId.get(String(tweet.id))?.amount ??
-          twitterBonusByTweetId.get(tweet.id)?.amount ??
-          null,
+          (tweet as any).bonus_amount != null
+            ? (tweet as any).bonus_amount
+            : twitterBonusByTweetId.get(String(tweet.id))?.amount ??
+              twitterBonusByTweetId.get(tweet.id)?.amount ??
+              null,
         creator_display_name: creatorDisplayName,
         creator_username: creatorUsername,
         // Explicit username from users table for creator-wise view

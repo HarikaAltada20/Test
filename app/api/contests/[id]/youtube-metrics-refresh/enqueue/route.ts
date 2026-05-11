@@ -137,7 +137,7 @@ export async function POST(
           : {},
       }).catch((e) => console.warn("[youtube-metrics-refresh] Trigger processor failed:", e));
 
-    if (!cronAuth && scope === "basic") {
+    if (!cronAuth) {
       const isOwner = contest.advertiser_id === user?.id;
       const isOpportunitiesRefresh = !isAdmin && !isOwner;
       const cooldownMs = isOpportunitiesRefresh

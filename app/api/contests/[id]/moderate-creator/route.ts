@@ -82,6 +82,13 @@ export async function POST(
     }
 
     const supabaseAdmin = createAdminClient();
+
+    let refund: {
+      mainCents: number;
+      bonusCents: number;
+      totalCents: number;
+    } | null = null;
+
     const moderationStatus = action === "approve" ? "verified" : "rejected";
 
     // Get current leaderboard entry to check if creator is paid
@@ -234,7 +241,7 @@ export async function POST(
             "refund",
             mainReversalAmount,
             "success",
-            `Reversal of Twitter contest reward - ${contestTitle}`,
+            `Reversal of Twitter CPM creator reward — ${contestTitle}`,
             {
               remarks: REVERSAL_TRANSACTION_REMARK,
               paymentMethod: "refund",
@@ -267,7 +274,7 @@ export async function POST(
             "refund",
             bonusReversalAmount,
             "success",
-            `Reversal of Twitter contest flat-fee bonus - ${contestTitle}`,
+            `Reversal of Twitter CPM bonus — ${contestTitle}`,
             {
               remarks: REVERSAL_TRANSACTION_REMARK,
               paymentMethod: "refund",
@@ -294,6 +301,12 @@ export async function POST(
             );
           }
         }
+
+        refund = {
+          mainCents: mainReversalAmount,
+          bonusCents: bonusReversalAmount,
+          totalCents: mainReversalAmount + bonusReversalAmount,
+        };
       }
     }
 
@@ -399,6 +412,7 @@ export async function POST(
       message: `Creator ${
         action === "approve" ? "approved" : "rejected"
       } successfully`,
+      refund,
     });
   } catch (error: any) {
     console.error("[moderate-creator] Error:", error);

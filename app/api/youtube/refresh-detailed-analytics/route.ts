@@ -10,6 +10,7 @@ import {
   isYouTubeShort,
   getDefaultAnalyticsStartDate,
 } from "@/lib/youtube-analytics";
+import { METRICS_REFRESH_COOLDOWN_MS_ADMIN } from "@/lib/constants";
 
 /**
  * POST /api/youtube/refresh-detailed-analytics
@@ -63,7 +64,7 @@ export async function POST(request: Request) {
   // --- Fetch target submissions ---
   let submissionsQuery = supabaseAdmin
     .from("submissions")
-    .select("id, creator_id, content_link, views, other_stats, created_at, platform")
+    .select("id, contest_id, creator_id, content_link, views, other_stats, created_at, platform")
     .in("status", ["verified", "pending"])
     .not("content_link", "is", null);
 
@@ -94,6 +95,57 @@ export async function POST(request: Request) {
 
   if (youtubeSubmissions.length === 0) {
     return NextResponse.json({ message: "No YouTube submissions found", updated: 0 });
+  }
+
+  const targetContestIds = [
+    ...new Set(
+      (contestId
+        ? [contestId]
+        : youtubeSubmissions.map((submission) => submission.contest_id)
+      ).filter(Boolean),
+    ),
+  ];
+
+  if (targetContestIds.length > 0) {
+    const { data: contests, error: contestError } = await supabaseAdmin
+      .from("contests")
+      .select("id, last_metrics_updated")
+      .in("id", targetContestIds);
+
+    if (contestError) {
+      return NextResponse.json(
+        { error: `Failed to check refresh cooldown: ${contestError.message}` },
+        { status: 500 },
+      );
+    }
+
+    const nowMs = Date.now();
+    const coolingContest = (contests || []).find((contest) => {
+      if (!contest.last_metrics_updated) return false;
+      const lastUpdateMs = new Date(contest.last_metrics_updated).getTime();
+      return (
+        !Number.isNaN(lastUpdateMs) &&
+        nowMs - lastUpdateMs < METRICS_REFRESH_COOLDOWN_MS_ADMIN
+      );
+    });
+
+    if (coolingContest?.last_metrics_updated) {
+      const lastUpdateMs = new Date(coolingContest.last_metrics_updated).getTime();
+      const remainingMs = METRICS_REFRESH_COOLDOWN_MS_ADMIN - (nowMs - lastUpdateMs);
+      const remainingMinutes = Math.ceil(remainingMs / 1000 / 60);
+      return NextResponse.json(
+        {
+          error: `Metrics were updated ${Math.floor(
+            (nowMs - lastUpdateMs) / 1000 / 60,
+          )} minutes ago. Please wait ${remainingMinutes} more minutes before refreshing again.`,
+          nextRefreshAvailable: new Date(
+            lastUpdateMs + METRICS_REFRESH_COOLDOWN_MS_ADMIN,
+          ).toISOString(),
+          userType: "admins",
+        },
+        { status: 429 },
+      );
+    }
   }
 
   // --- Group by creator to reuse tokens ---
@@ -354,11 +406,11 @@ export async function POST(request: Request) {
   }
 
   // Update contest-level last-updated timestamps for contest-wide refreshes
-  if (contestId) {
+  if (targetContestIds.length > 0) {
     const { data: contestRow } = await supabaseAdmin
       .from("contests")
       .select("contest_based_details")
-      .eq("id", contestId)
+      .eq("id", targetContestIds[0])
       .maybeSingle();
 
     const existing = (contestRow?.contest_based_details as Record<string, unknown>) || {};
@@ -371,9 +423,10 @@ export async function POST(request: Request) {
     await supabaseAdmin
       .from("contests")
       .update({
+        last_metrics_updated: now,
         contest_based_details: { ...existing, youtube_metrics_last_updated: nextYt },
       })
-      .eq("id", contestId);
+      .in("id", targetContestIds);
   }
 
   return NextResponse.json({

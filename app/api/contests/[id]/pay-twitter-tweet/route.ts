@@ -8,6 +8,7 @@ import {
   logTransactionAsAdmin,
   REVERSAL_TRANSACTION_REMARK,
 } from "@/lib/payment-utils";
+import { adjustRewardCents, parsePayoutAdjustment } from "@/lib/payout-rules";
 
 /**
  * POST /api/contests/[id]/pay-twitter-tweet
@@ -66,7 +67,7 @@ export async function POST(
     const { data: contest, error: contestError } = await supabase
       .from("contests")
       .select(
-        "id, title, platform, contest_type, contest_based_details, post_contest_status, max_earnings_per_creator"
+        "id, title, platform, contest_type, contest_based_details, post_contest_status, max_earnings_per_creator, payout_adjustment_percentage, payout_adjustment_mode"
       )
       .eq("id", contestId)
       .single();
@@ -104,6 +105,10 @@ export async function POST(
     }
 
     const cpmContest = (contest.contest_based_details as any)?.cpm_contest;
+    const payoutAdjustment = parsePayoutAdjustment(
+      (contest as any).payout_adjustment_percentage,
+      (contest as any).payout_adjustment_mode,
+    );
     if (!cpmContest || typeof cpmContest.cpm_rate_usd !== "number") {
       return NextResponse.json(
         { error: "CPM configuration is missing for this contest" },
@@ -204,6 +209,11 @@ export async function POST(
       const totalPoints = Math.max(0, basePoints + manualAdjustment);
       const rate = cpmContest.cpm_rate_usd;
       rewardAmount = Math.round((totalPoints * rate * 100) / 1000);
+
+      rewardAmount = adjustRewardCents(rewardAmount, {
+        shouldAdjustReward: payoutAdjustment.shouldAdjustReward,
+        percentage: payoutAdjustment.percentage,
+      });
 
       if (rewardAmount <= 0) {
         return NextResponse.json(
