@@ -389,12 +389,28 @@ export async function POST(request: Request) {
       const totalBudget = contestDetails?.total_budget || null;
       const flatFeeBonusCap = contestDetails?.flat_fee_bonus_cap || null;
 
-      if (flatFeeBonus > 0 && submissionFull.status === "verified") {
+      const submissionStatusLower = String(
+        submissionFull.status || "",
+      ).toLowerCase();
+      const isBonusEligibleStatus =
+        submissionStatusLower === "verified" ||
+        submissionStatusLower === "approved" ||
+        // Allow paying bonus after the standard reward has already been paid.
+        // Only valid for mark_bonus_paid; mark_both_paid still requires verified
+        // because we cannot pay the main reward twice.
+        (action === "mark_bonus_paid" &&
+          (submissionStatusLower === "paid" ||
+            submissionFull.paid === true));
+
+      if (flatFeeBonus > 0 && isBonusEligibleStatus) {
+        // Fetch every contest submission and let `buildFlatFeeBonusExpectedCentsBySubmissionId`
+        // apply its internal eligibility rule (status in verified/approved/paid OR paid=true).
+        // Pre-filtering with PostgREST `.or(...)` is unsafe here because commas inside
+        // `in.(...)` collide with the `.or()` separator and return an empty result.
         const { data: allEligibleContestSubs } = await supabaseAdmin
           .from("submissions")
           .select("id, created_at, status, paid")
-          .eq("contest_id", submissionFull.contest_id)
-          .in("status", ["verified", "paid", "approved"]);
+          .eq("contest_id", submissionFull.contest_id);
         const expectedBonusMap = buildFlatFeeBonusExpectedCentsBySubmissionId(
           contest as any,
           (allEligibleContestSubs || []).map((s: any) => ({
@@ -580,9 +596,14 @@ export async function POST(request: Request) {
           { error: "No flat fee bonus configured for this contest" },
           { status: 400 },
         );
-      } else if (submissionFull.status !== "verified") {
+      } else if (!isBonusEligibleStatus) {
         return NextResponse.json(
-          { error: "Submission must be verified before paying bonus" },
+          {
+            error:
+              action === "mark_bonus_paid"
+                ? "Bonus can only be paid on verified submissions or already-paid submissions whose bonus has not been paid yet."
+                : "Submission must be verified before paying bonus",
+          },
           { status: 400 },
         );
       }
