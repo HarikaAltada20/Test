@@ -91,10 +91,15 @@ export async function POST(
       totalCents: number;
     } | null = null;
 
-    // Fetch current tweet state before any update (for per-tweet reversal)
+    // Fetch current tweet state before any update (for per-tweet reversal).
+    // bonus_paid/bonus_amount are needed as a fallback when the bonus was credited
+    // through bulk-pay-twitter-cpm (which stores per-tweet bonus inside
+    // metadata.twitter_bulk_bonus_breakdown rather than metadata.tweet_id).
     const { data: currentTweet, error: tweetFetchError } = await supabaseAdmin
       .from("twitter_campaign_tweets")
-      .select("id, creator_id, moderation_status, earnings")
+      .select(
+        "id, creator_id, moderation_status, earnings, bonus_paid, bonus_amount"
+      )
       .eq("id", tweetId)
       .eq("contest_id", contestId)
       .single();
@@ -120,10 +125,15 @@ export async function POST(
     ) {
       const creatorId = currentTweet.creator_id;
 
-      // Fetch all rewards and refunds for this tweet so we can split reward-granted vs bonus
+      // Fetch all rewards and refunds for this tweet so we can split reward-granted vs bonus.
+      // We also fetch contest-level bonus rows (no tweet_id filter) so bulk-pay-twitter-cpm
+      // payouts — where the per-tweet bonus slice lives inside
+      // metadata.twitter_bulk_bonus_breakdown — are included in the bonus reversal calc.
       const [
         { data: rewardTxns, error: rewardErr },
         { data: refundTxns, error: refundErr },
+        { data: contestBonusRewardTxns, error: contestBonusRewardErr },
+        { data: contestBonusRefundTxns, error: contestBonusRefundErr },
       ] = await Promise.all([
         supabaseAdmin
           .from("money_transactions")
@@ -137,10 +147,38 @@ export async function POST(
           .eq("user_id", creatorId)
           .eq("type", "refund")
           .contains("metadata", { contest_id: contestId, tweet_id: tweetId }),
+        supabaseAdmin
+          .from("money_transactions")
+          .select("id, amount, metadata")
+          .eq("user_id", creatorId)
+          .eq("type", "reward")
+          .contains("metadata", {
+            contest_id: contestId,
+            bonus_type: "flat_fee",
+          }),
+        supabaseAdmin
+          .from("money_transactions")
+          .select("id, amount, metadata, remarks")
+          .eq("user_id", creatorId)
+          .eq("type", "refund")
+          .contains("metadata", {
+            contest_id: contestId,
+            bonus_type: "flat_fee",
+          }),
       ] as any);
 
-      if (rewardErr || refundErr) {
-        const msg = rewardErr?.message || refundErr?.message || "unknown";
+      if (
+        rewardErr ||
+        refundErr ||
+        contestBonusRewardErr ||
+        contestBonusRefundErr
+      ) {
+        const msg =
+          rewardErr?.message ||
+          refundErr?.message ||
+          contestBonusRewardErr?.message ||
+          contestBonusRefundErr?.message ||
+          "unknown";
         return NextResponse.json(
           { error: `Failed to fetch transactions for reversal: ${msg}` },
           { status: 500 }
@@ -178,26 +216,74 @@ export async function POST(
         cpmReversalCents = storedCpmCents;
       }
 
-      // Flat fee bonus = rewards/refunds with bonus_type "flat_fee"
-      const bonusRewardTxns = (rewardTxns || []).filter(
-        (tx: any) =>
-          tx.metadata && (tx.metadata as any).bonus_type === "flat_fee"
+      // Flat fee bonus for THIS tweet — handle three payout shapes:
+      //   1. pay-twitter-bonus: metadata.tweet_id === tweetId + bonus_type=flat_fee
+      //   2. bulk-pay-twitter-cpm: metadata.twitter_bulk_bonus_breakdown[tweetId] holds
+      //      the per-tweet bonus slice; metadata has no top-level tweet_id.
+      //   3. Prior reversals: refunds logged per-tweet (case 1) OR via bulk rollback
+      //      that carries the breakdown (case 2).
+      const tweetIdStr = String(tweetId);
+      const isFlatFeeBonus = (tx: any) =>
+        tx?.metadata && (tx.metadata as any).bonus_type === "flat_fee";
+      const breakdownAmountForTweet = (tx: any): number => {
+        const breakdown = (tx?.metadata as any)?.twitter_bulk_bonus_breakdown;
+        if (!breakdown || typeof breakdown !== "object") return 0;
+        const cents = Number(breakdown[tweetIdStr]);
+        return Number.isFinite(cents) && cents > 0 ? cents : 0;
+      };
+      const perTweetBonusAmount = (tx: any): number => {
+        if (!isFlatFeeBonus(tx)) return 0;
+        const metaTweetId = (tx.metadata as any).tweet_id;
+        if (metaTweetId != null && String(metaTweetId) === tweetIdStr) {
+          return Number(tx.amount) || 0;
+        }
+        return breakdownAmountForTweet(tx);
+      };
+
+      // Union of per-tweet metadata rows + contest-level bonus rows (which include bulk).
+      const bonusRewardCandidates = new Map<string, any>();
+      [...(rewardTxns || []), ...(contestBonusRewardTxns || [])].forEach(
+        (tx: any) => {
+          if (tx?.id && !bonusRewardCandidates.has(tx.id)) {
+            bonusRewardCandidates.set(tx.id, tx);
+          }
+        }
       );
-      const bonusRefundTxns = (refundTxns || []).filter(
-        (tx: any) =>
-          tx.metadata &&
-          (tx.metadata as any).bonus_type === "flat_fee" &&
-          (!tx.remarks || tx.remarks === REVERSAL_TRANSACTION_REMARK)
+      const bonusRefundCandidates = new Map<string, any>();
+      [...(refundTxns || []), ...(contestBonusRefundTxns || [])].forEach(
+        (tx: any) => {
+          if (
+            tx?.id &&
+            !bonusRefundCandidates.has(tx.id) &&
+            (!tx.remarks || tx.remarks === REVERSAL_TRANSACTION_REMARK)
+          ) {
+            bonusRefundCandidates.set(tx.id, tx);
+          }
+        }
       );
-      const bonusRewardSum = bonusRewardTxns.reduce(
-        (sum: number, tx: any) => sum + (tx.amount || 0),
+
+      const bonusRewardSum = Array.from(bonusRewardCandidates.values()).reduce(
+        (sum: number, tx: any) => sum + perTweetBonusAmount(tx),
         0
       );
-      const bonusRefundSum = bonusRefundTxns.reduce(
-        (sum: number, tx: any) => sum + (tx.amount || 0),
+      const bonusRefundSum = Array.from(bonusRefundCandidates.values()).reduce(
+        (sum: number, tx: any) => sum + perTweetBonusAmount(tx),
         0
       );
-      const bonusReversalAmount = Math.max(0, bonusRewardSum - bonusRefundSum);
+      let bonusReversalAmount = Math.max(0, bonusRewardSum - bonusRefundSum);
+
+      // Fallback: if the row says bonus_paid=true but no matching ledger entry was
+      // found (legacy data or an edge bulk metadata shape), trust the stored cents.
+      const storedBonusCents = Math.round(
+        Number((currentTweet as any).bonus_amount) || 0
+      );
+      if (
+        bonusReversalAmount <= 0 &&
+        (currentTweet as any).bonus_paid === true &&
+        storedBonusCents > 0
+      ) {
+        bonusReversalAmount = storedBonusCents;
+      }
 
       const totalReversalAmount = cpmReversalCents + bonusReversalAmount;
 
@@ -334,13 +420,19 @@ export async function POST(
       moderation_status: moderationStatus,
     };
 
-    // Leaving "paid": clear stored CPM cents so SSR/UI never show stale granted amounts
+    // Leaving "paid": clear stored CPM cents and bonus state so SSR/UI never show stale
+    // granted amounts. Bonus columns must reset alongside the reward — otherwise the row
+    // still reports bonus_paid=true after the wallet refund logged above, which leaves
+    // twitter_campaign_tweets out of sync with money_transactions.
     if (
       isTwitterCpm &&
       currentTweet.moderation_status === "paid" &&
       action !== "paid"
     ) {
       updateData.earnings = null;
+      updateData.bonus_paid = false;
+      updateData.bonus_paid_at = null;
+      updateData.bonus_amount = null;
     }
 
     if (action === "reject") {
