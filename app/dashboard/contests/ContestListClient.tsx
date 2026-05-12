@@ -96,6 +96,10 @@ type Contest = {
       max_views?: number;
       flat_fee_bonus?: number;
     };
+    milestone_contest?: {
+      total_budget_cents?: number;
+      budget_spent?: number;
+    };
     twitter_campaign?: {
       campaign_type?: "raid" | "awareness";
       keywords?: string[];
@@ -319,6 +323,52 @@ const getBudgetTrackerValues = (
   const remaining = Math.max(totalBudget - clampedSpent, 0);
 
   return { spent: clampedSpent, percentage, remaining };
+};
+
+const getContestTypeLabel = (contestType: string | null | undefined) => {
+  if (contestType === "cpm") return "CPM Based";
+  if (contestType === "leaderboard") return "Leaderboard";
+  if (contestType === "milestone") return "Milestone";
+  if (!contestType) return "N/A";
+  return contestType.charAt(0).toUpperCase() + contestType.slice(1);
+};
+
+const getContestValueForSort = (contest: Contest): number => {
+  if (
+    contest.contest_type === "leaderboard" &&
+    contest.contest_based_details?.leaderboard_contest?.total_prize
+  ) {
+    return contest.contest_based_details.leaderboard_contest.total_prize;
+  }
+  if (
+    contest.contest_type === "cpm" &&
+    contest.contest_based_details?.cpm_contest?.total_budget
+  ) {
+    return contest.contest_based_details.cpm_contest.total_budget;
+  }
+  if (
+    contest.contest_type === "milestone" &&
+    contest.contest_based_details?.milestone_contest?.total_budget_cents
+  ) {
+    return contest.contest_based_details.milestone_contest.total_budget_cents;
+  }
+  return 0;
+};
+
+const getContestPrimaryFinancialText = (contest: Contest): string => {
+  if (contest.contest_type === "leaderboard") {
+    return `Prize: ${formatMoney(
+      contest.contest_based_details?.leaderboard_contest?.total_prize || 0,
+    )}`;
+  }
+  if (contest.contest_type === "milestone") {
+    return `Budget: ${formatMoney(
+      contest.contest_based_details?.milestone_contest?.total_budget_cents || 0,
+    )}`;
+  }
+  return `Budget: ${formatMoney(
+    contest.contest_based_details?.cpm_contest?.total_budget || 0,
+  )}`;
 };
 
 export function ContestListClient({
@@ -932,30 +982,8 @@ export function ContestListClient({
           );
         case "value_desc":
         case "value_asc":
-          let valueA = 0;
-          let valueB = 0;
-          if (
-            a.contest_type === "leaderboard" &&
-            a.contest_based_details?.leaderboard_contest?.total_prize
-          ) {
-            valueA = a.contest_based_details.leaderboard_contest.total_prize;
-          } else if (
-            a.contest_type === "cpm" &&
-            a.contest_based_details?.cpm_contest?.total_budget
-          ) {
-            valueA = a.contest_based_details.cpm_contest.total_budget;
-          }
-          if (
-            b.contest_type === "leaderboard" &&
-            b.contest_based_details?.leaderboard_contest?.total_prize
-          ) {
-            valueB = b.contest_based_details.leaderboard_contest.total_prize;
-          } else if (
-            b.contest_type === "cpm" &&
-            b.contest_based_details?.cpm_contest?.total_budget
-          ) {
-            valueB = b.contest_based_details.cpm_contest.total_budget;
-          }
+          const valueA = getContestValueForSort(a);
+          const valueB = getContestValueForSort(b);
           return sortOption === "value_desc"
             ? valueB - valueA
             : valueA - valueB;
@@ -1323,14 +1351,7 @@ export function ContestListClient({
                 <span>
                   Contest Type:{" "}
                   <span className="font-medium">
-                    {contest.contest_type === "cpm"
-                      ? "CPM Based"
-                      : contest.contest_type === "leaderboard"
-                        ? "Leaderboard"
-                        : contest.contest_type
-                          ? contest.contest_type.charAt(0).toUpperCase() +
-                            contest.contest_type.slice(1)
-                          : "N/A"}
+                    {getContestTypeLabel(contest.contest_type)}
                   </span>
                 </span>
               </div>
@@ -1405,6 +1426,24 @@ export function ContestListClient({
                         {formatMoney(
                           contest.contest_based_details.leaderboard_contest
                             .total_budget,
+                        )}
+                      </span>
+                    </span>
+                  </div>
+                )}
+              {contest.contest_type === "milestone" &&
+                contest.contest_based_details?.milestone_contest
+                  ?.total_budget_cents != null &&
+                contest.contest_based_details.milestone_contest
+                  .total_budget_cents > 0 && (
+                  <div className="flex items-center">
+                    <DollarSign className="h-4 w-4 mr-2 flex-shrink-0 text-blue-600" />
+                    <span>
+                      Total Budget:{" "}
+                      <span className="font-medium text-blue-700 dark:text-blue-300">
+                        {formatMoney(
+                          contest.contest_based_details.milestone_contest
+                            .total_budget_cents,
                         )}
                       </span>
                     </span>
@@ -1525,6 +1564,66 @@ export function ContestListClient({
                   </div>
                 );
               })()}
+            {/* Budget Tracker for Milestone contests — budget_spent is enriched server-side
+                (per-submission milestone model + verified-only ladder + creator bonus expected),
+                same basis as contest detail / opportunities. */}
+            {contest.contest_type === "milestone" &&
+              contest.contest_based_details?.milestone_contest
+                ?.total_budget_cents != null &&
+              contest.contest_based_details.milestone_contest.total_budget_cents >
+                0 &&
+              (() => {
+                const totalBudget =
+                  contest.contest_based_details.milestone_contest
+                    .total_budget_cents;
+                const budgetSpent =
+                  contest.contest_based_details.milestone_contest.budget_spent ||
+                  0;
+                const { percentage, remaining } = getBudgetTrackerValues(
+                  totalBudget,
+                  budgetSpent,
+                );
+
+                return (
+                  <div className="mt-3 mb-3">
+                    <div
+                      className="flex justify-between text-sm mb-2"
+                      style={{
+                        color: isDark ? "#d1d5db" : "#374151",
+                        transition: "none",
+                      }}
+                    >
+                      <span className="font-medium">Budget Tracker</span>
+                      <span className="font-semibold">
+                        {formatMoney(budgetSpent)} /{" "}
+                        {formatMoney(totalBudget)}
+                      </span>
+                    </div>
+                    <div
+                      className={cn(
+                        "relative w-full rounded-full h-3 overflow-hidden",
+                        isDark ? "bg-[#FFFFFF42]" : "bg-slate-200",
+                      )}
+                      title={`Total Budget Spent: ${formatMoney(budgetSpent)}`}
+                    >
+                      <div
+                        className="absolute h-full bg-gradient-to-r from-purple-500 to-purple-600 rounded-full transition-all duration-500 ease-out"
+                        style={{ width: `${Math.min(percentage, 100)}%` }}
+                      ></div>
+                    </div>
+                    <div
+                      className="flex justify-between text-xs mt-1.5"
+                      style={{
+                        color: isDark ? "#d1d5db" : "#64748b",
+                        transition: "none",
+                      }}
+                    >
+                      <span>{percentage.toFixed(1)}% used</span>
+                      <span>{formatMoney(remaining)} remaining</span>
+                    </div>
+                  </div>
+                );
+              })()}
 
             <button
               className={cn(
@@ -1613,7 +1712,7 @@ export function ContestListClient({
                 variant="outline"
                 className="text-sm  bg-[#7F39EC] text-white py-1 capitalize"
               >
-                {contest.contest_type || "Type"}
+                {getContestTypeLabel(contest.contest_type)}
               </Badge>
             </div>
 
@@ -1678,17 +1777,7 @@ export function ContestListClient({
               {contest.contest_based_details && (
                 <div className="flex items-center gap-1">
                   <DollarSign className="h-3 w-3" />
-                  <span>
-                    {contest.contest_type === "leaderboard"
-                      ? `Prize: ${formatMoney(
-                          contest.contest_based_details.leaderboard_contest
-                            ?.total_prize || 0,
-                        )}`
-                      : `Budget: ${formatMoney(
-                          contest.contest_based_details.cpm_contest
-                            ?.total_budget || 0,
-                        )}`}
-                  </span>
+                  <span>{getContestPrimaryFinancialText(contest)}</span>
                 </div>
               )}
               {contest.moderation_status === "rejected" &&
@@ -2140,14 +2229,7 @@ export function ContestListClient({
                   >
                     Contest Type:{" "}
                     <span className="font-medium">
-                      {contest.contest_type === "cpm"
-                        ? "CPM Based"
-                        : contest.contest_type === "leaderboard"
-                          ? "Leaderboard"
-                          : contest.contest_type
-                            ? contest.contest_type.charAt(0).toUpperCase() +
-                              contest.contest_type.slice(1)
-                            : "N/A"}
+                      {getContestTypeLabel(contest.contest_type)}
                     </span>
                   </span>
                 </div>
@@ -2220,6 +2302,29 @@ export function ContestListClient({
                           {formatMoney(
                             contest.contest_based_details.leaderboard_contest
                               .total_prize,
+                          )}
+                        </span>
+                      </span>
+                    </div>
+                  )}
+                {contest.contest_type === "milestone" &&
+                  contest.contest_based_details?.milestone_contest
+                    ?.total_budget_cents != null &&
+                  contest.contest_based_details.milestone_contest
+                    .total_budget_cents > 0 && (
+                    <div className="flex items-center">
+                      <DollarSign className="h-4 w-4 mr-2 flex-shrink-0 text-blue-600" />
+                      <span
+                        style={{
+                          color: isDark ? "white" : "#475569",
+                          transition: "none",
+                        }}
+                      >
+                        Total Budget:{" "}
+                        <span className="font-medium text-blue-700 dark:text-blue-300">
+                          {formatMoney(
+                            contest.contest_based_details.milestone_contest
+                              .total_budget_cents,
                           )}
                         </span>
                       </span>
@@ -2334,6 +2439,64 @@ export function ContestListClient({
                     </div>
                   );
                 })()}
+              {/* Milestone budget_spent: server-enriched, same model as contest detail */}
+              {contest.contest_type === "milestone" &&
+                contest.contest_based_details?.milestone_contest
+                  ?.total_budget_cents != null &&
+                contest.contest_based_details.milestone_contest
+                  .total_budget_cents > 0 &&
+                (() => {
+                  const totalBudget =
+                    contest.contest_based_details.milestone_contest
+                      .total_budget_cents;
+                  const budgetSpent =
+                    contest.contest_based_details.milestone_contest
+                      .budget_spent || 0;
+                  const { percentage, remaining } = getBudgetTrackerValues(
+                    totalBudget,
+                    budgetSpent,
+                  );
+
+                  return (
+                    <div className="mt-3">
+                      <div
+                        className="flex justify-between text-sm mb-2"
+                        style={{
+                          color: isDark ? "#d1d5db" : "#374151",
+                          transition: "none",
+                        }}
+                      >
+                        <span className="font-medium">Budget Tracker</span>
+                        <span className="font-semibold">
+                          {formatMoney(budgetSpent)} /{" "}
+                          {formatMoney(totalBudget)}
+                        </span>
+                      </div>
+                      <div
+                        className={cn(
+                          "relative w-full rounded-full h-3 overflow-hidden",
+                          isDark ? "bg-[#FFFFFF42]" : "bg-slate-200",
+                        )}
+                        title={`Total Budget Spent: ${formatMoney(budgetSpent)}`}
+                      >
+                        <div
+                          className="absolute h-full bg-gradient-to-r from-purple-500 to-purple-600 rounded-full transition-all duration-500 ease-out"
+                          style={{ width: `${Math.min(percentage, 100)}%` }}
+                        ></div>
+                      </div>
+                      <div
+                        className="flex justify-between text-xs mt-1.5"
+                        style={{
+                          color: isDark ? "#d1d5db" : "#64748b",
+                          transition: "none",
+                        }}
+                      >
+                        <span>{percentage.toFixed(1)}% used</span>
+                        <span>{formatMoney(remaining)} remaining</span>
+                      </div>
+                    </div>
+                  );
+                })()}
             </CardContent>
           </div>
 
@@ -2425,7 +2588,7 @@ export function ContestListClient({
               variant="outline"
               className="text-sm bg-[#7F39EC] text-white py-1 capitalize"
             >
-              {contest.contest_type || "Type"}
+              {getContestTypeLabel(contest.contest_type)}
             </Badge>
           </div>
 
@@ -2490,17 +2653,7 @@ export function ContestListClient({
             {contest.contest_based_details && (
               <div className="flex items-center gap-1 text-base">
                 <DollarSign className="h-3 w-3" />
-                <span>
-                  {contest.contest_type === "leaderboard"
-                    ? `Prize: ${formatMoney(
-                        contest.contest_based_details.leaderboard_contest
-                          ?.total_prize || 0,
-                      )}`
-                    : `Budget: ${formatMoney(
-                        contest.contest_based_details.cpm_contest
-                          ?.total_budget || 0,
-                      )}`}
-                </span>
+                <span>{getContestPrimaryFinancialText(contest)}</span>
               </div>
             )}
             {contest.rejection_reason && (
@@ -2834,7 +2987,7 @@ export function ContestListClient({
   }, [isCheckingCpmAccess, router, toast]);
 
   const contestTypeGuideCards = (
-    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
       <Card
         className={cn(
           "shadow-lg",
@@ -3095,6 +3248,141 @@ export function ContestListClient({
               disabled={isCheckingCpmAccess}
             >
               Create CPM Contest
+            </button>
+            <a
+              href="https://calendly.com/guptavishesh2/30min"
+              target="_blank"
+              rel="noopener noreferrer"
+              className={cn(
+                "w-full text-md rounded-lg font-medium py-2 flex items-center justify-center gap-2 border transition-colors",
+                isDark
+                  ? "border-gray-600 text-gray-300 hover:bg-gray-800"
+                  : "border-gray-300 text-gray-600 hover:bg-gray-50",
+              )}
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 13a19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 3.55 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
+              Need Help? Book a Call
+            </a>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card
+        className={cn(
+          "shadow-lg",
+          isDark ? "border border-gray-700 bg-[#07031D]" : "border border-gray-200 bg-white",
+        )}
+      >
+        <div
+          className={cn(
+            "aspect-[16/10] flex items-center justify-center overflow-hidden relative rounded-md border",
+            isDark ? "bg-slate-900 border-gray-700" : "bg-slate-100 border-gray-100",
+          )}
+        >
+          <img
+            src="/images/Milestones.avif"
+            alt="Milestone contest preview"
+            className="w-full h-full object-cover transition-transform duration-300 ease-in-out group-hover:scale-105"
+          />
+        </div>
+        <CardHeader className="pb-3">
+          <div className="flex items-center gap-3">
+            <div className="flex-1">
+              <CardTitle className={cn("text-base", isDark ? "text-white" : "text-gray-900")}>Milestone Contest</CardTitle>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent className="pt-0">
+          <div className={cn("space-y-4 text-md leading-6", isDark ? "text-slate-300" : "text-slate-800")}>
+            <div className="rounded-lg">
+              <p className="mt-2">
+                Milestone contests reward creators as they reach specific view targets. This provides guaranteed payouts for creators and guaranteed results for your brand, with full control over the maximum budget.
+              </p>
+            </div>
+
+            <div className="space-y-3">
+              <div
+                className={cn(
+                  "flex items-start gap-3 rounded-lg border p-4 shadow-sm",
+                  isDark ? "border-gray-700 bg-[#0b1020]" : "border-slate-200 bg-white",
+                )}
+              >
+                <span
+                  className={cn(
+                    "inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-semibold",
+                    isDark ? "bg-purple-900/60 text-purple-200" : "bg-purple-100 text-purple-700",
+                  )}
+                >
+                  1
+                </span>
+                <div>
+                  <p className={cn("font-semibold", isDark ? "text-white" : "text-slate-900")}>
+                    Define Milestones
+                  </p>
+                  <p className={cn("mt-1", isDark ? "text-slate-300" : "text-slate-600")}>
+                    Set specific view targets (e.g., 10K, 50K, 100K) and the payout amount for each. You can also set a cap on the number of winners per milestone.
+                  </p>
+                </div>
+              </div>
+
+              <div
+                className={cn(
+                  "flex items-start gap-3 rounded-lg border p-4 shadow-sm",
+                  isDark ? "border-gray-700 bg-[#0b1020]" : "border-slate-200 bg-white",
+                )}
+              >
+                <span
+                  className={cn(
+                    "inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-semibold",
+                    isDark ? "bg-purple-900/60 text-purple-200" : "bg-purple-100 text-purple-700",
+                  )}
+                >
+                  2
+                </span>
+                <div>
+                  <p className={cn("font-semibold", isDark ? "text-white" : "text-slate-900")}>
+                    Creators Participate
+                  </p>
+                  <p className={cn("mt-1", isDark ? "text-slate-300" : "text-slate-600")}>
+                    Creators produce and publish content. As their videos gain organic views, our system tracks their progress towards the milestones you set.
+                  </p>
+                </div>
+              </div>
+
+              <div
+                className={cn(
+                  "flex items-start gap-3 rounded-lg border p-4 shadow-sm",
+                  isDark ? "border-gray-700 bg-[#0b1020]" : "border-slate-200 bg-white",
+                )}
+              >
+                <span
+                  className={cn(
+                    "inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-semibold",
+                    isDark ? "bg-purple-900/60 text-purple-200" : "bg-purple-100 text-purple-700",
+                  )}
+                >
+                  3
+                </span>
+                <div>
+                  <p className={cn("font-semibold", isDark ? "text-white" : "text-slate-900")}>
+                  Payouts Based on Achieved Milestones
+                  </p>
+                  <p className={cn("mt-1", isDark ? "text-slate-300" : "text-slate-600")}>
+                  When a creator reaches a milestone, the payout is calculated and credited based only the milestone they have actually achieved for that submission.
+                  </p>
+                </div>
+              </div>
+            </div>
+            <button
+              type="button"
+              className="w-full bg-purple-600 text-md rounded-lg font-medium text-white py-2 hover:bg-purple-700"
+              onClick={() =>
+                router.push(
+                  "/dashboard/contests/create?new=true&contestType=milestone",
+                )
+              }
+            >
+              Create Milestone Contest
             </button>
             <a
               href="https://calendly.com/guptavishesh2/30min"
@@ -3384,6 +3672,9 @@ export function ContestListClient({
                   </SelectItem>
                   <SelectItem isDark={isDark} value="cpm">
                     CPM
+                  </SelectItem>
+                  <SelectItem isDark={isDark} value="milestone">
+                    Milestone
                   </SelectItem>
                 </SelectContent>
               </Select>

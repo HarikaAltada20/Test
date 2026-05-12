@@ -299,7 +299,7 @@ export interface Database {
           tracking_links: { url: string; description: string }[] | null;
           created_at: string;
           updated_at: string;
-          contest_type: "leaderboard" | "cpm";
+          contest_type: "leaderboard" | "cpm" | "milestone";
           contest_based_details: Json | null;
           post_contest_status:
             | "pending_review"
@@ -354,7 +354,7 @@ export interface Database {
           tracking_links?: { url: string; description: string }[] | null;
           created_at?: string;
           updated_at?: string;
-          contest_type?: "leaderboard" | "cpm";
+          contest_type?: "leaderboard" | "cpm" | "milestone";
           contest_based_details?: Json | null;
           post_contest_status?:
             | "pending_review"
@@ -407,7 +407,7 @@ export interface Database {
           inspiration_links?: { url: string; description: string }[] | null;
           created_at?: string;
           updated_at?: string;
-          contest_type?: "leaderboard" | "cpm";
+          contest_type?: "leaderboard" | "cpm" | "milestone";
           contest_based_details?: Json | null;
           post_contest_status?:
             | "pending_review"
@@ -685,6 +685,7 @@ export interface Database {
           payment_intent_id: string | null;
           payment_method: string | null;
           metadata: any | null;
+          idempotency_key: string | null;
         };
         Insert: {
           id?: string;
@@ -708,6 +709,7 @@ export interface Database {
           payment_intent_id?: string | null;
           payment_method?: string | null;
           metadata?: any | null;
+          idempotency_key?: string | null;
         };
         Update: {
           id?: string;
@@ -731,6 +733,7 @@ export interface Database {
           payment_intent_id?: string | null;
           payment_method?: string | null;
           metadata?: any | null;
+          idempotency_key?: string | null;
         };
       };
       coin_transactions: {
@@ -873,7 +876,7 @@ export interface Database {
           tracking_links: { url: string; description: string }[] | null;
           created_at: string | null;
           updated_at: string | null;
-          contest_type: "leaderboard" | "cpm" | null;
+          contest_type: "leaderboard" | "cpm" | "milestone" | null;
           contest_based_details: Json | null;
           post_contest_status:
             | "pending_review"

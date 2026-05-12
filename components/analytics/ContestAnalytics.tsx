@@ -13,7 +13,7 @@ interface ContestAnalyticsProps {
   contentType?: "video" | "text_image";
   videoPlatform?: string;
   twitterAnalytics?: boolean;
-  contestTypeFilter?: "all" | "leaderboard" | "cpm";
+  contestTypeFilter?: "all" | "leaderboard" | "cpm" | "milestone";
 }
 
 interface Contest {
@@ -141,6 +141,16 @@ export default function ContestAnalytics({
         details?.cpm_contest?.total_budget
       ) {
         return sum + details.cpm_contest.total_budget;
+      } else if (
+        contest.contest_type === "milestone" &&
+        (details?.milestone_contest?.budget_spent ||
+          details?.milestone_contest?.budget_spent_cents)
+      ) {
+        return (
+          sum +
+          (details.milestone_contest.budget_spent ||
+            details.milestone_contest.budget_spent_cents)
+        );
       }
       return sum;
     }, 0);

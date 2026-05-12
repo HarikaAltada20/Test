@@ -40,6 +40,7 @@ import React from "react";
 import { centsToDollars, formatCurrencyFromCents as formatMoney } from "@/lib/currency-utils";
 import { getFullRejectionDetails } from "@/lib/submission-metadata";
 import { cn } from "@/lib/utils";
+import { adjustRewardCents, parsePayoutAdjustment } from "@/lib/payout-rules";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Calendar } from "@/components/ui/calendar";
@@ -80,7 +81,7 @@ interface SubmissionsClientProps {
   fetchError?: string;
 }
 
-type ContestTypeFilter = "all" | "leaderboard" | "cpm";
+type ContestTypeFilter = "all" | "leaderboard" | "cpm" | "milestone";
 type StatusFilter =
   | "all"
   | "pending"
@@ -249,7 +250,7 @@ export default function SubmissionsClient({
     useState<SubmissionWithContest[]>(initialSubmissions);
 
   const [contestTypeFilter, setContestTypeFilter] =
-    useState<string[]>(["leaderboard", "cpm"]);
+    useState<string[]>(["leaderboard", "cpm", "milestone"]);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [platformFilter, setPlatformFilter] = useState<string[]>([
     "youtube", "instagram", "tiktok"
@@ -287,6 +288,67 @@ export default function SubmissionsClient({
   const isSubmissionPaid = (s: SubmissionWithContest) =>
     (s.status as string || "").toLowerCase() === "paid" || (s as any).paid === true;
 
+  const getMilestoneMatchForSubmission = (
+    submission: SubmissionWithContest,
+    contest: any,
+  ) => {
+    const contestDetails = contest?.contest_based_details as any;
+    const milestoneContest = contestDetails?.milestone_contest;
+    const milestones = Array.isArray(milestoneContest?.milestones)
+      ? milestoneContest.milestones
+      : [];
+    if (milestones.length === 0) return null;
+
+    const submissionViews = Number(submission.views ?? 0);
+    const sortedMilestones = [...milestones].sort(
+      (a: any, b: any) => Number(b?.target_views || 0) - Number(a?.target_views || 0),
+    );
+
+    const matched = sortedMilestones.find((milestone: any) => {
+      const targetViews = Number(milestone?.target_views || 0);
+      return submissionViews >= targetViews;
+    });
+
+    if (!matched) return null;
+    return {
+      order: Number(matched?.order || 0),
+      targetViews: Number(matched?.target_views || 0),
+      payoutCents: Number(matched?.payout_cents || 0),
+    };
+  };
+
+  const getMilestoneEstimatedEarningsCents = (
+    submission: SubmissionWithContest,
+    contest: any,
+  ) => {
+    const matchedMilestone = getMilestoneMatchForSubmission(submission, contest);
+    return Number(matchedMilestone?.payoutCents || 0);
+  };
+
+  const getPlatformEffectiveViews = (submission: SubmissionWithContest) => {
+    const platform = String(submission.platform || "").toLowerCase();
+    if (platform.includes("tiktok")) {
+      return Number(
+        (submission.other_stats as any)?.tiktok?.view_count ??
+          (submission.other_stats as any)?.tiktok?.views ??
+          submission.views ??
+          0,
+      );
+    }
+    return Number(submission.views ?? 0);
+  };
+
+  const applyContestRewardAdjustment = (amountCents: number, contest: any) => {
+    const adjustment = parsePayoutAdjustment(
+      contest?.payout_adjustment_percentage,
+      contest?.payout_adjustment_mode,
+    );
+    return adjustRewardCents(amountCents, {
+      shouldAdjustReward: adjustment.shouldAdjustReward,
+      percentage: adjustment.percentage,
+    });
+  };
+
   const getSubmissionEarningsAmount = (submission: SubmissionWithContest) => {
     const contest = submission.contests;
     const subStatus = (submission.status as string || "").toLowerCase();
@@ -310,15 +372,25 @@ export default function SubmissionsClient({
           "cpm_contest" in (contest.contest_based_details as any)
           ? ((contest.contest_based_details as any).cpm_contest as unknown as CpmContestDetails)
           : null;
-      const views = submission.views ?? 0;
+      const views = getPlatformEffectiveViews(submission);
       let effectiveViews = views;
       if (cpmConfig?.min_views != null && views < cpmConfig.min_views) effectiveViews = 0;
       else if (cpmConfig?.max_views != null && views > cpmConfig.max_views) effectiveViews = cpmConfig.max_views;
       const rateUsd = cpmConfig?.cpm_rate_usd ?? 0;
-      return Math.round((effectiveViews * rateUsd) / 10);
+      const rawAmount = Math.round((effectiveViews * rateUsd) / 10);
+      return applyContestRewardAdjustment(rawAmount, contest);
     }
+
+    if (contest?.contest_type === "milestone") {
+      if (subStatus === "rejected") return 0;
+      return applyContestRewardAdjustment(
+        getMilestoneEstimatedEarningsCents(submission, contest),
+        contest,
+      );
+    }
+
     const data = calculateLeaderboardEarnings(submission, contest);
-    return data.amount;
+    return applyContestRewardAdjustment(data.amount, contest);
   };
 
   // For UI display only (cards/modals). This can show CPM estimates for
@@ -361,17 +433,37 @@ export default function SubmissionsClient({
           "cpm_contest" in (contest.contest_based_details as any)
           ? ((contest.contest_based_details as any).cpm_contest as unknown as CpmContestDetails)
           : null;
-      const views = submission.views ?? 0;
+      const views = getPlatformEffectiveViews(submission);
       let effectiveViews = views;
       if (cpmConfig?.min_views != null && views < cpmConfig.min_views) effectiveViews = 0;
       else if (cpmConfig?.max_views != null && views > cpmConfig.max_views) effectiveViews = cpmConfig.max_views;
       const rateUsd = cpmConfig?.cpm_rate_usd ?? 0;
-      return Math.round((effectiveViews * rateUsd) / 10);
+      const rawAmount = Math.round((effectiveViews * rateUsd) / 10);
+      return applyContestRewardAdjustment(rawAmount, contest);
+    }
+
+    if (contest?.contest_type === "milestone") {
+      if (subStatus === "rejected") return 0;
+
+      // After verification completes, only verified/paid submissions should keep estimated value.
+      const isVerificationComplete = postContestStatus === "verification_complete";
+      if (isVerificationComplete) {
+        const isConfirmed =
+          subStatus === "verified" ||
+          subStatus === "paid" ||
+          (submission as any).paid === true;
+        if (!isConfirmed) return 0;
+      }
+
+      return applyContestRewardAdjustment(
+        getMilestoneEstimatedEarningsCents(submission, contest),
+        contest,
+      );
     }
 
     // Non-CPM: share the same logic as stats helper.
     const data = calculateLeaderboardEarnings(submission, contest);
-    return data.amount;
+    return applyContestRewardAdjustment(data.amount, contest);
   };
 
   const getSubmissionBonusAmount = (submission: SubmissionWithContest) => {
@@ -676,7 +768,7 @@ export default function SubmissionsClient({
     let submissions = [...allSubmissions];
 
     // Filter by contest type
-    if (contestTypeFilter.length < 2) {
+    if (contestTypeFilter.length < 3) {
       submissions = submissions.filter(
         (sub) => sub.contests?.contest_type && contestTypeFilter.includes(sub.contests.contest_type)
       );
@@ -1071,6 +1163,10 @@ export default function SubmissionsClient({
 
     const totalEarningsCents = getSubmissionDisplayEarningsAmount(submission);
     const earningsInDollars = centsToDollars(totalEarningsCents);
+    const milestoneMatch =
+      contest?.contest_type === "milestone"
+        ? getMilestoneMatchForSubmission(submission, contest)
+        : null;
 
     let earningsDisplay: { label: string; amount: string; color: string; isRejected?: boolean } | null = null;
 
@@ -1083,7 +1179,7 @@ export default function SubmissionsClient({
         // Finalized, fully earned amount in dark green
         color: "text-green-700",
       };
-    } else if (contest?.contest_type === "cpm") {
+    } else if (contest?.contest_type === "cpm" || contest?.contest_type === "milestone") {
       const label = isPayoutsProcessedVal
         ? "Amount Earned"
         : "Estimated Earnings";
@@ -1111,7 +1207,10 @@ export default function SubmissionsClient({
     }
 
     // Status-based color overrides for CPM submissions
-    if (earningsDisplay && contest?.contest_type === "cpm") {
+    if (
+      earningsDisplay &&
+      (contest?.contest_type === "cpm" || contest?.contest_type === "milestone")
+    ) {
       if (isPaidCard && isPayoutsProcessedVal) {
         // Fully finalized
         earningsDisplay.color = "text-green-700";
@@ -1135,7 +1234,8 @@ export default function SubmissionsClient({
     const bonusAmountCents = getSubmissionBonusAmount(submission);
     const bonusAmountDollars = centsToDollars(bonusAmountCents).toFixed(2);
     const isVerifiedForBonus = submission.status === "verified";
-    const showEstimatedBonus = !isPaidCard && (isVerifiedForBonus || flatFeeBonusForCard > 0);
+    const isMilestoneContest = contest?.contest_type === "milestone";
+    const showEstimatedBonus = !isMilestoneContest && !isPaidCard && (isVerifiedForBonus || flatFeeBonusForCard > 0);
 
     let bonusLabel = "Estimated Bonus";
     if (isRejected) {
@@ -1150,7 +1250,7 @@ export default function SubmissionsClient({
       bonusLabel = "Estimated Bonus";
     }
     const bonusColor = (bonusLabel === "Bonus Earned") ? "text-green-500" : isEnded ? "text-emerald-500" : isDark ? "text-slate-300" : "text-slate-600";
-    const showBonusRow = bonusAmountCents > 0 && (bonusLabel !== "Estimated Bonus" || showEstimatedBonus);
+    const showBonusRow = !isMilestoneContest && bonusAmountCents > 0 && (bonusLabel !== "Estimated Bonus" || showEstimatedBonus);
 
     // Massively expanded thumbnail detection for all social platforms (IG, TikTok, YT, Twitter)
     const meta = submission.metadata as any;
@@ -1334,7 +1434,7 @@ export default function SubmissionsClient({
 
           <div className="flex flex-col gap-1 mt-1">
             {earningsDisplay && (
-              <div className="flex items-center gap-2">
+              <div className="flex flex-col items-start gap-1">
                 <p className={cn("text-[15px] font-semibold flex items-center gap-1.5", earningsDisplay.color)}>
                   {earningsDisplay.label === "Winning Zone" && <Trophy className="h-4 w-4" />}
                   {earningsDisplay.label}:{" "}
@@ -1351,6 +1451,16 @@ export default function SubmissionsClient({
                     `$${earningsDisplay.amount} USD`
                   )}
                 </p>
+                {contest?.contest_type === "milestone" &&
+                  totalEarningsCents > 0 &&
+                  milestoneMatch && (
+                    <p className={cn("text-[12px] font-medium", isDark ? "text-slate-300" : "text-slate-600")}>
+                      {milestoneMatch.order > 0
+                        ? `Milestone ${milestoneMatch.order}`
+                        : "Milestone"}{" "}
+                      • Required Views: {milestoneMatch.targetViews.toLocaleString()}
+                    </p>
+                  )}
                 {isPayoutsProcessedVal && (submission as any).paid_at && (
                   <span className="text-[12px] font-medium text-slate-400">
                     (Paid on: {format(new Date((submission as any).paid_at), "MMM d, yyyy")})
@@ -2009,7 +2119,7 @@ export default function SubmissionsClient({
             >
               <Trophy className="mr-2 h-4 w-4 opacity-70" />
               <span className="truncate">
-                {contestTypeFilter.length === 2 ? "All Types" :
+                {contestTypeFilter.length === 3 ? "All Types" :
                   contestTypeFilter.map(t => t.charAt(0).toUpperCase() + t.slice(1)).join(", ")}
               </span>
               <ChevronRight className="ml-auto h-4 w-4 opacity-50 rotate-90" />
@@ -2019,7 +2129,8 @@ export default function SubmissionsClient({
             <div className="flex flex-col gap-1">
               {[
                 { id: "leaderboard", label: "Leaderboard" },
-                { id: "cpm", label: "CPM" }
+                { id: "cpm", label: "CPM" },
+                { id: "milestone", label: "Milestone" }
               ].map(type => (
                 <div
                   key={type.id}
@@ -2451,6 +2562,10 @@ export default function SubmissionsClient({
 
               const totalEarningsCents = getSubmissionDisplayEarningsAmount(submission);
               const earningsInDollars = centsToDollars(totalEarningsCents);
+              const milestoneMatchModal =
+                contest?.contest_type === "milestone"
+                  ? getMilestoneMatchForSubmission(submission, contest)
+                  : null;
 
               const bonusAmountCentsModal = getSubmissionBonusAmount(submission);
               const bonusAmountDollarsModal = centsToDollars(bonusAmountCentsModal).toFixed(2);
@@ -2461,14 +2576,15 @@ export default function SubmissionsClient({
                 contestDetailsModal?.leaderboard_contest?.flat_fee_bonus ||
                 bonusDetailsModal?.flat_fee_bonus ||
                 0;
-              const showEstimatedBonusModal = !isPaidModal && (submission.status === "verified" || flatFeeBonusModal > 0);
+              const isMilestoneContestModal = contest?.contest_type === "milestone";
+              const showEstimatedBonusModal = !isMilestoneContestModal && !isPaidModal && (submission.status === "verified" || flatFeeBonusModal > 0);
               let bonusLabelModal = "Estimated Bonus";
               if (isRejectedModal) bonusLabelModal = "Bonus Won";
               else if (isPaidModal) bonusLabelModal = "Bonus Earned";
               else if (isPayoutsProcessed) bonusLabelModal = "Bonus Earned";
               else if (isVerificationComplete) bonusLabelModal = "Estimated Bonus";
               else bonusLabelModal = "Estimated Bonus";
-              const showBonusRowModal = bonusAmountCentsModal > 0 && (bonusLabelModal !== "Estimated Bonus" || showEstimatedBonusModal);
+              const showBonusRowModal = !isMilestoneContestModal && bonusAmountCentsModal > 0 && (bonusLabelModal !== "Estimated Bonus" || showEstimatedBonusModal);
               const bonusColorModal = (bonusLabelModal === "Bonus Earned") ? "text-green-500" : isEnded ? "text-emerald-500" : isDark ? "text-slate-300" : "text-slate-600";
 
               let earningsDisplay: { label: string; amount: string; color: string; isRejected?: boolean } | null = null;
@@ -2480,7 +2596,7 @@ export default function SubmissionsClient({
                   amount: centsToDollars(submission.earnings ?? 0).toFixed(2),
                   color: "text-green-700",
                 };
-              } else if (contest?.contest_type === "cpm") {
+              } else if (contest?.contest_type === "cpm" || contest?.contest_type === "milestone") {
                 const label = isPayoutsProcessed
                   ? "Amount Earned"
                   : "Estimated Earnings";
@@ -2508,7 +2624,10 @@ export default function SubmissionsClient({
               }
 
               // Status-based color overrides for CPM submissions in modal
-              if (earningsDisplay && contest?.contest_type === "cpm") {
+              if (
+                earningsDisplay &&
+                (contest?.contest_type === "cpm" || contest?.contest_type === "milestone")
+              ) {
                 if (isPaidModal && isPayoutsProcessed) {
                   earningsDisplay.color = "text-green-700";
                 } else if (subStatusLowerModal === "verified") {
@@ -2629,6 +2748,16 @@ export default function SubmissionsClient({
                           "Not Eligible"
                         ) : `$${earningsDisplay?.amount || "0.00"} USD`}
                       </p>
+                      {contest?.contest_type === "milestone" &&
+                        totalEarningsCents > 0 &&
+                        milestoneMatchModal && (
+                          <p className={cn("text-[11px] font-semibold mt-1", isDark ? "text-slate-300" : "text-slate-600")}>
+                            {milestoneMatchModal.order > 0
+                              ? `Milestone ${milestoneMatchModal.order}`
+                              : "Milestone"}{" "}
+                            • Required Views: {milestoneMatchModal.targetViews.toLocaleString()}
+                          </p>
+                        )}
                       {isPayoutsProcessed && (submission as any).paid_at && (
                         <p className="text-[10px] font-bold text-slate-400 mt-1 uppercase tracking-tighter">
                           Paid on: {format(new Date((submission as any).paid_at), "MMM d, yyyy")}

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -18,6 +18,7 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
@@ -35,6 +36,11 @@ import {
   Loader2,
   ThumbsUp,
   MessageCircle,
+  ThumbsDown,
+  Share2,
+  BarChart2,
+  CircleHelp,
+  AlertTriangle,
 } from "lucide-react";
 import {
   Select,
@@ -51,6 +57,8 @@ import {
 import { cn } from "@/lib/utils";
 import { toast } from "@/hooks/use-toast";
 import { applyPayoutAdjustment } from "@/lib/payout-adjustment";
+import { buildFlatFeeBonusExpectedCentsBySubmissionId } from "@/lib/twitter-cpm-bonus-expected";
+import { YouTubeAnalyticsPanel } from "@/components/youtube/YouTubeAnalyticsPanel";
 import {
   formatMetadataTimestamp,
   parseSubmissionMetadata,
@@ -97,8 +105,7 @@ function effectiveTikTokSubmissionViews(sub: Submission): number {
   return Number(
     (sub.other_stats?.tiktok as Record<string, unknown> | undefined)
       ?.view_count ??
-      (sub.other_stats?.tiktok as Record<string, unknown> | undefined)
-        ?.views ??
+      (sub.other_stats?.tiktok as Record<string, unknown> | undefined)?.views ??
       sub.views ??
       0,
   );
@@ -117,7 +124,7 @@ interface CreatorSubmissionsModalProps {
   creator: Creator;
   submissions: Submission[];
   contest: any;
-  onVerify: (submissionIds: string[]) => void;
+  onVerify: (submissionIds: string[]) => Promise<void> | void;
   onReject: (submissionIds: string[]) => void;
   onSetPending: (submissionIds: string[]) => void;
   onPayment: (
@@ -129,6 +136,22 @@ interface CreatorSubmissionsModalProps {
   isAdminView?: boolean;
   /** For leaderboard contests: creator's rank (1-based) so expected reward per tweet matches main view */
   creatorRank?: number;
+  /** For milestone contests: precomputed expected payout per submission from normal view logic */
+  milestoneExpectedPayoutBySubmissionId?: Map<string, number>;
+  /** For milestone contests: precomputed milestone label per submission from normal view logic */
+  milestoneAssignedLabelBySubmissionId?: Map<string, string>;
+  ytVisibleColumns?: string[];
+  canSeeCore?: boolean;
+  canSeeTraffic?: boolean;
+  /** Match submission-wise YouTube analytics: demographics when admin or brand allowed */
+  canSeeDemographics?: boolean;
+  /**
+   * Full contest submission list for flat-fee bonus cap (FCFS by created_at).
+   * When omitted, falls back to `submissions` (per-creator only — wrong cap scope).
+   */
+  bonusCapSubmissions?: Submission[];
+  /** True while parent runs bulk/single verify API after paid-reversal confirm (Creator modal stays open). */
+  parentBulkActionLoading?: boolean;
 }
 
 export function CreatorSubmissionsModal({
@@ -144,6 +167,14 @@ export function CreatorSubmissionsModal({
   onCustomPayment,
   isAdminView = false,
   creatorRank,
+  milestoneExpectedPayoutBySubmissionId,
+  milestoneAssignedLabelBySubmissionId,
+  ytVisibleColumns,
+  canSeeCore = true,
+  canSeeTraffic = true,
+  canSeeDemographics = false,
+  bonusCapSubmissions,
+  parentBulkActionLoading = false,
 }: CreatorSubmissionsModalProps) {
   const [selectedSubmissions, setSelectedSubmissions] = useState<Set<string>>(
     new Set(),
@@ -155,7 +186,29 @@ export function CreatorSubmissionsModal({
     "views-desc" | "views-asc" | "date-desc" | "date-asc"
   >("date-desc");
   const [mode, setMode] = useState<"light" | "dark">("light");
-  const [bulkPaymentLoading, setBulkPaymentLoading] = useState(false);
+  const [bulkVerifyLoading, setBulkVerifyLoading] = useState(false);
+  const bulkStatusActionsBusy =
+    bulkVerifyLoading || parentBulkActionLoading;
+  type BulkPaymentActiveKey =
+    | "standard:0"
+    | "standard:1"
+    | "bonus:0"
+    | "bonus:1"
+    | "both:0"
+    | "both:1";
+  const [bulkPaymentActiveKey, setBulkPaymentActiveKey] = useState<
+    BulkPaymentActiveKey | null
+  >(null);
+  const bulkPayKey = (
+    payType: "standard" | "bonus" | "both",
+    isBulk: boolean,
+  ): BulkPaymentActiveKey =>
+    `${payType}:${isBulk ? "1" : "0"}` as BulkPaymentActiveKey;
+  const isBulkPayBtnLoading = (
+    payType: "standard" | "bonus" | "both",
+    isBulk: boolean,
+  ) => bulkPaymentActiveKey === bulkPayKey(payType, isBulk);
+  const isAnyBulkPaymentBusy = bulkPaymentActiveKey !== null;
   const [downloadingSubmissionId, setDownloadingSubmissionId] = useState<
     string | null
   >(null);
@@ -289,10 +342,19 @@ export function CreatorSubmissionsModal({
     setSelectedSubmissions(newSet);
   };
 
-  const handleBulkAction = (action: "verify" | "reject" | "pending") => {
+  const handleBulkAction = async (
+    action: "verify" | "reject" | "pending",
+  ) => {
     const selectedIds = Array.from(selectedSubmissions);
     if (action === "verify") {
-      onVerify(selectedIds);
+      setBulkVerifyLoading(true);
+      try {
+        await onVerify(selectedIds);
+        setSelectedSubmissions(new Set());
+      } finally {
+        setBulkVerifyLoading(false);
+      }
+      return;
     } else if (action === "reject") {
       onReject(selectedIds);
     } else {
@@ -310,105 +372,152 @@ export function CreatorSubmissionsModal({
     // Get selected submissions
     const selectedSubs = submissions.filter((s) => selectedIds.includes(s.id));
 
-    // Filter to verified submissions only (Twitter: use moderation_status)
-    const verifiedSubs = selectedSubs.filter((s) => {
-      const status = (s as any).is_twitter_tweet
-        ? (s as any).moderation_status || s.status
-        : s.status;
-      return status === "verified";
-    });
+    const hasTwitterTweetsSelected = selectedSubs.some(
+      (s) => (s as any).is_twitter_tweet === true,
+    );
+    const isTwitterCpmContestFlag =
+      contest.contest_type === "cpm" &&
+      (contest.platform?.toLowerCase() === "twitter" ||
+        contest.platform?.toLowerCase() === "x");
 
-    if (verifiedSubs.length === 0) {
-      alert(
-        "No verified submissions selected. Only verified submissions can be paid.",
-      );
+    // Standard/both: verified only.
+    // Twitter CPM bonus-only: only already-paid tweets with unpaid bonus.
+    let paySubs: typeof selectedSubs;
+    if (
+      type === "bonus" &&
+      hasTwitterTweetsSelected &&
+      isTwitterCpmContestFlag
+    ) {
+      paySubs = selectedSubs.filter((s) => {
+        if (!(s as any).is_twitter_tweet) return false;
+        const st = getNormalizedSubmissionStatus(s);
+        if (s.bonus_paid) return false;
+        return st === "paid" || s.paid === true;
+      });
+    } else {
+      paySubs = selectedSubs.filter((s) => {
+        const status = (s as any).is_twitter_tweet
+          ? (s as any).moderation_status || s.status
+          : s.status;
+        const st = String(status || "").toLowerCase();
+        return st === "verified" || st === "approved";
+      });
+    }
+
+    if (paySubs.length === 0) {
+      toast({
+        title: "Cannot pay",
+        description:
+          type === "bonus" &&
+          hasTwitterTweetsSelected &&
+          isTwitterCpmContestFlag
+            ? "No selected paid tweets with unpaid bonus found."
+            : "No verified submissions selected. Only verified submissions can be paid.",
+        variant: "destructive",
+      });
       return;
     }
 
-    setBulkPaymentLoading(true);
+    setBulkPaymentActiveKey(bulkPayKey(type, isBulkTransaction));
     try {
       // Sort by submission time (earliest first)
-      const sortedSubs = [...verifiedSubs].sort(
+      const sortedSubs = [...paySubs].sort(
         (a, b) =>
           new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
       );
 
-    const hasTwitterTweets = sortedSubs.some(
-      (s) => (s as any).is_twitter_tweet === true
-    );
-    const isTwitterCpm =
-      contest.contest_type === "cpm" &&
-      (contest.platform?.toLowerCase() === "twitter" ||
-        contest.platform?.toLowerCase() === "x");
-    const useInstagramBulkApi = isBulkTransaction && !hasTwitterTweets;
-    const useTwitterCpmBulkApi =
-      isBulkTransaction && hasTwitterTweets && isTwitterCpm;
+      const hasTwitterTweets = sortedSubs.some(
+        (s) => (s as any).is_twitter_tweet === true,
+      );
+      const isTwitterCpm =
+        contest.contest_type === "cpm" &&
+        (contest.platform?.toLowerCase() === "twitter" ||
+          contest.platform?.toLowerCase() === "x");
+      const useInstagramBulkApi = isBulkTransaction && !hasTwitterTweets;
+      const useTwitterCpmBulkApi =
+        isBulkTransaction && hasTwitterTweets && isTwitterCpm;
 
-    if (useInstagramBulkApi || useTwitterCpmBulkApi) {
-      try {
-        const response = useTwitterCpmBulkApi
-          ? await fetch(`/api/contests/${contest.id}/bulk-pay-twitter-cpm`, {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                tweet_ids: sortedSubs.map((s) => s.id),
-                payment_type: type,
-                creator_id: creator.id,
-              }),
-            })
-          : await fetch("/api/admin/bulk-payment", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                submission_ids: sortedSubs.map((s) => s.id),
-                payment_type: type,
-                contest_id: contest.id,
-                creator_id: creator.id,
-              }),
-            });
+      if (useInstagramBulkApi || useTwitterCpmBulkApi) {
+        try {
+          const response = useTwitterCpmBulkApi
+            ? await fetch(`/api/contests/${contest.id}/bulk-pay-twitter-cpm`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  tweet_ids: sortedSubs.map((s) => s.id),
+                  payment_type: type,
+                  creator_id: creator.id,
+                }),
+              })
+            : await fetch("/api/admin/bulk-payment", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  submission_ids: sortedSubs.map((s) => s.id),
+                  payment_type: type,
+                  contest_id: contest.id,
+                  creator_id: creator.id,
+                }),
+              });
 
           const result = await response.json();
 
           if (!response.ok) {
-            alert(`Bulk payment failed:\n${result.error || "Unknown error"}`);
+            toast({
+              title: "Bulk payment failed",
+              description: result.error || "Unknown error",
+              variant: "destructive",
+            });
             return;
           }
 
           setSelectedSubmissions(new Set());
 
-        const { data } = result;
-        const message = [
-          `✓ Bulk Payment Successful!`,
-          ``,
-          `Paid items: ${data.paid_count}`,
-          `Skipped: ${data.skipped_count}`,
-          ``,
-          `CPM Earnings: $${(data.total_cpm / 100).toFixed(2)}`,
-          `Flat Fee Bonus: $${(data.total_bonus / 100).toFixed(2)}`,
-          `Total Paid: $${(data.total_amount / 100).toFixed(2)}`,
-        ];
+          const { data } = result;
+          const isMilestoneContest = contest.contest_type === "milestone";
+          const lines = isMilestoneContest
+            ? [
+                `Paid items: ${data.paid_count}`,
+                `Skipped: ${data.skipped_count}`,
+                ``,
+                `Total paid: $${(data.total_amount / 100).toFixed(2)}`,
+              ]
+            : [
+                `Paid items: ${data.paid_count}`,
+                `Skipped: ${data.skipped_count}`,
+                ``,
+                `CPM earnings: $${(data.total_cpm / 100).toFixed(2)}`,
+                `Flat fee bonus: $${(data.total_bonus / 100).toFixed(2)}`,
+                `Total paid: $${(data.total_amount / 100).toFixed(2)}`,
+              ];
 
           if (data.cap_reached) {
-            message.push(``, `⚠️ Earnings cap reached!`);
-            message.push(
-              `Remaining cap: $${(data.remaining_cap / 100).toFixed(2)}`,
+            lines.push(
+              ``,
+              `Earnings cap reached. Remaining cap: $${(data.remaining_cap / 100).toFixed(2)}`,
             );
           }
 
-          alert(message.join("\n"));
+          toast({
+            title: "Bulk payment successful",
+            description: lines.join("\n"),
+            variant: "payment",
+          });
 
-        window.location.reload();
-      } catch (error) {
-        console.error("Bulk payment error:", error);
-        alert(
-          `Bulk payment failed:\n${error instanceof Error ? error.message : "Unknown error"
-          }`
-        );
-      }
-    } else {
-      // OPTION 1: Individual Transactions (Multiple API calls)
-      let successCount = 0;
-      let failCount = 0;
+          setTimeout(() => window.location.reload(), 700);
+        } catch (error) {
+          console.error("Bulk payment error:", error);
+          toast({
+            title: "Bulk payment failed",
+            description:
+              error instanceof Error ? error.message : "Unknown error",
+            variant: "destructive",
+          });
+        }
+      } else {
+        // OPTION 1: Individual Transactions (Multiple API calls)
+        let successCount = 0;
+        let failCount = 0;
 
         // Pay each submission in order (skipReload so parent doesn't reload after each)
         for (const sub of sortedSubs) {
@@ -433,14 +542,14 @@ export function CreatorSubmissionsModal({
           toast({
             title: "Success",
             description: `Successfully paid ${successCount} submission(s).`,
-            variant: "default",
+            variant: "payment",
           });
           setSelectedSubmissions(new Set());
         }
-        window.location.reload();
+        setTimeout(() => window.location.reload(), 700);
       }
     } finally {
-      setBulkPaymentLoading(false);
+      setBulkPaymentActiveKey(null);
     }
   };
 
@@ -512,6 +621,13 @@ export function CreatorSubmissionsModal({
       return 0;
     }
 
+    // Milestone: use the globally precomputed per-submission payout map from normal view.
+    if (contest?.contest_type === "milestone") {
+      const milestonePayout =
+        milestoneExpectedPayoutBySubmissionId?.get(submission.id) ?? 0;
+      return Math.max(Number(milestonePayout) || 0, 0);
+    }
+
     if (contest?.contest_type === "cpm" && !baseExpectedReward) {
       const cpmConfig = (contest?.contest_based_details as any)?.cpm_contest;
       const cpmRateUsd = cpmConfig?.cpm_rate_usd;
@@ -529,7 +645,10 @@ export function CreatorSubmissionsModal({
           const calculatedEarnings = (totalPoints * cpmRateUsd * 100) / 1000;
           baseExpectedReward = Math.round(calculatedEarnings);
         } else {
-          let effectiveViews = submission.views || 0;
+          let effectiveViews =
+            isTikTokContest && !isTwitterSubmission
+              ? effectiveTikTokSubmissionViews(submission)
+              : (submission.views ?? 0);
           if (
             cpmConfig?.min_views != null &&
             effectiveViews < cpmConfig.min_views
@@ -568,7 +687,7 @@ export function CreatorSubmissionsModal({
   };
 
   const flatFeeBonus = getFlatFeeBonus();
-  const hasBonus = flatFeeBonus > 0;
+  const hasFlatFeeBonus = flatFeeBonus > 0;
 
   // Simple contest-level payout adjustment (percentage + mode)
   const payoutAdjustmentPercentage = Number(
@@ -616,6 +735,67 @@ export function CreatorSubmissionsModal({
 
   const isYouTubeContest =
     contest?.platform?.toLowerCase().includes("youtube") ?? false;
+  const ytVisibleColumnsEffective =
+    ytVisibleColumns && ytVisibleColumns.length > 0
+      ? ytVisibleColumns
+      : [
+          "views",
+          "likes",
+          "comments",
+          "dislikes",
+          "shares",
+          "avg_view_pct",
+          "watch_time",
+          "avg_duration",
+          "engaged_views",
+          "subs_gained",
+          "bot_score",
+          "analytics",
+          "top_traffic_source",
+          "insights_status",
+          "expected_reward",
+          "adjusted_reward",
+          "reward_granted",
+          "status",
+          "submitted",
+        ];
+  const showYtColumn = (columnId: string) => {
+    if (!isYouTubeContest) return false;
+    if (!ytVisibleColumnsEffective.includes(columnId)) return false;
+    if (
+      [
+        "dislikes",
+        "shares",
+        "avg_view_pct",
+        "watch_time",
+        "avg_duration",
+        "engaged_views",
+        "subs_gained",
+        "bot_score",
+        "analytics",
+      ].includes(columnId)
+    ) {
+      return canSeeCore;
+    }
+    if (columnId === "top_traffic_source") return canSeeTraffic;
+    return true;
+  };
+  const YT_TRAFFIC_SOURCE_LABELS: Record<string, string> = {
+    SHORTS: "Shorts",
+    YT_SEARCH: "YouTube Search",
+    RELATED_VIDEO: "Related",
+    YT_CHANNEL: "Channel",
+    SUBSCRIBER: "Subscriber",
+    EXT_URL: "External",
+    NO_LINK_OTHER: "Direct",
+    YT_OTHER_PAGE: "Other YT",
+    PLAYLIST: "Playlist",
+    NOTIFICATION: "Notifications",
+    END_SCREEN: "End Screen",
+    HASHTAGS: "Hashtags",
+    SOUND_PAGE: "Sound",
+    NO_LINK_EMBEDDED: "Embedded",
+  };
 
   const getInsightsMeta = (
     status: Submission["insights_status"],
@@ -635,7 +815,8 @@ export function CreatorSubmissionsModal({
     }
     if (status === "temporary_failure") {
       return {
-        help: "Temporary error fetching insights\nWill retry later" + errorSuffix,
+        help:
+          "Temporary error fetching insights\nWill retry later" + errorSuffix,
         dotClass: "bg-amber-400",
         pillClass: isDark
           ? "border-amber-700/60 bg-amber-950/35"
@@ -726,9 +907,13 @@ export function CreatorSubmissionsModal({
   // Sort submissions
   const sortedSubmissions = [...filteredSubmissions].sort((a, b) => {
     if (sortBy === "views-desc")
-      return effectiveSubmissionViewsForSort(b) - effectiveSubmissionViewsForSort(a);
+      return (
+        effectiveSubmissionViewsForSort(b) - effectiveSubmissionViewsForSort(a)
+      );
     if (sortBy === "views-asc")
-      return effectiveSubmissionViewsForSort(a) - effectiveSubmissionViewsForSort(b);
+      return (
+        effectiveSubmissionViewsForSort(a) - effectiveSubmissionViewsForSort(b)
+      );
     if (sortBy === "date-desc")
       return (
         new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
@@ -745,72 +930,20 @@ export function CreatorSubmissionsModal({
   const maxEarningsPerCreator =
     (contest as any)?.max_earnings_per_creator || null;
 
-  // Pre-calculate expected bonuses with budget constraints
-  const expectedBonusMap = new Map<string, number>();
-
-  if (hasBonus) {
-    // Get budget information
-    const totalBudget =
-      contest?.contest_type === "cpm"
-        ? (contest?.contest_based_details as any)?.cpm_contest?.total_budget ||
-          0
-        : (contest?.contest_based_details as any)?.leaderboard_contest
-            ?.total_budget || 0;
-
-    const bonusBudget =
-      contest?.contest_type === "cpm"
-        ? (contest?.contest_based_details as any)?.cpm_contest
-            ?.flat_fee_bonus_cap || totalBudget
-        : totalBudget;
-
-    // Sort submissions by created_at to process in order
-    const submissionsByTime = [...submissions].sort((a, b) => {
-      return (
-        new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
-      );
-    });
-
-    let currentTotalExpectedBonus = 0;
-
-    submissionsByTime.forEach((sub) => {
-      const normalizedStatus = getNormalizedSubmissionStatus(sub);
-      const isBonusStatus =
-        normalizedStatus === "verified" ||
-        normalizedStatus === "paid" ||
-        sub.paid === true;
-      const isEligibleForBonus = hasBonus && isBonusStatus;
-
-      if (isEligibleForBonus) {
-        // Calculate remaining budget for bonuses
-        const remainingBudget = bonusBudget - currentTotalExpectedBonus;
-
-        if (remainingBudget > 0) {
-          if (remainingBudget >= flatFeeBonus) {
-            // Full bonus can be granted
-            expectedBonusMap.set(sub.id, flatFeeBonus);
-            currentTotalExpectedBonus += flatFeeBonus;
-          } else {
-            // Only partial bonus remaining - distribute the remaining amount
-            expectedBonusMap.set(sub.id, remainingBudget);
-            currentTotalExpectedBonus += remainingBudget;
-          }
-        } else {
-          expectedBonusMap.set(sub.id, 0);
-        }
-      } else {
-        expectedBonusMap.set(sub.id, 0);
-      }
-    });
-  }
-
-  let creatorCapApplied = false;
-  let cappedTwitterSubmissionId: string | null = null;
+  const expectedBonusMap = useMemo(
+    () =>
+      buildFlatFeeBonusExpectedCentsBySubmissionId(
+        contest,
+        bonusCapSubmissions ?? submissions,
+      ),
+    [contest, bonusCapSubmissions, submissions],
+  );
 
   // For leaderboard, expected reward per tweet = prize for creator's rank (no cap); match normal view
   const isLeaderboard = contest?.contest_type === "leaderboard";
   if (maxEarningsPerCreator && maxEarningsPerCreator > 0 && !isLeaderboard) {
-    // Sort by created_at to apply cap in submission order (CPM only)
-    const submissionsByTime = [...sortedSubmissions].sort((a, b) => {
+    // Sort by created_at to apply creator cap in submission order
+    const submissionsByTime = [...submissions].sort((a, b) => {
       return (
         new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
       );
@@ -839,19 +972,10 @@ export function CreatorSubmissionsModal({
         Math.max(0, remainingCap),
       );
       runningTotal += amountApplied;
-
-      if (
-        !creatorCapApplied &&
-        cappedExpectedReward < baseExpectedReward &&
-        sub.is_twitter_tweet === true
-      ) {
-        creatorCapApplied = true;
-        cappedTwitterSubmissionId = sub.id;
-      }
     });
   } else {
     // No cap (or leaderboard): use formula-only expected per submission
-    sortedSubmissions.forEach((sub) => {
+    submissions.forEach((sub) => {
       const baseExpectedReward = calculateSubmissionBaseExpectedReward(
         sub,
         false,
@@ -893,276 +1017,294 @@ export function CreatorSubmissionsModal({
   return (
     <>
       <Dialog open={isOpen} onOpenChange={onClose} isdark={isDark}>
-      <DialogContent
-        className="max-w-[98vw] max-h-[98vh] p-0 gap-0"
-        hideCloseButton
-        onOpenAutoFocus={(e) => e.preventDefault()}
-      >
-        <DialogTitle className="sr-only">
-          {creator.username}'s Submissions
-        </DialogTitle>
-        <div className="flex flex-col h-[98vh] min-h-0 overflow-hidden">
-          {/* Header */}
-          <div
-            className={cn(
-              "flex items-center justify-between p-6 border-b flex-shrink-0",
-              isDark
-                ? "bg-[#170337] "
-                : "bg-gradient-to-r from-purple-50 to-blue-50",
+        <DialogContent
+          className="max-w-[98vw] max-h-[98vh] p-0 gap-0"
+          hideCloseButton
+          onOpenAutoFocus={(e) => e.preventDefault()}
+        >
+          <DialogTitle className="sr-only">
+            {creator.username}'s Submissions
+          </DialogTitle>
+          <div className="flex flex-col h-[98vh] min-h-0 overflow-hidden relative">
+            {parentBulkActionLoading && (
+              <div
+                className="absolute inset-0 z-50 flex flex-col items-center justify-center gap-3 rounded-lg bg-black/45 px-4"
+                aria-live="polite"
+                aria-busy="true"
+              >
+                <Loader2 className="h-10 w-10 animate-spin text-purple-300" />
+                <p className="text-center text-sm font-medium text-white">
+                  Processing submission updates…
+                </p>
+              </div>
             )}
-          >
-            <div className="flex items-center gap-4">
-              <Avatar className="h-12 w-12">
-                <AvatarImage src={creator.profile_picture_url || undefined} />
-                <AvatarFallback>
-                  {creator.username?.[0]?.toUpperCase() || "U"}
-                </AvatarFallback>
-              </Avatar>
-              <div>
-                <h2
+            {/* Header */}
+            <div
+              className={cn(
+                "flex items-center justify-between p-6 border-b flex-shrink-0",
+                isDark
+                  ? "bg-[#170337] "
+                  : "bg-gradient-to-r from-purple-50 to-blue-50",
+              )}
+            >
+              <div className="flex items-center gap-4">
+                <Avatar className="h-12 w-12">
+                  <AvatarImage src={creator.profile_picture_url || undefined} />
+                  <AvatarFallback>
+                    {creator.username?.[0]?.toUpperCase() || "U"}
+                  </AvatarFallback>
+                </Avatar>
+                <div>
+                  <h2
+                    className={cn(
+                      "text-2xl font-bold text-gray-900 dark:text-white",
+                      isDark ? "text-white" : "text-gray-900",
+                    )}
+                  >
+                    {creator.username}'s Submissions
+                  </h2>
+                  <p
+                    className={cn(
+                      "text-sm",
+                      isDark ? "text-gray-400" : "text-gray-600",
+                    )}
+                  >
+                    {submissions.length} total{" "}
+                    {submissions.length === 1 ? "submission" : "submissions"}
+                  </p>
+                </div>
+              </div>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={onClose}
+                disabled={parentBulkActionLoading}
+                className={cn(
+                  isDark ? "text-white" : "text-gray-600 hover:bg-white/50",
+                )}
+              >
+                <X className="h-6 w-6" />
+              </Button>
+            </div>
+
+            {/* Status Filter Tabs */}
+            <div
+              className={cn(
+                "flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between px-4 sm:px-6 py-3 border-b flex-shrink-0",
+                isDark ? "bg-[#06021D] " : "bg-white",
+              )}
+            >
+              <div className="flex items-center gap-2 flex-wrap w-full sm:w-auto">
+                <Button
+                  size="sm"
+                  variant={statusFilter === "all" ? "default" : "outline"}
+                  onClick={() => setStatusFilter("all")}
                   className={cn(
-                    "text-2xl font-bold text-gray-900 dark:text-white",
-                    isDark ? "text-white" : "text-gray-900",
+                    statusFilter === "all"
+                      ? "bg-purple-600 hover:bg-purple-700 text-white"
+                      : "",
+                    isDark
+                      ? "text-white border-gray-600"
+                      : statusFilter === "all"
+                        ? "text-white"
+                        : "text-gray-600",
                   )}
                 >
-                  {creator.username}'s Submissions
-                </h2>
-                <p
+                  All{" "}
+                  <Badge variant="secondary" className="ml-2">
+                    {statusCounts.all}
+                  </Badge>
+                </Button>
+                <Button
+                  size="sm"
+                  variant={
+                    statusFilter === "verified_or_paid" ? "default" : "outline"
+                  }
+                  onClick={() => setStatusFilter("verified_or_paid")}
+                  className={cn(
+                    statusFilter === "verified_or_paid"
+                      ? "bg-purple-600 hover:bg-purple-700 text-white"
+                      : "",
+                    isDark
+                      ? "text-white border-gray-600"
+                      : statusFilter === "verified_or_paid"
+                        ? "text-white"
+                        : "text-gray-600",
+                  )}
+                >
+                  Verified + Paid{" "}
+                  <Badge variant="secondary" className="ml-2">
+                    {statusCounts.verifiedOrPaid}
+                  </Badge>
+                </Button>
+                <Button
+                  size="sm"
+                  variant={statusFilter === "pending" ? "default" : "outline"}
+                  onClick={() => setStatusFilter("pending")}
+                  className={cn(
+                    statusFilter === "pending"
+                      ? "bg-purple-600 hover:bg-purple-700 text-white"
+                      : "",
+                    isDark
+                      ? "text-white border-gray-600"
+                      : statusFilter === "pending"
+                        ? "text-white"
+                        : "text-gray-600",
+                  )}
+                >
+                  Pending{" "}
+                  <Badge variant="secondary" className="ml-2">
+                    {statusCounts.pending}
+                  </Badge>
+                </Button>
+                <Button
+                  size="sm"
+                  variant={statusFilter === "verified" ? "default" : "outline"}
+                  onClick={() => setStatusFilter("verified")}
+                  className={cn(
+                    statusFilter === "verified"
+                      ? "bg-purple-600 hover:bg-purple-700 text-white"
+                      : "",
+                    isDark
+                      ? "text-white border-gray-600"
+                      : statusFilter === "verified"
+                        ? "text-white"
+                        : "text-gray-600",
+                  )}
+                >
+                  Verified{" "}
+                  <Badge variant="secondary" className="ml-2">
+                    {statusCounts.verified}
+                  </Badge>
+                </Button>
+                <Button
+                  size="sm"
+                  variant={statusFilter === "rejected" ? "default" : "outline"}
+                  onClick={() => setStatusFilter("rejected")}
+                  className={cn(
+                    statusFilter === "rejected"
+                      ? "bg-purple-600 hover:bg-purple-700 text-white"
+                      : "",
+                    isDark
+                      ? "text-white border-gray-600"
+                      : statusFilter === "rejected"
+                        ? "text-white"
+                        : "text-gray-600",
+                  )}
+                >
+                  Rejected{" "}
+                  <Badge variant="secondary" className="ml-2">
+                    {statusCounts.rejected}
+                  </Badge>
+                </Button>
+                <Button
+                  size="sm"
+                  variant={statusFilter === "paid" ? "default" : "outline"}
+                  onClick={() => setStatusFilter("paid")}
+                  className={cn(
+                    statusFilter === "paid"
+                      ? "bg-purple-600 hover:bg-purple-700 text-white"
+                      : "",
+                    isDark
+                      ? "text-white border-gray-600"
+                      : statusFilter === "paid"
+                        ? "text-white"
+                        : "text-gray-600",
+                  )}
+                >
+                  Paid{" "}
+                  <Badge variant="secondary" className="ml-2">
+                    {statusCounts.paid}
+                  </Badge>
+                </Button>
+              </div>
+              <div className="flex items-center gap-2 w-full flex-wrap justify-between sm:w-auto sm:flex-nowrap sm:justify-end">
+                <span
                   className={cn(
                     "text-sm",
                     isDark ? "text-gray-400" : "text-gray-600",
                   )}
                 >
-                  {submissions.length} total{" "}
-                  {submissions.length === 1 ? "submission" : "submissions"}
-                </p>
-              </div>
-            </div>
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={onClose}
-              className={cn(
-                isDark ? "text-white" : "text-gray-600 hover:bg-white/50",
-              )}
-            >
-              <X className="h-6 w-6" />
-            </Button>
-          </div>
-
-          {/* Status Filter Tabs */}
-          <div
-            className={cn(
-              "flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between px-4 sm:px-6 py-3 border-b flex-shrink-0",
-              isDark ? "bg-[#06021D] " : "bg-white",
-            )}
-          >
-            <div className="flex items-center gap-2 flex-wrap w-full sm:w-auto">
-              <Button
-                size="sm"
-                variant={statusFilter === "all" ? "default" : "outline"}
-                onClick={() => setStatusFilter("all")}
-                className={cn(
-                  statusFilter === "all"
-                    ? "bg-purple-600 hover:bg-purple-700 text-white"
-                    : "",
-                  isDark
-                    ? "text-white border-gray-600"
-                    : statusFilter === "all"
-                      ? "text-white"
-                      : "text-gray-600",
-                )}
-              >
-                All{" "}
-                <Badge variant="secondary" className="ml-2">
-                  {statusCounts.all}
-                </Badge>
-              </Button>
-              <Button
-                size="sm"
-                variant={
-                  statusFilter === "verified_or_paid" ? "default" : "outline"
-                }
-                onClick={() => setStatusFilter("verified_or_paid")}
-                className={cn(
-                  statusFilter === "verified_or_paid"
-                    ? "bg-purple-600 hover:bg-purple-700 text-white"
-                    : "",
-                  isDark
-                    ? "text-white border-gray-600"
-                    : statusFilter === "verified_or_paid"
-                      ? "text-white"
-                      : "text-gray-600",
-                )}
-              >
-                Verified + Paid{" "}
-                <Badge variant="secondary" className="ml-2">
-                  {statusCounts.verifiedOrPaid}
-                </Badge>
-              </Button>
-              <Button
-                size="sm"
-                variant={statusFilter === "pending" ? "default" : "outline"}
-                onClick={() => setStatusFilter("pending")}
-                className={cn(
-                  statusFilter === "pending"
-                    ? "bg-purple-600 hover:bg-purple-700 text-white"
-                    : "",
-                  isDark
-                    ? "text-white border-gray-600"
-                    : statusFilter === "pending"
-                      ? "text-white"
-                      : "text-gray-600",
-                )}
-              >
-                Pending{" "}
-                <Badge variant="secondary" className="ml-2">
-                  {statusCounts.pending}
-                </Badge>
-              </Button>
-              <Button
-                size="sm"
-                variant={statusFilter === "verified" ? "default" : "outline"}
-                onClick={() => setStatusFilter("verified")}
-                className={cn(
-                  statusFilter === "verified"
-                    ? "bg-purple-600 hover:bg-purple-700 text-white"
-                    : "",
-                  isDark
-                    ? "text-white border-gray-600"
-                    : statusFilter === "verified"
-                      ? "text-white"
-                      : "text-gray-600",
-                )}
-              >
-                Verified{" "}
-                <Badge variant="secondary" className="ml-2">
-                  {statusCounts.verified}
-                </Badge>
-              </Button>
-              <Button
-                size="sm"
-                variant={statusFilter === "rejected" ? "default" : "outline"}
-                onClick={() => setStatusFilter("rejected")}
-                className={cn(
-                  statusFilter === "rejected"
-                    ? "bg-purple-600 hover:bg-purple-700 text-white"
-                    : "",
-                  isDark
-                    ? "text-white border-gray-600"
-                    : statusFilter === "rejected"
-                      ? "text-white"
-                      : "text-gray-600",
-                )}
-              >
-                Rejected{" "}
-                <Badge variant="secondary" className="ml-2">
-                  {statusCounts.rejected}
-                </Badge>
-              </Button>
-              <Button
-                size="sm"
-                variant={statusFilter === "paid" ? "default" : "outline"}
-                onClick={() => setStatusFilter("paid")}
-                className={cn(
-                  statusFilter === "paid"
-                    ? "bg-purple-600 hover:bg-purple-700 text-white"
-                    : "",
-                  isDark
-                    ? "text-white border-gray-600"
-                    : statusFilter === "paid"
-                      ? "text-white"
-                      : "text-gray-600",
-                )}
-              >
-                Paid{" "}
-                <Badge variant="secondary" className="ml-2">
-                  {statusCounts.paid}
-                </Badge>
-              </Button>
-            </div>
-            <div className="flex items-center gap-2 w-full flex-wrap justify-between sm:w-auto sm:flex-nowrap sm:justify-end">
-              <span
-                className={cn(
-                  "text-sm",
-                  isDark ? "text-gray-400" : "text-gray-600",
-                )}
-              >
-                Sort by
-              </span>
-              <div className="flex-1 sm:flex-none">
-                <Select
-                  value={sortBy}
-                  onValueChange={(v) => setSortBy(v as any)}
-                >
-                  <SelectTrigger
-                    className={cn(
-                      "w-full sm:w-[180px]",
-                      isDark ? "text-white border-gray-600" : "text-gray-600",
-                    )}
-                  >
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent isDark={isDark}>
-                    <SelectItem value="date-desc" isDark={isDark}>
-                      Date (Newest First)
-                    </SelectItem>
-                    <SelectItem value="date-asc" isDark={isDark}>
-                      Date (Oldest First)
-                    </SelectItem>
-                    <SelectItem value="views-desc" isDark={isDark}>
-                      Views (High → Low)
-                    </SelectItem>
-                    <SelectItem value="views-asc" isDark={isDark}>
-                      Views (Low → High)
-                    </SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-          </div>
-
-          {/* Bulk Actions Bar */}
-          {selectedSubmissions.size > 0 && (
-            <div
-              className={cn(
-                "p-4 border-b",
-                isDark ? "bg-blue-900/20" : "bg-blue-50",
-              )}
-            >
-              <div className="flex items-center gap-3 mb-3">
-                <span
-                  className={cn(
-                    "font-medium",
-                    isDark ? "text-blue-300" : "text-blue-900",
-                  )}
-                >
-                  {selectedSubmissions.size} selected
+                  Sort by
                 </span>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  onClick={() => setSelectedSubmissions(new Set())}
-                  className={cn(
-                    "text-sm",
-                    isDark ? "text-white" : "text-gray-600",
-                  )}
-                >
-                  Clear
-                </Button>
+                <div className="flex-1 sm:flex-none">
+                  <Select
+                    value={sortBy}
+                    onValueChange={(v) => setSortBy(v as any)}
+                  >
+                    <SelectTrigger
+                      className={cn(
+                        "w-full sm:w-[180px]",
+                        isDark ? "text-white border-gray-600" : "text-gray-600",
+                      )}
+                    >
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent isDark={isDark}>
+                      <SelectItem value="date-desc" isDark={isDark}>
+                        Date (Newest First)
+                      </SelectItem>
+                      <SelectItem value="date-asc" isDark={isDark}>
+                        Date (Oldest First)
+                      </SelectItem>
+                      <SelectItem value="views-desc" isDark={isDark}>
+                        Views (High → Low)
+                      </SelectItem>
+                      <SelectItem value="views-asc" isDark={isDark}>
+                        Views (Low → High)
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
+            </div>
 
-              {/* Scrollable buttons container */}
-              <div className="overflow-x-auto pb-2 -mx-1 px-1">
-                <div className="flex gap-2 min-w-max">
+            {/* Bulk Actions Bar */}
+            {selectedSubmissions.size > 0 && (
+              <div
+                className={cn(
+                  "border-b p-2 sm:p-3",
+                  isDark ? "bg-blue-900/20" : "bg-blue-50",
+                )}
+              >
+                <div className="flex flex-wrap items-center gap-x-2 gap-y-2">
+                  <div className="flex shrink-0 items-center gap-2">
+                    <span
+                      className={cn(
+                        "text-sm font-medium",
+                        isDark ? "text-blue-300" : "text-blue-900",
+                      )}
+                    >
+                      {selectedSubmissions.size} selected
+                    </span>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => setSelectedSubmissions(new Set())}
+                      disabled={bulkStatusActionsBusy}
+                      className={cn(
+                        "h-8 text-sm",
+                        isDark ? "text-white" : "text-gray-600",
+                      )}
+                    >
+                      Clear
+                    </Button>
+                  </div>
+
                   {contest?.post_contest_status !== "verification_complete" &&
                     contest?.post_contest_status !== "payments_processed" && (
                       <>
                         <Button
                           size="sm"
                           onClick={() => handleBulkAction("verify")}
+                          loading={bulkStatusActionsBusy}
+                          loadingText={
+                            parentBulkActionLoading
+                              ? "Processing updates..."
+                              : "Verifying submissions..."
+                          }
                           className={cn(
-                            "whitespace-nowrap rounded-md",
+                            "h-8 shrink-0 whitespace-nowrap rounded-md",
                             isDark
                               ? "border bg-green-900/30 text-green-400 border-green-500"
                               : "bg-green-600 text-white hover:bg-green-700 ",
@@ -1174,8 +1316,9 @@ export function CreatorSubmissionsModal({
                         <Button
                           size="sm"
                           onClick={() => handleBulkAction("reject")}
+                          disabled={bulkStatusActionsBusy}
                           className={cn(
-                            "whitespace-nowrap rounded-md",
+                            "h-8 shrink-0 whitespace-nowrap rounded-md",
                             isDark
                               ? "border bg-red-900/30 text-red-400 border-red-500"
                               : "bg-red-600 text-white hover:bg-red-700 ",
@@ -1187,8 +1330,9 @@ export function CreatorSubmissionsModal({
                         <Button
                           size="sm"
                           onClick={() => handleBulkAction("pending")}
+                          disabled={bulkStatusActionsBusy}
                           className={cn(
-                            "whitespace-nowrap rounded-md",
+                            "h-8 shrink-0 whitespace-nowrap rounded-md",
                             isDark
                               ? "border bg-yellow-900/30 text-yellow-400 border-yellow-500"
                               : "bg-yellow-600 text-white hover:bg-yellow-700 ",
@@ -1197,289 +1341,400 @@ export function CreatorSubmissionsModal({
                           <Clock className="h-4 w-4 mr-1" />
                           Mark as Pending
                         </Button>
+                        {bulkStatusActionsBusy && (
+                          <span
+                            className={cn(
+                              "text-xs self-center whitespace-nowrap",
+                              isDark ? "text-blue-200" : "text-blue-700",
+                            )}
+                          >
+                            {parentBulkActionLoading
+                              ? "Processing submission updates…"
+                              : "Verifying submissions…"}
+                          </span>
+                        )}
                       </>
                     )}
+
                   {contest?.post_contest_status === "verification_complete" &&
                     contest?.post_contest_status !== "payments_processed" &&
                     isAdminView &&
-                    // Hide all payment buttons for Twitter leaderboard contests
                     !isTwitterLeaderboardContest && (
                       <>
-                        <div className="border-l border-gray-300 dark:border-gray-600 h-6 mx-2"></div>
-                        <Button
-                          size="sm"
-                          onClick={() => handleBulkPayment("standard", false)}
-                          disabled={bulkPaymentLoading}
-                          className="bg-blue-600 hover:bg-blue-700 text-white whitespace-nowrap"
-                        >
-                          {bulkPaymentLoading ? (
-                            <Loader2 className="h-4 w-4 mr-1 animate-spin" />
-                          ) : (
-                            <DollarSign className="h-4 w-4 mr-1" />
-                          )}
-                          Mark as Paid
-                        </Button>
-                        <Button
-                          size="sm"
-                          onClick={() => handleBulkPayment("standard", true)}
-                          disabled={bulkPaymentLoading}
-                          className="bg-blue-500 hover:bg-blue-600 text-white whitespace-nowrap"
-                        >
-                          {bulkPaymentLoading ? (
-                            <Loader2 className="h-4 w-4 mr-1 animate-spin" />
-                          ) : (
-                            <DollarSign className="h-4 w-4 mr-1" />
-                          )}
-                          Mark as Paid (Bulk)
-                        </Button>
-                        {hasBonus && (
-                          <>
-                            {!isTwitterCpmContest && (
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <button
+                              type="button"
+                              className={cn(
+                                "shrink-0 rounded p-1",
+                                isDark
+                                  ? "text-blue-300/90 hover:bg-white/10"
+                                  : "text-blue-800/80 hover:bg-blue-100/80",
+                              )}
+                              aria-label="How payout works"
+                            >
+                              <CircleHelp className="h-4 w-4" />
+                            </button>
+                          </TooltipTrigger>
+                          <TooltipContent
+                            side="bottom"
+                            className="max-w-[min(100vw-2rem,22rem)] text-left text-xs leading-snug"
+                          >
+                            Left group: one payment per checked row. (Bulk)
+                            buttons: same checked rows, one combined payout
+                            request. Only verified rows qualify.
+                          </TooltipContent>
+                        </Tooltip>
+                        <div className="-mx-1 flex min-h-9 min-w-0 max-w-full flex-[1_1_200px] items-center overflow-x-auto overscroll-x-contain px-1 [-webkit-overflow-scrolling:touch]">
+                          <div className="flex w-max items-center gap-1.5 py-0.5">
+                            {!hasFlatFeeBonus ? (
                               <>
                                 <Button
                                   size="sm"
                                   onClick={() =>
-                                    handleBulkPayment("bonus", false)
+                                    handleBulkPayment("standard", false)
                                   }
-                                  disabled={bulkPaymentLoading}
-                                  className="bg-green-600 hover:bg-green-700 text-white whitespace-nowrap"
+                                  disabled={isAnyBulkPaymentBusy}
+                                  className="h-8 shrink-0 bg-blue-600 text-white hover:bg-blue-700"
                                 >
-                                  {bulkPaymentLoading ? (
-                                    <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                                  {isBulkPayBtnLoading("standard", false) ? (
+                                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
                                   ) : (
-                                    <DollarSign className="h-4 w-4 mr-1" />
+                                    <DollarSign className="h-3.5 w-3.5" />
+                                  )}
+                                  Mark as Paid
+                                </Button>
+                                <span
+                                  className={cn(
+                                    "hidden h-6 w-px shrink-0 self-center sm:block",
+                                    isDark ? "bg-white/15" : "bg-border",
+                                  )}
+                                  aria-hidden
+                                />
+                                <Button
+                                  size="sm"
+                                  onClick={() =>
+                                    handleBulkPayment("standard", true)
+                                  }
+                                  disabled={isAnyBulkPaymentBusy}
+                                  className="h-8 shrink-0 border border-blue-500/80 bg-blue-500/10 text-blue-700 hover:bg-blue-500/20 dark:text-blue-300"
+                                >
+                                  {isBulkPayBtnLoading("standard", true) ? (
+                                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                  ) : (
+                                    <DollarSign className="h-3.5 w-3.5" />
+                                  )}
+                                  Mark as Paid (Bulk)
+                                </Button>
+                              </>
+                            ) : (
+                              <>
+                                <Button
+                                  size="sm"
+                                  onClick={() =>
+                                    handleBulkPayment("standard", false)
+                                  }
+                                  disabled={isAnyBulkPaymentBusy}
+                                  className="h-8 shrink-0 bg-blue-600 text-white hover:bg-blue-700"
+                                >
+                                  {isBulkPayBtnLoading("standard", false) ? (
+                                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                  ) : (
+                                    <DollarSign className="h-3.5 w-3.5" />
+                                  )}
+                                  Mark as Paid
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  onClick={() => handleBulkPayment("bonus", false)}
+                                  disabled={isAnyBulkPaymentBusy}
+                                  className="h-8 shrink-0 bg-green-600 text-white hover:bg-green-700"
+                                >
+                                  {isBulkPayBtnLoading("bonus", false) ? (
+                                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                  ) : (
+                                    <DollarSign className="h-3.5 w-3.5" />
                                   )}
                                   Mark Bonus as Paid
                                 </Button>
                                 <Button
                                   size="sm"
-                                  onClick={() =>
-                                    handleBulkPayment("bonus", true)
-                                  }
-                                  disabled={bulkPaymentLoading}
-                                  className="bg-green-500 hover:bg-green-600 text-white whitespace-nowrap"
+                                  onClick={() => handleBulkPayment("both", false)}
+                                  disabled={isAnyBulkPaymentBusy}
+                                  className="h-8 shrink-0 bg-purple-600 text-white hover:bg-purple-700"
                                 >
-                                  {bulkPaymentLoading ? (
-                                    <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                                  {isBulkPayBtnLoading("both", false) ? (
+                                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
                                   ) : (
-                                    <DollarSign className="h-4 w-4 mr-1" />
+                                    <DollarSign className="h-3.5 w-3.5" />
+                                  )}
+                                  Mark Both as Paid
+                                </Button>
+                                <span
+                                  className={cn(
+                                    "hidden h-6 w-px shrink-0 self-center sm:block",
+                                    isDark ? "bg-white/15" : "bg-border",
+                                  )}
+                                  aria-hidden
+                                />
+                                <Button
+                                  size="sm"
+                                  onClick={() =>
+                                    handleBulkPayment("standard", true)
+                                  }
+                                  disabled={isAnyBulkPaymentBusy}
+                                  className="h-8 shrink-0 border border-blue-500/80 bg-blue-500/10 text-blue-700 hover:bg-blue-500/20 dark:text-blue-300"
+                                >
+                                  {isBulkPayBtnLoading("standard", true) ? (
+                                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                  ) : (
+                                    <DollarSign className="h-3.5 w-3.5" />
+                                  )}
+                                  Mark as Paid (Bulk)
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  onClick={() => handleBulkPayment("bonus", true)}
+                                  disabled={isAnyBulkPaymentBusy}
+                                  className="h-8 shrink-0 border border-green-500/80 bg-green-500/10 text-green-700 hover:bg-green-500/20 dark:text-green-300"
+                                >
+                                  {isBulkPayBtnLoading("bonus", true) ? (
+                                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                  ) : (
+                                    <DollarSign className="h-3.5 w-3.5" />
                                   )}
                                   Mark Bonus as Paid (Bulk)
                                 </Button>
+                                <Button
+                                  size="sm"
+                                  onClick={() => handleBulkPayment("both", true)}
+                                  disabled={isAnyBulkPaymentBusy}
+                                  className="h-8 shrink-0 border border-purple-500/80 bg-purple-500/10 text-purple-700 hover:bg-purple-500/20 dark:text-purple-300"
+                                >
+                                  {isBulkPayBtnLoading("both", true) ? (
+                                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                  ) : (
+                                    <DollarSign className="h-3.5 w-3.5" />
+                                  )}
+                                  Mark Both as Paid (Bulk)
+                                </Button>
                               </>
                             )}
-                            <Button
-                              size="sm"
-                              onClick={() => handleBulkPayment("both", false)}
-                              disabled={bulkPaymentLoading}
-                              className="bg-purple-600 hover:bg-purple-700 text-white whitespace-nowrap"
-                            >
-                              {bulkPaymentLoading ? (
-                                <Loader2 className="h-4 w-4 mr-1 animate-spin" />
-                              ) : (
-                                <DollarSign className="h-4 w-4 mr-1" />
-                              )}
-                              Mark Both as Paid
-                            </Button>
-                            <Button
-                              size="sm"
-                              onClick={() => handleBulkPayment("both", true)}
-                              disabled={bulkPaymentLoading}
-                              className="bg-purple-500 hover:bg-purple-600 text-white whitespace-nowrap"
-                            >
-                              {bulkPaymentLoading ? (
-                                <Loader2 className="h-4 w-4 mr-1 animate-spin" />
-                              ) : (
-                                <DollarSign className="h-4 w-4 mr-1" />
-                              )}
-                              Mark Both as Paid (Bulk)
-                            </Button>
-                          </>
-                        )}
+                          </div>
+                        </div>
                       </>
                     )}
                 </div>
               </div>
-            </div>
-          )}
+            )}
 
-          {/* Scrollable Table */}
-          <div className="min-h-0 flex-1 overflow-auto px-6 py-4">
-            <Table>
-              <TableHeader
-                className={cn(
-                  "sticky top-0 z-20 shadow-sm",
-                  isDark ? "bg-[#391A6A] text-white" : "bg-white text-gray-600",
-                )}
-              >
-                <TableRow className="border-b-2">
-                  <TableHead
-                    className={cn(
-                      "w-12",
-                      isDark ? "bg-[#391A6A] " : "bg-gray-50",
-                    )}
-                  >
-                    <Checkbox
-                      checked={
-                        filteredSubmissions.length > 0 &&
-                        filteredSubmissions.every((s) =>
-                          selectedSubmissions.has(s.id),
-                        )
-                      }
-                      onCheckedChange={() =>
-                        handleSelectAll(filteredSubmissions)
-                      }
-                      aria-label="Select all submissions in current tab"
-                    />
-                  </TableHead>
-                  <TableHead
-                    className={cn(
-                      "w-12",
-                      isDark ? "bg-[#391A6A] " : "bg-gray-50",
-                    )}
-                  >
-                    #
-                  </TableHead>
-                  {/* For Twitter text_image contests, show Tweet column; for others, show Content */}
-                  {isTwitterTextImageContest ? (
-                    <TableHead
-                      className={cn(
-                        "min-w-[200px]",
-                        isDark ? "bg-[#391A6A] " : "bg-gray-50",
-                      )}
-                    >
-                      Tweet
-                    </TableHead>
-                  ) : (
-                    <TableHead
-                      className={cn(
-                        "min-w-[200px]",
-                        isDark ? "bg-[#391A6A] " : "bg-gray-50",
-                      )}
-                    >
-                      Content
-                    </TableHead>
+            {/* Scrollable Table */}
+            <div className="min-h-0 flex-1 overflow-auto px-6 py-4">
+              <Table>
+                <TableHeader
+                  className={cn(
+                    "sticky top-0 z-20 shadow-sm",
+                    isDark
+                      ? "bg-[#391A6A] text-white"
+                      : "bg-white text-gray-600",
                   )}
-                  {/* For Twitter text_image contests, show detailed metrics; for others, show simplified (with Instagram extras) */}
-                  {isTwitterTextImageContest ? (
-                    <>
+                >
+                  <TableRow className="border-b-2">
+                    <TableHead
+                      className={cn(
+                        "w-12",
+                        isDark ? "bg-[#391A6A] " : "bg-gray-50",
+                      )}
+                    >
+                      <Checkbox
+                        checked={
+                          filteredSubmissions.length > 0 &&
+                          filteredSubmissions.every((s) =>
+                            selectedSubmissions.has(s.id),
+                          )
+                        }
+                        onCheckedChange={() =>
+                          handleSelectAll(filteredSubmissions)
+                        }
+                        aria-label="Select all submissions in current tab"
+                      />
+                    </TableHead>
+                    <TableHead
+                      className={cn(
+                        "w-12",
+                        isDark ? "bg-[#391A6A] " : "bg-gray-50",
+                      )}
+                    >
+                      #
+                    </TableHead>
+                    {/* For Twitter text_image contests, show Tweet column; for others, show Content */}
+                    {isTwitterTextImageContest ? (
                       <TableHead
                         className={cn(
-                          "text-center",
+                          "min-w-[200px]",
                           isDark ? "bg-[#391A6A] " : "bg-gray-50",
                         )}
                       >
-                        Total Points
+                        Tweet
                       </TableHead>
+                    ) : (
                       <TableHead
                         className={cn(
-                          "text-center",
+                          "min-w-[200px]",
                           isDark ? "bg-[#391A6A] " : "bg-gray-50",
                         )}
                       >
-                        Base Points
+                        Content
                       </TableHead>
-                      <TableHead
-                        className={cn(
-                          "text-center",
-                          isDark ? "bg-[#391A6A] " : "bg-gray-50",
+                    )}
+                    {/* For Twitter text_image contests, show detailed metrics; for others, show simplified (with Instagram extras) */}
+                    {isTwitterTextImageContest ? (
+                      <>
+                        <TableHead
+                          className={cn(
+                            "text-center",
+                            isDark ? "bg-[#391A6A] " : "bg-gray-50",
+                          )}
+                        >
+                          Total Points
+                        </TableHead>
+                        <TableHead
+                          className={cn(
+                            "text-center",
+                            isDark ? "bg-[#391A6A] " : "bg-gray-50",
+                          )}
+                        >
+                          Base Points
+                        </TableHead>
+                        <TableHead
+                          className={cn(
+                            "text-center",
+                            isDark ? "bg-[#391A6A] " : "bg-gray-50",
+                          )}
+                        >
+                          Manual Points
+                        </TableHead>
+                        <TableHead
+                          className={cn(
+                            "text-center",
+                            isDark ? "bg-[#391A6A] " : "bg-gray-50",
+                          )}
+                        >
+                          Likes
+                        </TableHead>
+                        <TableHead
+                          className={cn(
+                            "text-center",
+                            isDark ? "bg-[#391A6A] " : "bg-gray-50",
+                          )}
+                        >
+                          Replies
+                        </TableHead>
+                        <TableHead
+                          className={cn(
+                            "text-center",
+                            isDark ? "bg-[#391A6A] " : "bg-gray-50",
+                          )}
+                        >
+                          Retweets
+                        </TableHead>
+                        <TableHead
+                          className={cn(
+                            "text-center",
+                            isDark ? "bg-[#391A6A] " : "bg-gray-50",
+                          )}
+                        >
+                          Quote Reposts
+                        </TableHead>
+                        <TableHead
+                          className={cn(
+                            "text-center",
+                            isDark ? "bg-[#391A6A] " : "bg-gray-50",
+                          )}
+                        >
+                          Impressions
+                        </TableHead>
+                        <TableHead
+                          className={cn(
+                            "text-center",
+                            isDark ? "bg-[#391A6A] " : "bg-gray-50",
+                          )}
+                        >
+                          Expected Reward
+                        </TableHead>
+                        {hasPayoutAdjustment &&
+                          shouldAdjustReward &&
+                          (!isYouTubeContest ||
+                            showYtColumn("adjusted_reward")) && (
+                            <TableHead
+                              className={cn(
+                                "text-center",
+                                isDark ? "bg-[#391A6A] " : "bg-gray-50",
+                              )}
+                            >
+                              Adjusted Reward
+                            </TableHead>
+                          )}
+                        <TableHead
+                          className={cn(
+                            "text-center",
+                            isDark ? "bg-[#391A6A] " : "bg-gray-50",
+                          )}
+                        >
+                          Reward Granted
+                        </TableHead>
+                        <TableHead
+                          className={cn(
+                            "text-center",
+                            isDark ? "bg-[#391A6A] " : "bg-gray-50",
+                          )}
+                        >
+                          Manual Points Reason
+                        </TableHead>
+                      </>
+                    ) : (
+                      <>
+                        {(!isYouTubeContest || showYtColumn("views")) && (
+                          <TableHead
+                            className={cn(
+                              "text-center",
+                              isDark ? "bg-[#391A6A] " : "bg-gray-50",
+                            )}
+                          >
+                            Views
+                          </TableHead>
                         )}
-                      >
-                        Manual Points
-                      </TableHead>
-                      <TableHead
-                        className={cn(
-                          "text-center",
-                          isDark ? "bg-[#391A6A] " : "bg-gray-50",
+                        {(!isYouTubeContest || showYtColumn("likes")) && (
+                          <TableHead
+                            className={cn(
+                              "text-center",
+                              isDark ? "bg-[#391A6A] " : "bg-gray-50",
+                            )}
+                          >
+                            Likes
+                          </TableHead>
                         )}
-                      >
-                        Likes
-                      </TableHead>
-                      <TableHead
-                        className={cn(
-                          "text-center",
-                          isDark ? "bg-[#391A6A] " : "bg-gray-50",
+                        {(!isYouTubeContest || showYtColumn("comments")) && (
+                          <TableHead
+                            className={cn(
+                              "text-center",
+                              isDark ? "bg-[#391A6A] " : "bg-gray-50",
+                            )}
+                          >
+                            Comments
+                          </TableHead>
                         )}
-                      >
-                        Replies
-                      </TableHead>
-                      <TableHead
-                        className={cn(
-                          "text-center",
-                          isDark ? "bg-[#391A6A] " : "bg-gray-50",
+                        {isYouTubeContest && showYtColumn("dislikes") && (
+                          <TableHead
+                            className={cn(
+                              "text-center",
+                              isDark ? "bg-[#391A6A] " : "bg-gray-50",
+                            )}
+                          >
+                            Dislikes
+                          </TableHead>
                         )}
-                      >
-                        Retweets
-                      </TableHead>
-                      <TableHead
-                        className={cn(
-                          "text-center",
-                          isDark ? "bg-[#391A6A] " : "bg-gray-50",
-                        )}
-                      >
-                        Quote Reposts
-                      </TableHead>
-                      <TableHead
-                        className={cn(
-                          "text-center",
-                          isDark ? "bg-[#391A6A] " : "bg-gray-50",
-                        )}
-                      >
-                        Impressions
-                      </TableHead>
-                      <TableHead
-                        className={cn(
-                          "text-center",
-                          isDark ? "bg-[#391A6A] " : "bg-gray-50",
-                        )}
-                      >
-                        Expected Reward
-                      </TableHead>
-                      <TableHead
-                        className={cn(
-                          "text-center",
-                          isDark ? "bg-[#391A6A] " : "bg-gray-50",
-                        )}
-                      >
-                        Reward Granted
-                      </TableHead>
-                      <TableHead
-                        className={cn(
-                          "text-center",
-                          isDark ? "bg-[#391A6A] " : "bg-gray-50",
-                        )}
-                      >
-                        Manual Points Reason
-                      </TableHead>
-                    </>
-                  ) : (
-                    <>
-                      <TableHead
-                        className={cn(
-                          "text-center",
-                          isDark ? "bg-[#391A6A] " : "bg-gray-50",
-                        )}
-                      >
-                        Views
-                      </TableHead>
-                      <TableHead
-                        className={cn(
-                          "text-center",
-                          isDark ? "bg-[#391A6A] " : "bg-gray-50",
-                        )}
-                      >
-                        Likes
-                      </TableHead>
-                      <TableHead
-                        className={cn(
-                          "text-center",
-                          isDark ? "bg-[#391A6A] " : "bg-gray-50",
-                        )}
-                      >
-                        Comments
-                      </TableHead>
-                      {(isInstagramContest || isTikTokContest) && (
-                        <>
+                        {isYouTubeContest && showYtColumn("shares") && (
                           <TableHead
                             className={cn(
                               "text-center",
@@ -1488,142 +1743,267 @@ export function CreatorSubmissionsModal({
                           >
                             Shares
                           </TableHead>
-                          {/* Saves: Instagram only — not in TikTok Display API */}
-                          {!isTikTokContest && (
+                        )}
+                        {isYouTubeContest && showYtColumn("avg_view_pct") && (
+                          <TableHead
+                            className={cn(
+                              "text-center",
+                              isDark ? "bg-[#391A6A] " : "bg-gray-50",
+                            )}
+                          >
+                            Avg View %
+                          </TableHead>
+                        )}
+                        {isYouTubeContest && showYtColumn("watch_time") && (
+                          <TableHead
+                            className={cn(
+                              "text-center",
+                              isDark ? "bg-[#391A6A] " : "bg-gray-50",
+                            )}
+                          >
+                            Watch Time
+                          </TableHead>
+                        )}
+                        {isYouTubeContest && showYtColumn("avg_duration") && (
+                          <TableHead
+                            className={cn(
+                              "text-center",
+                              isDark ? "bg-[#391A6A] " : "bg-gray-50",
+                            )}
+                          >
+                            Avg Duration
+                          </TableHead>
+                        )}
+                        {isYouTubeContest && showYtColumn("engaged_views") && (
+                          <TableHead
+                            className={cn(
+                              "text-center",
+                              isDark ? "bg-[#391A6A] " : "bg-gray-50",
+                            )}
+                          >
+                            Engaged Views
+                          </TableHead>
+                        )}
+                        {isYouTubeContest && showYtColumn("subs_gained") && (
+                          <TableHead
+                            className={cn(
+                              "text-center",
+                              isDark ? "bg-[#391A6A] " : "bg-gray-50",
+                            )}
+                          >
+                            Subs Gained
+                          </TableHead>
+                        )}
+                        {isYouTubeContest && showYtColumn("bot_score") && (
+                          <TableHead
+                            className={cn(
+                              "text-center",
+                              isDark ? "bg-[#391A6A] " : "bg-gray-50",
+                            )}
+                          >
+                            Bot Score
+                          </TableHead>
+                        )}
+                        {isYouTubeContest && showYtColumn("analytics") && (
+                          <TableHead
+                            className={cn(
+                              "text-center",
+                              isDark ? "bg-[#391A6A] " : "bg-gray-50",
+                            )}
+                          >
+                            Analytics
+                          </TableHead>
+                        )}
+                        {isYouTubeContest &&
+                          showYtColumn("top_traffic_source") && (
                             <TableHead
                               className={cn(
                                 "text-center",
                                 isDark ? "bg-[#391A6A] " : "bg-gray-50",
                               )}
                             >
-                              Saves
+                              Top Traffic Source
                             </TableHead>
                           )}
-                          {/* Reach and Interactions commented out for TikTok per user request */}
-                          {!isTikTokContest && (
-                            <>
+                        {(isInstagramContest || isTikTokContest) && (
+                          <>
+                            <TableHead
+                              className={cn(
+                                "text-center",
+                                isDark ? "bg-[#391A6A] " : "bg-gray-50",
+                              )}
+                            >
+                              Shares
+                            </TableHead>
+                            {/* Saves: Instagram only — not in TikTok Display API */}
+                            {!isTikTokContest && (
                               <TableHead
                                 className={cn(
                                   "text-center",
                                   isDark ? "bg-[#391A6A] " : "bg-gray-50",
                                 )}
                               >
-                                Reach
+                                Saves
                               </TableHead>
-                              <TableHead
-                                className={cn(
-                                  "text-center",
-                                  isDark ? "bg-[#391A6A] " : "bg-gray-50",
-                                )}
-                              >
-                                Interactions
-                              </TableHead>
-                            </>
-                          )}
-                          {isTikTokContest ? (
-                            <>
-                              <TableHead
-                                className={cn(
-                                  "text-center",
-                                  isDark ? "bg-[#391A6A] " : "bg-gray-50",
-                                )}
-                              >
-                                Total engagement
-                              </TableHead>
-                              <TableHead
-                                className={cn(
-                                  "text-center",
-                                  isDark ? "bg-[#391A6A] " : "bg-gray-50",
-                                )}
-                              >
-                                Engagement rate
-                              </TableHead>
-                            </>
-                          ) : (
-                            <>
-                              <TableHead
-                                className={cn(
-                                  "text-center",
-                                  isDark ? "bg-[#391A6A] " : "bg-gray-50",
-                                )}
-                              >
-                                Avg Watch Time
-                              </TableHead>
-                              <TableHead
-                                className={cn(
-                                  "text-center",
-                                  isDark ? "bg-[#391A6A] " : "bg-gray-50",
-                                )}
-                              >
-                                Total Watch Time
-                              </TableHead>
-                            </>
-                          )}
-                        </>
-                      )}
-                    </>
-                  )}
-                  {/* Hide reward columns for Twitter text_image contests */}
-                  {!isTwitterTextImageContest && (
-                    <>
-                      <TableHead
-                        className={cn(
-                          "text-center",
-                          isDark ? "bg-[#391A6A] " : "bg-gray-50",
+                            )}
+                            {/* Reach and Interactions commented out for TikTok per user request */}
+                            {!isTikTokContest && (
+                              <>
+                                <TableHead
+                                  className={cn(
+                                    "text-center",
+                                    isDark ? "bg-[#391A6A] " : "bg-gray-50",
+                                  )}
+                                >
+                                  Reach
+                                </TableHead>
+                                <TableHead
+                                  className={cn(
+                                    "text-center",
+                                    isDark ? "bg-[#391A6A] " : "bg-gray-50",
+                                  )}
+                                >
+                                  Interactions
+                                </TableHead>
+                              </>
+                            )}
+                            {isTikTokContest ? (
+                              <>
+                                <TableHead
+                                  className={cn(
+                                    "text-center",
+                                    isDark ? "bg-[#391A6A] " : "bg-gray-50",
+                                  )}
+                                >
+                                  Total engagement
+                                </TableHead>
+                                <TableHead
+                                  className={cn(
+                                    "text-center",
+                                    isDark ? "bg-[#391A6A] " : "bg-gray-50",
+                                  )}
+                                >
+                                  Engagement rate
+                                </TableHead>
+                              </>
+                            ) : (
+                              <>
+                                <TableHead
+                                  className={cn(
+                                    "text-center",
+                                    isDark ? "bg-[#391A6A] " : "bg-gray-50",
+                                  )}
+                                >
+                                  Avg Watch Time
+                                </TableHead>
+                                <TableHead
+                                  className={cn(
+                                    "text-center",
+                                    isDark ? "bg-[#391A6A] " : "bg-gray-50",
+                                  )}
+                                >
+                                  Total Watch Time
+                                </TableHead>
+                              </>
+                            )}
+                          </>
                         )}
-                      >
-                        Expected Reward
-                      </TableHead>
-                      <TableHead
-                        className={cn(
-                          "text-center",
-                          isDark ? "bg-[#391A6A] " : "bg-gray-50",
-                        )}
-                      >
-                        Reward Granted
-                      </TableHead>
-                    </>
-                  )}
-                  {/* Bonus columns */}
-                  {hasBonus && (
-                    <>
-                      <TableHead
-                        className={cn(
-                          "text-center",
-                          isDark ? "bg-[#391A6A] " : "bg-gray-50",
-                        )}
-                      >
-                        Bonus Expected
-                      </TableHead>
-                      <TableHead
-                        className={cn(
-                          "text-center",
-                          isDark ? "bg-[#391A6A] " : "bg-gray-50",
-                        )}
-                      >
-                        Bonus Granted
-                      </TableHead>
-                    </>
-                  )}
-                  {isAdminView && (isInstagramContest || isTikTokContest || isYouTubeContest) && (
-                    <TableHead
-                      className={cn(
-                        "text-center",
-                        isDark ? "bg-[#391A6A] " : "bg-gray-50",
-                      )}
-                    >
-                      Insights status
-                    </TableHead>
-                  )}
-                  <TableHead
-                    className={cn(
-                      "text-center",
-                      isDark ? "bg-[#391A6A] " : "bg-gray-50",
+                      </>
                     )}
-                  >
-                    Status
-                  </TableHead>
-                  {/* <TableHead
+                    {/* Hide reward columns for Twitter text_image contests */}
+                    {!isTwitterTextImageContest && (
+                      <>
+                        {(!isYouTubeContest || showYtColumn("expected_reward")) && (
+                          <TableHead
+                            className={cn(
+                              "text-center",
+                              isDark ? "bg-[#391A6A] " : "bg-gray-50",
+                            )}
+                          >
+                            Expected Reward
+                          </TableHead>
+                        )}
+                        {hasPayoutAdjustment &&
+                          shouldAdjustReward &&
+                          (!isYouTubeContest ||
+                            showYtColumn("adjusted_reward")) && (
+                            <TableHead
+                              className={cn(
+                                "text-center",
+                                isDark ? "bg-[#391A6A] " : "bg-gray-50",
+                              )}
+                            >
+                              Adjusted Reward
+                            </TableHead>
+                          )}
+                        {contest?.contest_type === "milestone" && (
+                          <TableHead
+                            className={cn(
+                              "text-center min-w-[170px]",
+                              isDark ? "bg-[#391A6A] " : "bg-gray-50",
+                            )}
+                          >
+                            Milestone
+                          </TableHead>
+                        )}
+                        {(!isYouTubeContest || showYtColumn("reward_granted")) && (
+                          <TableHead
+                            className={cn(
+                              "text-center",
+                              isDark ? "bg-[#391A6A] " : "bg-gray-50",
+                            )}
+                          >
+                            Reward Granted
+                          </TableHead>
+                        )}
+                      </>
+                    )}
+                    {/* Bonus columns */}
+                    {hasFlatFeeBonus && (
+                      <>
+                        <TableHead
+                          className={cn(
+                            "text-center",
+                            isDark ? "bg-[#391A6A] " : "bg-gray-50",
+                          )}
+                        >
+                          Bonus Expected
+                        </TableHead>
+                        <TableHead
+                          className={cn(
+                            "text-center",
+                            isDark ? "bg-[#391A6A] " : "bg-gray-50",
+                          )}
+                        >
+                          Bonus Granted
+                        </TableHead>
+                      </>
+                    )}
+                    {isAdminView &&
+                      (!isYouTubeContest || showYtColumn("insights_status")) &&
+                      (isInstagramContest ||
+                        isTikTokContest ||
+                        isYouTubeContest) && (
+                        <TableHead
+                          className={cn(
+                            "text-center",
+                            isDark ? "bg-[#391A6A] " : "bg-gray-50",
+                          )}
+                        >
+                          Insights status
+                        </TableHead>
+                      )}
+                    {(!isYouTubeContest || showYtColumn("status")) && (
+                      <TableHead
+                        className={cn(
+                          "text-center",
+                          isDark ? "bg-[#391A6A] " : "bg-gray-50",
+                        )}
+                      >
+                        Status
+                      </TableHead>
+                    )}
+                    {/* <TableHead
                     className={cn(
                       "min-w-[180px]",
                       isDark ? "bg-[#391A6A] " : "bg-gray-50"
@@ -1631,272 +2011,363 @@ export function CreatorSubmissionsModal({
                   >
                     Rejection reason
                   </TableHead> */}
-                  <TableHead
-                    className={cn(
-                      "min-w-[180px]",
-                      isDark ? "bg-[#391A6A] " : "bg-gray-50"
-                    )}
-                  >
-                    Rejection reason
-                  </TableHead>
-                  <TableHead
-                    className={cn(
-                      "min-w-[180px]",
-                      isDark ? "bg-[#391A6A] " : "bg-gray-50",
-                    )}
-                  >
-                    Submitted
-                  </TableHead>
-                  <TableHead
-                    className={cn(
-                      "text-center",
-                      isDark ? "bg-[#391A6A] " : "bg-gray-50",
-                    )}
-                  >
-                    Actions
-                  </TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {sortedSubmissions.length === 0 ? (
-                  <TableRow>
-                    <TableCell
-                      colSpan={
-                        isTwitterTextImageContest
-                          ? 18 // Checkbox, #, Tweet, Total Points, Base Points, Manual Points, Likes, Replies, Retweets, Quote Reposts, Impressions, Expected Reward, Reward Granted, Manual Points Reason, Status, Rejection reason, Submitted, Actions
-                          : 3 + // Checkbox, #, Content
-                          3 + // Views, Likes, Comments
-                          ((isInstagramContest || isTikTokContest) ? (isTikTokContest ? 3 : 6) : 0) + // TT: Shares + total engagement + engagement rate; IG: +Saves, Reach, Interactions, Avg/Total watch
-                          2 + // Expected Reward, Reward Granted
-                          (hasBonus ? 2 : 0) + // Bonus Expected, Bonus Granted
-                          (isAdminView && (isInstagramContest || isTikTokContest || isYouTubeContest) ? 1 : 0) + // Insights status (admin only)
-                          4 // Status, Rejection reason, Submitted, Actions
-                      }
+                    <TableHead
                       className={cn(
-                        "text-center py-8",
-                        isDark ? "text-gray-400" : "text-gray-600",
+                        "min-w-[180px]",
+                        isDark ? "bg-[#391A6A] " : "bg-gray-50",
                       )}
                     >
-                      No submissions found for this filter.
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  sortedSubmissions.map((submission, index) => {
-                    const isTwitterTweet = submission.is_twitter_tweet === true;
-
-                    // For Twitter tweets, use Twitter metrics; for others, use platform-specific
-                    const tt = submission.other_stats?.tiktok as
-                      | Record<string, unknown>
-                      | undefined;
-                    const isTikTokRow =
-                      (submission.platform || "").toLowerCase().includes(
-                        "tiktok",
-                      );
-
-                    const likes = isTwitterTweet
-                      ? submission.other_stats?.likes || 0
-                      : submission.other_stats?.youtube?.likes ||
-                        submission.other_stats?.instagram?.likes ||
-                        (isTikTokRow
-                          ? Number(tt?.like_count ?? tt?.likes ?? 0)
-                          : 0);
-                    const comments = isTwitterTweet
-                      ? submission.other_stats?.replies || 0
-                      : submission.other_stats?.youtube?.comments ||
-                        submission.other_stats?.instagram?.comments ||
-                        (isTikTokRow
-                          ? Number(tt?.comment_count ?? tt?.comments ?? 0)
-                          : 0);
-                    const platformStats =
-                      submission.other_stats?.instagram ||
-                      submission.other_stats?.tiktok ||
-                      submission.other_stats ||
-                      {};
-                    const shares = isTikTokRow
-                      ? Number(tt?.share_count ?? tt?.shares ?? 0)
-                      : Number(
-                          (platformStats as any)?.share_count ??
-                            (platformStats as any)?.shares ??
-                            0,
-                        );
-                    const saves =
-                      (platformStats as any)?.saves ||
-                      (platformStats as any)?.saved ||
-                      0;
-                    const reach = (platformStats as any)?.reach || 0;
-                    const totalInteractions =
-                      (platformStats as any)?.total_interactions || 0;
-                    const avgWatchTimeMs =
-                      (platformStats as any)?.avg_watch_time_ms || 0;
-                    const totalWatchTimeMs =
-                      (platformStats as any)?.total_watch_time_ms || 0;
-
-                    const tiktokViewsForRate =
-                      isTikTokContest && !isTwitterTweet
-                        ? effectiveTikTokSubmissionViews(submission)
-                        : 0;
-                    const tiktokTotalEngagement =
-                      isTikTokContest && !isTwitterTweet
-                        ? Number(likes) + Number(comments) + Number(shares)
-                        : 0;
-                    const tiktokEngagementRatePct =
-                      isTikTokContest &&
-                      !isTwitterTweet &&
-                      tiktokViewsForRate > 0
-                        ? Math.round(
-                            (tiktokTotalEngagement / tiktokViewsForRate) *
-                              10000,
-                          ) / 100
-                        : 0;
-
-                    // Twitter-specific metrics
-                    const retweets = submission.other_stats?.retweets || 0;
-                    const quoteReposts =
-                      submission.other_stats?.quote_reposts || 0;
-                    const impressions =
-                      submission.other_stats?.impressions || 0;
-                    const basePoints =
-                      submission.other_stats?.base_points ||
-                      submission.other_stats?.points ||
-                      0;
-                    const manualPointsAdjustment =
-                      submission.manual_points_adjustment || 0;
-                    const totalPoints = basePoints + manualPointsAdjustment;
-                    const isDeletedTweet =
-                      isTwitterTweet &&
-                      !!(submission as any).deleted_at &&
-                      (submission as any).deleted_at !== "";
-
-                    // Get pre-calculated expected reward (with cap applied in submission time order)
-                    const expectedReward =
-                      expectedRewardsMap.get(submission.id) || 0;
-                    const adjustedExpectedReward = shouldAdjustReward
-                      ? applyPayoutAdjustment(
-                          expectedReward,
-                          payoutAdjustmentPercentage,
-                        )
-                      : expectedReward;
-                    let expectedRewardForDisplay = expectedReward;
-
-                    if (creatorCapApplied && submission.is_twitter_tweet) {
-                      if (submission.id === cappedTwitterSubmissionId) {
-                        expectedRewardForDisplay =
-                          maxEarningsPerCreator || expectedReward;
-                      } else {
-                        expectedRewardForDisplay = 0;
-                      }
-                    }
-
-                    // Use ACTUAL earnings for granted reward (includes custom pay amount)
-                    // For Twitter CPM: treat as paid when paid flag or moderation_status is 'paid'
-                    // Prefer: explicit paid/granted amount (custom pay) > submission.earnings > expected reward
-                    const statusForGranted =
-                      getNormalizedSubmissionStatus(submission);
-                    const isPaidForGranted =
-                      submission.paid ||
-                      (isTwitterTweet && statusForGranted === "paid");
-                    const explicitPaidAmount =
-                      (submission as any).granted_amount_cents ??
-                      (submission as any).paid_amount_cents ??
-                      submission.other_stats?.paid_amount_cents ??
-                      submission.other_stats?.granted_amount_cents;
-                    const grantedReward = isPaidForGranted
-                      ? explicitPaidAmount != null && explicitPaidAmount > 0
-                        ? Number(explicitPaidAmount)
-                        : submission.earnings && submission.earnings > 0
-                          ? submission.earnings
-                          : expectedReward
-                      : 0;
-                    const expectedBonus =
-                      expectedBonusMap.get(submission.id) || 0;
-                    const adjustedExpectedBonus = shouldAdjustBonus
-                      ? applyPayoutAdjustment(
-                          expectedBonus,
-                          payoutAdjustmentPercentage,
-                        )
-                      : expectedBonus;
-                    // Use actual bonus_amount from database if available
-                    const grantedBonus = submission.bonus_paid
-                      ? (submission as any).bonus_amount || flatFeeBonus
-                      : 0;
-
-                    const normalizedStatus =
-                      getNormalizedSubmissionStatus(submission);
-                    const isSubmissionVerified =
-                      normalizedStatus === "verified";
-                    const isSubmissionRejected =
-                      normalizedStatus === "rejected";
-                    const isSubmissionPending = normalizedStatus === "pending";
-
-                    return (
-                      <TableRow
-                        key={submission.id}
+                      Rejection reason
+                    </TableHead>
+                    {(!isYouTubeContest || showYtColumn("submitted")) && (
+                      <TableHead
                         className={cn(
-                          isDark ? "text-white" : "text-gray-700",
-                          isDeletedTweet && "opacity-60",
+                          "min-w-[180px]",
+                          isDark ? "bg-[#391A6A] " : "bg-gray-50",
                         )}
                       >
-                        <TableCell>
-                          <Checkbox
-                            checked={selectedSubmissions.has(submission.id)}
-                            onCheckedChange={(checked) =>
-                              handleCheckboxChange(
-                                submission.id,
-                                checked as boolean,
-                              )
-                            }
-                            aria-label={`Select submission ${index + 1}`}
-                          />
-                        </TableCell>
-                        <TableCell
+                        Submitted
+                      </TableHead>
+                    )}
+                    <TableHead
+                      className={cn(
+                        "text-center",
+                        isDark ? "bg-[#391A6A] " : "bg-gray-50",
+                      )}
+                    >
+                      Actions
+                    </TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {sortedSubmissions.length === 0 ? (
+                    <TableRow>
+                      <TableCell
+                        colSpan={40}
+                        className={cn(
+                          "text-center py-8",
+                          isDark ? "text-gray-400" : "text-gray-600",
+                        )}
+                      >
+                        No submissions found for this filter.
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    sortedSubmissions.map((submission, index) => {
+                      const isTwitterTweet =
+                        submission.is_twitter_tweet === true;
+
+                      // For Twitter tweets, use Twitter metrics; for others, use platform-specific
+                      const tt = submission.other_stats?.tiktok as
+                        | Record<string, unknown>
+                        | undefined;
+                      const isTikTokRow = (submission.platform || "")
+                        .toLowerCase()
+                        .includes("tiktok");
+
+                      const likes = isTwitterTweet
+                        ? submission.other_stats?.likes || 0
+                        : submission.other_stats?.youtube?.likes ||
+                          submission.other_stats?.instagram?.likes ||
+                          (isTikTokRow
+                            ? Number(tt?.like_count ?? tt?.likes ?? 0)
+                            : 0);
+                      const comments = isTwitterTweet
+                        ? submission.other_stats?.replies || 0
+                        : submission.other_stats?.youtube?.comments ||
+                          submission.other_stats?.instagram?.comments ||
+                          (isTikTokRow
+                            ? Number(tt?.comment_count ?? tt?.comments ?? 0)
+                            : 0);
+                      const platformStats =
+                        submission.other_stats?.instagram ||
+                        submission.other_stats?.tiktok ||
+                        submission.other_stats ||
+                        {};
+                      const youtubeStats = (submission.other_stats as any)
+                        ?.youtube || {};
+                      const shares = isTikTokRow
+                        ? Number(tt?.share_count ?? tt?.shares ?? 0)
+                        : Number(
+                            (platformStats as any)?.share_count ??
+                              (platformStats as any)?.shares ??
+                              0,
+                          );
+                      const saves =
+                        (platformStats as any)?.saves ||
+                        (platformStats as any)?.saved ||
+                        0;
+                      const reach = (platformStats as any)?.reach || 0;
+                      const totalInteractions =
+                        (platformStats as any)?.total_interactions || 0;
+                      const avgWatchTimeMs =
+                        (platformStats as any)?.avg_watch_time_ms || 0;
+                      const totalWatchTimeMs =
+                        (platformStats as any)?.total_watch_time_ms || 0;
+                      const ytDislikes = Number(youtubeStats.dislikes ?? 0);
+                      const ytShares = Number(youtubeStats.shares ?? 0);
+                      const ytAvgViewPct = Number(
+                        youtubeStats.avg_view_percentage ?? 0,
+                      );
+                      const ytWatchTimeMinutes = Number(
+                        youtubeStats.estimated_minutes_watched ?? 0,
+                      );
+                      const ytAvgDurationSeconds = Number(
+                        youtubeStats.avg_view_duration_seconds ?? 0,
+                      );
+                      const ytEngagedViews = Number(
+                        youtubeStats.engaged_views ?? 0,
+                      );
+                      const ytSubsGained = Number(
+                        youtubeStats.subscribers_gained ?? 0,
+                      );
+
+                      const tiktokViewsForRate =
+                        isTikTokContest && !isTwitterTweet
+                          ? effectiveTikTokSubmissionViews(submission)
+                          : 0;
+                      const tiktokTotalEngagement =
+                        isTikTokContest && !isTwitterTweet
+                          ? Number(likes) + Number(comments) + Number(shares)
+                          : 0;
+                      const tiktokEngagementRatePct =
+                        isTikTokContest &&
+                        !isTwitterTweet &&
+                        tiktokViewsForRate > 0
+                          ? Math.round(
+                              (tiktokTotalEngagement / tiktokViewsForRate) *
+                                10000,
+                            ) / 100
+                          : 0;
+
+                      // Twitter-specific metrics
+                      const retweets = submission.other_stats?.retweets || 0;
+                      const quoteReposts =
+                        submission.other_stats?.quote_reposts || 0;
+                      const impressions =
+                        submission.other_stats?.impressions || 0;
+                      const basePoints =
+                        submission.other_stats?.base_points ||
+                        submission.other_stats?.points ||
+                        0;
+                      const manualPointsAdjustment =
+                        submission.manual_points_adjustment || 0;
+                      const totalPoints = basePoints + manualPointsAdjustment;
+                      const isDeletedTweet =
+                        isTwitterTweet &&
+                        !!(submission as any).deleted_at &&
+                        (submission as any).deleted_at !== "";
+
+                      // Get pre-calculated expected reward (with cap applied in submission time order)
+                      const expectedReward =
+                        expectedRewardsMap.get(submission.id) || 0;
+                      const adjustedExpectedReward = shouldAdjustReward
+                        ? applyPayoutAdjustment(
+                            expectedReward,
+                            payoutAdjustmentPercentage,
+                          )
+                        : expectedReward;
+                      const expectedRewardForDisplay = expectedReward;
+
+                      // Use ACTUAL earnings for granted reward (includes custom pay amount)
+                      // For Twitter CPM: treat as paid when paid flag or moderation_status is 'paid'
+                      // Prefer: explicit paid/granted amount (custom pay) > submission.earnings > expected reward
+                      const statusForGranted =
+                        getNormalizedSubmissionStatus(submission);
+                      const isPaidForGranted =
+                        submission.paid ||
+                        (isTwitterTweet && statusForGranted === "paid");
+                      const explicitPaidAmount =
+                        (submission as any).granted_amount_cents ??
+                        (submission as any).paid_amount_cents ??
+                        submission.other_stats?.paid_amount_cents ??
+                        submission.other_stats?.granted_amount_cents;
+                      const grantedReward = isPaidForGranted
+                        ? explicitPaidAmount != null && explicitPaidAmount > 0
+                          ? Number(explicitPaidAmount)
+                          : contest?.contest_type === "milestone"
+                            ? shouldAdjustReward
+                              ? adjustedExpectedReward
+                              : expectedReward
+                            : submission.earnings && submission.earnings > 0
+                              ? submission.earnings
+                              : expectedReward
+                        : 0;
+                      const uncappedExpectedReward =
+                        calculateSubmissionBaseExpectedReward(submission, false);
+                      const uncappedExpectedRewardAdjusted = shouldAdjustReward
+                        ? applyPayoutAdjustment(
+                            uncappedExpectedReward,
+                            payoutAdjustmentPercentage,
+                          )
+                        : uncappedExpectedReward;
+                      const isCappedToZeroWithPotential =
+                        expectedReward === 0 && uncappedExpectedRewardAdjusted > 0;
+                      const expectedBonus =
+                        expectedBonusMap.get(submission.id) || 0;
+                      const adjustedExpectedBonus = shouldAdjustBonus
+                        ? applyPayoutAdjustment(
+                            expectedBonus,
+                            payoutAdjustmentPercentage,
+                          )
+                        : expectedBonus;
+                      // Use actual bonus_amount from database if available.
+                      // Twitter CPM: only count granted bonus when tweet is paid.
+                      const grantedBonus =
+                        submission.bonus_paid &&
+                        (contest?.contest_type !== "cpm" ||
+                          !isTwitterTweet ||
+                          statusForGranted === "paid")
+                          ? (submission as any).bonus_amount || flatFeeBonus
+                          : 0;
+
+                      const normalizedStatus =
+                        getNormalizedSubmissionStatus(submission);
+                      const isSubmissionVerified =
+                        normalizedStatus === "verified";
+                      const isSubmissionRejected =
+                        normalizedStatus === "rejected";
+                      const isSubmissionPending =
+                        normalizedStatus === "pending";
+                      const milestoneAssignmentLabel =
+                        contest?.contest_type === "milestone"
+                          ? (milestoneAssignedLabelBySubmissionId?.get(
+                              submission.id,
+                            ) ?? "Not eligible")
+                          : "—";
+                      const milestoneAssignmentParts =
+                        milestoneAssignmentLabel.split(" • ");
+                      const milestonePrimaryLabel =
+                        milestoneAssignmentParts[0] || "—";
+                      const milestoneViewsLabel =
+                        milestoneAssignmentParts[1] || "—";
+
+                      return (
+                        <TableRow
+                          key={submission.id}
                           className={cn(
-                            "font-medium",
                             isDark ? "text-white" : "text-gray-700",
+                            isDeletedTweet && "opacity-60",
                           )}
                         >
-                          {index + 1}
-                        </TableCell>
-                        {/* For Twitter text_image contests, show Tweet column; for others, show Content */}
-                        {isTwitterTextImageContest && isTwitterTweet ? (
-                          <>
-                            {/* Tweet Column */}
-                            <TableCell className="min-w-[200px] max-w-[300px]">
-                              <div className="flex flex-col gap-2">
-                                {/* Tweet type badge */}
-                                <div className="flex items-center gap-2">
-                                  <Badge
-                                    variant="outline"
-                                    className={cn(
-                                      "text-xs px-2 py-0.5",
-                                      submission.other_stats?.tweet_type ===
-                                        "reply" ||
-                                        submission.other_stats?.tweet_type ===
-                                          "quote" ||
-                                        submission.other_stats?.tweet_type ===
-                                          "retweet"
-                                        ? "bg-purple-100 text-purple-700 border-purple-300"
-                                        : "bg-blue-100 text-blue-700 border-blue-300",
-                                    )}
-                                  >
-                                    {submission.other_stats?.tweet_type ===
-                                    "reply"
-                                      ? "REPLY"
-                                      : submission.other_stats?.tweet_type ===
-                                          "quote"
-                                        ? "QUOTE"
-                                        : submission.other_stats?.tweet_type ===
-                                            "retweet"
-                                          ? "RETWEET"
-                                          : "TWEET"}
-                                  </Badge>
-                                  {isDeletedTweet && (
+                          <TableCell>
+                            <Checkbox
+                              checked={selectedSubmissions.has(submission.id)}
+                              onCheckedChange={(checked) =>
+                                handleCheckboxChange(
+                                  submission.id,
+                                  checked as boolean,
+                                )
+                              }
+                              aria-label={`Select submission ${index + 1}`}
+                            />
+                          </TableCell>
+                          <TableCell
+                            className={cn(
+                              "font-medium",
+                              isDark ? "text-white" : "text-gray-700",
+                            )}
+                          >
+                            {index + 1}
+                          </TableCell>
+                          {/* For Twitter text_image contests, show Tweet column; for others, show Content */}
+                          {isTwitterTextImageContest && isTwitterTweet ? (
+                            <>
+                              {/* Tweet Column */}
+                              <TableCell className="min-w-[200px] max-w-[300px]">
+                                <div className="flex flex-col gap-2">
+                                  {/* Tweet type badge */}
+                                  <div className="flex items-center gap-2">
                                     <Badge
                                       variant="outline"
-                                      className="text-xs px-2 py-0.5 bg-red-100 text-red-700 border-red-300"
+                                      className={cn(
+                                        "text-xs px-2 py-0.5",
+                                        submission.other_stats?.tweet_type ===
+                                          "reply" ||
+                                          submission.other_stats?.tweet_type ===
+                                            "quote" ||
+                                          submission.other_stats?.tweet_type ===
+                                            "retweet"
+                                          ? "bg-purple-100 text-purple-700 border-purple-300"
+                                          : "bg-blue-100 text-blue-700 border-blue-300",
+                                      )}
                                     >
-                                      DELETED
+                                      {submission.other_stats?.tweet_type ===
+                                      "reply"
+                                        ? "REPLY"
+                                        : submission.other_stats?.tweet_type ===
+                                            "quote"
+                                          ? "QUOTE"
+                                          : submission.other_stats
+                                                ?.tweet_type === "retweet"
+                                            ? "RETWEET"
+                                            : "TWEET"}
                                     </Badge>
+                                    {isDeletedTweet && (
+                                      <Badge
+                                        variant="outline"
+                                        className="text-xs px-2 py-0.5 bg-red-100 text-red-700 border-red-300"
+                                      >
+                                        DELETED
+                                      </Badge>
+                                    )}
+                                    <span
+                                      className={cn(
+                                        "text-xs",
+                                        isDark
+                                          ? "text-gray-400"
+                                          : "text-gray-500",
+                                      )}
+                                    >
+                                      from @{creator.username}
+                                    </span>
+                                  </div>
+                                  {/* Tweet text */}
+                                  <p
+                                    className={cn(
+                                      "text-sm line-clamp-3",
+                                      isDark ? "text-white" : "text-gray-900",
+                                    )}
+                                    title={
+                                      submission.other_stats?.tweet_text ||
+                                      submission.video_title ||
+                                      ""
+                                    }
+                                  >
+                                    {submission.other_stats?.tweet_text ||
+                                      submission.video_title ||
+                                      "No content"}
+                                  </p>
+                                  {/* View tweet link */}
+                                  {submission.content_link && (
+                                    <a
+                                      href={submission.content_link}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className={cn(
+                                        "text-xs flex items-center gap-1 hover:underline w-fit",
+                                        isDark
+                                          ? "text-purple-400"
+                                          : "text-purple-600",
+                                      )}
+                                    >
+                                      Click to view tweet
+                                      <ExternalLink className="h-3 w-3" />
+                                    </a>
                                   )}
+                                </div>
+                              </TableCell>
+                              {/* Total Points */}
+                              <TableCell className="text-center">
+                                <div className="flex flex-col items-center">
+                                  <span
+                                    className={cn(
+                                      "font-bold text-sm",
+                                      isDark ? "text-white" : "text-gray-900",
+                                    )}
+                                  >
+                                    {totalPoints}
+                                  </span>
                                   <span
                                     className={cn(
                                       "text-xs",
@@ -1905,297 +2376,1026 @@ export function CreatorSubmissionsModal({
                                         : "text-gray-500",
                                     )}
                                   >
-                                    from @{creator.username}
+                                    total
                                   </span>
                                 </div>
-                                {/* Tweet text */}
-                                <p
-                                  className={cn(
-                                    "text-sm line-clamp-3",
-                                    isDark ? "text-white" : "text-gray-900",
-                                  )}
-                                  title={
-                                    submission.other_stats?.tweet_text ||
-                                    submission.video_title ||
-                                    ""
-                                  }
-                                >
-                                  {submission.other_stats?.tweet_text ||
-                                    submission.video_title ||
-                                    "No content"}
-                                </p>
-                                {/* View tweet link */}
-                                {submission.content_link && (
-                                  <a
-                                    href={submission.content_link}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
+                              </TableCell>
+                              {/* Base Points */}
+                              <TableCell className="text-center">
+                                <div className="flex flex-col items-center">
+                                  <span
                                     className={cn(
-                                      "text-xs flex items-center gap-1 hover:underline w-fit",
+                                      "font-bold text-sm",
+                                      isDark ? "text-white" : "text-gray-900",
+                                    )}
+                                  >
+                                    {basePoints}
+                                  </span>
+                                  <span
+                                    className={cn(
+                                      "text-xs",
                                       isDark
-                                        ? "text-purple-400"
-                                        : "text-purple-600",
+                                        ? "text-gray-400"
+                                        : "text-gray-500",
                                     )}
                                   >
-                                    Click to view tweet
-                                    <ExternalLink className="h-3 w-3" />
-                                  </a>
+                                    base
+                                  </span>
+                                </div>
+                              </TableCell>
+                              {/* Manual Points */}
+                              <TableCell className="text-center">
+                                <div className="flex flex-col items-center">
+                                  <span
+                                    className={cn(
+                                      "font-bold text-sm",
+                                      manualPointsAdjustment > 0
+                                        ? "text-green-600"
+                                        : manualPointsAdjustment < 0
+                                          ? "text-red-600"
+                                          : isDark
+                                            ? "text-white"
+                                            : "text-gray-900",
+                                    )}
+                                  >
+                                    {manualPointsAdjustment > 0 ? "+" : ""}
+                                    {manualPointsAdjustment}
+                                  </span>
+                                  <span
+                                    className={cn(
+                                      "text-xs",
+                                      isDark
+                                        ? "text-gray-400"
+                                        : "text-gray-500",
+                                    )}
+                                  >
+                                    manual
+                                  </span>
+                                </div>
+                              </TableCell>
+                              {/* Likes */}
+                              <TableCell className="text-center">
+                                <div className="flex flex-col items-center">
+                                  <div className="flex items-center gap-1">
+                                    <ThumbsUp className="h-3 w-3 text-purple-400" />
+                                    <span
+                                      className={cn(
+                                        "font-bold text-sm",
+                                        isDark ? "text-white" : "text-gray-900",
+                                      )}
+                                    >
+                                      {likes.toLocaleString()}
+                                    </span>
+                                  </div>
+                                  <span
+                                    className={cn(
+                                      "text-xs",
+                                      isDark
+                                        ? "text-gray-400"
+                                        : "text-gray-500",
+                                    )}
+                                  >
+                                    likes
+                                  </span>
+                                </div>
+                              </TableCell>
+                              {/* Replies */}
+                              <TableCell className="text-center">
+                                <div className="flex flex-col items-center">
+                                  <div className="flex items-center gap-1">
+                                    <MessageCircle className="h-3 w-3 text-purple-400" />
+                                    <span
+                                      className={cn(
+                                        "font-bold text-sm",
+                                        isDark ? "text-white" : "text-gray-900",
+                                      )}
+                                    >
+                                      {comments.toLocaleString()}
+                                    </span>
+                                  </div>
+                                  <span
+                                    className={cn(
+                                      "text-xs",
+                                      isDark
+                                        ? "text-gray-400"
+                                        : "text-gray-500",
+                                    )}
+                                  >
+                                    replies
+                                  </span>
+                                </div>
+                              </TableCell>
+                              {/* Retweets */}
+                              <TableCell className="text-center">
+                                <div className="flex flex-col items-center">
+                                  <span
+                                    className={cn(
+                                      "font-bold text-sm",
+                                      isDark ? "text-white" : "text-gray-900",
+                                    )}
+                                  >
+                                    {retweets.toLocaleString()}
+                                  </span>
+                                  <span
+                                    className={cn(
+                                      "text-xs",
+                                      isDark
+                                        ? "text-gray-400"
+                                        : "text-gray-500",
+                                    )}
+                                  >
+                                    retweets
+                                  </span>
+                                </div>
+                              </TableCell>
+                              {/* Quote Reposts */}
+                              <TableCell className="text-center">
+                                <div className="flex flex-col items-center">
+                                  <span
+                                    className={cn(
+                                      "font-bold text-sm",
+                                      isDark ? "text-white" : "text-gray-900",
+                                    )}
+                                  >
+                                    {quoteReposts.toLocaleString()}
+                                  </span>
+                                  <span
+                                    className={cn(
+                                      "text-xs",
+                                      isDark
+                                        ? "text-gray-400"
+                                        : "text-gray-500",
+                                    )}
+                                  >
+                                    quote reposts
+                                  </span>
+                                </div>
+                              </TableCell>
+                              {/* Impressions */}
+                              <TableCell className="text-center">
+                                <div className="flex flex-col items-center">
+                                  <div className="flex items-center gap-1">
+                                    <Eye className="h-3 w-3 text-purple-400" />
+                                    <span
+                                      className={cn(
+                                        "font-bold text-sm",
+                                        isDark ? "text-white" : "text-gray-900",
+                                      )}
+                                    >
+                                      {impressions.toLocaleString()}
+                                    </span>
+                                  </div>
+                                  <span
+                                    className={cn(
+                                      "text-xs",
+                                      isDark
+                                        ? "text-gray-400"
+                                        : "text-gray-500",
+                                    )}
+                                  >
+                                    impressions
+                                  </span>
+                                </div>
+                              </TableCell>
+                              <TableCell className="text-center font-medium text-sm">
+                                {formatCurrency(expectedRewardForDisplay)}
+                              </TableCell>
+                              {hasPayoutAdjustment &&
+                                shouldAdjustReward &&
+                                (!isYouTubeContest ||
+                                  showYtColumn("adjusted_reward")) && (
+                                  <TableCell className="text-center font-medium text-sm">
+                                    {formatCurrency(adjustedExpectedReward)}
+                                  </TableCell>
                                 )}
-                              </div>
-                            </TableCell>
-                            {/* Total Points */}
-                            <TableCell className="text-center">
-                              <div className="flex flex-col items-center">
-                                <span
-                                  className={cn(
-                                    "font-bold text-sm",
-                                    isDark ? "text-white" : "text-gray-900",
-                                  )}
-                                >
-                                  {totalPoints}
-                                </span>
-                                <span
-                                  className={cn(
-                                    "text-xs",
-                                    isDark ? "text-gray-400" : "text-gray-500",
-                                  )}
-                                >
-                                  total
-                                </span>
-                              </div>
-                            </TableCell>
-                            {/* Base Points */}
-                            <TableCell className="text-center">
-                              <div className="flex flex-col items-center">
-                                <span
-                                  className={cn(
-                                    "font-bold text-sm",
-                                    isDark ? "text-white" : "text-gray-900",
-                                  )}
-                                >
-                                  {basePoints}
-                                </span>
-                                <span
-                                  className={cn(
-                                    "text-xs",
-                                    isDark ? "text-gray-400" : "text-gray-500",
-                                  )}
-                                >
-                                  base
-                                </span>
-                              </div>
-                            </TableCell>
-                            {/* Manual Points */}
-                            <TableCell className="text-center">
-                              <div className="flex flex-col items-center">
-                                <span
-                                  className={cn(
-                                    "font-bold text-sm",
-                                    manualPointsAdjustment > 0
-                                      ? "text-green-600"
-                                      : manualPointsAdjustment < 0
-                                        ? "text-red-600"
-                                        : isDark
-                                          ? "text-white"
-                                          : "text-gray-900",
-                                  )}
-                                >
-                                  {manualPointsAdjustment > 0 ? "+" : ""}
-                                  {manualPointsAdjustment}
-                                </span>
-                                <span
-                                  className={cn(
-                                    "text-xs",
-                                    isDark ? "text-gray-400" : "text-gray-500",
-                                  )}
-                                >
-                                  manual
-                                </span>
-                              </div>
-                            </TableCell>
-                            {/* Likes */}
-                            <TableCell className="text-center">
-                              <div className="flex flex-col items-center">
-                                <div className="flex items-center gap-1">
-                                  <ThumbsUp className="h-3 w-3 text-purple-400" />
+                              <TableCell className="text-center font-medium text-green-600">
+                                {grantedReward > 0
+                                  ? formatCurrency(grantedReward)
+                                  : "-"}
+                              </TableCell>
+                              {/* Manual Points Reason */}
+                              <TableCell className="text-center">
+                                {submission.manual_points_reason ? (
                                   <span
                                     className={cn(
-                                      "font-bold text-sm",
-                                      isDark ? "text-white" : "text-gray-900",
+                                      "text-xs italic truncate max-w-[150px] block",
+                                      isDark
+                                        ? "text-gray-400"
+                                        : "text-gray-600",
                                     )}
+                                    title={submission.manual_points_reason}
                                   >
-                                    {likes.toLocaleString()}
+                                    {submission.manual_points_reason.length > 20
+                                      ? submission.manual_points_reason.substring(
+                                          0,
+                                          20,
+                                        ) + "..."
+                                      : submission.manual_points_reason}
                                   </span>
-                                </div>
-                                <span
-                                  className={cn(
-                                    "text-xs",
-                                    isDark ? "text-gray-400" : "text-gray-500",
-                                  )}
-                                >
-                                  likes
-                                </span>
-                              </div>
-                            </TableCell>
-                            {/* Replies */}
-                            <TableCell className="text-center">
-                              <div className="flex flex-col items-center">
-                                <div className="flex items-center gap-1">
-                                  <MessageCircle className="h-3 w-3 text-purple-400" />
+                                ) : (
                                   <span
                                     className={cn(
-                                      "font-bold text-sm",
-                                      isDark ? "text-white" : "text-gray-900",
+                                      "text-xs",
+                                      isDark
+                                        ? "text-gray-500"
+                                        : "text-gray-400",
                                     )}
                                   >
-                                    {comments.toLocaleString()}
+                                    —
                                   </span>
-                                </div>
-                                <span
-                                  className={cn(
-                                    "text-xs",
-                                    isDark ? "text-gray-400" : "text-gray-500",
+                                )}
+                              </TableCell>
+                            </>
+                          ) : (
+                            <>
+                              {/* Content Column for non-Twitter submissions */}
+                              <TableCell>
+                                <div className="flex items-center gap-3">
+                                  {submission.video_thumbnail_url && (
+                                    <img
+                                      src={submission.video_thumbnail_url}
+                                      alt={
+                                        submission.video_title ||
+                                        "Video thumbnail"
+                                      }
+                                      className="w-16 h-9 object-cover rounded"
+                                    />
                                   )}
-                                >
-                                  replies
-                                </span>
-                              </div>
-                            </TableCell>
-                            {/* Retweets */}
-                            <TableCell className="text-center">
-                              <div className="flex flex-col items-center">
-                                <span
-                                  className={cn(
-                                    "font-bold text-sm",
-                                    isDark ? "text-white" : "text-gray-900",
-                                  )}
-                                >
-                                  {retweets.toLocaleString()}
-                                </span>
-                                <span
-                                  className={cn(
-                                    "text-xs",
-                                    isDark ? "text-gray-400" : "text-gray-500",
-                                  )}
-                                >
-                                  retweets
-                                </span>
-                              </div>
-                            </TableCell>
-                            {/* Quote Reposts */}
-                            <TableCell className="text-center">
-                              <div className="flex flex-col items-center">
-                                <span
-                                  className={cn(
-                                    "font-bold text-sm",
-                                    isDark ? "text-white" : "text-gray-900",
-                                  )}
-                                >
-                                  {quoteReposts.toLocaleString()}
-                                </span>
-                                <span
-                                  className={cn(
-                                    "text-xs",
-                                    isDark ? "text-gray-400" : "text-gray-500",
-                                  )}
-                                >
-                                  quote reposts
-                                </span>
-                              </div>
-                            </TableCell>
-                            {/* Impressions */}
-                            <TableCell className="text-center">
-                              <div className="flex flex-col items-center">
-                                <div className="flex items-center gap-1">
-                                  <Eye className="h-3 w-3 text-purple-400" />
-                                  <span
-                                    className={cn(
-                                      "font-bold text-sm",
-                                      isDark ? "text-white" : "text-gray-900",
+                                  <div className="flex-1 min-w-0">
+                                    <p className="font-medium truncate max-w-xs">
+                                      {submission.video_title || "Untitled"}
+                                    </p>
+                                    {submission.content_link && (
+                                      <div className="flex items-center gap-2">
+                                        <a
+                                          href={submission.content_link}
+                                          target="_blank"
+                                          rel="noopener noreferrer"
+                                          className="text-xs text-blue-600 hover:underline flex items-center gap-1"
+                                        >
+                                          View Content
+                                          <ExternalLink className="h-3 w-3" />
+                                        </a>
+                                        {isAdminView && (
+                                          <button
+                                            onClick={() =>
+                                              handleDownloadReel(submission.id)
+                                            }
+                                            disabled={
+                                              downloadingSubmissionId ===
+                                              submission.id
+                                            }
+                                            className={cn(
+                                              "text-xs text-blue-600 hover:underline flex items-center gap-1",
+                                              downloadingSubmissionId ===
+                                                submission.id &&
+                                                "opacity-50 cursor-not-allowed",
+                                            )}
+                                            title="Download Reel/Short"
+                                          >
+                                            {downloadingSubmissionId ===
+                                            submission.id ? (
+                                              <>
+                                                <Loader2 className="h-3 w-3 animate-spin" />
+                                                Downloading...
+                                              </>
+                                            ) : (
+                                              <>
+                                                <Download className="h-3 w-3" />
+                                                Download
+                                              </>
+                                            )}
+                                          </button>
+                                        )}
+                                      </div>
                                     )}
-                                  >
-                                    {impressions.toLocaleString()}
-                                  </span>
+                                  </div>
                                 </div>
-                                <span
-                                  className={cn(
-                                    "text-xs",
-                                    isDark ? "text-gray-400" : "text-gray-500",
-                                  )}
-                                >
-                                  impressions
-                                </span>
-                              </div>
-                            </TableCell>
-                            <TableCell className="text-center font-medium text-sm">
-                              {formatCurrency(expectedRewardForDisplay)}
-                            </TableCell>
-                            <TableCell className="text-center font-medium text-green-600">
-                              {grantedReward > 0
-                                ? formatCurrency(grantedReward)
-                                : "-"}
-                            </TableCell>
-                            {/* Manual Points Reason */}
-                            <TableCell className="text-center">
-                              {submission.manual_points_reason ? (
-                                <span
-                                  className={cn(
-                                    "text-xs italic truncate max-w-[150px] block",
-                                    isDark ? "text-gray-400" : "text-gray-600",
-                                  )}
-                                  title={submission.manual_points_reason}
-                                >
-                                  {submission.manual_points_reason.length > 20
-                                    ? submission.manual_points_reason.substring(
-                                        0,
-                                        20,
-                                      ) + "..."
-                                    : submission.manual_points_reason}
-                                </span>
-                              ) : (
-                                <span
-                                  className={cn(
-                                    "text-xs",
-                                    isDark ? "text-gray-500" : "text-gray-400",
-                                  )}
-                                >
-                                  —
-                                </span>
+                              </TableCell>
+                              {/* Views, Likes, Comments for non-Twitter submissions */}
+                              {(!isYouTubeContest || showYtColumn("views")) && (
+                                <TableCell className="text-center font-mono">
+                                  {(isTikTokContest && !isTwitterTweet
+                                    ? effectiveTikTokSubmissionViews(submission)
+                                    : Number(submission.views ?? 0)
+                                  ).toLocaleString()}
+                                </TableCell>
                               )}
-                            </TableCell>
-                          </>
-                        ) : (
-                          <>
-                            {/* Content Column for non-Twitter submissions */}
-                            <TableCell>
-                              <div className="flex items-center gap-3">
-                                {submission.video_thumbnail_url && (
-                                  <img
-                                    src={submission.video_thumbnail_url}
-                                    alt={
-                                      submission.video_title ||
-                                      "Video thumbnail"
-                                    }
-                                    className="w-16 h-9 object-cover rounded"
-                                  />
+                              {(!isYouTubeContest || showYtColumn("likes")) && (
+                                <TableCell className="text-center font-mono">
+                                  {likes.toLocaleString()}
+                                </TableCell>
+                              )}
+                              {(!isYouTubeContest || showYtColumn("comments")) && (
+                                <TableCell className="text-center font-mono">
+                                  {comments.toLocaleString()}
+                                </TableCell>
+                              )}
+                              {/* YouTube-specific metrics for non-Twitter submissions */}
+                              {isYouTubeContest && showYtColumn("dislikes") && (
+                                <TableCell className="text-center font-mono">
+                                  {formatMetricValue(ytDislikes)}
+                                </TableCell>
+                              )}
+                              {isYouTubeContest && showYtColumn("shares") && (
+                                <TableCell className="text-center font-mono">
+                                  {ytShares > 0 ? formatMetricValue(ytShares) : "—"}
+                                </TableCell>
+                              )}
+                              {isYouTubeContest && showYtColumn("avg_view_pct") && (
+                                <TableCell className="text-center font-mono">
+                                  {ytAvgViewPct > 0
+                                    ? `${ytAvgViewPct.toFixed(1)}%`
+                                    : "—"}
+                                </TableCell>
+                              )}
+                              {isYouTubeContest && showYtColumn("watch_time") && (
+                                <TableCell className="text-center font-mono">
+                                  {ytWatchTimeMinutes > 0
+                                    ? formatWatchTime(ytWatchTimeMinutes * 60 * 1000)
+                                    : "—"}
+                                </TableCell>
+                              )}
+                              {isYouTubeContest && showYtColumn("avg_duration") && (
+                                <TableCell className="text-center font-mono">
+                                  {ytAvgDurationSeconds > 0
+                                    ? `${ytAvgDurationSeconds}s`
+                                    : "—"}
+                                </TableCell>
+                              )}
+                              {isYouTubeContest && showYtColumn("engaged_views") && (
+                                <TableCell className="text-center font-mono">
+                                  {ytEngagedViews > 0
+                                    ? formatMetricValue(ytEngagedViews)
+                                    : "—"}
+                                </TableCell>
+                              )}
+                              {isYouTubeContest && showYtColumn("subs_gained") && (
+                                <TableCell className="text-center font-mono text-sm">
+                                  {youtubeStats.subscribers_gained != null ? (
+                                    <span
+                                      className={cn(
+                                        "font-bold",
+                                        Number(youtubeStats.subscribers_gained) > 0
+                                          ? "text-green-600"
+                                          : isDark
+                                            ? "text-slate-400"
+                                            : "text-slate-600",
+                                      )}
+                                    >
+                                      {Number(youtubeStats.subscribers_gained) > 0
+                                        ? "+"
+                                        : ""}
+                                      {youtubeStats.subscribers_gained}
+                                    </span>
+                                  ) : (
+                                    <span
+                                      className={cn(
+                                        "text-xs",
+                                        isDark ? "text-slate-500" : "text-slate-400",
+                                      )}
+                                    >
+                                      —
+                                    </span>
+                                  )}
+                                </TableCell>
+                              )}
+                              {isYouTubeContest && showYtColumn("bot_score") && (
+                                <TableCell className="text-center">
+                                  {youtubeStats.bot_score !== null &&
+                                  youtubeStats.bot_score !== undefined ? (
+                                    <div className="flex flex-col items-center gap-0.5">
+                                      <span
+                                        className={cn(
+                                          "inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold border",
+                                          Number(youtubeStats.bot_score) >= 60
+                                            ? "bg-red-100 text-red-700 border-red-300"
+                                            : Number(youtubeStats.bot_score) >= 30
+                                              ? "bg-yellow-100 text-yellow-700 border-yellow-300"
+                                              : "bg-green-100 text-green-600 border-green-300",
+                                        )}
+                                        title={
+                                          Array.isArray(youtubeStats.bot_flags)
+                                            ? youtubeStats.bot_flags.join("\n")
+                                            : "No flags"
+                                        }
+                                      >
+                                        {Number(youtubeStats.bot_score) >= 60 ? "⚠ " : ""}
+                                        {youtubeStats.bot_score}
+                                        /100
+                                      </span>
+                                      {youtubeStats.bot_flags &&
+                                        youtubeStats.bot_flags.length > 0 && (
+                                          <span
+                                            className={cn(
+                                              "text-xs",
+                                              isDark
+                                                ? "text-slate-400"
+                                                : "text-slate-500",
+                                            )}
+                                          >
+                                            {youtubeStats.bot_flags.length} flag
+                                            {youtubeStats.bot_flags.length !== 1
+                                              ? "s"
+                                              : ""}
+                                          </span>
+                                        )}
+                                    </div>
+                                  ) : (
+                                    <span
+                                      className={cn(
+                                        "text-xs",
+                                        isDark ? "text-slate-500" : "text-slate-400",
+                                      )}
+                                    >
+                                      No data
+                                    </span>
+                                  )}
+                                </TableCell>
+                              )}
+                              {isYouTubeContest && showYtColumn("analytics") && (
+                                <TableCell className="text-center">
+                                  <YouTubeAnalyticsPanel
+                                    metrics={{
+                                      views: youtubeStats.views ?? submission.views ?? 0,
+                                      likes: youtubeStats.likes ?? 0,
+                                      dislikes: youtubeStats.dislikes ?? 0,
+                                      comments: youtubeStats.comments ?? 0,
+                                      shares: youtubeStats.shares ?? 0,
+                                      subscribers_gained:
+                                        youtubeStats.subscribers_gained ?? 0,
+                                      subscribers_lost:
+                                        youtubeStats.subscribers_lost ?? 0,
+                                      videos_added_to_playlists:
+                                        youtubeStats.videos_added_to_playlists ?? 0,
+                                      videos_removed_from_playlists:
+                                        youtubeStats.videos_removed_from_playlists ?? 0,
+                                      estimated_minutes_watched:
+                                        youtubeStats.estimated_minutes_watched ?? 0,
+                                      avg_view_duration_seconds:
+                                        youtubeStats.avg_view_duration_seconds ?? 0,
+                                      avg_view_percentage:
+                                        youtubeStats.avg_view_percentage ?? 0,
+                                      engaged_views: youtubeStats.engaged_views ?? 0,
+                                      traffic_sources:
+                                        youtubeStats.traffic_sources ?? null,
+                                      demographics: youtubeStats.demographics ?? null,
+                                      bot_score: youtubeStats.bot_score ?? null,
+                                      bot_flags: youtubeStats.bot_flags ?? [],
+                                      analytics_needs_reauth:
+                                        youtubeStats.analytics_needs_reauth ?? false,
+                                      last_basic_update:
+                                        youtubeStats.last_basic_update ?? null,
+                                      last_traffic_update:
+                                        youtubeStats.last_traffic_update ?? null,
+                                      last_demographics_update:
+                                        youtubeStats.last_demographics_update ?? null,
+                                    }}
+                                    isDark={isDark}
+                                    showCore={canSeeCore}
+                                    showTraffic={canSeeTraffic}
+                                    showDemographics={canSeeDemographics}
+                                  >
+                                    <button
+                                      className={cn(
+                                        "inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs transition-colors",
+                                        isDark
+                                          ? "bg-slate-800 hover:bg-slate-700 text-slate-300"
+                                          : "bg-slate-100 hover:bg-purple-100 text-slate-600 hover:text-purple-700",
+                                      )}
+                                    >
+                                      <BarChart2 className="h-3 w-3" />
+                                      Details
+                                    </button>
+                                  </YouTubeAnalyticsPanel>
+                                </TableCell>
+                              )}
+                              {isYouTubeContest &&
+                                showYtColumn("top_traffic_source") && (
+                                  <TableCell className="text-center font-mono text-xs">
+                                    {(() => {
+                                      const ts = youtubeStats.traffic_sources as
+                                        | Record<string, number>
+                                        | undefined;
+                                      if (!ts || Object.keys(ts).length === 0)
+                                        return "—";
+                                      const entries = Object.entries(ts);
+                                      const top = entries.reduce(
+                                        (best, [k, v]) =>
+                                          v > best.pct ? { key: k, pct: v } : best,
+                                        { key: entries[0][0], pct: entries[0][1] },
+                                      );
+                                      const label =
+                                        YT_TRAFFIC_SOURCE_LABELS[top.key] || top.key;
+                                      return `${label} ${top.pct.toFixed(1)}%`;
+                                    })()}
+                                  </TableCell>
                                 )}
-                                <div className="flex-1 min-w-0">
-                                  <p className="font-medium truncate max-w-xs">
-                                    {submission.video_title || "Untitled"}
-                                  </p>
-                                  {submission.content_link && (
-                                    <div className="flex items-center gap-2">
+                              {/* Instagram-specific metrics for non-Twitter submissions */}
+                              {(isInstagramContest || isTikTokContest) && (
+                                <>
+                                  <TableCell className="text-center font-mono">
+                                    {formatMetricValue(shares)}
+                                  </TableCell>
+                                  {!isTikTokContest && (
+                                    <TableCell className="text-center font-mono">
+                                      {formatMetricValue(saves)}
+                                    </TableCell>
+                                  )}
+                                  {/* Reach and Interactions commented out for TikTok per user request */}
+                                  {!isTikTokContest && (
+                                    <>
+                                      <TableCell className="text-center font-mono">
+                                        {formatMetricValue(reach)}
+                                      </TableCell>
+                                      <TableCell className="text-center font-mono">
+                                        {formatMetricValue(totalInteractions)}
+                                      </TableCell>
+                                    </>
+                                  )}
+                                  {isTikTokContest ? (
+                                    <>
+                                      <TableCell className="text-center font-mono">
+                                        {formatMetricValue(
+                                          tiktokTotalEngagement,
+                                        )}
+                                      </TableCell>
+                                      <TableCell className="text-center font-mono">
+                                        {tiktokViewsForRate > 0
+                                          ? `${formatMetricValue(tiktokEngagementRatePct)}%`
+                                          : "—"}
+                                      </TableCell>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <TableCell className="text-center font-mono">
+                                        <div className="flex flex-col items-center">
+                                          <span className="font-bold">
+                                            {formatWatchTime(avgWatchTimeMs)}
+                                          </span>
+                                          <span
+                                            className={cn(
+                                              "text-xs",
+                                              isDark
+                                                ? "text-gray-400"
+                                                : "text-gray-500",
+                                            )}
+                                          >
+                                            avg
+                                          </span>
+                                        </div>
+                                      </TableCell>
+                                      <TableCell className="text-center font-mono">
+                                        <div className="flex flex-col items-center">
+                                          <span className="font-bold">
+                                            {formatWatchTime(totalWatchTimeMs)}
+                                          </span>
+                                          <span
+                                            className={cn(
+                                              "text-xs",
+                                              isDark
+                                                ? "text-gray-400"
+                                                : "text-gray-500",
+                                            )}
+                                          >
+                                            total
+                                          </span>
+                                        </div>
+                                      </TableCell>
+                                    </>
+                                  )}
+                                </>
+                              )}
+                              {/* Expected Reward and Reward Granted (only for non-Twitter) */}
+                              {!isTwitterTextImageContest && (
+                                <>
+                                  {(!isYouTubeContest ||
+                                    showYtColumn("expected_reward")) && (
+                                    <TableCell className="text-center font-medium">
+                                      {isCappedToZeroWithPotential ? (
+                                        <div className="inline-flex items-center gap-1">
+                                          <span>{formatCurrency(0)}</span>
+                                          <Tooltip>
+                                            <TooltipTrigger asChild>
+                                              <AlertTriangle className="h-3.5 w-3.5 text-amber-500 cursor-help" />
+                                            </TooltipTrigger>
+                                            <TooltipContent className="max-w-[260px] text-left">
+                                              Creator cap exhausted for expected payout order.
+                                              <br />
+                                              {grantedReward > 0 ? (
+                                                <>
+                                                  Actual granted amount:{" "}
+                                                  {formatCurrency(grantedReward)}
+                                                </>
+                                              ) : (
+                                                <>
+                                                  Else expected reward would be:{" "}
+                                                  {formatCurrency(
+                                                    uncappedExpectedRewardAdjusted,
+                                                  )}
+                                                </>
+                                              )}
+                                            </TooltipContent>
+                                          </Tooltip>
+                                        </div>
+                                      ) : (
+                                        formatCurrency(expectedReward)
+                                      )}
+                                    </TableCell>
+                                  )}
+                                  {hasPayoutAdjustment &&
+                                    shouldAdjustReward &&
+                                    (!isYouTubeContest ||
+                                      showYtColumn("adjusted_reward")) && (
+                                      <TableCell className="text-center font-medium">
+                                        {isCappedToZeroWithPotential
+                                          ? formatCurrency(0)
+                                          : formatCurrency(
+                                              adjustedExpectedReward,
+                                            )}
+                                      </TableCell>
+                                    )}
+                                  {contest?.contest_type === "milestone" && (
+                                    <TableCell className="text-center">
+                                      {milestoneAssignmentLabel === "—" ? (
+                                        <span
+                                          className={cn(
+                                            "text-xs font-medium",
+                                            isDark
+                                              ? "text-slate-400"
+                                              : "text-slate-500",
+                                          )}
+                                        >
+                                          —
+                                        </span>
+                                      ) : (
+                                        <div className="flex flex-col items-center gap-1">
+                                          <span className="inline-flex items-center rounded-full bg-violet-100 text-violet-700 px-2 py-0.5 text-[10px] font-semibold">
+                                            {milestonePrimaryLabel}
+                                          </span>
+                                          <span
+                                            className={cn(
+                                              "text-xs font-medium whitespace-nowrap",
+                                              isDark
+                                                ? "text-slate-200"
+                                                : "text-slate-700",
+                                            )}
+                                          >
+                                            {milestoneViewsLabel}
+                                          </span>
+                                        </div>
+                                      )}
+                                    </TableCell>
+                                  )}
+                                  {(!isYouTubeContest ||
+                                    showYtColumn("reward_granted")) && (
+                                    <TableCell className="text-center font-medium text-green-600">
+                                      {grantedReward > 0
+                                        ? formatCurrency(grantedReward)
+                                        : "-"}
+                                    </TableCell>
+                                  )}
+                                </>
+                              )}
+                            </>
+                          )}
+                          {/* Bonus columns */}
+                          {hasFlatFeeBonus && (
+                            <>
+                              <TableCell className="text-center font-medium">
+                                {expectedBonus > 0
+                                  ? hasPayoutAdjustment && shouldAdjustBonus
+                                    ? `${formatCurrency(
+                                        expectedBonus,
+                                      )} → ${formatCurrency(
+                                        adjustedExpectedBonus,
+                                      )}`
+                                    : formatCurrency(expectedBonus)
+                                  : "-"}
+                              </TableCell>
+                              <TableCell
+                                className={cn(
+                                  "text-center font-medium",
+                                  isDark ? "text-green-400" : "text-green-600",
+                                )}
+                              >
+                                {grantedBonus > 0
+                                  ? formatCurrency(grantedBonus)
+                                  : "-"}
+                              </TableCell>
+                            </>
+                          )}
+                          {isAdminView &&
+                            (!isYouTubeContest ||
+                              showYtColumn("insights_status")) &&
+                            (isInstagramContest ||
+                              isTikTokContest ||
+                              isYouTubeContest) && (
+                              <TableCell className="text-center">
+                                {(() => {
+                                  const meta = getInsightsMeta(
+                                    submission.insights_status ?? null,
+                                    (submission.other_stats as any)
+                                      ?.tiktok_error ||
+                                      (submission.other_stats as any)
+                                        ?.instagram_error ||
+                                      (submission.other_stats as any)?.youtube
+                                        ?.insights_error,
+                                  );
+                                  return (
+                                    <div className="flex items-center justify-center">
+                                      <Tooltip>
+                                        <TooltipTrigger asChild>
+                                          <span
+                                            className={cn(
+                                              "inline-flex items-center justify-center rounded-full border px-2 py-1",
+                                              meta.pillClass,
+                                            )}
+                                          >
+                                            <span
+                                              className={cn(
+                                                "h-2.5 w-2.5 rounded-full",
+                                                meta.dotClass,
+                                              )}
+                                            />
+                                          </span>
+                                        </TooltipTrigger>
+                                        <TooltipContent className="whitespace-pre-line">
+                                          {meta.help}
+                                        </TooltipContent>
+                                      </Tooltip>
+                                    </div>
+                                  );
+                                })()}
+                              </TableCell>
+                            )}
+                          {(!isYouTubeContest || showYtColumn("status")) && (
+                            <TableCell>
+                              {getStatusBadge(normalizedStatus, submission.paid)}
+                            </TableCell>
+                          )}
+                          <TableCell
+                            className={cn(
+                              "text-center text-xs max-w-[220px]",
+                              isDark ? "text-gray-300" : "text-gray-700",
+                            )}
+                          >
+                            {normalizedStatus === "rejected" ? (
+                              (() => {
+                                const details = getFullRejectionDetails(
+                                  submission.metadata,
+                                );
+                                const reason = details?.reason ?? null;
+                                return (
+                                  <div className="flex flex-col items-center gap-1">
+                                    {reason ? (
+                                      <span
+                                        className="truncate block max-w-[180px]"
+                                        title={reason}
+                                      >
+                                        {reason.length > 25
+                                          ? `${reason.slice(0, 25)}...`
+                                          : reason}
+                                      </span>
+                                    ) : (
+                                      <span
+                                        className={
+                                          isDark
+                                            ? "text-gray-500"
+                                            : "text-gray-400"
+                                        }
+                                      >
+                                        —
+                                      </span>
+                                    )}
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      className="text-xs h-6 px-2"
+                                      onClick={() =>
+                                        setRejectionDetailsModalSubmission({
+                                          id: submission.id,
+                                          metadata: submission.metadata,
+                                        })
+                                      }
+                                    >
+                                      Check
+                                    </Button>
+                                  </div>
+                                );
+                              })()
+                            ) : (
+                              <span
+                                className={
+                                  isDark ? "text-gray-500" : "text-gray-400"
+                                }
+                              >
+                                —
+                              </span>
+                            )}
+                          </TableCell>
+                          {(!isYouTubeContest || showYtColumn("submitted")) && (
+                            <TableCell
+                              className={cn(
+                                "text-sm",
+                                isDark ? "text-gray-400" : "text-gray-600",
+                              )}
+                            >
+                              {formatDate(submission.created_at)}
+                            </TableCell>
+                          )}
+                          <TableCell className="text-right">
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button variant="ghost" size="sm">
+                                  <MoreVertical className="h-4 w-4" />
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end">
+                                {contest?.post_contest_status !==
+                                  "verification_complete" &&
+                                  contest?.post_contest_status !==
+                                    "payments_processed" && (
+                                    <>
+                                      {/* For Twitter tweets, check moderation_status; for others, check status */}
+                                      {!isSubmissionVerified && (
+                                        <DropdownMenuItem
+                                          onClick={() =>
+                                            onVerify([submission.id])
+                                          }
+                                        >
+                                          <CheckCircle className="h-4 w-4 mr-2" />
+                                          {isTwitterTweet
+                                            ? "Approve"
+                                            : "Verify"}
+                                        </DropdownMenuItem>
+                                      )}
+                                      {!isSubmissionRejected && (
+                                        <DropdownMenuItem
+                                          onClick={() =>
+                                            onReject([submission.id])
+                                          }
+                                        >
+                                          <XCircle className="h-4 w-4 mr-2" />
+                                          Reject
+                                        </DropdownMenuItem>
+                                      )}
+                                      {!isSubmissionPending && (
+                                        <DropdownMenuItem
+                                          onClick={() =>
+                                            onSetPending([submission.id])
+                                          }
+                                        >
+                                          <Clock className="h-4 w-4 mr-2" />
+                                          Set Pending
+                                        </DropdownMenuItem>
+                                      )}
+                                    </>
+                                  )}
+
+                                {contest?.post_contest_status !==
+                                  "payouts_processed" &&
+                                  isAdminView &&
+                                  normalizedStatus === "paid" && (
+                                    <>
+                                      <DropdownMenuSeparator />
+                                      <DropdownMenuLabel className="text-purple-500">
+                                        Change status (reverses payment)
+                                      </DropdownMenuLabel>
+                                      <DropdownMenuItem
+                                        onClick={() =>
+                                          onVerify([submission.id])
+                                        }
+                                      >
+                                        <CheckCircle className="h-4 w-4 mr-2" />
+                                        Mark as Verified
+                                      </DropdownMenuItem>
+                                      <DropdownMenuItem
+                                        onClick={() =>
+                                          onSetPending([submission.id])
+                                        }
+                                      >
+                                        <Clock className="h-4 w-4 mr-2" />
+                                        Set to Pending
+                                      </DropdownMenuItem>
+                                      <DropdownMenuItem
+                                        className="text-red-600"
+                                        onClick={() =>
+                                          onReject([submission.id])
+                                        }
+                                      >
+                                        <XCircle className="h-4 w-4 mr-2" />
+                                        Mark as Rejected
+                                      </DropdownMenuItem>
+                                    </>
+                                  )}
+
+                                {/* Payment options: verified submissions (hide for Twitter leaderboard contests) */}
+                                {contest?.post_contest_status ===
+                                  "verification_complete" &&
+                                  getNormalizedSubmissionStatus(submission) ===
+                                    "verified" &&
+                                  !submission.paid &&
+                                  isAdminView &&
+                                  !isTwitterLeaderboardContest && (
+                                    <>
+                                      <DropdownMenuSeparator />
+                                      <DropdownMenuItem
+                                        onClick={() =>
+                                          onPayment(submission.id, "standard")
+                                        }
+                                      >
+                                        <DollarSign className="h-4 w-4 mr-2" />
+                                        Mark as Paid
+                                      </DropdownMenuItem>
+                                      {hasFlatFeeBonus &&
+                                        !submission.bonus_paid && (
+                                          <>
+                                            {!isTwitterCpmContest && (
+                                              <DropdownMenuItem
+                                                onClick={() =>
+                                                  onPayment(
+                                                    submission.id,
+                                                    "bonus",
+                                                  )
+                                                }
+                                              >
+                                                <DollarSign className="h-4 w-4 mr-2" />
+                                                Mark Bonus as Paid
+                                              </DropdownMenuItem>
+                                            )}
+                                            <DropdownMenuItem
+                                              onClick={() =>
+                                                onPayment(submission.id, "both")
+                                              }
+                                            >
+                                              <DollarSign className="h-4 w-4 mr-2" />
+                                              Mark Both as Paid
+                                            </DropdownMenuItem>
+                                          </>
+                                        )}
+                                    </>
+                                  )}
+
+                                {contest?.post_contest_status ===
+                                  "verification_complete" &&
+                                  isAdminView &&
+                                  !isTwitterLeaderboardContest &&
+                                  isTwitterCpmContest &&
+                                  isTwitterTweet &&
+                                  hasFlatFeeBonus &&
+                                  !submission.bonus_paid &&
+                                  isPaidForGranted && (
+                                    <>
+                                      <DropdownMenuSeparator />
+                                      <DropdownMenuItem
+                                        onClick={() =>
+                                          onPayment(submission.id, "bonus")
+                                        }
+                                      >
+                                        <DollarSign className="h-4 w-4 mr-2" />
+                                        Mark Bonus as Paid
+                                      </DropdownMenuItem>
+                                    </>
+                                  )}
+
+                                {contest?.post_contest_status ===
+                                  "verification_complete" &&
+                                  contest?.post_contest_status !==
+                                    "payments_processed" &&
+                                  isAdminView && (
+                                    <>
+                                      <DropdownMenuSeparator />
+                                      <DropdownMenuItem
+                                        onClick={() =>
+                                          onCustomPayment(submission.id)
+                                        }
+                                      >
+                                        Custom Pay
+                                      </DropdownMenuItem>
+                                    </>
+                                  )}
+
+                                {submission.content_link && (
+                                  <>
+                                    <DropdownMenuSeparator />
+                                    <DropdownMenuItem asChild>
                                       <a
                                         href={submission.content_link}
                                         target="_blank"
                                         rel="noopener noreferrer"
-                                        className="text-xs text-blue-600 hover:underline flex items-center gap-1"
+                                        className="flex items-center"
                                       >
+                                        <Eye className="h-4 w-4 mr-2" />
                                         View Content
-                                        <ExternalLink className="h-3 w-3" />
                                       </a>
-                                      {isAdminView && (
-                                        <button
+                                    </DropdownMenuItem>
+                                    {isAdminView &&
+                                      contest?.platform?.toLowerCase() !==
+                                        "twitter" &&
+                                      contest?.platform?.toLowerCase() !==
+                                        "x" && (
+                                        <DropdownMenuItem
                                           onClick={() =>
                                             handleDownloadReel(submission.id)
                                           }
@@ -2203,452 +3403,42 @@ export function CreatorSubmissionsModal({
                                             downloadingSubmissionId ===
                                             submission.id
                                           }
-                                          className={cn(
-                                            "text-xs text-blue-600 hover:underline flex items-center gap-1",
+                                          className={
                                             downloadingSubmissionId ===
-                                              submission.id &&
-                                              "opacity-50 cursor-not-allowed",
-                                          )}
-                                          title="Download Reel/Short"
+                                            submission.id
+                                              ? "opacity-50 cursor-not-allowed"
+                                              : ""
+                                          }
                                         >
                                           {downloadingSubmissionId ===
                                           submission.id ? (
                                             <>
-                                              <Loader2 className="h-3 w-3 animate-spin" />
+                                              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                                               Downloading...
                                             </>
                                           ) : (
                                             <>
-                                              <Download className="h-3 w-3" />
-                                              Download
+                                              <Download className="h-4 w-4 mr-2" />
+                                              Download Reel/Short
                                             </>
                                           )}
-                                        </button>
+                                        </DropdownMenuItem>
                                       )}
-                                    </div>
-                                  )}
-                                </div>
-                              </div>
-                            </TableCell>
-                            {/* Views, Likes, Comments for non-Twitter submissions */}
-                            <TableCell className="text-center font-mono">
-                              {(isTikTokContest && !isTwitterTweet
-                                ? effectiveTikTokSubmissionViews(submission)
-                                : Number(submission.views ?? 0)
-                              ).toLocaleString()}
-                            </TableCell>
-                            <TableCell className="text-center font-mono">
-                              {likes.toLocaleString()}
-                            </TableCell>
-                            <TableCell className="text-center font-mono">
-                              {comments.toLocaleString()}
-                            </TableCell>
-                            {/* Instagram-specific metrics for non-Twitter submissions */}
-                            {(isInstagramContest || isTikTokContest) && (
-                              <>
-                                <TableCell className="text-center font-mono">
-                                  {formatMetricValue(shares)}
-                                </TableCell>
-                                {!isTikTokContest && (
-                                  <TableCell className="text-center font-mono">
-                                    {formatMetricValue(saves)}
-                                  </TableCell>
-                                )}
-                                {/* Reach and Interactions commented out for TikTok per user request */}
-                                {!isTikTokContest && (
-                                  <>
-                                    <TableCell className="text-center font-mono">
-                                      {formatMetricValue(reach)}
-                                    </TableCell>
-                                    <TableCell className="text-center font-mono">
-                                      {formatMetricValue(totalInteractions)}
-                                    </TableCell>
                                   </>
                                 )}
-                                {isTikTokContest ? (
-                                  <>
-                                    <TableCell className="text-center font-mono">
-                                      {formatMetricValue(tiktokTotalEngagement)}
-                                    </TableCell>
-                                    <TableCell className="text-center font-mono">
-                                      {tiktokViewsForRate > 0
-                                        ? `${formatMetricValue(tiktokEngagementRatePct)}%`
-                                        : "—"}
-                                    </TableCell>
-                                  </>
-                                ) : (
-                                  <>
-                                    <TableCell className="text-center font-mono">
-                                      <div className="flex flex-col items-center">
-                                        <span className="font-bold">
-                                          {formatWatchTime(avgWatchTimeMs)}
-                                        </span>
-                                        <span
-                                          className={cn(
-                                            "text-xs",
-                                            isDark
-                                              ? "text-gray-400"
-                                              : "text-gray-500",
-                                          )}
-                                        >
-                                          avg
-                                        </span>
-                                      </div>
-                                    </TableCell>
-                                    <TableCell className="text-center font-mono">
-                                      <div className="flex flex-col items-center">
-                                        <span className="font-bold">
-                                          {formatWatchTime(totalWatchTimeMs)}
-                                        </span>
-                                        <span
-                                          className={cn(
-                                            "text-xs",
-                                            isDark
-                                              ? "text-gray-400"
-                                              : "text-gray-500",
-                                          )}
-                                        >
-                                          total
-                                        </span>
-                                      </div>
-                                    </TableCell>
-                                  </>
-                                )}
-                              </>
-                            )}
-                            {/* Expected Reward and Reward Granted (only for non-Twitter) */}
-                            {!isTwitterTextImageContest && (
-                              <>
-                                <TableCell className="text-center font-medium">
-                                  {hasPayoutAdjustment && shouldAdjustReward
-                                    ? `${formatCurrency(
-                                        expectedReward,
-                                      )} → ${formatCurrency(
-                                        adjustedExpectedReward,
-                                      )}`
-                                    : formatCurrency(expectedReward)}
-                                </TableCell>
-                                <TableCell className="text-center font-medium text-green-600">
-                                  {grantedReward > 0
-                                    ? formatCurrency(grantedReward)
-                                    : "-"}
-                                </TableCell>
-                              </>
-                            )}
-                          </>
-                        )}
-                        {/* Bonus columns */}
-                        {hasBonus && (
-                          <>
-                            <TableCell className="text-center font-medium">
-                              {expectedBonus > 0
-                                ? hasPayoutAdjustment && shouldAdjustBonus
-                                  ? `${formatCurrency(
-                                      expectedBonus,
-                                    )} → ${formatCurrency(
-                                      adjustedExpectedBonus,
-                                    )}`
-                                  : formatCurrency(expectedBonus)
-                                : "-"}
-                            </TableCell>
-                            <TableCell
-                              className={cn(
-                                "text-center font-medium",
-                                isDark ? "text-green-400" : "text-green-600",
-                              )}
-                            >
-                              {grantedBonus > 0
-                                ? formatCurrency(grantedBonus)
-                                : "-"}
-                            </TableCell>
-                          </>
-                        )}
-                        {isAdminView && (isInstagramContest || isTikTokContest || isYouTubeContest) && (
-                          <TableCell className="text-center">
-                            {(() => {
-                              const meta = getInsightsMeta(
-                                submission.insights_status ?? null,
-                                (submission.other_stats as any)?.tiktok_error ||
-                                  (submission.other_stats as any)?.instagram_error ||
-                                  (submission.other_stats as any)?.youtube?.insights_error
-                              );
-                              return (
-                                <div className="flex items-center justify-center">
-                                  <Tooltip>
-                                    <TooltipTrigger asChild>
-                                      <span
-                                        className={cn(
-                                          "inline-flex items-center justify-center rounded-full border px-2 py-1",
-                                          meta.pillClass,
-                                        )}
-                                      >
-                                        <span
-                                          className={cn(
-                                            "h-2.5 w-2.5 rounded-full",
-                                            meta.dotClass,
-                                          )}
-                                        />
-                                      </span>
-                                    </TooltipTrigger>
-                                    <TooltipContent className="whitespace-pre-line">
-                                      {meta.help}
-                                    </TooltipContent>
-                                  </Tooltip>
-                                </div>
-                              );
-                            })()}
+                              </DropdownMenuContent>
+                            </DropdownMenu>
                           </TableCell>
-                        )}
-                        <TableCell>
-                          {getStatusBadge(normalizedStatus, submission.paid)}
-                        </TableCell>
-                        <TableCell
-                          className={cn(
-                            "text-center text-xs max-w-[220px]",
-                            isDark ? "text-gray-300" : "text-gray-700"
-                          )}
-                        >
-                          {normalizedStatus === "rejected" ? (
-                            (() => {
-                              const details = getFullRejectionDetails(
-                                submission.metadata
-                              );
-                              const reason = details?.reason ?? null;
-                              return (
-                                <div className="flex flex-col items-center gap-1">
-                                  {reason ? (
-                                    <span
-                                      className="truncate block max-w-[180px]"
-                                      title={reason}
-                                    >
-                                      {reason.length > 25
-                                        ? `${reason.slice(0, 25)}...`
-                                        : reason}
-                                    </span>
-                                  ) : (
-                                    <span
-                                      className={
-                                        isDark ? "text-gray-500" : "text-gray-400"
-                                      }
-                                    >
-                                      —
-                                    </span>
-                                  )}
-                                  <Button
-                                    variant="outline"
-                                    size="sm"
-                                    className="text-xs h-6 px-2"
-                                    onClick={() =>
-                                      setRejectionDetailsModalSubmission({
-                                        id: submission.id,
-                                        metadata: submission.metadata,
-                                      })
-                                    }
-                                  >
-                                    Check
-                                  </Button>
-                                </div>
-                              );
-                            })()
-                          ) : (
-                            <span
-                              className={isDark ? "text-gray-500" : "text-gray-400"}
-                            >
-                              —
-                            </span>
-                          )}
-                        </TableCell>
-                        <TableCell
-                          className={cn(
-                            "text-sm",
-                            isDark ? "text-gray-400" : "text-gray-600",
-                          )}
-                        >
-                          {formatDate(submission.created_at)}
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                              <Button variant="ghost" size="sm">
-                                <MoreVertical className="h-4 w-4" />
-                              </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end">
-                              {contest?.post_contest_status !==
-                                "verification_complete" &&
-                                contest?.post_contest_status !==
-                                  "payments_processed" && (
-                                  <>
-                                    {/* For Twitter tweets, check moderation_status; for others, check status */}
-                                    {!isSubmissionVerified && (
-                                      <DropdownMenuItem
-                                        onClick={() =>
-                                          onVerify([submission.id])
-                                        }
-                                      >
-                                        <CheckCircle className="h-4 w-4 mr-2" />
-                                        {isTwitterTweet ? "Approve" : "Verify"}
-                                      </DropdownMenuItem>
-                                    )}
-                                    {!isSubmissionRejected && (
-                                      <DropdownMenuItem
-                                        onClick={() =>
-                                          onReject([submission.id])
-                                        }
-                                      >
-                                        <XCircle className="h-4 w-4 mr-2" />
-                                        Reject
-                                      </DropdownMenuItem>
-                                    )}
-                                    {!isSubmissionPending && (
-                                      <DropdownMenuItem
-                                        onClick={() =>
-                                          onSetPending([submission.id])
-                                        }
-                                      >
-                                        <Clock className="h-4 w-4 mr-2" />
-                                        Set Pending
-                                      </DropdownMenuItem>
-                                    )}
-                                  </>
-                                )}
-
-                              {/* Payment options: verified submissions (hide for Twitter leaderboard contests) */}
-                              {contest?.post_contest_status ===
-                                "verification_complete" &&
-                                getNormalizedSubmissionStatus(submission) ===
-                                  "verified" &&
-                                !submission.paid &&
-                                isAdminView &&
-                                !isTwitterLeaderboardContest && (
-                                  <>
-                                    <DropdownMenuSeparator />
-                                    <DropdownMenuItem
-                                      onClick={() =>
-                                        onPayment(submission.id, "standard")
-                                      }
-                                    >
-                                      <DollarSign className="h-4 w-4 mr-2" />
-                                      Mark as Paid
-                                    </DropdownMenuItem>
-                                    {hasBonus && !submission.bonus_paid && (
-                                      <>
-                                        {!isTwitterCpmContest && (
-                                          <DropdownMenuItem
-                                            onClick={() =>
-                                              onPayment(submission.id, "bonus")
-                                            }
-                                          >
-                                            <DollarSign className="h-4 w-4 mr-2" />
-                                            Mark Bonus as Paid
-                                          </DropdownMenuItem>
-                                        )}
-                                        <DropdownMenuItem
-                                          onClick={() =>
-                                            onPayment(submission.id, "both")
-                                          }
-                                        >
-                                          <DollarSign className="h-4 w-4 mr-2" />
-                                          Mark Both as Paid
-                                        </DropdownMenuItem>
-                                      </>
-                                    )}
-                                    {hasBonus &&
-                                      !submission.bonus_paid &&
-                                      submission.paid &&
-                                      !isTwitterCpmContest && (
-                                        <DropdownMenuItem
-                                          onClick={() =>
-                                            onPayment(submission.id, "bonus")
-                                          }
-                                        >
-                                          <DollarSign className="h-4 w-4 mr-2" />
-                                          Mark Bonus as Paid
-                                        </DropdownMenuItem>
-                                      )}
-                                  </>
-                                )}
-
-                              {contest?.post_contest_status ===
-                                "verification_complete" &&
-                                contest?.post_contest_status !==
-                                  "payments_processed" &&
-                                isAdminView && (
-                                  <>
-                                    <DropdownMenuSeparator />
-                                    <DropdownMenuItem
-                                      onClick={() =>
-                                        onCustomPayment(submission.id)
-                                      }
-                                    >
-                                      Custom Pay
-                                    </DropdownMenuItem>
-                                  </>
-                                )}
-
-                              {submission.content_link && (
-                                <>
-                                  <DropdownMenuSeparator />
-                                  <DropdownMenuItem asChild>
-                                    <a
-                                      href={submission.content_link}
-                                      target="_blank"
-                                      rel="noopener noreferrer"
-                                      className="flex items-center"
-                                    >
-                                      <Eye className="h-4 w-4 mr-2" />
-                                      View Content
-                                    </a>
-                                  </DropdownMenuItem>
-                                  {isAdminView &&
-                                    contest?.platform?.toLowerCase() !==
-                                      "twitter" &&
-                                    contest?.platform?.toLowerCase() !==
-                                      "x" && (
-                                      <DropdownMenuItem
-                                        onClick={() =>
-                                          handleDownloadReel(submission.id)
-                                        }
-                                        disabled={
-                                          downloadingSubmissionId ===
-                                          submission.id
-                                        }
-                                        className={
-                                          downloadingSubmissionId ===
-                                          submission.id
-                                            ? "opacity-50 cursor-not-allowed"
-                                            : ""
-                                        }
-                                      >
-                                        {downloadingSubmissionId ===
-                                        submission.id ? (
-                                          <>
-                                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                                            Downloading...
-                                          </>
-                                        ) : (
-                                          <>
-                                            <Download className="h-4 w-4 mr-2" />
-                                            Download Reel/Short
-                                          </>
-                                        )}
-                                      </DropdownMenuItem>
-                                    )}
-                                </>
-                              )}
-                            </DropdownMenuContent>
-                          </DropdownMenu>
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })
-                )}
-              </TableBody>
-            </Table>
+                        </TableRow>
+                      );
+                    })
+                  )}
+                </TableBody>
+              </Table>
+            </div>
           </div>
-        </div>
-      </DialogContent>
-    </Dialog>
+        </DialogContent>
+      </Dialog>
 
       <Dialog
         open={!!rejectionDetailsModalSubmission}
@@ -2659,7 +3449,7 @@ export function CreatorSubmissionsModal({
         <DialogContent
           className={cn(
             "max-w-md",
-            isDark ? "bg-[#1a0a2e] border-gray-700 text-white" : "bg-white"
+            isDark ? "bg-[#1a0a2e] border-gray-700 text-white" : "bg-white",
           )}
         >
           <DialogTitle className="flex items-center gap-2">
@@ -2668,7 +3458,7 @@ export function CreatorSubmissionsModal({
           {rejectionDetailsModalSubmission &&
             (() => {
               const parsed = parseSubmissionMetadata(
-                rejectionDetailsModalSubmission.metadata
+                rejectionDetailsModalSubmission.metadata,
               );
               const hasStructured = parsed && parsed.type === "rejection";
               const reason = hasStructured ? parsed.reason : null;
@@ -2683,7 +3473,7 @@ export function CreatorSubmissionsModal({
                   <p
                     className={cn(
                       "text-sm",
-                      isDark ? "text-gray-400" : "text-gray-600"
+                      isDark ? "text-gray-400" : "text-gray-600",
                     )}
                   >
                     No rejection details available.
@@ -2698,7 +3488,7 @@ export function CreatorSubmissionsModal({
                       <span
                         className={cn(
                           "font-medium",
-                          isDark ? "text-gray-300" : "text-gray-700"
+                          isDark ? "text-gray-300" : "text-gray-700",
                         )}
                       >
                         Reason
@@ -2706,7 +3496,7 @@ export function CreatorSubmissionsModal({
                       <p
                         className={cn(
                           "mt-1",
-                          isDark ? "text-gray-200" : "text-gray-900"
+                          isDark ? "text-gray-200" : "text-gray-900",
                         )}
                       >
                         {reason}
@@ -2718,7 +3508,7 @@ export function CreatorSubmissionsModal({
                       <span
                         className={cn(
                           "font-medium",
-                          isDark ? "text-gray-300" : "text-gray-700"
+                          isDark ? "text-gray-300" : "text-gray-700",
                         )}
                       >
                         Additional notes
@@ -2726,7 +3516,7 @@ export function CreatorSubmissionsModal({
                       <p
                         className={cn(
                           "mt-1 whitespace-pre-wrap",
-                          isDark ? "text-gray-200" : "text-gray-900"
+                          isDark ? "text-gray-200" : "text-gray-900",
                         )}
                       >
                         {additionalNotes}
@@ -2737,7 +3527,7 @@ export function CreatorSubmissionsModal({
                     <div
                       className={cn(
                         "text-xs",
-                        isDark ? "text-gray-500" : "text-gray-500"
+                        isDark ? "text-gray-500" : "text-gray-500",
                       )}
                     >
                       <span>

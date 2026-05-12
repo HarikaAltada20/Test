@@ -18,7 +18,7 @@ export async function GET(request: NextRequest) {
     const notRejected = searchParams.get("notRejected") === "true";
     const contestTypeFilter = (searchParams.get("type") ?? "all")
       .trim()
-      .toLowerCase() as "all" | "leaderboard" | "cpm";
+      .toLowerCase() as "all" | "leaderboard" | "cpm" | "milestone";
     const contentType = (searchParams.get("contentType") ?? "video")
       .trim()
       .toLowerCase() as "video" | "text_image";
@@ -41,49 +41,97 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
-    // Fetch contests with submission data
-    let submissionsQuery = supabase.from("submissions").select(`
-        id,
-        views,
-        created_at,
-        platform,
-        creator_id,
-        other_stats,
-        status,
-        contest_id
-      `);
+    // 1. Fetch contests first to get IDs for filtering submissions
+    let contests: any[] = [];
+    const CHUNK_CONTEST = 1000;
+    let contestRangeFrom = 0;
+    while (true) {
+      const { data: chunk, error: contestsError } = await supabase
+        .from("contests")
+        .select(
+          `
+          id,
+          title,
+          platform,
+          contest_type,
+          start_date,
+          end_date,
+          created_at,
+          contest_based_details,
+          live_submission_count,
+          moderation_status
+        `,
+        )
+        .eq("advertiser_id", user.id)
+        .order("created_at", { ascending: false })
+        .range(contestRangeFrom, contestRangeFrom + CHUNK_CONTEST - 1);
 
-    // Apply status filter if provided (submissionStatus is lowercase, e.g. "verifiedpaid")
-    if (notRejected) {
-      submissionsQuery = submissionsQuery.neq("status", "rejected");
-    } else if (submissionStatus && submissionStatus !== "all") {
-      if (submissionStatus === "verifiedpaid") {
-        submissionsQuery = submissionsQuery.in("status", ["verified", "paid"]);
-      } else {
-        submissionsQuery = submissionsQuery.eq("status", submissionStatus);
+      if (contestsError) {
+        console.error("Error fetching contests:", contestsError);
+        return NextResponse.json(
+          { error: "Failed to fetch contests" },
+          { status: 500 },
+        );
       }
+      if (!chunk || chunk.length === 0) break;
+      contests = contests.concat(chunk);
+      if (chunk.length < CHUNK_CONTEST) break;
+      contestRangeFrom += CHUNK_CONTEST;
     }
 
-    const { data: allSubmissions } = await submissionsQuery;
+    const advertiserContestIds = contests?.map((c) => c.id) || [];
 
-    const { data: contests } = await supabase
-      .from("contests")
-      .select(
-        `
-        id,
-        title,
-        platform,
-        contest_type,
-        start_date,
-        end_date,
-        created_at,
-        contest_based_details,
-        live_submission_count,
-        moderation_status
-      `,
-      )
-      .eq("advertiser_id", user.id)
-      .order("created_at", { ascending: false });
+    // 2. Fetch submissions for these contests in chunks to avoid Supabase's 1000-row limit
+    let allSubmissions: any[] = [];
+    if (advertiserContestIds.length > 0) {
+      const CHUNK = 1000;
+      const CONTEST_ID_CHUNK = 200;
+      for (let idFrom = 0; idFrom < advertiserContestIds.length; idFrom += CONTEST_ID_CHUNK) {
+        const contestIdChunk = advertiserContestIds.slice(
+          idFrom,
+          idFrom + CONTEST_ID_CHUNK,
+        );
+        let rangeFrom = 0;
+        while (true) {
+          let query = supabase.from("submissions").select(`
+            id,
+            views,
+            created_at,
+            platform,
+            creator_id,
+            other_stats,
+            status,
+            contest_id
+          `)
+            .in("contest_id", contestIdChunk)
+            .range(rangeFrom, rangeFrom + CHUNK - 1);
+
+          // Apply status filter if provided
+          if (notRejected) {
+            query = query.neq("status", "rejected");
+          } else if (submissionStatus && submissionStatus !== "all") {
+            if (submissionStatus === "verifiedpaid") {
+              query = query.in("status", ["verified", "paid"]);
+            } else {
+              query = query.eq("status", submissionStatus);
+            }
+          }
+
+          const { data: chunk, error: submissionsError } = await query;
+          if (submissionsError) {
+            console.error("Error fetching submissions chunk:", submissionsError);
+            return NextResponse.json(
+              { error: "Failed to fetch submissions" },
+              { status: 500 },
+            );
+          }
+          if (!chunk || chunk.length === 0) break;
+          allSubmissions = allSubmissions.concat(chunk);
+          if (chunk.length < CHUNK) break;
+          rangeFrom += CHUNK;
+        }
+      }
+    }
 
     // Normalize platform key (used for Twitter/TikTok contest detection)
     const normalizePlatformKey = (contest: {
@@ -257,12 +305,37 @@ export async function GET(request: NextRequest) {
 
     // Unfiltered submission and Twitter tweet counts for status breakdown (within filtered contests)
     const contestIdsAll = contestsFilteredByPlatform.map((c) => c.id);
-    const { data: allSubmissionsUnfiltered } = contestIdsAll.length
-      ? await supabase
-          .from("submissions")
-          .select("id, status, contest_id, other_stats")
-          .in("contest_id", contestIdsAll)
-      : { data: [] };
+    let allSubmissionsUnfiltered: any[] = [];
+    if (contestIdsAll.length > 0) {
+      const CHUNK = 1000;
+      const CONTEST_ID_CHUNK = 200;
+      for (let idFrom = 0; idFrom < contestIdsAll.length; idFrom += CONTEST_ID_CHUNK) {
+        const contestIdChunk = contestIdsAll.slice(
+          idFrom,
+          idFrom + CONTEST_ID_CHUNK,
+        );
+        let rangeFrom = 0;
+        while (true) {
+          const { data: chunk, error: unfilteredError } = await supabase
+            .from("submissions")
+            .select("id, status, contest_id, other_stats")
+            .in("contest_id", contestIdChunk)
+            .range(rangeFrom, rangeFrom + CHUNK - 1);
+
+          if (unfilteredError) {
+            console.error("Error fetching unfiltered submissions:", unfilteredError);
+            return NextResponse.json(
+              { error: "Failed to fetch unfiltered submissions" },
+              { status: 500 },
+            );
+          }
+          if (!chunk || chunk.length === 0) break;
+          allSubmissionsUnfiltered = allSubmissionsUnfiltered.concat(chunk);
+          if (chunk.length < CHUNK) break;
+          rangeFrom += CHUNK;
+        }
+      }
+    }
     let twitterTweetsAll: {
       contest_id?: string;
       likes?: number;
@@ -369,6 +442,32 @@ export async function GET(request: NextRequest) {
         ) || 0
       );
     };
+    const getContestSpent = (contest: {
+      contest_type?: string;
+      contest_based_details?: any;
+    }) => {
+      const details = contest.contest_based_details;
+      if (
+        contest.contest_type === "leaderboard" &&
+        details?.leaderboard_contest?.total_prize
+      ) {
+        return Number(details.leaderboard_contest.total_prize) || 0;
+      }
+      if (
+        contest.contest_type === "cpm" &&
+        details?.cpm_contest?.total_budget
+      ) {
+        return Number(details.cpm_contest.total_budget) || 0;
+      }
+      if (contest.contest_type === "milestone") {
+        return (
+          Number(details?.milestone_contest?.total_budget_cents) ||
+          Number(details?.milestone_contest?.total_budget) ||
+          0
+        );
+      }
+      return 0;
+    };
 
     // Calculate overview metrics (include Twitter from twitter_* tables)
     const totalContests = contestsFilteredByPlatform.length;
@@ -388,18 +487,7 @@ export async function GET(request: NextRequest) {
           ? (twitterTweetCountByContest[contest.id] || 0) > 0
           : (contest.submissions?.length || 0) > 0;
       if (hasActivity) {
-        const details = contest.contest_based_details;
-        if (
-          contest.contest_type === "leaderboard" &&
-          details?.leaderboard_contest?.total_prize
-        ) {
-          return sum + details.leaderboard_contest.total_prize;
-        } else if (
-          contest.contest_type === "cpm" &&
-          details?.cpm_contest?.total_budget
-        ) {
-          return sum + details.cpm_contest.total_budget;
-        }
+        return sum + getContestSpent(contest);
       }
       return sum;
     }, 0);
@@ -564,20 +652,7 @@ export async function GET(request: NextRequest) {
         }
         const hasActivity = subCount > 0;
         if (hasActivity) {
-          const details = contest.contest_based_details;
-          let contestSpent = 0;
-          if (
-            contest.contest_type === "leaderboard" &&
-            details?.leaderboard_contest?.total_prize
-          ) {
-            contestSpent = details.leaderboard_contest.total_prize;
-          } else if (
-            contest.contest_type === "cpm" &&
-            details?.cpm_contest?.total_budget
-          ) {
-            contestSpent = details.cpm_contest.total_budget;
-          }
-          acc[platform].spent += contestSpent;
+          acc[platform].spent += getContestSpent(contest);
         }
         return acc;
       },
@@ -664,20 +739,7 @@ export async function GET(request: NextRequest) {
           acc[month].contests++;
           acc[month].submissions += subCount;
           acc[month].views += views;
-          const details = contest.contest_based_details;
-          let contestSpent = 0;
-          if (
-            contest.contest_type === "leaderboard" &&
-            details?.leaderboard_contest?.total_prize
-          ) {
-            contestSpent = details.leaderboard_contest.total_prize;
-          } else if (
-            contest.contest_type === "cpm" &&
-            details?.cpm_contest?.total_budget
-          ) {
-            contestSpent = details.cpm_contest.total_budget;
-          }
-          acc[month].spent += contestSpent;
+          acc[month].spent += getContestSpent(contest);
         }
         return acc;
       },
@@ -711,20 +773,7 @@ export async function GET(request: NextRequest) {
           acc[type].count++;
           acc[type].submissions += subCount;
           acc[type].views += views;
-          const details = contest.contest_based_details;
-          let contestSpent = 0;
-          if (
-            contest.contest_type === "leaderboard" &&
-            details?.leaderboard_contest?.total_prize
-          ) {
-            contestSpent = details.leaderboard_contest.total_prize;
-          } else if (
-            contest.contest_type === "cpm" &&
-            details?.cpm_contest?.total_budget
-          ) {
-            contestSpent = details.cpm_contest.total_budget;
-          }
-          acc[type].spent += contestSpent;
+          acc[type].spent += getContestSpent(contest);
         }
         return acc;
       },

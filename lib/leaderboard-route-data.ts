@@ -93,6 +93,62 @@ async function getLeaderboardGroupedByCreator(
 
   const usersMap = new Map(usersData?.map((u) => [u.id, u]) || []);
   const profilesMap = new Map(creatorProfilesData?.map((p) => [p.id, p]) || []);
+  const creatorBonusPaidTotalMap = new Map<string, number>();
+  const creatorMostVerifiedBonusPaidViewsMap = new Map<string, number>();
+  const creatorMostVerifiedBonusPaidReelsMap = new Map<string, number>();
+  const { data: creatorBonusRows, error: creatorBonusError } = await supabase
+    .from("submissions")
+    .select("creator_id, bonus_paid, bonus_paid_at, bonus_amount, milestone_bonus_paid")
+    .eq("contest_id", contestId)
+    .in("creator_id", creatorIds);
+
+  if (creatorBonusError) {
+    console.error(
+      "Error fetching creator bonus paid totals for creator-wise:",
+      creatorBonusError,
+    );
+  } else {
+    for (const row of creatorBonusRows || []) {
+      const creatorIdRow = String((row as any).creator_id || "");
+      const mbp = (row as any)?.milestone_bonus_paid;
+      if (
+        creatorIdRow &&
+        mbp &&
+        typeof mbp === "object" &&
+        !Array.isArray(mbp)
+      ) {
+        const vPaid = Number((mbp as { views?: unknown }).views) || 0;
+        const rPaid = Number((mbp as { reels?: unknown }).reels) || 0;
+        if (vPaid > 0) {
+          creatorMostVerifiedBonusPaidViewsMap.set(
+            creatorIdRow,
+            (creatorMostVerifiedBonusPaidViewsMap.get(creatorIdRow) || 0) +
+              vPaid,
+          );
+        }
+        if (rPaid > 0) {
+          creatorMostVerifiedBonusPaidReelsMap.set(
+            creatorIdRow,
+            (creatorMostVerifiedBonusPaidReelsMap.get(creatorIdRow) || 0) +
+              rPaid,
+          );
+        }
+      }
+
+      const explicitBonusAmount = (row as any)?.bonus_amount;
+      const hasBonusPaid =
+        (row as any)?.bonus_paid === true ||
+        Boolean((row as any)?.bonus_paid_at) ||
+        (explicitBonusAmount != null && Number(explicitBonusAmount) > 0);
+      if (!hasBonusPaid) continue;
+      const current = creatorBonusPaidTotalMap.get(creatorIdRow) || 0;
+      const amount =
+        explicitBonusAmount != null && Number(explicitBonusAmount) > 0
+          ? Number(explicitBonusAmount)
+          : 0;
+      creatorBonusPaidTotalMap.set(creatorIdRow, current + amount);
+    }
+  }
 
   const leaderboard = pageCreators.map((agg, index) => {
     const userProfile = usersMap.get(agg.creator_id) || null;
@@ -114,6 +170,12 @@ async function getLeaderboardGroupedByCreator(
       best_rank,
       submission_ranks: agg.submission_ranks,
       has_paid_submission: agg.has_paid_submission,
+      creator_bonus_paid_total:
+        creatorBonusPaidTotalMap.get(agg.creator_id) ?? 0,
+      most_verified_bonus_paid_views_cents:
+        creatorMostVerifiedBonusPaidViewsMap.get(agg.creator_id) ?? 0,
+      most_verified_bonus_paid_reels_cents:
+        creatorMostVerifiedBonusPaidReelsMap.get(agg.creator_id) ?? 0,
       submissions: [],
     };
   });
@@ -212,7 +274,11 @@ export async function fetchLeaderboardPayload(
         status,
         created_at,
         content_link,
-        platform
+        platform,
+        bonus_paid,
+        bonus_paid_at,
+        bonus_amount,
+        milestone_bonus_paid
       `,
     )
     .eq("contest_id", contestId);

@@ -1,0 +1,1 @@
+-- Superseded by SUPABASE/migrations/20260427_add_contest_type_milestone_enum_value.sql (run via your migration pipeline).

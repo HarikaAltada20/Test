@@ -490,6 +490,11 @@ export default function ContestModerationClient({
       contest.contest_type === "cpm" &&
       contest.contest_based_details?.cpm_contest?.total_budget;
 
+    const milestoneBudget =
+      contest.contest_type === "milestone" &&
+      (contest.contest_based_details?.milestone_contest?.total_budget_cents ||
+        contest.contest_based_details?.milestone_contest?.total_budget);
+
     const budgetSpent =
       contest.contest_type === "cpm"
         ? contest.contest_based_details?.cpm_contest?.budget_spent ?? 0
@@ -658,13 +663,13 @@ export default function ContestModerationClient({
                   </span>
                 </span>
               </div>
-              {(leaderboardPrizeMoney || cpmBudget) && (
+              {(leaderboardPrizeMoney || cpmBudget || milestoneBudget) && (
                 <div className="flex items-center gap-1">
                   <DollarSign className="h-3 w-3 flex-shrink-0" />
                   <span className="break-words">
                     {contest.contest_type === "leaderboard"
                       ? `Prize: ${formatMoney(leaderboardPrizeMoney)}`
-                      : `Budget: ${formatMoney(cpmBudget)}`}
+                      : `Budget: ${formatMoney(cpmBudget || milestoneBudget)}`}
                   </span>
                 </div>
               )}

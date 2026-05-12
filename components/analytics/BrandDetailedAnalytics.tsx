@@ -37,8 +37,10 @@ interface BrandDetailedAnalyticsProps {
   contentType?: "video" | "text_image";
   videoPlatform?: string;
   twitterAnalytics?: boolean;
-  contestTypeFilter: "all" | "leaderboard" | "cpm";
-  onContestTypeFilterChange: (value: "all" | "leaderboard" | "cpm") => void;
+  contestTypeFilter: "all" | "leaderboard" | "cpm" | "milestone";
+  onContestTypeFilterChange: (
+    value: "all" | "leaderboard" | "cpm" | "milestone",
+  ) => void;
   activeFilter?: string;
 }
 

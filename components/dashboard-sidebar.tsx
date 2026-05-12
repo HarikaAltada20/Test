@@ -28,6 +28,7 @@ import {
   PlusCircle,
   Newspaper,
   Star,
+  Flame,
 } from "lucide-react";
 import Link from "next/link";
 import { ButtonLoadingSpinner } from "@/components/loading/LoadingSpinner";
@@ -175,6 +176,12 @@ export function DashboardSidebar({
       description: "Top creators",
     },
     {
+      name: "Daily Challenge",
+      href: "/dashboard/daily-challenge",
+      icon: Flame,
+      description: "Competition overview",
+    },
+    {
       name: "Withdrawal Requests",
       href: "/dashboard/admin/withdrawals",
       icon: DollarSign,
@@ -246,6 +253,12 @@ export function DashboardSidebar({
       href: "/dashboard/leaderboard",
       icon: Award,
       description: "Top creators",
+    },
+    {
+      name: "Daily Challenge",
+      href: "/dashboard/daily-challenge",
+      icon: Flame,
+      description: "Daily competition engine",
     },
     {
       name: "Wallet",

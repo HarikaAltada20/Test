@@ -30,7 +30,7 @@ interface CreatorAnalyticsProps {
   contentType?: "video" | "text_image";
   videoPlatform?: string;
   twitterAnalytics?: boolean;
-  contestTypeFilter?: "all" | "leaderboard" | "cpm";
+  contestTypeFilter?: "all" | "leaderboard" | "cpm" | "milestone";
 }
 
 interface CreatorData {
@@ -582,6 +582,24 @@ export default function CreatorAnalytics({
                               {(creator.submissionsYoutubeInstagram ?? 0) >
                                 0 && (
                                 <span className="flex items-center gap-1 text-xs sm:text-sm text-muted-foreground">
+                                  {Array.isArray(creator.platforms) &&
+                                    creator.platforms.some((platform: string) => {
+                                      const normalized = platform
+                                        ?.toString()
+                                        .toLowerCase();
+                                      return (
+                                        normalized === "tiktok" ||
+                                        normalized === "tik_tok" ||
+                                        normalized === "tik-tok"
+                                      );
+                                    }) && (
+                                      <SiTiktok
+                                        className={cn(
+                                          "w-3 h-3 sm:w-5 sm:h-5",
+                                          isDark ? "text-white" : "text-black",
+                                        )}
+                                      />
+                                    )}
                                   {(creator.submissionsYoutube ?? 0) > 0 && (
                                     <Youtube
                                       className={cn(

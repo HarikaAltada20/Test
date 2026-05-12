@@ -4,7 +4,7 @@ import { createClient } from '@/utils/supabase/server';
 // POST: Brand submit contest for approval or publish approved contest
 export async function POST(
   request: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const supabase = await createClient();
@@ -145,7 +145,7 @@ export async function POST(
 // GET: Get contest moderation status and history
 export async function GET(
   request: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const supabase = await createClient();

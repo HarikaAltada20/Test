@@ -105,16 +105,19 @@ export const MetricsService = {
     if (subError) throw new Error(`Failed to increment total_submissions_won: ${subError.message}`);
 
     // 2. Check if creator already has a contest win for this contest
-    const { data: existingContestWin, error: checkErr } = await supabase
+    // Use limit(1) instead of single() — duplicate rows (bad data) break .single() with
+    // "Cannot coerce the result to a single JSON object".
+    const { data: existingContestWinRows, error: checkErr } = await supabase
       .from('creator_contest_wins')
       .select('first_win_submission_id')
       .eq('creator_id', creatorId)
       .eq('contest_id', contestId)
-      .single();
+      .limit(1);
 
-    if (checkErr && !checkErr.message?.includes('No rows')) {
+    if (checkErr) {
       throw new Error(`Failed to check existing contest win: ${checkErr.message}`);
     }
+    const existingContestWin = existingContestWinRows?.[0];
 
     // 3. Handle contest win tracking
     if (!existingContestWin) {
@@ -188,17 +191,18 @@ export const MetricsService = {
       .eq('id', creatorId);
     if (subError) throw new Error(`Failed to decrement total_submissions_won: ${subError.message}`);
 
-    // 2. Check if this was the first win for this contest
-    const { data: contestWin, error: contestWinErr } = await supabase
+    // 2. Check if this was the first win for this contest (limit(1): tolerate duplicate rows)
+    const { data: contestWinRows, error: contestWinErr } = await supabase
       .from('creator_contest_wins')
       .select('first_win_submission_id')
       .eq('creator_id', creatorId)
       .eq('contest_id', contestId)
-      .single();
+      .limit(1);
 
-    if (contestWinErr && !contestWinErr.message?.includes('No rows')) {
+    if (contestWinErr) {
       throw new Error(`Failed to check contest win: ${contestWinErr.message}`);
     }
+    const contestWin = contestWinRows?.[0];
 
     // 3. If this was the first win submission for this contest, remove contest win and decrement total_contests_won
     if (contestWin && contestWin.first_win_submission_id === submissionId) {

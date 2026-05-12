@@ -318,18 +318,26 @@ export default function ContestTile({
   ).twitter_metrics;
   const isTwitter = platform === "twitter" || platform === "x";
 
-  // Calculate total spent
-  let totalSpent = 0;
+  // Calculate the headline money metric shown on the tile.
+  let moneyMetricCents = 0;
+  let moneyMetricLabel = "Prize Pool";
   if (
     contest.contest_type === "leaderboard" &&
     contest.contest_based_details?.leaderboard_contest?.total_prize
   ) {
-    totalSpent = contest.contest_based_details.leaderboard_contest.total_prize;
+    moneyMetricCents = contest.contest_based_details.leaderboard_contest.total_prize;
   } else if (
     contest.contest_type === "cpm" &&
     contest.contest_based_details?.cpm_contest?.total_budget
   ) {
-    totalSpent = contest.contest_based_details.cpm_contest.total_budget;
+    moneyMetricCents = contest.contest_based_details.cpm_contest.total_budget;
+    moneyMetricLabel = "Budget";
+  } else if (contest.contest_type === "milestone") {
+    moneyMetricCents =
+      Number(contest.contest_based_details?.milestone_contest?.budget_spent) ||
+      Number(contest.contest_based_details?.milestone_contest?.budget_spent_cents) ||
+      0;
+    moneyMetricLabel = "Budget Spent";
   }
 
   const daysRemaining = getDaysRemaining(contest.end_date);
@@ -484,7 +492,7 @@ export default function ContestTile({
                   }}
                 />
               ) : null}
-              <div className="hidden flex items-center justify-center w-full h-full">
+              <div className="hidden items-center justify-center w-full h-full">
                 <PlatformIcon platform={contest.platform} />
               </div>
             </div>
@@ -548,7 +556,7 @@ export default function ContestTile({
                     isDark ? "text-purple-400" : "text-purple-600",
                   )}
                 >
-                  {formatCurrencyFromCents(totalSpent)}
+                  {formatCurrencyFromCents(moneyMetricCents)}
                 </div>
                 <div
                   className={cn(
@@ -556,7 +564,7 @@ export default function ContestTile({
                     isDark ? "text-gray-400" : "text-gray-500",
                   )}
                 >
-                  Total Payout
+                  {moneyMetricLabel}
                 </div>
               </div>
             </div>

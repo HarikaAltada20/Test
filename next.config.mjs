@@ -18,6 +18,12 @@ try {
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  // Light throttle for DB-backed static routes (helps /brands, blog, marketing pages during build).
+  experimental: {
+    staticGenerationMaxConcurrency: 4,
+    staticGenerationMinPagesPerWorker: 25,
+    staticGenerationRetryCount: 3,
+  },
   outputFileTracingRoot: path.join(__dirname),
   eslint: {
     ignoreDuringBuilds: true,

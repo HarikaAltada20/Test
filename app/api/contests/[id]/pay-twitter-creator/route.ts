@@ -4,8 +4,11 @@ import { createAdminClient } from "@/utils/supabase/admin";
 import { verifyAdminAccess } from "@/utils/admin-auth";
 import {
   creditCreatorWithdrawableBalance,
+  debitCreatorWithdrawableBalance,
+  logTransactionAsAdmin,
   REVERSAL_TRANSACTION_REMARK,
 } from "@/lib/payment-utils";
+import { adjustRewardCents, parsePayoutAdjustment } from "@/lib/payout-rules";
 
 /** Split total cents across rows by non-negative weights; remainder by largest fractional parts. Equal split when all weights are 0. */
 function distributeCentsByWeights(
@@ -91,9 +94,9 @@ export async function POST(
 
     // Verify admin access
     const { isAdmin, error: adminError } = await verifyAdminAccess();
-    if (!isAdmin && adminError) {
+    if (!isAdmin) {
       return NextResponse.json(
-        { error: "Admin access required" },
+        { error: adminError || "Admin access required" },
         { status: 403 }
       );
     }
@@ -102,7 +105,7 @@ export async function POST(
     const { data: contest, error: contestError } = await supabase
       .from("contests")
       .select(
-        "id, title, advertiser_id, platform, contest_type, contest_based_details, post_contest_status, max_earnings_per_creator"
+        "id, title, advertiser_id, platform, contest_type, contest_based_details, post_contest_status, max_earnings_per_creator, payout_adjustment_percentage, payout_adjustment_mode"
       )
       .eq("id", contestId)
       .single();
@@ -149,7 +152,7 @@ export async function POST(
       await supabaseAdmin
         .from("twitter_campaign_leaderboard")
         .select(
-          "id, creator_id, current_rank, total_points, earnings, paid_rank, moderation_status"
+          "id, creator_id, current_rank, total_points, earnings, paid_rank, paid_at, moderation_status"
         )
         .eq("contest_id", contestId)
         .eq("creator_id", creatorId)
@@ -183,12 +186,23 @@ export async function POST(
 
     // Get prize/CPM amount
     const contestDetails = contest.contest_based_details as any;
+    const payoutAdjustment = parsePayoutAdjustment(
+      (contest as any).payout_adjustment_percentage,
+      (contest as any).payout_adjustment_mode,
+    );
     const leaderboardContest = contestDetails?.leaderboard_contest;
     const cpmContest = contestDetails?.cpm_contest;
     const prizes = leaderboardContest?.prizes || [];
 
     let rewardAmount = 0;
-    const customAmount = isCustom && amountInCents ? amountInCents : 0;
+    const parsedCustomAmount = Number(amountInCents);
+    if (isCustom && (!Number.isFinite(parsedCustomAmount) || parsedCustomAmount <= 0)) {
+      return NextResponse.json(
+        { error: "Custom amount must be a positive number of cents" },
+        { status: 400 }
+      );
+    }
+    const customAmount = isCustom ? Math.round(parsedCustomAmount) : 0;
 
     if (customAmount > 0) {
       // Use custom amount
@@ -247,13 +261,26 @@ export async function POST(
         { status: 400 }
       );
     }
+    if (!isCustom) {
+      rewardAmount = adjustRewardCents(rewardAmount, {
+        shouldAdjustReward: payoutAdjustment.shouldAdjustReward,
+        percentage: payoutAdjustment.percentage,
+      });
+    }
+
+    if (rewardAmount <= 0) {
+      return NextResponse.json(
+        { error: "Reward became zero after payout adjustment" },
+        { status: 400 },
+      );
+    }
 
     // Determine payout cycle for idempotency (similar to submissions)
-    const [{ data: existingRewards }, { data: existingRefunds }] =
+    const [{ data: existingRewardsRaw }, { data: existingRefundsRaw }] =
       await Promise.all([
         supabaseAdmin
           .from("money_transactions")
-          .select("id")
+          .select("id, amount, metadata")
           .eq("user_id", creatorId)
           .eq("type", "reward")
           .contains("metadata", {
@@ -262,7 +289,7 @@ export async function POST(
           }),
         supabaseAdmin
           .from("money_transactions")
-          .select("id, remarks")
+          .select("id, amount, remarks, metadata")
           .eq("user_id", creatorId)
           .eq("type", "refund")
           .contains("metadata", {
@@ -271,11 +298,74 @@ export async function POST(
           }),
       ] as any);
 
-    const rewardsCount = (existingRewards || []).length;
+    const isCreatorLevelReward = (row: any) => {
+      const metadata = row?.metadata || {};
+      const payoutType = String(metadata.payout_type || "");
+      return (
+        !metadata.tweet_id &&
+        !metadata.bonus_type &&
+        (payoutType === "twitter_cpm_creator" ||
+          payoutType === "standard" ||
+          payoutType === "custom")
+      );
+    };
+    const isPerTweetOrBulkCpm = (row: any) => {
+      const metadata = row?.metadata || {};
+      const payoutType = String(metadata.payout_type || "");
+      return (
+        Boolean(metadata.tweet_id) ||
+        payoutType === "twitter_cpm_tweet" ||
+        payoutType === "twitter_cpm_tweet_custom" ||
+        payoutType === "twitter_cpm_bulk"
+      );
+    };
+    const cpmAmountForHistoryRow = (row: any) => {
+      const metadata = row?.metadata || {};
+      if (metadata.payout_type === "twitter_cpm_bulk") {
+        const totalCpm = Number(metadata.total_cpm);
+        return Number.isFinite(totalCpm) && totalCpm > 0 ? totalCpm : 0;
+      }
+      return Number(row?.amount) || 0;
+    };
+
+    const existingRewards = (existingRewardsRaw || []).filter(
+      isCreatorLevelReward,
+    );
+    const existingRefunds = (existingRefundsRaw || []).filter(
+      (row: any) =>
+        (!row.remarks || row.remarks === REVERSAL_TRANSACTION_REMARK) &&
+        isCreatorLevelReward(row),
+    );
+
+    if (contest.contest_type === "cpm") {
+      const partialCpmRewards = (existingRewardsRaw || [])
+        .filter(isPerTweetOrBulkCpm)
+        .reduce((sum: number, row: any) => sum + cpmAmountForHistoryRow(row), 0);
+      const partialCpmRefunds = (existingRefundsRaw || [])
+        .filter(
+          (row: any) =>
+            (!row.remarks || row.remarks === REVERSAL_TRANSACTION_REMARK) &&
+            isPerTweetOrBulkCpm(row),
+        )
+        .reduce((sum: number, row: any) => sum + cpmAmountForHistoryRow(row), 0);
+
+      if (
+        Math.max(0, partialCpmRewards - partialCpmRefunds) > 0 &&
+        leaderboardEntry.moderation_status !== "paid"
+      ) {
+        return NextResponse.json(
+          {
+            error:
+              "Creator has existing per-tweet or bulk CPM payouts. Use the tweet/bulk payout flow or reverse those payouts before creator-level payout.",
+          },
+          { status: 400 },
+        );
+      }
+    }
+
+    const rewardsCount = existingRewards.length;
     const refundsCount =
-      (existingRefunds || [])?.filter(
-        (r: any) => !r.remarks || r.remarks === REVERSAL_TRANSACTION_REMARK
-      ).length || 0;
+      existingRefunds.length || 0;
     const nextCycle =
       rewardsCount > refundsCount ? rewardsCount : rewardsCount + 1;
 
@@ -291,46 +381,66 @@ export async function POST(
         payout_cycle: nextCycle,
       });
 
-    if (rewardInThisCycle && rewardInThisCycle.length > 0) {
+    const hasRewardInThisCycle =
+      Boolean(rewardInThisCycle && rewardInThisCycle.length > 0);
+    const canReconcileExistingReward =
+      hasRewardInThisCycle && leaderboardEntry.moderation_status !== "paid";
+    if (hasRewardInThisCycle && !canReconcileExistingReward) {
       return NextResponse.json(
         { error: "Payment for this cycle has already been processed" },
         { status: 400 }
       );
     }
 
-    // Credit creator wallet
-    const creditRes = await creditCreatorWithdrawableBalance(
-      creatorId,
-      rewardAmount,
+    const twitterCreatorPayKey =
       customAmount > 0
-        ? `Custom Twitter contest payment - ${contest.title || "Contest"}`
-        : contest.contest_type === "cpm"
-        ? `Twitter CPM contest reward - ${contest.title || "Contest"}`
-        : `Twitter contest reward - ${contest.title || "Contest"}`,
-      {
-        remarks:
-          customRemarks ||
-          (customAmount > 0
-            ? "Custom Twitter payout credited to creator wallet"
+        ? `twitter_creator_pay:v1:${contestId}:${creatorId}:cycle:${nextCycle}:amt:${rewardAmount}`
+        : `twitter_creator_pay:v1:${contestId}:${creatorId}:cycle:${nextCycle}`;
+
+    const creditRes: {
+      success: boolean;
+      transactionId?: string;
+      alreadyApplied?: boolean;
+      error?: string;
+    } = canReconcileExistingReward
+      ? {
+          success: true,
+          transactionId: rewardInThisCycle?.[0]?.id,
+          alreadyApplied: true,
+        }
+      : await creditCreatorWithdrawableBalance(
+          creatorId,
+          rewardAmount,
+          customAmount > 0
+            ? `Custom Twitter contest payment - ${contest.title || "Contest"}`
             : contest.contest_type === "cpm"
-            ? "Standard Twitter CPM payout credited to creator wallet"
-            : "Standard Twitter payout credited to creator wallet"),
-        metadata: {
-          contest_id: contestId,
-          twitter_creator_id: creatorId,
-          payout_type:
-            customAmount > 0
-              ? "custom"
-              : contest.contest_type === "cpm"
-              ? "standard_cpm"
-              : "standard",
-          payout_cycle: nextCycle,
-          rank: leaderboardEntry.current_rank,
-          prize_amount: rewardAmount,
-          total_points: leaderboardEntry.total_points,
-        },
-      }
-    );
+            ? `Twitter CPM contest reward - ${contest.title || "Contest"}`
+            : `Twitter contest reward - ${contest.title || "Contest"}`,
+          {
+            idempotencyKey: twitterCreatorPayKey,
+            remarks:
+              customRemarks ||
+              (customAmount > 0
+                ? "Custom Twitter payout credited to creator wallet"
+                : contest.contest_type === "cpm"
+                ? "Standard Twitter CPM payout credited to creator wallet"
+                : "Standard Twitter payout credited to creator wallet"),
+            metadata: {
+              contest_id: contestId,
+              twitter_creator_id: creatorId,
+              payout_type:
+                customAmount > 0
+                  ? "custom"
+                  : contest.contest_type === "cpm"
+                  ? "twitter_cpm_creator"
+                  : "standard",
+              payout_cycle: nextCycle,
+              rank: leaderboardEntry.current_rank,
+              prize_amount: rewardAmount,
+              total_points: leaderboardEntry.total_points,
+            },
+          }
+        );
 
     if (!creditRes.success) {
       return NextResponse.json(
@@ -366,7 +476,7 @@ export async function POST(
     // Mark non-rejected tweets paid and set per-tweet earnings (DB + reversals; bulk CPM already does this).
     const { data: tweetsToPay, error: tweetsFetchError } = await supabaseAdmin
       .from("twitter_campaign_tweets")
-      .select("id, points, manual_points_adjustment")
+      .select("id, points, manual_points_adjustment, moderation_status, earnings")
       .eq("contest_id", contestId)
       .eq("creator_id", creatorId)
       .neq("moderation_status", "rejected")
@@ -406,6 +516,75 @@ export async function POST(
           "[pay-twitter-creator] Error updating tweets with earnings:",
           tweetUpdateErr
         );
+        if (!creditRes.alreadyApplied) {
+          const debitRes = await debitCreatorWithdrawableBalance(
+            creatorId,
+            rewardAmount,
+          );
+          if (debitRes.success) {
+            await logTransactionAsAdmin(
+              creatorId,
+              "refund",
+              rewardAmount,
+              "success",
+              `Rollback: Twitter creator payment tweet update failed - ${
+                contest.title || "Contest"
+              }`,
+              {
+                remarks: REVERSAL_TRANSACTION_REMARK,
+                paymentMethod: "refund",
+                metadata: {
+                  contest_id: contestId,
+                  twitter_creator_id: creatorId,
+                  payout_type: "twitter_creator_rollback",
+                  original_reward_transaction_id: creditRes.transactionId,
+                },
+              },
+            );
+          } else {
+            console.error(
+              "[pay-twitter-creator] CRITICAL: wallet rollback failed after tweet update error:",
+              debitRes.error,
+            );
+            return NextResponse.json(
+              {
+                error:
+                  "Creator payment could not be reconciled and automatic wallet rollback failed. Contact support immediately.",
+                details: debitRes.error,
+              },
+              { status: 500 },
+            );
+          }
+        }
+        await supabaseAdmin
+          .from("twitter_campaign_leaderboard")
+          .update({
+            paid_at: leaderboardEntry.paid_at,
+            earnings: leaderboardEntry.earnings,
+            paid_rank: leaderboardEntry.paid_rank,
+            moderation_status: leaderboardEntry.moderation_status,
+          })
+          .eq("id", leaderboardEntry.id);
+        await Promise.all(
+          tweetsToPay.map((t) =>
+            supabaseAdmin
+              .from("twitter_campaign_tweets")
+              .update({
+                moderation_status: t.moderation_status,
+                earnings: t.earnings,
+              })
+              .eq("id", t.id)
+              .eq("contest_id", contestId),
+          ),
+        );
+        return NextResponse.json(
+          {
+            error: creditRes.alreadyApplied
+              ? "Creator payout existed, but tweet rows could not be reconciled. Retry or contact support."
+              : "Creator payment row updates failed. Wallet credit was rolled back; retry after resolving tweets.",
+          },
+          { status: 500 },
+        );
       }
     } else {
       const { error: tweetsUpdateError } = await supabaseAdmin
@@ -419,6 +598,58 @@ export async function POST(
         console.error(
           "[pay-twitter-creator] Error updating tweets:",
           tweetsUpdateError
+        );
+        if (!creditRes.alreadyApplied) {
+          const debitRes = await debitCreatorWithdrawableBalance(
+            creatorId,
+            rewardAmount,
+          );
+          if (!debitRes.success) {
+            return NextResponse.json(
+              {
+                error:
+                  "Creator payment could not be reconciled and automatic wallet rollback failed. Contact support immediately.",
+                details: debitRes.error,
+              },
+              { status: 500 },
+            );
+          }
+          await logTransactionAsAdmin(
+            creatorId,
+            "refund",
+            rewardAmount,
+            "success",
+            `Rollback: Twitter creator payment tweet update failed - ${
+              contest.title || "Contest"
+            }`,
+            {
+              remarks: REVERSAL_TRANSACTION_REMARK,
+              paymentMethod: "refund",
+              metadata: {
+                contest_id: contestId,
+                twitter_creator_id: creatorId,
+                payout_type: "twitter_creator_rollback",
+                original_reward_transaction_id: creditRes.transactionId,
+              },
+            },
+          );
+        }
+        await supabaseAdmin
+          .from("twitter_campaign_leaderboard")
+          .update({
+            paid_at: leaderboardEntry.paid_at,
+            earnings: leaderboardEntry.earnings,
+            paid_rank: leaderboardEntry.paid_rank,
+            moderation_status: leaderboardEntry.moderation_status,
+          })
+          .eq("id", leaderboardEntry.id);
+        return NextResponse.json(
+          {
+            error: creditRes.alreadyApplied
+              ? "Creator payout existed, but tweet rows could not be reconciled. Retry or contact support."
+              : "Creator payment row updates failed. Wallet credit was rolled back; retry after resolving tweets.",
+          },
+          { status: 500 },
         );
       }
     }

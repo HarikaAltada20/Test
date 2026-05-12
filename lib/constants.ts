@@ -38,6 +38,10 @@ export const METRICS_REFRESH_COOLDOWN_MS_BRAND =
 export const METRICS_REFRESH_COOLDOWN_MS_ADMIN =
   METRICS_REFRESH_COOLDOWN_MINUTES_ADMIN * 60 * 1000;
 
+// Daily challenge leaderboard refresh cooldowns.
+export const DAILY_CHALLENGE_REFRESH_COOLDOWN_MS_CREATOR = 30 * 60 * 1000; // 30 minutes
+export const DAILY_CHALLENGE_REFRESH_COOLDOWN_MS_ADMIN = 1 * 60 * 1000; // 1 minute
+
 /**
  * Helper function to get remaining cooldown time for opportunities (creators)
  * @param lastUpdateTimestamp - The last_metrics_updated timestamp

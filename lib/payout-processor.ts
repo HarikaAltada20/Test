@@ -31,10 +31,20 @@ export async function processQueuedPayouts(batchSize: number = 10): Promise<Payo
 
   for (const job of jobs) {
     try {
-      await supabaseAdmin
+      const { data: claimedJob, error: claimErr } = await supabaseAdmin
         .from('payout_jobs')
         .update({ status: 'processing' })
-        .eq('id', job.id);
+        .eq('id', job.id)
+        .eq('status', 'queued')
+        .select('id')
+        .maybeSingle();
+      if (claimErr) {
+        throw new Error(`Failed to claim job: ${claimErr.message}`);
+      }
+      if (!claimedJob) {
+        results.push({ id: job.id, status: 'done' });
+        continue;
+      }
 
       // Load submission + contest
       const { data: sub, error: subErr } = await supabaseAdmin
@@ -89,13 +99,7 @@ export async function processQueuedPayouts(batchSize: number = 10): Promise<Payo
       }
 
       if (rewardAmount > 0) {
-        // 1) Update submission to paid and persist earnings
-        await supabaseAdmin
-          .from('submissions')
-          .update({ earnings: rewardAmount, status: 'paid' })
-          .eq('id', sub.id);
-
-        // 2) Idempotency-safe wallet crediting
+        // 1) Idempotency-safe wallet crediting
         // Determine payout cycle based on prior rewards/refunds for this submission
         const [{ data: existingRewards }, { data: existingRefunds }] = await Promise.all([
           supabaseAdmin
@@ -128,6 +132,10 @@ export async function processQueuedPayouts(batchSize: number = 10): Promise<Payo
 
         if (!rewardInThisCycle || rewardInThisCycle.length === 0) {
           const customRemarks = payload?.customRemarks as string | undefined;
+          const contestRewardIdempotencyKey =
+            payoutType === "custom"
+              ? `contest_reward:v1:${sub.id}:cycle:${nextCycle}:amt:${rewardAmount}`
+              : `contest_reward:v1:${sub.id}:cycle:${nextCycle}`;
           const creditRes = await creditCreatorWithdrawableBalance(
             sub.creator_id,
             rewardAmount,
@@ -135,13 +143,32 @@ export async function processQueuedPayouts(batchSize: number = 10): Promise<Payo
               ? `Custom contest payment credited - ${(contest as any)?.title || 'Contest'}`
               : `Contest reward credited - ${(contest as any)?.title || 'Contest'}`,
             {
-              remarks: customRemarks || (payoutType === 'custom' ? 'Custom payout credited to creator wallet' : 'Standard payout credited to creator wallet'),
-              metadata: { contest_id: sub.contest_id, submission_id: sub.id, payout_type: payoutType, payout_cycle: nextCycle }
-            }
+              idempotencyKey: contestRewardIdempotencyKey,
+              remarks:
+                customRemarks ||
+                (payoutType === "custom"
+                  ? "Custom payout credited to creator wallet"
+                  : "Standard payout credited to creator wallet"),
+              metadata: {
+                contest_id: sub.contest_id,
+                submission_id: sub.id,
+                payout_type: payoutType,
+                payout_cycle: nextCycle,
+              },
+            },
           );
           if (!creditRes.success) {
             throw new Error(`Failed to credit creator wallet: ${creditRes.error}`);
           }
+        }
+
+        // 2) Mark submission paid only after the wallet credit is known to be safe.
+        const { error: paidUpdateErr } = await supabaseAdmin
+          .from('submissions')
+          .update({ earnings: rewardAmount, status: 'paid' })
+          .eq('id', sub.id);
+        if (paidUpdateErr) {
+          throw new Error(`Reward credited but failed to mark submission paid: ${paidUpdateErr.message}`);
         }
 
         // 3) Metrics are now updated automatically by database triggers when status changes to 'paid'

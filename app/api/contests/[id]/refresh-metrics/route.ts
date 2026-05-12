@@ -31,7 +31,7 @@ import { isYouTubeMetricsQueueEnabled } from "@/lib/queue/youtube-metrics-queue"
 
 export async function POST(
   request: Request,
-  { params }: { params: { id: string } },
+  { params }: { params: Promise<{ id: string }> },
 ) {
   const refreshMetricsStartMs = Date.now();
   try {

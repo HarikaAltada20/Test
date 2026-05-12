@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { ContestListClient } from "../../contests/ContestListClient";
 import { getAllContestsWithCalculatedBudgets } from "@/lib/contest-service";
 import { verifyAdminAccess } from "@/utils/admin-auth";
+import { PageLoadingSpinner } from "@/components/loading/LoadingSpinner";
 
 // Define the type for a contest in the admin view
 export type AdminContest = {
@@ -68,7 +69,13 @@ export default async function AdminContestsPage() {
             </p>
           </div>
         </div>
-        <Suspense fallback={<div>Loading contests...</div>}>
+        <Suspense
+          fallback={
+            <div className="flex min-h-[50vh] w-full items-center justify-center py-16">
+              <PageLoadingSpinner mode="light" />
+            </div>
+          }
+        >
           <ContestListClient
             initialContests={typedContests}
             isAdminView={true}

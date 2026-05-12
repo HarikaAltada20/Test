@@ -23,7 +23,11 @@ export async function GET(request: NextRequest) {
     const supabase = await createClient();
 
     const searchParams = request.nextUrl.searchParams;
-    const sortBy = searchParams.get("sortBy") || "winnings";
+    const sortByRaw = searchParams.get("sortBy") || "winnings";
+    const sortBy =
+      sortByRaw === "affiliate_earnings" || sortByRaw === "other_earnings"
+        ? "affiliate_and_other_earnings"
+        : sortByRaw;
     const platform = searchParams.get("platform") || "all";
     const page = parseInt(searchParams.get("page") || "1");
     const limit = parseInt(searchParams.get("limit") || "25");
@@ -932,8 +936,7 @@ export async function GET(request: NextRequest) {
     const shouldSkipPlatformFilter =
       sortBy === "referrals" ||
       sortBy === "total_coins" ||
-      sortBy === "affiliate_earnings" ||
-      sortBy === "other_earnings";
+      sortBy === "affiliate_and_other_earnings";
 
     const filteredLeaders = shouldSkipPlatformFilter
       ? leaders
@@ -967,17 +970,12 @@ export async function GET(request: NextRequest) {
         return b.metrics.submissions_made - a.metrics.submissions_made;
       }
 
-      if (sortBy === "affiliate_earnings") {
-        return (
-          (b.metrics.affiliate_earnings || 0) -
-          (a.metrics.affiliate_earnings || 0)
-        );
-      }
-
-      if (sortBy === "other_earnings") {
-        return (
-          (b.metrics.other_earnings || 0) - (a.metrics.other_earnings || 0)
-        );
+      if (sortBy === "affiliate_and_other_earnings") {
+        const bSum =
+          (b.metrics.affiliate_earnings || 0) + (b.metrics.other_earnings || 0);
+        const aSum =
+          (a.metrics.affiliate_earnings || 0) + (a.metrics.other_earnings || 0);
+        return bSum - aSum;
       }
 
       // Custom tie-breakers when ranking by contests_won
