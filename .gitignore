@@ -30,3 +30,7 @@ public/videos/_originals/
 
 # Generated AI / export diffs — do not commit
 reviews/*.diff
+SUPABASE/storage-backups/
+SUPABASE/backup-storage.local.ps1
+SUPABASE/supabase-backups/
+SUPABASE_BACKUP/
