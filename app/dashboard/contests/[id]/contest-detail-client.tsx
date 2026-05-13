@@ -99,9 +99,9 @@ import {
 } from "@/lib/twitter-cpm-bonus-expected";
 import {
   selectionIncludesPaidRow,
+  submissionIsPaidRow,
   summarizePaidReversalPreview,
 } from "@/lib/paid-reversal-preview";
-import { applyPayoutAdjustment } from "@/lib/payout-adjustment";
 import { parsePayoutAdjustment } from "@/lib/payout-rules";
 import { YouTubeAnalyticsPanel } from "@/components/youtube/YouTubeAnalyticsPanel";
 import { YT_ANALYTICS_DEFAULT_WINDOW_DAYS } from "@/lib/youtube-constants";
@@ -899,7 +899,13 @@ export default function ContestDetailClient({
   const [currentContest, setCurrentContest] = useState<Contest>(contest);
   const [persistedPayoutAdjustment, setPersistedPayoutAdjustment] = useState<{
     percentage: number | null;
-    mode: "cpm_only" | "bonus_only" | "combined" | null;
+    mode:
+      | "cpm_only"
+      | "milestone_only"
+      | "bonus_only"
+      | "combined"
+      | "dual_rewards_only"
+      | null;
   }>({
     percentage:
       (contest as any)?.payout_adjustment_percentage != null
@@ -908,13 +914,21 @@ export default function ContestDetailClient({
     mode:
       ((contest as any)?.payout_adjustment_mode as
         | "cpm_only"
+        | "milestone_only"
         | "bonus_only"
         | "combined"
+        | "dual_rewards_only"
         | null) ?? "combined",
   });
   const [draftPayoutAdjustment, setDraftPayoutAdjustment] = useState<{
     percentage: number | null;
-    mode: "cpm_only" | "bonus_only" | "combined" | null;
+    mode:
+      | "cpm_only"
+      | "milestone_only"
+      | "bonus_only"
+      | "combined"
+      | "dual_rewards_only"
+      | null;
   }>({
     percentage:
       (contest as any)?.payout_adjustment_percentage != null
@@ -923,8 +937,10 @@ export default function ContestDetailClient({
     mode:
       ((contest as any)?.payout_adjustment_mode as
         | "cpm_only"
+        | "milestone_only"
         | "bonus_only"
         | "combined"
+        | "dual_rewards_only"
         | null) ?? "combined",
   });
   const [instagramRun, setInstagramRun] =
@@ -3481,7 +3497,7 @@ export default function ContestDetailClient({
       currentContest?.contest_type === "leaderboard" ||
       isCpmContestType(currentContest?.contest_type) ||
       isMilestoneContestType(currentContest?.contest_type);
-    if (!isLeaderboardOrCpm || !filteredCreatorGroups?.length) {
+    if (!isSupportedContestType || !filteredCreatorGroups?.length) {
       return {
         totalExpectedReward: 0,
         totalRewardGranted: 0,
@@ -3579,8 +3595,10 @@ export default function ContestDetailClient({
     const nextMode =
       ((contest as any)?.payout_adjustment_mode as
         | "cpm_only"
+        | "milestone_only"
         | "bonus_only"
         | "combined"
+        | "dual_rewards_only"
         | null) ?? "combined";
     setPersistedPayoutAdjustment({ percentage: nextPercentage, mode: nextMode });
     setDraftPayoutAdjustment({ percentage: nextPercentage, mode: nextMode });
@@ -6278,8 +6296,12 @@ export default function ContestDetailClient({
       };
     } else if (platform?.includes("instagram")) {
       const igStats = stats.instagram || stats;
+      const igViews = Number(igStats.views ?? 0);
+      const reach = Number(igStats.reach ?? 0);
+      const viewsForCpm =
+        Math.max(baseViews, igViews) === 0 && reach > 0 ? reach : Math.max(baseViews, igViews);
       return {
-        views: baseViews,
+        views: viewsForCpm,
         likes: igStats.likes || igStats.like_count || 0,
         comments: igStats.comments || igStats.comment_count || 0,
         shares: igStats.shares || igStats.share_count || 0,
@@ -6391,6 +6413,31 @@ export default function ContestDetailClient({
     [isDark],
   );
 
+  /**
+   * View count used for CPM math (matches instagram-insights: prefer views, else reach for IG).
+   */
+  function getCpmBasisViewCountForSubmission(submission: Submission): number {
+    const platform = String(submission.platform || "").toLowerCase();
+    const tiktokViews =
+      Number((submission as any)?.other_stats?.tiktok?.view_count) || 0;
+    if (platform.includes("tiktok") && tiktokViews > 0) {
+      return tiktokViews;
+    }
+    let raw = Number(submission.views ?? 0);
+    if (platform.includes("instagram")) {
+      const stats = submission.other_stats || {};
+      const ig =
+        (stats as any).instagram && typeof (stats as any).instagram === "object"
+          ? ((stats as any).instagram as Record<string, unknown>)
+          : (stats as Record<string, unknown>);
+      const igViews = Number(ig.views ?? 0);
+      raw = Math.max(raw, igViews);
+      const reach = Number(ig.reach ?? 0);
+      if (raw === 0 && reach > 0) raw = reach;
+    }
+    return raw;
+  }
+
   /** Expected earnings for a submission. When useStoredEarnings is false, always compute from CPM formula so "Expected" column stays correct after payment. */
   function calculateSubmissionExpectedEarnings(
     submission: Submission,
@@ -6403,13 +6450,7 @@ export default function ContestDetailClient({
       const cpmConfig = (currentContest?.contest_based_details as any)
         ?.cpm_contest;
       if (cpmConfig?.cpm_rate_usd) {
-        const platform = String(submission.platform || "").toLowerCase();
-        const tiktokViews =
-          Number((submission as any)?.other_stats?.tiktok?.view_count) || 0;
-        let effectiveViews =
-          platform.includes("tiktok") && tiktokViews > 0
-            ? tiktokViews
-            : (submission.views ?? 0);
+        let effectiveViews = getCpmBasisViewCountForSubmission(submission);
         if (
           cpmConfig.min_views != null &&
           effectiveViews < cpmConfig.min_views
@@ -6437,7 +6478,7 @@ export default function ContestDetailClient({
   const cappedExpectedRewardBySubmissionId = useMemo(() => {
     const preAdjustmentCappedMap = new Map<string, number>();
     const preAdjustmentUncappedMap = new Map<string, number>();
-    if (currentContest?.contest_type !== "cpm") {
+    if (!isCpmContestType(currentContest?.contest_type)) {
       return { preAdjustmentCappedMap, preAdjustmentUncappedMap };
     }
 
@@ -6635,6 +6676,32 @@ export default function ContestDetailClient({
       milestoneCents,
       isPaid,
     };
+  }
+
+  /**
+   * Non–Twitter dual-rewards rows: capped CPM expectation + milestone map, with the same
+   * payout-adjustment flags as the submissions table (used for reversal refund estimates).
+   */
+  function getDualAdjExpectedCpmAndMilestoneForReversalRow(
+    submission: Submission | any,
+  ): { adjCpm: number; adjMilestone: number } {
+    const cpmConfig = currentContest?.contest_based_details?.cpm_contest;
+    let cpmCentsExpected = 0;
+    if (cpmConfig?.cpm_rate_usd) {
+      cpmCentsExpected =
+        cappedExpectedRewardBySubmissionId.preAdjustmentCappedMap.get(
+          submission.id,
+        ) ?? 0;
+    }
+    const milestoneCentsExpected =
+      milestoneSubmissionExpectedPayoutCents.get(submission.id) ?? 0;
+    const adjCpm = dualAdjustCpmForDisplay
+      ? applyPayoutAdjustment(cpmCentsExpected, contestPayoutAdjPct)
+      : cpmCentsExpected;
+    const adjMilestone = dualAdjustMilestoneForDisplay
+      ? applyPayoutAdjustment(milestoneCentsExpected, contestPayoutAdjPct)
+      : milestoneCentsExpected;
+    return { adjCpm, adjMilestone };
   }
 
   const formatMetricValue = (value: any, isRate = false) => {
@@ -12716,8 +12783,7 @@ export default function ContestDetailClient({
                             <select
                               value={(() => {
                                 const rawMode =
-                                  ((currentContest as any)
-                                    ?.payout_adjustment_mode as
+                                  (draftPayoutAdjustment.mode as
                                     | "cpm_only"
                                     | "milestone_only"
                                     | "bonus_only"
@@ -12793,14 +12859,7 @@ export default function ContestDetailClient({
                               onClick={async () => {
                                 const pct = draftPayoutAdjustment.percentage;
                                 const mode =
-                                  ((currentContest as any)
-                                    ?.payout_adjustment_mode as
-                                    | "cpm_only"
-                                    | "milestone_only"
-                                    | "bonus_only"
-                                    | "combined"
-                                    | "dual_rewards_only"
-                                    | null) ?? "combined";
+                                  draftPayoutAdjustment.mode ?? "combined";
                                 const normalizedMode =
                                   mode === "dual_rewards_only"
                                     ? "combined"
@@ -12841,7 +12900,14 @@ export default function ContestDetailClient({
                                       pct != null
                                         ? Math.round(pct * 100) / 100
                                         : null,
-                                    mode,
+                                    mode: normalizedMode,
+                                  });
+                                  setDraftPayoutAdjustment({
+                                    percentage:
+                                      pct != null
+                                        ? Math.round(pct * 100) / 100
+                                        : null,
+                                    mode: normalizedMode,
                                   });
                                   setCurrentContest((prev) => ({
                                     ...prev,
@@ -12849,7 +12915,7 @@ export default function ContestDetailClient({
                                       pct != null
                                         ? Math.round(pct * 100) / 100
                                         : null,
-                                    payout_adjustment_mode: mode,
+                                    payout_adjustment_mode: normalizedMode,
                                   }));
                                 } catch (err: any) {
                                   console.error(
@@ -14972,6 +15038,9 @@ export default function ContestDetailClient({
                                           </TableHead>
                                         )}
                                   {showAdjustedRewardColumn &&
+                                    !isDualRewardsContestType(
+                                      currentContest.contest_type,
+                                    ) &&
                                     (currentContest.platform
                                       ?.toLowerCase()
                                       .includes("youtube")
@@ -15108,8 +15177,10 @@ export default function ContestDetailClient({
                                 const payoutAdjustmentMode = (currentContest as any)
                                   ?.payout_adjustment_mode as
                                   | "cpm_only"
+                                  | "milestone_only"
                                   | "bonus_only"
                                   | "combined"
+                                  | "dual_rewards_only"
                                   | null;
                                 const hasPayoutAdjustment =
                                   payoutAdjustmentPercentage > 0 &&
@@ -15117,7 +15188,9 @@ export default function ContestDetailClient({
                                 const shouldAdjustReward =
                                   hasPayoutAdjustment &&
                                   (payoutAdjustmentMode === "combined" ||
-                                    payoutAdjustmentMode === "cpm_only");
+                                    payoutAdjustmentMode === "cpm_only" ||
+                                    payoutAdjustmentMode ===
+                                      "dual_rewards_only");
 
                                 if (
                                   currentContest.contest_type === "leaderboard"
@@ -15237,31 +15310,32 @@ export default function ContestDetailClient({
                                       const calculatedEarnings =
                                         (totalPoints * cpmConfig.cpm_rate_usd) /
                                         1000;
-                                      const preCents = Math.round(
+                                      cpmCentsExpected = Math.round(
                                         calculatedEarnings * 100,
                                       );
-                                      const postCents = shouldAdjustReward
-                                        ? applyPayoutAdjustment(
-                                            preCents,
-                                            payoutAdjustmentPercentage,
-                                          )
-                                        : preCents;
-                                      return {
-                                        amount: calculatedEarnings,
-                                        label: "Expected",
-                                        className:
-                                          "text-slate-700 font-semibold",
-                                        preAdjustmentAmountDollars:
-                                          calculatedEarnings,
-                                        postAdjustmentAmountDollars:
-                                          centsToDollars(postCents),
-                                      };
-                                      cpmCentsExpected = Math.round(
-                                        (totalPoints *
-                                          cpmConfig.cpm_rate_usd *
-                                          100) /
-                                          1000,
-                                      );
+                                      if (
+                                        !isDualRewardsContestType(
+                                          currentContest.contest_type,
+                                        )
+                                      ) {
+                                        const preCents = cpmCentsExpected;
+                                        const postCents = shouldAdjustReward
+                                          ? applyPayoutAdjustment(
+                                              preCents,
+                                              payoutAdjustmentPercentage,
+                                            )
+                                          : preCents;
+                                        return {
+                                          amount: calculatedEarnings,
+                                          label: "Expected",
+                                          className:
+                                            "text-slate-700 font-semibold",
+                                          preAdjustmentAmountDollars:
+                                            calculatedEarnings,
+                                          postAdjustmentAmountDollars:
+                                            centsToDollars(postCents),
+                                        };
+                                      }
                                     } else {
                                       const preCents =
                                         cappedExpectedRewardBySubmissionId.preAdjustmentCappedMap.get(
@@ -15271,12 +15345,13 @@ export default function ContestDetailClient({
                                         cappedExpectedRewardBySubmissionId.preAdjustmentUncappedMap.get(
                                           submission.id,
                                         ) ?? 0;
-                                      const uncappedAdjusted = shouldAdjustReward
-                                        ? applyPayoutAdjustment(
-                                            preUncappedCents,
-                                            payoutAdjustmentPercentage,
-                                          )
-                                        : preUncappedCents;
+                                      const uncappedAdjusted =
+                                        shouldAdjustReward
+                                          ? applyPayoutAdjustment(
+                                              preUncappedCents,
+                                              payoutAdjustmentPercentage,
+                                            )
+                                          : preUncappedCents;
                                       const postCents = shouldAdjustReward
                                         ? applyPayoutAdjustment(
                                             preCents,
@@ -15285,42 +15360,29 @@ export default function ContestDetailClient({
                                         : preCents;
                                       const isCappedToZeroWithPotential =
                                         preCents === 0 && uncappedAdjusted > 0;
-                                      return {
-                                        amount: centsToDollars(preCents),
-                                        label: isCappedToZeroWithPotential
-                                          ? "Capped"
-                                          : "Expected",
-                                        className:
-                                          "text-slate-700 font-semibold",
-                                        cappedFromCreatorLimit:
-                                          isCappedToZeroWithPotential,
-                                        uncappedAmount:
-                                          centsToDollars(uncappedAdjusted),
-                                        preAdjustmentAmountDollars:
-                                          centsToDollars(preCents),
-                                        postAdjustmentAmountDollars:
-                                          centsToDollars(postCents),
-                                      };
-                                    }
-                                      const views = submission.views || 0;
-                                      let effectiveViews = views;
                                       if (
-                                        cpmConfig.min_views != null &&
-                                        views < cpmConfig.min_views
+                                        !isDualRewardsContestType(
+                                          currentContest.contest_type,
+                                        )
                                       ) {
-                                        effectiveViews = 0;
-                                      } else if (
-                                        cpmConfig.max_views != null &&
-                                        views > cpmConfig.max_views
-                                      ) {
-                                        effectiveViews = cpmConfig.max_views;
+                                        return {
+                                          amount: centsToDollars(preCents),
+                                          label: isCappedToZeroWithPotential
+                                            ? "Capped"
+                                            : "Expected",
+                                          className:
+                                            "text-slate-700 font-semibold",
+                                          cappedFromCreatorLimit:
+                                            isCappedToZeroWithPotential,
+                                          uncappedAmount:
+                                            centsToDollars(uncappedAdjusted),
+                                          preAdjustmentAmountDollars:
+                                            centsToDollars(preCents),
+                                          postAdjustmentAmountDollars:
+                                            centsToDollars(postCents),
+                                        };
                                       }
-                                      cpmCentsExpected = Math.round(
-                                        (effectiveViews *
-                                          cpmConfig.cpm_rate_usd *
-                                          100) /
-                                          1000,
-                                      );
+                                      cpmCentsExpected = preCents;
                                     }
                                   }
                                   const totalCentsExpected =
@@ -15370,6 +15432,7 @@ export default function ContestDetailClient({
                                       label: "Expected",
                                       className: "text-slate-500",
                                     };
+                                  }
                                   return {
                                     amount: 0,
                                     label: "N/A",
@@ -15377,7 +15440,9 @@ export default function ContestDetailClient({
                                   };
                                 }
                                 if (
-                                  currentContest.contest_type === "milestone"
+                                  isMilestoneContestType(
+                                    currentContest.contest_type,
+                                  )
                                 ) {
                                   const milestones =
                                     currentContest.contest_based_details
@@ -15463,7 +15528,10 @@ export default function ContestDetailClient({
                                           1000,
                                       );
                                     } else {
-                                      const views = submission.views || 0;
+                                      const views =
+                                        getCpmBasisViewCountForSubmission(
+                                          submission,
+                                        );
                                       let effectiveViews = views;
                                       if (
                                         cpmConfig.min_views != null &&
@@ -17064,10 +17132,11 @@ export default function ContestDetailClient({
                                           "expected_reward",
                                         )
                                         : true) && (
-                                          <TableCell className="text-center">
-                                            <div className="flex flex-col items-center">
-                                              <div className="flex flex-col items-center">
-                                                <div className="inline-flex items-center gap-1">
+                                        <>
+                                          {isDualRewardContest ? (
+                                            <>
+                                              <TableCell className="text-center">
+                                                <div className="flex flex-col items-center">
                                                   <span
                                                     className={cn(
                                                       "text-lg font-bold tracking-wide",
@@ -17088,56 +17157,115 @@ export default function ContestDetailClient({
                                                             : "text-slate-900",
                                                     )}
                                                   >
-                                                    $
-                                                    {expectedInfo.amount.toFixed(
-                                                      2,
+                                                    {formatMoney(
+                                                      (expectedCpmCents ?? 0) +
+                                                        (expectedMilestoneCents ??
+                                                          0),
                                                     )}
                                                   </span>
-                                                  {(expectedInfo as any)
-                                                    ?.cappedFromCreatorLimit && (
-                                                    <Tooltip>
-                                                      <TooltipTrigger asChild>
-                                                        <AlertTriangle className="h-3.5 w-3.5 text-amber-500 cursor-help" />
-                                                      </TooltipTrigger>
-                                                      <TooltipContent className="max-w-[260px] text-left whitespace-pre-line">
-                                                        Creator cap exhausted for expected payout order.
-                                                        {"\n"}
-                                                        {grantedInfo.amount > 0 ? (
-                                                          <>
-                                                            Actual granted amount: $
-                                                            {grantedInfo.amount.toFixed(
-                                                              2,
-                                                            )}
-                                                          </>
-                                                        ) : (
-                                                          <>
-                                                            Else expected reward would be: $
-                                                            {Number(
-                                                              (expectedInfo as any)
-                                                                ?.uncappedAmount ||
-                                                                0,
-                                                            ).toFixed(2)}
-                                                          </>
-                                                        )}
-                                                      </TooltipContent>
-                                                    </Tooltip>
-                                                  )}
+                                                  <span
+                                                    className={cn(
+                                                      "text-xs uppercase tracking-wide",
+                                                      isDark
+                                                        ? "text-white"
+                                                        : "text-slate-800",
+                                                    )}
+                                                  >
+                                                    {expectedInfo.label}
+                                                  </span>
                                                 </div>
-                                                <span
-                                                  className={cn(
-                                                    "text-xs uppercase tracking-wide",
-                                                    isDark
-                                                      ? "text-white"
-                                                      : "text-slate-800",
-                                                  )}
-                                                >
-                                                  {expectedInfo.label}
-                                                </span>
+                                              </TableCell>
+                                              <TableCell className="text-center font-semibold">
+                                                {formatMoney(
+                                                  expectedCpmCents ?? 0,
+                                                )}
+                                              </TableCell>
+                                              <TableCell className="text-center font-semibold">
+                                                {formatMoney(
+                                                  expectedMilestoneCents ?? 0,
+                                                )}
+                                              </TableCell>
+                                            </>
+                                          ) : (
+                                            <TableCell className="text-center">
+                                              <div className="flex flex-col items-center">
+                                                <div className="flex flex-col items-center">
+                                                  <div className="inline-flex items-center gap-1">
+                                                    <span
+                                                      className={cn(
+                                                        "text-lg font-bold tracking-wide",
+                                                        expectedInfo.className.includes(
+                                                          "text-slate-500",
+                                                        )
+                                                          ? isDark
+                                                            ? "text-slate-400"
+                                                            : "text-slate-500"
+                                                          : expectedInfo.className.includes(
+                                                            "text-slate-700",
+                                                          )
+                                                            ? isDark
+                                                              ? "text-slate-200"
+                                                              : "text-slate-700"
+                                                            : isDark
+                                                              ? "text-white"
+                                                              : "text-slate-900",
+                                                      )}
+                                                    >
+                                                      $
+                                                      {expectedInfo.amount.toFixed(
+                                                        2,
+                                                      )}
+                                                    </span>
+                                                    {(expectedInfo as any)
+                                                      ?.cappedFromCreatorLimit && (
+                                                      <Tooltip>
+                                                        <TooltipTrigger asChild>
+                                                          <AlertTriangle className="h-3.5 w-3.5 text-amber-500 cursor-help" />
+                                                        </TooltipTrigger>
+                                                        <TooltipContent className="max-w-[260px] text-left whitespace-pre-line">
+                                                          Creator cap exhausted for expected payout order.
+                                                          {"\n"}
+                                                          {grantedInfo.amount > 0 ? (
+                                                            <>
+                                                              Actual granted amount: $
+                                                              {grantedInfo.amount.toFixed(
+                                                                2,
+                                                              )}
+                                                            </>
+                                                          ) : (
+                                                            <>
+                                                              Else expected reward would be: $
+                                                              {Number(
+                                                                (expectedInfo as any)
+                                                                  ?.uncappedAmount ||
+                                                                  0,
+                                                              ).toFixed(2)}
+                                                            </>
+                                                          )}
+                                                        </TooltipContent>
+                                                      </Tooltip>
+                                                    )}
+                                                  </div>
+                                                  <span
+                                                    className={cn(
+                                                      "text-xs uppercase tracking-wide",
+                                                      isDark
+                                                        ? "text-white"
+                                                        : "text-slate-800",
+                                                    )}
+                                                  >
+                                                    {expectedInfo.label}
+                                                  </span>
+                                                </div>
                                               </div>
-                                            </div>
-                                          </TableCell>
+                                            </TableCell>
+                                          )}
+                                        </>
                                         )}
                                       {showAdjustedRewardColumn &&
+                                        !isDualRewardsContestType(
+                                          currentContest.contest_type,
+                                        ) &&
                                         (currentContest.platform
                                           ?.toLowerCase()
                                           .includes("youtube")
@@ -17207,8 +17335,9 @@ export default function ContestDetailClient({
                                             </div>
                                           </TableCell>
                                         )}
-                                      {currentContest.contest_type ===
-                                        "milestone" && (
+                                      {isMilestoneContestType(
+                                        currentContest.contest_type,
+                                      ) && (
                                           <TableCell className="text-center">
                                             {milestoneAssignmentLabel === "—" ? (
                                               <span
@@ -23736,6 +23865,29 @@ export default function ContestDetailClient({
                   currentSubmissions,
                   confirmReversal.submissionIds,
                 );
+                const isDualReversalContest = isDualRewardsContestType(
+                  currentContest?.contest_type,
+                );
+                let dualReversalCpmCents = 0;
+                let dualReversalMilestoneCents = 0;
+                let dualReversalTotalCents = 0;
+                if (isDualReversalContest) {
+                  for (const id of confirmReversal.submissionIds) {
+                    const sub = currentSubmissions.find((s) => s.id === id);
+                    if (!sub || !submissionIsPaidRow(sub)) continue;
+                    if ((sub as any).is_twitter_tweet === true) continue;
+                    const { adjCpm, adjMilestone } =
+                      getDualAdjExpectedCpmAndMilestoneForReversalRow(sub);
+                    const bd = getDualGrantedBreakdown(
+                      sub as any,
+                      adjCpm,
+                      adjMilestone,
+                    );
+                    dualReversalCpmCents += bd.cpmCents;
+                    dualReversalMilestoneCents += bd.milestoneCents;
+                    dualReversalTotalCents += bd.totalCents;
+                  }
+                }
                 const targetLabel =
                   confirmReversal.target === "verified"
                     ? "Verified"
@@ -23774,14 +23926,33 @@ export default function ContestDetailClient({
                                 {preview.paidNonTwitterCount}
                               </span>
                             </p>
-                            <p>
-                              Main reward (CPM):{" "}
-                              {formatMoney(preview.rewardCents)}
-                            </p>
-                            <p>Bonus: {formatMoney(preview.bonusCents)}</p>
-                            <p className="font-semibold">
-                              Total: {formatMoney(preview.totalCents)}
-                            </p>
+                            {isDualReversalContest ? (
+                              <>
+                                <p>
+                                  CPM:{" "}
+                                  {formatMoney(dualReversalCpmCents)}
+                                </p>
+                                <p>
+                                  Milestone:{" "}
+                                  {formatMoney(dualReversalMilestoneCents)}
+                                </p>
+                                <p className="font-semibold">
+                                  Total:{" "}
+                                  {formatMoney(dualReversalTotalCents)}
+                                </p>
+                              </>
+                            ) : (
+                              <>
+                                <p>
+                                  Main reward (CPM):{" "}
+                                  {formatMoney(preview.rewardCents)}
+                                </p>
+                                <p>Bonus: {formatMoney(preview.bonusCents)}</p>
+                                <p className="font-semibold">
+                                  Total: {formatMoney(preview.totalCents)}
+                                </p>
+                              </>
+                            )}
                           </>
                         ) : null}
                         {preview.paidTwitterCount > 0 ? (

@@ -1,6 +1,12 @@
 import { applyPayoutAdjustment } from "@/lib/payout-adjustment";
 
-export type PayoutAdjustmentMode = "cpm_only" | "bonus_only" | "combined" | null;
+export type PayoutAdjustmentMode =
+  | "cpm_only"
+  | "milestone_only"
+  | "bonus_only"
+  | "combined"
+  | "dual_rewards_only"
+  | null;
 
 export function parsePayoutAdjustment(
   percentageRaw: unknown,
@@ -22,9 +28,15 @@ export function parsePayoutAdjustment(
   const mode = (modeRaw ?? null) as PayoutAdjustmentMode;
   const hasAdjustment = percentage > 0 && !!mode;
   const shouldAdjustReward =
-    hasAdjustment && (mode === "combined" || mode === "cpm_only");
+    hasAdjustment &&
+    (mode === "combined" ||
+      mode === "cpm_only" ||
+      mode === "dual_rewards_only");
   const shouldAdjustBonus =
-    hasAdjustment && (mode === "combined" || mode === "bonus_only");
+    hasAdjustment &&
+    (mode === "combined" ||
+      mode === "bonus_only" ||
+      mode === "dual_rewards_only");
 
   return {
     percentage,

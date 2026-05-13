@@ -878,6 +878,7 @@ export async function POST(request: Request) {
           { status: 400 },
         );
       }
+      }
     }
 
     // If action is mark_both_paid, continue to regular payment logic

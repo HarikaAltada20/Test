@@ -237,6 +237,10 @@ export async function POST(request: NextRequest) {
       | "combined"
       | "dual_rewards_only"
       | null;
+    const payoutAdjustment = {
+      percentage: payoutAdjustmentPercentage,
+      mode: payoutAdjustmentMode,
+    };
     const hasPayoutAdjustment =
       payoutAdjustmentPercentage > 0 && !!payoutAdjustmentMode;
     const shouldAdjustReward =

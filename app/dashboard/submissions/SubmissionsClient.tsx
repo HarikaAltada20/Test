@@ -353,6 +353,26 @@ export default function SubmissionsClient({
     return Number(submission.views ?? 0);
   };
 
+  /** CPM-only portion of dual_rewards (cents), before contest-level payout adjustment. */
+  const getDualRewardsCpmEstimatedCents = (
+    submission: SubmissionWithContest,
+    contest: any,
+  ) => {
+    const cpmConfig =
+      contest.contest_based_details &&
+        typeof contest.contest_based_details === "object" &&
+        "cpm_contest" in (contest.contest_based_details as any)
+        ? ((contest.contest_based_details as any).cpm_contest as unknown as CpmContestDetails)
+        : null;
+    const views = getPlatformEffectiveViews(submission);
+    let effectiveViews = views;
+    if (cpmConfig?.min_views != null && views < cpmConfig.min_views) effectiveViews = 0;
+    else if (cpmConfig?.max_views != null && views > cpmConfig.max_views)
+      effectiveViews = cpmConfig.max_views;
+    const rateUsd = cpmConfig?.cpm_rate_usd ?? 0;
+    return Math.round((effectiveViews * rateUsd) / 10);
+  };
+
   const applyContestRewardAdjustment = (amountCents: number, contest: any) => {
     const adjustment = parsePayoutAdjustment(
       contest?.payout_adjustment_percentage,
@@ -406,17 +426,10 @@ export default function SubmissionsClient({
 
     if (contest?.contest_type === "dual_rewards") {
       if (subStatus === "rejected") return 0;
-      return (
+      return applyContestRewardAdjustment(
         getDualRewardsCpmEstimatedCents(submission, contest) +
-        getMilestoneEstimatedEarningsCents(submission, contest)
-      );
-    }
-
-    if (contest?.contest_type === "dual_rewards") {
-      if (subStatus === "rejected") return 0;
-      return (
-        getDualRewardsCpmEstimatedCents(submission, contest) +
-        getMilestoneEstimatedEarningsCents(submission, contest)
+          getMilestoneEstimatedEarningsCents(submission, contest),
+        contest,
       );
     }
 
@@ -505,28 +518,10 @@ export default function SubmissionsClient({
         if (!isConfirmed) return 0;
       }
 
-      return (
+      return applyContestRewardAdjustment(
         getDualRewardsCpmEstimatedCents(submission, contest) +
-        getMilestoneEstimatedEarningsCents(submission, contest)
-      );
-    }
-
-    if (contest?.contest_type === "dual_rewards") {
-      if (subStatus === "rejected") return 0;
-
-      const isVerificationComplete =
-        postContestStatus === "verification_complete";
-      if (isVerificationComplete) {
-        const isConfirmed =
-          subStatus === "verified" ||
-          subStatus === "paid" ||
-          (submission as any).paid === true;
-        if (!isConfirmed) return 0;
-      }
-
-      return (
-        getDualRewardsCpmEstimatedCents(submission, contest) +
-        getMilestoneEstimatedEarningsCents(submission, contest)
+          getMilestoneEstimatedEarningsCents(submission, contest),
+        contest,
       );
     }
 
