@@ -5,8 +5,12 @@ import {
   getCachedBrandsLandingData,
 } from "@/lib/landing-data-cache";
 
-/** Time-based ISR: page shell + `unstable_cache` refresh at this interval. */
-export const revalidate = 86400;
+/**
+ * Do not set `revalidate` here — with `force-dynamic`, the page must not participate in static prerender
+ * (that path hits 60s timeouts / DB pool contention during `next build`). Freshness comes from
+ * `unstable_cache` in `getCachedBrandsLandingData` (24h TTL + tags).
+ */
+export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
   title: "Best Platform for Creator Marketing - Make Your Product Go Viral | Game Of Creators",

@@ -202,7 +202,10 @@ export default async function AdminContestDetailPage({
         deleted_at,
         excluded_by_submission_cap,
         first_fetched_at,
-        last_updated_at
+        last_updated_at,
+        bonus_paid,
+        bonus_paid_at,
+        bonus_amount
       `;
 
       const selectBasic = `
@@ -591,8 +594,13 @@ export default async function AdminContestDetailPage({
           video_title: tweet.tweet_text?.substring(0, 100) || null,
           paid: tweetPaid,
           paid_at: null,
-          bonus_paid: false,
-          bonus_paid_at: null,
+          // Source of truth: twitter_campaign_tweets.bonus_paid / bonus_amount /
+          // bonus_paid_at. Fall back to false/null when the columns are missing
+          // (legacy DBs without the bonus_columns migration); the client effect
+          // will then hydrate via /api/contests/[id]/twitter-bonus-status.
+          bonus_paid: (tweet as any).bonus_paid === true,
+          bonus_paid_at: (tweet as any).bonus_paid_at ?? null,
+          bonus_amount: (tweet as any).bonus_amount ?? null,
           creator_display_name: creatorDisplayName,
           creator_username: creatorUsername,
           creator_avatar_url: creatorAvatarUrl,

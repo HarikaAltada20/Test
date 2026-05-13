@@ -332,33 +332,21 @@ function DashboardPage() {
             setProfile(creatorProfile);
           }
 
-          const { data: submissions, error: submissionsError } = await supabase
-            .from("submissions")
-            .select("*, contests(*)")
-            .eq("creator_id", user.id)
-            .order("created_at", { ascending: false })
-            .limit(3);
+          const { data: recentRows, error: recentError } = await supabase.rpc(
+            "creator_dashboard_recent_activity"
+          );
 
           if (!isMounted) return;
-          if (submissionsError) {
-            console.error("Error fetching submissions:", submissionsError);
-          } else if (submissions) {
-            const contests = submissions
-              .map((sub) => sub.contests)
-              .filter(Boolean);
-
-            // Remove duplicate contests by keeping only unique contest IDs
-            const uniqueContests = contests.reduce(
-              (acc: any[], contest: any) => {
-                if (!acc.find((c) => c.id === contest.id)) {
-                  acc.push(contest);
-                }
-                return acc;
-              },
-              []
+          if (recentError) {
+            console.error(
+              "Error fetching creator recent activity:",
+              recentError
             );
-
-            setRecentContests(uniqueContests || []);
+            setRecentContests([]);
+          } else if (recentRows?.length) {
+            setRecentContests(recentRows as any[]);
+          } else {
+            setRecentContests([]);
           }
         } else if (userType === "admin") {
           // Redirect admin users to their dedicated admin dashboard
@@ -852,13 +840,19 @@ function DashboardPage() {
                         <p className="text-sm sm:text-base font-semibold text-foreground break-words">
                           {contest.title}
                         </p>
-                        <p className="text-xs sm:text-sm text-muted-foreground mt-1 truncate">
+                        <p className="text-xs sm:text-sm text-muted-foreground mt-1 break-words">
                           {contest.platform} •{" "}
-                          {formatLocalDateTime(contest.created_at, {
-                            year: "numeric",
-                            month: "short",
-                            day: "numeric",
-                          })}
+                          {isAdvertiser
+                            ? formatLocalDateTime(contest.created_at, {
+                                year: "numeric",
+                                month: "short",
+                                day: "numeric",
+                              })
+                            : contest.last_submission_at
+                              ? `Last submission ${formatLocalDateTime(
+                                  contest.last_submission_at
+                                )}`
+                              : "Last submission —"}
                         </p>
                       </div>
                     </div>

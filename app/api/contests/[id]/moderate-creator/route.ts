@@ -6,6 +6,10 @@ import {
   logTransactionAsAdmin,
   REVERSAL_TRANSACTION_REMARK,
 } from "@/lib/payment-utils";
+import {
+  sumBonusRewards,
+  sumBonusRefunds,
+} from "@/lib/twitter-bonus-accounting";
 import { syncTwitterLeaderboardFromTweets } from "@/lib/twitter/sync-twitter-leaderboard-from-tweets";
 import { revalidateLeaderboardCache } from "@/lib/leaderboard-cache";
 
@@ -82,6 +86,13 @@ export async function POST(
     }
 
     const supabaseAdmin = createAdminClient();
+
+    let refund: {
+      mainCents: number;
+      bonusCents: number;
+      totalCents: number;
+    } | null = null;
+
     const moderationStatus = action === "approve" ? "verified" : "rejected";
 
     // Get current leaderboard entry to check if creator is paid
@@ -159,14 +170,18 @@ export async function POST(
         mainReversalAmount = Math.max(0, totalMainRewards - totalMainReversals);
       }
 
-      // Bonus reversal: flat_fee bonuses credited for this creator+contest minus any already reversed
+      // Bonus reversal: flat_fee bonuses credited for this creator+contest minus any
+      // already reversed. Twitter CPM bulk payouts (`payout_type=twitter_cpm_bulk`)
+      // pack `CPM + bonus` into `amount`, with the bonus-only slice in
+      // `metadata.total_bonus`. Summing `amount` would refund CPM twice (once via
+      // mainReversalAmount, again here), so we use bonus-only accounting.
       const [
         { data: bonusRewardTxns, error: bonusRewardErr },
         { data: bonusRefundTxns, error: bonusRefundErr },
       ] = await Promise.all([
         supabaseAdmin
           .from("money_transactions")
-          .select("id, amount")
+          .select("id, amount, metadata")
           .eq("user_id", creatorId)
           .eq("type", "reward")
           .contains("metadata", {
@@ -175,12 +190,11 @@ export async function POST(
           }),
         supabaseAdmin
           .from("money_transactions")
-          .select("id, amount, remarks")
+          .select("id, amount, metadata, remarks")
           .eq("user_id", creatorId)
           .eq("type", "refund")
           .contains("metadata", {
             contest_id: contestId,
-            twitter_creator_id: creatorId,
             bonus_type: "flat_fee",
           }),
       ] as any);
@@ -196,17 +210,10 @@ export async function POST(
         );
       }
 
-      const bonusCredited = (bonusRewardTxns || []).reduce(
-        (sum: number, tx: any) => sum + (tx.amount || 0),
-        0
-      );
-      const bonusReversals = (bonusRefundTxns || []).filter(
-        (tx: any) => !tx.remarks || tx.remarks === REVERSAL_TRANSACTION_REMARK
-      );
-      const bonusAlreadyReversed = bonusReversals.reduce(
-        (sum: number, tx: any) => sum + (tx.amount || 0),
-        0
-      );
+      const bonusCredited = sumBonusRewards(bonusRewardTxns || []);
+      const bonusAlreadyReversed = sumBonusRefunds(bonusRefundTxns || [], {
+        reversalRemark: REVERSAL_TRANSACTION_REMARK,
+      });
       const bonusReversalAmount = Math.max(
         0,
         bonusCredited - bonusAlreadyReversed
@@ -234,7 +241,7 @@ export async function POST(
             "refund",
             mainReversalAmount,
             "success",
-            `Reversal of Twitter contest reward - ${contestTitle}`,
+            `Reversal of Twitter CPM creator reward — ${contestTitle}`,
             {
               remarks: REVERSAL_TRANSACTION_REMARK,
               paymentMethod: "refund",
@@ -267,7 +274,7 @@ export async function POST(
             "refund",
             bonusReversalAmount,
             "success",
-            `Reversal of Twitter contest flat-fee bonus - ${contestTitle}`,
+            `Reversal of Twitter CPM bonus — ${contestTitle}`,
             {
               remarks: REVERSAL_TRANSACTION_REMARK,
               paymentMethod: "refund",
@@ -294,6 +301,12 @@ export async function POST(
             );
           }
         }
+
+        refund = {
+          mainCents: mainReversalAmount,
+          bonusCents: bonusReversalAmount,
+          totalCents: mainReversalAmount + bonusReversalAmount,
+        };
       }
     }
 
@@ -330,6 +343,30 @@ export async function POST(
         { error: "Failed to update leaderboard" },
         { status: 500 }
       );
+    }
+
+    // If the creator was paid before this moderation, the wallet credit + bonus were
+    // reversed above. Clear bonus state on every tweet for this creator+contest so
+    // twitter_campaign_tweets matches money_transactions — otherwise rows still show
+    // bonus_paid=true even though no bonus is on record.
+    if (currentLeaderboardEntry?.moderation_status === "paid") {
+      const { error: tweetBonusClearError } = await supabaseAdmin
+        .from("twitter_campaign_tweets")
+        .update({
+          bonus_paid: false,
+          bonus_paid_at: null,
+          bonus_amount: null,
+          earnings: null,
+        })
+        .eq("contest_id", contestId)
+        .eq("creator_id", creatorId);
+
+      if (tweetBonusClearError) {
+        console.error(
+          "[moderate-creator] Error clearing tweet bonus columns after reversal:",
+          tweetBonusClearError,
+        );
+      }
     }
 
     // Also update all tweets from this creator
@@ -399,6 +436,7 @@ export async function POST(
       message: `Creator ${
         action === "approve" ? "approved" : "rejected"
       } successfully`,
+      refund,
     });
   } catch (error: any) {
     console.error("[moderate-creator] Error:", error);

@@ -1,6 +1,7 @@
 import { type NextRequest, NextResponse } from 'next/server'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { shouldAllowLoggedInMarketingHome } from '@/constants/marketingHome'
+import type { MiddlewareUserProfile } from './utils/supabase/middleware'
 import { updateSession } from './utils/supabase/middleware'
 
 async function getLoggedInLandingPath(
@@ -19,9 +20,25 @@ async function getLoggedInLandingPath(
   return '/dashboard/opportunities'
 }
 
+function loggedInLandingPathFromProfile(profile: MiddlewareUserProfile): string {
+  if (!profile.username) return '/choose-username'
+  if (profile.user_type === 'admin') return '/dashboard/admin'
+  if (profile.user_type === 'advertiser') return '/dashboard/contests'
+  return '/dashboard/opportunities'
+}
+
+async function resolveLoggedInLandingPath(
+  supabase: SupabaseClient,
+  userId: string,
+  profile: MiddlewareUserProfile | null
+): Promise<string> {
+  if (profile !== null) return loggedInLandingPathFromProfile(profile)
+  return getLoggedInLandingPath(supabase, userId)
+}
+
 export async function middleware(request: NextRequest) {
   // Session update and auth; returns response plus user/supabase to avoid duplicate getUser()
-  const { response, user, supabase } = await updateSession(request)
+  const { response, user, supabase, profile } = await updateSession(request)
   
   // If updateSession already redirected (e.g. unauthenticated on protected path), return that response
   const location = response.headers.get('Location')
@@ -36,14 +53,22 @@ export async function middleware(request: NextRequest) {
     user &&
     !shouldAllowLoggedInMarketingHome(request.nextUrl.searchParams)
   ) {
-    const redirectPath = await getLoggedInLandingPath(supabase, user.id)
+    const redirectPath = await resolveLoggedInLandingPath(
+      supabase,
+      user.id,
+      profile
+    )
     return NextResponse.redirect(new URL(redirectPath, request.url))
   }
 
   // Auth route protection - redirect logged-in users away from auth pages
   if (pathname.startsWith('/auth/')) {
     if (user) {
-      const redirectPath = await getLoggedInLandingPath(supabase, user.id)
+      const redirectPath = await resolveLoggedInLandingPath(
+        supabase,
+        user.id,
+        profile
+      )
       return NextResponse.redirect(new URL(redirectPath, request.url))
     }
   }
@@ -53,14 +78,19 @@ export async function middleware(request: NextRequest) {
     try {
       // If user is authenticated, check permissions (reuse user/supabase from updateSession)
       if (user) {
-        const { data: userData } = await supabase
-          .from('users')
-          .select('user_type')
-          .eq('id', user.id)
-          .single()
+        let userType: string | null | undefined
+        if (profile !== null && profile.user_type != null) {
+          userType = profile.user_type
+        } else {
+          const { data: userData } = await supabase
+            .from('users')
+            .select('user_type')
+            .eq('id', user.id)
+            .single()
+          userType = userData?.user_type ?? undefined
+        }
 
-        if (userData?.user_type) {
-          const userType = userData.user_type
+        if (userType) {
           
           // Keep /dashboard root accessible for non-admin users.
           // Only admins are redirected to the admin dashboard.
