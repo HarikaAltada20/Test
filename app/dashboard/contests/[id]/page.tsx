@@ -180,6 +180,7 @@ export default async function ContestDetailPage({
       bonus_paid_at,
       bonus_amount,
       milestone_bonus_paid,
+      dual_rewards_payout,
       metadata,
       insights_status,
       last_insights_update

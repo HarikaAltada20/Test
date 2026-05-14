@@ -377,6 +377,7 @@ export default function SubmissionsClient({
     const adjustment = parsePayoutAdjustment(
       contest?.payout_adjustment_percentage,
       contest?.payout_adjustment_mode,
+      { contestType: contest?.contest_type ?? null },
     );
     return adjustRewardCents(amountCents, {
       shouldAdjustReward: adjustment.shouldAdjustReward,

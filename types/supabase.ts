@@ -469,6 +469,8 @@ export interface Database {
           bonus_paid: boolean;
           bonus_paid_at: string | null;
           bonus_amount: number;
+          /** dual_rewards: main earnings split `{ cpm_cents, milestone_cents }` (JSON). */
+          dual_rewards_payout: Json | null;
         };
         Insert: {
           id?: string;
@@ -492,6 +494,7 @@ export interface Database {
           bonus_paid?: boolean;
           bonus_paid_at?: string | null;
           bonus_amount?: number;
+          dual_rewards_payout?: Json | null;
         };
         Update: {
           id?: string;
@@ -515,6 +518,7 @@ export interface Database {
           bonus_paid?: boolean;
           bonus_paid_at?: string | null;
           bonus_amount?: number;
+          dual_rewards_payout?: Json | null;
         };
       };
       instagram_insights_refresh_runs: {
@@ -996,10 +1000,13 @@ export interface SubmissionRejectionMetadata {
   legacy?: boolean;
 }
 
+/** Not stored on paid `dual_rewards` rows; payment audit + split live on `dual_rewards_payout`. */
 export interface SubmissionPaymentMetadata {
   type: "payment";
   paymentProofUrl: string | null;
   paymentDescription: string | null;
+  /** Optional human note; for dual_rewards see `dual_rewards_payout.customRemarks` on the row. */
+  customRemarks?: string | null;
   timestamp: string;
   updatedBy: string;
 }

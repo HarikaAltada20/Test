@@ -8,9 +8,15 @@ export type PayoutAdjustmentMode =
   | "dual_rewards_only"
   | null;
 
+export type ParsePayoutAdjustmentOptions = {
+  /** When `contest_type` is `milestone`, `milestone_only` mode adjusts the main milestone reward. */
+  contestType?: string | null;
+};
+
 export function parsePayoutAdjustment(
   percentageRaw: unknown,
   modeRaw: unknown,
+  options?: ParsePayoutAdjustmentOptions,
 ): {
   percentage: number;
   mode: PayoutAdjustmentMode;
@@ -27,11 +33,13 @@ export function parsePayoutAdjustment(
   const percentage = Math.max(0, parsedPct);
   const mode = (modeRaw ?? null) as PayoutAdjustmentMode;
   const hasAdjustment = percentage > 0 && !!mode;
+  const contestType = options?.contestType ?? null;
   const shouldAdjustReward =
     hasAdjustment &&
     (mode === "combined" ||
       mode === "cpm_only" ||
-      mode === "dual_rewards_only");
+      mode === "dual_rewards_only" ||
+      (mode === "milestone_only" && contestType === "milestone"));
   const shouldAdjustBonus =
     hasAdjustment &&
     (mode === "combined" ||

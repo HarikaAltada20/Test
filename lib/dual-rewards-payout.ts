@@ -1,0 +1,193 @@
+/**
+ * Dual-rewards: main `earnings` split (cents) plus optional payment audit when written from admin pay.
+ * Stored on `submissions.dual_rewards_payout` as JSON.
+ */
+export type DualRewardsPayoutJson = {
+  cpm_cents: number;
+  milestone_cents: number;
+  type?: "payment";
+  timestamp?: string;
+  updatedBy?: string;
+  customRemarks?: string | null;
+};
+
+const DUAL_SCOPE_RE = /dual_component:\s*(cpm|milestone|both)/i;
+
+export type DualRewardPayoutScope = "cpm" | "milestone" | "both";
+
+/** When `dual_rewards_payout` JSON is missing, infer which component was paid from totals (cents). */
+export type DualPayoutScopeHint = {
+  paidTotalCents: number;
+  cpmExpectedCents: number;
+  milestoneExpectedCents: number;
+};
+
+const PAID_SCOPE_MATCH_TOL_CENTS = 2;
+
+/**
+ * Match `paidTotalCents` to adjusted expected CPM / milestone / sum so UI does not
+ * mis-split a milestone-only payment across columns via proportional weights.
+ */
+export function inferDualPayoutScopeFromPaidTotal(
+  paidTotalCents: number,
+  cpmExpectedCents: number,
+  milestoneExpectedCents: number,
+): DualRewardPayoutScope | null {
+  const paid = Math.round(Number(paidTotalCents) || 0);
+  if (paid <= 0) return null;
+  const cpm = Math.round(Number(cpmExpectedCents) || 0);
+  const ms = Math.round(Number(milestoneExpectedCents) || 0);
+  const combined = cpm + ms;
+  const near = (a: number, b: number) =>
+    Math.abs(a - b) <= PAID_SCOPE_MATCH_TOL_CENTS;
+
+  if (ms > 0 && near(paid, ms) && !near(paid, cpm)) return "milestone";
+  if (cpm > 0 && near(paid, cpm) && !near(paid, ms)) return "cpm";
+  if (combined > 0 && near(paid, combined)) return "both";
+  return null;
+}
+
+export function parseDualRewardPayoutScopeFromRemarks(
+  remarks: string | null | undefined,
+): DualRewardPayoutScope | null {
+  const m = String(remarks || "").match(DUAL_SCOPE_RE);
+  return m ? (m[1].toLowerCase() as DualRewardPayoutScope) : null;
+}
+
+/** Strip machine-readable dual_component tag; leave any human note for metadata. */
+export function stripDualComponentTagFromRemarks(
+  remarks: string | null | undefined,
+): string {
+  return String(remarks || "")
+    .replace(DUAL_SCOPE_RE, "")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+}
+
+function parseDualRewardsPayoutJson(raw: unknown): DualRewardsPayoutJson | null {
+  if (raw == null) return null;
+  let o: Record<string, unknown>;
+  if (typeof raw === "string") {
+    const trimmed = raw.trim();
+    if (!trimmed) return null;
+    try {
+      const parsed = JSON.parse(trimmed) as unknown;
+      if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+        return null;
+      }
+      o = parsed as Record<string, unknown>;
+    } catch {
+      return null;
+    }
+  } else if (typeof raw === "object") {
+    if (Array.isArray(raw)) return null;
+    o = raw as Record<string, unknown>;
+  } else {
+    return null;
+  }
+  const cRaw =
+    o.cpm_cents ?? (o as { cpmCents?: unknown }).cpmCents;
+  const mRaw =
+    o.milestone_cents ?? (o as { milestoneCents?: unknown }).milestoneCents;
+  const c = Number(cRaw);
+  const m = Number(mRaw);
+  if (!Number.isFinite(c) || !Number.isFinite(m)) return null;
+  const out: DualRewardsPayoutJson = {
+    cpm_cents: Math.round(c),
+    milestone_cents: Math.round(m),
+  };
+  if (o.type === "payment") out.type = "payment";
+  if (typeof o.timestamp === "string") out.timestamp = o.timestamp;
+  if (typeof o.updatedBy === "string") out.updatedBy = o.updatedBy;
+  if (o.customRemarks === null) out.customRemarks = null;
+  else if (typeof o.customRemarks === "string") out.customRemarks = o.customRemarks;
+  return out;
+}
+
+/** Full JSON persisted on `submissions.dual_rewards_payout` when marking dual-rewards paid. */
+export function buildDualRewardsPayoutPersistValue(
+  split: { cpm_cents: number; milestone_cents: number },
+  audit: {
+    updatedBy: string;
+    customRemarks: string | null | undefined;
+  },
+): Record<string, unknown> {
+  const remarks =
+    audit.customRemarks != null && String(audit.customRemarks).trim()
+      ? String(audit.customRemarks).trim()
+      : null;
+  return {
+    cpm_cents: Math.max(0, Math.round(split.cpm_cents)),
+    milestone_cents: Math.max(0, Math.round(split.milestone_cents)),
+    type: "payment",
+    timestamp: new Date().toISOString(),
+    updatedBy: audit.updatedBy,
+    customRemarks: remarks,
+  };
+}
+
+/**
+ * Infer legacy scope string for getDualGrantedBreakdown / UI branching.
+ * Prefers `dual_rewards_payout` JSON, then legacy text column, then metadata tag.
+ */
+export function getDualPayoutScopeFromSubmission(
+  sub: {
+    dual_rewards_payout?: unknown;
+    dual_reward_payout_scope?: string | null;
+    metadata?: {
+      customRemarks?: string | null;
+      custom_remarks?: string | null;
+    } | null;
+  },
+  hint?: DualPayoutScopeHint | null,
+): DualRewardPayoutScope | null {
+  const j = parseDualRewardsPayoutJson(sub.dual_rewards_payout);
+  if (j) {
+    const { cpm_cents: c, milestone_cents: ms } = j;
+    if (c > 0 && ms <= 0) return "cpm";
+    if (ms > 0 && c <= 0) return "milestone";
+    if (c > 0 && ms > 0) return "both";
+    const fromJsonRemarks =
+      parseDualRewardPayoutScopeFromRemarks(j.customRemarks);
+    if (fromJsonRemarks) return fromJsonRemarks;
+    return null;
+  }
+  const legacy = sub.dual_reward_payout_scope;
+  if (legacy === "cpm" || legacy === "milestone" || legacy === "both") {
+    return legacy;
+  }
+  const raw =
+    sub.metadata?.customRemarks ??
+    (sub.metadata as { custom_remarks?: string | null } | null)
+      ?.custom_remarks ??
+    "";
+  const fromRemarks = parseDualRewardPayoutScopeFromRemarks(raw);
+  if (fromRemarks) return fromRemarks;
+  if (
+    hint &&
+    Number(hint.paidTotalCents) > 0 &&
+    (Number(hint.cpmExpectedCents) > 0 || Number(hint.milestoneExpectedCents) > 0)
+  ) {
+    const inferred = inferDualPayoutScopeFromPaidTotal(
+      hint.paidTotalCents,
+      hint.cpmExpectedCents,
+      hint.milestoneExpectedCents,
+    );
+    if (inferred) return inferred;
+  }
+  return null;
+}
+
+export function dualRewardsPayoutJsonToRowValue(
+  j: DualRewardsPayoutJson,
+): Record<string, unknown> {
+  const row: Record<string, unknown> = {
+    cpm_cents: Math.max(0, Math.round(j.cpm_cents)),
+    milestone_cents: Math.max(0, Math.round(j.milestone_cents)),
+  };
+  if (j.type === "payment") row.type = "payment";
+  if (typeof j.timestamp === "string") row.timestamp = j.timestamp;
+  if (typeof j.updatedBy === "string") row.updatedBy = j.updatedBy;
+  if (j.customRemarks !== undefined) row.customRemarks = j.customRemarks;
+  return row;
+}

@@ -189,6 +189,7 @@ export async function POST(
     const payoutAdjustment = parsePayoutAdjustment(
       (contest as any).payout_adjustment_percentage,
       (contest as any).payout_adjustment_mode,
+      { contestType: contest.contest_type },
     );
     const leaderboardContest = contestDetails?.leaderboard_contest;
     const cpmContest = contestDetails?.cpm_contest;
