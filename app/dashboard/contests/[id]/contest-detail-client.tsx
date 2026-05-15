@@ -115,6 +115,14 @@ import {
 } from "@/lib/paid-reversal-preview";
 import { adjustBonusCents, parsePayoutAdjustment } from "@/lib/payout-rules";
 import { YouTubeAnalyticsPanel } from "@/components/youtube/YouTubeAnalyticsPanel";
+import { SubmissionLeaderboardExportDialog } from "@/components/submissions/SubmissionLeaderboardExportDialog";
+import type {
+  RewardExportContext,
+  SubmissionDualCents,
+} from "@/lib/submission-leaderboard-export";
+import type { CreatorExportContext } from "@/lib/creator-leaderboard-export";
+import { getSubmissionExportDefaultColumnIds } from "@/lib/submission-leaderboard-export-columns";
+import { getCreatorExportDefaultColumnIds } from "@/lib/creator-leaderboard-export-columns";
 import { YT_ANALYTICS_DEFAULT_WINDOW_DAYS } from "@/lib/youtube-constants";
 import { PaginationControls } from "@/components/ui/pagination-controls";
 import { TwitterFeed } from "@/components/twitter-feed";
@@ -927,8 +935,7 @@ export default function ContestDetailClient({
         : null,
     mode: (() => {
       const raw = (contest as any)?.payout_adjustment_mode as string | null;
-      const normalized =
-        raw === "most_verified_bonus_only" ? "bonus" : raw;
+      const normalized = raw === "most_verified_bonus_only" ? "bonus" : raw;
       return (
         (normalized as
           | "cpm_only"
@@ -960,8 +967,7 @@ export default function ContestDetailClient({
         : null,
     mode: (() => {
       const raw = (contest as any)?.payout_adjustment_mode as string | null;
-      const normalized =
-        raw === "most_verified_bonus_only" ? "bonus" : raw;
+      const normalized = raw === "most_verified_bonus_only" ? "bonus" : raw;
       return (
         (normalized as
           | "cpm_only"
@@ -1759,6 +1765,7 @@ export default function ContestDetailClient({
     ytVisibleColumns,
   ]);
   const [ytColumnsModalOpen, setYtColumnsModalOpen] = useState(false);
+  const [exportDialogOpen, setExportDialogOpen] = useState(false);
   // Submission-wise: modal to view rejection reason (from submission.metadata only; no rejection_reason on submissions for Instagram/YouTube)
   const [rejectionDetailsModalSubmission, setRejectionDetailsModalSubmission] =
     useState<{ id: string; metadata: any } | null>(null);
@@ -3447,6 +3454,150 @@ export default function ContestDetailClient({
     return rankingMap;
   }, [filteredSubmissions, currentContest, currentSubmissions]);
 
+  const exportSortLabel = useMemo(() => {
+    const labels: Record<string, string> = {
+      views_desc: "Views · High → Low",
+      views_asc: "Views · Low → High",
+      time_desc: "Submitted · Newest First",
+      time_asc: "Submitted · Oldest First",
+      submissions_desc: "Submissions · High → Low",
+      submissions_asc: "Submissions · Low → High",
+      points_desc: "Points · High → Low",
+      points_asc: "Points · Low → High",
+      impressions_desc: "Impressions · High → Low",
+      impressions_asc: "Impressions · Low → High",
+    };
+    return labels[sortOption] || sortOption;
+  }, [sortOption]);
+
+  const showExportRewardColumns = useMemo(() => {
+    if (!isTwitterTextImageContest) return true;
+    if (currentContest.contest_type === "leaderboard") return true;
+    if (isCpmContestType(currentContest.contest_type)) return true;
+    if (isMilestoneContestType(currentContest.contest_type)) return true;
+    if (isDualRewardsContestType(currentContest.contest_type)) return true;
+    return false;
+  }, [isTwitterTextImageContest, currentContest.contest_type]);
+
+  const submissionExportColumnOptions = useMemo(
+    () => ({
+      platform: currentContest.platform || "",
+      contestFormat: currentContest.contest_format,
+      contestType: currentContest.contest_type,
+      isTwitterTextImage: isTwitterTextImageContest,
+      canSeeCore,
+      canSeeTraffic,
+      canSeeDemographics: canSeeDemo,
+      isAdminView,
+      showAdjustedReward: showAdjustedRewardColumn,
+      showDualPayoutAdjustedColumns,
+      dualAdjustCpm: dualAdjustCpmForDisplay,
+      dualAdjustMilestone: dualAdjustMilestoneForDisplay,
+      showBonusColumns: showNormalViewFlatFeeBonusColumns,
+      showRewardColumns: showExportRewardColumns,
+      isDualRewards: isDualRewardsContestType(currentContest.contest_type),
+      isMilestoneContest: isMilestoneContestType(currentContest.contest_type),
+      ytVisibleColumnIds: ytVisibleColumns,
+    }),
+    [
+      currentContest.platform,
+      currentContest.contest_format,
+      currentContest.contest_type,
+      isTwitterTextImageContest,
+      canSeeCore,
+      canSeeTraffic,
+      canSeeDemo,
+      isAdminView,
+      showAdjustedRewardColumn,
+      showDualPayoutAdjustedColumns,
+      dualAdjustCpmForDisplay,
+      dualAdjustMilestoneForDisplay,
+      showNormalViewFlatFeeBonusColumns,
+      showExportRewardColumns,
+      ytVisibleColumns,
+    ],
+  );
+
+  const submissionExportDefaultColumnIds = useMemo(
+    () => getSubmissionExportDefaultColumnIds(submissionExportColumnOptions),
+    [submissionExportColumnOptions],
+  );
+
+  const submissionExportRewardContext = useMemo<RewardExportContext>(
+    () => ({
+      contestType: currentContest.contest_type,
+      platform: currentContest.platform || "",
+      contestFormat: currentContest.contest_format,
+      payoutAdjustmentPct: payoutAdjustmentPercentageForUi,
+      showAdjustedReward: showAdjustedRewardColumn,
+      dualAdjustCpm: dualAdjustCpmForDisplay,
+      dualAdjustMilestone: dualAdjustMilestoneForDisplay,
+      creatorRankingMap,
+      leaderboardPrizes:
+        currentContest.contest_based_details?.leaderboard_contest?.prizes,
+      cappedCpmExpectedMap:
+        cappedExpectedRewardBySubmissionId.preAdjustmentCappedMap,
+      dualMilestoneExpectedMap:
+        cappedExpectedRewardBySubmissionId.dualMilestoneCappedAfterCreatorCapBySubmissionId,
+      milestoneExpectedMap: milestoneSubmissionExpectedPayoutCents,
+      milestoneLabelMap: milestoneSubmissionAssignedLabelBySubmissionId,
+      flatFeeBonusExpectedMap:
+        normalViewFlatFeeBonusExpectedCentsBySubmissionId,
+      ytCanSeeCore: canSeeCore,
+      ytCanSeeTraffic: canSeeTraffic,
+      ytCanSeeDemographics: canSeeDemo,
+      getDualGrantedForSubmission: (submission, _rank) => {
+        const subId = String(submission.id ?? "");
+        const cpmCap =
+          cappedExpectedRewardBySubmissionId.preAdjustmentCappedMap.get(
+            subId,
+          ) ?? 0;
+        const msCap =
+          cappedExpectedRewardBySubmissionId.dualMilestoneCappedAfterCreatorCapBySubmissionId.get(
+            subId,
+          ) ??
+          milestoneSubmissionExpectedPayoutCents.get(subId) ??
+          0;
+        const adjCpm = dualAdjustCpmForDisplay
+          ? applyPayoutAdjustment(cpmCap, payoutAdjustmentPercentageForUi)
+          : cpmCap;
+        const adjMilestone = dualAdjustMilestoneForDisplay
+          ? applyPayoutAdjustment(msCap, payoutAdjustmentPercentageForUi)
+          : msCap;
+        const bd = getDualGrantedBreakdown(submission, adjCpm, adjMilestone);
+        return {
+          totalCents: bd.totalCents,
+          cpmCents: bd.cpmCents,
+          milestoneCents: bd.milestoneCents,
+        } satisfies SubmissionDualCents;
+      },
+    }),
+    [
+      currentContest.contest_type,
+      currentContest.platform,
+      currentContest.contest_format,
+      currentContest.contest_based_details,
+      payoutAdjustmentPercentageForUi,
+      showAdjustedRewardColumn,
+      dualAdjustCpmForDisplay,
+      dualAdjustMilestoneForDisplay,
+      creatorRankingMap,
+      cappedExpectedRewardBySubmissionId,
+      milestoneSubmissionExpectedPayoutCents,
+      milestoneSubmissionAssignedLabelBySubmissionId,
+      normalViewFlatFeeBonusExpectedCentsBySubmissionId,
+      canSeeCore,
+      canSeeTraffic,
+      canSeeDemo,
+    ],
+  );
+
+  const getSubmissionExportMetrics = useCallback(
+    (submission: Record<string, unknown>) =>
+      extractPlatformMetrics(submission as unknown as Submission),
+    [],
+  );
+
   // Sort creator groups (used in creator-wise view)
   const sortedCreatorGroups = useMemo(() => {
     if (!groupSubmissionsByCreator) return [];
@@ -3592,8 +3743,10 @@ export default function ContestDetailClient({
       const key = milestoneMvCreatorIdKey(k);
       if (!key) continue;
       out[key] = {
-        viewsPaidCents: Number((v as { viewsPaidCents?: number })?.viewsPaidCents ?? 0) || 0,
-        reelsPaidCents: Number((v as { reelsPaidCents?: number })?.reelsPaidCents ?? 0) || 0,
+        viewsPaidCents:
+          Number((v as { viewsPaidCents?: number })?.viewsPaidCents ?? 0) || 0,
+        reelsPaidCents:
+          Number((v as { reelsPaidCents?: number })?.reelsPaidCents ?? 0) || 0,
       };
     }
     return out;
@@ -3750,6 +3903,129 @@ export default function ContestDetailClient({
         creatorWisePage * creatorWiseItemsPerPage,
       )
     : [];
+
+  const showTwitterCreatorManualColumns = useMemo(
+    () =>
+      isTwitterTextImageContest &&
+      (currentContest.contest_type === "leaderboard" ||
+        isCpmContestType(currentContest.contest_type)),
+    [isTwitterTextImageContest, currentContest.contest_type],
+  );
+
+  const creatorExportColumnOptions = useMemo(
+    () => ({
+      platform: currentContest.platform || "",
+      contestFormat: currentContest.contest_format,
+      contestType: currentContest.contest_type,
+      isTwitterTextImage: isTwitterTextImageContest,
+      canSeeCore,
+      isAdminView,
+      showAdjustedReward: showAdjustedRewardColumn,
+      showDualPayoutAdjustedColumns,
+      dualAdjustCpm: dualAdjustCpmForDisplay,
+      dualAdjustMilestone: dualAdjustMilestoneForDisplay,
+      showBonusColumns: showNormalViewFlatFeeBonusColumns,
+      showRewardColumns: showExportRewardColumns,
+      isDualRewards: isDualRewardsContestType(currentContest.contest_type),
+      isMilestoneContest: isMilestoneContestType(currentContest.contest_type),
+      showTwitterManualColumns: showTwitterCreatorManualColumns,
+      ytVisibleColumnIds: ytVisibleColumns,
+      showMostVerifiedViewsBonusColumns,
+      showMostVerifiedReelsBonusColumns: showMostVerifiedReelsCreatorColumn,
+      showMvBonusAdjustedExpectedColumns:
+        showMilestoneMvBonusAdjustedExpectedColumns,
+      showRejectionReasonColumn: showRejectionReasonInCreatorView,
+    }),
+    [
+      currentContest.platform,
+      currentContest.contest_format,
+      currentContest.contest_type,
+      isTwitterTextImageContest,
+      canSeeCore,
+      isAdminView,
+      showAdjustedRewardColumn,
+      showDualPayoutAdjustedColumns,
+      dualAdjustCpmForDisplay,
+      dualAdjustMilestoneForDisplay,
+      showNormalViewFlatFeeBonusColumns,
+      showExportRewardColumns,
+      showTwitterCreatorManualColumns,
+      ytVisibleColumns,
+      showMostVerifiedViewsBonusColumns,
+      showMostVerifiedReelsCreatorColumn,
+      showMilestoneMvBonusAdjustedExpectedColumns,
+      showRejectionReasonInCreatorView,
+    ],
+  );
+
+  const creatorExportDefaultColumnIds = useMemo(
+    () => getCreatorExportDefaultColumnIds(creatorExportColumnOptions),
+    [creatorExportColumnOptions],
+  );
+
+  const creatorExportContext = useMemo<CreatorExportContext>(
+    () => ({
+      contestType: currentContest.contest_type,
+      payoutAdjustmentPct: payoutAdjustmentPercentageForUi,
+      showAdjustedReward: showAdjustedRewardColumn,
+      dualAdjustCpm: dualAdjustCpmForDisplay,
+      dualAdjustMilestone: dualAdjustMilestoneForDisplay,
+      cappedCpmMap: cappedExpectedRewardBySubmissionId.preAdjustmentCappedMap,
+      dualMilestoneMap:
+        cappedExpectedRewardBySubmissionId.dualMilestoneCappedAfterCreatorCapBySubmissionId,
+      milestoneLabelMap: milestoneSubmissionAssignedLabelBySubmissionId,
+      getDualGrantedForCreator: (group) => {
+        let cpmCents = 0;
+        let milestoneCents = 0;
+        for (const sub of (group.submissions || []) as Submission[]) {
+          const tw =
+            (sub as any).is_twitter_tweet ||
+            String(sub.platform || "").toLowerCase() === "twitter";
+          if (tw) continue;
+          const cpmCap =
+            cappedExpectedRewardBySubmissionId.preAdjustmentCappedMap.get(
+              sub.id,
+            ) ?? 0;
+          const msCap =
+            cappedExpectedRewardBySubmissionId.dualMilestoneCappedAfterCreatorCapBySubmissionId.get(
+              sub.id,
+            ) ??
+            milestoneSubmissionExpectedPayoutCents.get(sub.id) ??
+            0;
+          const adjCpm = dualAdjustCpmForDisplay
+            ? applyPayoutAdjustment(cpmCap, payoutAdjustmentPercentageForUi)
+            : cpmCap;
+          const adjMilestone = dualAdjustMilestoneForDisplay
+            ? applyPayoutAdjustment(msCap, payoutAdjustmentPercentageForUi)
+            : msCap;
+          const bd = getDualGrantedBreakdown(sub, adjCpm, adjMilestone);
+          cpmCents += bd.cpmCents;
+          milestoneCents += bd.milestoneCents;
+        }
+        const earnings = (group.earnings || {}) as { granted?: number };
+        const total =
+          Number(earnings.granted) > 0
+            ? Number(earnings.granted)
+            : cpmCents + milestoneCents;
+        return { totalCents: total, cpmCents, milestoneCents };
+      },
+      milestoneMostVerifiedBonusByCreator: milestoneReelsBonusByCreator,
+      shouldAdjustMostVerifiedMilestoneBonus:
+        payoutAdjustmentForUi.shouldAdjustMostVerifiedMilestoneBonus,
+    }),
+    [
+      currentContest.contest_type,
+      payoutAdjustmentPercentageForUi,
+      payoutAdjustmentForUi.shouldAdjustMostVerifiedMilestoneBonus,
+      showAdjustedRewardColumn,
+      dualAdjustCpmForDisplay,
+      dualAdjustMilestoneForDisplay,
+      cappedExpectedRewardBySubmissionId,
+      milestoneSubmissionExpectedPayoutCents,
+      milestoneSubmissionAssignedLabelBySubmissionId,
+      milestoneReelsBonusByCreator,
+    ],
+  );
 
   // Reset to page 1 when filter or sort changes
   useEffect(() => {
@@ -6525,9 +6801,7 @@ export default function ContestDetailClient({
         }
         toast({
           title:
-            track === "views"
-              ? "Views bonus reversed"
-              : "Reels bonus reversed",
+            track === "views" ? "Views bonus reversed" : "Reels bonus reversed",
           description:
             data?.reversedCents != null
               ? `${formatMoney(Number(data.reversedCents))} debited from the creator wallet and refund logged.`
@@ -6557,7 +6831,9 @@ export default function ContestDetailClient({
     extraDisabled?: boolean,
   ) => {
     if (!showCreatorMilestoneVerifiedBonusActions) return null;
-    const row = milestoneReelsBonusByCreator.get(milestoneMvCreatorIdKey(creatorId)) ?? {
+    const row = milestoneReelsBonusByCreator.get(
+      milestoneMvCreatorIdKey(creatorId),
+    ) ?? {
       expectedCents: 0,
       paidCents: 0,
       viewsExpectedCents: 0,
@@ -13298,7 +13574,9 @@ export default function ContestDetailClient({
                                     const rawMode = String(
                                       draftPayoutAdjustment.mode ?? "combined",
                                     );
-                                    if (rawMode === "most_verified_bonus_only") {
+                                    if (
+                                      rawMode === "most_verified_bonus_only"
+                                    ) {
                                       return "bonus";
                                     }
                                     const m = draftPayoutAdjustment.mode as
@@ -13349,7 +13627,7 @@ export default function ContestDetailClient({
                                       <option value="cpm_and_milestone">
                                         CPM & milestone
                                       </option>
-                                      
+
                                       {(showMostVerifiedViewsBonusColumns ||
                                         showMostVerifiedReelsCreatorColumn) && (
                                         <option value="bonus">Bonus</option>
@@ -15276,8 +15554,83 @@ export default function ContestDetailClient({
                               </DialogContent>
                             </Dialog>
                           )}
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            disabled={
+                              (viewMode === "normal"
+                                ? sortedSubmissions.length === 0
+                                : (filteredCreatorGroups?.length ?? 0) === 0) ||
+                              anyYtRefreshInProgress
+                            }
+                            className={cn(
+                              "h-12 gap-2",
+                              isDark
+                                ? "border-slate-600 text-slate-300 hover:bg-slate-800"
+                                : "border-slate-300 text-slate-700 hover:bg-slate-50",
+                              anyYtRefreshInProgress &&
+                                "opacity-60 cursor-not-allowed",
+                            )}
+                            title={
+                              viewMode === "creator-wise"
+                                ? "Download creator-wise leaderboard report"
+                                : "Download submissions leaderboard report"
+                            }
+                            onClick={() => setExportDialogOpen(true)}
+                          >
+                            <Download className="h-4 w-4" />
+                            Download report
+                          </Button>
                         </div>
                       </div>
+                      {viewMode === "normal" ? (
+                        <SubmissionLeaderboardExportDialog
+                          key="export-submission"
+                          exportKind="submission"
+                          rowCount={sortedSubmissions.length}
+                          open={exportDialogOpen}
+                          onOpenChange={setExportDialogOpen}
+                          isDark={isDark}
+                          contestTitle={currentContest.title}
+                          submissions={
+                            sortedSubmissions as unknown as Record<
+                              string,
+                              unknown
+                            >[]
+                          }
+                          getMetrics={getSubmissionExportMetrics}
+                          rewardContext={submissionExportRewardContext}
+                          columnOptions={submissionExportColumnOptions}
+                          defaultSelectedColumnIds={
+                            submissionExportDefaultColumnIds
+                          }
+                          viewLabel="Normal View"
+                          sortLabel={exportSortLabel}
+                        />
+                      ) : (
+                        <SubmissionLeaderboardExportDialog
+                          key="export-creator"
+                          exportKind="creator"
+                          rowCount={filteredCreatorGroups?.length ?? 0}
+                          open={exportDialogOpen}
+                          onOpenChange={setExportDialogOpen}
+                          isDark={isDark}
+                          contestTitle={currentContest.title}
+                          creatorGroups={
+                            (filteredCreatorGroups ?? []) as unknown as Record<
+                              string,
+                              unknown
+                            >[]
+                          }
+                          creatorExportContext={creatorExportContext}
+                          columnOptions={creatorExportColumnOptions}
+                          defaultSelectedColumnIds={
+                            creatorExportDefaultColumnIds
+                          }
+                          viewLabel="Creator-wise"
+                          sortLabel={exportSortLabel}
+                        />
+                      )}
                       {isTwitterTextImageContest && viewMode === "normal" && (
                         <TwitterContestSubmissionStatusTabs
                           activeStatusTab={activeStatusTab}
@@ -15744,18 +16097,19 @@ export default function ContestDetailClient({
                                 const payoutAdjCpmOrLeaderboardPrize =
                                   hasPayoutAdjustment &&
                                   (payoutAdjustmentMode === "combined" ||
-                                    payoutAdjustmentMode === "cpm_and_milestone" ||
+                                    payoutAdjustmentMode ===
+                                      "cpm_and_milestone" ||
                                     payoutAdjustmentMode === "cpm_only" ||
                                     payoutAdjustmentMode ===
                                       "dual_rewards_only");
                                 const payoutAdjMilestonePortion =
                                   hasPayoutAdjustment &&
                                   (payoutAdjustmentMode === "combined" ||
-                                    payoutAdjustmentMode === "cpm_and_milestone" ||
+                                    payoutAdjustmentMode ===
+                                      "cpm_and_milestone" ||
                                     payoutAdjustmentMode ===
                                       "dual_rewards_only" ||
-                                    payoutAdjustmentMode ===
-                                      "milestone_only" ||
+                                    payoutAdjustmentMode === "milestone_only" ||
                                     (isDualRewardsContestType(
                                       currentContest.contest_type,
                                     ) &&
@@ -15805,11 +16159,11 @@ export default function ContestDetailClient({
                                         );
                                         const postCents =
                                           payoutAdjCpmOrLeaderboardPrize
-                                          ? applyPayoutAdjustment(
-                                              preCents,
-                                              payoutAdjustmentPercentage,
-                                            )
-                                          : preCents;
+                                            ? applyPayoutAdjustment(
+                                                preCents,
+                                                payoutAdjustmentPercentage,
+                                              )
+                                            : preCents;
                                         const preDollars =
                                           centsToDollars(preCents);
                                         const postDollars =
@@ -15911,11 +16265,11 @@ export default function ContestDetailClient({
                                         const preCents = cpmCentsExpected;
                                         const postCents =
                                           payoutAdjCpmOrLeaderboardPrize
-                                          ? applyPayoutAdjustment(
-                                              preCents,
-                                              payoutAdjustmentPercentage,
-                                            )
-                                          : preCents;
+                                            ? applyPayoutAdjustment(
+                                                preCents,
+                                                payoutAdjustmentPercentage,
+                                              )
+                                            : preCents;
                                         return {
                                           amount: calculatedEarnings,
                                           label: "Expected",
@@ -16043,13 +16397,12 @@ export default function ContestDetailClient({
                                       milestoneCentsExpected > 0
                                     ) {
                                       const preMs = milestoneCentsExpected;
-                                      const postMs =
-                                        payoutAdjMilestonePortion
-                                          ? applyPayoutAdjustment(
-                                              preMs,
-                                              payoutAdjustmentPercentage,
-                                            )
-                                          : preMs;
+                                      const postMs = payoutAdjMilestonePortion
+                                        ? applyPayoutAdjustment(
+                                            preMs,
+                                            payoutAdjustmentPercentage,
+                                          )
+                                        : preMs;
                                       return {
                                         amount:
                                           centsToDollars(totalCentsExpected),
@@ -18053,7 +18406,9 @@ export default function ContestDetailClient({
                                                                 adjTotalCents,
                                                               )}
                                                             </span>
-                                                            {(expectedInfo as any)
+                                                            {(
+                                                              expectedInfo as any
+                                                            )
                                                               .dualCreatorCapWarning && (
                                                               <Tooltip>
                                                                 <TooltipTrigger
@@ -18064,8 +18419,8 @@ export default function ContestDetailClient({
                                                                 <TooltipContent className="max-w-[260px] text-left whitespace-pre-line">
                                                                   Creator cap
                                                                   exhausted for
-                                                                  expected payout
-                                                                  order.
+                                                                  expected
+                                                                  payout order.
                                                                   {"\n"}
                                                                   {(grantedCpmCents ??
                                                                     0) +
@@ -18087,8 +18442,8 @@ export default function ContestDetailClient({
                                                                     <>
                                                                       Else
                                                                       expected
-                                                                      total would
-                                                                      be:{" "}
+                                                                      total
+                                                                      would be:{" "}
                                                                       {formatMoney(
                                                                         (
                                                                           expectedInfo as any
@@ -18122,7 +18477,9 @@ export default function ContestDetailClient({
                                                                 adjCpm,
                                                               )}
                                                             </span>
-                                                            {(expectedInfo as any)
+                                                            {(
+                                                              expectedInfo as any
+                                                            )
                                                               .dualCreatorCapWarning && (
                                                               <Tooltip>
                                                                 <TooltipTrigger
@@ -18133,8 +18490,8 @@ export default function ContestDetailClient({
                                                                 <TooltipContent className="max-w-[260px] text-left whitespace-pre-line">
                                                                   Creator cap
                                                                   exhausted for
-                                                                  expected payout
-                                                                  order.
+                                                                  expected
+                                                                  payout order.
                                                                   {"\n"}
                                                                   {(grantedCpmCents ??
                                                                     0) +
@@ -18155,7 +18512,8 @@ export default function ContestDetailClient({
                                                                   ) : (
                                                                     <>
                                                                       Else
-                                                                      expected reward
+                                                                      expected
+                                                                      reward
                                                                       would be:{" "}
                                                                       {formatMoney(
                                                                         (
@@ -18180,7 +18538,9 @@ export default function ContestDetailClient({
                                                                 adjMs,
                                                               )}
                                                             </span>
-                                                            {(expectedInfo as any)
+                                                            {(
+                                                              expectedInfo as any
+                                                            )
                                                               .dualMilestoneCapWarning && (
                                                               <Tooltip>
                                                                 <TooltipTrigger
@@ -18191,8 +18551,8 @@ export default function ContestDetailClient({
                                                                 <TooltipContent className="max-w-[260px] text-left whitespace-pre-line">
                                                                   Creator cap
                                                                   exhausted for
-                                                                  expected payout
-                                                                  order.
+                                                                  expected
+                                                                  payout order.
                                                                   {"\n"}
                                                                   {(grantedMilestoneCents ??
                                                                     0) > 0 ? (
@@ -18209,8 +18569,8 @@ export default function ContestDetailClient({
                                                                     <>
                                                                       Else
                                                                       expected
-                                                                      milestone would
-                                                                      be:{" "}
+                                                                      milestone
+                                                                      would be:{" "}
                                                                       {formatMoney(
                                                                         (
                                                                           expectedInfo as any
@@ -19401,7 +19761,8 @@ export default function ContestDetailClient({
                                                     )}
                                                     {dualAdjustMilestoneForDisplay && (
                                                       <TableHead className="text-center">
-                                                        Adjusted Reward (Milestone)
+                                                        Adjusted Reward
+                                                        (Milestone)
                                                       </TableHead>
                                                     )}
                                                   </>
@@ -20359,7 +20720,8 @@ export default function ContestDetailClient({
                                                                       currentContest.max_earnings_per_creator ??
                                                                         (
                                                                           currentContest.contest_based_details as any
-                                                                        )?.cpm_contest
+                                                                        )
+                                                                          ?.cpm_contest
                                                                           ?.max_earnings_per_creator ??
                                                                         (
                                                                           currentContest.contest_based_details as any

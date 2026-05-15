@@ -118,12 +118,18 @@ const TRAFFIC_LABELS: Record<string, string> = {
 
 // Color based on suspicion level
 function trafficColor(source: string, pct: number): string {
-  if (["EXT_URL", "NO_LINK_OTHER", "NO_LINK_EMBEDDED"].includes(source) && pct > 20)
+  if (
+    ["EXT_URL", "NO_LINK_OTHER", "NO_LINK_EMBEDDED"].includes(source) &&
+    pct > 20
+  )
     return "bg-red-400";
-  if (source === "SHORTS" || source === "YT_SEARCH" || source === "RELATED_VIDEO")
+  if (
+    source === "SHORTS" ||
+    source === "YT_SEARCH" ||
+    source === "RELATED_VIDEO"
+  )
     return "bg-emerald-400";
-  if (source === "SUBSCRIBER" || source === "YT_CHANNEL")
-    return "bg-blue-400";
+  if (source === "SUBSCRIBER" || source === "YT_CHANNEL") return "bg-blue-400";
   return "bg-slate-400";
 }
 
@@ -138,15 +144,42 @@ function countryFlag(code: string): string {
 
 // Common country names (ISO-3166-1 alpha-2 → display name)
 const COUNTRY_NAMES: Record<string, string> = {
-  US: "United States", IN: "India", GB: "United Kingdom", BR: "Brazil",
-  CA: "Canada", AU: "Australia", DE: "Germany", FR: "France",
-  MX: "Mexico", PH: "Philippines", ID: "Indonesia", NG: "Nigeria",
-  PK: "Pakistan", BD: "Bangladesh", TR: "Turkey", VN: "Vietnam",
-  KR: "South Korea", JP: "Japan", EG: "Egypt", TH: "Thailand",
-  IT: "Italy", ES: "Spain", CO: "Colombia", AR: "Argentina",
-  SA: "Saudi Arabia", MY: "Malaysia", RU: "Russia", ZA: "South Africa",
-  NL: "Netherlands", PL: "Poland", UA: "Ukraine", KE: "Kenya",
-  GH: "Ghana", AE: "UAE", SG: "Singapore", NZ: "New Zealand",
+  US: "United States",
+  IN: "India",
+  GB: "United Kingdom",
+  BR: "Brazil",
+  CA: "Canada",
+  AU: "Australia",
+  DE: "Germany",
+  FR: "France",
+  MX: "Mexico",
+  PH: "Philippines",
+  ID: "Indonesia",
+  NG: "Nigeria",
+  PK: "Pakistan",
+  BD: "Bangladesh",
+  TR: "Turkey",
+  VN: "Vietnam",
+  KR: "South Korea",
+  JP: "Japan",
+  EG: "Egypt",
+  TH: "Thailand",
+  IT: "Italy",
+  ES: "Spain",
+  CO: "Colombia",
+  AR: "Argentina",
+  SA: "Saudi Arabia",
+  MY: "Malaysia",
+  RU: "Russia",
+  ZA: "South Africa",
+  NL: "Netherlands",
+  PL: "Poland",
+  UA: "Ukraine",
+  KE: "Kenya",
+  GH: "Ghana",
+  AE: "UAE",
+  SG: "Singapore",
+  NZ: "New Zealand",
 };
 
 // Age group labels
@@ -173,7 +206,9 @@ function SectionHeader({
 }) {
   return (
     <div className="flex items-center gap-1.5 mb-2">
-      <span className={isDark ? "text-purple-400" : "text-purple-500"}>{icon}</span>
+      <span className={isDark ? "text-purple-400" : "text-purple-500"}>
+        {icon}
+      </span>
       <span
         className={cn(
           "text-xs font-semibold uppercase tracking-wide",
@@ -300,8 +335,7 @@ export function YouTubeAnalyticsPanel({
     (metrics.shares ?? 0) > 0;
 
   const hasTraffic =
-    metrics.traffic_sources &&
-    Object.keys(metrics.traffic_sources).length > 0;
+    metrics.traffic_sources && Object.keys(metrics.traffic_sources).length > 0;
 
   const hasDemographics =
     metrics.demographics &&
@@ -322,18 +356,23 @@ export function YouTubeAnalyticsPanel({
           : "text-green-600";
 
   const sortedTraffic = hasTraffic
-    ? Object.entries(metrics.traffic_sources!)
-        .sort((a, b) => b[1] - a[1])
+    ? Object.entries(metrics.traffic_sources!).sort((a, b) => b[1] - a[1])
     : [];
 
   const ageGroups = hasDemographics
-    ? Object.entries(metrics.demographics!.age_groups ?? {}).sort((a, b) => b[1] - a[1])
+    ? Object.entries(metrics.demographics!.age_groups ?? {}).sort(
+        (a, b) => b[1] - a[1],
+      )
     : [];
   const genders = hasDemographics
-    ? Object.entries(metrics.demographics!.gender ?? {}).sort((a, b) => b[1] - a[1])
+    ? Object.entries(metrics.demographics!.gender ?? {}).sort(
+        (a, b) => b[1] - a[1],
+      )
     : [];
   const topCountries = hasDemographics
-    ? Object.entries(metrics.demographics!.countries ?? {}).sort((a, b) => b[1] - a[1]).slice(0, 10)
+    ? Object.entries(metrics.demographics!.countries ?? {})
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 10)
     : [];
 
   return (
@@ -344,7 +383,7 @@ export function YouTubeAnalyticsPanel({
           "z-[100] w-full max-w-xs sm:w-80 p-4 text-sm shadow-xl border max-h-[80vh] overflow-y-auto overscroll-y-contain",
           isDark
             ? "bg-slate-900 border-slate-700 text-slate-100"
-            : "bg-white border-slate-200 text-slate-900"
+            : "bg-white border-slate-200 text-slate-900",
         )}
         align="end"
         side="left"
@@ -355,14 +394,24 @@ export function YouTubeAnalyticsPanel({
         <div className="flex items-center justify-between mb-1.5">
           <div className="flex items-center gap-1.5">
             <BarChart2
-              className={cn("h-4 w-4", dark ? "text-purple-400" : "text-purple-500")}
+              className={cn(
+                "h-4 w-4",
+                dark ? "text-purple-400" : "text-purple-500",
+              )}
             />
-            <span className={cn("font-semibold text-sm", dark ? "text-slate-100" : "text-slate-900")}>
+            <span
+              className={cn(
+                "font-semibold text-sm",
+                dark ? "text-slate-100" : "text-slate-900",
+              )}
+            >
               YouTube Analytics
             </span>
           </div>
           {metrics.analytics_needs_reauth ? (
-            <Badge variant="destructive" className="text-[10px] h-5">Needs Reauth</Badge>
+            <Badge variant="destructive" className="text-[10px] h-5">
+              Needs Reauth
+            </Badge>
           ) : botScore != null ? (
             <span className={cn("text-xs font-bold", botColor)}>
               {botScore >= 60 ? "⚠ " : ""}Bot Score: {botScore}/100
@@ -398,10 +447,22 @@ export function YouTubeAnalyticsPanel({
         {/* ── Core Analytics ──────────────────────────────────── */}
         {hasCore && showCore ? (
           <div className="mb-4">
-            <SectionHeader isDark={dark} icon={<Eye className="h-3.5 w-3.5" />} title="Core Analytics" />
-            <div className={cn("rounded-md border px-3 py-1 divide-y", isDark ? "border-slate-700 divide-slate-700" : "border-slate-100 divide-slate-100")}>
+            <SectionHeader
+              isDark={dark}
+              icon={<Eye className="h-3.5 w-3.5" />}
+              title="Core Analytics"
+            />
+            <div
+              className={cn(
+                "rounded-md border px-3 py-1 divide-y",
+                isDark
+                  ? "border-slate-700 divide-slate-700"
+                  : "border-slate-100 divide-slate-100",
+              )}
+            >
               {(metrics.avg_view_percentage ?? 0) > 0 && (
-                <StatRow isDark={dark}
+                <StatRow
+                  isDark={dark}
                   icon={<Eye className="h-3.5 w-3.5" />}
                   label="Avg View %"
                   value={`${metrics.avg_view_percentage!.toFixed(1)}%`}
@@ -415,43 +476,53 @@ export function YouTubeAnalyticsPanel({
                 />
               )}
               {(metrics.estimated_minutes_watched ?? 0) > 0 && (
-                <StatRow isDark={dark}
+                <StatRow
+                  isDark={dark}
                   icon={<Clock className="h-3.5 w-3.5" />}
                   label="Watch Time"
                   value={fmtMinutes(metrics.estimated_minutes_watched)}
                 />
               )}
               {(metrics.avg_view_duration_seconds ?? 0) > 0 && (
-                <StatRow isDark={dark}
+                <StatRow
+                  isDark={dark}
                   icon={<Clock className="h-3.5 w-3.5" />}
                   label="Avg Duration"
                   value={fmtDuration(metrics.avg_view_duration_seconds)}
                 />
               )}
               {(metrics.engaged_views ?? 0) > 0 && (
-                <StatRow isDark={dark}
+                <StatRow
+                  isDark={dark}
                   icon={<Eye className="h-3.5 w-3.5" />}
                   label="Engaged Views"
                   value={fmt(metrics.engaged_views)}
-                  sub={metrics.views ? `${((metrics.engaged_views! / metrics.views) * 100).toFixed(0)}%` : undefined}
+                  sub={
+                    metrics.views
+                      ? `${((metrics.engaged_views! / metrics.views) * 100).toFixed(0)}%`
+                      : undefined
+                  }
                 />
               )}
               {(metrics.shares ?? 0) > 0 && (
-                <StatRow isDark={dark}
+                <StatRow
+                  isDark={dark}
                   icon={<Share2 className="h-3.5 w-3.5" />}
                   label="Shares"
                   value={fmt(metrics.shares)}
                 />
               )}
               {(metrics.likes ?? 0) > 0 && (
-                <StatRow isDark={dark}
+                <StatRow
+                  isDark={dark}
                   icon={<ThumbsUp className="h-3.5 w-3.5" />}
                   label="Likes"
                   value={fmt(metrics.likes)}
                 />
               )}
               {(metrics.dislikes ?? 0) > 0 && (
-                <StatRow isDark={dark}
+                <StatRow
+                  isDark={dark}
                   icon={<ThumbsDown className="h-3.5 w-3.5" />}
                   label="Dislikes"
                   value={fmt(metrics.dislikes)}
@@ -459,7 +530,8 @@ export function YouTubeAnalyticsPanel({
                 />
               )}
               {(metrics.subscribers_gained ?? 0) > 0 && (
-                <StatRow isDark={dark}
+                <StatRow
+                  isDark={dark}
                   icon={<UserPlus className="h-3.5 w-3.5" />}
                   label="Subs Gained"
                   value={`+${fmt(metrics.subscribers_gained)}`}
@@ -467,7 +539,8 @@ export function YouTubeAnalyticsPanel({
                 />
               )}
               {(metrics.subscribers_lost ?? 0) > 0 && (
-                <StatRow isDark={dark}
+                <StatRow
+                  isDark={dark}
                   icon={<UserMinus className="h-3.5 w-3.5" />}
                   label="Subs Lost"
                   value={`-${fmt(metrics.subscribers_lost)}`}
@@ -475,7 +548,8 @@ export function YouTubeAnalyticsPanel({
                 />
               )}
               {(metrics.videos_added_to_playlists ?? 0) > 0 && (
-                <StatRow isDark={dark}
+                <StatRow
+                  isDark={dark}
                   icon={<ListPlus className="h-3.5 w-3.5" />}
                   label="Added to Playlists"
                   value={fmt(metrics.videos_added_to_playlists)}
@@ -485,7 +559,11 @@ export function YouTubeAnalyticsPanel({
           </div>
         ) : (
           <div className="mb-4">
-            <SectionHeader isDark={dark} icon={<Eye className="h-3.5 w-3.5" />} title="Core Analytics" />
+            <SectionHeader
+              isDark={dark}
+              icon={<Eye className="h-3.5 w-3.5" />}
+              title="Core Analytics"
+            />
             <p
               className={cn(
                 "text-[11px] italic",
@@ -499,13 +577,27 @@ export function YouTubeAnalyticsPanel({
 
         {/* ── Traffic Sources ─────────────────────────────────── */}
         <div className="mb-4">
-          <SectionHeader isDark={dark} icon={<BarChart2 className="h-3.5 w-3.5" />} title="Traffic Sources" />
+          <SectionHeader
+            isDark={dark}
+            icon={<BarChart2 className="h-3.5 w-3.5" />}
+            title="Traffic Sources"
+          />
           {hasTraffic && showTraffic ? (
             <div>
               {sortedTraffic.map(([source, pct]) => (
-                <TrafficSourceBar isDark={dark} key={source} source={source} pct={pct} />
+                <TrafficSourceBar
+                  isDark={dark}
+                  key={source}
+                  source={source}
+                  pct={pct}
+                />
               ))}
-              <p className={cn("text-[10px] mt-2", isDark ? "text-slate-500" : "text-slate-400")}>
+              <p
+                className={cn(
+                  "text-[10px] mt-2",
+                  isDark ? "text-slate-500" : "text-slate-400",
+                )}
+              >
                 Updated {timeAgo(metrics.last_traffic_update)}
               </p>
             </div>
@@ -523,7 +615,11 @@ export function YouTubeAnalyticsPanel({
 
         {/* ── Demographics ────────────────────────────────────── */}
         <div>
-          <SectionHeader isDark={dark} icon={<Users className="h-3.5 w-3.5" />} title="Demographics" />
+          <SectionHeader
+            isDark={dark}
+            icon={<Users className="h-3.5 w-3.5" />}
+            title="Demographics"
+          />
           {hasDemographics && showDemographics ? (
             <div>
               {/* Gender */}
@@ -534,7 +630,9 @@ export function YouTubeAnalyticsPanel({
                       key={gender}
                       className={cn(
                         "flex-1 rounded-md py-1.5 text-center",
-                        isDark ? "bg-slate-800" : "bg-slate-50 border border-slate-100"
+                        isDark
+                          ? "bg-slate-800"
+                          : "bg-slate-50 border border-slate-100",
                       )}
                     >
                       <div
@@ -561,7 +659,9 @@ export function YouTubeAnalyticsPanel({
               {ageGroups.map(([age, pct]) => (
                 <div key={age} className="mb-1.5">
                   <div className="flex justify-between text-[11px] mb-0.5">
-                    <span className={dark ? "text-slate-300" : "text-slate-600"}>
+                    <span
+                      className={dark ? "text-slate-300" : "text-slate-600"}
+                    >
                       {AGE_LABELS[age] ?? age}
                     </span>
                     <span
@@ -637,7 +737,12 @@ export function YouTubeAnalyticsPanel({
                 </div>
               )}
 
-              <p className={cn("text-[10px] mt-2", isDark ? "text-slate-500" : "text-slate-400")}>
+              <p
+                className={cn(
+                  "text-[10px] mt-2",
+                  isDark ? "text-slate-500" : "text-slate-400",
+                )}
+              >
                 Updated {timeAgo(metrics.last_demographics_update)}
               </p>
             </div>
@@ -654,12 +759,24 @@ export function YouTubeAnalyticsPanel({
         </div>
 
         {/* ── Last updated footer ────────────────────────────── */}
-        <div className={cn("mt-3 pt-2 border-t text-[10px] flex justify-between", isDark ? "border-slate-700 text-slate-500" : "border-slate-100 text-slate-400")}>
+        <div
+          className={cn(
+            "mt-3 pt-2 border-t text-[10px] flex justify-between",
+            isDark
+              ? "border-slate-700 text-slate-500"
+              : "border-slate-100 text-slate-400",
+          )}
+        >
           <span>Core: {timeAgo(metrics.last_basic_update)}</span>
           <span>Traffic: {timeAgo(metrics.last_traffic_update)}</span>
           <span>Demo: {timeAgo(metrics.last_demographics_update)}</span>
         </div>
-        <p className={cn("mt-2 text-[10px]", isDark ? "text-slate-500" : "text-slate-400")}>
+        <p
+          className={cn(
+            "mt-2 text-[10px]",
+            isDark ? "text-slate-500" : "text-slate-400",
+          )}
+        >
           Max. analytics window: last {YT_ANALYTICS_DEFAULT_WINDOW_DAYS} days
         </p>
       </PopoverContent>
