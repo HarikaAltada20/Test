@@ -16930,6 +16930,19 @@ export default function ContestDetailClient({
                                               >
                                                 Mark as Paid
                                               </DropdownMenuItem>
+                                              {showNormalViewFlatFeeBonusColumns && (
+                                                <DropdownMenuItem
+                                                  disabled={isLoading}
+                                                  onClick={() =>
+                                                    handleUpdateSubmissionStatus(
+                                                      submission.id,
+                                                      "mark_both_paid",
+                                                    )
+                                                  }
+                                                >
+                                                  Mark Both as Paid
+                                                </DropdownMenuItem>
+                                              )}
                                               <DropdownMenuItem
                                                 disabled={isLoading}
                                                 onClick={() =>
@@ -19007,8 +19020,7 @@ export default function ContestDetailClient({
                                                           "verification_complete" &&
                                                           !group.paid &&
                                                           group.creator_moderation_status !==
-                                                          "rejected" &&
-                                                          isAdminView && (
+                                                          "rejected" && (
                                                             <>
                                                               <DropdownMenuSeparator />
                                                               <DropdownMenuItem

@@ -24,6 +24,15 @@ import { allocateFlatFeeBonusCents } from "@/lib/bonus-allocation";
 import { buildFlatFeeBonusExpectedCentsBySubmissionId } from "@/lib/twitter-cpm-bonus-expected";
 import { formatCurrencyFromCents } from "@/lib/currency-utils";
 
+function getTransactionPayoutCycle(metadata: any): number {
+  const rawCycle = metadata?.payout_cycle;
+  const parsedCycle =
+    typeof rawCycle === "number"
+      ? rawCycle
+      : Number.parseInt(String(rawCycle ?? ""), 10);
+  return Number.isFinite(parsedCycle) && parsedCycle > 0 ? parsedCycle : 1;
+}
+
 export async function POST(request: Request) {
   const supabase = await createClient();
 
@@ -389,12 +398,27 @@ export async function POST(request: Request) {
       const totalBudget = contestDetails?.total_budget || null;
       const flatFeeBonusCap = contestDetails?.flat_fee_bonus_cap || null;
 
-      if (flatFeeBonus > 0 && submissionFull.status === "verified") {
+      const submissionStatusLower = String(
+        submissionFull.status || "",
+      ).toLowerCase();
+      const isBonusEligibleStatus =
+        submissionStatusLower === "verified" ||
+        submissionStatusLower === "approved" ||
+        // Allow paying bonus after the standard reward has already been paid.
+        // Only valid for mark_bonus_paid; mark_both_paid still requires verified
+        // because we cannot pay the main reward twice.
+        (action === "mark_bonus_paid" &&
+          (submissionStatusLower === "paid" || submissionFull.paid === true));
+
+      if (flatFeeBonus > 0 && isBonusEligibleStatus) {
+        // Fetch every contest submission and let `buildFlatFeeBonusExpectedCentsBySubmissionId`
+        // apply its internal eligibility rule (status in verified/approved/paid OR paid=true).
+        // Pre-filtering with PostgREST `.or(...)` is unsafe here because commas inside
+        // `in.(...)` collide with the `.or()` separator and return an empty result.
         const { data: allEligibleContestSubs } = await supabaseAdmin
           .from("submissions")
           .select("id, created_at, status, paid")
-          .eq("contest_id", submissionFull.contest_id)
-          .in("status", ["verified", "paid", "approved"]);
+          .eq("contest_id", submissionFull.contest_id);
         const expectedBonusMap = buildFlatFeeBonusExpectedCentsBySubmissionId(
           contest as any,
           (allEligibleContestSubs || []).map((s: any) => ({
@@ -440,24 +464,38 @@ export async function POST(request: Request) {
               ? flatFeeBonusCap
               : null;
         const remainingBonusBudget =
-          budgetLimit != null ? Math.max(0, budgetLimit - currentBonusSpent) : null;
+          budgetLimit != null
+            ? Math.max(0, budgetLimit - currentBonusSpent)
+            : null;
         const rawBonusAllocation = allocateFlatFeeBonusCents(
           flatFeeBonus,
           remainingBonusBudget,
         );
-        const adjustedBonusAllocation = adjustBonusCents(rawBonusAllocation.amount, {
-          shouldAdjustBonus: payoutAdjustment.shouldAdjustBonus,
-          percentage: payoutAdjustment.percentage,
-        });
+        const adjustedBonusAllocation = adjustBonusCents(
+          rawBonusAllocation.amount,
+          {
+            shouldAdjustBonus: payoutAdjustment.shouldAdjustBonus,
+            percentage: payoutAdjustment.percentage,
+          },
+        );
         // Check if bonus already paid
         if (!submissionFull.bonus_paid) {
           const [
+            { data: existingRewardsForSubmission },
             { data: existingBonusRewards },
             { data: existingBonusRefunds },
           ] = await Promise.all([
             supabaseAdmin
               .from("money_transactions")
-              .select("id")
+              .select("id, metadata")
+              .eq("user_id", submissionFull.creator_id)
+              .eq("type", "reward")
+              .contains("metadata", {
+                submission_id: submissionId,
+              }),
+            supabaseAdmin
+              .from("money_transactions")
+              .select("id, metadata")
               .eq("user_id", submissionFull.creator_id)
               .eq("type", "reward")
               .contains("metadata", {
@@ -475,17 +513,23 @@ export async function POST(request: Request) {
               }),
           ] as any);
           const bonusRewardsCount = (existingBonusRewards || []).length;
-          const bonusRefundsCount = (existingBonusRefunds || [])
-            .filter(
-              (r: any) =>
-                !r.remarks || r.remarks === REVERSAL_TRANSACTION_REMARK,
-            )
-            .length;
+          const bonusRefundsCount = (existingBonusRefunds || []).filter(
+            (r: any) => !r.remarks || r.remarks === REVERSAL_TRANSACTION_REMARK,
+          ).length;
           const nextBonusCycle =
             bonusRewardsCount > bonusRefundsCount
               ? bonusRewardsCount
               : bonusRewardsCount + 1;
-          const flatFeeBonusIdempotencyKey = `flat_fee_bonus:v2:${submissionId}:cycle:${nextBonusCycle}`;
+          const occupiedRewardCycles = new Set(
+            (existingRewardsForSubmission || []).map((r: any) =>
+              getTransactionPayoutCycle(r?.metadata),
+            ),
+          );
+          let resolvedBonusCycle = nextBonusCycle;
+          while (occupiedRewardCycles.has(resolvedBonusCycle)) {
+            resolvedBonusCycle += 1;
+          }
+          const flatFeeBonusIdempotencyKey = `flat_fee_bonus:v2:${submissionId}:cycle:${resolvedBonusCycle}`;
 
           if (adjustedBonusAllocation <= 0) {
             bonusOutcome =
@@ -525,7 +569,7 @@ export async function POST(request: Request) {
                   submission_id: submissionId,
                   contest_id: submissionFull.contest_id,
                   bonus_type: "flat_fee",
-                  payout_cycle: nextBonusCycle,
+                  payout_cycle: resolvedBonusCycle,
                   bonus_reason: rawBonusAllocation.reason,
                   original_bonus_amount: flatFeeBonus,
                   adjusted_bonus_amount: adjustedBonusAllocation,
@@ -580,9 +624,14 @@ export async function POST(request: Request) {
           { error: "No flat fee bonus configured for this contest" },
           { status: 400 },
         );
-      } else if (submissionFull.status !== "verified") {
+      } else if (!isBonusEligibleStatus) {
         return NextResponse.json(
-          { error: "Submission must be verified before paying bonus" },
+          {
+            error:
+              action === "mark_bonus_paid"
+                ? "Bonus can only be paid on verified submissions or already-paid submissions whose bonus has not been paid yet."
+                : "Submission must be verified before paying bonus",
+          },
           { status: 400 },
         );
       }
@@ -646,10 +695,8 @@ export async function POST(request: Request) {
                 platform: sub.platform,
                 other_stats: sub.other_stats,
               }));
-              const payoutBySubmissionId = buildMilestoneSubmissionPayoutCentsMap(
-                records,
-                milestones,
-              );
+              const payoutBySubmissionId =
+                buildMilestoneSubmissionPayoutCentsMap(records, milestones);
 
               const { data: creatorSubs, error: creatorSubsErr } =
                 await supabaseAdmin
@@ -768,7 +815,9 @@ export async function POST(request: Request) {
                   ) {
                     effectiveViews = cpm.max_views;
                   }
-                  baseAmount = Math.round(((effectiveViews * rate) / 1000) * 100);
+                  baseAmount = Math.round(
+                    ((effectiveViews * rate) / 1000) * 100,
+                  );
                 }
 
                 let applied = baseAmount;
@@ -831,6 +880,15 @@ export async function POST(request: Request) {
             ).length || 0;
           const nextCycle =
             rewardsCount > refundsCount ? rewardsCount : rewardsCount + 1;
+          const occupiedRewardCycles = new Set(
+            (existingRewards || []).map((r: any) =>
+              getTransactionPayoutCycle(r?.metadata),
+            ),
+          );
+          let resolvedNextCycle = nextCycle;
+          while (occupiedRewardCycles.has(resolvedNextCycle)) {
+            resolvedNextCycle += 1;
+          }
 
           // Check duplicate reward in this cycle
           const { data: rewardInThisCycle } = await supabaseAdmin
@@ -840,12 +898,12 @@ export async function POST(request: Request) {
             .eq("type", "reward")
             .contains("metadata", {
               submission_id: submissionId,
-              payout_cycle: nextCycle,
+              payout_cycle: resolvedNextCycle,
             });
 
           const contestRewardIdempotencyKey = customAmount
-            ? `contest_reward:v1:${submissionId}:cycle:${nextCycle}:amt:${rewardAmount}`
-            : `contest_reward:v1:${submissionId}:cycle:${nextCycle}`;
+            ? `contest_reward:v1:${submissionId}:cycle:${resolvedNextCycle}:amt:${rewardAmount}`
+            : `contest_reward:v1:${submissionId}:cycle:${resolvedNextCycle}`;
 
           const mainRewardInThisCycle = (rewardInThisCycle || []).filter(
             (r: any) => !r?.metadata?.bonus_type,
@@ -873,7 +931,7 @@ export async function POST(request: Request) {
                   contest_id: submissionFull.contest_id,
                   submission_id: submissionId,
                   payout_type: customAmount ? "custom" : "standard",
-                  payout_cycle: nextCycle,
+                  payout_cycle: resolvedNextCycle,
                 },
               },
             );
@@ -988,12 +1046,19 @@ export async function POST(request: Request) {
         );
       };
       const sumAmount = (rows: any[]) =>
-        rows.reduce((sum: number, tx: any) => sum + (Number(tx.amount) || 0), 0);
+        rows.reduce(
+          (sum: number, tx: any) => sum + (Number(tx.amount) || 0),
+          0,
+        );
 
       const mainRewardNet = Math.max(
         0,
         sumAmount((rewardTxns || []).filter(isMainSubmissionTx)) -
-          sumAmount((refundTxns || []).filter((tx: any) => isReversalRefund(tx) && isMainSubmissionTx(tx))),
+          sumAmount(
+            (refundTxns || []).filter(
+              (tx: any) => isReversalRefund(tx) && isMainSubmissionTx(tx),
+            ),
+          ),
       );
       const mainReversalAmount =
         Number(submissionFull.earnings) > 0
@@ -1007,14 +1072,23 @@ export async function POST(request: Request) {
       const bonusByType = new Map<string, number>();
       for (const tx of bonusRewards) {
         const key = String(tx?.metadata?.bonus_type || "bonus");
-        bonusByType.set(key, (bonusByType.get(key) || 0) + (Number(tx.amount) || 0));
+        bonusByType.set(
+          key,
+          (bonusByType.get(key) || 0) + (Number(tx.amount) || 0),
+        );
       }
       for (const tx of bonusRefunds) {
         const key = String(tx?.metadata?.bonus_type || "bonus");
-        bonusByType.set(key, (bonusByType.get(key) || 0) - (Number(tx.amount) || 0));
+        bonusByType.set(
+          key,
+          (bonusByType.get(key) || 0) - (Number(tx.amount) || 0),
+        );
       }
       let bonusReversals = Array.from(bonusByType.entries())
-        .map(([bonusType, amount]) => ({ bonusType, amount: Math.max(0, amount) }))
+        .map(([bonusType, amount]) => ({
+          bonusType,
+          amount: Math.max(0, amount),
+        }))
         .filter((row) => row.amount > 0);
       let bonusReversalAmount = bonusReversals.reduce(
         (sum, row) => sum + row.amount,

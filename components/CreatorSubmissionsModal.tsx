@@ -382,6 +382,9 @@ export function CreatorSubmissionsModal({
 
     // Standard/both: verified only.
     // Twitter CPM bonus-only: only already-paid tweets with unpaid bonus.
+    // Other bonus-only (non-Twitter or Twitter leaderboard): verified rows with
+    // unpaid bonus, OR already-paid rows whose bonus is still unpaid (parallel
+    // to the Twitter CPM path so admins can pay bonus after standard).
     let paySubs: typeof selectedSubs;
     if (
       type === "bonus" &&
@@ -393,6 +396,20 @@ export function CreatorSubmissionsModal({
         const st = getNormalizedSubmissionStatus(s);
         if (s.bonus_paid) return false;
         return st === "paid" || s.paid === true;
+      });
+    } else if (type === "bonus") {
+      paySubs = selectedSubs.filter((s) => {
+        if (s.bonus_paid) return false;
+        const status = (s as any).is_twitter_tweet
+          ? (s as any).moderation_status || s.status
+          : s.status;
+        const st = String(status || "").toLowerCase();
+        return (
+          st === "verified" ||
+          st === "approved" ||
+          st === "paid" ||
+          s.paid === true
+        );
       });
     } else {
       paySubs = selectedSubs.filter((s) => {
@@ -412,7 +429,9 @@ export function CreatorSubmissionsModal({
           hasTwitterTweetsSelected &&
           isTwitterCpmContestFlag
             ? "No selected paid tweets with unpaid bonus found."
-            : "No verified submissions selected. Only verified submissions can be paid.",
+            : type === "bonus"
+              ? "No selected submissions have an unpaid bonus. Bonus can be paid on verified or already-paid rows whose bonus has not been paid yet."
+              : "No verified submissions selected. Only verified submissions can be paid.",
         variant: "destructive",
       });
       return;
@@ -3346,6 +3365,31 @@ export function CreatorSubmissionsModal({
                                   hasFlatFeeBonus &&
                                   !submission.bonus_paid &&
                                   isPaidForGranted && (
+                                    <>
+                                      <DropdownMenuSeparator />
+                                      <DropdownMenuItem
+                                        onClick={() =>
+                                          onPayment(submission.id, "bonus")
+                                        }
+                                      >
+                                        <DollarSign className="h-4 w-4 mr-2" />
+                                        Mark Bonus as Paid
+                                      </DropdownMenuItem>
+                                    </>
+                                  )}
+
+                                {/* Non-Twitter contests: allow paying bonus
+                                    after the standard reward has already been
+                                    paid (mirrors Twitter CPM behavior above). */}
+                                {contest?.post_contest_status ===
+                                  "verification_complete" &&
+                                  isAdminView &&
+                                  !isTwitterLeaderboardContest &&
+                                  !isTwitterCpmContest &&
+                                  !isTwitterTweet &&
+                                  hasFlatFeeBonus &&
+                                  !submission.bonus_paid &&
+                                  submission.paid === true && (
                                     <>
                                       <DropdownMenuSeparator />
                                       <DropdownMenuItem

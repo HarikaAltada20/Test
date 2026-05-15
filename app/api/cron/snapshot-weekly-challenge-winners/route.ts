@@ -4,6 +4,8 @@ import { snapshotWinnersForPeriod } from "@/lib/daily-challenge";
 
 export const dynamic = "force-dynamic";
 
+// Vercel cron runs in UTC. Schedule `0 21 * * 0` → Monday 02:30 IST (locks last_week after verification buffer).
+
 export async function GET(request: NextRequest) {
   try {
     const cronSecret = process.env.CRON_SECRET;

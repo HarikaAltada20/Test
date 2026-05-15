@@ -18,15 +18,15 @@
     },
     {
       "path": "/api/cron/snapshot-daily-challenge-winners",
-      "schedule": "35 18 * * *"
+      "schedule": "0 21 * * *"
     },
     {
       "path": "/api/cron/snapshot-weekly-challenge-winners",
-      "schedule": "40 18 * * 0"
+      "schedule": "0 21 * * 0"
     },
     {
       "path": "/api/cron/snapshot-monthly-challenge-winners",
-      "schedule": "45 18 28-31 * *"
+      "schedule": "0 21 28-31 * *"
     }
   ]
 }

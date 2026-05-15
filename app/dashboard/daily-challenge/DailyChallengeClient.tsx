@@ -42,36 +42,60 @@ import {
   DAILY_CHALLENGE_REFRESH_COOLDOWN_MS_CREATOR,
 } from "@/lib/constants";
 
-/** Only “open” windows—maps to API competition period. */
-type LeaderboardPeriod = "today" | "this_week" | "this_month";
-type RewardMode = "daily" | "weekly" | "monthly";
+/** Maps to API `period` query param. */
+type UiLeaderboardPeriod =
+  | "today"
+  | "yesterday"
+  | "this_week"
+  | "last_week"
+  | "this_month"
+  | "last_month";
 type Scope = "pending" | "verified" | "all";
 
 type AdminPrimaryTab = "setup" | "live";
 
-const REWARD_MODE_OPTIONS: { value: RewardMode; label: string }[] = [
-  { value: "daily", label: "Daily" },
-  { value: "weekly", label: "Weekly" },
-  { value: "monthly", label: "Monthly" },
+const CREATOR_PERIOD_OPTIONS: { value: UiLeaderboardPeriod; label: string }[] = [
+  { value: "today", label: "Daily" },
+  { value: "this_week", label: "Weekly" },
+  { value: "this_month", label: "Monthly" },
 ];
 
-const LEADERBOARD_PERIOD_FOR_MODE: Record<RewardMode, LeaderboardPeriod> = {
-  daily: "today",
-  weekly: "this_week",
-  monthly: "this_month",
+const ADMIN_PERIOD_OPTIONS: { value: UiLeaderboardPeriod; label: string }[] = [
+  { value: "today", label: "Daily" },
+  { value: "yesterday", label: "Yesterday" },
+  { value: "this_week", label: "Weekly" },
+  { value: "last_week", label: "Last week" },
+  { value: "this_month", label: "Monthly" },
+  { value: "last_month", label: "Last month" },
+];
+
+const PERIOD_HEADLINE: Record<UiLeaderboardPeriod, string> = {
+  today: "Today",
+  yesterday: "Yesterday",
+  this_week: "This week",
+  last_week: "Last week",
+  this_month: "This month",
+  last_month: "Last month",
 };
 
-const MODE_HEADLINE: Record<RewardMode, string> = {
-  daily: "Today",
-  weekly: "This week",
-  monthly: "This month",
+const PERIOD_CHALLENGE_TITLE: Record<UiLeaderboardPeriod, string> = {
+  today: "Daily Challenge",
+  yesterday: "Daily Challenge",
+  this_week: "Weekly Challenge",
+  last_week: "Weekly Challenge",
+  this_month: "Monthly Challenge",
+  last_month: "Monthly Challenge",
 };
 
-const CHALLENGE_TITLE: Record<RewardMode, string> = {
-  daily: "Daily Challenge",
-  weekly: "Weekly Challenge",
-  monthly: "Monthly Challenge",
-};
+function isPastLeaderboardPeriod(period: UiLeaderboardPeriod): boolean {
+  return period === "yesterday" || period === "last_week" || period === "last_month";
+}
+
+function prizeTierForPeriod(period: UiLeaderboardPeriod): "day" | "week" | "month" {
+  if (period === "this_week" || period === "last_week") return "week";
+  if (period === "this_month" || period === "last_month") return "month";
+  return "day";
+}
 
 const SNAPSHOT_PERIOD_LABELS: Record<string, string> = {
   day: "Daily",
@@ -240,10 +264,13 @@ function formatPrize(amountMinorUnits: number, currency: string) {
   }
 }
 
-/** Minor units for the open Daily / Weekly / Monthly window (matches server effectivePrizeMinorUnits). */
-function effectivePrizeMinorForPeriod(activeEvent: Record<string, unknown> | null, p: LeaderboardPeriod): number {
+/** Minor units for the selected period tier (matches server getPrizeTierForCompetitionPeriod). */
+function effectivePrizeMinorForPeriod(
+  activeEvent: Record<string, unknown> | null,
+  period: UiLeaderboardPeriod,
+): number {
   const eff = Number((activeEvent as { effectivePrizeMinorUnits?: number })?.effectivePrizeMinorUnits);
-  if (Number.isFinite(eff)) return Math.round(eff);
+  if (Number.isFinite(eff) && !isPastLeaderboardPeriod(period)) return Math.round(eff);
   const daily = Number(
     (activeEvent as { prizeAmountMinorUnits?: number })?.prizeAmountMinorUnits ??
       (activeEvent as { prize_amount_minor_units?: number })?.prize_amount_minor_units ??
@@ -259,8 +286,9 @@ function effectivePrizeMinorForPeriod(activeEvent: Record<string, unknown> | nul
       (activeEvent as { monthly_prize_minor_units?: number })?.monthly_prize_minor_units ??
       daily,
   );
-  if (p === "this_week") return weekly;
-  if (p === "this_month") return monthly;
+  const tier = prizeTierForPeriod(period);
+  if (tier === "week") return weekly;
+  if (tier === "month") return monthly;
   return daily;
 }
 
@@ -304,8 +332,8 @@ export default function DailyChallengeClient({
   currentUserId: string;
   isAdmin: boolean;
 }) {
-  const [rewardMode, setRewardMode] = useState<RewardMode>("daily");
-  const leaderboardPeriod = LEADERBOARD_PERIOD_FOR_MODE[rewardMode];
+  const [leaderboardPeriod, setLeaderboardPeriod] = useState<UiLeaderboardPeriod>("today");
+  const periodOptions = isAdmin ? ADMIN_PERIOD_OPTIONS : CREATOR_PERIOD_OPTIONS;
   const [scope, setScope] = useState<Scope>("verified");
   const [activeBoard, setActiveBoard] = useState<BoardTab>("views");
   const [currentPage, setCurrentPage] = useState(1);
@@ -483,7 +511,7 @@ export default function DailyChallengeClient({
 
   useEffect(() => {
     setWinnersPage(1);
-  }, [rewardMode]);
+  }, [leaderboardPeriod]);
 
   useLayoutEffect(() => {
     const checkMode = () => {
@@ -574,15 +602,16 @@ export default function DailyChallengeClient({
       ? payload.lastLeaderboardFreshAt
       : null;
   const lastManualRefreshRelative = lastLeaderboardFreshIso ? fromNow(lastLeaderboardFreshIso) : null;
-  const modeHeadline = MODE_HEADLINE[rewardMode];
-  const challengeTitle = CHALLENGE_TITLE[rewardMode];
+  const modeHeadline = PERIOD_HEADLINE[leaderboardPeriod];
+  const challengeTitle = PERIOD_CHALLENGE_TITLE[leaderboardPeriod];
+  const viewingPastPeriod = isPastLeaderboardPeriod(leaderboardPeriod);
   const scopeWindowLabel =
     scope === "verified" ? "Verified" : scope === "pending" ? "Pending" : "All";
   void countdownTick;
-  const endsIn =
-    typeof payload?.effectiveRange?.end === "string"
-      ? getTimeUntil(payload.effectiveRange.end)
-      : "—";
+  const rangeEndIso =
+    typeof payload?.effectiveRange?.end === "string" ? payload.effectiveRange.end : null;
+  const rangeEnded = rangeEndIso ? new Date(rangeEndIso).getTime() <= Date.now() : false;
+  const endsIn = rangeEndIso ? (rangeEnded ? "Ended" : getTimeUntil(rangeEndIso)) : "—";
   const activeEvent =
     (payload?.event || selectedLiveEvent || selectedEvent || null) as Record<string, unknown> | null;
   const prizeAmountMinorUnits = effectivePrizeMinorForPeriod(activeEvent, leaderboardPeriod);
@@ -892,7 +921,9 @@ export default function DailyChallengeClient({
                 isDark ? "text-gray-200" : "text-gray-800",
               )}
             >
-              Win instant cash on winning challenges — pick daily, weekly, or monthly below.
+              {isAdmin
+                ? "Win instant cash on winning challenges — pick a mode below. Yesterday, Last week, and Last month show rankings for a completed IST window (helpful after midnight while verifications finish)."
+                : "Win instant cash on winning challenges — pick daily, weekly, or monthly below."}
             </p>
             <div className="mt-5 grid grid-cols-1 md:grid-cols-2 gap-3">
               <div className={cn("rounded-xl px-3.5 py-3 border", isDark ? "border-violet-500/25 bg-violet-500/10" : "border-violet-200/90 bg-violet-50/80")}>
@@ -949,7 +980,7 @@ export default function DailyChallengeClient({
                     <p className="flex flex-wrap items-center gap-1.5 pt-2 mt-1 border-t border-amber-500/20 dark:border-amber-400/25">
                       <Clock3 className="w-4 h-4 shrink-0 opacity-80" aria-hidden />
                       <span className={cn("text-muted-foreground font-medium uppercase text-[11px] tracking-wide", isDark ? "text-amber-200/90" : "text-amber-900/70")}>
-                        Ends in:
+                        {rangeEnded ? "Status:" : "Ends in:"}
                       </span>
                       <span className="font-semibold">{endsIn === "—" ? "—" : endsIn}</span>
                     </p>
@@ -1054,9 +1085,9 @@ export default function DailyChallengeClient({
                 Mode
               </p>
               <Select
-                value={rewardMode}
+                value={leaderboardPeriod}
                 onValueChange={(v) => {
-                  setRewardMode(v as RewardMode);
+                  setLeaderboardPeriod(v as UiLeaderboardPeriod);
                   setCurrentPage(1);
                 }}
               >
@@ -1064,7 +1095,7 @@ export default function DailyChallengeClient({
                   <SelectValue placeholder="Mode" />
                 </SelectTrigger>
                 <SelectContent isDark={isDark}>
-                  {REWARD_MODE_OPTIONS.map((opt) => (
+                  {periodOptions.map((opt) => (
                     <SelectItem key={opt.value} value={opt.value} isDark={isDark}>
                       {opt.label}
                     </SelectItem>
@@ -1390,13 +1421,21 @@ export default function DailyChallengeClient({
                         rank here again.
                       </p>
                     </>
+                  ) : isAdmin && viewingPastPeriod ? (
+                    <>
+                      <p className="text-base sm:text-lg font-semibold tracking-tight">No ranked creators</p>
+                      <p className="text-sm text-muted-foreground mt-1.5 max-w-md mx-auto">
+                        No creators ranked for this closed window with the selected post filter. Try another scope or
+                        refresh after more verifications.
+                      </p>
+                    </>
                   ) : (
                     <>
                       <p className="text-base sm:text-lg font-semibold tracking-tight">Be the first to take the lead</p>
                       <p className="text-sm text-muted-foreground mt-1.5">
-                        {rewardMode === "daily"
+                        {leaderboardPeriod === "today"
                           ? "Upload a strong reel today and climb the board."
-                          : rewardMode === "weekly"
+                          : leaderboardPeriod === "this_week"
                             ? "Keep posting verified reels—your weekly totals update when you refresh."
                             : "Your monthly totals add up across the calendar month."}
                       </p>
@@ -1440,7 +1479,7 @@ export default function DailyChallengeClient({
         <CardHeader className="pb-2">
           <CardTitle className="flex items-center gap-2">
             <Crown className="w-5 h-5" />
-            Past winners ({MODE_HEADLINE[rewardMode]})
+            Past winners ({modeHeadline})
           </CardTitle>
           <p className="text-xs text-muted-foreground font-normal mt-1">
             Shown here only after a finished run has been recorded for this mode—not from the refresh button above.

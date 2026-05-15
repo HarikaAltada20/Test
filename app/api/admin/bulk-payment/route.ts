@@ -127,15 +127,28 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Filter to verified (or legacy "approved") submissions only — same notion as verify-submission / UI
+    // Filter to verified (or legacy "approved") submissions — same notion as verify-submission / UI.
+    // For bonus-only payouts, also accept rows whose standard reward was already paid
+    // (status="paid" or paid=true) but whose flat-fee bonus is still unpaid. This mirrors
+    // the Twitter CPM bulk payout, which already supports paying bonus after standard.
     const verifiedSubmissions = submissions.filter((s) => {
       const st = String(s.status || "").toLowerCase();
-      return st === "verified" || st === "approved";
+      if (st === "verified" || st === "approved") return true;
+      if (payment_type === "bonus") {
+        const isPaidRow = st === "paid" || s.paid === true;
+        return isPaidRow && s.bonus_paid !== true;
+      }
+      return false;
     });
 
     if (verifiedSubmissions.length === 0) {
       return NextResponse.json(
-        { error: "No verified submissions found" },
+        {
+          error:
+            payment_type === "bonus"
+              ? "No eligible submissions found. Bonus can be paid on verified rows, or already-paid rows whose bonus has not been paid yet."
+              : "No verified submissions found",
+        },
         { status: 400 },
       );
     }
@@ -235,11 +248,15 @@ export async function POST(request: NextRequest) {
     );
     let runningBonusSpent = currentBonusSpent;
     if (payment_type !== "standard" && flatFeeBonus > 0) {
+      // Fetch every contest submission and let `buildFlatFeeBonusExpectedCentsBySubmissionId`
+      // apply its internal eligibility rule (status in verified/approved/paid OR paid=true).
+      // We intentionally avoid pre-filtering with `.or(...)` on Supabase because the
+      // PostgREST `.or()` syntax parses commas inside `in.(...)` as top-level filter
+      // separators, which yields an empty result and silently breaks the bonus map.
       const { data: contestEligibleSubs } = await supabaseAdmin
         .from("submissions")
         .select("id, created_at, status, paid")
-        .eq("contest_id", contest_id)
-        .in("status", ["verified", "paid", "approved"]);
+        .eq("contest_id", contest_id);
       globalExpectedBonusMap = buildFlatFeeBonusExpectedCentsBySubmissionId(
         contest as any,
         (contestEligibleSubs || []).map((s: any) => ({
@@ -418,6 +435,86 @@ export async function POST(request: NextRequest) {
         contest.contest_type === "milestone"
           ? " Milestone: confirm submissions are not already paid, creator max earnings is not exhausted, and view counts qualify for the ladder (pending entries count toward winner limits)."
           : "";
+
+      // For bonus payouts, surface the specific reason buckets so admins can
+      // tell whether the rows hit the bonus budget cap, fell outside the
+      // contest's expected bonus window (FCFS allocation by created_at), or
+      // were already bonus_paid. Without this, the generic message is
+      // confusing when no bonus has actually been credited yet.
+      if (payment_type === "bonus") {
+        const alreadyBonusPaid = sortedSubmissions.filter(
+          (s) => s.bonus_paid === true,
+        ).length;
+        const notExpected = bonusReasonCounts.not_expected || 0;
+        const capExhausted = bonusReasonCounts.cap_exhausted || 0;
+        const partialZero = bonusReasonCounts.partial_remainder || 0;
+
+        // Per-submission diagnostic so admins can compare with the UI's
+        // "Expected bonus" column when the buckets above seem to disagree
+        // with what's on screen.
+        const perSubmissionDiagnostic = sortedSubmissions.map((s) => ({
+          submission_id: s.id,
+          status: s.status,
+          paid: s.paid === true,
+          bonus_paid: s.bonus_paid === true,
+          in_eligible_map: globalExpectedBonusMap.has(String(s.id)),
+          expected_bonus_cents:
+            globalExpectedBonusMap.get(String(s.id)) ?? null,
+        }));
+
+        const reasonParts: string[] = [];
+        if (alreadyBonusPaid > 0) {
+          reasonParts.push(
+            `${alreadyBonusPaid} already had bonus paid`,
+          );
+        }
+        if (notExpected > 0) {
+          reasonParts.push(
+            `${notExpected} fall outside this contest's bonus budget allocation`,
+          );
+        }
+        if (capExhausted > 0) {
+          reasonParts.push(
+            `${capExhausted} hit the bonus cap at runtime`,
+          );
+        }
+        if (partialZero > 0) {
+          reasonParts.push(
+            `${partialZero} had bonus adjusted to 0 by the payout adjustment`,
+          );
+        }
+        const reasonSummary = reasonParts.length
+          ? ` ${reasonParts.join("; ")}.`
+          : "";
+        const tip =
+          notExpected > 0
+            ? " Bonus is allocated first-come-first-served by submission date until flat_fee_bonus_cap (or total_budget if no cap is set) is exhausted. To pay these rows, raise the cap/budget or pick earlier submissions."
+            : "";
+
+        console.warn("[bulk-payment] bonus payout produced 0 total amount", {
+          contest_id,
+          creator_id,
+          flatFeeBonus,
+          flatFeeBonusCap,
+          totalBudget,
+          currentBonusSpent,
+          globalExpectedBonusMapSize: globalExpectedBonusMap.size,
+          bonusReasonCounts,
+          alreadyBonusPaid,
+          perSubmissionDiagnostic,
+        });
+
+        return NextResponse.json(
+          {
+            error: "No bonus payments to process." + reasonSummary + tip,
+            bonus_reason_counts: bonusReasonCounts,
+            already_bonus_paid: alreadyBonusPaid,
+            per_submission_diagnostic: perSubmissionDiagnostic,
+          },
+          { status: 400 },
+        );
+      }
+
       return NextResponse.json(
         {
           error:
