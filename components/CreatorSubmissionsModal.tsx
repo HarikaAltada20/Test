@@ -801,13 +801,17 @@ export function CreatorSubmissionsModal({
     const shouldAdjustDualCpmComponent =
       hasPayoutAdjustment &&
       (payoutAdjustmentMode === "combined" ||
+        payoutAdjustmentMode === "cpm_and_milestone" ||
         payoutAdjustmentMode === "dual_rewards_only" ||
         payoutAdjustmentMode === "cpm_only");
     const shouldAdjustDualMilestoneComponent =
       hasPayoutAdjustment &&
       (payoutAdjustmentMode === "combined" ||
+        payoutAdjustmentMode === "cpm_and_milestone" ||
         payoutAdjustmentMode === "dual_rewards_only" ||
-        payoutAdjustmentMode === "milestone_only");
+        payoutAdjustmentMode === "milestone_only" ||
+        (contest?.contest_type === "dual_rewards" &&
+          payoutAdjustmentMode === "bonus_only"));
     const cpmExpected = shouldAdjustDualCpmComponent
       ? applyPayoutAdjustment(cpmCappedBase, payoutAdjustmentPercentage)
       : cpmCappedBase;
@@ -959,6 +963,7 @@ export function CreatorSubmissionsModal({
     | "milestone_only"
     | "bonus_only"
     | "combined"
+    | "cpm_and_milestone"
     | "dual_rewards_only"
     | null;
   const hasPayoutAdjustment =
@@ -966,6 +971,7 @@ export function CreatorSubmissionsModal({
   const shouldAdjustReward =
     hasPayoutAdjustment &&
     (payoutAdjustmentMode === "combined" ||
+      payoutAdjustmentMode === "cpm_and_milestone" ||
       payoutAdjustmentMode === "dual_rewards_only" ||
       payoutAdjustmentMode === "cpm_only" ||
       payoutAdjustmentMode === "milestone_only");
@@ -991,12 +997,14 @@ export function CreatorSubmissionsModal({
     isDualRewardsContest &&
     hasPayoutAdjustment &&
     (payoutAdjustmentMode === "combined" ||
+      payoutAdjustmentMode === "cpm_and_milestone" ||
       payoutAdjustmentMode === "dual_rewards_only" ||
       payoutAdjustmentMode === "cpm_only");
   const dualAdjustMilestoneForModal =
     isDualRewardsContest &&
     hasPayoutAdjustment &&
     (payoutAdjustmentMode === "combined" ||
+      payoutAdjustmentMode === "cpm_and_milestone" ||
       payoutAdjustmentMode === "dual_rewards_only" ||
       payoutAdjustmentMode === "milestone_only" ||
       payoutAdjustmentMode === "bonus_only");

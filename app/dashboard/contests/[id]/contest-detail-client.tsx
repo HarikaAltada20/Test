@@ -91,6 +91,11 @@ import { InstagramCreatorAnalyticsModal } from "@/components/contest/InstagramCr
 import { BudgetProgress } from "@/components/BudgetProgress";
 import { buildMilestoneMostVerifiedBonusByCreatorMap } from "@/lib/milestone-contest-expected-spend";
 import type { MilestoneMostVerifiedBonusPaidByCreator } from "@/lib/milestone-contest-expected-spend";
+
+/** Normalize id so submission `creator_id` matches SSR ledger keys (`money_transactions.user_id`). */
+function milestoneMvCreatorIdKey(id: unknown): string {
+  return String(id ?? "").trim();
+}
 import {
   buildDualRewardCreatorCapSplitMaps,
   splitDualPaidTotalByExpectedWeights,
@@ -108,7 +113,7 @@ import {
   submissionIsPaidRow,
   summarizePaidReversalPreview,
 } from "@/lib/paid-reversal-preview";
-import { parsePayoutAdjustment } from "@/lib/payout-rules";
+import { adjustBonusCents, parsePayoutAdjustment } from "@/lib/payout-rules";
 import { YouTubeAnalyticsPanel } from "@/components/youtube/YouTubeAnalyticsPanel";
 import { YT_ANALYTICS_DEFAULT_WINDOW_DAYS } from "@/lib/youtube-constants";
 import { PaginationControls } from "@/components/ui/pagination-controls";
@@ -167,6 +172,7 @@ import {
   Zap,
   CheckCheck,
   Gift,
+  Undo2,
   Tag,
   Star,
   Globe,
@@ -910,21 +916,31 @@ export default function ContestDetailClient({
       | "milestone_only"
       | "bonus_only"
       | "combined"
+      | "cpm_and_milestone"
       | "dual_rewards_only"
+      | "bonus"
       | null;
   }>({
     percentage:
       (contest as any)?.payout_adjustment_percentage != null
         ? Number((contest as any).payout_adjustment_percentage)
         : null,
-    mode:
-      ((contest as any)?.payout_adjustment_mode as
-        | "cpm_only"
-        | "milestone_only"
-        | "bonus_only"
-        | "combined"
-        | "dual_rewards_only"
-        | null) ?? "combined",
+    mode: (() => {
+      const raw = (contest as any)?.payout_adjustment_mode as string | null;
+      const normalized =
+        raw === "most_verified_bonus_only" ? "bonus" : raw;
+      return (
+        (normalized as
+          | "cpm_only"
+          | "milestone_only"
+          | "bonus_only"
+          | "combined"
+          | "cpm_and_milestone"
+          | "dual_rewards_only"
+          | "bonus"
+          | null) ?? "combined"
+      );
+    })(),
   });
   const [draftPayoutAdjustment, setDraftPayoutAdjustment] = useState<{
     percentage: number | null;
@@ -933,21 +949,31 @@ export default function ContestDetailClient({
       | "milestone_only"
       | "bonus_only"
       | "combined"
+      | "cpm_and_milestone"
       | "dual_rewards_only"
+      | "bonus"
       | null;
   }>({
     percentage:
       (contest as any)?.payout_adjustment_percentage != null
         ? Number((contest as any).payout_adjustment_percentage)
         : null,
-    mode:
-      ((contest as any)?.payout_adjustment_mode as
-        | "cpm_only"
-        | "milestone_only"
-        | "bonus_only"
-        | "combined"
-        | "dual_rewards_only"
-        | null) ?? "combined",
+    mode: (() => {
+      const raw = (contest as any)?.payout_adjustment_mode as string | null;
+      const normalized =
+        raw === "most_verified_bonus_only" ? "bonus" : raw;
+      return (
+        (normalized as
+          | "cpm_only"
+          | "milestone_only"
+          | "bonus_only"
+          | "combined"
+          | "cpm_and_milestone"
+          | "dual_rewards_only"
+          | "bonus"
+          | null) ?? "combined"
+      );
+    })(),
   });
   const [instagramRun, setInstagramRun] =
     useState<InstagramInsightsRefreshRunSummary | null>(null);
@@ -1064,11 +1090,13 @@ export default function ContestDetailClient({
   const dualAdjustCpmForDisplay =
     hasContestPayoutAdj &&
     (contestPayoutAdjMode === "combined" ||
+      contestPayoutAdjMode === "cpm_and_milestone" ||
       contestPayoutAdjMode === "dual_rewards_only" ||
       contestPayoutAdjMode === "cpm_only");
   const dualAdjustMilestoneForDisplay =
     hasContestPayoutAdj &&
     (contestPayoutAdjMode === "combined" ||
+      contestPayoutAdjMode === "cpm_and_milestone" ||
       contestPayoutAdjMode === "dual_rewards_only" ||
       contestPayoutAdjMode === "bonus_only" ||
       contestPayoutAdjMode === "milestone_only");
@@ -1701,6 +1729,8 @@ export default function ContestDetailClient({
   const [igAnalyticsLoadingCreatorId, setIgAnalyticsLoadingCreatorId] =
     useState<string | null>(null);
   const [markingMilestoneVerifiedBonus, setMarkingMilestoneVerifiedBonus] =
+    useState<Record<string, "views" | "reels" | undefined>>({});
+  const [markingMilestoneMvBonusReversal, setMarkingMilestoneMvBonusReversal] =
     useState<Record<string, "views" | "reels" | undefined>>({});
   const clearIgAnalyticsButtonLoading = useCallback(() => {
     setIgAnalyticsLoadingCreatorId(null);
@@ -3539,6 +3569,36 @@ export default function ContestDetailClient({
     currentContest?.post_contest_status === "verification_complete" &&
     (showMostVerifiedViewsBonusColumns || showMostVerifiedReelsCreatorColumn);
 
+  const showMilestoneMvBonusAdjustedExpectedColumns =
+    payoutAdjustmentForUi.shouldAdjustMostVerifiedMilestoneBonus &&
+    isMilestoneContestType(currentContest.contest_type) &&
+    (showMostVerifiedViewsBonusColumns || showMostVerifiedReelsCreatorColumn);
+  const milestoneMvBonusAdjustedColumnCount = useMemo(() => {
+    if (!showMilestoneMvBonusAdjustedExpectedColumns) return 0;
+    let n = 0;
+    if (showMostVerifiedViewsBonusColumns) n += 1;
+    if (showMostVerifiedReelsCreatorColumn) n += 1;
+    return n;
+  }, [
+    showMilestoneMvBonusAdjustedExpectedColumns,
+    showMostVerifiedViewsBonusColumns,
+    showMostVerifiedReelsCreatorColumn,
+  ]);
+
+  const milestoneLedgerNormalized = useMemo(() => {
+    const raw = milestoneBonusPaidByCreator ?? {};
+    const out: MilestoneMostVerifiedBonusPaidByCreator = {};
+    for (const [k, v] of Object.entries(raw)) {
+      const key = milestoneMvCreatorIdKey(k);
+      if (!key) continue;
+      out[key] = {
+        viewsPaidCents: Number((v as { viewsPaidCents?: number })?.viewsPaidCents ?? 0) || 0,
+        reelsPaidCents: Number((v as { reelsPaidCents?: number })?.reelsPaidCents ?? 0) || 0,
+      };
+    }
+    return out;
+  }, [milestoneBonusPaidByCreator]);
+
   const milestoneReelsBonusByCreator = useMemo(() => {
     const empty = new Map<
       string,
@@ -3563,7 +3623,7 @@ export default function ContestDetailClient({
     return buildMilestoneMostVerifiedBonusByCreatorMap(
       (currentSubmissions || []).map((sub: any) => ({
         id: sub.id,
-        creator_id: sub.creator_id,
+        creator_id: milestoneMvCreatorIdKey(sub.creator_id),
         created_at: sub.created_at,
         status: getStatus(sub),
         deleted_at: sub.deleted_at,
@@ -3574,13 +3634,20 @@ export default function ContestDetailClient({
         metadata: sub.metadata,
       })),
       bonusConfig,
-      milestoneBonusPaidByCreator,
+      milestoneLedgerNormalized,
+      {
+        shouldAdjustMostVerifiedMilestoneBonus:
+          payoutAdjustmentForUi.shouldAdjustMostVerifiedMilestoneBonus,
+        percentage: payoutAdjustmentForUi.percentage,
+      },
     );
   }, [
     currentContest,
     currentSubmissions,
     getStatus,
-    milestoneBonusPaidByCreator,
+    milestoneLedgerNormalized,
+    payoutAdjustmentForUi.percentage,
+    payoutAdjustmentForUi.shouldAdjustMostVerifiedMilestoneBonus,
     showMostVerifiedReelsCreatorColumn,
     showMostVerifiedViewsBonusColumns,
   ]);
@@ -3715,9 +3782,9 @@ export default function ContestDetailClient({
     filteredCreatorGroups.forEach((group: any) => {
       totalExpectedReward += Number(group.earnings?.expected ?? 0);
       totalRewardGranted += Number(group.earnings?.granted ?? 0);
+      const mvKey = milestoneMvCreatorIdKey(group?.creator?.id);
       if (currentContest?.contest_type === "milestone") {
-        const creatorId = String(group?.creator?.id || "");
-        const row = milestoneReelsBonusByCreator.get(creatorId);
+        const row = milestoneReelsBonusByCreator.get(mvKey);
         totalBonusExpected +=
           (Number(row?.viewsExpectedCents ?? 0) || 0) +
           (Number(row?.expectedCents ?? 0) || 0);
@@ -3729,9 +3796,8 @@ export default function ContestDetailClient({
         totalBonusGranted += Number(group.bonus?.granted ?? 0);
       }
 
-      const creatorId = group.creator?.id;
-      if (creatorId && milestoneReelsBonusByCreator) {
-        const row = milestoneReelsBonusByCreator.get(creatorId);
+      if (mvKey && milestoneReelsBonusByCreator) {
+        const row = milestoneReelsBonusByCreator.get(mvKey);
         if (row) {
           totalMostVerifiedViewsBonusExpected += Number(
             row.viewsExpectedCents || 0,
@@ -3795,13 +3861,21 @@ export default function ContestDetailClient({
       (contest as any)?.payout_adjustment_percentage != null
         ? Number((contest as any).payout_adjustment_percentage)
         : null;
+    const rawMode = (contest as any)?.payout_adjustment_mode as
+      | string
+      | null
+      | undefined;
+    const normalizedMode =
+      rawMode === "most_verified_bonus_only" ? "bonus" : rawMode;
     const nextMode =
-      ((contest as any)?.payout_adjustment_mode as
+      (normalizedMode as
         | "cpm_only"
         | "milestone_only"
         | "bonus_only"
         | "combined"
+        | "cpm_and_milestone"
         | "dual_rewards_only"
+        | "bonus"
         | null) ?? "combined";
     setPersistedPayoutAdjustment({
       percentage: nextPercentage,
@@ -6429,12 +6503,61 @@ export default function ContestDetailClient({
     [contestId, toast],
   );
 
+  const handleReverseMilestoneMostVerifiedBonus = useCallback(
+    async (creatorId: string, track: "views" | "reels") => {
+      setMarkingMilestoneMvBonusReversal((p) => ({ ...p, [creatorId]: track }));
+      try {
+        const res = await fetch(
+          `/api/contests/${contestId}/mark-milestone-most-verified-bonus`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ creatorId, track, reversal: true }),
+          },
+        );
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          throw new Error(
+            typeof data?.error === "string"
+              ? data.error
+              : "Failed to reverse bonus payment",
+          );
+        }
+        toast({
+          title:
+            track === "views"
+              ? "Views bonus reversed"
+              : "Reels bonus reversed",
+          description:
+            data?.reversedCents != null
+              ? `${formatMoney(Number(data.reversedCents))} debited from the creator wallet and refund logged.`
+              : "Bonus reversal recorded.",
+          variant: "success",
+        });
+        setTimeout(() => window.location.reload(), 800);
+      } catch (e: any) {
+        toast({
+          title: "Could not reverse bonus",
+          description: e?.message || "Request failed",
+          variant: "destructive",
+        });
+      } finally {
+        setMarkingMilestoneMvBonusReversal((p) => {
+          const next = { ...p };
+          delete next[creatorId];
+          return next;
+        });
+      }
+    },
+    [contestId, toast],
+  );
+
   const renderMilestoneVerifiedBonusMenuItems = (
     creatorId: string,
     extraDisabled?: boolean,
   ) => {
     if (!showCreatorMilestoneVerifiedBonusActions) return null;
-    const row = milestoneReelsBonusByCreator.get(creatorId) ?? {
+    const row = milestoneReelsBonusByCreator.get(milestoneMvCreatorIdKey(creatorId)) ?? {
       expectedCents: 0,
       paidCents: 0,
       viewsExpectedCents: 0,
@@ -6443,19 +6566,23 @@ export default function ContestDetailClient({
       minRequired: 0,
     };
     const busy = markingMilestoneVerifiedBonus[creatorId];
-    const d = Boolean(busy) || Boolean(extraDisabled);
-    const viewsDone =
-      row.viewsExpectedCents <= 0 ||
-      row.viewsPaidCents >= row.viewsExpectedCents;
-    const reelsDone =
-      row.expectedCents <= 0 || row.paidCents >= row.expectedCents;
-    const reelsBlockedByViews =
-      row.viewsExpectedCents > 0 && row.viewsPaidCents < row.viewsExpectedCents;
+    const busyRev = markingMilestoneMvBonusReversal[creatorId];
+    const d = Boolean(busy) || Boolean(busyRev) || Boolean(extraDisabled);
 
     const canGetViewsBonus = row.viewsExpectedCents > 0;
     const canGetReelsBonus = row.expectedCents > 0;
+    const canReverseViews =
+      showMostVerifiedViewsBonusColumns && row.viewsPaidCents > 0;
+    const canReverseReels =
+      showMostVerifiedReelsCreatorColumn && row.paidCents > 0;
 
-    if (!canGetViewsBonus && !canGetReelsBonus) return null;
+    if (
+      !canGetViewsBonus &&
+      !canGetReelsBonus &&
+      !canReverseViews &&
+      !canReverseReels
+    )
+      return null;
 
     return (
       <>
@@ -6491,6 +6618,38 @@ export default function ContestDetailClient({
               <Gift className="h-4 w-4 mr-2" />
             )}
             Mark most verified reels bonus paid
+          </DropdownMenuItem>
+        )}
+        {canReverseViews && (
+          <DropdownMenuItem
+            className="text-destructive focus:text-destructive"
+            disabled={d}
+            onClick={() =>
+              void handleReverseMilestoneMostVerifiedBonus(creatorId, "views")
+            }
+          >
+            {busyRev === "views" ? (
+              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+            ) : (
+              <Undo2 className="h-4 w-4 mr-2" />
+            )}
+            Reverse most verified views bonus payment
+          </DropdownMenuItem>
+        )}
+        {canReverseReels && (
+          <DropdownMenuItem
+            className="text-destructive focus:text-destructive"
+            disabled={d}
+            onClick={() =>
+              void handleReverseMilestoneMostVerifiedBonus(creatorId, "reels")
+            }
+          >
+            {busyRev === "reels" ? (
+              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+            ) : (
+              <Undo2 className="h-4 w-4 mr-2" />
+            )}
+            Reverse most verified reels bonus payment
           </DropdownMenuItem>
         )}
       </>
@@ -13136,28 +13295,37 @@ export default function ContestDetailClient({
                                 />
                                 <select
                                   value={(() => {
-                                    const rawMode =
-                                      (draftPayoutAdjustment.mode as
-                                        | "cpm_only"
-                                        | "milestone_only"
-                                        | "bonus_only"
-                                        | "combined"
-                                        | "dual_rewards_only"
-                                        | null) ?? "combined";
-                                    if (rawMode === "dual_rewards_only") {
+                                    const rawMode = String(
+                                      draftPayoutAdjustment.mode ?? "combined",
+                                    );
+                                    if (rawMode === "most_verified_bonus_only") {
+                                      return "bonus";
+                                    }
+                                    const m = draftPayoutAdjustment.mode as
+                                      | "cpm_only"
+                                      | "milestone_only"
+                                      | "bonus_only"
+                                      | "combined"
+                                      | "cpm_and_milestone"
+                                      | "dual_rewards_only"
+                                      | "bonus"
+                                      | null;
+                                    if (m === "dual_rewards_only") {
                                       return "combined";
                                     }
-                                    if (rawMode === "milestone_only") {
+                                    if (m === "milestone_only") {
                                       return "milestone_only";
                                     }
-                                    return rawMode;
+                                    return m ?? "combined";
                                   })()}
                                   onChange={(e) => {
                                     const value = e.target.value as
                                       | "cpm_only"
                                       | "milestone_only"
                                       | "bonus_only"
-                                      | "combined";
+                                      | "combined"
+                                      | "cpm_and_milestone"
+                                      | "bonus";
                                     setDraftPayoutAdjustment((prev) => ({
                                       ...prev,
                                       mode: value,
@@ -13178,6 +13346,14 @@ export default function ContestDetailClient({
                                       <option value="bonus_only">
                                         Milestone only
                                       </option>
+                                      <option value="cpm_and_milestone">
+                                        CPM & milestone
+                                      </option>
+                                      
+                                      {(showMostVerifiedViewsBonusColumns ||
+                                        showMostVerifiedReelsCreatorColumn) && (
+                                        <option value="bonus">Bonus</option>
+                                      )}
                                       <option value="combined">Both</option>
                                     </>
                                   ) : (
@@ -15558,7 +15734,9 @@ export default function ContestDetailClient({
                                   | "milestone_only"
                                   | "bonus_only"
                                   | "combined"
+                                  | "cpm_and_milestone"
                                   | "dual_rewards_only"
+                                  | "bonus"
                                   | null;
                                 const hasPayoutAdjustment =
                                   payoutAdjustmentPercentage > 0 &&
@@ -15566,16 +15744,22 @@ export default function ContestDetailClient({
                                 const payoutAdjCpmOrLeaderboardPrize =
                                   hasPayoutAdjustment &&
                                   (payoutAdjustmentMode === "combined" ||
+                                    payoutAdjustmentMode === "cpm_and_milestone" ||
                                     payoutAdjustmentMode === "cpm_only" ||
                                     payoutAdjustmentMode ===
                                       "dual_rewards_only");
                                 const payoutAdjMilestonePortion =
                                   hasPayoutAdjustment &&
                                   (payoutAdjustmentMode === "combined" ||
+                                    payoutAdjustmentMode === "cpm_and_milestone" ||
                                     payoutAdjustmentMode ===
                                       "dual_rewards_only" ||
                                     payoutAdjustmentMode ===
-                                      "milestone_only");
+                                      "milestone_only" ||
+                                    (isDualRewardsContestType(
+                                      currentContest.contest_type,
+                                    ) &&
+                                      payoutAdjustmentMode === "bonus_only"));
 
                                 if (
                                   currentContest.contest_type === "leaderboard"
@@ -19311,6 +19495,11 @@ export default function ContestDetailClient({
                                       <TableHead className="text-center">
                                         Most Verified Views (Bonus Expected)
                                       </TableHead>
+                                      {showMilestoneMvBonusAdjustedExpectedColumns && (
+                                        <TableHead className="text-center">
+                                          Most Verified Views (Adjusted Reward)
+                                        </TableHead>
+                                      )}
                                       <TableHead className="text-center">
                                         Most Verified Views (Bonus Granted)
                                       </TableHead>
@@ -19321,6 +19510,11 @@ export default function ContestDetailClient({
                                       <TableHead className="text-center">
                                         Most Verified Reels (Bonus Expected)
                                       </TableHead>
+                                      {showMilestoneMvBonusAdjustedExpectedColumns && (
+                                        <TableHead className="text-center">
+                                          Most Verified Reels (Adjusted Reward)
+                                        </TableHead>
+                                      )}
                                       <TableHead className="text-center">
                                         Most Verified Reels (Bonus Granted)
                                       </TableHead>
@@ -19385,6 +19579,7 @@ export default function ContestDetailClient({
                                         (showMostVerifiedReelsCreatorColumn
                                           ? 2
                                           : 0) +
+                                        milestoneMvBonusAdjustedColumnCount +
                                         (currentContest.platform
                                           ?.toLowerCase()
                                           .includes("tiktok")
@@ -19414,7 +19609,9 @@ export default function ContestDetailClient({
                                           : 0;
                                       const reelsBonusInfo =
                                         milestoneReelsBonusByCreator.get(
-                                          group.creator.id,
+                                          milestoneMvCreatorIdKey(
+                                            group.creator.id,
+                                          ),
                                         ) || {
                                           expectedCents: 0,
                                           paidCents: 0,
@@ -20742,6 +20939,24 @@ export default function ContestDetailClient({
                                                     )
                                                   : "-"}
                                               </TableCell>
+                                              {showMilestoneMvBonusAdjustedExpectedColumns && (
+                                                <TableCell className="text-center font-medium">
+                                                  {reelsBonusInfo.viewsExpectedCents >
+                                                  0
+                                                    ? formatMoney(
+                                                        adjustBonusCents(
+                                                          reelsBonusInfo.viewsExpectedCents,
+                                                          {
+                                                            shouldAdjustBonus:
+                                                              payoutAdjustmentForUi.shouldAdjustMostVerifiedMilestoneBonus,
+                                                            percentage:
+                                                              payoutAdjustmentForUi.percentage,
+                                                          },
+                                                        ),
+                                                      )
+                                                    : "-"}
+                                                </TableCell>
+                                              )}
                                               <TableCell className="text-center font-medium text-green-600">
                                                 {reelsBonusInfo.viewsPaidCents >
                                                 0
@@ -20762,6 +20977,24 @@ export default function ContestDetailClient({
                                                     )
                                                   : "-"}
                                               </TableCell>
+                                              {showMilestoneMvBonusAdjustedExpectedColumns && (
+                                                <TableCell className="text-center font-medium">
+                                                  {reelsBonusInfo.expectedCents >
+                                                  0
+                                                    ? formatMoney(
+                                                        adjustBonusCents(
+                                                          reelsBonusInfo.expectedCents,
+                                                          {
+                                                            shouldAdjustBonus:
+                                                              payoutAdjustmentForUi.shouldAdjustMostVerifiedMilestoneBonus,
+                                                            percentage:
+                                                              payoutAdjustmentForUi.percentage,
+                                                          },
+                                                        ),
+                                                      )
+                                                    : "-"}
+                                                </TableCell>
+                                              )}
                                               <TableCell className="text-center font-medium text-green-600">
                                                 {reelsBonusInfo.paidCents > 0
                                                   ? formatMoney(
@@ -21115,6 +21348,9 @@ export default function ContestDetailClient({
                                                         >
                                                           {markingMilestoneVerifiedBonus[
                                                             group.creator.id
+                                                          ] ||
+                                                          markingMilestoneMvBonusReversal[
+                                                            group.creator.id
                                                           ] ? (
                                                             <Loader2 className="h-4 w-4 animate-spin" />
                                                           ) : (
@@ -21144,6 +21380,9 @@ export default function ContestDetailClient({
                                                           aria-label="Milestone bonus actions"
                                                         >
                                                           {markingMilestoneVerifiedBonus[
+                                                            group.creator.id
+                                                          ] ||
+                                                          markingMilestoneMvBonusReversal[
                                                             group.creator.id
                                                           ] ? (
                                                             <Loader2 className="h-4 w-4 animate-spin" />

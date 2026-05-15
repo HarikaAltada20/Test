@@ -92,6 +92,7 @@ import { CONTENT_TYPE_CATEGORIES } from "@/constants/contentCategories";
 import { TwitterFeed } from "@/components/twitter-feed";
 import { getTwitterSubmissionActionKind } from "@/lib/twitter/analytics-twitter-submission-kind";
 import { buildMilestoneMostVerifiedBonusByCreatorMap } from "@/lib/milestone-contest-expected-spend";
+import { parsePayoutAdjustment } from "@/lib/payout-rules";
 // --- START DUMMY DATA CONFIGURATION ---
 const USE_DUMMY_DATA_FOR_LEADERBOARD = false; // SWITCHED OFF FOR PRODUCTION
 const DUMMY_ENTRIES_COUNT = 250; // Total number of dummy entries to generate
@@ -1058,6 +1059,11 @@ export function ContestClientPage({
     const creatorMostVerifiedViewsBonusMap = new Map<string, number>();
     const creatorMostVerifiedReelsBonusMap = new Map<string, number>();
     const bonus = milestoneContest?.bonus;
+    const mvBonusAdj = parsePayoutAdjustment(
+      (contest as any)?.payout_adjustment_percentage,
+      (contest as any)?.payout_adjustment_mode,
+      { contestType: contest?.contest_type ?? null },
+    );
     const mostVerifiedBonusByCreator = buildMilestoneMostVerifiedBonusByCreatorMap(
       uniqueSubmissions.map((sub: any) => ({
         id: String(sub?.id || ""),
@@ -1076,6 +1082,12 @@ export function ContestClientPage({
         other_stats: sub?.other_stats ?? null,
       })),
       bonus,
+      undefined,
+      {
+        shouldAdjustMostVerifiedMilestoneBonus:
+          mvBonusAdj.shouldAdjustMostVerifiedMilestoneBonus,
+        percentage: mvBonusAdj.percentage,
+      },
     );
 
     mostVerifiedBonusByCreator.forEach((row, creatorId) => {
@@ -1103,6 +1115,8 @@ export function ContestClientPage({
   }, [
     contest?.contest_type,
     contest?.contest_based_details,
+    (contest as any)?.payout_adjustment_percentage,
+    (contest as any)?.payout_adjustment_mode,
     allMilestoneBonusSubmissions,
     leaderboard,
     groupedLeaderboardByCreator,

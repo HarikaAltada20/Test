@@ -4,12 +4,15 @@ export type PayoutAdjustmentMode =
   | "cpm_only"
   | "milestone_only"
   | "bonus_only"
+  | "bonus"
   | "combined"
+  /** Dual rewards: CPM + milestone ladder only (excludes most-verified bonus and flat-fee bonus adjustment). */
+  | "cpm_and_milestone"
   | "dual_rewards_only"
   | null;
 
 export type ParsePayoutAdjustmentOptions = {
-  /** When `contest_type` is `milestone`, `milestone_only` mode adjusts the main milestone reward. */
+  /** Pass `contest_type` so `milestone_only` applies to milestone and dual_rewards ladder pay. */
   contestType?: string | null;
 };
 
@@ -23,6 +26,8 @@ export function parsePayoutAdjustment(
   hasAdjustment: boolean;
   shouldAdjustReward: boolean;
   shouldAdjustBonus: boolean;
+  /** Milestone "most verified" views/reels bonus (and dual_rewards equivalent). */
+  shouldAdjustMostVerifiedMilestoneBonus: boolean;
 } {
   const parsedPct =
     typeof percentageRaw === "number"
@@ -31,20 +36,34 @@ export function parsePayoutAdjustment(
         ? parseFloat(percentageRaw) || 0
         : 0;
   const percentage = Math.max(0, parsedPct);
-  const mode = (modeRaw ?? null) as PayoutAdjustmentMode;
+  const raw = (modeRaw ?? null) as string | null;
+  /** Legacy rows used `most_verified_bonus_only`; normalize to `bonus` for return + UI. */
+  const wasLegacyMostVerifiedOnly = raw === "most_verified_bonus_only";
+  const mode: PayoutAdjustmentMode = wasLegacyMostVerifiedOnly
+    ? "bonus"
+    : ((raw ?? null) as PayoutAdjustmentMode);
   const hasAdjustment = percentage > 0 && !!mode;
   const contestType = options?.contestType ?? null;
   const shouldAdjustReward =
     hasAdjustment &&
     (mode === "combined" ||
+      mode === "cpm_and_milestone" ||
       mode === "cpm_only" ||
       mode === "dual_rewards_only" ||
-      (mode === "milestone_only" && contestType === "milestone"));
+      (mode === "milestone_only" &&
+        (contestType === "milestone" || contestType === "dual_rewards")));
   const shouldAdjustBonus =
     hasAdjustment &&
     (mode === "combined" ||
       mode === "bonus_only" ||
       mode === "dual_rewards_only");
+  const shouldAdjustMostVerifiedMilestoneBonus =
+    hasAdjustment &&
+    (mode === "combined" ||
+      mode === "dual_rewards_only" ||
+      (mode === "bonus_only" && contestType !== "dual_rewards") ||
+      (mode === "bonus" &&
+        (contestType === "dual_rewards" || wasLegacyMostVerifiedOnly)));
 
   return {
     percentage,
@@ -52,6 +71,7 @@ export function parsePayoutAdjustment(
     hasAdjustment,
     shouldAdjustReward,
     shouldAdjustBonus,
+    shouldAdjustMostVerifiedMilestoneBonus,
   };
 }
 

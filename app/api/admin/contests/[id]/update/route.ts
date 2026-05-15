@@ -75,7 +75,9 @@ export async function POST(
       "milestone_only",
       "bonus_only",
       "combined",
+      "cpm_and_milestone",
       "dual_rewards_only",
+      "bonus",
     ];
     if (updateData.payout_adjustment_mode !== undefined) {
       const mode = updateData.payout_adjustment_mode;
@@ -117,6 +119,23 @@ export async function POST(
         .maybeSingle();
       if (existingContest?.contest_type === "milestone") {
         updateData.payout_adjustment_mode = "milestone_only";
+      }
+    }
+
+    if (updateData.payout_adjustment_mode === "cpm_and_milestone") {
+      const { data: rowForPayoutMode } = await admin
+        .from("contests")
+        .select("contest_type")
+        .eq("id", contestId)
+        .maybeSingle();
+      if (rowForPayoutMode?.contest_type !== "dual_rewards") {
+        return NextResponse.json(
+          {
+            error:
+              "payout_adjustment_mode cpm_and_milestone is only valid for dual_rewards contests",
+          },
+          { status: 400 }
+        );
       }
     }
 

@@ -37,6 +37,7 @@ function dualRewardsPayoutAdjustmentAppliesToCpm(
 ): boolean {
   return (
     mode === "combined" ||
+    mode === "cpm_and_milestone" ||
     mode === "dual_rewards_only" ||
     mode === "cpm_only"
   );
@@ -48,6 +49,7 @@ function dualRewardsPayoutAdjustmentAppliesToMilestone(
 ): boolean {
   return (
     mode === "combined" ||
+    mode === "cpm_and_milestone" ||
     mode === "dual_rewards_only" ||
     mode === "milestone_only" ||
     mode === "bonus_only"
