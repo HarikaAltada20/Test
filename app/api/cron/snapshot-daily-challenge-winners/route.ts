@@ -7,6 +7,8 @@ import {
 
 export const dynamic = "force-dynamic";
 
+// Vercel cron runs in UTC. Schedule `0 21 * * *` → 02:30 IST (verification buffer after midnight period end).
+
 export async function GET(request: NextRequest) {
   try {
     const cronSecret = process.env.CRON_SECRET;

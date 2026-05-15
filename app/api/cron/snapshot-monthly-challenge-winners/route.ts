@@ -6,10 +6,10 @@ export const dynamic = "force-dynamic";
 
 // Vercel cron runs in UTC. We must align with IST calendar months (same as the leaderboard).
 //
-// Avoid `45 18 1 * *` (“1st of month”): that is day 1 in UTC only. At 18:45 UTC on the UTC 1st,
-// clocks in Asia/Kolkata are already 00:15 on the **2nd** — not “evening on the 1st IST”.
-// With `isIstFirstCalendarDay()` below, those runs would skip (IST day ≠ 1) and monthly locks
-// would never execute. IST month rollover is ~prev UTC evening; `45 18 28-31 * *` hits that window.
+// Schedule: `0 21 28-31 * *` → 02:30 IST on the 1st (21:00 UTC on the prior UTC calendar day).
+// Avoid `0 21 1 * *` (“1st of month” in UTC): on the UTC 1st, IST is already the 2nd.
+// With `isIstFirstCalendarDay()` below, those runs would skip and monthly locks would never execute.
+// IST month rollover is ~prev UTC evening; `0 21 28-31 * *` hits that window.
 
 export async function GET(request: NextRequest) {
   try {
