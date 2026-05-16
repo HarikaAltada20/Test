@@ -1124,7 +1124,9 @@ export function CreatorSubmissionsModal({
     }
     if (status === "permanent_failure") {
       return {
-        help: "Insights cannot be fetched for this post" + errorSuffix,
+        help:
+          "Insights cannot be fetched for this post; refresh can retry once every 24 hours" +
+          errorSuffix,
         dotClass: "bg-rose-500",
         pillClass: isDark
           ? "border-rose-700/60 bg-rose-950/35"

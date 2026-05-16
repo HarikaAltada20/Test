@@ -21,6 +21,9 @@ export const CREATOR_EXPORT_TWITTER_COLUMN_IDS = [
   "manual_points_reason",
 ] as const;
 
+export const CREATOR_EXPORT_INSTAGRAM_ANALYTICS_COLUMN_ID =
+  "instagram_insights" as const;
+
 export const CREATOR_EXPORT_METRIC_COLUMN_IDS = [
   "views",
   "likes",
@@ -81,7 +84,8 @@ export type CreatorExportColumnId =
   | (typeof CREATOR_EXPORT_SIMPLE_REWARD_COLUMN_IDS)[number]
   | (typeof CREATOR_EXPORT_DUAL_REWARD_COLUMN_IDS)[number]
   | (typeof CREATOR_EXPORT_OTHER_REWARD_COLUMN_IDS)[number]
-  | (typeof CREATOR_EXPORT_MOST_VERIFIED_COLUMN_IDS)[number];
+  | (typeof CREATOR_EXPORT_MOST_VERIFIED_COLUMN_IDS)[number]
+  | typeof CREATOR_EXPORT_INSTAGRAM_ANALYTICS_COLUMN_ID;
 
 export const CREATOR_EXPORT_COLUMN_LABELS: Record<
   CreatorExportColumnId,
@@ -113,6 +117,7 @@ export const CREATOR_EXPORT_COLUMN_LABELS: Record<
   total_engagement: "Total engagement",
   engagement_rate: "Engagement rate",
   insights_status: "Insights status",
+  instagram_insights: "Instagram Insights",
   expected_reward: "Expected Reward",
   adjusted_reward: "Adjusted Reward",
   reward_granted: "Reward Granted",
@@ -246,6 +251,9 @@ export function getCreatorExportColumns(
         platform.includes("youtube"))
     ) {
       metricIds.push("insights_status");
+    }
+    if (opts.isAdminView && platform.includes("instagram")) {
+      metricIds.push(CREATOR_EXPORT_INSTAGRAM_ANALYTICS_COLUMN_ID);
     }
 
     for (const id of metricIds) {

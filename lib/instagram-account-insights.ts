@@ -53,11 +53,101 @@ export function normalizeAccountInsightsPreset(
   return fallback;
 }
 
-/** Meta demographic insights only support these rolling windows (not arbitrary ranges). */
+/**
+ * Meta IG user demographics `timeframe` values (Graph API).
+ * @see https://developers.facebook.com/docs/instagram-platform/api-reference/instagram-user/insights
+ */
 export type DemographicsTimeframe =
-  | "last_7_days"
+  | "last_14_days"
   | "last_30_days"
-  | "last_90_days";
+  | "last_90_days"
+  | "this_week"
+  | "this_month"
+  | "prev_month";
+
+const META_DEMOGRAPHICS_TIMEFRAMES = new Set<string>([
+  "last_14_days",
+  "last_30_days",
+  "last_90_days",
+  "this_week",
+  "this_month",
+  "prev_month",
+]);
+
+const DEMOGRAPHICS_TIMEFRAME_FALLBACKS: DemographicsTimeframe[] = [
+  "last_90_days",
+  "last_30_days",
+  "last_14_days",
+];
+
+/** Normalize stored or legacy timeframe strings to a Meta-supported value. */
+export function normalizeDemographicsTimeframe(
+  raw: string | undefined,
+  fallback: DemographicsTimeframe = "last_30_days"
+): DemographicsTimeframe {
+  if (raw && META_DEMOGRAPHICS_TIMEFRAMES.has(raw)) {
+    return raw as DemographicsTimeframe;
+  }
+  if (raw === "last_7_days") return "last_14_days";
+  return fallback;
+}
+
+export function demographicsBundleHasRows(
+  bundle: InstagramDemographicsBundle | undefined
+): boolean {
+  if (!bundle) return false;
+  const hasIn = (
+    m:
+      | InstagramDemographicsBundle["follower_demographics"]
+      | InstagramDemographicsBundle["engaged_audience_demographics"]
+  ) =>
+    !!m &&
+    (["country", "age", "gender"] as const).some(
+      (k) => (m[k]?.length ?? 0) > 0
+    );
+  return (
+    hasIn(bundle.follower_demographics) ||
+    hasIn(bundle.engaged_audience_demographics)
+  );
+}
+
+export function isDemographicsTimeframeApiError(
+  message: string | undefined,
+): boolean {
+  if (!message) return false;
+  const m = message.toLowerCase();
+  return (
+    m.includes("timeframe must be one of") ||
+    m.includes("must be one of the following values")
+  );
+}
+
+/** Hide legacy/invalid Meta timeframe errors in UI and exports; keep real failures. */
+export function filterDemographicsErrorsForDisplay(
+  bundle: InstagramDemographicsBundle,
+): string[] {
+  const raw = bundle.errors ?? [];
+  if (!raw.length) return [];
+
+  const hasRows = demographicsBundleHasRows(bundle);
+  const meaningful = raw.filter((e) => !isDemographicsTimeframeApiError(e));
+
+  if (meaningful.length > 0) {
+    return meaningful.slice(0, 10);
+  }
+
+  if (hasRows) {
+    return [];
+  }
+
+  if (raw.some(isDemographicsTimeframeApiError)) {
+    return [
+      "Audience demographics use Meta rolling windows only (last 14, 30, or 90 days—not the same as 24h/7d interaction ranges). Refresh from Meta to reload this preset.",
+    ];
+  }
+
+  return raw.slice(0, 5);
+}
 
 /**
  * Maps the interaction-metrics preset to the closest Meta-supported demographics timeframe.
@@ -70,14 +160,14 @@ export function demographicsTimeframeForPreset(
   if (preset === "custom" && customSince != null && customUntil != null) {
     const spanSec = Math.abs(customUntil - customSince);
     const days = spanSec / (24 * 60 * 60);
-    if (days <= 7) return "last_7_days";
+    if (days <= 14) return "last_14_days";
     if (days <= 30) return "last_30_days";
     return "last_90_days";
   }
   switch (preset) {
     case "day":
     case "7d":
-      return "last_7_days";
+      return "last_14_days";
     case "30d":
       return "last_30_days";
     case "365d":
@@ -312,6 +402,54 @@ function engagedAudienceHasAnyRows(
   });
 }
 
+async function fetchDemographicBreakdown(
+  igUserId: string,
+  accessToken: string,
+  metric: "follower_demographics" | "engaged_audience_demographics",
+  breakdown: "country" | "age" | "gender",
+  preferredTimeframe: DemographicsTimeframe
+): Promise<{
+  rows: InstagramDemographicRow[];
+  usedTimeframe: DemographicsTimeframe;
+  error?: string;
+}> {
+  const tryOrder: DemographicsTimeframe[] = [
+    preferredTimeframe,
+    ...DEMOGRAPHICS_TIMEFRAME_FALLBACKS.filter((t) => t !== preferredTimeframe),
+  ];
+  let lastMessage: string | undefined;
+
+  for (const timeframe of tryOrder) {
+    const params = new URLSearchParams({
+      metric,
+      period: "lifetime",
+      timeframe,
+      metric_type: "total_value",
+      breakdown,
+      access_token: accessToken,
+    });
+    const url = `${GRAPH_IG}/${encodeURIComponent(igUserId)}/insights?${params.toString()}`;
+    const res = await fetch(url, { headers: DEMOGRAPHICS_FETCH_HEADERS });
+    const body = (await res.json()) as IgUserInsightsResponse;
+    if (res.ok && !body.error) {
+      return {
+        rows: parseDemographicRowsFromInsightsBody(body),
+        usedTimeframe: timeframe,
+      };
+    }
+    lastMessage = body.error?.message ?? String(res.status);
+    if (!isDemographicsTimeframeApiError(lastMessage)) {
+      break;
+    }
+  }
+
+  return {
+    rows: [],
+    usedTimeframe: preferredTimeframe,
+    error: `${metric} (${breakdown}): ${lastMessage ?? "request failed"}`,
+  };
+}
+
 async function runEngagedAudienceOnly(
   igUserId: string,
   accessToken: string,
@@ -324,31 +462,21 @@ async function runEngagedAudienceOnly(
   const engaged: EngagedDemoMap = {};
 
   const run = async (breakdown: "country" | "age" | "gender") => {
-    const params = new URLSearchParams({
-      metric: "engaged_audience_demographics",
-      period: "lifetime",
-      timeframe,
-      metric_type: "total_value",
+    const result = await fetchDemographicBreakdown(
+      igUserId,
+      accessToken,
+      "engaged_audience_demographics",
       breakdown,
-      access_token: accessToken,
-    });
-    const url = `${GRAPH_IG}/${encodeURIComponent(igUserId)}/insights?${params.toString()}`;
-    const res = await fetch(url, { headers: DEMOGRAPHICS_FETCH_HEADERS });
-    const body = (await res.json()) as IgUserInsightsResponse;
-    if (!res.ok || body.error) {
-      errors.push(
-        `engaged_audience_demographics (${breakdown}): ${body.error?.message ?? String(res.status)}`
-      );
+      timeframe
+    );
+    if (result.error && result.rows.length === 0) {
+      errors.push(result.error);
       return;
     }
-    engaged[breakdown] = parseDemographicRowsFromInsightsBody(body);
+    engaged[breakdown] = result.rows;
   };
 
-  await Promise.all([
-    run("country"),
-    run("age"),
-    run("gender"),
-  ]);
+  await Promise.all([run("country"), run("age"), run("gender")]);
 
   return { engaged, errors };
 }
@@ -362,36 +490,34 @@ export async function fetchAccountDemographics(
   accessToken: string,
   timeframe: DemographicsTimeframe = "last_30_days"
 ): Promise<InstagramDemographicsBundle> {
+  const preferredTf = normalizeDemographicsTimeframe(timeframe);
   const errors: string[] = [];
   const follower: FollowerDemoMap = {};
   let engaged: EngagedDemoMap = {};
+  let usedTimeframe = preferredTf;
 
   const run = async (
     metric: "follower_demographics" | "engaged_audience_demographics",
     breakdown: "country" | "age" | "gender"
   ) => {
-    const params = new URLSearchParams({
+    const result = await fetchDemographicBreakdown(
+      igUserId,
+      accessToken,
       metric,
-      period: "lifetime",
-      timeframe,
-      metric_type: "total_value",
       breakdown,
-      access_token: accessToken,
-    });
-    const url = `${GRAPH_IG}/${encodeURIComponent(igUserId)}/insights?${params.toString()}`;
-    const res = await fetch(url, { headers: DEMOGRAPHICS_FETCH_HEADERS });
-    const body = (await res.json()) as IgUserInsightsResponse;
-    if (!res.ok || body.error) {
-      errors.push(
-        `${metric} (${breakdown}): ${body.error?.message ?? String(res.status)}`
-      );
+      preferredTf
+    );
+    if (result.usedTimeframe !== preferredTf) {
+      usedTimeframe = result.usedTimeframe;
+    }
+    if (result.error && result.rows.length === 0) {
+      errors.push(result.error);
       return;
     }
-    const rows = parseDemographicRowsFromInsightsBody(body);
     if (metric === "follower_demographics") {
-      follower[breakdown] = rows;
+      follower[breakdown] = result.rows;
     } else {
-      engaged[breakdown] = rows;
+      engaged[breakdown] = result.rows;
     }
   };
 
@@ -407,7 +533,7 @@ export async function fetchAccountDemographics(
   let engagedRetryNote: string | undefined;
   if (
     !engagedAudienceHasAnyRows(engaged) &&
-    timeframe !== "last_90_days"
+    usedTimeframe !== "last_90_days"
   ) {
     const retry = await runEngagedAudienceOnly(
       igUserId,
@@ -428,15 +554,26 @@ export async function fetchAccountDemographics(
     }
   }
 
-  const tfLabel = timeframe.replace(/_/g, " ");
+  const tfLabel = usedTimeframe.replace(/_/g, " ");
+  const requestedLabel = preferredTf.replace(/_/g, " ");
 
-  return {
-    timeframe,
+  const bundleForFilter: InstagramDemographicsBundle = {
+    timeframe: usedTimeframe,
     follower_demographics: follower,
     engaged_audience_demographics: engaged,
     errors,
+  };
+  const displayErrors = filterDemographicsErrorsForDisplay(bundleForFilter);
+
+  return {
+    timeframe: usedTimeframe,
+    follower_demographics: follower,
+    engaged_audience_demographics: engaged,
+    errors: displayErrors,
     note: [
-      `Demographics use Meta’s rolling window “${tfLabel}” (closest match to your preset).`,
+      usedTimeframe !== preferredTf
+        ? `Demographics use Meta’s “${tfLabel}” window (requested “${requestedLabel}” is not supported for all breakdowns).`
+        : `Demographics use Meta’s rolling window “${tfLabel}” (closest match to your preset).`,
       "They are not the same dates as interaction metrics above.",
       "Bucket counts are estimates; rows in a column won’t sum to your profile follower total, and engaged-audience may stay empty until Meta has enough activity in that window.",
       engagedRetryNote,

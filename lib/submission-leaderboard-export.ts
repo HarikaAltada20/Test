@@ -10,11 +10,12 @@ import { centsToDollars } from "@/lib/currency-utils";
 import { formatLocalDateTime } from "@/lib/utils";
 import { getFullRejectionDetails } from "@/lib/submission-metadata";
 import {
-  formatYouTubeAnalyticsForExport,
-  formatYouTubeDemographicsForExport,
-  formatYouTubeTopCountriesForExport,
-  formatYouTubeTrafficForExport,
-} from "@/lib/youtube-analytics-export";
+  formatInstagramInsightsForExport,
+  instagramInsightsColumnHeaderSuffix,
+  type InstagramInsightsExportSelection,
+} from "@/lib/instagram-analytics-export";
+import type { InstagramProfileSnapshot } from "@/lib/platform-social-archive";
+import { formatYouTubeAnalyticsForExport } from "@/lib/youtube-analytics-export";
 
 export type LeaderboardExportFormat = "csv" | "xlsx" | "pdf";
 
@@ -68,6 +69,14 @@ export type RewardExportContext = {
   ytCanSeeCore?: boolean;
   ytCanSeeTraffic?: boolean;
   ytCanSeeDemographics?: boolean;
+  instagramInsightsSelection?: InstagramInsightsExportSelection | null;
+  /** Fresh instagram_archive from DB (export); keyed by creator_id. */
+  instagramArchiveByCreatorId?: Record<string, unknown> | null;
+  /** Live profile fields from instagram_account (no tokens); keyed by creator_id. */
+  instagramProfileByCreatorId?: Record<
+    string,
+    InstagramProfileSnapshot | null
+  > | null;
 };
 
 function computeDualExpectedForSubmission(
@@ -138,7 +147,7 @@ function formatMoneyFromCents(cents: number): string {
 function insightsStatusLabel(status: string | null | undefined): string {
   switch (status) {
     case "ok":
-      return "OK";
+      return "Fetched successfully";
     case "temporary_failure":
       return "Temporary failure";
     case "permanent_failure":
@@ -248,13 +257,12 @@ export function buildSubmissionExportCellValue(
     case "video_title":
       return String(submission.video_title || EMPTY_CELL);
     case "tweet_excerpt": {
+      const stats = (submission.other_stats || {}) as Record<string, unknown>;
       const text = String(
-        (submission.other_stats as Record<string, unknown>)?.text ||
-          (submission.other_stats as Record<string, unknown>)?.full_text ||
-          "",
-      );
+        stats.tweet_text ?? stats.text ?? stats.full_text ?? submission.video_title ?? "",
+      ).trim();
       if (!text) return EMPTY_CELL;
-      return text.length > 200 ? `${text.slice(0, 200)}…` : text;
+      return text;
     }
     case "total_points": {
       const stats = (submission.other_stats || {}) as Record<string, unknown>;
@@ -339,28 +347,31 @@ export function buildSubmissionExportCellValue(
       });
       return text || EMPTY_CELL;
     }
-    case "youtube_traffic_sources": {
-      const text = formatYouTubeTrafficForExport(submission, metrics, {
-        showTraffic: ctx.ytCanSeeTraffic !== false,
-      });
-      return text || EMPTY_CELL;
-    }
-    case "youtube_demographics": {
-      const text = formatYouTubeDemographicsForExport(submission, metrics, {
-        showDemographics: Boolean(ctx.ytCanSeeDemographics),
-      });
-      return text || EMPTY_CELL;
-    }
-    case "youtube_top_countries": {
-      const text = formatYouTubeTopCountriesForExport(submission, metrics, {
-        showDemographics: Boolean(ctx.ytCanSeeDemographics),
-      });
-      return text || EMPTY_CELL;
-    }
     case "insights_status":
       return insightsStatusLabel(
         submission.insights_status as string | null | undefined,
       );
+    case "instagram_insights": {
+      const creator = submission.creator as
+        | { id?: string; instagram_archive?: unknown }
+        | undefined;
+      const creatorId = String(
+        submission.creator_id ?? creator?.id ?? "",
+      ).trim();
+      const archive =
+        (creatorId && ctx.instagramArchiveByCreatorId?.[creatorId]) ??
+        submission.creator_instagram_archive ??
+        creator?.instagram_archive ??
+        null;
+      const text = formatInstagramInsightsForExport(
+        archive,
+        ctx.instagramInsightsSelection,
+        creatorId
+          ? (ctx.instagramProfileByCreatorId?.[creatorId] ?? null)
+          : null,
+      );
+      return text || EMPTY_CELL;
+    }
     case "saves":
       return formatMetricValue(metrics.saves);
     case "reach":
@@ -498,7 +509,13 @@ export function buildLeaderboardExportMatrix(
   getMetrics: (submission: Record<string, unknown>) => PlatformMetrics,
   rewardCtx: RewardExportContext,
 ): { headers: string[]; rows: string[][] } {
-  const headers = columnIds.map((id) => SUBMISSION_EXPORT_COLUMN_LABELS[id]);
+  const headers = columnIds.map((id) => {
+    const base = SUBMISSION_EXPORT_COLUMN_LABELS[id];
+    if (id === "instagram_insights" && rewardCtx.instagramInsightsSelection) {
+      return `${base}${instagramInsightsColumnHeaderSuffix(rewardCtx.instagramInsightsSelection)}`;
+    }
+    return base;
+  });
   const rows = submissions.map((submission, index) => {
     const rank = index + 1;
     const metrics = getMetrics(submission);
@@ -607,18 +624,53 @@ function preparePdfBodyCell(
   return `${s.slice(0, maxLen - 1)}…`;
 }
 
+function isTweetExportColumn(header: string): boolean {
+  return /^tweet$/i.test(header.trim());
+}
+
+/** Break long tweet text into lines for Excel (wrap text is not set in community xlsx). */
+function wrapTextAtWords(text: string, maxLineLen = 48): string {
+  const s = text.trim();
+  if (!s || s.length <= maxLineLen) return s;
+  const words = s.split(/\s+/).filter(Boolean);
+  const lines: string[] = [];
+  let line = "";
+  for (const word of words) {
+    const candidate = line ? `${line} ${word}` : word;
+    if (candidate.length <= maxLineLen) {
+      line = candidate;
+      continue;
+    }
+    if (line) lines.push(line);
+    if (word.length > maxLineLen) {
+      for (let i = 0; i < word.length; i += maxLineLen) {
+        lines.push(word.slice(i, i + maxLineLen));
+      }
+      line = "";
+    } else {
+      line = word;
+    }
+  }
+  if (line) lines.push(line);
+  return lines.join("\n");
+}
+
 /** Relative width weight so all columns share exactly one page width. */
 function estimatePdfColumnWeight(header: string): number {
   const h = header.toLowerCase();
   if (/^rank$/.test(h.trim())) return 0.85;
   if (
-    /analytics|traffic sources|demographics|top countries/i.test(h)
+    /analytics|traffic sources|demographics|top countries|instagram insights/i.test(
+      h,
+    )
   ) {
     return 2.4;
   }
+  if (isTweetExportColumn(h)) return 2.3;
   if (/link|url|content/.test(h)) return 1.6;
   if (/title|excerpt/.test(h)) return 1.9;
   if (/reason|summary/.test(h)) return 1.7;
+  if (/insights status/.test(h)) return 1.35;
   if (/milestone/.test(h)) return 1.5;
   if (/reward|bonus|granted|expected|adjusted/.test(h)) return 1.25;
   if (/submitted|date|time|watch/.test(h)) return 1.15;
@@ -747,7 +799,7 @@ function pickPdfCellMaxLen(
   const wide = colWidthPt >= 100;
   const medium = colWidthPt >= 70;
   if (
-    /youtube_analytics|^analytics$|traffic sources|demographics|top countries/i.test(
+    /youtube_analytics|^analytics$|traffic sources|demographics|top countries|instagram insights/i.test(
       header,
     )
   ) {
@@ -758,6 +810,12 @@ function pickPdfCellMaxLen(
     if (medium) return 120;
     if (columnCount > 20) return 56;
     return 80;
+  }
+  if (/insights status/i.test(header)) {
+    return 500;
+  }
+  if (isTweetExportColumn(header)) {
+    return 8000;
   }
   if (/title|excerpt|reason|summary|milestone/i.test(header)) {
     if (wide) return 240;
@@ -849,15 +907,40 @@ export async function downloadLeaderboardReport(
     const ws = XLSX.utils.aoa_to_sheet(sheetData);
     ws["!cols"] = headers.map((h) => {
       if (
-        /analytics|traffic sources|demographics|top countries/i.test(h)
+        /analytics|traffic sources|demographics|top countries|instagram insights/i.test(
+          h,
+        )
       ) {
         return { wch: 48 };
+      }
+      if (/insights status/i.test(h)) {
+        return { wch: 28 };
+      }
+      if (isTweetExportColumn(h)) {
+        return { wch: 72 };
       }
       if (/link|url|content|title|excerpt|reason/i.test(h)) {
         return { wch: 36 };
       }
       return { wch: 14 };
     });
+    const tweetColIdx = headers.findIndex((h) => isTweetExportColumn(h));
+    if (tweetColIdx >= 0) {
+      const headerRowIndex = meta?.contestTitle ? 2 : 0;
+      for (let r = 0; r < rows.length; r++) {
+        const ref = XLSX.utils.encode_cell({
+          r: headerRowIndex + 1 + r,
+          c: tweetColIdx,
+        });
+        const cell = ws[ref];
+        if (!cell) continue;
+        const wrapped = wrapTextAtWords(String(cell.v ?? ""));
+        if (wrapped !== cell.v) {
+          cell.v = wrapped;
+          cell.w = wrapped;
+        }
+      }
+    }
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Submissions");
     const out = XLSX.write(wb, { bookType: "xlsx", type: "array" });
@@ -922,12 +1005,16 @@ export async function downloadLeaderboardReport(
       const colWidth =
         columnStyles[i]?.cellWidth ?? avgColWidth;
       const isAnalyticsCol =
-        /analytics|traffic sources|demographics|top countries/i.test(header);
+        /analytics|traffic sources|demographics|top countries|instagram insights/i.test(
+          header,
+        );
+      const isInsightsStatusCol = /insights status/i.test(header);
+      const isTweetCol = isTweetExportColumn(header);
       return preparePdfBodyCell(
         cell,
         pickPdfCellMaxLen(colCount, header, colWidth),
         useUnicodeFont,
-        isAnalyticsCol,
+        isAnalyticsCol || isInsightsStatusCol || isTweetCol,
       );
     }),
   );

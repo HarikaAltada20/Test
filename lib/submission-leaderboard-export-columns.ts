@@ -41,12 +41,8 @@ export const SUBMISSION_EXPORT_YOUTUBE_COLUMN_IDS = [
 export const SUBMISSION_EXPORT_YOUTUBE_ANALYTICS_COLUMN_ID =
   "youtube_analytics" as const;
 
-/** Split analytics sections for Excel/PDF (shown when Analytics table column is visible). */
-export const SUBMISSION_EXPORT_YOUTUBE_ANALYTICS_DETAIL_COLUMN_IDS = [
-  "youtube_traffic_sources",
-  "youtube_demographics",
-  "youtube_top_countries",
-] as const;
+export const SUBMISSION_EXPORT_INSTAGRAM_ANALYTICS_COLUMN_ID =
+  "instagram_insights" as const;
 
 export const SUBMISSION_EXPORT_INSTAGRAM_COLUMN_IDS = [
   "views",
@@ -107,8 +103,8 @@ export type SubmissionExportColumnId =
   | (typeof SUBMISSION_EXPORT_TWITTER_COLUMN_IDS)[number]
   | (typeof SUBMISSION_EXPORT_YOUTUBE_COLUMN_IDS)[number]
   | typeof SUBMISSION_EXPORT_YOUTUBE_ANALYTICS_COLUMN_ID
-  | (typeof SUBMISSION_EXPORT_YOUTUBE_ANALYTICS_DETAIL_COLUMN_IDS)[number]
   | (typeof SUBMISSION_EXPORT_INSTAGRAM_COLUMN_IDS)[number]
+  | typeof SUBMISSION_EXPORT_INSTAGRAM_ANALYTICS_COLUMN_ID
   | (typeof SUBMISSION_EXPORT_TIKTOK_COLUMN_IDS)[number]
   | (typeof SUBMISSION_EXPORT_SIMPLE_REWARD_COLUMN_IDS)[number]
   | (typeof SUBMISSION_EXPORT_DUAL_REWARD_COLUMN_IDS)[number]
@@ -145,10 +141,8 @@ export const SUBMISSION_EXPORT_COLUMN_LABELS: Record<
   bot_score: "Bot Score",
   top_traffic_source: "Top Traffic Source",
   youtube_analytics: "Analytics",
-  youtube_traffic_sources: "Traffic Sources",
-  youtube_demographics: "Demographics",
-  youtube_top_countries: "Top Countries",
   insights_status: "Insights Status",
+  instagram_insights: "Instagram Insights",
   saves: "Saves",
   reach: "Reach",
   interactions: "Interactions",
@@ -218,14 +212,35 @@ export function getSubmissionExportColumns(
   opts: GetSubmissionExportColumnsOptions,
 ): SubmissionExportColumnOption[] {
   const platform = opts.platform.toLowerCase();
-  const cols: SubmissionExportColumnOption[] =
-    SUBMISSION_EXPORT_BASE_COLUMN_IDS.map((id) => ({
-      id,
-      label: SUBMISSION_EXPORT_COLUMN_LABELS[id],
-    }));
+  const baseColumnIds = opts.isTwitterTextImage
+    ? SUBMISSION_EXPORT_BASE_COLUMN_IDS.filter((id) => id !== "video_title")
+    : SUBMISSION_EXPORT_BASE_COLUMN_IDS;
+  const cols: SubmissionExportColumnOption[] = baseColumnIds.map((id) => ({
+    id,
+    label: SUBMISSION_EXPORT_COLUMN_LABELS[id],
+  }));
 
   if (opts.isTwitterTextImage) {
     for (const id of SUBMISSION_EXPORT_TWITTER_COLUMN_IDS) {
+      cols.push({ id, label: SUBMISSION_EXPORT_COLUMN_LABELS[id] });
+    }
+  } else if (platform.includes("instagram")) {
+    for (const id of SUBMISSION_EXPORT_INSTAGRAM_COLUMN_IDS) {
+      if (id === "insights_status" && !opts.isAdminView) continue;
+      cols.push({ id, label: SUBMISSION_EXPORT_COLUMN_LABELS[id] });
+    }
+    if (opts.isAdminView) {
+      cols.push({
+        id: SUBMISSION_EXPORT_INSTAGRAM_ANALYTICS_COLUMN_ID,
+        label:
+          SUBMISSION_EXPORT_COLUMN_LABELS[
+            SUBMISSION_EXPORT_INSTAGRAM_ANALYTICS_COLUMN_ID
+          ],
+      });
+    }
+  } else if (platform.includes("tiktok")) {
+    for (const id of SUBMISSION_EXPORT_TIKTOK_COLUMN_IDS) {
+      if (id === "insights_status" && !opts.isAdminView) continue;
       cols.push({ id, label: SUBMISSION_EXPORT_COLUMN_LABELS[id] });
     }
   } else if (platform.includes("youtube")) {
@@ -262,32 +277,6 @@ export function getSubmissionExportColumns(
         id: SUBMISSION_EXPORT_YOUTUBE_ANALYTICS_COLUMN_ID,
         label: SUBMISSION_EXPORT_COLUMN_LABELS.youtube_analytics,
       });
-      if (opts.canSeeTraffic) {
-        cols.push({
-          id: "youtube_traffic_sources",
-          label: SUBMISSION_EXPORT_COLUMN_LABELS.youtube_traffic_sources,
-        });
-      }
-      if (opts.canSeeDemographics) {
-        cols.push({
-          id: "youtube_demographics",
-          label: SUBMISSION_EXPORT_COLUMN_LABELS.youtube_demographics,
-        });
-        cols.push({
-          id: "youtube_top_countries",
-          label: SUBMISSION_EXPORT_COLUMN_LABELS.youtube_top_countries,
-        });
-      }
-    }
-  } else if (platform.includes("instagram")) {
-    for (const id of SUBMISSION_EXPORT_INSTAGRAM_COLUMN_IDS) {
-      if (id === "insights_status" && !opts.isAdminView) continue;
-      cols.push({ id, label: SUBMISSION_EXPORT_COLUMN_LABELS[id] });
-    }
-  } else if (platform.includes("tiktok")) {
-    for (const id of SUBMISSION_EXPORT_TIKTOK_COLUMN_IDS) {
-      if (id === "insights_status" && !opts.isAdminView) continue;
-      cols.push({ id, label: SUBMISSION_EXPORT_COLUMN_LABELS[id] });
     }
   } else {
     cols.push(

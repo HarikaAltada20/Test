@@ -1741,6 +1741,24 @@ export default function ContestDetailClient({
   const clearIgAnalyticsButtonLoading = useCallback(() => {
     setIgAnalyticsLoadingCreatorId(null);
   }, []);
+
+  const syncInstagramArchiveForCreator = useCallback(
+    (creatorId: string, archive: unknown) => {
+      setCurrentSubmissions((prev) =>
+        prev.map((sub: any) => {
+          if (sub.creator_id !== creatorId) return sub;
+          return {
+            ...sub,
+            creator_instagram_archive: archive,
+            creator: sub.creator
+              ? { ...sub.creator, instagram_archive: archive }
+              : sub.creator,
+          };
+        }),
+      );
+    },
+    [],
+  );
   // YouTube table: which columns are visible (admin/brand can customize)
   const [ytVisibleColumns, setYtVisibleColumns] = useState<string[]>(
     YT_COLUMN_IDS as unknown as string[],
@@ -2659,6 +2677,10 @@ export default function ContestDetailClient({
               submission.creator?.profile_picture_url || null,
             full_name: submission.creator?.full_name || null,
           },
+          instagram_archive:
+            submission.creator_instagram_archive ??
+            submission.creator?.instagram_archive ??
+            null,
           submissions: [],
           totalCount: 0,
           statusCounts: {
@@ -7150,7 +7172,9 @@ export default function ContestDetailClient({
         case "permanent_failure":
           return {
             label: null,
-            help: "Insights cannot be fetched for this post" + errorSuffix,
+            help:
+              "Insights cannot be fetched for this post; refresh can retry once every 24 hours" +
+              errorSuffix,
             dotClass: "bg-rose-500",
             pillClass: isDark
               ? "border-rose-700/60 bg-rose-950/35 text-rose-200"
@@ -15592,6 +15616,7 @@ export default function ContestDetailClient({
                           onOpenChange={setExportDialogOpen}
                           isDark={isDark}
                           contestTitle={currentContest.title}
+                          contestId={contestId}
                           submissions={
                             sortedSubmissions as unknown as Record<
                               string,
@@ -15616,6 +15641,7 @@ export default function ContestDetailClient({
                           onOpenChange={setExportDialogOpen}
                           isDark={isDark}
                           contestTitle={currentContest.title}
+                          contestId={contestId}
                           creatorGroups={
                             (filteredCreatorGroups ?? []) as unknown as Record<
                               string,
@@ -25754,6 +25780,7 @@ export default function ContestDetailClient({
           creatorLabel={igAnalyticsCreatorLabel}
           isDark={isDark}
           onFetchComplete={clearIgAnalyticsButtonLoading}
+          onArchiveUpdated={syncInstagramArchiveForCreator}
         />
       )}
     </div>

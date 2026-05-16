@@ -9,6 +9,12 @@ import { adjustBonusCents } from "@/lib/payout-rules";
 import type { MilestoneMostVerifiedBonusCreatorRow } from "@/lib/milestone-contest-expected-spend";
 import { centsToDollars } from "@/lib/currency-utils";
 import { formatLocalDateTime } from "@/lib/utils";
+import {
+  formatInstagramInsightsForExport,
+  instagramInsightsColumnHeaderSuffix,
+  type InstagramInsightsExportSelection,
+} from "@/lib/instagram-analytics-export";
+import type { InstagramProfileSnapshot } from "@/lib/platform-social-archive";
 
 const EMPTY_CELL = "\u2014";
 
@@ -59,12 +65,16 @@ function formatCreatorStatus(group: Record<string, unknown>): string {
 
 function formatInsightsCounts(group: Record<string, unknown>): string {
   const c = (group.insightsCounts || {}) as Record<string, number>;
-  const ok = c.ok || 0;
-  const temp = c.temporary_failure || 0;
-  const perm = c.permanent_failure || 0;
-  const never = c.never || 0;
-  if (ok + temp + perm + never === 0) return EMPTY_CELL;
-  return `OK: ${ok}; Temp: ${temp}; Perm: ${perm}; Never: ${never}`;
+  const parts: string[] = [];
+  if (c.ok) parts.push(`Fetched successfully: ${c.ok}`);
+  if (c.temporary_failure) {
+    parts.push(`Temporary failure: ${c.temporary_failure}`);
+  }
+  if (c.permanent_failure) {
+    parts.push(`Permanent failure: ${c.permanent_failure}`);
+  }
+  if (c.never) parts.push(`Never refreshed: ${c.never}`);
+  return parts.length > 0 ? parts.join("\n") : EMPTY_CELL;
 }
 
 function extractMilestoneOrderFromLabel(label: string): number | null {
@@ -98,6 +108,12 @@ export type CreatorExportContext = {
     MilestoneMostVerifiedBonusCreatorRow
   >;
   shouldAdjustMostVerifiedMilestoneBonus?: boolean;
+  instagramInsightsSelection?: InstagramInsightsExportSelection | null;
+  instagramArchiveByCreatorId?: Record<string, unknown> | null;
+  instagramProfileByCreatorId?: Record<
+    string,
+    InstagramProfileSnapshot | null
+  > | null;
 };
 
 function mvCreatorKey(group: Record<string, unknown>): string {
@@ -275,6 +291,22 @@ export function buildCreatorExportCellValue(
     }
     case "insights_status":
       return formatInsightsCounts(group);
+    case "instagram_insights": {
+      const creator = (group.creator || {}) as { id?: string };
+      const creatorId = String(creator.id ?? "").trim();
+      const archive =
+        (creatorId && ctx.instagramArchiveByCreatorId?.[creatorId]) ??
+        group.instagram_archive ??
+        null;
+      const text = formatInstagramInsightsForExport(
+        archive,
+        ctx.instagramInsightsSelection,
+        creatorId
+          ? (ctx.instagramProfileByCreatorId?.[creatorId] ?? null)
+          : null,
+      );
+      return text || EMPTY_CELL;
+    }
     case "expected_reward": {
       const cents = Number(earnings.expected) || 0;
       return formatMoneyFromCents(cents);
@@ -382,7 +414,13 @@ export function buildCreatorLeaderboardExportMatrix(
   columnIds: CreatorExportColumnId[],
   ctx: CreatorExportContext,
 ): { headers: string[]; rows: string[][] } {
-  const headers = columnIds.map((id) => CREATOR_EXPORT_COLUMN_LABELS[id]);
+  const headers = columnIds.map((id) => {
+    const base = CREATOR_EXPORT_COLUMN_LABELS[id];
+    if (id === "instagram_insights" && ctx.instagramInsightsSelection) {
+      return `${base}${instagramInsightsColumnHeaderSuffix(ctx.instagramInsightsSelection)}`;
+    }
+    return base;
+  });
   const rows = groups.map((group, index) =>
     columnIds.map((col) =>
       buildCreatorExportCellValue(col, group, index + 1, ctx),

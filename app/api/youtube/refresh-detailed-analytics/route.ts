@@ -65,7 +65,7 @@ export async function POST(request: Request) {
   let submissionsQuery = supabaseAdmin
     .from("submissions")
     .select("id, contest_id, creator_id, content_link, views, other_stats, created_at, platform")
-    .in("status", ["verified", "pending"])
+    .neq("status", "rejected")
     .not("content_link", "is", null);
 
   if (submissionId) {

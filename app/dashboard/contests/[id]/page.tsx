@@ -411,6 +411,7 @@ export default async function ContestDetailPage({
           id,
           youtube_account,
           instagram_account,
+          instagram_archive,
           twitter_account
         `
         )
@@ -1001,7 +1002,9 @@ export default async function ContestDetailPage({
           username: creatorUsername,
           profile_picture_url: creatorAvatarUrl,
           full_name: creatorDisplayName,
+          instagram_archive: creatorProfile?.instagram_archive ?? null,
         },
+        creator_instagram_archive: creatorProfile?.instagram_archive ?? null,
         metadata: sub.metadata ?? null,
         insights_status: sub.insights_status ?? null,
         last_insights_update: sub.last_insights_update ?? null,

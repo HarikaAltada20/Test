@@ -452,6 +452,7 @@ export default async function AdminContestDetailPage({
             id,
             youtube_account,
             instagram_account,
+            instagram_archive,
             twitter_account
           `
           )
@@ -805,7 +806,9 @@ export default async function AdminContestDetailPage({
             username: creatorUsername,
             profile_picture_url: creatorAvatarUrl,
             full_name: creatorDisplayName,
+            instagram_archive: creatorProfile?.instagram_archive ?? null,
           },
+          creator_instagram_archive: creatorProfile?.instagram_archive ?? null,
         };
       })
       : [];

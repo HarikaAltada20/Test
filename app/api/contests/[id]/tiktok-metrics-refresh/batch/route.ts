@@ -5,6 +5,7 @@
 import { NextResponse } from "next/server";
 import { createClient as createAdminSupabaseClient } from "@supabase/supabase-js";
 import { syncCreatorTikTokDisplayMetrics } from "@/lib/tiktok/sync-tiktok-display-metrics";
+import { insightsRefreshInsightsStatusOrFilter } from "@/lib/insights-refresh-eligibility";
 
 type SubmissionCandidate = {
   id: string;
@@ -94,7 +95,7 @@ export async function POST(
       .eq("platform", "tiktok")
       .neq("status", "rejected")
       .or("video_id.not.is.null,content_link.not.is.null")
-      .or("insights_status.is.null,insights_status.neq.permanent_failure")
+      .or(insightsRefreshInsightsStatusOrFilter())
       .or(`last_insights_update.is.null,last_insights_update.lt.${runStartedAt}`)
       .order("last_insights_update", { ascending: true, nullsFirst: true })
       .order("id", { ascending: true })
