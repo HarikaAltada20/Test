@@ -193,11 +193,13 @@ export function SubmissionLeaderboardExportDialog(
   }, [props.columnOptions.platform]);
 
   const showIgInsightsRange = useMemo(() => {
+    if (exportKind !== "creator") return false;
     if (!isInstagramContest || !props.columnOptions.isAdminView) return false;
     const hasColumn = availableColumns.some((c) => c.id === "instagram_insights");
     if (!hasColumn) return false;
     return selected.instagram_insights !== false;
   }, [
+    exportKind,
     isInstagramContest,
     props.columnOptions.isAdminView,
     availableColumns,

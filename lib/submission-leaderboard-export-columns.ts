@@ -229,15 +229,6 @@ export function getSubmissionExportColumns(
       if (id === "insights_status" && !opts.isAdminView) continue;
       cols.push({ id, label: SUBMISSION_EXPORT_COLUMN_LABELS[id] });
     }
-    if (opts.isAdminView) {
-      cols.push({
-        id: SUBMISSION_EXPORT_INSTAGRAM_ANALYTICS_COLUMN_ID,
-        label:
-          SUBMISSION_EXPORT_COLUMN_LABELS[
-            SUBMISSION_EXPORT_INSTAGRAM_ANALYTICS_COLUMN_ID
-          ],
-      });
-    }
   } else if (platform.includes("tiktok")) {
     for (const id of SUBMISSION_EXPORT_TIKTOK_COLUMN_IDS) {
       if (id === "insights_status" && !opts.isAdminView) continue;
