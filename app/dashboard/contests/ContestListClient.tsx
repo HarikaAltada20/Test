@@ -71,6 +71,12 @@ import { PaginationControls } from "@/components/ui/pagination-controls";
 import { useToast } from "@/hooks/use-toast";
 import { PaidPlanUpgradeModal } from "@/components/PaidPlanUpgradeModal";
 import { ButtonLoadingSpinner } from "@/components/loading/LoadingSpinner";
+import {
+  ADMIN_CONTEST_LIST_TAB_KEY,
+  DEFAULT_CAMPAIGN_LIST_TAB,
+  readStoredCampaignListTab,
+  writeStoredCampaignListTab,
+} from "@/lib/campaign-list-tab-storage";
 
 // Define the type for a contest
 type Contest = {
@@ -435,7 +441,22 @@ export function ContestListClient({
   const { toast } = useToast();
   const [sortOption, setSortOption] =
     useState<SortOptionType>("created_at_desc");
-  const [internalSelectedTab, setInternalSelectedTab] = useState("all");
+  const [internalSelectedTab, setInternalSelectedTab] = useState(
+    DEFAULT_CAMPAIGN_LIST_TAB,
+  );
+  const contestListTabStorageKey = isAdminView
+    ? ADMIN_CONTEST_LIST_TAB_KEY
+    : null;
+
+  useEffect(() => {
+    if (externalSelectedTab !== undefined || !contestListTabStorageKey) return;
+    const stored = readStoredCampaignListTab(
+      contestListTabStorageKey,
+      BRAND_CONTEST_TAB_IDS,
+      DEFAULT_CAMPAIGN_LIST_TAB,
+    );
+    setInternalSelectedTab(stored);
+  }, [externalSelectedTab, contestListTabStorageKey]);
   const [mode, setMode] = useState<"light" | "dark">(() => {
     if (typeof document !== "undefined") {
       const modeElement = document.querySelector("[data-mode]");
@@ -458,7 +479,20 @@ export function ContestListClient({
       ? externalSelectedTab
       : internalSelectedTab;
   const selectedTab = normalizeBrandContestTabId(rawSelectedTab);
-  const setSelectedTab = onTabChange || setInternalSelectedTab;
+  const setSelectedTab = useCallback(
+    (tab: string) => {
+      if (onTabChange) {
+        onTabChange(tab);
+      } else {
+        setInternalSelectedTab(tab);
+        if (contestListTabStorageKey) {
+          writeStoredCampaignListTab(contestListTabStorageKey, tab);
+        }
+      }
+    },
+    [onTabChange, contestListTabStorageKey],
+  );
+
   const showPostContestPipeline =
     selectedTab === "all" || selectedTab === "ended";
   const [postContestPhaseFilter, setPostContestPhaseFilter] =

@@ -11,6 +11,7 @@ import {
   getDefaultAnalyticsStartDate,
 } from "@/lib/youtube-analytics";
 import { METRICS_REFRESH_COOLDOWN_MS_ADMIN } from "@/lib/constants";
+import { fetchYouTubeBasicStatsByVideoId } from "@/lib/youtube-submission-refresh-by-scope";
 
 /**
  * POST /api/youtube/refresh-detailed-analytics
@@ -261,6 +262,17 @@ export async function POST(request: Request) {
       const updates: Record<string, any> = {};
       let hadAuthError = false;
 
+      if (type === "all") {
+        const basicMap = await fetchYouTubeBasicStatsByVideoId(accessToken, [videoId]);
+        const basic = basicMap.get(videoId);
+        if (basic) {
+          updates.views = basic.viewCount;
+          updates.likes = basic.likeCount;
+          updates.comments = basic.commentCount;
+          updates.last_basic_update = now;
+        }
+      }
+
       // ── Call 1: Core analytics (on-demand) ──────────────────────────────────
       if (type === "core" || type === "all") {
         try {
@@ -270,15 +282,15 @@ export async function POST(request: Request) {
             updates.avg_view_duration_seconds = analytics.avg_view_duration_seconds;
             updates.avg_view_percentage = analytics.avg_view_percentage;
             updates.engaged_views = analytics.engaged_views;
-            updates.likes = analytics.likes;
-            updates.dislikes = analytics.dislikes;
-            updates.comments = analytics.comments;
+            // Lifetime likes/comments come from Data API, not windowed Analytics metrics.
             updates.shares = analytics.shares;
             updates.subscribers_gained = analytics.subscribers_gained;
             updates.subscribers_lost = analytics.subscribers_lost;
             updates.videos_added_to_playlists = analytics.videos_added_to_playlists;
             updates.videos_removed_from_playlists = analytics.videos_removed_from_playlists;
-            updates.last_basic_update = now;
+            if (type !== "all") {
+              updates.last_basic_update = now;
+            }
           }
         } catch (err: any) {
           const code = err?.code ?? err?.status;
@@ -380,14 +392,19 @@ export async function POST(request: Request) {
       updates.bot_flags = flags;
       updates.analytics_needs_reauth = false;
 
+      const patch: Record<string, unknown> = {
+        insights_status: "ok",
+        last_insights_update: now,
+        other_stats: { ...sub.other_stats, youtube: { ...existingStats, ...updates } },
+        updated_at: now,
+      };
+      if (type === "all" && typeof updates.views === "number") {
+        patch.views = updates.views;
+      }
+
       await supabaseAdmin
         .from("submissions")
-        .update({
-          insights_status: "ok",
-          last_insights_update: now,
-          other_stats: { ...sub.other_stats, youtube: { ...existingStats, ...updates } },
-          updated_at: now,
-        })
+        .update(patch)
         .eq("id", sub.id);
 
       updated++;

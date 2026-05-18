@@ -75,6 +75,13 @@ import {
   getEndedOpportunityBadgeClassName,
   getEndedOpportunityPhaseLabel,
 } from "@/lib/contest-ended-phase-display";
+import {
+  DEFAULT_CAMPAIGN_LIST_TAB,
+  OPPORTUNITIES_STATUS_TAB_IDS,
+  OPPORTUNITIES_STATUS_TAB_KEY,
+  readStoredCampaignListTab,
+  writeStoredCampaignListTab,
+} from "@/lib/campaign-list-tab-storage";
 
 // Define types for filters and sorting
 type StatusFilterType = "all" | "live" | "upcoming" | "ended";
@@ -240,7 +247,29 @@ export default function OpportunitiesPage({
   ];
 
   // New state variables for filters and sorting
-  const [statusFilter, setStatusFilter] = useState<StatusFilterType>("all");
+  const [statusFilter, setStatusFilterState] = useState<StatusFilterType>(
+    DEFAULT_CAMPAIGN_LIST_TAB as StatusFilterType,
+  );
+  const [statusTabHydrated, setStatusTabHydrated] = useState(false);
+
+  useEffect(() => {
+    const stored = readStoredCampaignListTab(
+      OPPORTUNITIES_STATUS_TAB_KEY,
+      OPPORTUNITIES_STATUS_TAB_IDS,
+      DEFAULT_CAMPAIGN_LIST_TAB,
+    ) as StatusFilterType;
+    setStatusFilterState(stored);
+    setStatusTabHydrated(true);
+  }, []);
+
+  useEffect(() => {
+    if (!statusTabHydrated) return;
+    writeStoredCampaignListTab(OPPORTUNITIES_STATUS_TAB_KEY, statusFilter);
+  }, [statusFilter, statusTabHydrated]);
+
+  const setStatusFilter = useCallback((value: StatusFilterType) => {
+    setStatusFilterState(value);
+  }, []);
   const [platformFilter, setPlatformFilter] =
     useState<PlatformFilterType>("all");
   const [typeFilter, setTypeFilter] = useState<ContestTypeFilterType>("all");
