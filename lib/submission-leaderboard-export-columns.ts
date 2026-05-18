@@ -263,7 +263,7 @@ export function getSubmissionExportColumns(
       cols.push({ id: exportId, label: SUBMISSION_EXPORT_COLUMN_LABELS[exportId] });
     }
 
-    if (ytCol("analytics")) {
+    if (ytCol("analytics") && opts.isAdminView) {
       cols.push({
         id: SUBMISSION_EXPORT_YOUTUBE_ANALYTICS_COLUMN_ID,
         label: SUBMISSION_EXPORT_COLUMN_LABELS.youtube_analytics,
