@@ -1,5 +1,6 @@
 import { createClient } from "@/utils/supabase/server";
 import { NextRequest, NextResponse } from "next/server";
+import { getPoolBudgetCentsFromDetails } from "@/lib/contest-type";
 
 export async function GET(request: NextRequest) {
   try {
@@ -18,7 +19,12 @@ export async function GET(request: NextRequest) {
     const notRejected = searchParams.get("notRejected") === "true";
     const contestTypeFilter = (searchParams.get("type") ?? "all")
       .trim()
-      .toLowerCase() as "all" | "leaderboard" | "cpm" | "milestone";
+      .toLowerCase() as
+      | "all"
+      | "leaderboard"
+      | "cpm"
+      | "milestone"
+      | "dual_rewards";
     const contentType = (searchParams.get("contentType") ?? "video")
       .trim()
       .toLowerCase() as "video" | "text_image";
@@ -460,11 +466,10 @@ export async function GET(request: NextRequest) {
         return Number(details.cpm_contest.total_budget) || 0;
       }
       if (contest.contest_type === "milestone") {
-        return (
-          Number(details?.milestone_contest?.total_budget_cents) ||
-          Number(details?.milestone_contest?.total_budget) ||
-          0
-        );
+        return getPoolBudgetCentsFromDetails("milestone", details);
+      }
+      if (contest.contest_type === "dual_rewards") {
+        return getPoolBudgetCentsFromDetails("dual_rewards", details);
       }
       return 0;
     };
@@ -493,9 +498,12 @@ export async function GET(request: NextRequest) {
     }, 0);
 
     // Calculate additional metrics
-    const avgCostPerView = totalViews > 0 ? totalSpent / totalViews : 0;
+    // totalSpent is in cents; divide by 100 to get dollars so the frontend
+    // (which does value * 100 → formatCurrencyFromCents) receives the correct unit.
+    const totalSpentDollars = totalSpent / 100;
+    const avgCostPerView = totalViews > 0 ? totalSpentDollars / totalViews : 0;
     const avgCostPerSubmission =
-      totalSubmissions > 0 ? totalSpent / totalSubmissions : 0;
+      totalSubmissions > 0 ? totalSpentDollars / totalSubmissions : 0;
     const avgSubmissionsPerContest =
       totalContests > 0 ? totalSubmissions / totalContests : 0;
 

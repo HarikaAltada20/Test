@@ -58,6 +58,11 @@ import {
 } from "@/lib/contest-ended-phase-display";
 import { formatCurrencyFromCents as formatMoney } from "@/lib/currency-utils";
 import {
+  getPoolBudgetCentsFromDetails,
+  isCpmContestType,
+  isMilestoneContestType,
+} from "@/lib/contest-type";
+import {
   calculateLeaderboardBudgetSpent,
   Submission,
 } from "@/lib/contest-utils-client";
@@ -66,6 +71,12 @@ import { PaginationControls } from "@/components/ui/pagination-controls";
 import { useToast } from "@/hooks/use-toast";
 import { PaidPlanUpgradeModal } from "@/components/PaidPlanUpgradeModal";
 import { ButtonLoadingSpinner } from "@/components/loading/LoadingSpinner";
+import {
+  ADMIN_CONTEST_LIST_TAB_KEY,
+  DEFAULT_CAMPAIGN_LIST_TAB,
+  readStoredCampaignListTab,
+  writeStoredCampaignListTab,
+} from "@/lib/campaign-list-tab-storage";
 
 // Define the type for a contest
 type Contest = {
@@ -100,6 +111,8 @@ type Contest = {
       total_budget_cents?: number;
       budget_spent?: number;
     };
+    /** Dual rewards unified pool (cents); nested CPM/milestone totals may be omitted */
+    total_budget_cents?: number;
     twitter_campaign?: {
       campaign_type?: "raid" | "awareness";
       keywords?: string[];
@@ -329,9 +342,20 @@ const getContestTypeLabel = (contestType: string | null | undefined) => {
   if (contestType === "cpm") return "CPM Based";
   if (contestType === "leaderboard") return "Leaderboard";
   if (contestType === "milestone") return "Milestone";
+  if (contestType === "dual_rewards") return "Dual Rewards";
   if (!contestType) return "N/A";
   return contestType.charAt(0).toUpperCase() + contestType.slice(1);
 };
+
+/** Unified pool tracker spend: dual splits spend across CPM + milestone nested objects */
+function getPoolBudgetSpentForTrackerDisplay(contest: Contest): number {
+  const cpm =
+    contest.contest_based_details?.cpm_contest?.budget_spent ?? 0;
+  if (contest.contest_type !== "dual_rewards") return cpm;
+  const milestone =
+    contest.contest_based_details?.milestone_contest?.budget_spent ?? 0;
+  return cpm + milestone;
+}
 
 const getContestValueForSort = (contest: Contest): number => {
   if (
@@ -352,6 +376,15 @@ const getContestValueForSort = (contest: Contest): number => {
   ) {
     return contest.contest_based_details.milestone_contest.total_budget_cents;
   }
+  if (
+    contest.contest_type === "dual_rewards" &&
+    contest.contest_based_details
+  ) {
+    return getPoolBudgetCentsFromDetails(
+      contest.contest_type,
+      contest.contest_based_details,
+    );
+  }
   return 0;
 };
 
@@ -366,9 +399,15 @@ const getContestPrimaryFinancialText = (contest: Contest): string => {
       contest.contest_based_details?.milestone_contest?.total_budget_cents || 0,
     )}`;
   }
-  return `Budget: ${formatMoney(
-    contest.contest_based_details?.cpm_contest?.total_budget || 0,
-  )}`;
+  if (contest.contest_type === "cpm" || contest.contest_type === "dual_rewards") {
+    return `Budget: ${formatMoney(
+      getPoolBudgetCentsFromDetails(
+        contest.contest_type,
+        contest.contest_based_details,
+      ),
+    )}`;
+  }
+  return `Budget: ${formatMoney(0)}`;
 };
 
 export function ContestListClient({
@@ -402,7 +441,22 @@ export function ContestListClient({
   const { toast } = useToast();
   const [sortOption, setSortOption] =
     useState<SortOptionType>("created_at_desc");
-  const [internalSelectedTab, setInternalSelectedTab] = useState("all");
+  const [internalSelectedTab, setInternalSelectedTab] = useState(
+    DEFAULT_CAMPAIGN_LIST_TAB,
+  );
+  const contestListTabStorageKey = isAdminView
+    ? ADMIN_CONTEST_LIST_TAB_KEY
+    : null;
+
+  useEffect(() => {
+    if (externalSelectedTab !== undefined || !contestListTabStorageKey) return;
+    const stored = readStoredCampaignListTab(
+      contestListTabStorageKey,
+      BRAND_CONTEST_TAB_IDS,
+      DEFAULT_CAMPAIGN_LIST_TAB,
+    );
+    setInternalSelectedTab(stored);
+  }, [externalSelectedTab, contestListTabStorageKey]);
   const [mode, setMode] = useState<"light" | "dark">(() => {
     if (typeof document !== "undefined") {
       const modeElement = document.querySelector("[data-mode]");
@@ -425,7 +479,20 @@ export function ContestListClient({
       ? externalSelectedTab
       : internalSelectedTab;
   const selectedTab = normalizeBrandContestTabId(rawSelectedTab);
-  const setSelectedTab = onTabChange || setInternalSelectedTab;
+  const setSelectedTab = useCallback(
+    (tab: string) => {
+      if (onTabChange) {
+        onTabChange(tab);
+      } else {
+        setInternalSelectedTab(tab);
+        if (contestListTabStorageKey) {
+          writeStoredCampaignListTab(contestListTabStorageKey, tab);
+        }
+      }
+    },
+    [onTabChange, contestListTabStorageKey],
+  );
+
   const showPostContestPipeline =
     selectedTab === "all" || selectedTab === "ended";
   const [postContestPhaseFilter, setPostContestPhaseFilter] =
@@ -455,6 +522,8 @@ export function ContestListClient({
   >([]);
   const [isCheckingCpmAccess, setIsCheckingCpmAccess] = useState(false);
   const [showCpmUpgradeModal, setShowCpmUpgradeModal] = useState(false);
+  const [upgradeFeatureName, setUpgradeFeatureName] =
+    useState<string>("CPM Contest");
   const [page, setPage] = useState<number>(1);
   // Default to 9 campaigns per page with options: 9, 15, 21, 30
   const [limit, setLimit] = useState<number>(9);
@@ -990,12 +1059,12 @@ export function ContestListClient({
         case "cpm_rate_desc":
         case "cpm_rate_asc":
           const rateA =
-            a.contest_type === "cpm" &&
+            isCpmContestType(a.contest_type) &&
             a.contest_based_details?.cpm_contest?.cpm_rate_usd
               ? a.contest_based_details.cpm_contest.cpm_rate_usd
               : -1;
           const rateB =
-            b.contest_type === "cpm" &&
+            isCpmContestType(b.contest_type) &&
             b.contest_based_details?.cpm_contest?.cpm_rate_usd
               ? b.contest_based_details.cpm_contest.cpm_rate_usd
               : -1;
@@ -1355,7 +1424,7 @@ export function ContestListClient({
                   </span>
                 </span>
               </div>
-              {contest.contest_type === "cpm" &&
+              {isCpmContestType(contest.contest_type) &&
                 contest.contest_based_details?.cpm_contest?.cpm_rate_usd !=
                   null && (
                   <div className="flex items-center">
@@ -1378,18 +1447,21 @@ export function ContestListClient({
                     </span>
                   </div>
                 )}
-              {contest.contest_type === "cpm" &&
-                contest.contest_based_details?.cpm_contest?.total_budget !=
-                  null &&
-                contest.contest_based_details.cpm_contest.total_budget > 0 && (
+              {isCpmContestType(contest.contest_type) &&
+                getPoolBudgetCentsFromDetails(
+                  contest.contest_type,
+                  contest.contest_based_details,
+                ) > 0 && (
                   <div className="flex items-center">
                     <DollarSign className="h-4 w-4 mr-2 flex-shrink-0" />
                     <span>
                       Total Budget:{" "}
                       <span className="font-medium ">
                         {formatMoney(
-                          contest.contest_based_details.cpm_contest
-                            .total_budget,
+                          getPoolBudgetCentsFromDetails(
+                            contest.contest_type,
+                            contest.contest_based_details,
+                          ),
                         )}
                       </span>
                     </span>
@@ -1431,7 +1503,7 @@ export function ContestListClient({
                     </span>
                   </div>
                 )}
-              {contest.contest_type === "milestone" &&
+              {isMilestoneContestType(contest.contest_type) &&
                 contest.contest_based_details?.milestone_contest
                   ?.total_budget_cents != null &&
                 contest.contest_based_details.milestone_contest
@@ -1451,19 +1523,23 @@ export function ContestListClient({
                 )}
             </div>
 
-            {/* Budget Spent Progress Bar for CPM contests */}
-            {contest.contest_type === "cpm" &&
-              contest.contest_based_details?.cpm_contest?.total_budget !=
-                null &&
-              contest.contest_based_details.cpm_contest.total_budget > 0 &&
+            {/* Budget Spent Progress Bar for CPM and dual contests */}
+            {isCpmContestType(contest.contest_type) &&
+              getPoolBudgetCentsFromDetails(
+                contest.contest_type,
+                contest.contest_based_details,
+              ) > 0 &&
               (() => {
-                const totalBudget =
-                  contest.contest_based_details.cpm_contest.total_budget;
-                // Use real-time updated budget_spent field
+                const totalBudget = getPoolBudgetCentsFromDetails(
+                  contest.contest_type,
+                  contest.contest_based_details,
+                );
                 const budgetSpent =
-                  contest.contest_based_details.cpm_contest.budget_spent || 0;
-                const percentage = (budgetSpent / totalBudget) * 100;
-                const remaining = totalBudget - budgetSpent;
+                  getPoolBudgetSpentForTrackerDisplay(contest);
+                const { percentage, remaining } = getBudgetTrackerValues(
+                  totalBudget,
+                  budgetSpent,
+                );
 
                 return (
                   <div className="mt-3 mb-3">
@@ -1488,7 +1564,7 @@ export function ContestListClient({
                     >
                       <div
                         className="absolute h-full bg-gradient-to-r from-purple-500 to-purple-600 rounded-full transition-all duration-500 ease-out"
-                        style={{ width: `${Math.min(percentage, 100)}%` }}
+                        style={{ width: `${percentage}%` }}
                       ></div>
                     </div>
                     <div
@@ -1608,7 +1684,7 @@ export function ContestListClient({
                     >
                       <div
                         className="absolute h-full bg-gradient-to-r from-purple-500 to-purple-600 rounded-full transition-all duration-500 ease-out"
-                        style={{ width: `${Math.min(percentage, 100)}%` }}
+                        style={{ width: `${percentage}%` }}
                       ></div>
                     </div>
                     <div
@@ -2233,7 +2309,7 @@ export function ContestListClient({
                     </span>
                   </span>
                 </div>
-                {contest.contest_type === "cpm" &&
+                {isCpmContestType(contest.contest_type) &&
                   contest.contest_based_details?.cpm_contest?.cpm_rate_usd !=
                     null && (
                     <div className="flex items-center">
@@ -2261,11 +2337,11 @@ export function ContestListClient({
                       </span>
                     </div>
                   )}
-                {contest.contest_type === "cpm" &&
-                  contest.contest_based_details?.cpm_contest?.total_budget !=
-                    null &&
-                  contest.contest_based_details.cpm_contest.total_budget >
-                    0 && (
+                {isCpmContestType(contest.contest_type) &&
+                  getPoolBudgetCentsFromDetails(
+                    contest.contest_type,
+                    contest.contest_based_details,
+                  ) > 0 && (
                     <div className="flex items-center">
                       <DollarSign className="h-4 w-4 mr-2 flex-shrink-0" />
                       <span
@@ -2277,8 +2353,10 @@ export function ContestListClient({
                         Total Budget:{" "}
                         <span className="font-medium">
                           {formatMoney(
-                            contest.contest_based_details.cpm_contest
-                              .total_budget,
+                            getPoolBudgetCentsFromDetails(
+                              contest.contest_type,
+                              contest.contest_based_details,
+                            ),
                           )}
                         </span>
                       </span>
@@ -2307,7 +2385,7 @@ export function ContestListClient({
                       </span>
                     </div>
                   )}
-                {contest.contest_type === "milestone" &&
+                {isMilestoneContestType(contest.contest_type) &&
                   contest.contest_based_details?.milestone_contest
                     ?.total_budget_cents != null &&
                   contest.contest_based_details.milestone_contest
@@ -2332,18 +2410,23 @@ export function ContestListClient({
                   )}
               </div>
 
-              {/* Budget Spent Progress Bar for CPM contests */}
-              {contest.contest_type === "cpm" &&
-                contest.contest_based_details?.cpm_contest?.total_budget !=
-                  null &&
-                contest.contest_based_details.cpm_contest.total_budget > 0 &&
+              {/* Budget Spent Progress Bar for CPM and dual contests */}
+              {isCpmContestType(contest.contest_type) &&
+                getPoolBudgetCentsFromDetails(
+                  contest.contest_type,
+                  contest.contest_based_details,
+                ) > 0 &&
                 (() => {
-                  const totalBudget =
-                    contest.contest_based_details.cpm_contest.total_budget;
+                  const totalBudget = getPoolBudgetCentsFromDetails(
+                    contest.contest_type,
+                    contest.contest_based_details,
+                  );
                   const budgetSpent =
-                    contest.contest_based_details.cpm_contest.budget_spent || 0;
-                  const percentage = (budgetSpent / totalBudget) * 100;
-                  const remaining = totalBudget - budgetSpent;
+                    getPoolBudgetSpentForTrackerDisplay(contest);
+                  const { percentage, remaining } = getBudgetTrackerValues(
+                    totalBudget,
+                    budgetSpent,
+                  );
 
                   return (
                     <div className="mt-3">
@@ -2368,7 +2451,7 @@ export function ContestListClient({
                       >
                         <div
                           className="absolute h-full bg-gradient-to-r from-purple-500 to-purple-600 rounded-full transition-all duration-500 ease-out"
-                          style={{ width: `${Math.min(percentage, 100)}%` }}
+                          style={{ width: `${percentage}%` }}
                         ></div>
                       </div>
                       <div
@@ -2481,7 +2564,7 @@ export function ContestListClient({
                       >
                         <div
                           className="absolute h-full bg-gradient-to-r from-purple-500 to-purple-600 rounded-full transition-all duration-500 ease-out"
-                          style={{ width: `${Math.min(percentage, 100)}%` }}
+                          style={{ width: `${percentage}%` }}
                         ></div>
                       </div>
                       <div
@@ -2855,10 +2938,19 @@ export function ContestListClient({
           ) {
             valueA = a.contest_based_details.leaderboard_contest.total_prize;
           } else if (
-            a.contest_type === "cpm" &&
-            a.contest_based_details?.cpm_contest?.total_budget
+            a.contest_type === "milestone" &&
+            a.contest_based_details?.milestone_contest?.total_budget_cents
           ) {
-            valueA = a.contest_based_details.cpm_contest.total_budget;
+            valueA =
+              a.contest_based_details.milestone_contest.total_budget_cents;
+          } else if (
+            isCpmContestType(a.contest_type) &&
+            a.contest_based_details
+          ) {
+            valueA = getPoolBudgetCentsFromDetails(
+              a.contest_type,
+              a.contest_based_details,
+            );
           }
           if (
             b.contest_type === "leaderboard" &&
@@ -2866,30 +2958,41 @@ export function ContestListClient({
           ) {
             valueB = b.contest_based_details.leaderboard_contest.total_prize;
           } else if (
-            b.contest_type === "cpm" &&
-            b.contest_based_details?.cpm_contest?.total_budget
+            b.contest_type === "milestone" &&
+            b.contest_based_details?.milestone_contest?.total_budget_cents
           ) {
-            valueB = b.contest_based_details.cpm_contest.total_budget;
+            valueB =
+              b.contest_based_details.milestone_contest.total_budget_cents;
+          } else if (
+            isCpmContestType(b.contest_type) &&
+            b.contest_based_details
+          ) {
+            valueB = getPoolBudgetCentsFromDetails(
+              b.contest_type,
+              b.contest_based_details,
+            );
           }
           return sortOption === "value_desc"
             ? valueB - valueA
             : valueA - valueB;
         case "cpm_rate_desc":
         case "cpm_rate_asc":
-          const rateA =
-            a.contest_type === "cpm" &&
+          const rateSortA =
+            isCpmContestType(a.contest_type) &&
             a.contest_based_details?.cpm_contest?.cpm_rate_usd
               ? a.contest_based_details.cpm_contest.cpm_rate_usd
               : -1;
-          const rateB =
-            b.contest_type === "cpm" &&
+          const rateSortB =
+            isCpmContestType(b.contest_type) &&
             b.contest_based_details?.cpm_contest?.cpm_rate_usd
               ? b.contest_based_details.cpm_contest.cpm_rate_usd
               : -1;
-          if (rateA === -1 && rateB === -1) return 0;
-          if (rateA === -1) return 1; // a (no rate) comes after b (has rate)
-          if (rateB === -1) return -1; // b (no rate) comes after a (has rate)
-          return sortOption === "cpm_rate_desc" ? rateB - rateA : rateA - rateB;
+          if (rateSortA === -1 && rateSortB === -1) return 0;
+          if (rateSortA === -1) return 1; // a (no rate) comes after b (has rate)
+          if (rateSortB === -1) return -1; // b (no rate) comes after a (has rate)
+          return sortOption === "cpm_rate_desc"
+            ? rateSortB - rateSortA
+            : rateSortA - rateSortB;
         case "submissions_desc":
         case "submissions_asc":
           const countA = a.live_submission_count ?? -1;
@@ -2969,6 +3072,7 @@ export function ContestListClient({
       );
 
       if (!canCreateCpm) {
+        setUpgradeFeatureName("CPM Contest");
         setShowCpmUpgradeModal(true);
         return;
       }
@@ -2986,8 +3090,84 @@ export function ContestListClient({
     }
   }, [isCheckingCpmAccess, router, toast]);
 
+  const handleCreateMilestoneContest = useCallback(async () => {
+    if (isCheckingCpmAccess) return;
+
+    setIsCheckingCpmAccess(true);
+    try {
+      const response = await fetch(`/api/subscriptions/current?t=${Date.now()}`, {
+        method: "GET",
+        cache: "no-store",
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to fetch subscription details");
+      }
+
+      const data = await response.json();
+      const canCreatePaidContest = Boolean(
+        data?.plan?.features?.contestTypes?.includes("cpm"),
+      );
+
+      if (!canCreatePaidContest) {
+        setUpgradeFeatureName("Milestone Contest");
+        setShowCpmUpgradeModal(true);
+        return;
+      }
+
+      router.push("/dashboard/contests/create?new=true&contestType=milestone");
+    } catch (error) {
+      console.error("Error checking milestone contest access:", error);
+      toast({
+        title: "Unable to verify your plan",
+        description: "Please try again. If needed, upgrade your plan in Billing.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsCheckingCpmAccess(false);
+    }
+  }, [isCheckingCpmAccess, router, toast]);
+
+  const handleCreateDualRewardsContest = useCallback(async () => {
+    if (isCheckingCpmAccess) return;
+
+    setIsCheckingCpmAccess(true);
+    try {
+      const response = await fetch(`/api/subscriptions/current?t=${Date.now()}`, {
+        method: "GET",
+        cache: "no-store",
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to fetch subscription details");
+      }
+
+      const data = await response.json();
+      const canCreatePaidContest = Boolean(
+        data?.plan?.features?.contestTypes?.includes("cpm"),
+      );
+
+      if (!canCreatePaidContest) {
+        setUpgradeFeatureName("Dual Rewards Contest");
+        setShowCpmUpgradeModal(true);
+        return;
+      }
+
+      router.push("/dashboard/contests/create?new=true&contestType=dual_rewards");
+    } catch (error) {
+      console.error("Error checking dual rewards contest access:", error);
+      toast({
+        title: "Unable to verify your plan",
+        description: "Please try again. If needed, upgrade your plan in Billing.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsCheckingCpmAccess(false);
+    }
+  }, [isCheckingCpmAccess, router, toast]);
+
   const contestTypeGuideCards = (
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
       <Card
         className={cn(
           "shadow-lg",
@@ -3376,13 +3556,149 @@ export function ContestListClient({
             <button
               type="button"
               className="w-full bg-purple-600 text-md rounded-lg font-medium text-white py-2 hover:bg-purple-700"
-              onClick={() =>
-                router.push(
-                  "/dashboard/contests/create?new=true&contestType=milestone",
-                )
-              }
+              onClick={handleCreateMilestoneContest}
+              disabled={isCheckingCpmAccess}
             >
               Create Milestone Contest
+            </button>
+            <a
+              href="https://calendly.com/guptavishesh2/30min"
+              target="_blank"
+              rel="noopener noreferrer"
+              className={cn(
+                "w-full text-md rounded-lg font-medium py-2 flex items-center justify-center gap-2 border transition-colors",
+                isDark
+                  ? "border-gray-600 text-gray-300 hover:bg-gray-800"
+                  : "border-gray-300 text-gray-600 hover:bg-gray-50",
+              )}
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 13a19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 3.55 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
+              Need Help? Book a Call
+            </a>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card
+        className={cn(
+          "shadow-lg",
+          isDark ? "border border-gray-700 bg-[#07031D]" : "border border-gray-200 bg-white",
+        )}
+      >
+        <div
+          className={cn(
+            "aspect-[16/10] flex items-center justify-center overflow-hidden relative rounded-md border",
+            isDark ? "bg-slate-900 border-gray-700" : "bg-slate-100 border-gray-100",
+          )}
+        >
+          <img
+            src="/images/dual-rewards.avif"
+            alt="Dual rewards contest preview"
+            className="w-full h-full object-cover transition-transform duration-300 ease-in-out group-hover:scale-105"
+          />
+        </div>
+        <CardHeader className="pb-3">
+          <div className="flex items-center gap-3">
+            <div className="flex-1">
+              <CardTitle className={cn("text-base", isDark ? "text-white" : "text-gray-900")}>Dual Rewards Contest</CardTitle>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent className="pt-0">
+          <div className={cn("space-y-4 text-md leading-6", isDark ? "text-slate-300" : "text-slate-800")}>
+            <div className="rounded-lg">
+              <p className="mt-2">
+                Dual Rewards combines both payout models in one campaign: creators
+                earn milestone-based rewards for hitting view targets and CPM-based
+                rewards from ongoing performance, all under a unified budget pool.
+              </p>
+            </div>
+
+            <div className="space-y-3">
+              <div
+                className={cn(
+                  "flex items-start gap-3 rounded-lg border p-4 shadow-sm",
+                  isDark ? "border-gray-700 bg-[#0b1020]" : "border-slate-200 bg-white",
+                )}
+              >
+                <span
+                  className={cn(
+                    "inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-semibold",
+                    isDark ? "bg-purple-900/60 text-purple-200" : "bg-purple-100 text-purple-700",
+                  )}
+                >
+                  1
+                </span>
+                <div>
+                  <p className={cn("font-semibold", isDark ? "text-white" : "text-slate-900")}>
+                    Configure Combined Rewards
+                  </p>
+                  <p className={cn("mt-1", isDark ? "text-slate-300" : "text-slate-600")}>
+                    Define milestone tiers and set the CPM rate in the same contest
+                    setup so both reward tracks run together.
+                  </p>
+                </div>
+              </div>
+
+              <div
+                className={cn(
+                  "flex items-start gap-3 rounded-lg border p-4 shadow-sm",
+                  isDark ? "border-gray-700 bg-[#0b1020]" : "border-slate-200 bg-white",
+                )}
+              >
+                <span
+                  className={cn(
+                    "inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-semibold",
+                    isDark ? "bg-purple-900/60 text-purple-200" : "bg-purple-100 text-purple-700",
+                  )}
+                >
+                  2
+                </span>
+                <div>
+                  <p className={cn("font-semibold", isDark ? "text-white" : "text-slate-900")}>
+                    Creators Publish and Grow
+                  </p>
+                  <p className={cn("mt-1", isDark ? "text-slate-300" : "text-slate-600")}>
+                    Creators submit content and continue building organic views.
+                    Their progress contributes to both milestone eligibility and
+                    CPM-based earnings.
+                  </p>
+                </div>
+              </div>
+
+              <div
+                className={cn(
+                  "flex items-start gap-3 rounded-lg border p-4 shadow-sm",
+                  isDark ? "border-gray-700 bg-[#0b1020]" : "border-slate-200 bg-white",
+                )}
+              >
+                <span
+                  className={cn(
+                    "inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-semibold",
+                    isDark ? "bg-purple-900/60 text-purple-200" : "bg-purple-100 text-purple-700",
+                  )}
+                >
+                  3
+                </span>
+                <div>
+                  <p className={cn("font-semibold", isDark ? "text-white" : "text-slate-900")}>
+                    Reward Through Both Paths
+                  </p>
+                  <p className={cn("mt-1", isDark ? "text-slate-300" : "text-slate-600")}>
+                    Payouts are calculated from achieved milestones and view-based
+                    CPM performance, giving creators a blended earning model in one
+                    campaign.
+                  </p>
+                </div>
+              </div>
+            </div>
+            <button
+              type="button"
+              className="w-full bg-purple-600 text-md rounded-lg font-medium text-white py-2 hover:bg-purple-700"
+              onClick={handleCreateDualRewardsContest}
+              disabled={isCheckingCpmAccess}
+            >
+              Create Dual Rewards Contest
             </button>
             <a
               href="https://calendly.com/guptavishesh2/30min"
@@ -3409,7 +3725,7 @@ export function ContestListClient({
       <PaidPlanUpgradeModal
         isOpen={showCpmUpgradeModal}
         onClose={() => setShowCpmUpgradeModal(false)}
-        featureName="CPM Contests"
+        featureName={upgradeFeatureName}
       />
       {hasCreatedContests ? (
         <>
@@ -3675,6 +3991,9 @@ export function ContestListClient({
                   </SelectItem>
                   <SelectItem isDark={isDark} value="milestone">
                     Milestone
+                  </SelectItem>
+                  <SelectItem isDark={isDark} value="dual_rewards">
+                    Dual Rewards
                   </SelectItem>
                 </SelectContent>
               </Select>

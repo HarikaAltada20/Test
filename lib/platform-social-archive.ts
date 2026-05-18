@@ -131,14 +131,35 @@ export function parseSimpleArchive(raw: unknown): SimplePlatformArchive {
   return { version: 1, disconnect_snapshots: [] };
 }
 
+function coerceArchiveObject(raw: unknown): Record<string, unknown> | null {
+  if (raw == null) return null;
+  if (typeof raw === "string") {
+    const trimmed = raw.trim();
+    if (!trimmed) return null;
+    try {
+      const parsed = JSON.parse(trimmed) as unknown;
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+        return parsed as Record<string, unknown>;
+      }
+      return null;
+    } catch {
+      return null;
+    }
+  }
+  if (typeof raw === "object" && !Array.isArray(raw)) {
+    return raw as Record<string, unknown>;
+  }
+  return null;
+}
+
 export function parseInstagramArchive(raw: unknown): InstagramArchive {
   const base: InstagramArchive = {
     version: 2,
     analytics: { entries: {} },
     disconnect_snapshots: [],
   };
-  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return base;
-  const o = raw as Record<string, unknown>;
+  const o = coerceArchiveObject(raw);
+  if (!o) return base;
   if (o.version === 2 || o.analytics || o.disconnect_snapshots) {
     const analytics = o.analytics as Record<string, unknown> | undefined;
     const entries =

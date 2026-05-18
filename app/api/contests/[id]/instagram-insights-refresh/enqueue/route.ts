@@ -15,6 +15,7 @@ import {
   isQStashEnabled,
   triggerProcessInstagramInsightsQueue,
 } from "@/lib/qstash";
+import { insightsRefreshInsightsStatusOrFilter } from "@/lib/insights-refresh-eligibility";
 
 const BATCH_SIZE = 100;
 
@@ -135,7 +136,7 @@ export async function POST(
       });
     }
 
-    // Count eligible submissions (instagram, has video_id, not rejected, not permanent_failure)
+    // Count eligible submissions (instagram, has video_id, not rejected; permanent_failure only after 24h)
     const { count: eligibleCount } = await supabaseAdmin
       .from("submissions")
       .select("*", { count: "exact", head: true })
@@ -143,7 +144,7 @@ export async function POST(
       .eq("platform", "instagram")
       .neq("status", "rejected")
       .not("video_id", "is", null)
-      .or("insights_status.is.null,insights_status.neq.permanent_failure");
+      .or(insightsRefreshInsightsStatusOrFilter());
 
     const totalEligible = eligibleCount ?? 0;
     const totalBatches = Math.max(1, Math.ceil(totalEligible / BATCH_SIZE));

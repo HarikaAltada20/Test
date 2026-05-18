@@ -192,6 +192,7 @@ export async function POST(
       entryKey,
       since,
       until,
+      archive: parsed,
       profileSummary: buildInstagramProfileSnapshot(
         profile.instagram_account as Record<string, unknown>
       ),
@@ -206,6 +207,10 @@ export async function POST(
       }
     | null;
 
+  const liveProfileSnap = buildInstagramProfileSnapshot(
+    profile.instagram_account as Record<string, unknown>
+  );
+
   if (!ig?.access_token || !ig.app_scoped_user_id) {
     const errEntry: InstagramAnalyticsEntry = {
       fetched_at: new Date().toISOString(),
@@ -214,6 +219,7 @@ export async function POST(
       preset,
       metrics: {},
       error: "Instagram not connected or missing app_scoped_user_id",
+      ...(liveProfileSnap ? { profile: liveProfileSnap } : {}),
     };
     const merged = mergeInstagramAnalyticsEntry(
       profile.instagram_archive,
@@ -241,9 +247,7 @@ export async function POST(
       entryKey,
       since,
       until,
-      profileSummary: buildInstagramProfileSnapshot(
-        profile.instagram_account as Record<string, unknown>
-      ),
+      profileSummary: liveProfileSnap,
     });
   }
 
@@ -298,9 +302,6 @@ export async function POST(
       accessToken,
       demoTf
     );
-    const profileSnap = buildInstagramProfileSnapshot(
-      ig as Record<string, unknown>
-    );
     entry = {
       fetched_at: new Date().toISOString(),
       since,
@@ -308,7 +309,7 @@ export async function POST(
       preset,
       metrics: result.metrics,
       demographics,
-      ...(profileSnap ? { profile: profileSnap } : {}),
+      ...(liveProfileSnap ? { profile: liveProfileSnap } : {}),
     };
   } else {
     entry = {
@@ -318,6 +319,7 @@ export async function POST(
       preset,
       metrics: {},
       error: result.message || "Failed to fetch insights",
+      ...(liveProfileSnap ? { profile: liveProfileSnap } : {}),
     };
   }
 
@@ -350,6 +352,7 @@ export async function POST(
     entryKey,
     since,
     until,
+    archive: mergedArchive,
     profileSummary: buildInstagramProfileSnapshot(
       profile.instagram_account as Record<string, unknown>
     ),

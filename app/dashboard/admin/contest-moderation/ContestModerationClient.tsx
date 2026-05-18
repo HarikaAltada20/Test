@@ -31,6 +31,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { formatLocalDateTime, cn } from "@/lib/utils";
 import { formatCurrencyFromCents as formatMoney } from "@/lib/currency-utils";
+import { getPoolBudgetCentsFromDetails } from "@/lib/contest-type";
 import { PageLoadingSpinner } from "@/components/loading/LoadingSpinner";
 import {
   Shield,
@@ -486,17 +487,14 @@ export default function ContestModerationClient({
       contest.contest_type === "leaderboard" &&
       contest.contest_based_details?.leaderboard_contest?.total_prize;
 
-    const cpmBudget =
-      contest.contest_type === "cpm" &&
-      contest.contest_based_details?.cpm_contest?.total_budget;
-
-    const milestoneBudget =
-      contest.contest_type === "milestone" &&
-      (contest.contest_based_details?.milestone_contest?.total_budget_cents ||
-        contest.contest_based_details?.milestone_contest?.total_budget);
+    const poolBudgetCents = getPoolBudgetCentsFromDetails(
+      contest.contest_type,
+      contest.contest_based_details,
+    );
 
     const budgetSpent =
-      contest.contest_type === "cpm"
+      contest.contest_type === "cpm" ||
+      contest.contest_type === "dual_rewards"
         ? contest.contest_based_details?.cpm_contest?.budget_spent ?? 0
         : 0;
 
@@ -656,20 +654,22 @@ export default function ContestModerationClient({
                       ? "CPM Based"
                       : contest.contest_type === "leaderboard"
                         ? "Leaderboard"
-                        : contest.contest_type
-                          ? contest.contest_type.charAt(0).toUpperCase() +
-                          contest.contest_type.slice(1)
-                          : "N/A"}
+                        : contest.contest_type === "dual_rewards"
+                          ? "Dual Rewards"
+                          : contest.contest_type
+                            ? contest.contest_type.charAt(0).toUpperCase() +
+                              contest.contest_type.slice(1)
+                            : "N/A"}
                   </span>
                 </span>
               </div>
-              {(leaderboardPrizeMoney || cpmBudget || milestoneBudget) && (
+              {(leaderboardPrizeMoney || poolBudgetCents > 0) && (
                 <div className="flex items-center gap-1">
                   <DollarSign className="h-3 w-3 flex-shrink-0" />
                   <span className="break-words">
                     {contest.contest_type === "leaderboard"
                       ? `Prize: ${formatMoney(leaderboardPrizeMoney)}`
-                      : `Budget: ${formatMoney(cpmBudget || milestoneBudget)}`}
+                      : `Budget: ${formatMoney(poolBudgetCents)}`}
                   </span>
                 </div>
               )}
@@ -722,37 +722,37 @@ export default function ContestModerationClient({
               </div>
             )}
 
-            <div className="flex flex-col sm:flex-row gap-2 mt-auto pt-3">
-              <button
-                className={cn(
-                  "flex w-full items-center justify-center gap-2 px-3 py-2.5 sm:py-3 rounded-full text-sm sm:text-base",
-                  isDark
-                    ? "bg-[#7F39EC] text-white"
-                    : "bg-[#D9C0FF61] text-[#7F39EC]"
-                )}
-                onClick={() =>
-                  window.open(
-                    `/dashboard/admin/contests/${contest.id}`,
-                    "_blank"
-                  )
-                }
-              >
-                <Eye className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-                <span className="whitespace-nowrap">View Details</span>
-              </button>
-
-              {contest.moderation_status === "pending_approval" && (
-                <div className="flex gap-2">
+            <div className="mt-auto min-w-0 pt-3">
+              {contest.moderation_status === "pending_approval" ? (
+                <div className="grid min-w-0 grid-cols-2 gap-2 lg:grid-cols-3">
+                  <button
+                    type="button"
+                    className={cn(
+                      "col-span-2 flex min-h-[44px] min-w-0 items-center justify-center gap-2 rounded-full px-3 py-2.5 text-xs sm:text-sm lg:col-span-1 lg:text-base",
+                      isDark
+                        ? "bg-[#7F39EC] text-white"
+                        : "bg-[#D9C0FF61] text-[#7F39EC]"
+                    )}
+                    onClick={() =>
+                      window.open(
+                        `/dashboard/admin/contests/${contest.id}`,
+                        "_blank"
+                      )
+                    }
+                  >
+                    <Eye className="h-3.5 w-3.5 shrink-0 sm:h-4 sm:w-4" />
+                    <span className="truncate">View Details</span>
+                  </button>
                   <Button
                     size="sm"
                     onClick={() => {
                       setSelectedContest(contest);
                       setShowApprovalDialog(true);
                     }}
-                    className="bg-green-600 hover:bg-green-700 flex-1 sm:flex-initial text-xs sm:text-sm px-2 sm:px-3"
+                    className="flex min-h-[44px] min-w-0 w-full items-center justify-center gap-1 bg-green-600 px-2 text-[11px] hover:bg-green-700 sm:gap-1.5 sm:px-3 sm:text-xs lg:text-sm"
                   >
-                    <CheckCircle className="h-3.5 w-3.5 sm:h-4 sm:w-4 mr-1" />
-                    <span className="whitespace-nowrap">Approve</span>
+                    <CheckCircle className="h-3.5 w-3.5 shrink-0 sm:h-4 sm:w-4" />
+                    <span className="truncate">Approve</span>
                   </Button>
                   <Button
                     size="sm"
@@ -761,12 +761,31 @@ export default function ContestModerationClient({
                       setSelectedContest(contest);
                       setShowRejectionDialog(true);
                     }}
-                    className="flex-1 sm:flex-initial text-xs sm:text-sm px-2 sm:px-3"
+                    className="flex min-h-[44px] min-w-0 w-full items-center justify-center gap-1 px-2 text-[11px] sm:gap-1.5 sm:px-3 sm:text-xs lg:text-sm"
                   >
-                    <XCircle className="h-3.5 w-3.5 sm:h-4 sm:w-4 mr-1" />
-                    <span className="whitespace-nowrap">Reject</span>
+                    <XCircle className="h-3.5 w-3.5 shrink-0 sm:h-4 sm:w-4" />
+                    <span className="truncate">Reject</span>
                   </Button>
                 </div>
+              ) : (
+                <button
+                  type="button"
+                  className={cn(
+                    "flex min-h-[44px] w-full min-w-0 items-center justify-center gap-2 rounded-full px-3 py-2.5 text-sm sm:text-base",
+                    isDark
+                      ? "bg-[#7F39EC] text-white"
+                      : "bg-[#D9C0FF61] text-[#7F39EC]"
+                  )}
+                  onClick={() =>
+                    window.open(
+                      `/dashboard/admin/contests/${contest.id}`,
+                      "_blank"
+                    )
+                  }
+                >
+                  <Eye className="h-3.5 w-3.5 shrink-0 sm:h-4 sm:w-4" />
+                  <span className="truncate">View Details</span>
+                </button>
               )}
             </div>
           </CardContent>

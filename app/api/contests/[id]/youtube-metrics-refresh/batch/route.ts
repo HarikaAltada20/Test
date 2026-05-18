@@ -11,6 +11,7 @@ import {
   fetchYouTubeBasicStatsByVideoId,
   type PrefetchedBasic,
 } from "@/lib/youtube-submission-refresh-by-scope";
+import { insightsRefreshInsightsStatusOrFilter } from "@/lib/insights-refresh-eligibility";
 
 async function mapLimit<T, R>(
   items: readonly T[],
@@ -101,9 +102,9 @@ export async function POST(
       .select("id, creator_id, content_link, views, other_stats")
       .eq("contest_id", contestId)
       .ilike("platform", "%youtube%")
-      .in("status", ["verified", "pending"])
+      .neq("status", "rejected")
       .not("content_link", "is", null)
-      .or("insights_status.is.null,insights_status.neq.permanent_failure")
+      .or(insightsRefreshInsightsStatusOrFilter())
       .order("id", { ascending: true })
       .limit(batchSize + 1);
 

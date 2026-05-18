@@ -1,5 +1,6 @@
 import { createClient } from "@/utils/supabase/server";
 import { NextRequest, NextResponse } from "next/server";
+import { getPoolBudgetCentsFromDetails } from "@/lib/contest-type";
 
 export async function GET(request: NextRequest) {
   try {
@@ -27,7 +28,12 @@ export async function GET(request: NextRequest) {
     const contestId = searchParams.get("contestId");
     const contestTypeFilter = (searchParams.get("type") ?? "all")
       .trim()
-      .toLowerCase() as "all" | "leaderboard" | "cpm";
+      .toLowerCase() as
+      | "all"
+      | "leaderboard"
+      | "cpm"
+      | "milestone"
+      | "dual_rewards";
     const contentType = (searchParams.get("contentType") ?? "video")
       .trim()
       .toLowerCase() as "video" | "text_image";
@@ -41,6 +47,7 @@ export async function GET(request: NextRequest) {
 
     if (contestId) {
       // Get detailed analytics for a specific contest
+      // Fetch contest metadata first (without nested submissions to avoid row cap)
       const { data: contest } = await supabase
         .from("contests")
         .select(
@@ -54,58 +61,65 @@ export async function GET(request: NextRequest) {
           created_at,
           contest_based_details,
           live_submission_count,
-          brief_html,
-          submissions (
-            id,
-            views,
-            created_at,
-            platform,
-            creator_id,
-            other_stats,
-            status,
-            earnings,
-            creator:creator_id (
-              username,
-              creator_profiles (
-                total_views,
-                total_contests_participated,
-                youtube_account,
-                instagram_account
-              )
-            )
-          )
+          brief_html
         `,
         )
         .eq("id", contestId)
         .eq("advertiser_id", user.id)
         .single();
 
-      if (!contest) {
+      // Fetch submissions separately with pagination to bypass PostgREST row cap
+      const SINGLE_PAGE_SIZE = 1000;
+      const allContestSubs: any[] = [];
+      for (let page = 0; ; page++) {
+        const from = page * SINGLE_PAGE_SIZE;
+        const to = from + SINGLE_PAGE_SIZE - 1;
+        const { data: subPage, error: subPageErr } = await supabase
+          .from("submissions")
+          .select(
+            `id, views, created_at, platform, creator_id, other_stats, status, earnings,
+             creator:creator_id (username, creator_profiles (total_views, total_contests_participated, youtube_account, instagram_account))`,
+          )
+          .eq("contest_id", contestId)
+          .range(from, to)
+          .order("created_at", { ascending: false });
+        if (subPageErr) break;
+        if (subPage && subPage.length > 0) allContestSubs.push(...subPage);
+        if (!subPage || subPage.length < SINGLE_PAGE_SIZE) break;
+      }
+      // Merge submissions back into contest object
+      const resolvedContest = contest ? { ...contest, submissions: allContestSubs } : null;
+
+      if (!resolvedContest) {
         return NextResponse.json(
           { error: "Contest not found" },
           { status: 404 },
         );
       }
+      const contestData = resolvedContest;
 
       // Calculate contest-specific metrics
       const totalViews =
-        contest.submissions?.reduce((sum, sub) => sum + (sub.views || 0), 0) ||
+        contestData.submissions?.reduce((sum: number, sub: any) => sum + (sub.views || 0), 0) ||
         0;
-      const totalSubmissions = contest.submissions?.length || 0;
+      const totalSubmissions = contestData.submissions?.length || 0;
 
-      // Calculate total spent for this contest
       let totalSpent = 0;
-      const details = contest.contest_based_details;
+      const details = contestData.contest_based_details;
       if (
-        contest.contest_type === "leaderboard" &&
-        details?.leaderboard_contest?.total_prize
+        contestData.contest_type === "leaderboard" &&
+        (details as any)?.leaderboard_contest?.total_prize
       ) {
-        totalSpent = details.leaderboard_contest.total_prize;
+        totalSpent = (details as any).leaderboard_contest.total_prize;
       } else if (
-        contest.contest_type === "cpm" &&
-        details?.cpm_contest?.total_budget
+        contestData.contest_type === "cpm" &&
+        (details as any)?.cpm_contest?.total_budget
       ) {
-        totalSpent = details.cpm_contest.total_budget;
+        totalSpent = (details as any).cpm_contest.total_budget;
+      } else if (contestData.contest_type === "milestone") {
+        totalSpent = getPoolBudgetCentsFromDetails("milestone", details);
+      } else if (contestData.contest_type === "dual_rewards") {
+        totalSpent = getPoolBudgetCentsFromDetails("dual_rewards", details);
       }
 
       const avgViewsPerSubmission =
@@ -114,14 +128,15 @@ export async function GET(request: NextRequest) {
 
       // Top performing submissions
       const topSubmissions =
-        contest.submissions
-          ?.sort((a, b) => (b.views || 0) - (a.views || 0))
+        contestData.submissions
+          ?.slice()
+          .sort((a: any, b: any) => (b.views || 0) - (a.views || 0))
           .slice(0, 10) || [];
 
       // Submission timeline (daily submissions)
       const submissionTimeline =
-        contest.submissions?.reduce(
-          (acc, sub) => {
+        contestData.submissions?.reduce(
+          (acc: Record<string, number>, sub: any) => {
             const date = new Date(sub.created_at).toISOString().split("T")[0];
             if (!acc[date]) {
               acc[date] = 0;
@@ -134,8 +149,8 @@ export async function GET(request: NextRequest) {
 
       // Platform breakdown for this contest
       const platformBreakdown =
-        contest.submissions?.reduce(
-          (acc, sub) => {
+        contestData.submissions?.reduce(
+          (acc: Record<string, { count: number; views: number }>, sub: any) => {
             const platform = sub.platform || "unknown";
             if (!acc[platform]) {
               acc[platform] = { count: 0, views: 0 };
@@ -149,14 +164,14 @@ export async function GET(request: NextRequest) {
 
       // Creator participation stats
       const uniqueCreators = new Set(
-        contest.submissions?.map((sub) => sub.creator_id),
+        contestData.submissions?.map((sub: any) => sub.creator_id),
       ).size;
       const avgSubmissionsPerCreator =
         uniqueCreators > 0 ? totalSubmissions / uniqueCreators : 0;
 
       return NextResponse.json({
         contest: {
-          ...contest,
+          ...contestData,
           metrics: {
             totalViews,
             totalSubmissions,
@@ -278,28 +293,37 @@ export async function GET(request: NextRequest) {
               allowedPlatforms.includes(normalizePlatformKey(c)),
             );
 
-      let submissionsQuery = supabase
-        .from("submissions")
-        .select(
-          "id, views, created_at, platform, contest_id, other_stats, status",
-        )
-        .in(
-          "contest_id",
-          contestsFiltered.map((c) => c.id),
-        );
-      if (notRejected) {
-        submissionsQuery = submissionsQuery.neq("status", "rejected");
-      } else if (submissionStatus && submissionStatus !== "all") {
-        if (submissionStatus === "verifiedpaid") {
-          submissionsQuery = submissionsQuery.in("status", [
-            "verified",
-            "paid",
-          ]);
-        } else {
-          submissionsQuery = submissionsQuery.eq("status", submissionStatus);
+      // Fetch all submissions with pagination to bypass PostgREST default row cap
+      const LIST_PAGE_SIZE = 1000;
+      const allSubmissions: any[] = [];
+      const contestIdsToFetch = contestsFiltered.map((c) => c.id);
+
+      if (contestIdsToFetch.length > 0) {
+        for (let page = 0; ; page++) {
+          const from = page * LIST_PAGE_SIZE;
+          const to = from + LIST_PAGE_SIZE - 1;
+          let pageQuery = supabase
+            .from("submissions")
+            .select(
+              "id, views, created_at, platform, contest_id, other_stats, status",
+            )
+            .in("contest_id", contestIdsToFetch)
+            .range(from, to)
+            .order("created_at", { ascending: false });
+          if (notRejected) {
+            pageQuery = pageQuery.neq("status", "rejected");
+          } else if (submissionStatus && submissionStatus !== "all") {
+            if (submissionStatus === "verifiedpaid") {
+              pageQuery = pageQuery.in("status", ["verified", "paid"]);
+            } else {
+              pageQuery = pageQuery.eq("status", submissionStatus);
+            }
+          }
+          const { data: pageData } = await pageQuery;
+          if (pageData && pageData.length > 0) allSubmissions.push(...pageData);
+          if (!pageData || pageData.length < LIST_PAGE_SIZE) break;
         }
       }
-      const { data: allSubmissions } = await submissionsQuery;
 
       const twitterContestIds = contestsFiltered
         .filter((c) => normalizePlatformKey(c) === "twitter")
@@ -440,6 +464,10 @@ export async function GET(request: NextRequest) {
             details?.cpm_contest?.total_budget
           ) {
             totalSpent = details.cpm_contest.total_budget;
+          } else if (contest.contest_type === "milestone") {
+            totalSpent = getPoolBudgetCentsFromDetails("milestone", details);
+          } else if (contest.contest_type === "dual_rewards") {
+            totalSpent = getPoolBudgetCentsFromDetails("dual_rewards", details);
           }
 
           const avgViewsPerSubmission =

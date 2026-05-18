@@ -77,7 +77,10 @@ export async function processQueuedPayouts(batchSize: number = 10): Promise<Payo
       }
 
       if (!rewardAmount || rewardAmount <= 0) {
-        if ((contest as any).contest_type === 'cpm') {
+        if (
+          (contest as any).contest_type === "cpm" ||
+          (contest as any).contest_type === "dual_rewards"
+        ) {
           const cpm = (contest as any)?.contest_based_details?.cpm_contest;
           const rate = typeof cpm?.cpm_rate_usd === 'number' ? cpm.cpm_rate_usd : 0;
           let effectiveViews = sub.views || 0;

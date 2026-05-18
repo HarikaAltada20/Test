@@ -19,6 +19,7 @@ import {
   type YouTubeRefreshScope,
 } from "@/lib/queue/youtube-metrics-queue";
 import { isQStashEnabled, triggerProcessYouTubeMetricsQueue } from "@/lib/qstash";
+import { insightsRefreshInsightsStatusOrFilter } from "@/lib/insights-refresh-eligibility";
 
 const BATCH_SIZE = 25;
 
@@ -204,9 +205,9 @@ export async function POST(
       .select("*", { count: "exact", head: true })
       .eq("contest_id", contestId)
       .ilike("platform", "%youtube%")
-      .in("status", ["verified", "pending"])
+      .neq("status", "rejected")
       .not("content_link", "is", null)
-      .or("insights_status.is.null,insights_status.neq.permanent_failure");
+      .or(insightsRefreshInsightsStatusOrFilter());
     if (eligibleCountError) {
       console.error(
         "[youtube-metrics-refresh enqueue] eligible count failed:",

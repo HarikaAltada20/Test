@@ -16,6 +16,7 @@ import {
   TrendingUp,
   Award,
   Star,
+  Target,
   Shield,
   Check,
   Info,
@@ -51,17 +52,22 @@ export default function GettingStartedClient({
       createLeaderboard?: boolean;
       createCpm?: boolean;
       createMilestone?: boolean;
+      createDualRewards?: boolean;
     };
   }>({});
 
   // Helper functions for loading states
-  const setButtonLoading = (buttonId: string, action: string, isLoading: boolean) => {
-    setLoadingButtons(prev => ({
+  const setButtonLoading = (
+    buttonId: string,
+    action: string,
+    isLoading: boolean,
+  ) => {
+    setLoadingButtons((prev) => ({
       ...prev,
       [buttonId]: {
         ...prev[buttonId],
-        [action]: isLoading
-      }
+        [action]: isLoading,
+      },
     }));
   };
 
@@ -438,7 +444,6 @@ export default function GettingStartedClient({
                       <div
                         className={cn(
                           "relative h-24 w-full mb-4 rounded-xl overflow-hidden",
-                  
                         )}
                       >
                         <Image
@@ -470,12 +475,12 @@ export default function GettingStartedClient({
                       isDark ? "bg-[#5F2BB1]" : "bg-[#4A00BE]",
                     )}
                     onClick={() => {
-                      setButtonLoading('create-first', 'createContest', true);
-                      window.location.href = '/dashboard/contests';
+                      setButtonLoading("create-first", "createContest", true);
+                      window.location.href = "/dashboard/contests";
                     }}
-                    disabled={loadingButtons['create-first']?.createContest}
+                    disabled={loadingButtons["create-first"]?.createContest}
                   >
-                    {loadingButtons['create-first']?.createContest ? (
+                    {loadingButtons["create-first"]?.createContest ? (
                       <ButtonLoadingSpinner />
                     ) : null}
                     {/* <Play className="w-4 h-4 mr-2" /> */}
@@ -496,12 +501,17 @@ export default function GettingStartedClient({
                 >
                   Choose Your Contest Type
                 </h2>
-                <p className={cn("mt-1 text-sm", isDark ? "text-[#C4AEED]" : "text-gray-500")}>
+                <p
+                  className={cn(
+                    "mt-1 text-sm",
+                    isDark ? "text-[#C4AEED]" : "text-gray-500",
+                  )}
+                >
                   Pick the model that fits your goal — you can always try both.
                 </p>
               </div>
 
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
                 {/* Leaderboard Card */}
                 <div
                   className={cn(
@@ -517,7 +527,9 @@ export default function GettingStartedClient({
                       <Trophy className="w-5 h-5 text-[#4A00BE]" />
                     </div>
                     <div>
-                      <h3 className="font-bold text-base leading-tight">Leaderboard Contest</h3>
+                      <h3 className="font-bold text-base leading-tight">
+                        Leaderboard Contest
+                      </h3>
                       <Badge
                         variant="outline"
                         className={cn(
@@ -533,17 +545,38 @@ export default function GettingStartedClient({
                   </div>
 
                   {/* Tagline */}
-                  <p className={cn("text-sm leading-relaxed", isDark ? "text-[#D8C7F5]" : "text-gray-600")}>
-                    Set a prize pool. Creators compete for views. Top performers win — you own the content.
+                  <p
+                    className={cn(
+                      "text-sm leading-relaxed",
+                      isDark ? "text-[#D8C7F5]" : "text-gray-600",
+                    )}
+                  >
+                    Set a prize pool. Creators compete for views. Top performers
+                    win — you own the content.
                   </p>
 
                   {/* Example */}
-                  <div className={cn(
-                    "rounded-lg px-4 py-3 text-sm",
-                    isDark ? "bg-[#2A0C5A] border border-[#B994F8]/30" : "bg-[#F7F1FF] border border-[#D6B6FF]",
-                  )}>
-                    <span className={cn("font-semibold", isDark ? "text-[#D0AAFF]" : "text-purple-700")}>Example: </span>
-                    <span className={cn(isDark ? "text-[#E7DAFF]" : "text-gray-600")}>
+                  <div
+                    className={cn(
+                      "rounded-lg px-4 py-3 text-sm",
+                      isDark
+                        ? "bg-[#2A0C5A] border border-[#B994F8]/30"
+                        : "bg-[#F7F1FF] border border-[#D6B6FF]",
+                    )}
+                  >
+                    <span
+                      className={cn(
+                        "font-semibold",
+                        isDark ? "text-[#D0AAFF]" : "text-purple-700",
+                      )}
+                    >
+                      Example:{" "}
+                    </span>
+                    <span
+                      className={cn(
+                        isDark ? "text-[#E7DAFF]" : "text-gray-600",
+                      )}
+                    >
                       $1,000 pool — 1st gets $500, 2nd $300, 3rd $200
                     </span>
                   </div>
@@ -557,21 +590,42 @@ export default function GettingStartedClient({
                       "Great for brand awareness & viral campaigns",
                     ].map((point) => (
                       <li key={point} className="flex items-start gap-2">
-                        <Check className={cn("w-4 h-4 mt-0.5 shrink-0", isDark ? "text-[#D0AAFF]" : "text-[#6A30CC]")} />
-                        <span className={cn("text-sm", isDark ? "text-[#E7DAFF]" : "text-gray-700")}>{point}</span>
+                        <Check
+                          className={cn(
+                            "w-4 h-4 mt-0.5 shrink-0",
+                            isDark ? "text-[#D0AAFF]" : "text-[#6A30CC]",
+                          )}
+                        />
+                        <span
+                          className={cn(
+                            "text-sm",
+                            isDark ? "text-[#E7DAFF]" : "text-gray-700",
+                          )}
+                        >
+                          {point}
+                        </span>
                       </li>
                     ))}
                   </ul>
 
-                  <Button 
-                    className={cn("text-sm text-white w-full", isDark ? "bg-[#5F2BB1] hover:bg-[#4A1E99]" : "bg-[#4A00BE] hover:bg-[#3900a0]")}
+                  <Button
+                    className={cn(
+                      "text-sm text-white w-full",
+                      isDark
+                        ? "bg-[#5F2BB1] hover:bg-[#4A1E99]"
+                        : "bg-[#4A00BE] hover:bg-[#3900a0]",
+                    )}
                     onClick={() => {
-                      setButtonLoading('leaderboard', 'createLeaderboard', true);
-                      window.location.href = '/dashboard/contests';
+                      setButtonLoading(
+                        "leaderboard",
+                        "createLeaderboard",
+                        true,
+                      );
+                      window.location.href = "/dashboard/contests";
                     }}
-                    disabled={loadingButtons['leaderboard']?.createLeaderboard}
+                    disabled={loadingButtons["leaderboard"]?.createLeaderboard}
                   >
-                    {loadingButtons['leaderboard']?.createLeaderboard ? (
+                    {loadingButtons["leaderboard"]?.createLeaderboard ? (
                       <ButtonLoadingSpinner />
                     ) : (
                       <Trophy className="w-4 h-4" />
@@ -596,7 +650,9 @@ export default function GettingStartedClient({
                         <DollarSign className="w-5 h-5 text-[#4A00BE]" />
                       </div>
                       <div>
-                        <h3 className="font-bold text-base leading-tight">CPM Contest</h3>
+                        <h3 className="font-bold text-base leading-tight">
+                          CPM Contest
+                        </h3>
                         <Badge
                           variant="outline"
                           className={cn(
@@ -610,26 +666,51 @@ export default function GettingStartedClient({
                         </Badge>
                       </div>
                     </div>
-                    <span className={cn(
-                      "text-xs font-medium px-2 py-0.5 rounded-full shrink-0 whitespace-nowrap",
-                      isDark ? "bg-yellow-900/40 text-yellow-300 border border-yellow-700/30" : "bg-yellow-50 text-yellow-700 border border-yellow-200",
-                    )}>
+                    <span
+                      className={cn(
+                        "text-xs font-medium px-2 py-0.5 rounded-full shrink-0 whitespace-nowrap",
+                        isDark
+                          ? "bg-yellow-900/40 text-yellow-300 border border-yellow-700/30"
+                          : "bg-yellow-50 text-yellow-700 border border-yellow-200",
+                      )}
+                    >
                       Paid plans only
                     </span>
                   </div>
 
                   {/* Tagline */}
-                  <p className={cn("text-sm leading-relaxed", isDark ? "text-[#D8C7F5]" : "text-gray-600")}>
-                    Pay creators only for the views they generate. More views = more reach, no wasted budget.
+                  <p
+                    className={cn(
+                      "text-sm leading-relaxed",
+                      isDark ? "text-[#D8C7F5]" : "text-gray-600",
+                    )}
+                  >
+                    Pay creators only for the views they generate. More views =
+                    more reach, no wasted budget.
                   </p>
 
                   {/* Example */}
-                  <div className={cn(
-                    "rounded-lg px-4 py-3 text-sm",
-                    isDark ? "bg-[#2A0C5A] border border-[#B994F8]/30" : "bg-[#F7F1FF] border border-[#D6B6FF]",
-                  )}>
-                    <span className={cn("font-semibold", isDark ? "text-[#D0AAFF]" : "text-purple-700")}>Example: </span>
-                    <span className={cn(isDark ? "text-[#E7DAFF]" : "text-gray-600")}>
+                  <div
+                    className={cn(
+                      "rounded-lg px-4 py-3 text-sm",
+                      isDark
+                        ? "bg-[#2A0C5A] border border-[#B994F8]/30"
+                        : "bg-[#F7F1FF] border border-[#D6B6FF]",
+                    )}
+                  >
+                    <span
+                      className={cn(
+                        "font-semibold",
+                        isDark ? "text-[#D0AAFF]" : "text-purple-700",
+                      )}
+                    >
+                      Example:{" "}
+                    </span>
+                    <span
+                      className={cn(
+                        isDark ? "text-[#E7DAFF]" : "text-gray-600",
+                      )}
+                    >
                       $1 per 1K views — 50K views = $50 total payment
                     </span>
                   </div>
@@ -643,21 +724,38 @@ export default function GettingStartedClient({
                       "Ideal for ongoing & performance-based campaigns",
                     ].map((point) => (
                       <li key={point} className="flex items-start gap-2">
-                        <Check className={cn("w-4 h-4 mt-0.5 shrink-0", isDark ? "text-[#D0AAFF]" : "text-[#6A30CC]")} />
-                        <span className={cn("text-sm", isDark ? "text-[#E7DAFF]" : "text-gray-700")}>{point}</span>
+                        <Check
+                          className={cn(
+                            "w-4 h-4 mt-0.5 shrink-0",
+                            isDark ? "text-[#D0AAFF]" : "text-[#6A30CC]",
+                          )}
+                        />
+                        <span
+                          className={cn(
+                            "text-sm",
+                            isDark ? "text-[#E7DAFF]" : "text-gray-700",
+                          )}
+                        >
+                          {point}
+                        </span>
                       </li>
                     ))}
                   </ul>
 
-                  <Button 
-                    className={cn("text-sm text-white w-full", isDark ? "bg-[#5F2BB1] hover:bg-[#4A1E99]" : "bg-[#4A00BE] hover:bg-[#3900a0]")}
+                  <Button
+                    className={cn(
+                      "text-sm text-white w-full",
+                      isDark
+                        ? "bg-[#5F2BB1] hover:bg-[#4A1E99]"
+                        : "bg-[#4A00BE] hover:bg-[#3900a0]",
+                    )}
                     onClick={() => {
-                      setButtonLoading('cpm', 'createCpm', true);
-                      window.location.href = '/dashboard/contests';
+                      setButtonLoading("cpm", "createCpm", true);
+                      window.location.href = "/dashboard/contests";
                     }}
-                    disabled={loadingButtons['cpm']?.createCpm}
+                    disabled={loadingButtons["cpm"]?.createCpm}
                   >
-                    {loadingButtons['cpm']?.createCpm ? (
+                    {loadingButtons["cpm"]?.createCpm ? (
                       <ButtonLoadingSpinner />
                     ) : (
                       <DollarSign className="w-4 h-4" />
@@ -679,10 +777,12 @@ export default function GettingStartedClient({
                   <div className="flex items-start justify-between gap-2">
                     <div className="flex items-center gap-3">
                       <div className="p-2 bg-[#D8C3FF] rounded-full shrink-0">
-                        <Award className="w-5 h-5 text-[#4A00BE]" />
+                        <Target className="w-5 h-5 text-[#4A00BE]" />
                       </div>
                       <div>
-                        <h3 className="font-bold text-base leading-tight">Milestone Contest</h3>
+                        <h3 className="font-bold text-base leading-tight">
+                          Milestone Contest
+                        </h3>
                         <Badge
                           variant="outline"
                           className={cn(
@@ -696,26 +796,51 @@ export default function GettingStartedClient({
                         </Badge>
                       </div>
                     </div>
-                    <span className={cn(
-                      "text-xs font-medium px-2 py-0.5 rounded-full shrink-0 whitespace-nowrap",
-                      isDark ? "bg-yellow-900/40 text-yellow-300 border border-yellow-700/30" : "bg-yellow-50 text-yellow-700 border border-yellow-200",
-                    )}>
+                    <span
+                      className={cn(
+                        "text-xs font-medium px-2 py-0.5 rounded-full shrink-0 whitespace-nowrap",
+                        isDark
+                          ? "bg-yellow-900/40 text-yellow-300 border border-yellow-700/30"
+                          : "bg-yellow-50 text-yellow-700 border border-yellow-200",
+                      )}
+                    >
                       Paid plans only
                     </span>
                   </div>
 
                   {/* Tagline */}
-                  <p className={cn("text-sm leading-relaxed", isDark ? "text-[#D8C7F5]" : "text-gray-600")}>
-                    Reward creators as they hit specific view milestones. Guaranteed payouts for guaranteed results.
+                  <p
+                    className={cn(
+                      "text-sm leading-relaxed",
+                      isDark ? "text-[#D8C7F5]" : "text-gray-600",
+                    )}
+                  >
+                    Reward creators as they hit specific view milestones.
+                    Guaranteed payouts for guaranteed results.
                   </p>
 
                   {/* Example */}
-                  <div className={cn(
-                    "rounded-lg px-4 py-3 text-sm",
-                    isDark ? "bg-[#2A0C5A] border border-[#B994F8]/30" : "bg-[#F7F1FF] border border-[#D6B6FF]",
-                  )}>
-                    <span className={cn("font-semibold", isDark ? "text-[#D0AAFF]" : "text-purple-700")}>Example: </span>
-                    <span className={cn(isDark ? "text-[#E7DAFF]" : "text-gray-600")}>
+                  <div
+                    className={cn(
+                      "rounded-lg px-4 py-3 text-sm",
+                      isDark
+                        ? "bg-[#2A0C5A] border border-[#B994F8]/30"
+                        : "bg-[#F7F1FF] border border-[#D6B6FF]",
+                    )}
+                  >
+                    <span
+                      className={cn(
+                        "font-semibold",
+                        isDark ? "text-[#D0AAFF]" : "text-purple-700",
+                      )}
+                    >
+                      Example:{" "}
+                    </span>
+                    <span
+                      className={cn(
+                        isDark ? "text-[#E7DAFF]" : "text-gray-600",
+                      )}
+                    >
                       $50 at 10K views, $100 at 50K views, $500 at 1M views
                     </span>
                   </div>
@@ -729,21 +854,38 @@ export default function GettingStartedClient({
                       "Built-in bonuses for top performers",
                     ].map((point) => (
                       <li key={point} className="flex items-start gap-2">
-                        <Check className={cn("w-4 h-4 mt-0.5 shrink-0", isDark ? "text-[#D0AAFF]" : "text-[#6A30CC]")} />
-                        <span className={cn("text-sm", isDark ? "text-[#E7DAFF]" : "text-gray-700")}>{point}</span>
+                        <Check
+                          className={cn(
+                            "w-4 h-4 mt-0.5 shrink-0",
+                            isDark ? "text-[#D0AAFF]" : "text-[#6A30CC]",
+                          )}
+                        />
+                        <span
+                          className={cn(
+                            "text-sm",
+                            isDark ? "text-[#E7DAFF]" : "text-gray-700",
+                          )}
+                        >
+                          {point}
+                        </span>
                       </li>
                     ))}
                   </ul>
 
-                  <Button 
-                    className={cn("text-sm text-white w-full", isDark ? "bg-[#5F2BB1] hover:bg-[#4A1E99]" : "bg-[#4A00BE] hover:bg-[#3900a0]")}
+                  <Button
+                    className={cn(
+                      "text-sm text-white w-full",
+                      isDark
+                        ? "bg-[#5F2BB1] hover:bg-[#4A1E99]"
+                        : "bg-[#4A00BE] hover:bg-[#3900a0]",
+                    )}
                     onClick={() => {
-                      setButtonLoading('milestone', 'createMilestone', true);
-                      window.location.href = '/dashboard/contests';
+                      setButtonLoading("milestone", "createMilestone", true);
+                      window.location.href = "/dashboard/contests";
                     }}
-                    disabled={loadingButtons['milestone']?.createMilestone}
+                    disabled={loadingButtons["milestone"]?.createMilestone}
                   >
-                    {loadingButtons['milestone']?.createMilestone ? (
+                    {loadingButtons["milestone"]?.createMilestone ? (
                       <ButtonLoadingSpinner />
                     ) : (
                       <Award className="w-4 h-4" />
@@ -751,13 +893,153 @@ export default function GettingStartedClient({
                     Create Milestone Contest
                   </Button>
                 </div>
+
+                {/* Dual Rewards Card */}
+                <div
+                  className={cn(
+                    "p-6 rounded-2xl border flex flex-col gap-4 shadow-[0px_18px_34px_-24px_rgba(127,57,236,0.65)] transition-all duration-200 hover:-translate-y-0.5",
+                    isDark
+                      ? "bg-[#22074A] border-[#B994F8]/45 text-white"
+                      : "bg-white border-[#E9D8FF] text-[#2D1B4E]",
+                  )}
+                >
+                  {/* Header */}
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex items-center gap-3">
+                      <div className="p-2 bg-[#D8C3FF] rounded-full shrink-0">
+                        <Award className="w-5 h-5 text-[#4A00BE]" />
+                      </div>
+                      <div>
+                        <h3 className="font-bold text-base leading-tight">
+                          Dual Rewards Contest
+                        </h3>
+                        <Badge
+                          variant="outline"
+                          className={cn(
+                            "text-xs mt-0.5",
+                            isDark
+                              ? "bg-[#2E1160] border-[#B994F8]/55 text-[#E7D5FF]"
+                              : "bg-[#ECE1FC] border-[#DABFFF] text-purple-700",
+                          )}
+                        >
+                          CPM + Milestones
+                        </Badge>
+                      </div>
+                    </div>
+                    <span
+                      className={cn(
+                        "text-xs font-medium px-2 py-0.5 rounded-full shrink-0 whitespace-nowrap",
+                        isDark
+                          ? "bg-yellow-900/40 text-yellow-300 border border-yellow-700/30"
+                          : "bg-yellow-50 text-yellow-700 border border-yellow-200",
+                      )}
+                    >
+                      Paid plans only
+                    </span>
+                  </div>
+
+                  {/* Tagline */}
+                  <p
+                    className={cn(
+                      "text-sm leading-relaxed",
+                      isDark ? "text-[#D8C7F5]" : "text-gray-600",
+                    )}
+                  >
+                    Combine CPM payouts and milestone targets in one contest for
+                    balanced growth and outcomes.
+                  </p>
+
+                  {/* Example */}
+                  <div
+                    className={cn(
+                      "rounded-lg px-4 py-3 text-sm",
+                      isDark
+                        ? "bg-[#2A0C5A] border border-[#B994F8]/30"
+                        : "bg-[#F7F1FF] border border-[#D6B6FF]",
+                    )}
+                  >
+                    <span
+                      className={cn(
+                        "font-semibold",
+                        isDark ? "text-[#D0AAFF]" : "text-purple-700",
+                      )}
+                    >
+                      Example:{" "}
+                    </span>
+                    <span
+                      className={cn(
+                        isDark ? "text-[#E7DAFF]" : "text-gray-600",
+                      )}
+                    >
+                      Per submission: CPM at $0.20 per 1K views and a $120
+                      milestone at 50K views. If a submission reaches 50K
+                      views, total payout is $130 ($10 CPM + $120 milestone).
+                    </span>
+                  </div>
+
+                  {/* Benefits */}
+                  <ul className="space-y-2">
+                    {[
+                      "Blend steady CPM payouts with milestone-based rewards",
+                      "Great for scaling while motivating top performance",
+                      "Automatic milestone payouts when targets are reached",
+                      "Run one contest instead of splitting payout models",
+                    ].map((point) => (
+                      <li key={point} className="flex items-start gap-2">
+                        <Check
+                          className={cn(
+                            "w-4 h-4 mt-0.5 shrink-0",
+                            isDark ? "text-[#D0AAFF]" : "text-[#6A30CC]",
+                          )}
+                        />
+                        <span
+                          className={cn(
+                            "text-sm",
+                            isDark ? "text-[#E7DAFF]" : "text-gray-700",
+                          )}
+                        >
+                          {point}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+
+                  <Button
+                    className={cn(
+                      "text-sm text-white w-full",
+                      isDark
+                        ? "bg-[#5F2BB1] hover:bg-[#4A1E99]"
+                        : "bg-[#4A00BE] hover:bg-[#3900a0]",
+                    )}
+                    onClick={() => {
+                      setButtonLoading(
+                        "dual-rewards",
+                        "createDualRewards",
+                        true,
+                      );
+                      window.location.href = "/dashboard/contests";
+                    }}
+                    disabled={loadingButtons["dual-rewards"]?.createDualRewards}
+                  >
+                    {loadingButtons["dual-rewards"]?.createDualRewards ? (
+                      <ButtonLoadingSpinner />
+                    ) : (
+                      <Award className="w-4 h-4" />
+                    )}
+                    Create Dual Rewards Contest
+                  </Button>
+                </div>
               </div>
 
               {/* Shared Book a Call row */}
-              <div className={cn(
-                "flex flex-col sm:flex-row items-center justify-center gap-2 rounded-xl px-5 py-4 text-sm border",
-                isDark ? "bg-[#1A0438] border-[#B994F8]/20 text-[#C4AEED]" : "bg-[#F9F5FF] border-[#E9D8FF] text-gray-500",
-              )}>
+              <div
+                className={cn(
+                  "flex flex-col sm:flex-row items-center justify-center gap-2 rounded-xl px-5 py-4 text-sm border",
+                  isDark
+                    ? "bg-[#1A0438] border-[#B994F8]/20 text-[#C4AEED]"
+                    : "bg-[#F9F5FF] border-[#E9D8FF] text-gray-500",
+                )}
+              >
                 <span>Not sure which to pick?</span>
                 <a
                   href="https://calendly.com/guptavishesh2/30min"
@@ -765,7 +1047,9 @@ export default function GettingStartedClient({
                   rel="noopener noreferrer"
                   className={cn(
                     "font-semibold underline underline-offset-2",
-                    isDark ? "text-[#C9A1FF] hover:text-[#DDB8FF]" : "text-[#6A30CC] hover:text-[#4A00BE]",
+                    isDark
+                      ? "text-[#C9A1FF] hover:text-[#DDB8FF]"
+                      : "text-[#6A30CC] hover:text-[#4A00BE]",
                   )}
                 >
                   Book a free call — we&apos;ll help you decide
@@ -796,32 +1080,46 @@ export default function GettingStartedClient({
                 </div>
               )}
 
-              <div className={cn(
-                "rounded-2xl border overflow-hidden",
-                isDark ? "border-[#B994F8]/30 bg-[#22074A]" : "border-[#E9D8FF] bg-white",
-              )}>
+              <div
+                className={cn(
+                  "rounded-2xl border overflow-hidden",
+                  isDark
+                    ? "border-[#B994F8]/30 bg-[#22074A]"
+                    : "border-[#E9D8FF] bg-white",
+                )}
+              >
                 {/* Badge row */}
                 <div className="px-6 pt-5 pb-0 flex items-center gap-2">
-                  <span className={cn(
-                    "text-xs font-semibold px-2.5 py-1 rounded-full border",
-                    isDark ? "bg-green-900/40 text-green-300 border-green-700/40" : "bg-green-50 text-green-700 border-green-200",
-                  )}>
+                  <span
+                    className={cn(
+                      "text-xs font-semibold px-2.5 py-1 rounded-full border",
+                      isDark
+                        ? "bg-green-900/40 text-green-300 border-green-700/40"
+                        : "bg-green-50 text-green-700 border-green-200",
+                    )}
+                  >
                     ✦ Real Client Results
                   </span>
-                  <span className={cn("text-xs", isDark ? "text-gray-400" : "text-gray-400")}>
+                  <span
+                    className={cn(
+                      "text-xs",
+                      isDark ? "text-gray-400" : "text-gray-400",
+                    )}
+                  >
                     CPM Contest · 19 days
                   </span>
                 </div>
 
                 {/* Body: image thumbnail + stats */}
                 <div className="flex flex-col sm:flex-row gap-6 p-6">
-
                   {/* Clickable thumbnail */}
                   <button
                     type="button"
                     onClick={() => setCaseStudyImageOpen(true)}
                     className="group relative sm:w-64 shrink-0 rounded-xl overflow-hidden border cursor-zoom-in focus:outline-none"
-                    style={{ borderColor: isDark ? "rgba(185,148,248,0.2)" : "#E9D8FF" }}
+                    style={{
+                      borderColor: isDark ? "rgba(185,148,248,0.2)" : "#E9D8FF",
+                    }}
                     title="Click to enlarge"
                   >
                     <img
@@ -840,32 +1138,65 @@ export default function GettingStartedClient({
                   {/* Stats */}
                   <div className="flex flex-col justify-center gap-5 flex-1">
                     <div>
-                      <h3 className={cn("text-lg font-bold leading-snug", isDark ? "text-white" : "text-gray-900")}>
+                      <h3
+                        className={cn(
+                          "text-lg font-bold leading-snug",
+                          isDark ? "text-white" : "text-gray-900",
+                        )}
+                      >
                         What we achieved for one brand in 19 days
                       </h3>
-                      <p className={cn("text-sm mt-1", isDark ? "text-[#C4AEED]" : "text-gray-500")}>
+                      <p
+                        className={cn(
+                          "text-sm mt-1",
+                          isDark ? "text-[#C4AEED]" : "text-gray-500",
+                        )}
+                      >
                         One CPM contest. Real creators. 100% organic.
                       </p>
                     </div>
 
                     <div className="space-y-4">
                       {[
-                        { icon: "🎬", value: "200+", label: "Reels posted by creators" },
-                        { icon: "👁️", value: "3.8M+", label: "Views generated" },
+                        {
+                          icon: "🎬",
+                          value: "200+",
+                          label: "Reels posted by creators",
+                        },
+                        {
+                          icon: "👁️",
+                          value: "3.8M+",
+                          label: "Views generated",
+                        },
                         { icon: "💰", value: "$0.05", label: "Effective CPM" },
                       ].map((stat) => (
-                        <div key={stat.label} className="flex items-center gap-3">
-                          <span className={cn(
-                            "text-xl w-10 h-10 flex items-center justify-center rounded-xl shrink-0",
-                            isDark ? "bg-purple-900/40" : "bg-[#F0E8FF]",
-                          )}>
+                        <div
+                          key={stat.label}
+                          className="flex items-center gap-3"
+                        >
+                          <span
+                            className={cn(
+                              "text-xl w-10 h-10 flex items-center justify-center rounded-xl shrink-0",
+                              isDark ? "bg-purple-900/40" : "bg-[#F0E8FF]",
+                            )}
+                          >
                             {stat.icon}
                           </span>
                           <div>
-                            <div className={cn("text-xl font-bold leading-tight", isDark ? "text-white" : "text-[#2D1B4E]")}>
+                            <div
+                              className={cn(
+                                "text-xl font-bold leading-tight",
+                                isDark ? "text-white" : "text-[#2D1B4E]",
+                              )}
+                            >
                               {stat.value}
                             </div>
-                            <div className={cn("text-sm", isDark ? "text-[#C4AEED]" : "text-gray-500")}>
+                            <div
+                              className={cn(
+                                "text-sm",
+                                isDark ? "text-[#C4AEED]" : "text-gray-500",
+                              )}
+                            >
                               {stat.label}
                             </div>
                           </div>
@@ -879,7 +1210,9 @@ export default function GettingStartedClient({
                       rel="noopener noreferrer"
                       className={cn(
                         "text-sm font-semibold underline underline-offset-2 w-fit",
-                        isDark ? "text-[#C9A1FF] hover:text-[#DDB8FF]" : "text-[#6A30CC] hover:text-[#4A00BE]",
+                        isDark
+                          ? "text-[#C9A1FF] hover:text-[#DDB8FF]"
+                          : "text-[#6A30CC] hover:text-[#4A00BE]",
                       )}
                     >
                       Want results like this? Book a free call →
@@ -1290,7 +1623,6 @@ export default function GettingStartedClient({
                       <div
                         className={cn(
                           "relative h-24 w-full mb-4 rounded-xl overflow-hidden",
-                         
                         )}
                       >
                         <Image
@@ -1363,14 +1695,17 @@ export default function GettingStartedClient({
 
                 <div className="text-center pt-3">
                   <Button
-                    className={cn("text-md text-white px-6 py-5", primaryButtonClass)}
+                    className={cn(
+                      "text-md text-white px-6 py-5",
+                      primaryButtonClass,
+                    )}
                     onClick={() => {
-                      setButtonLoading('browse-creator', 'createContest', true);
-                      window.location.href = '/dashboard/opportunities';
+                      setButtonLoading("browse-creator", "createContest", true);
+                      window.location.href = "/dashboard/opportunities";
                     }}
-                    disabled={loadingButtons['browse-creator']?.createContest}
+                    disabled={loadingButtons["browse-creator"]?.createContest}
                   >
-                    {loadingButtons['browse-creator']?.createContest ? (
+                    {loadingButtons["browse-creator"]?.createContest ? (
                       <ButtonLoadingSpinner />
                     ) : (
                       <Video className="w-4 h-4" />
@@ -1395,7 +1730,7 @@ export default function GettingStartedClient({
               </CardHeader>
 
               <div className="p-0 md:px-4 ">
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                   {/* Leaderboard for Creators */}
                   <div
                     className={cn(
@@ -1662,9 +1997,11 @@ export default function GettingStartedClient({
                     <div>
                       <div className="flex items-center space-x-3 mb-4">
                         <div className="p-2.5 bg-[#D8C3FF] rounded-full">
-                          <Award className="w-6 h-6 text-purple-600" />
+                          <Target className="w-6 h-6 text-purple-600" />
                         </div>
-                        <h3 className="font-bold text-lg">Milestone Contests</h3>
+                        <h3 className="font-bold text-lg">
+                          Milestone Contests
+                        </h3>
                       </div>
                       <p
                         className={cn(
@@ -1672,7 +2009,9 @@ export default function GettingStartedClient({
                           isDark ? "text-gray-300" : "text-black",
                         )}
                       >
-                        Earn guaranteed payouts by hitting view milestones. No competition—just hit the target and get paid.
+                        Earn milestone payouts based on the target views your
+                        submission reaches. No competition - hit the target and
+                        get paid.
                       </p>
 
                       {/* Visual Milestone Display */}
@@ -1757,7 +2096,143 @@ export default function GettingStartedClient({
                             isDark ? "text-white" : "text-[#7F39EC]",
                           )}
                         >
-                          Example Milestones
+                          Example per submission
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Dual Rewards for Creators */}
+                  <div
+                    className={cn(
+                      "w-full rounded-2xl border p-6 flex flex-col justify-between shadow-[0px_18px_34px_-24px_rgba(127,57,236,0.65)]",
+                      isDark
+                        ? "bg-[#22074A] border-[#B994F8]/45 text-white"
+                        : "bg-white border-[#E9D8FF] text-[#2D1B4E]",
+                    )}
+                  >
+                    <div>
+                      <div className="flex items-center space-x-3 mb-4">
+                        <div className="p-2.5 bg-[#D8C3FF] rounded-full">
+                          <Award className="w-6 h-6 text-purple-600" />
+                        </div>
+                        <h3 className="font-bold text-lg">
+                          Dual Rewards Contests
+                        </h3>
+                      </div>
+                      <p
+                        className={cn(
+                          "text-md mb-2",
+                          isDark ? "text-gray-300" : "text-black",
+                        )}
+                      >
+                        Earn from both CPM and milestones in the same contest.
+                        CPM pays per 1K views, and milestones pay when your
+                        submission reaches each target.
+                      </p>
+
+                      <div className="text-center mb-4">
+                      <div
+                        className={cn(
+                          "inline-block px-4 py-2 rounded-xl",
+                          isDark
+                            ? "border border-[#7F39EC] bg-[#D9C0FF26]"
+                            : "bg-[#4A00BE]",
+                        )}
+                      >
+                        <div className="text-xl font-bold text-white">
+                          $5.00
+                        </div>
+                        <div className="text-sm text-white">
+                          per 1,000 views
+                        </div>
+                        <div className="text-sm text-white">$20 at 50k views, $50 at 100k views</div>
+                      </div>
+                    </div>
+
+                      {/* Visual Dual Rewards Display */}
+                      <div className="space-y-4 mt-8">
+                        <div className="rounded-lg border border-gray-400 p-4">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center space-x-3">
+                              <div className="w-9 h-9 border border-gray-500 rounded-full flex items-center justify-center">
+                                <Video
+                                  className={cn(
+                                    "w-5 h-5",
+                                    isDark ? "text-white" : "text-black",
+                                  )}
+                                />
+                              </div>
+                              <span className="font-semibold">50K views</span>
+                            </div>
+                            <span
+                              className={cn(
+                                "font-bold text-lg",
+                                isDark ? "text-gray-200" : "text-[#2D1B4E]",
+                              )}
+                            >
+                              $70
+                            </span>
+                          </div>
+                          <p
+                            className={cn(
+                              "mt-2 text-sm",
+                              isDark ? "text-gray-300" : "text-gray-700",
+                            )}
+                          >
+                            CPM: $50 + Milestone: $20
+                          </p>
+                        </div>
+
+                        <div className="rounded-lg border border-gray-400 p-4">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center space-x-3">
+                              <div className="w-9 h-9 border border-gray-500 rounded-full flex items-center justify-center">
+                                <Video
+                                  className={cn(
+                                    "w-5 h-5",
+                                    isDark ? "text-white" : "text-black",
+                                  )}
+                                />
+                              </div>
+                              <span className="font-semibold">100K views</span>
+                            </div>
+                            <span
+                              className={cn(
+                                "font-bold text-lg",
+                                isDark ? "text-gray-200" : "text-[#2D1B4E]",
+                              )}
+                            >
+                             $150
+                            </span>
+                          </div>
+                          <p
+                            className={cn(
+                              "mt-2 text-sm",
+                              isDark ? "text-gray-300" : "text-gray-700",
+                            )}
+                          >
+                            CPM: $100 + Milestone: $50
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="mt-4 text-center">
+                      <div
+                        className={cn(
+                          "inline-block px-5 py-2 border rounded-xl",
+                          isDark
+                            ? "bg-[#C9A7FF26] border-[#C9A7FF]"
+                            : "bg-[#D8C3FF54] border-[#7F39EC]",
+                        )}
+                      >
+                        <span
+                          className={cn(
+                            "text-sm font-medium",
+                            isDark ? "text-white" : "text-[#7F39EC]",
+                          )}
+                        >
+                          Examples per submission
                         </span>
                       </div>
                     </div>
@@ -2083,12 +2558,12 @@ export default function GettingStartedClient({
                   isDark ? "bg-[#5F2BB1]" : "bg-[#4A00BE]",
                 )}
                 onClick={() => {
-                  setButtonLoading('create-advertiser', 'createContest', true);
-                  window.location.href = '/dashboard/contests';
+                  setButtonLoading("create-advertiser", "createContest", true);
+                  window.location.href = "/dashboard/contests";
                 }}
-                disabled={loadingButtons['create-advertiser']?.createContest}
+                disabled={loadingButtons["create-advertiser"]?.createContest}
               >
-                {loadingButtons['create-advertiser']?.createContest ? (
+                {loadingButtons["create-advertiser"]?.createContest ? (
                   <ButtonLoadingSpinner />
                 ) : (
                   <Video className="w-6 h-6" />
@@ -2139,12 +2614,12 @@ export default function GettingStartedClient({
                     primaryButtonClass,
                   )}
                   onClick={() => {
-                    setButtonLoading('browse-final', 'createContest', true);
-                    window.location.href = '/dashboard/opportunities';
+                    setButtonLoading("browse-final", "createContest", true);
+                    window.location.href = "/dashboard/opportunities";
                   }}
-                  disabled={loadingButtons['browse-final']?.createContest}
+                  disabled={loadingButtons["browse-final"]?.createContest}
                 >
-                  {loadingButtons['browse-final']?.createContest ? (
+                  {loadingButtons["browse-final"]?.createContest ? (
                     <ButtonLoadingSpinner />
                   ) : (
                     <Video className="w-5 h-5" />
@@ -2158,16 +2633,16 @@ export default function GettingStartedClient({
                 rel="noopener noreferrer"
               >
                 <div className="w-full sm:w-auto">
-                <Button
-                  className={cn(
-                    "w-full sm:w-auto py-3 px-8 text-lg",
-                    primaryButtonClass,
-                  )}
-                >
-                  <FaDiscord className="w-5 h-5" />
-                  Join Community
-                </Button>
-              </div>
+                  <Button
+                    className={cn(
+                      "w-full sm:w-auto py-3 px-8 text-lg",
+                      primaryButtonClass,
+                    )}
+                  >
+                    <FaDiscord className="w-5 h-5" />
+                    Join Community
+                  </Button>
+                </div>
               </a>
               <a
                 href={SOCIAL_LINKS.whatsapp}
@@ -2175,16 +2650,16 @@ export default function GettingStartedClient({
                 rel="noopener noreferrer"
               >
                 <div className="w-full sm:w-auto">
-                <Button
-                  className={cn(
-                    "w-full sm:w-auto py-3 px-8 text-lg",
-                    primaryButtonClass,
-                  )}
-                >
-                  <FaWhatsapp className="w-5 h-5" />
-                  Join Community
-                </Button>
-              </div>
+                  <Button
+                    className={cn(
+                      "w-full sm:w-auto py-3 px-8 text-lg",
+                      primaryButtonClass,
+                    )}
+                  >
+                    <FaWhatsapp className="w-5 h-5" />
+                    Join Community
+                  </Button>
+                </div>
               </a>
             </div>
           </CardContent>

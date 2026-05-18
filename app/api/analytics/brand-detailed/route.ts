@@ -1,6 +1,7 @@
 import { createClient } from "@/utils/supabase/server";
 import { createAdminClient } from "@/utils/supabase/admin";
 import { NextRequest, NextResponse } from "next/server";
+import { getPoolBudgetCentsFromDetails } from "@/lib/contest-type";
 
 export async function GET(request: NextRequest) {
   try {
@@ -67,41 +68,63 @@ export async function GET(request: NextRequest) {
       .eq("advertiser_id", user.id)
       .order("created_at", { ascending: false });
 
-    // Fetch all submissions for this brand's contests
-    // Use an inner join on contests to ensure RLS permits access for the advertiser
-    // (mirrors the pattern used in other analytics queries)
-    // Use a flexible any[] type to accommodate join vs non-join fallbacks
+    // Fetch all submissions for this brand's contests using pagination
+    // to bypass the default PostgREST row limit (100–1000 rows).
+    // Use an inner join on contests to ensure RLS permits access for the advertiser.
     let allSubmissions: any[] = [];
-    let submissionsQuery = supabaseAdmin
-      .from("submissions")
-      .select(
-        `
-        id,
-        views,
-        likes,
-        comments,
-        shares,
-        created_at,
-        platform,
-        creator_id,
-        status,
-        contest_id,
-        contests!inner(advertiser_id)
-      `,
-      )
-      .eq("contests.advertiser_id", user.id);
-    if (notRejected) {
-      submissionsQuery = submissionsQuery.neq("status", "rejected");
-    } else if (submissionStatus && submissionStatus !== "all") {
-      if (submissionStatus === "verifiedpaid") {
-        submissionsQuery = submissionsQuery.in("status", ["verified", "paid"]);
-      } else {
-        submissionsQuery = submissionsQuery.eq("status", submissionStatus);
+    const PAGE_SIZE = 1000;
+    let joinFetchError = false;
+
+    for (let page = 0; ; page++) {
+      const from = page * PAGE_SIZE;
+      const to = from + PAGE_SIZE - 1;
+
+      let pageQuery = supabaseAdmin
+        .from("submissions")
+        .select(
+          `
+          id,
+          views,
+          likes,
+          comments,
+          shares,
+          created_at,
+          platform,
+          creator_id,
+          status,
+          contest_id,
+          contests!inner(advertiser_id)
+        `,
+        )
+        .eq("contests.advertiser_id", user.id)
+        .range(from, to)
+        .order("created_at", { ascending: false });
+
+      if (notRejected) {
+        pageQuery = pageQuery.neq("status", "rejected");
+      } else if (submissionStatus && submissionStatus !== "all") {
+        if (submissionStatus === "verifiedpaid") {
+          pageQuery = pageQuery.in("status", ["verified", "paid"]);
+        } else {
+          pageQuery = pageQuery.eq("status", submissionStatus);
+        }
+      }
+
+      const { data: pageData, error: pageErr } = await pageQuery;
+      if (pageErr) {
+        joinFetchError = true;
+        break;
+      }
+      if (pageData && pageData.length > 0) {
+        allSubmissions.push(...(pageData as any[]));
+      }
+      // If fewer rows than page size returned, we've reached the end
+      if (!pageData || pageData.length < PAGE_SIZE) {
+        break;
       }
     }
-    const { data: joinedSubs, error: joinErr } = await submissionsQuery;
-    allSubmissions = (joinedSubs as any[]) || [];
-    // swallow joinErr; the robust fallbacks will handle it
+    // joinErr alias kept for fallback trigger below
+    const joinErr = joinFetchError ? new Error("join fetch error") : null;
 
     // Fallback: if join returns no rows but contests exist, try explicit IN filter
     let subsSource: "join" | "fallback" = "join";
@@ -116,36 +139,45 @@ export async function GET(request: NextRequest) {
 
       const aggregated: any[] = [];
       for (const ids of chunks) {
-        let chunkQuery = supabaseAdmin
-          .from("submissions")
-          .select(
-            `
-            id,
-            views,
-            likes,
-            comments,
-            shares,
-            created_at,
-            platform,
-            creator_id,
-            status,
-            contest_id
-          `,
-          )
-          .in("contest_id", ids)
-          .order("created_at", { ascending: false });
-        if (notRejected) {
-          chunkQuery = chunkQuery.neq("status", "rejected");
-        } else if (submissionStatus && submissionStatus !== "all") {
-          if (submissionStatus === "verifiedpaid") {
-            chunkQuery = chunkQuery.in("status", ["verified", "paid"]);
-          } else {
-            chunkQuery = chunkQuery.eq("status", submissionStatus);
+        // Paginate each chunk to avoid the PostgREST row cap
+        for (let page = 0; ; page++) {
+          const from = page * PAGE_SIZE;
+          const to = from + PAGE_SIZE - 1;
+          let chunkQuery = supabaseAdmin
+            .from("submissions")
+            .select(
+              `
+              id,
+              views,
+              likes,
+              comments,
+              shares,
+              created_at,
+              platform,
+              creator_id,
+              status,
+              contest_id
+            `,
+            )
+            .in("contest_id", ids)
+            .range(from, to)
+            .order("created_at", { ascending: false });
+          if (notRejected) {
+            chunkQuery = chunkQuery.neq("status", "rejected");
+          } else if (submissionStatus && submissionStatus !== "all") {
+            if (submissionStatus === "verifiedpaid") {
+              chunkQuery = chunkQuery.in("status", ["verified", "paid"]);
+            } else {
+              chunkQuery = chunkQuery.eq("status", submissionStatus);
+            }
           }
-        }
-        const { data: subsFallback } = await chunkQuery;
-        if (subsFallback && subsFallback.length > 0) {
-          aggregated.push(...subsFallback);
+          const { data: subsFallback } = await chunkQuery;
+          if (subsFallback && subsFallback.length > 0) {
+            aggregated.push(...subsFallback);
+          }
+          if (!subsFallback || subsFallback.length < PAGE_SIZE) {
+            break;
+          }
         }
       }
 
@@ -618,12 +650,10 @@ export async function GET(request: NextRequest) {
         return sum + (details.cpm_contest.total_budget || 0);
       }
       if (c.contest_type === "milestone") {
-        return (
-          sum +
-          (Number(details?.milestone_contest?.total_budget_cents) ||
-            Number(details?.milestone_contest?.total_budget) ||
-            0)
-        );
+        return sum + getPoolBudgetCentsFromDetails("milestone", details);
+      }
+      if (c.contest_type === "dual_rewards") {
+        return sum + getPoolBudgetCentsFromDetails("dual_rewards", details);
       }
       return sum;
     }, 0);
@@ -653,12 +683,10 @@ export async function GET(request: NextRequest) {
         return sum + (details.cpm_contest.total_budget || 0);
       }
       if (c.contest_type === "milestone") {
-        return (
-          sum +
-          (Number(details?.milestone_contest?.total_budget_cents) ||
-            Number(details?.milestone_contest?.total_budget) ||
-            0)
-        );
+        return sum + getPoolBudgetCentsFromDetails("milestone", details);
+      }
+      if (c.contest_type === "dual_rewards") {
+        return sum + getPoolBudgetCentsFromDetails("dual_rewards", details);
       }
       return sum;
     }, 0);
@@ -740,6 +768,16 @@ export async function GET(request: NextRequest) {
               details?.cpm_contest?.total_budget
             ) {
               acc[key].spent += details.cpm_contest.total_budget;
+          } else if (contest.contest_type === "milestone") {
+            acc[key].spent += getPoolBudgetCentsFromDetails(
+              "milestone",
+              details,
+            );
+          } else if (contest.contest_type === "dual_rewards") {
+            acc[key].spent += getPoolBudgetCentsFromDetails(
+              "dual_rewards",
+              details,
+            );
             }
           }
         } else if (contest.submissions.length > 0) {
@@ -778,10 +816,12 @@ export async function GET(request: NextRequest) {
           ) {
             contestSpent = details.cpm_contest.total_budget;
           } else if (contest.contest_type === "milestone") {
-            contestSpent =
-              Number(details?.milestone_contest?.total_budget_cents) ||
-              Number(details?.milestone_contest?.total_budget) ||
-              0;
+            contestSpent = getPoolBudgetCentsFromDetails("milestone", details);
+          } else if (contest.contest_type === "dual_rewards") {
+            contestSpent = getPoolBudgetCentsFromDetails(
+              "dual_rewards",
+              details,
+            );
           }
           acc[key].spent += contestSpent;
         }
@@ -823,10 +863,15 @@ export async function GET(request: NextRequest) {
           ) {
             acc[type].spent += details.cpm_contest.total_budget;
           } else if (contest.contest_type === "milestone") {
-            acc[type].spent +=
-              Number(details?.milestone_contest?.total_budget_cents) ||
-              Number(details?.milestone_contest?.total_budget) ||
-              0;
+            acc[type].spent += getPoolBudgetCentsFromDetails(
+              "milestone",
+              details,
+            );
+          } else if (contest.contest_type === "dual_rewards") {
+            acc[type].spent += getPoolBudgetCentsFromDetails(
+              "dual_rewards",
+              details,
+            );
           }
         }
         return acc;

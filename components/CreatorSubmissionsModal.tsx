@@ -57,6 +57,11 @@ import {
 import { cn } from "@/lib/utils";
 import { toast } from "@/hooks/use-toast";
 import { applyPayoutAdjustment } from "@/lib/payout-adjustment";
+import {
+  buildDualRewardCreatorCapSplitMaps,
+  splitDualPaidTotalByExpectedWeights,
+} from "@/lib/dual-rewards-creator-cap";
+import { getDualPayoutScopeFromSubmission } from "@/lib/dual-rewards-payout";
 import { buildFlatFeeBonusExpectedCentsBySubmissionId } from "@/lib/twitter-cpm-bonus-expected";
 import { YouTubeAnalyticsPanel } from "@/components/youtube/YouTubeAnalyticsPanel";
 import {
@@ -187,8 +192,7 @@ export function CreatorSubmissionsModal({
   >("date-desc");
   const [mode, setMode] = useState<"light" | "dark">("light");
   const [bulkVerifyLoading, setBulkVerifyLoading] = useState(false);
-  const bulkStatusActionsBusy =
-    bulkVerifyLoading || parentBulkActionLoading;
+  const bulkStatusActionsBusy = bulkVerifyLoading || parentBulkActionLoading;
   type BulkPaymentActiveKey =
     | "standard:0"
     | "standard:1"
@@ -196,9 +200,8 @@ export function CreatorSubmissionsModal({
     | "bonus:1"
     | "both:0"
     | "both:1";
-  const [bulkPaymentActiveKey, setBulkPaymentActiveKey] = useState<
-    BulkPaymentActiveKey | null
-  >(null);
+  const [bulkPaymentActiveKey, setBulkPaymentActiveKey] =
+    useState<BulkPaymentActiveKey | null>(null);
   const bulkPayKey = (
     payType: "standard" | "bonus" | "both",
     isBulk: boolean,
@@ -342,9 +345,7 @@ export function CreatorSubmissionsModal({
     setSelectedSubmissions(newSet);
   };
 
-  const handleBulkAction = async (
-    action: "verify" | "reject" | "pending",
-  ) => {
+  const handleBulkAction = async (action: "verify" | "reject" | "pending") => {
     const selectedIds = Array.from(selectedSubmissions);
     if (action === "verify") {
       setBulkVerifyLoading(true);
@@ -452,6 +453,43 @@ export function CreatorSubmissionsModal({
         contest.contest_type === "cpm" &&
         (contest.platform?.toLowerCase() === "twitter" ||
           contest.platform?.toLowerCase() === "x");
+      const isDual = contest.contest_type === "dual_rewards";
+
+      if (isDual) {
+        let successCount = 0;
+        let skippedCount = 0;
+        const component =
+          type === "standard" ? "cpm" : type === "bonus" ? "milestone" : "both";
+        for (const sub of sortedSubs) {
+          try {
+            const paid = await handleDualSubmissionPayment(sub, component, {
+              skipReload: true,
+            });
+            if (paid) successCount++;
+            else skippedCount++;
+          } catch (error) {
+            console.error(
+              `Dual payment skipped for submission ${sub.id}:`,
+              error,
+            );
+            skippedCount++;
+          }
+        }
+        toast({
+          title: "Bulk payment successful",
+          description: [
+            `Paid items: ${successCount}`,
+            `Skipped: ${skippedCount}`,
+          ].join("\n"),
+          variant: "payment",
+        });
+        if (skippedCount === 0) {
+          setSelectedSubmissions(new Set());
+        }
+        window.location.reload();
+        return;
+      }
+
       const useInstagramBulkApi = isBulkTransaction && !hasTwitterTweets;
       const useTwitterCpmBulkApi =
         isBulkTransaction && hasTwitterTweets && isTwitterCpm;
@@ -536,7 +574,7 @@ export function CreatorSubmissionsModal({
       } else {
         // OPTION 1: Individual Transactions (Multiple API calls)
         let successCount = 0;
-        let failCount = 0;
+        let skippedCount = 0;
 
         // Pay each submission in order (skipReload so parent doesn't reload after each)
         for (const sub of sortedSubs) {
@@ -544,25 +582,22 @@ export function CreatorSubmissionsModal({
             await onPayment(sub.id, type, { skipReload: true });
             successCount++;
           } catch (error) {
-            console.error(`Failed to pay submission ${sub.id}:`, error);
-            failCount++;
-            // Continue with next submission even if one fails
+            console.error(`Payment skipped for submission ${sub.id}:`, error);
+            skippedCount++;
+            // Continue with next submission even if one is skipped
           }
         }
 
-        // Show summary and reload once so data is fresh
-        if (failCount > 0) {
-          toast({
-            title: "Payment completed with errors",
-            description: `✓ ${successCount} paid, ✗ ${failCount} failed`,
-            variant: "destructive",
-          });
-        } else {
-          toast({
-            title: "Success",
-            description: `Successfully paid ${successCount} submission(s).`,
-            variant: "payment",
-          });
+        // Show summary and reload once so data is fresh (same style as bulk CPM / dual)
+        toast({
+          title: "Bulk payment successful",
+          description: [
+            `Paid items: ${successCount}`,
+            `Skipped: ${skippedCount}`,
+          ].join("\n"),
+          variant: "payment",
+        });
+        if (skippedCount === 0) {
           setSelectedSubmissions(new Set());
         }
         setTimeout(() => window.location.reload(), 700);
@@ -612,6 +647,217 @@ export function CreatorSubmissionsModal({
   };
 
   /** Base expected reward. When useStoredEarnings is false, always compute from formula so Expected column does not equal Granted after payment. */
+  const calculateRawSubmissionCpmExpectedReward = (submission: Submission) => {
+    const cpmConfig = (contest?.contest_based_details as any)?.cpm_contest;
+    const cpmRateUsd = cpmConfig?.cpm_rate_usd;
+    if (!cpmRateUsd) return 0;
+
+    const platform = (submission.platform || "").toLowerCase();
+    const isTwitterSubmission =
+      submission.is_twitter_tweet === true ||
+      platform === "twitter" ||
+      platform === "x";
+
+    if (isTwitterSubmission) {
+      const basePoints = submission.other_stats?.base_points || 0;
+      const manualAdjustment = submission.manual_points_adjustment || 0;
+      const totalPoints = Math.max(basePoints + manualAdjustment, 0);
+      return Math.max(Math.round((totalPoints * cpmRateUsd * 100) / 1000), 0);
+    }
+
+    let effectiveViews = submission.views || 0;
+    if (cpmConfig?.min_views != null && effectiveViews < cpmConfig.min_views) {
+      effectiveViews = 0;
+    }
+    if (cpmConfig?.max_views != null && effectiveViews > cpmConfig.max_views) {
+      effectiveViews = cpmConfig.max_views;
+    }
+    return Math.max(Math.round((effectiveViews * cpmRateUsd * 100) / 1000), 0);
+  };
+
+  const dualAndCpmCapMaps = useMemo(() => {
+    const cpmMap = new Map<string, number>();
+    const dualMilestoneCappedMap = new Map<string, number>();
+    const details = contest?.contest_based_details as any;
+    const maxResolved =
+      contest?.max_earnings_per_creator ??
+      details?.cpm_contest?.max_earnings_per_creator ??
+      (contest?.contest_type === "leaderboard"
+        ? details?.leaderboard_contest?.max_earnings_per_creator
+        : null) ??
+      null;
+    const maxEarningsPerCreator = Number(maxResolved);
+
+    const fillUncappedMilestoneForAllSubs = () => {
+      submissions.forEach((sub) => {
+        dualMilestoneCappedMap.set(
+          sub.id,
+          Number(milestoneExpectedPayoutBySubmissionId?.get(sub.id) || 0),
+        );
+      });
+    };
+
+    const groupByCreator = () => {
+      const grouped = new Map<string, Submission[]>();
+      for (const sub of submissions) {
+        const cid = String(sub.creator_id || "");
+        if (!cid) continue;
+        const arr = grouped.get(cid) || [];
+        arr.push(sub);
+        grouped.set(cid, arr);
+      }
+      return grouped;
+    };
+
+    if (!Number.isFinite(maxEarningsPerCreator) || maxEarningsPerCreator <= 0) {
+      submissions.forEach((sub) => {
+        cpmMap.set(sub.id, calculateRawSubmissionCpmExpectedReward(sub));
+      });
+      fillUncappedMilestoneForAllSubs();
+      return { cpmMap, dualMilestoneCappedMap };
+    }
+
+    if (contest?.contest_type === "dual_rewards") {
+      for (const list of groupByCreator().values()) {
+        list.sort(
+          (a, b) =>
+            new Date(a.created_at).getTime() -
+            new Date(b.created_at).getTime(),
+        );
+        const rows = list.map((sub) => ({
+          id: sub.id,
+          created_at: String(sub.created_at || ""),
+          mRawCents: Number(
+            milestoneExpectedPayoutBySubmissionId?.get(sub.id) || 0,
+          ),
+          cRawCents: calculateRawSubmissionCpmExpectedReward(sub),
+        }));
+        const { milestoneCappedBySubmissionId, cpmCappedBySubmissionId } =
+          buildDualRewardCreatorCapSplitMaps(rows, maxEarningsPerCreator);
+        for (const row of rows) {
+          cpmMap.set(row.id, cpmCappedBySubmissionId.get(row.id) ?? 0);
+          dualMilestoneCappedMap.set(
+            row.id,
+            milestoneCappedBySubmissionId.get(row.id) ?? 0,
+          );
+        }
+      }
+      submissions.forEach((sub) => {
+        if (!cpmMap.has(sub.id)) {
+          cpmMap.set(sub.id, calculateRawSubmissionCpmExpectedReward(sub));
+          dualMilestoneCappedMap.set(
+            sub.id,
+            Number(milestoneExpectedPayoutBySubmissionId?.get(sub.id) || 0),
+          );
+        }
+      });
+      return { cpmMap, dualMilestoneCappedMap };
+    }
+
+    for (const list of groupByCreator().values()) {
+      list.sort(
+        (a, b) =>
+          new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
+      );
+      let runningTotal = 0;
+      for (const sub of list) {
+        const rawCpm = calculateRawSubmissionCpmExpectedReward(sub);
+        let cappedCpm = rawCpm;
+        if (runningTotal + rawCpm > maxEarningsPerCreator) {
+          cappedCpm = Math.max(0, maxEarningsPerCreator - runningTotal);
+        }
+        cpmMap.set(sub.id, cappedCpm);
+        runningTotal += cappedCpm;
+      }
+    }
+    submissions.forEach((sub) => {
+      if (!cpmMap.has(sub.id)) {
+        cpmMap.set(sub.id, calculateRawSubmissionCpmExpectedReward(sub));
+      }
+    });
+    fillUncappedMilestoneForAllSubs();
+    return { cpmMap, dualMilestoneCappedMap };
+  }, [submissions, contest, milestoneExpectedPayoutBySubmissionId]);
+
+  const calculateSubmissionCpmExpectedReward = (submission: Submission) => {
+    return dualAndCpmCapMaps.cpmMap.get(submission.id) ?? 0;
+  };
+
+  const handleDualSubmissionPayment = async (
+    submission: Submission,
+    component: "cpm" | "milestone" | "both",
+    options?: { skipReload?: boolean },
+  ): Promise<boolean> => {
+    const cpmExpectedRaw = calculateRawSubmissionCpmExpectedReward(submission);
+    const milestoneExpectedRaw = Math.max(
+      Number(milestoneExpectedPayoutBySubmissionId?.get(submission.id) || 0),
+      0,
+    );
+    const cpmCappedBase =
+      dualAndCpmCapMaps.cpmMap.get(submission.id) ?? cpmExpectedRaw;
+    const milestoneCappedBase =
+      dualAndCpmCapMaps.dualMilestoneCappedMap.get(submission.id) ??
+      milestoneExpectedRaw;
+    const shouldAdjustDualCpmComponent =
+      hasPayoutAdjustment &&
+      (payoutAdjustmentMode === "combined" ||
+        payoutAdjustmentMode === "cpm_and_milestone" ||
+        payoutAdjustmentMode === "dual_rewards_only" ||
+        payoutAdjustmentMode === "cpm_only");
+    const shouldAdjustDualMilestoneComponent =
+      hasPayoutAdjustment &&
+      (payoutAdjustmentMode === "combined" ||
+        payoutAdjustmentMode === "cpm_and_milestone" ||
+        payoutAdjustmentMode === "dual_rewards_only" ||
+        payoutAdjustmentMode === "milestone_only" ||
+        (contest?.contest_type === "dual_rewards" &&
+          payoutAdjustmentMode === "bonus_only"));
+    const cpmExpected = shouldAdjustDualCpmComponent
+      ? applyPayoutAdjustment(cpmCappedBase, payoutAdjustmentPercentage)
+      : cpmCappedBase;
+    const milestoneExpected = shouldAdjustDualMilestoneComponent
+      ? applyPayoutAdjustment(
+          milestoneCappedBase,
+          payoutAdjustmentPercentage,
+        )
+      : milestoneCappedBase;
+    const amountInCents =
+      component === "cpm"
+        ? cpmExpected
+        : component === "milestone"
+          ? milestoneExpected
+          : cpmExpected + milestoneExpected;
+    if (amountInCents <= 0) {
+      toast({
+        title: "Nothing to pay",
+        description:
+          "Computed payout is 0 for this component. Check views, milestone eligibility, creator cap, or payout adjustment.",
+        variant: "default",
+      });
+      return false;
+    }
+    const res = await fetch("/api/admin/verify-submission", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        submissionId: submission.id,
+        action: "paid",
+        paymentDetails: {
+          amountInCents,
+          isCustom: true,
+          customRemarks: `dual_component:${component}`,
+        },
+      }),
+    });
+    const result = await res.json();
+    if (!res.ok) throw new Error(result?.error || "Failed to pay submission");
+
+    if (!options?.skipReload) {
+      setTimeout(() => window.location.reload(), 800);
+    }
+    return true;
+  };
+
   const calculateSubmissionBaseExpectedReward = (
     submission: Submission,
     useStoredEarnings = true,
@@ -714,18 +960,25 @@ export function CreatorSubmissionsModal({
   );
   const payoutAdjustmentMode = (contest as any)?.payout_adjustment_mode as
     | "cpm_only"
+    | "milestone_only"
     | "bonus_only"
     | "combined"
+    | "cpm_and_milestone"
+    | "dual_rewards_only"
     | null;
   const hasPayoutAdjustment =
     payoutAdjustmentPercentage > 0 && !!payoutAdjustmentMode;
   const shouldAdjustReward =
     hasPayoutAdjustment &&
     (payoutAdjustmentMode === "combined" ||
-      payoutAdjustmentMode === "cpm_only");
+      payoutAdjustmentMode === "cpm_and_milestone" ||
+      payoutAdjustmentMode === "dual_rewards_only" ||
+      payoutAdjustmentMode === "cpm_only" ||
+      payoutAdjustmentMode === "milestone_only");
   const shouldAdjustBonus =
     hasPayoutAdjustment &&
     (payoutAdjustmentMode === "combined" ||
+      payoutAdjustmentMode === "dual_rewards_only" ||
       payoutAdjustmentMode === "bonus_only");
 
   const isTwitterLeaderboardContest =
@@ -739,6 +992,26 @@ export function CreatorSubmissionsModal({
     (contest?.platform?.toLowerCase() === "twitter" ||
       contest?.platform?.toLowerCase() === "x") &&
     contest?.contest_format === "text_image";
+  const isDualRewardsContest = contest?.contest_type === "dual_rewards";
+  const dualAdjustCpmForModal =
+    isDualRewardsContest &&
+    hasPayoutAdjustment &&
+    (payoutAdjustmentMode === "combined" ||
+      payoutAdjustmentMode === "cpm_and_milestone" ||
+      payoutAdjustmentMode === "dual_rewards_only" ||
+      payoutAdjustmentMode === "cpm_only");
+  const dualAdjustMilestoneForModal =
+    isDualRewardsContest &&
+    hasPayoutAdjustment &&
+    (payoutAdjustmentMode === "combined" ||
+      payoutAdjustmentMode === "cpm_and_milestone" ||
+      payoutAdjustmentMode === "dual_rewards_only" ||
+      payoutAdjustmentMode === "milestone_only" ||
+      payoutAdjustmentMode === "bonus_only");
+  const showDualPayoutAdjBreakdownColumns =
+    isDualRewardsContest &&
+    hasPayoutAdjustment &&
+    (dualAdjustCpmForModal || dualAdjustMilestoneForModal);
 
   // Check if this is a Twitter text_image contest
   const isTwitterTextImageContest =
@@ -799,6 +1072,13 @@ export function CreatorSubmissionsModal({
     if (columnId === "top_traffic_source") return canSeeTraffic;
     return true;
   };
+  const dualPayoutAdjModalBreakdownColumnCount =
+    showDualPayoutAdjBreakdownColumns &&
+    (!isYouTubeContest || showYtColumn("adjusted_reward"))
+      ? 1 +
+        (dualAdjustCpmForModal ? 1 : 0) +
+        (dualAdjustMilestoneForModal ? 1 : 0)
+      : 0;
   const YT_TRAFFIC_SOURCE_LABELS: Record<string, string> = {
     SHORTS: "Shorts",
     YT_SEARCH: "YouTube Search",
@@ -844,7 +1124,9 @@ export function CreatorSubmissionsModal({
     }
     if (status === "permanent_failure") {
       return {
-        help: "Insights cannot be fetched for this post" + errorSuffix,
+        help:
+          "Insights cannot be fetched for this post; refresh can retry once every 24 hours" +
+          errorSuffix,
         dotClass: "bg-rose-500",
         pillClass: isDark
           ? "border-rose-700/60 bg-rose-950/35"
@@ -1406,79 +1688,50 @@ export function CreatorSubmissionsModal({
                         </Tooltip>
                         <div className="-mx-1 flex min-h-9 min-w-0 max-w-full flex-[1_1_200px] items-center overflow-x-auto overscroll-x-contain px-1 [-webkit-overflow-scrolling:touch]">
                           <div className="flex w-max items-center gap-1.5 py-0.5">
-                            {!hasFlatFeeBonus ? (
+                            <Button
+                              size="sm"
+                              onClick={() =>
+                                handleBulkPayment("standard", false)
+                              }
+                              disabled={isAnyBulkPaymentBusy}
+                              className="h-8 shrink-0 bg-blue-600 text-white hover:bg-blue-700"
+                            >
+                              {isBulkPayBtnLoading("standard", false) ? (
+                                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                              ) : (
+                                <DollarSign className="h-3.5 w-3.5" />
+                              )}
+                              {isDualRewardsContest
+                                ? "Mark as Paid (CPM)"
+                                : "Mark as Paid"}
+                            </Button>
+                            {hasFlatFeeBonus || isDualRewardsContest ? (
                               <>
+                                {(!isTwitterCpmContest ||
+                                  isDualRewardsContest) && (
+                                  <Button
+                                    size="sm"
+                                    onClick={() =>
+                                      handleBulkPayment("bonus", false)
+                                    }
+                                    disabled={isAnyBulkPaymentBusy}
+                                    className="h-8 shrink-0 bg-green-600 text-white hover:bg-green-700"
+                                  >
+                                    {isBulkPayBtnLoading("bonus", false) ? (
+                                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                    ) : (
+                                      <DollarSign className="h-3.5 w-3.5" />
+                                    )}
+                                    {isDualRewardsContest
+                                      ? "Mark as Paid (Milestone)"
+                                      : "Mark Bonus as Paid"}
+                                  </Button>
+                                )}
                                 <Button
                                   size="sm"
                                   onClick={() =>
-                                    handleBulkPayment("standard", false)
+                                    handleBulkPayment("both", false)
                                   }
-                                  disabled={isAnyBulkPaymentBusy}
-                                  className="h-8 shrink-0 bg-blue-600 text-white hover:bg-blue-700"
-                                >
-                                  {isBulkPayBtnLoading("standard", false) ? (
-                                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                                  ) : (
-                                    <DollarSign className="h-3.5 w-3.5" />
-                                  )}
-                                  Mark as Paid
-                                </Button>
-                                <span
-                                  className={cn(
-                                    "hidden h-6 w-px shrink-0 self-center sm:block",
-                                    isDark ? "bg-white/15" : "bg-border",
-                                  )}
-                                  aria-hidden
-                                />
-                                <Button
-                                  size="sm"
-                                  onClick={() =>
-                                    handleBulkPayment("standard", true)
-                                  }
-                                  disabled={isAnyBulkPaymentBusy}
-                                  className="h-8 shrink-0 border border-blue-500/80 bg-blue-500/10 text-blue-700 hover:bg-blue-500/20 dark:text-blue-300"
-                                >
-                                  {isBulkPayBtnLoading("standard", true) ? (
-                                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                                  ) : (
-                                    <DollarSign className="h-3.5 w-3.5" />
-                                  )}
-                                  Mark as Paid (Bulk)
-                                </Button>
-                              </>
-                            ) : (
-                              <>
-                                <Button
-                                  size="sm"
-                                  onClick={() =>
-                                    handleBulkPayment("standard", false)
-                                  }
-                                  disabled={isAnyBulkPaymentBusy}
-                                  className="h-8 shrink-0 bg-blue-600 text-white hover:bg-blue-700"
-                                >
-                                  {isBulkPayBtnLoading("standard", false) ? (
-                                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                                  ) : (
-                                    <DollarSign className="h-3.5 w-3.5" />
-                                  )}
-                                  Mark as Paid
-                                </Button>
-                                <Button
-                                  size="sm"
-                                  onClick={() => handleBulkPayment("bonus", false)}
-                                  disabled={isAnyBulkPaymentBusy}
-                                  className="h-8 shrink-0 bg-green-600 text-white hover:bg-green-700"
-                                >
-                                  {isBulkPayBtnLoading("bonus", false) ? (
-                                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                                  ) : (
-                                    <DollarSign className="h-3.5 w-3.5" />
-                                  )}
-                                  Mark Bonus as Paid
-                                </Button>
-                                <Button
-                                  size="sm"
-                                  onClick={() => handleBulkPayment("both", false)}
                                   disabled={isAnyBulkPaymentBusy}
                                   className="h-8 shrink-0 bg-purple-600 text-white hover:bg-purple-700"
                                 >
@@ -1487,7 +1740,9 @@ export function CreatorSubmissionsModal({
                                   ) : (
                                     <DollarSign className="h-3.5 w-3.5" />
                                   )}
-                                  Mark Both as Paid
+                                  {isDualRewardsContest
+                                    ? "Mark Both as Paid (CPM+Milestone)"
+                                    : "Mark Both as Paid"}
                                 </Button>
                                 <span
                                   className={cn(
@@ -1509,24 +1764,35 @@ export function CreatorSubmissionsModal({
                                   ) : (
                                     <DollarSign className="h-3.5 w-3.5" />
                                   )}
-                                  Mark as Paid (Bulk)
+                                  {isDualRewardsContest
+                                    ? "Mark as Paid Bulk (CPM)"
+                                    : "Mark as Paid (Bulk)"}
                                 </Button>
+                                {(!isTwitterCpmContest ||
+                                  isDualRewardsContest) && (
+                                  <Button
+                                    size="sm"
+                                    onClick={() =>
+                                      handleBulkPayment("bonus", true)
+                                    }
+                                    disabled={isAnyBulkPaymentBusy}
+                                    className="h-8 shrink-0 border border-green-500/80 bg-green-500/10 text-green-700 hover:bg-green-500/20 dark:text-green-300"
+                                  >
+                                    {isBulkPayBtnLoading("bonus", true) ? (
+                                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                    ) : (
+                                      <DollarSign className="h-3.5 w-3.5" />
+                                    )}
+                                    {isDualRewardsContest
+                                      ? "Mark as Paid Bulk (Milestone)"
+                                      : "Mark Bonus as Paid (Bulk)"}
+                                  </Button>
+                                )}
                                 <Button
                                   size="sm"
-                                  onClick={() => handleBulkPayment("bonus", true)}
-                                  disabled={isAnyBulkPaymentBusy}
-                                  className="h-8 shrink-0 border border-green-500/80 bg-green-500/10 text-green-700 hover:bg-green-500/20 dark:text-green-300"
-                                >
-                                  {isBulkPayBtnLoading("bonus", true) ? (
-                                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                                  ) : (
-                                    <DollarSign className="h-3.5 w-3.5" />
-                                  )}
-                                  Mark Bonus as Paid (Bulk)
-                                </Button>
-                                <Button
-                                  size="sm"
-                                  onClick={() => handleBulkPayment("both", true)}
+                                  onClick={() =>
+                                    handleBulkPayment("both", true)
+                                  }
                                   disabled={isAnyBulkPaymentBusy}
                                   className="h-8 shrink-0 border border-purple-500/80 bg-purple-500/10 text-purple-700 hover:bg-purple-500/20 dark:text-purple-300"
                                 >
@@ -1535,7 +1801,34 @@ export function CreatorSubmissionsModal({
                                   ) : (
                                     <DollarSign className="h-3.5 w-3.5" />
                                   )}
-                                  Mark Both as Paid (Bulk)
+                                  {isDualRewardsContest
+                                    ? "Mark Both as Paid Bulk (CPM+Milestone)"
+                                    : "Mark Both as Paid (Bulk)"}
+                                </Button>
+                              </>
+                            ) : (
+                              <>
+                                <span
+                                  className={cn(
+                                    "hidden h-6 w-px shrink-0 self-center sm:block",
+                                    isDark ? "bg-white/15" : "bg-border",
+                                  )}
+                                  aria-hidden
+                                />
+                                <Button
+                                  size="sm"
+                                  onClick={() =>
+                                    handleBulkPayment("standard", true)
+                                  }
+                                  disabled={isAnyBulkPaymentBusy}
+                                  className="h-8 shrink-0 border border-blue-500/80 bg-blue-500/10 text-blue-700 hover:bg-blue-500/20 dark:text-blue-300"
+                                >
+                                  {isBulkPayBtnLoading("standard", true) ? (
+                                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                  ) : (
+                                    <DollarSign className="h-3.5 w-3.5" />
+                                  )}
+                                  Mark as Paid (Bulk)
                                 </Button>
                               </>
                             )}
@@ -1679,12 +1972,16 @@ export function CreatorSubmissionsModal({
                             isDark ? "bg-[#391A6A] " : "bg-gray-50",
                           )}
                         >
-                          Expected Reward
+                          {contest?.contest_type === "dual_rewards"
+                            ? "Total Expected Reward"
+                            : "Expected Reward"}
                         </TableHead>
                         {hasPayoutAdjustment &&
                           shouldAdjustReward &&
                           (!isYouTubeContest ||
-                            showYtColumn("adjusted_reward")) && (
+                            showYtColumn("adjusted_reward")) &&
+                          (!isDualRewardsContest ||
+                            !showDualPayoutAdjBreakdownColumns) && (
                             <TableHead
                               className={cn(
                                 "text-center",
@@ -1694,14 +1991,101 @@ export function CreatorSubmissionsModal({
                               Adjusted Reward
                             </TableHead>
                           )}
+                        {contest?.contest_type === "dual_rewards" && (
+                          <>
+                            <TableHead
+                              className={cn(
+                                "text-center",
+                                isDark ? "bg-[#391A6A] " : "bg-gray-50",
+                              )}
+                            >
+                              Expected Reward (CPM)
+                            </TableHead>
+                            <TableHead
+                              className={cn(
+                                "text-center",
+                                isDark ? "bg-[#391A6A] " : "bg-gray-50",
+                              )}
+                            >
+                              Expected Reward (Milestone)
+                            </TableHead>
+                            {showDualPayoutAdjBreakdownColumns &&
+                              (!isYouTubeContest ||
+                                showYtColumn("adjusted_reward")) && (
+                                <>
+                                  <TableHead
+                                    className={cn(
+                                      "text-center",
+                                      isDark ? "bg-[#391A6A] " : "bg-gray-50",
+                                    )}
+                                  >
+                                    Total Adjusted Reward
+                                  </TableHead>
+                                  {dualAdjustCpmForModal && (
+                                    <TableHead
+                                      className={cn(
+                                        "text-center",
+                                        isDark ? "bg-[#391A6A] " : "bg-gray-50",
+                                      )}
+                                    >
+                                      Adjusted Reward (CPM)
+                                    </TableHead>
+                                  )}
+                                  {dualAdjustMilestoneForModal && (
+                                    <TableHead
+                                      className={cn(
+                                        "text-center",
+                                        isDark ? "bg-[#391A6A] " : "bg-gray-50",
+                                      )}
+                                    >
+                                      Adjusted Reward (Milestone)
+                                    </TableHead>
+                                  )}
+                                </>
+                              )}
+                          </>
+                        )}
+                        {(contest?.contest_type === "milestone" ||
+                          contest?.contest_type === "dual_rewards") && (
+                          <TableHead
+                            className={cn(
+                              "text-center min-w-[170px]",
+                              isDark ? "bg-[#391A6A] " : "bg-gray-50",
+                            )}
+                          >
+                            Milestone
+                          </TableHead>
+                        )}
                         <TableHead
                           className={cn(
                             "text-center",
                             isDark ? "bg-[#391A6A] " : "bg-gray-50",
                           )}
                         >
-                          Reward Granted
+                          {contest?.contest_type === "dual_rewards"
+                            ? "Total Reward Granted"
+                            : "Reward Granted"}
                         </TableHead>
+                        {contest?.contest_type === "dual_rewards" && (
+                          <>
+                            <TableHead
+                              className={cn(
+                                "text-center",
+                                isDark ? "bg-[#391A6A] " : "bg-gray-50",
+                              )}
+                            >
+                              Reward Granted (CPM)
+                            </TableHead>
+                            <TableHead
+                              className={cn(
+                                "text-center",
+                                isDark ? "bg-[#391A6A] " : "bg-gray-50",
+                              )}
+                            >
+                              Reward Granted (Milestone)
+                            </TableHead>
+                          </>
+                        )}
                         <TableHead
                           className={cn(
                             "text-center",
@@ -1932,20 +2316,25 @@ export function CreatorSubmissionsModal({
                     {/* Hide reward columns for Twitter text_image contests */}
                     {!isTwitterTextImageContest && (
                       <>
-                        {(!isYouTubeContest || showYtColumn("expected_reward")) && (
+                        {(!isYouTubeContest ||
+                          showYtColumn("expected_reward")) && (
                           <TableHead
                             className={cn(
                               "text-center",
                               isDark ? "bg-[#391A6A] " : "bg-gray-50",
                             )}
                           >
-                            Expected Reward
+                            {contest?.contest_type === "dual_rewards"
+                              ? "Total Expected Reward"
+                              : "Expected Reward"}
                           </TableHead>
                         )}
                         {hasPayoutAdjustment &&
                           shouldAdjustReward &&
                           (!isYouTubeContest ||
-                            showYtColumn("adjusted_reward")) && (
+                            showYtColumn("adjusted_reward")) &&
+                          (!isDualRewardsContest ||
+                            !showDualPayoutAdjBreakdownColumns) && (
                             <TableHead
                               className={cn(
                                 "text-center",
@@ -1955,7 +2344,62 @@ export function CreatorSubmissionsModal({
                               Adjusted Reward
                             </TableHead>
                           )}
-                        {contest?.contest_type === "milestone" && (
+                        {contest?.contest_type === "dual_rewards" && (
+                          <>
+                            <TableHead
+                              className={cn(
+                                "text-center",
+                                isDark ? "bg-[#391A6A] " : "bg-gray-50",
+                              )}
+                            >
+                              Expected Reward (CPM)
+                            </TableHead>
+                            <TableHead
+                              className={cn(
+                                "text-center",
+                                isDark ? "bg-[#391A6A] " : "bg-gray-50",
+                              )}
+                            >
+                              Expected Reward (Milestone)
+                            </TableHead>
+                            {showDualPayoutAdjBreakdownColumns &&
+                              (!isYouTubeContest ||
+                                showYtColumn("adjusted_reward")) && (
+                                <>
+                                  <TableHead
+                                    className={cn(
+                                      "text-center",
+                                      isDark ? "bg-[#391A6A] " : "bg-gray-50",
+                                    )}
+                                  >
+                                    Total Adjusted Reward
+                                  </TableHead>
+                                  {dualAdjustCpmForModal && (
+                                    <TableHead
+                                      className={cn(
+                                        "text-center",
+                                        isDark ? "bg-[#391A6A] " : "bg-gray-50",
+                                      )}
+                                    >
+                                      Adjusted Reward (CPM)
+                                    </TableHead>
+                                  )}
+                                  {dualAdjustMilestoneForModal && (
+                                    <TableHead
+                                      className={cn(
+                                        "text-center",
+                                        isDark ? "bg-[#391A6A] " : "bg-gray-50",
+                                      )}
+                                    >
+                                      Adjusted Reward (Milestone)
+                                    </TableHead>
+                                  )}
+                                </>
+                              )}
+                          </>
+                        )}
+                        {(contest?.contest_type === "milestone" ||
+                          contest?.contest_type === "dual_rewards") && (
                           <TableHead
                             className={cn(
                               "text-center min-w-[170px]",
@@ -1965,15 +2409,40 @@ export function CreatorSubmissionsModal({
                             Milestone
                           </TableHead>
                         )}
-                        {(!isYouTubeContest || showYtColumn("reward_granted")) && (
-                          <TableHead
-                            className={cn(
-                              "text-center",
-                              isDark ? "bg-[#391A6A] " : "bg-gray-50",
+                        {(!isYouTubeContest ||
+                          showYtColumn("reward_granted")) && (
+                          <>
+                            <TableHead
+                              className={cn(
+                                "text-center",
+                                isDark ? "bg-[#391A6A] " : "bg-gray-50",
+                              )}
+                            >
+                              {contest?.contest_type === "dual_rewards"
+                                ? "Total Reward Granted"
+                                : "Reward Granted"}
+                            </TableHead>
+                            {contest?.contest_type === "dual_rewards" && (
+                              <>
+                                <TableHead
+                                  className={cn(
+                                    "text-center",
+                                    isDark ? "bg-[#391A6A] " : "bg-gray-50",
+                                  )}
+                                >
+                                  Reward Granted (CPM)
+                                </TableHead>
+                                <TableHead
+                                  className={cn(
+                                    "text-center",
+                                    isDark ? "bg-[#391A6A] " : "bg-gray-50",
+                                  )}
+                                >
+                                  Reward Granted (Milestone)
+                                </TableHead>
+                              </>
                             )}
-                          >
-                            Reward Granted
-                          </TableHead>
+                          </>
                         )}
                       </>
                     )}
@@ -2062,7 +2531,50 @@ export function CreatorSubmissionsModal({
                   {sortedSubmissions.length === 0 ? (
                     <TableRow>
                       <TableCell
-                        colSpan={40}
+                        colSpan={
+                          isTwitterTextImageContest
+                            ? 18 + // Checkbox, #, Tweet, Total Points, Base Points, Manual Points, Likes, Replies, Retweets, Quote Reposts, Impressions, Expected Reward, Reward Granted, Manual Points Reason, Status, Rejection reason, Submitted, Actions
+                              (contest?.contest_type === "dual_rewards"
+                                ? 4
+                                : 0) + // Dual: Expected/Granted CPM + Milestone
+                              (showDualPayoutAdjBreakdownColumns &&
+                              (!isYouTubeContest ||
+                                showYtColumn("adjusted_reward"))
+                                ? dualPayoutAdjModalBreakdownColumnCount
+                                : 0) +
+                              (contest?.contest_type === "milestone" ||
+                              contest?.contest_type === "dual_rewards"
+                                ? 1
+                                : 0) // Milestone column
+                            : 3 + // Checkbox, #, Content
+                              3 + // Views, Likes, Comments
+                              (isInstagramContest || isTikTokContest
+                                ? isTikTokContest
+                                  ? 3
+                                  : 6
+                                : 0) + // TT: Shares + total engagement + engagement rate; IG: +Saves, Reach, Interactions, Avg/Total watch
+                              2 + // Expected Reward, Reward Granted
+                              (contest?.contest_type === "dual_rewards"
+                                ? 4
+                                : 0) + // Dual: Expected/Granted CPM + Milestone
+                              (showDualPayoutAdjBreakdownColumns &&
+                              (!isYouTubeContest ||
+                                showYtColumn("adjusted_reward"))
+                                ? dualPayoutAdjModalBreakdownColumnCount
+                                : 0) +
+                              (contest?.contest_type === "milestone" ||
+                              contest?.contest_type === "dual_rewards"
+                                ? 1
+                                : 0) + // Milestone
+                              (hasFlatFeeBonus ? 2 : 0) + // Bonus Expected, Bonus Granted
+                              (isAdminView &&
+                              (isInstagramContest ||
+                                isTikTokContest ||
+                                isYouTubeContest)
+                                ? 1
+                                : 0) + // Insights status (admin only)
+                              4 // Status, Rejection reason, Submitted, Actions
+                        }
                         className={cn(
                           "text-center py-8",
                           isDark ? "text-gray-400" : "text-gray-600",
@@ -2103,8 +2615,8 @@ export function CreatorSubmissionsModal({
                         submission.other_stats?.tiktok ||
                         submission.other_stats ||
                         {};
-                      const youtubeStats = (submission.other_stats as any)
-                        ?.youtube || {};
+                      const youtubeStats =
+                        (submission.other_stats as any)?.youtube || {};
                       const shares = isTikTokRow
                         ? Number(tt?.share_count ?? tt?.shares ?? 0)
                         : Number(
@@ -2188,6 +2700,106 @@ export function CreatorSubmissionsModal({
                         : expectedReward;
                       const expectedRewardForDisplay = expectedReward;
 
+                      const milestoneUncappedForDual =
+                        contest?.contest_type === "dual_rewards"
+                          ? Math.max(
+                              Number(
+                                milestoneExpectedPayoutBySubmissionId?.get(
+                                  submission.id,
+                                ) || 0,
+                              ),
+                              0,
+                            )
+                          : 0;
+                      const milestoneExpectedForDual =
+                        contest?.contest_type === "dual_rewards"
+                          ? Math.max(
+                              Number(
+                                dualAndCpmCapMaps.dualMilestoneCappedMap.get(
+                                  submission.id,
+                                ) || 0,
+                              ),
+                              0,
+                            )
+                          : 0;
+                      const cpmExpectedForDual =
+                        contest?.contest_type === "dual_rewards"
+                          ? Math.max(
+                              calculateSubmissionCpmExpectedReward(submission),
+                              0,
+                            )
+                          : 0;
+                      const adjustedCpmExpectedForDual = dualAdjustCpmForModal
+                        ? applyPayoutAdjustment(
+                            cpmExpectedForDual,
+                            payoutAdjustmentPercentage,
+                          )
+                        : cpmExpectedForDual;
+                      const adjustedMilestoneExpectedForDual =
+                        dualAdjustMilestoneForModal
+                          ? applyPayoutAdjustment(
+                              milestoneExpectedForDual,
+                              payoutAdjustmentPercentage,
+                            )
+                          : milestoneExpectedForDual;
+                      const totalExpectedForDual =
+                        contest?.contest_type === "dual_rewards"
+                          ? adjustedCpmExpectedForDual +
+                            adjustedMilestoneExpectedForDual
+                          : 0;
+                      const rawCpmUncappedForDual =
+                        contest?.contest_type === "dual_rewards"
+                          ? calculateRawSubmissionCpmExpectedReward(submission)
+                          : 0;
+                      const uncappedCpmAdjustedForDualTooltip =
+                        contest?.contest_type === "dual_rewards"
+                          ? dualAdjustCpmForModal
+                            ? applyPayoutAdjustment(
+                                rawCpmUncappedForDual,
+                                payoutAdjustmentPercentage,
+                              )
+                            : rawCpmUncappedForDual
+                          : 0;
+                      const detailsForCap = contest?.contest_based_details as any;
+                      const activeCreatorCapCents = Number(
+                        (contest as any)?.max_earnings_per_creator ??
+                          detailsForCap?.cpm_contest?.max_earnings_per_creator ??
+                          (contest?.contest_type === "leaderboard"
+                            ? detailsForCap?.leaderboard_contest
+                                ?.max_earnings_per_creator
+                            : 0) ??
+                          0,
+                      );
+                      const dualCreatorCapWarning =
+                        contest?.contest_type === "dual_rewards" &&
+                        activeCreatorCapCents > 0 &&
+                        cpmExpectedForDual + milestoneExpectedForDual <
+                          rawCpmUncappedForDual + milestoneUncappedForDual;
+                      const uncappedTotalForDualTooltip =
+                        contest?.contest_type === "dual_rewards"
+                          ? uncappedCpmAdjustedForDualTooltip +
+                            (dualAdjustMilestoneForModal
+                              ? applyPayoutAdjustment(
+                                  milestoneUncappedForDual,
+                                  payoutAdjustmentPercentage,
+                                )
+                              : milestoneUncappedForDual)
+                          : 0;
+                      const uncappedMilestoneAdjustedForDualTooltip =
+                        contest?.contest_type === "dual_rewards"
+                          ? dualAdjustMilestoneForModal
+                            ? applyPayoutAdjustment(
+                                milestoneUncappedForDual,
+                                payoutAdjustmentPercentage,
+                              )
+                            : milestoneUncappedForDual
+                          : 0;
+                      const dualMilestoneCapWarning =
+                        contest?.contest_type === "dual_rewards" &&
+                        activeCreatorCapCents > 0 &&
+                        milestoneUncappedForDual > 0 &&
+                        milestoneExpectedForDual < milestoneUncappedForDual;
+
                       // Use ACTUAL earnings for granted reward (includes custom pay amount)
                       // For Twitter CPM: treat as paid when paid flag or moderation_status is 'paid'
                       // Prefer: explicit paid/granted amount (custom pay) > submission.earnings > expected reward
@@ -2204,16 +2816,62 @@ export function CreatorSubmissionsModal({
                       const grantedReward = isPaidForGranted
                         ? explicitPaidAmount != null && explicitPaidAmount > 0
                           ? Number(explicitPaidAmount)
-                          : contest?.contest_type === "milestone"
-                            ? shouldAdjustReward
-                              ? adjustedExpectedReward
-                              : expectedReward
-                            : submission.earnings && submission.earnings > 0
-                              ? submission.earnings
+                          : submission.earnings && submission.earnings > 0
+                            ? submission.earnings
+                            : contest?.contest_type === "milestone"
+                              ? shouldAdjustReward
+                                ? adjustedExpectedReward
+                                : expectedReward
                               : expectedReward
                         : 0;
+                      const isDualPaid =
+                        contest?.contest_type === "dual_rewards" &&
+                        isPaidForGranted;
+                      const dualScope = getDualPayoutScopeFromSubmission(
+                        submission as any,
+                        isPaidForGranted && grantedReward > 0
+                          ? {
+                              paidTotalCents: grantedReward,
+                              cpmExpectedCents: adjustedCpmExpectedForDual,
+                              milestoneExpectedCents:
+                                adjustedMilestoneExpectedForDual,
+                            }
+                          : undefined,
+                      );
+                      const dualPaidComponent = dualScope ?? "";
+                      const totalGrantedForDual =
+                        contest?.contest_type === "dual_rewards"
+                          ? grantedReward
+                          : 0;
+                      let milestoneGrantedForDual = 0;
+                      let cpmGrantedForDual = 0;
+                      if (contest?.contest_type === "dual_rewards") {
+                        if (dualPaidComponent === "milestone") {
+                          milestoneGrantedForDual = totalGrantedForDual;
+                        } else if (dualPaidComponent === "cpm") {
+                          cpmGrantedForDual = totalGrantedForDual;
+                        } else if (
+                          dualPaidComponent === "both" ||
+                          (isDualPaid && !dualPaidComponent)
+                        ) {
+                          const sp = splitDualPaidTotalByExpectedWeights(
+                            totalGrantedForDual,
+                            adjustedCpmExpectedForDual,
+                            adjustedMilestoneExpectedForDual,
+                            {
+                              cpmUncappedCents: rawCpmUncappedForDual,
+                              milestoneUncappedCents: milestoneUncappedForDual,
+                            },
+                          );
+                          cpmGrantedForDual = sp.cpmCents;
+                          milestoneGrantedForDual = sp.milestoneCents;
+                        }
+                      }
                       const uncappedExpectedReward =
-                        calculateSubmissionBaseExpectedReward(submission, false);
+                        calculateSubmissionBaseExpectedReward(
+                          submission,
+                          false,
+                        );
                       const uncappedExpectedRewardAdjusted = shouldAdjustReward
                         ? applyPayoutAdjustment(
                             uncappedExpectedReward,
@@ -2221,7 +2879,8 @@ export function CreatorSubmissionsModal({
                           )
                         : uncappedExpectedReward;
                       const isCappedToZeroWithPotential =
-                        expectedReward === 0 && uncappedExpectedRewardAdjusted > 0;
+                        expectedReward === 0 &&
+                        uncappedExpectedRewardAdjusted > 0;
                       const expectedBonus =
                         expectedBonusMap.get(submission.id) || 0;
                       const adjustedExpectedBonus = shouldAdjustBonus
@@ -2249,7 +2908,8 @@ export function CreatorSubmissionsModal({
                       const isSubmissionPending =
                         normalizedStatus === "pending";
                       const milestoneAssignmentLabel =
-                        contest?.contest_type === "milestone"
+                        contest?.contest_type === "milestone" ||
+                        contest?.contest_type === "dual_rewards"
                           ? (milestoneAssignedLabelBySubmissionId?.get(
                               submission.id,
                             ) ?? "Not eligible")
@@ -2577,21 +3237,182 @@ export function CreatorSubmissionsModal({
                                 </div>
                               </TableCell>
                               <TableCell className="text-center font-medium text-sm">
-                                {formatCurrency(expectedRewardForDisplay)}
+                                {contest?.contest_type === "dual_rewards"
+                                  ? formatCurrency(
+                                      cpmExpectedForDual +
+                                        milestoneExpectedForDual,
+                                    )
+                                  : formatCurrency(expectedRewardForDisplay)}
                               </TableCell>
                               {hasPayoutAdjustment &&
                                 shouldAdjustReward &&
                                 (!isYouTubeContest ||
-                                  showYtColumn("adjusted_reward")) && (
+                                  showYtColumn("adjusted_reward")) &&
+                                (!isDualRewardsContest ||
+                                  !showDualPayoutAdjBreakdownColumns) && (
                                   <TableCell className="text-center font-medium text-sm">
                                     {formatCurrency(adjustedExpectedReward)}
                                   </TableCell>
                                 )}
+                              {contest?.contest_type === "dual_rewards" && (
+                                <>
+                                  <TableCell className="text-center font-medium text-sm">
+                                    <div className="inline-flex items-center justify-center gap-1 flex-wrap">
+                                      <span>
+                                        {formatCurrency(cpmExpectedForDual)}
+                                      </span>
+                                      {dualCreatorCapWarning && (
+                                        <Tooltip>
+                                          <TooltipTrigger asChild>
+                                            <AlertTriangle className="h-3.5 w-3.5 text-amber-500 cursor-help shrink-0" />
+                                          </TooltipTrigger>
+                                          <TooltipContent className="max-w-[260px] text-left whitespace-pre-line">
+                                            Creator cap exhausted for expected
+                                            payout order.
+                                            {"\n"}
+                                            {totalGrantedForDual > 0 ? (
+                                              <>
+                                                Actual granted amount:{" "}
+                                                {formatCurrency(
+                                                  totalGrantedForDual,
+                                                )}
+                                              </>
+                                            ) : (
+                                              <>
+                                                Else expected total would be:{" "}
+                                                {formatCurrency(
+                                                  uncappedTotalForDualTooltip,
+                                                )}
+                                              </>
+                                            )}
+                                          </TooltipContent>
+                                        </Tooltip>
+                                      )}
+                                    </div>
+                                  </TableCell>
+                                  <TableCell className="text-center font-medium text-sm">
+                                    <div className="inline-flex items-center justify-center gap-1 flex-wrap">
+                                      <span>
+                                        {formatCurrency(
+                                          milestoneExpectedForDual,
+                                        )}
+                                      </span>
+                                      {dualMilestoneCapWarning && (
+                                        <Tooltip>
+                                          <TooltipTrigger asChild>
+                                            <AlertTriangle className="h-3.5 w-3.5 text-amber-500 cursor-help shrink-0" />
+                                          </TooltipTrigger>
+                                          <TooltipContent className="max-w-[260px] text-left whitespace-pre-line">
+                                            Creator cap exhausted for expected
+                                            payout order.
+                                            {"\n"}
+                                            {milestoneGrantedForDual > 0 ? (
+                                              <>
+                                                Actual granted milestone:{" "}
+                                                {formatCurrency(
+                                                  milestoneGrantedForDual,
+                                                )}
+                                              </>
+                                            ) : (
+                                              <>
+                                                Else expected milestone would
+                                                be:{" "}
+                                                {formatCurrency(
+                                                  uncappedMilestoneAdjustedForDualTooltip,
+                                                )}
+                                              </>
+                                            )}
+                                          </TooltipContent>
+                                        </Tooltip>
+                                      )}
+                                    </div>
+                                  </TableCell>
+                                  {showDualPayoutAdjBreakdownColumns &&
+                                    (!isYouTubeContest ||
+                                      showYtColumn("adjusted_reward")) && (
+                                      <>
+                                        <TableCell className="text-center font-medium text-sm">
+                                          {formatCurrency(
+                                            adjustedCpmExpectedForDual +
+                                              adjustedMilestoneExpectedForDual,
+                                          )}
+                                        </TableCell>
+                                        {dualAdjustCpmForModal && (
+                                          <TableCell className="text-center font-medium text-sm">
+                                            {formatCurrency(
+                                              adjustedCpmExpectedForDual,
+                                            )}
+                                          </TableCell>
+                                        )}
+                                        {dualAdjustMilestoneForModal && (
+                                          <TableCell className="text-center font-medium text-sm">
+                                            {formatCurrency(
+                                              adjustedMilestoneExpectedForDual,
+                                            )}
+                                          </TableCell>
+                                        )}
+                                      </>
+                                    )}
+                                </>
+                              )}
+                              {(contest?.contest_type === "milestone" ||
+                                contest?.contest_type === "dual_rewards") && (
+                                <TableCell className="text-center">
+                                  {milestoneAssignmentLabel === "—" ? (
+                                    <span
+                                      className={cn(
+                                        "text-xs font-medium",
+                                        isDark
+                                          ? "text-slate-400"
+                                          : "text-slate-500",
+                                      )}
+                                    >
+                                      —
+                                    </span>
+                                  ) : (
+                                    <div className="flex flex-col items-center gap-1">
+                                      <span className="inline-flex items-center rounded-full bg-violet-100 text-violet-700 px-2 py-0.5 text-[10px] font-semibold">
+                                        {milestonePrimaryLabel}
+                                      </span>
+                                      <span
+                                        className={cn(
+                                          "text-xs font-medium whitespace-nowrap",
+                                          isDark
+                                            ? "text-slate-200"
+                                            : "text-slate-700",
+                                        )}
+                                      >
+                                        {milestoneViewsLabel}
+                                      </span>
+                                    </div>
+                                  )}
+                                </TableCell>
+                              )}
                               <TableCell className="text-center font-medium text-green-600">
-                                {grantedReward > 0
-                                  ? formatCurrency(grantedReward)
+                                {(contest?.contest_type === "dual_rewards"
+                                  ? totalGrantedForDual
+                                  : grantedReward) > 0
+                                  ? formatCurrency(
+                                      contest?.contest_type === "dual_rewards"
+                                        ? totalGrantedForDual
+                                        : grantedReward,
+                                    )
                                   : "-"}
                               </TableCell>
+                              {contest?.contest_type === "dual_rewards" && (
+                                <>
+                                  <TableCell className="text-center font-medium text-green-600">
+                                    {cpmGrantedForDual > 0
+                                      ? formatCurrency(cpmGrantedForDual)
+                                      : "-"}
+                                  </TableCell>
+                                  <TableCell className="text-center font-medium text-green-600">
+                                    {milestoneGrantedForDual > 0
+                                      ? formatCurrency(milestoneGrantedForDual)
+                                      : "-"}
+                                  </TableCell>
+                                </>
+                              )}
                               {/* Manual Points Reason */}
                               <TableCell className="text-center">
                                 {submission.manual_points_reason ? (
@@ -2705,7 +3526,8 @@ export function CreatorSubmissionsModal({
                                   {likes.toLocaleString()}
                                 </TableCell>
                               )}
-                              {(!isYouTubeContest || showYtColumn("comments")) && (
+                              {(!isYouTubeContest ||
+                                showYtColumn("comments")) && (
                                 <TableCell className="text-center font-mono">
                                   {comments.toLocaleString()}
                                 </TableCell>
@@ -2718,194 +3540,244 @@ export function CreatorSubmissionsModal({
                               )}
                               {isYouTubeContest && showYtColumn("shares") && (
                                 <TableCell className="text-center font-mono">
-                                  {ytShares > 0 ? formatMetricValue(ytShares) : "—"}
-                                </TableCell>
-                              )}
-                              {isYouTubeContest && showYtColumn("avg_view_pct") && (
-                                <TableCell className="text-center font-mono">
-                                  {ytAvgViewPct > 0
-                                    ? `${ytAvgViewPct.toFixed(1)}%`
+                                  {ytShares > 0
+                                    ? formatMetricValue(ytShares)
                                     : "—"}
                                 </TableCell>
                               )}
-                              {isYouTubeContest && showYtColumn("watch_time") && (
-                                <TableCell className="text-center font-mono">
-                                  {ytWatchTimeMinutes > 0
-                                    ? formatWatchTime(ytWatchTimeMinutes * 60 * 1000)
-                                    : "—"}
-                                </TableCell>
-                              )}
-                              {isYouTubeContest && showYtColumn("avg_duration") && (
-                                <TableCell className="text-center font-mono">
-                                  {ytAvgDurationSeconds > 0
-                                    ? `${ytAvgDurationSeconds}s`
-                                    : "—"}
-                                </TableCell>
-                              )}
-                              {isYouTubeContest && showYtColumn("engaged_views") && (
-                                <TableCell className="text-center font-mono">
-                                  {ytEngagedViews > 0
-                                    ? formatMetricValue(ytEngagedViews)
-                                    : "—"}
-                                </TableCell>
-                              )}
-                              {isYouTubeContest && showYtColumn("subs_gained") && (
-                                <TableCell className="text-center font-mono text-sm">
-                                  {youtubeStats.subscribers_gained != null ? (
-                                    <span
-                                      className={cn(
-                                        "font-bold",
-                                        Number(youtubeStats.subscribers_gained) > 0
-                                          ? "text-green-600"
-                                          : isDark
-                                            ? "text-slate-400"
-                                            : "text-slate-600",
-                                      )}
-                                    >
-                                      {Number(youtubeStats.subscribers_gained) > 0
-                                        ? "+"
-                                        : ""}
-                                      {youtubeStats.subscribers_gained}
-                                    </span>
-                                  ) : (
-                                    <span
-                                      className={cn(
-                                        "text-xs",
-                                        isDark ? "text-slate-500" : "text-slate-400",
-                                      )}
-                                    >
-                                      —
-                                    </span>
-                                  )}
-                                </TableCell>
-                              )}
-                              {isYouTubeContest && showYtColumn("bot_score") && (
-                                <TableCell className="text-center">
-                                  {youtubeStats.bot_score !== null &&
-                                  youtubeStats.bot_score !== undefined ? (
-                                    <div className="flex flex-col items-center gap-0.5">
+                              {isYouTubeContest &&
+                                showYtColumn("avg_view_pct") && (
+                                  <TableCell className="text-center font-mono">
+                                    {ytAvgViewPct > 0
+                                      ? `${ytAvgViewPct.toFixed(1)}%`
+                                      : "—"}
+                                  </TableCell>
+                                )}
+                              {isYouTubeContest &&
+                                showYtColumn("watch_time") && (
+                                  <TableCell className="text-center font-mono">
+                                    {ytWatchTimeMinutes > 0
+                                      ? formatWatchTime(
+                                          ytWatchTimeMinutes * 60 * 1000,
+                                        )
+                                      : "—"}
+                                  </TableCell>
+                                )}
+                              {isYouTubeContest &&
+                                showYtColumn("avg_duration") && (
+                                  <TableCell className="text-center font-mono">
+                                    {ytAvgDurationSeconds > 0
+                                      ? `${ytAvgDurationSeconds}s`
+                                      : "—"}
+                                  </TableCell>
+                                )}
+                              {isYouTubeContest &&
+                                showYtColumn("engaged_views") && (
+                                  <TableCell className="text-center font-mono">
+                                    {ytEngagedViews > 0
+                                      ? formatMetricValue(ytEngagedViews)
+                                      : "—"}
+                                  </TableCell>
+                                )}
+                              {isYouTubeContest &&
+                                showYtColumn("subs_gained") && (
+                                  <TableCell className="text-center font-mono text-sm">
+                                    {youtubeStats.subscribers_gained != null ? (
                                       <span
                                         className={cn(
-                                          "inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold border",
-                                          Number(youtubeStats.bot_score) >= 60
-                                            ? "bg-red-100 text-red-700 border-red-300"
-                                            : Number(youtubeStats.bot_score) >= 30
-                                              ? "bg-yellow-100 text-yellow-700 border-yellow-300"
-                                              : "bg-green-100 text-green-600 border-green-300",
+                                          "font-bold",
+                                          Number(
+                                            youtubeStats.subscribers_gained,
+                                          ) > 0
+                                            ? "text-green-600"
+                                            : isDark
+                                              ? "text-slate-400"
+                                              : "text-slate-600",
                                         )}
-                                        title={
-                                          Array.isArray(youtubeStats.bot_flags)
-                                            ? youtubeStats.bot_flags.join("\n")
-                                            : "No flags"
-                                        }
                                       >
-                                        {Number(youtubeStats.bot_score) >= 60 ? "⚠ " : ""}
-                                        {youtubeStats.bot_score}
-                                        /100
+                                        {Number(
+                                          youtubeStats.subscribers_gained,
+                                        ) > 0
+                                          ? "+"
+                                          : ""}
+                                        {youtubeStats.subscribers_gained}
                                       </span>
-                                      {youtubeStats.bot_flags &&
-                                        youtubeStats.bot_flags.length > 0 && (
-                                          <span
-                                            className={cn(
-                                              "text-xs",
-                                              isDark
-                                                ? "text-slate-400"
-                                                : "text-slate-500",
-                                            )}
-                                          >
-                                            {youtubeStats.bot_flags.length} flag
-                                            {youtubeStats.bot_flags.length !== 1
-                                              ? "s"
-                                              : ""}
-                                          </span>
+                                    ) : (
+                                      <span
+                                        className={cn(
+                                          "text-xs",
+                                          isDark
+                                            ? "text-slate-500"
+                                            : "text-slate-400",
                                         )}
-                                    </div>
-                                  ) : (
-                                    <span
-                                      className={cn(
-                                        "text-xs",
-                                        isDark ? "text-slate-500" : "text-slate-400",
-                                      )}
+                                      >
+                                        —
+                                      </span>
+                                    )}
+                                  </TableCell>
+                                )}
+                              {isYouTubeContest &&
+                                showYtColumn("bot_score") && (
+                                  <TableCell className="text-center">
+                                    {youtubeStats.bot_score !== null &&
+                                    youtubeStats.bot_score !== undefined ? (
+                                      <div className="flex flex-col items-center gap-0.5">
+                                        <span
+                                          className={cn(
+                                            "inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold border",
+                                            Number(youtubeStats.bot_score) >= 60
+                                              ? "bg-red-100 text-red-700 border-red-300"
+                                              : Number(
+                                                    youtubeStats.bot_score,
+                                                  ) >= 30
+                                                ? "bg-yellow-100 text-yellow-700 border-yellow-300"
+                                                : "bg-green-100 text-green-600 border-green-300",
+                                          )}
+                                          title={
+                                            Array.isArray(
+                                              youtubeStats.bot_flags,
+                                            )
+                                              ? youtubeStats.bot_flags.join(
+                                                  "\n",
+                                                )
+                                              : "No flags"
+                                          }
+                                        >
+                                          {Number(youtubeStats.bot_score) >= 60
+                                            ? "⚠ "
+                                            : ""}
+                                          {youtubeStats.bot_score}
+                                          /100
+                                        </span>
+                                        {youtubeStats.bot_flags &&
+                                          youtubeStats.bot_flags.length > 0 && (
+                                            <span
+                                              className={cn(
+                                                "text-xs",
+                                                isDark
+                                                  ? "text-slate-400"
+                                                  : "text-slate-500",
+                                              )}
+                                            >
+                                              {youtubeStats.bot_flags.length}{" "}
+                                              flag
+                                              {youtubeStats.bot_flags.length !==
+                                              1
+                                                ? "s"
+                                                : ""}
+                                            </span>
+                                          )}
+                                      </div>
+                                    ) : (
+                                      <span
+                                        className={cn(
+                                          "text-xs",
+                                          isDark
+                                            ? "text-slate-500"
+                                            : "text-slate-400",
+                                        )}
+                                      >
+                                        No data
+                                      </span>
+                                    )}
+                                  </TableCell>
+                                )}
+                              {isYouTubeContest &&
+                                showYtColumn("analytics") && (
+                                  <TableCell className="text-center">
+                                    <YouTubeAnalyticsPanel
+                                      metrics={{
+                                        views:
+                                          youtubeStats.views ??
+                                          submission.views ??
+                                          0,
+                                        likes: youtubeStats.likes ?? 0,
+                                        dislikes: youtubeStats.dislikes ?? 0,
+                                        comments: youtubeStats.comments ?? 0,
+                                        shares: youtubeStats.shares ?? 0,
+                                        subscribers_gained:
+                                          youtubeStats.subscribers_gained ?? 0,
+                                        subscribers_lost:
+                                          youtubeStats.subscribers_lost ?? 0,
+                                        videos_added_to_playlists:
+                                          youtubeStats.videos_added_to_playlists ??
+                                          0,
+                                        videos_removed_from_playlists:
+                                          youtubeStats.videos_removed_from_playlists ??
+                                          0,
+                                        estimated_minutes_watched:
+                                          youtubeStats.estimated_minutes_watched ??
+                                          0,
+                                        avg_view_duration_seconds:
+                                          youtubeStats.avg_view_duration_seconds ??
+                                          0,
+                                        avg_view_percentage:
+                                          youtubeStats.avg_view_percentage ?? 0,
+                                        engaged_views:
+                                          youtubeStats.engaged_views ?? 0,
+                                        traffic_sources:
+                                          youtubeStats.traffic_sources ?? null,
+                                        demographics:
+                                          youtubeStats.demographics ?? null,
+                                        bot_score:
+                                          youtubeStats.bot_score ?? null,
+                                        bot_flags: youtubeStats.bot_flags ?? [],
+                                        analytics_needs_reauth:
+                                          youtubeStats.analytics_needs_reauth ??
+                                          false,
+                                        last_basic_update:
+                                          youtubeStats.last_basic_update ??
+                                          null,
+                                        last_traffic_update:
+                                          youtubeStats.last_traffic_update ??
+                                          null,
+                                        last_demographics_update:
+                                          youtubeStats.last_demographics_update ??
+                                          null,
+                                      }}
+                                      isDark={isDark}
+                                      showCore={canSeeCore}
+                                      showTraffic={canSeeTraffic}
+                                      showDemographics={canSeeDemographics}
                                     >
-                                      No data
-                                    </span>
-                                  )}
-                                </TableCell>
-                              )}
-                              {isYouTubeContest && showYtColumn("analytics") && (
-                                <TableCell className="text-center">
-                                  <YouTubeAnalyticsPanel
-                                    metrics={{
-                                      views: youtubeStats.views ?? submission.views ?? 0,
-                                      likes: youtubeStats.likes ?? 0,
-                                      dislikes: youtubeStats.dislikes ?? 0,
-                                      comments: youtubeStats.comments ?? 0,
-                                      shares: youtubeStats.shares ?? 0,
-                                      subscribers_gained:
-                                        youtubeStats.subscribers_gained ?? 0,
-                                      subscribers_lost:
-                                        youtubeStats.subscribers_lost ?? 0,
-                                      videos_added_to_playlists:
-                                        youtubeStats.videos_added_to_playlists ?? 0,
-                                      videos_removed_from_playlists:
-                                        youtubeStats.videos_removed_from_playlists ?? 0,
-                                      estimated_minutes_watched:
-                                        youtubeStats.estimated_minutes_watched ?? 0,
-                                      avg_view_duration_seconds:
-                                        youtubeStats.avg_view_duration_seconds ?? 0,
-                                      avg_view_percentage:
-                                        youtubeStats.avg_view_percentage ?? 0,
-                                      engaged_views: youtubeStats.engaged_views ?? 0,
-                                      traffic_sources:
-                                        youtubeStats.traffic_sources ?? null,
-                                      demographics: youtubeStats.demographics ?? null,
-                                      bot_score: youtubeStats.bot_score ?? null,
-                                      bot_flags: youtubeStats.bot_flags ?? [],
-                                      analytics_needs_reauth:
-                                        youtubeStats.analytics_needs_reauth ?? false,
-                                      last_basic_update:
-                                        youtubeStats.last_basic_update ?? null,
-                                      last_traffic_update:
-                                        youtubeStats.last_traffic_update ?? null,
-                                      last_demographics_update:
-                                        youtubeStats.last_demographics_update ?? null,
-                                    }}
-                                    isDark={isDark}
-                                    showCore={canSeeCore}
-                                    showTraffic={canSeeTraffic}
-                                    showDemographics={canSeeDemographics}
-                                  >
-                                    <button
-                                      className={cn(
-                                        "inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs transition-colors",
-                                        isDark
-                                          ? "bg-slate-800 hover:bg-slate-700 text-slate-300"
-                                          : "bg-slate-100 hover:bg-purple-100 text-slate-600 hover:text-purple-700",
-                                      )}
-                                    >
-                                      <BarChart2 className="h-3 w-3" />
-                                      Details
-                                    </button>
-                                  </YouTubeAnalyticsPanel>
-                                </TableCell>
-                              )}
+                                      <button
+                                        className={cn(
+                                          "inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs transition-colors",
+                                          isDark
+                                            ? "bg-slate-800 hover:bg-slate-700 text-slate-300"
+                                            : "bg-slate-100 hover:bg-purple-100 text-slate-600 hover:text-purple-700",
+                                        )}
+                                      >
+                                        <BarChart2 className="h-3 w-3" />
+                                        Details
+                                      </button>
+                                    </YouTubeAnalyticsPanel>
+                                  </TableCell>
+                                )}
                               {isYouTubeContest &&
                                 showYtColumn("top_traffic_source") && (
                                   <TableCell className="text-center font-mono text-xs">
                                     {(() => {
-                                      const ts = youtubeStats.traffic_sources as
-                                        | Record<string, number>
-                                        | undefined;
+                                      const ts =
+                                        youtubeStats.traffic_sources as
+                                          | Record<string, number>
+                                          | undefined;
                                       if (!ts || Object.keys(ts).length === 0)
                                         return "—";
                                       const entries = Object.entries(ts);
                                       const top = entries.reduce(
                                         (best, [k, v]) =>
-                                          v > best.pct ? { key: k, pct: v } : best,
-                                        { key: entries[0][0], pct: entries[0][1] },
+                                          v > best.pct
+                                            ? { key: k, pct: v }
+                                            : best,
+                                        {
+                                          key: entries[0][0],
+                                          pct: entries[0][1],
+                                        },
                                       );
                                       const label =
-                                        YT_TRAFFIC_SOURCE_LABELS[top.key] || top.key;
+                                        YT_TRAFFIC_SOURCE_LABELS[top.key] ||
+                                        top.key;
                                       return `${label} ${top.pct.toFixed(1)}%`;
                                     })()}
                                   </TableCell>
@@ -2991,7 +3863,45 @@ export function CreatorSubmissionsModal({
                                   {(!isYouTubeContest ||
                                     showYtColumn("expected_reward")) && (
                                     <TableCell className="text-center font-medium">
-                                      {isCappedToZeroWithPotential ? (
+                                      {contest?.contest_type ===
+                                      "dual_rewards" ? (
+                                        <div className="inline-flex items-center justify-center gap-1 flex-wrap">
+                                          <span>
+                                            {formatCurrency(
+                                              cpmExpectedForDual +
+                                                milestoneExpectedForDual,
+                                            )}
+                                          </span>
+                                          {dualCreatorCapWarning && (
+                                            <Tooltip>
+                                              <TooltipTrigger asChild>
+                                                <AlertTriangle className="h-3.5 w-3.5 text-amber-500 cursor-help shrink-0" />
+                                              </TooltipTrigger>
+                                              <TooltipContent className="max-w-[260px] text-left whitespace-pre-line">
+                                                Creator cap exhausted for
+                                                expected payout order.
+                                                {"\n"}
+                                                {totalGrantedForDual > 0 ? (
+                                                  <>
+                                                    Actual granted amount:{" "}
+                                                    {formatCurrency(
+                                                      totalGrantedForDual,
+                                                    )}
+                                                  </>
+                                                ) : (
+                                                  <>
+                                                    Else expected total would
+                                                    be:{" "}
+                                                    {formatCurrency(
+                                                      uncappedTotalForDualTooltip,
+                                                    )}
+                                                  </>
+                                                )}
+                                              </TooltipContent>
+                                            </Tooltip>
+                                          )}
+                                        </div>
+                                      ) : isCappedToZeroWithPotential ? (
                                         <div className="inline-flex items-center gap-1">
                                           <span>{formatCurrency(0)}</span>
                                           <Tooltip>
@@ -2999,12 +3909,15 @@ export function CreatorSubmissionsModal({
                                               <AlertTriangle className="h-3.5 w-3.5 text-amber-500 cursor-help" />
                                             </TooltipTrigger>
                                             <TooltipContent className="max-w-[260px] text-left">
-                                              Creator cap exhausted for expected payout order.
+                                              Creator cap exhausted for expected
+                                              payout order.
                                               <br />
                                               {grantedReward > 0 ? (
                                                 <>
                                                   Actual granted amount:{" "}
-                                                  {formatCurrency(grantedReward)}
+                                                  {formatCurrency(
+                                                    grantedReward,
+                                                  )}
                                                 </>
                                               ) : (
                                                 <>
@@ -3025,7 +3938,9 @@ export function CreatorSubmissionsModal({
                                   {hasPayoutAdjustment &&
                                     shouldAdjustReward &&
                                     (!isYouTubeContest ||
-                                      showYtColumn("adjusted_reward")) && (
+                                      showYtColumn("adjusted_reward")) &&
+                                    (!isDualRewardsContest ||
+                                      !showDualPayoutAdjBreakdownColumns) && (
                                       <TableCell className="text-center font-medium">
                                         {isCappedToZeroWithPotential
                                           ? formatCurrency(0)
@@ -3034,7 +3949,111 @@ export function CreatorSubmissionsModal({
                                             )}
                                       </TableCell>
                                     )}
-                                  {contest?.contest_type === "milestone" && (
+                                  {contest?.contest_type === "dual_rewards" && (
+                                    <>
+                                      <TableCell className="text-center font-medium">
+                                        <div className="inline-flex items-center justify-center gap-1 flex-wrap">
+                                          <span>
+                                            {formatCurrency(cpmExpectedForDual)}
+                                          </span>
+                                          {dualCreatorCapWarning && (
+                                            <Tooltip>
+                                              <TooltipTrigger asChild>
+                                                <AlertTriangle className="h-3.5 w-3.5 text-amber-500 cursor-help shrink-0" />
+                                              </TooltipTrigger>
+                                              <TooltipContent className="max-w-[260px] text-left whitespace-pre-line">
+                                                Creator cap exhausted for
+                                                expected payout order.
+                                                {"\n"}
+                                                {totalGrantedForDual > 0 ? (
+                                                  <>
+                                                    Actual granted amount:{" "}
+                                                    {formatCurrency(
+                                                      totalGrantedForDual,
+                                                    )}
+                                                  </>
+                                                ) : (
+                                                  <>
+                                                    Else expected reward would
+                                                    be:{" "}
+                                                    {formatCurrency(
+                                                      uncappedCpmAdjustedForDualTooltip,
+                                                    )}
+                                                  </>
+                                                )}
+                                              </TooltipContent>
+                                            </Tooltip>
+                                          )}
+                                        </div>
+                                      </TableCell>
+                                      <TableCell className="text-center font-medium">
+                                        <div className="inline-flex items-center justify-center gap-1 flex-wrap">
+                                          <span>
+                                            {formatCurrency(
+                                              milestoneExpectedForDual,
+                                            )}
+                                          </span>
+                                          {dualMilestoneCapWarning && (
+                                            <Tooltip>
+                                              <TooltipTrigger asChild>
+                                                <AlertTriangle className="h-3.5 w-3.5 text-amber-500 cursor-help shrink-0" />
+                                              </TooltipTrigger>
+                                              <TooltipContent className="max-w-[260px] text-left whitespace-pre-line">
+                                                Creator cap exhausted for
+                                                expected payout order.
+                                                {"\n"}
+                                                {milestoneGrantedForDual > 0 ? (
+                                                  <>
+                                                    Actual granted milestone:{" "}
+                                                    {formatCurrency(
+                                                      milestoneGrantedForDual,
+                                                    )}
+                                                  </>
+                                                ) : (
+                                                  <>
+                                                    Else expected milestone would
+                                                    be:{" "}
+                                                    {formatCurrency(
+                                                      uncappedMilestoneAdjustedForDualTooltip,
+                                                    )}
+                                                  </>
+                                                )}
+                                              </TooltipContent>
+                                            </Tooltip>
+                                          )}
+                                        </div>
+                                      </TableCell>
+                                      {showDualPayoutAdjBreakdownColumns &&
+                                        (!isYouTubeContest ||
+                                          showYtColumn("adjusted_reward")) && (
+                                          <>
+                                            <TableCell className="text-center font-medium">
+                                              {formatCurrency(
+                                                adjustedCpmExpectedForDual +
+                                                  adjustedMilestoneExpectedForDual,
+                                              )}
+                                            </TableCell>
+                                            {dualAdjustCpmForModal && (
+                                              <TableCell className="text-center font-medium">
+                                                {formatCurrency(
+                                                  adjustedCpmExpectedForDual,
+                                                )}
+                                              </TableCell>
+                                            )}
+                                            {dualAdjustMilestoneForModal && (
+                                              <TableCell className="text-center font-medium">
+                                                {formatCurrency(
+                                                  adjustedMilestoneExpectedForDual,
+                                                )}
+                                              </TableCell>
+                                            )}
+                                          </>
+                                        )}
+                                    </>
+                                  )}
+                                  {(contest?.contest_type === "milestone" ||
+                                    contest?.contest_type ===
+                                      "dual_rewards") && (
                                     <TableCell className="text-center">
                                       {milestoneAssignmentLabel === "—" ? (
                                         <span
@@ -3068,11 +4087,40 @@ export function CreatorSubmissionsModal({
                                   )}
                                   {(!isYouTubeContest ||
                                     showYtColumn("reward_granted")) && (
-                                    <TableCell className="text-center font-medium text-green-600">
-                                      {grantedReward > 0
-                                        ? formatCurrency(grantedReward)
-                                        : "-"}
-                                    </TableCell>
+                                    <>
+                                      <TableCell className="text-center font-medium text-green-600">
+                                        {(contest?.contest_type ===
+                                        "dual_rewards"
+                                          ? totalGrantedForDual
+                                          : grantedReward) > 0
+                                          ? formatCurrency(
+                                              contest?.contest_type ===
+                                                "dual_rewards"
+                                                ? totalGrantedForDual
+                                                : grantedReward,
+                                            )
+                                          : "-"}
+                                      </TableCell>
+                                      {contest?.contest_type ===
+                                        "dual_rewards" && (
+                                        <>
+                                          <TableCell className="text-center font-medium text-green-600">
+                                            {cpmGrantedForDual > 0
+                                              ? formatCurrency(
+                                                  cpmGrantedForDual,
+                                                )
+                                              : "-"}
+                                          </TableCell>
+                                          <TableCell className="text-center font-medium text-green-600">
+                                            {milestoneGrantedForDual > 0
+                                              ? formatCurrency(
+                                                  milestoneGrantedForDual,
+                                                )
+                                              : "-"}
+                                          </TableCell>
+                                        </>
+                                      )}
+                                    </>
                                   )}
                                 </>
                               )}
@@ -3150,7 +4198,10 @@ export function CreatorSubmissionsModal({
                             )}
                           {(!isYouTubeContest || showYtColumn("status")) && (
                             <TableCell>
-                              {getStatusBadge(normalizedStatus, submission.paid)}
+                              {getStatusBadge(
+                                normalizedStatus,
+                                submission.paid,
+                              )}
                             </TableCell>
                           )}
                           <TableCell
@@ -3321,35 +4372,64 @@ export function CreatorSubmissionsModal({
                                       <DropdownMenuSeparator />
                                       <DropdownMenuItem
                                         onClick={() =>
-                                          onPayment(submission.id, "standard")
+                                          isDualRewardsContest
+                                            ? handleDualSubmissionPayment(
+                                                submission,
+                                                "cpm",
+                                              )
+                                            : onPayment(
+                                                submission.id,
+                                                "standard",
+                                              )
                                         }
                                       >
                                         <DollarSign className="h-4 w-4 mr-2" />
-                                        Mark as Paid
+                                        {isDualRewardsContest
+                                          ? "Mark as Paid (CPM)"
+                                          : "Mark as Paid"}
                                       </DropdownMenuItem>
-                                      {hasFlatFeeBonus &&
+                                      {(hasFlatFeeBonus ||
+                                        isDualRewardsContest) &&
                                         !submission.bonus_paid && (
                                           <>
-                                            {!isTwitterCpmContest && (
+                                            {(!isTwitterCpmContest ||
+                                              isDualRewardsContest) && (
                                               <DropdownMenuItem
                                                 onClick={() =>
-                                                  onPayment(
-                                                    submission.id,
-                                                    "bonus",
-                                                  )
+                                                  isDualRewardsContest
+                                                    ? handleDualSubmissionPayment(
+                                                        submission,
+                                                        "milestone",
+                                                      )
+                                                    : onPayment(
+                                                        submission.id,
+                                                        "bonus",
+                                                      )
                                                 }
                                               >
                                                 <DollarSign className="h-4 w-4 mr-2" />
-                                                Mark Bonus as Paid
+                                                {isDualRewardsContest
+                                                  ? "Mark as Paid (Milestone)"
+                                                  : "Mark Bonus as Paid"}
                                               </DropdownMenuItem>
                                             )}
                                             <DropdownMenuItem
                                               onClick={() =>
-                                                onPayment(submission.id, "both")
+                                                isDualRewardsContest
+                                                  ? handleDualSubmissionPayment(
+                                                      submission,
+                                                      "both",
+                                                    )
+                                                  : onPayment(
+                                                      submission.id,
+                                                      "both",
+                                                    )
                                               }
                                             >
                                               <DollarSign className="h-4 w-4 mr-2" />
-                                              Mark Both as Paid
+                                              {isDualRewardsContest
+                                                ? "Mark Both as Paid (CPM+Milestone)"
+                                                : "Mark Both as Paid"}
                                             </DropdownMenuItem>
                                           </>
                                         )}

@@ -233,7 +233,7 @@ export async function GET(request: Request) {
     let submissionsQuery = supabaseAdmin
       .from("submissions")
       .select("id, creator_id, content_link, views, contest_id, created_at, other_stats")
-      .in("status", ["verified", "pending"])
+      .neq("status", "rejected")
       .not("content_link", "is", null);
 
     // If contest-specific, filter by contest_id
