@@ -118,6 +118,16 @@ import {
 import { adjustBonusCents, parsePayoutAdjustment } from "@/lib/payout-rules";
 import { YouTubeAnalyticsPanel } from "@/components/youtube/YouTubeAnalyticsPanel";
 import { SubmissionLeaderboardExportDialog } from "@/components/submissions/SubmissionLeaderboardExportDialog";
+import { ContestAnalyticsExportDialog } from "@/components/contests/ContestAnalyticsExportDialog";
+import {
+  getAnalyticsTabCounts,
+  type ContestAnalyticsExportSubmission,
+  type ContestAnalyticsTabId,
+} from "@/lib/contest-analytics-export";
+import {
+  buildAllContestAnalyticsTabSnapshots,
+  type ContestAnalyticsSnapshotContext,
+} from "@/lib/contest-analytics-snapshot";
 import type {
   RewardExportContext,
   SubmissionDualCents,
@@ -1785,6 +1795,8 @@ export default function ContestDetailClient({
   ]);
   const [ytColumnsModalOpen, setYtColumnsModalOpen] = useState(false);
   const [exportDialogOpen, setExportDialogOpen] = useState(false);
+  const [analyticsExportDialogOpen, setAnalyticsExportDialogOpen] =
+    useState(false);
   // Submission-wise: modal to view rejection reason (from submission.metadata only; no rejection_reason on submissions for Instagram/YouTube)
   const [rejectionDetailsModalSubmission, setRejectionDetailsModalSubmission] =
     useState<{ id: string; metadata: any } | null>(null);
@@ -2160,6 +2172,20 @@ export default function ContestDetailClient({
       return status === activeAnalyticsTab;
     },
   );
+
+  const analyticsTabCounts = useMemo(
+    () =>
+      getAnalyticsTabCounts(
+        currentSubmissions as ContestAnalyticsExportSubmission[],
+        (submission) => getStatus(submission as Submission),
+      ),
+    [currentSubmissions],
+  );
+
+  const showsAnalyticsExpectedRewardMetrics =
+    isCpmContestType(currentContest?.contest_type) ||
+    isMilestoneContestType(currentContest?.contest_type) ||
+    currentContest?.contest_type === "leaderboard";
 
   // Pre-adjustment CPM expectations with creator cap applied in submission order — matches
   // CreatorSubmissionsModal / payout display. Declared before creator-wise grouping so
@@ -7290,6 +7316,143 @@ export default function ContestDetailClient({
 
     return expectedEarnings;
   }
+
+  function getSubmissionAnalyticsExpectedCents(submission: Submission): number {
+    if (isDualRewardsContestType(currentContest?.contest_type)) {
+      const milestoneCents =
+        cappedExpectedRewardBySubmissionId.dualMilestoneCappedAfterCreatorCapBySubmissionId.get(
+          submission.id,
+        ) ??
+        milestoneSubmissionExpectedPayoutCents.get(submission.id) ??
+        0;
+      const cpmCents =
+        cappedExpectedRewardBySubmissionId.preAdjustmentCappedMap.get(
+          submission.id,
+        ) ?? 0;
+      return milestoneCents + cpmCents;
+    }
+    if (isMilestoneContestType(currentContest?.contest_type)) {
+      return (
+        milestoneSubmissionExpectedPayoutCents.get(submission.id) ??
+        Number(submission.earnings || 0)
+      );
+    }
+    if (currentContest?.contest_type === "leaderboard") {
+      return Number(submission.earnings || 0);
+    }
+    if (isCpmContestType(currentContest?.contest_type)) {
+      return (
+        cappedExpectedRewardBySubmissionId.preAdjustmentCappedMap.get(
+          submission.id,
+        ) ?? calculateSubmissionExpectedEarnings(submission, false)
+      );
+    }
+    return 0;
+  }
+
+  function sumFilteredAnalyticsExpectedCents(
+    subs: Submission[] | undefined,
+    tab: typeof activeAnalyticsTab = activeAnalyticsTab,
+  ): number {
+    return (subs ?? []).reduce((sum, s) => {
+      if (tab === "paid") return sum + Number(s.earnings || 0);
+      return sum + getSubmissionAnalyticsExpectedCents(s);
+    }, 0);
+  }
+
+  const analyticsSnapshotContext = useMemo((): ContestAnalyticsSnapshotContext => {
+    const raidTarget =
+      currentContest?.contest_based_details?.twitter_campaign?.raid_target;
+    const targetMetrics = raidTarget?.metrics || {};
+    const isRaid =
+      (currentContest as { content_type?: string }).content_type === "raid" &&
+      currentContest?.contest_format === "text_image";
+
+    const twitterRaid = isRaid
+      ? {
+          targetTweetUrl:
+            twitterMetrics?.target_tweet_url || raidTarget?.link || null,
+          targetLikes:
+            twitterMetrics?.target_likes ??
+            (targetMetrics.likes
+              ? parseInt(String(targetMetrics.likes), 10)
+              : null),
+          targetComments:
+            twitterMetrics?.target_comments ??
+            (targetMetrics.comments
+              ? parseInt(String(targetMetrics.comments), 10)
+              : null),
+          targetRetweets:
+            twitterMetrics?.target_retweets ??
+            (targetMetrics.retweets
+              ? parseInt(String(targetMetrics.retweets), 10)
+              : null),
+          targetQuoteReposts:
+            twitterMetrics?.target_quote_reposts ??
+            (targetMetrics.quote_reposts
+              ? parseInt(String(targetMetrics.quote_reposts), 10)
+              : null),
+          currentLikes: twitterMetrics?.target_current_likes ?? null,
+          currentComments: twitterMetrics?.target_current_comments ?? null,
+          currentRetweets: twitterMetrics?.target_current_retweets ?? null,
+          currentQuoteReposts:
+            twitterMetrics?.target_current_quote_reposts ?? null,
+          currentViews: twitterMetrics?.target_current_views ?? null,
+          targetsReached: twitterMetrics?.targets_reached ?? null,
+        }
+      : null;
+
+    return {
+      contestTitle: currentContest?.title || "Contest",
+      contestType: currentContest?.contest_type,
+      postContestStatus: currentContest?.post_contest_status,
+      durationDays,
+      totalSubmissionCount: currentSubmissions.length,
+      approvedCount: currentSubmissions.filter((s) => {
+        const status = getStatus(s);
+        return status === "verified" || status === "paid";
+      }).length,
+      isTwitterTextImage: isTwitterTextImageContest,
+      isTwitterPlatform,
+      contestFormat: currentContest?.contest_format,
+      platform: currentContest?.platform,
+      contentType: (currentContest as { content_type?: string }).content_type,
+      leaderboardTotalPrizeCents:
+        Number(
+          currentContest?.contest_based_details?.leaderboard_contest?.total_prize,
+        ) || 0,
+      allSubmissions:
+        currentSubmissions as ContestAnalyticsExportSubmission[],
+      getStatus: (submission) => getStatus(submission as Submission),
+      getSubmissionExpectedCents: (submission) =>
+        getSubmissionAnalyticsExpectedCents(submission as Submission),
+      getCreatorManualAdjustment,
+      creatorModerationData,
+      twitterRaid,
+      formatMoney,
+    };
+  }, [
+    currentContest?.title,
+    currentContest?.contest_type,
+    currentContest?.contest_format,
+    currentContest?.platform,
+    currentContest?.contest_based_details,
+    currentContest?.post_contest_status,
+    currentSubmissions,
+    durationDays,
+    isTwitterTextImageContest,
+    isTwitterPlatform,
+    twitterMetrics,
+    creatorModerationData,
+    cappedExpectedRewardBySubmissionId,
+    milestoneSubmissionExpectedPayoutCents,
+  ]);
+
+  const getAnalyticsSnapshotsForTabs = useCallback(
+    (tabs: ContestAnalyticsTabId[]) =>
+      buildAllContestAnalyticsTabSnapshots(analyticsSnapshotContext, tabs),
+    [analyticsSnapshotContext],
+  );
 
   function getDualPaidComponent(
     submission: Submission | any,
@@ -22302,7 +22465,32 @@ export default function ContestDetailClient({
               )}
             >
               <CardHeader>
-                <CardTitle>Contest Analytics</CardTitle>
+                <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                  <CardTitle className="shrink-0">Contest Analytics</CardTitle>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={currentSubmissions.length === 0}
+                    className={cn(
+                      "gap-2 shrink-0",
+                      isDark
+                        ? "border-slate-600 text-slate-300 hover:bg-slate-800"
+                        : "border-slate-300 text-slate-700 hover:bg-slate-50",
+                    )}
+                    onClick={() => setAnalyticsExportDialogOpen(true)}
+                  >
+                    <Download className="h-4 w-4" />
+                    Download report
+                  </Button>
+                  <ContestAnalyticsExportDialog
+                    open={analyticsExportDialogOpen}
+                    onOpenChange={setAnalyticsExportDialogOpen}
+                    contestTitle={currentContest?.title || "Contest"}
+                    tabCounts={analyticsTabCounts}
+                    getSnapshotsForTabs={getAnalyticsSnapshotsForTabs}
+                    isDark={isDark}
+                  />
+                </div>
                 {/* Analytics Filter Tabs */}
                 <div className="mt-4">
                   <Tabs
@@ -24314,46 +24502,11 @@ export default function ContestDetailClient({
                                       currentContest.post_contest_status ===
                                       "payouts_processed"
                                     ) {
-                                      const expectedCents =
-                                        filteredAnalyticsSubmissions?.reduce(
-                                          (sum, s) => {
-                                            if (
-                                              currentContest.contest_type ===
-                                              "milestone"
-                                            ) {
-                                              return (
-                                                sum +
-                                                (milestoneSubmissionExpectedPayoutCents.get(
-                                                  s.id,
-                                                ) ?? Number(s.earnings || 0))
-                                              );
-                                            }
-                                            if (
-                                              currentContest.contest_type ===
-                                              "leaderboard"
-                                            ) {
-                                              return (
-                                                sum +
-                                                Number((s as any).earnings || 0)
-                                              );
-                                            }
-                                            if (
-                                              currentContest.contest_type ===
-                                              "cpm"
-                                            ) {
-                                              return (
-                                                sum +
-                                                calculateSubmissionExpectedEarnings(
-                                                  s,
-                                                  false,
-                                                )
-                                              );
-                                            }
-                                            return sum;
-                                          },
-                                          0,
-                                        ) || 0;
-                                      return formatMoney(expectedCents);
+                                      return formatMoney(
+                                        sumFilteredAnalyticsExpectedCents(
+                                          filteredAnalyticsSubmissions,
+                                        ),
+                                      );
                                     }
 
                                     if (
@@ -24472,10 +24625,7 @@ export default function ContestDetailClient({
                                                 ? "Verified/Paid"
                                                 : "Filtered"}
                                 </p>
-                                {(currentContest.contest_type === "cpm" ||
-                                  currentContest.contest_type === "milestone" ||
-                                  currentContest.contest_type ===
-                                    "leaderboard") && (
+                                {showsAnalyticsExpectedRewardMetrics && (
                                   <p
                                     className={cn(
                                       "text-xs mt-1",
@@ -24486,45 +24636,9 @@ export default function ContestDetailClient({
                                   >
                                     Expected Reward:{" "}
                                     {formatMoney(
-                                      filteredAnalyticsSubmissions?.reduce(
-                                        (sum, s) => {
-                                          if (activeAnalyticsTab === "paid") {
-                                            return (
-                                              sum + Number(s.earnings || 0)
-                                            );
-                                          }
-
-                                          if (
-                                            currentContest.contest_type ===
-                                            "milestone"
-                                          ) {
-                                            return (
-                                              sum +
-                                              (milestoneSubmissionExpectedPayoutCents.get(
-                                                s.id,
-                                              ) ?? Number(s.earnings || 0))
-                                            );
-                                          }
-
-                                          if (
-                                            currentContest.contest_type ===
-                                            "leaderboard"
-                                          ) {
-                                            return (
-                                              sum + Number(s.earnings || 0)
-                                            );
-                                          }
-
-                                          return (
-                                            sum +
-                                            calculateSubmissionExpectedEarnings(
-                                              s,
-                                              false,
-                                            )
-                                          );
-                                        },
-                                        0,
-                                      ) || 0,
+                                      sumFilteredAnalyticsExpectedCents(
+                                        filteredAnalyticsSubmissions,
+                                      ),
                                     )}
                                   </p>
                                 )}
@@ -24561,9 +24675,7 @@ export default function ContestDetailClient({
                                     isDark ? "text-white" : "text-gray-600",
                                   )}
                                 >
-                                  {currentContest.contest_type === "cpm" ||
-                                  currentContest.contest_type === "milestone" ||
-                                  currentContest.contest_type === "leaderboard"
+                                  {showsAnalyticsExpectedRewardMetrics
                                     ? "Expected CPM"
                                     : "Cost Per View"}
                                 </p>
@@ -24573,9 +24685,7 @@ export default function ContestDetailClient({
                                     isDark ? "text-white" : "text-gray-900",
                                   )}
                                 >
-                                  {currentContest.contest_type === "cpm" ||
-                                  currentContest.contest_type === "milestone" ||
-                                  currentContest.contest_type === "leaderboard"
+                                  {showsAnalyticsExpectedRewardMetrics
                                     ? (() => {
                                         const totalViews =
                                           filteredAnalyticsSubmissions?.reduce(
@@ -24585,50 +24695,9 @@ export default function ContestDetailClient({
                                         if (totalViews === 0) return "$0.00";
 
                                         const expectedPayoutCents =
-                                          filteredAnalyticsSubmissions?.reduce(
-                                            (sum, s) => {
-                                              if (
-                                                activeAnalyticsTab === "paid"
-                                              ) {
-                                                return (
-                                                  sum + Number(s.earnings || 0)
-                                                );
-                                              }
-
-                                              if (
-                                                currentContest.contest_type ===
-                                                "milestone"
-                                              ) {
-                                                return (
-                                                  sum +
-                                                  (milestoneSubmissionExpectedPayoutCents.get(
-                                                    s.id,
-                                                  ) ?? Number(s.earnings || 0))
-                                                );
-                                              }
-
-                                              if (
-                                                currentContest.contest_type ===
-                                                "leaderboard"
-                                              ) {
-                                                return (
-                                                  sum +
-                                                  Number(
-                                                    (s as any).earnings || 0,
-                                                  )
-                                                );
-                                              }
-
-                                              return (
-                                                sum +
-                                                calculateSubmissionExpectedEarnings(
-                                                  s,
-                                                  false,
-                                                )
-                                              );
-                                            },
-                                            0,
-                                          ) || 0;
+                                          sumFilteredAnalyticsExpectedCents(
+                                            filteredAnalyticsSubmissions,
+                                          );
 
                                         const expectedEffectiveCpm =
                                           (expectedPayoutCents /
@@ -24661,9 +24730,7 @@ export default function ContestDetailClient({
                                     isDark ? "text-white" : "text-gray-500",
                                   )}
                                 >
-                                  {currentContest.contest_type === "cpm" ||
-                                  currentContest.contest_type === "milestone" ||
-                                  currentContest.contest_type === "leaderboard"
+                                  {showsAnalyticsExpectedRewardMetrics
                                     ? activeAnalyticsTab === "paid"
                                       ? "Paid amount ÷ paid views × 1000"
                                       : "Expected reward ÷ views × 1000"
@@ -24756,9 +24823,7 @@ export default function ContestDetailClient({
                               </div>
                             )}
 
-                          {(currentContest.contest_type === "cpm" ||
-                            currentContest.contest_type === "milestone" ||
-                            currentContest.contest_type === "leaderboard") &&
+                          {showsAnalyticsExpectedRewardMetrics &&
                             currentContest.post_contest_status ===
                               "payouts_processed" && (
                               <>
@@ -25030,9 +25095,17 @@ export default function ContestDetailClient({
                                   ) {
                                     totalCost =
                                       filteredAnalyticsSubmissions
-                                        ?.filter((s) => s.status === "paid")
+                                        ?.filter(
+                                          (s) =>
+                                            getStatus(s) === "paid" ||
+                                            Boolean((s as any).paid_at) ||
+                                            (s as any).paid === true,
+                                        )
                                         .reduce(
-                                          (sum, s) => sum + (s.earnings || 0),
+                                          (sum, s) =>
+                                            sum +
+                                            Number(s.earnings || 0) +
+                                            Number((s as any).bonus_amount || 0),
                                           0,
                                         ) || 0;
                                   }
