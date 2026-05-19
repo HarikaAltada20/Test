@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { verifyAdminAccess } from "@/utils/admin-auth";
 import { createAdminClient } from "@/utils/supabase/admin";
+import { INSTAGRAM_ARCHIVES_BATCH_SIZE } from "@/lib/instagram-analytics-export";
 import {
   buildInstagramProfileSnapshot,
   type InstagramProfileSnapshot,
@@ -41,17 +42,17 @@ export async function POST(
 
   const { id: contestId } = await context.params;
   const body = await request.json().catch(() => ({}));
-  const creatorIds = Array.isArray(body.creatorIds)
+  const creatorIds: string[] = Array.isArray(body.creatorIds)
     ? body.creatorIds
         .map((id: unknown) => String(id ?? "").trim())
-        .filter(Boolean)
+        .filter((id: string): id is string => id.length > 0)
     : [];
 
   if (creatorIds.length === 0) {
     return NextResponse.json({ archives: {}, profileSummaries: {} });
   }
 
-  const uniqueIds = [...new Set(creatorIds)].slice(0, 500);
+  const uniqueIds = [...new Set(creatorIds)].slice(0, INSTAGRAM_ARCHIVES_BATCH_SIZE);
   const admin = createAdminClient();
 
   const { data: members, error: memberErr } = await admin

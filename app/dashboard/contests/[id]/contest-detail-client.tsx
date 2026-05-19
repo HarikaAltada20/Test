@@ -76,6 +76,7 @@ import {
   centsToDollars,
   formatCurrencyFromCents as formatMoney,
 } from "@/lib/currency-utils";
+import { formatRefundReversalToastLine } from "@/lib/bulk-payment-toast";
 import { applyPayoutAdjustment } from "@/lib/payout-adjustment";
 import {
   parseSubmissionMetadata,
@@ -102,6 +103,7 @@ import {
 } from "@/lib/dual-rewards-creator-cap";
 import {
   getDualPayoutScopeFromSubmission,
+  getDualRemainingPayableCents,
   type DualPayoutScopeHint,
 } from "@/lib/dual-rewards-payout";
 import {
@@ -1104,7 +1106,6 @@ export default function ContestDetailClient({
     (contestPayoutAdjMode === "combined" ||
       contestPayoutAdjMode === "cpm_and_milestone" ||
       contestPayoutAdjMode === "dual_rewards_only" ||
-      contestPayoutAdjMode === "bonus_only" ||
       contestPayoutAdjMode === "milestone_only");
   const showDualPayoutAdjustedColumns =
     hasContestPayoutAdj &&
@@ -4986,8 +4987,13 @@ export default function ContestDetailClient({
             reward_refunded_cents: number;
             bonus_refunded_cents: number;
             total_refunded_cents: number;
+            cpm_refunded_cents?: number;
+            milestone_refunded_cents?: number;
           }
         | undefined;
+      const isDualRefundContest = isDualRewardsContestType(
+        currentContest?.contest_type,
+      );
       let description = toastConfig.description;
       if (
         refundSummary &&
@@ -4995,15 +5001,11 @@ export default function ContestDetailClient({
           newStatus === "pending" ||
           newStatus === "rejected")
       ) {
-        const {
-          reward_refunded_cents: rCents,
-          bonus_refunded_cents: bCents,
-          total_refunded_cents: tCents,
-        } = refundSummary;
-        const refundLine =
-          tCents > 0
-            ? `${formatMoney(rCents)} reward reversed, ${formatMoney(bCents)} bonus reversed (${formatMoney(tCents)} total).`
-            : "No wallet debit (nothing on record to refund).";
+        const refundLine = formatRefundReversalToastLine(
+          refundSummary,
+          formatMoney,
+          { isDualRewards: isDualRefundContest },
+        );
         description = `${description} ${refundLine}`;
       }
       console.log("🎉 Calling toast with config:", toastConfig);
@@ -5115,21 +5117,37 @@ export default function ContestDetailClient({
       ? applyPayoutAdjustment(milestoneCappedBase, contestPayoutAdjPct)
       : milestoneCappedBase;
 
-    const amountInCents =
-      component === "cpm"
-        ? cpmExpected
-        : component === "milestone"
-          ? milestoneExpected
-          : cpmExpected + milestoneExpected;
+    const submissionRow = currentSubmissions.find((s) => s.id === submissionId);
+    const { cpmRemaining, milestoneRemaining, totalRemaining } =
+      getDualRemainingPayableCents(
+        component,
+        cpmExpected,
+        milestoneExpected,
+        (submissionRow as { dual_rewards_payout?: unknown } | undefined)
+          ?.dual_rewards_payout,
+      );
 
-    if (amountInCents <= 0) {
+    if (totalRemaining <= 0) {
+      const componentLabel =
+        component === "cpm"
+          ? "CPM"
+          : component === "milestone"
+            ? "Milestone"
+            : "CPM and milestone";
       toast({
-        title: "Cannot pay",
-        description: "Computed payout is 0 for the selected component.",
-        variant: "destructive",
+        title: "Nothing to pay",
+        description:
+          cpmRemaining <= 0 &&
+          milestoneRemaining <= 0 &&
+          (cpmExpected > 0 || milestoneExpected > 0)
+            ? `${componentLabel} is already paid for this submission.`
+            : `No payable ${componentLabel.toLowerCase()} amount. Check views, milestone eligibility, creator cap, or payout adjustment.`,
+        variant: "default",
       });
       return;
     }
+
+    const amountInCents = totalRemaining;
 
     setIsLoadingSubmission((prev) => ({ ...prev, [submissionId]: true }));
     try {
@@ -5404,9 +5422,20 @@ export default function ContestDetailClient({
           normalRefundRewardCents + normalRefundBonusCents;
         const twitterRefundTotal =
           refundAggregate.rewardCents + refundAggregate.bonusCents;
+        const isDualRefundContest = isDualRewardsContestType(
+          currentContest?.contest_type,
+        );
         let bulkDescription = `Successfully ${actionText} ${totalProcessed} submission(s).`;
         if (normalRefundTotal > 0) {
-          bulkDescription += ` ${formatMoney(normalRefundRewardCents)} reward reversed, ${formatMoney(normalRefundBonusCents)} bonus reversed (${formatMoney(normalRefundTotal)} total).`;
+          bulkDescription += ` ${formatRefundReversalToastLine(
+            {
+              reward_refunded_cents: normalRefundRewardCents,
+              bonus_refunded_cents: normalRefundBonusCents,
+              total_refunded_cents: normalRefundTotal,
+            },
+            formatMoney,
+            { isDualRewards: isDualRefundContest },
+          )}`;
         }
         if (twitterRefundTotal > 0) {
           bulkDescription += ` ${formatTwitterRefundToastDescription(
@@ -13618,13 +13647,20 @@ export default function ContestDetailClient({
                                     if (m === "milestone_only") {
                                       return "milestone_only";
                                     }
+                                    if (
+                                      isDualRewardsContestType(
+                                        currentContest.contest_type,
+                                      ) &&
+                                      m === "bonus_only"
+                                    ) {
+                                      return "milestone_only";
+                                    }
                                     return m ?? "combined";
                                   })()}
                                   onChange={(e) => {
                                     const value = e.target.value as
                                       | "cpm_only"
                                       | "milestone_only"
-                                      | "bonus_only"
                                       | "combined"
                                       | "cpm_and_milestone"
                                       | "bonus";
@@ -13645,7 +13681,7 @@ export default function ContestDetailClient({
                                   ) ? (
                                     <>
                                       <option value="cpm_only">CPM only</option>
-                                      <option value="bonus_only">
+                                      <option value="milestone_only">
                                         Milestone only
                                       </option>
                                       <option value="cpm_and_milestone">
@@ -16135,11 +16171,7 @@ export default function ContestDetailClient({
                                       "cpm_and_milestone" ||
                                     payoutAdjustmentMode ===
                                       "dual_rewards_only" ||
-                                    payoutAdjustmentMode === "milestone_only" ||
-                                    (isDualRewardsContestType(
-                                      currentContest.contest_type,
-                                    ) &&
-                                      payoutAdjustmentMode === "bonus_only"));
+                                    payoutAdjustmentMode === "milestone_only");
 
                                 if (
                                   currentContest.contest_type === "leaderboard"
