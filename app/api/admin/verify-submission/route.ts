@@ -15,10 +15,15 @@ import {
   buildMilestoneSubmissionPayoutCentsMap,
   getMilestoneCappedPayoutCentsForCreatorSubmission,
 } from "@/lib/milestone-contest-expected-spend";
-import { buildDualRewardCreatorCapSplitMaps } from "@/lib/dual-rewards-creator-cap";
+import {
+  loadDualCreatorCapMaps,
+  type DualCreatorCapMaps,
+} from "@/lib/dual-rewards-payout-eligibility";
 import {
   adjustBonusCents,
   adjustRewardCents,
+  dualRewardsPayoutAdjustmentAppliesToCpm,
+  dualRewardsPayoutAdjustmentAppliesToMilestone,
   parsePayoutAdjustment,
 } from "@/lib/payout-rules";
 import { allocateFlatFeeBonusCents } from "@/lib/bonus-allocation";
@@ -30,46 +35,6 @@ import {
   stripDualComponentTagFromRemarks,
   buildDualRewardsPayoutPersistValue,
 } from "@/lib/dual-rewards-payout";
-
-/** Aligns with contest-detail-client dualAdjustCpmForDisplay / custom dual pay validation. */
-function dualRewardsPayoutAdjustmentAppliesToCpm(
-  mode: string | null | undefined,
-): boolean {
-  return (
-    mode === "combined" ||
-    mode === "cpm_and_milestone" ||
-    mode === "dual_rewards_only" ||
-    mode === "cpm_only"
-  );
-}
-
-/** Aligns with contest-detail-client dualAdjustMilestoneForDisplay / custom dual pay validation. */
-function dualRewardsPayoutAdjustmentAppliesToMilestone(
-  mode: string | null | undefined,
-): boolean {
-  return (
-    mode === "combined" ||
-    mode === "cpm_and_milestone" ||
-    mode === "dual_rewards_only" ||
-    mode === "milestone_only" ||
-    mode === "bonus_only"
-  );
-}
-
-function computeDualCpmRawCentsFromRow(
-  row: { views?: number | null },
-  cpm: any,
-): number {
-  const rate = typeof cpm?.cpm_rate_usd === "number" ? cpm.cpm_rate_usd : 0;
-  let effectiveViews = Number(row.views) || 0;
-  if (typeof cpm?.min_views === "number" && effectiveViews < cpm.min_views) {
-    effectiveViews = 0;
-  }
-  if (typeof cpm?.max_views === "number" && effectiveViews > cpm.max_views) {
-    effectiveViews = cpm.max_views;
-  }
-  return Math.round(((effectiveViews * rate) / 1000) * 100);
-}
 
 function getTransactionPayoutCycle(metadata: any): number {
   const rawCycle = metadata?.payout_cycle;
@@ -376,6 +341,43 @@ export async function POST(request: Request) {
 
     // Use admin client to bypass RLS for the update operation
     const supabaseAdmin = createAdminClient();
+
+    // Dual rewards: creator-scoped cap data; contest-wide fetch only for milestone FCFS.
+    let dualCreatorCapMaps: DualCreatorCapMaps | null = null;
+    let dualCreatorCapFetchError: string | null = null;
+    const ensureDualCreatorCapMaps = async (): Promise<DualCreatorCapMaps> => {
+      const empty: DualCreatorCapMaps = {
+        milestoneCappedBySubmissionId: new Map(),
+        cpmCappedBySubmissionId: new Map(),
+      };
+      if (contest.contest_type !== "dual_rewards") return empty;
+      if (dualCreatorCapMaps) return dualCreatorCapMaps;
+
+      const milestones = Array.isArray(
+        (contest as any)?.contest_based_details?.milestone_contest?.milestones,
+      )
+        ? (contest as any).contest_based_details.milestone_contest.milestones
+        : [];
+      const cpmCfg = (contest as any)?.contest_based_details?.cpm_contest;
+      const maxCap = Number(maxEarningsPerCreator || 0);
+
+      const result = await loadDualCreatorCapMaps(
+        supabaseAdmin,
+        submissionFull.contest_id,
+        String(submissionFull.creator_id),
+        milestones,
+        cpmCfg,
+        maxCap,
+      );
+      if (result.error) {
+        dualCreatorCapFetchError = result.error;
+        dualCreatorCapMaps = empty;
+        return empty;
+      }
+      dualCreatorCapMaps = result.maps ?? empty;
+      return dualCreatorCapMaps;
+    };
+
     const { data: updatedSubmission, error: updateError } = await supabaseAdmin
       .from("submissions")
       .update(updateData)
@@ -506,64 +508,21 @@ export async function POST(request: Request) {
         }
 
         if (!submissionFull.bonus_paid) {
-          const { data: payoutEligibleSubs, error: payoutSubsErr } =
-            await supabaseAdmin
-              .from("submissions")
-              .select(
-                "id, creator_id, status, views, created_at, platform, other_stats",
-              )
-              .eq("contest_id", submissionFull.contest_id)
-              .in("status", ["pending", "verified", "paid"])
-              .order("created_at", { ascending: true });
-
-          if (payoutSubsErr || !Array.isArray(payoutEligibleSubs)) {
+          const capMaps = await ensureDualCreatorCapMaps();
+          if (dualCreatorCapFetchError) {
             return NextResponse.json(
               {
                 error: "Failed to compute milestone payout eligibility",
-                details: payoutSubsErr?.message,
+                details: dualCreatorCapFetchError,
               },
               { status: 500 },
             );
           }
 
-          const payoutRecords = payoutEligibleSubs.map((sub: any) => ({
-            id: String(sub.id),
-            creator_id: sub.creator_id,
-            created_at: sub.created_at,
-            status: sub.status,
-            views: sub.views,
-            platform: sub.platform,
-            other_stats: sub.other_stats,
-          }));
-          const payoutBySubmissionId = buildMilestoneSubmissionPayoutCentsMap(
-            payoutRecords,
-            milestones,
-          );
-
-          const cpmCfg = (contest as any)?.contest_based_details?.cpm_contest;
-          const dualRows = payoutRecords
-            .filter(
-              (r: any) =>
-                String(r.creator_id) === String(submissionFull.creator_id),
-            )
-            .sort(
-              (a: any, b: any) =>
-                new Date(a.created_at).getTime() -
-                new Date(b.created_at).getTime(),
-            )
-            .map((r: any) => ({
-              id: String(r.id),
-              created_at: String(r.created_at || ""),
-              mRawCents: Number(payoutBySubmissionId.get(String(r.id)) || 0),
-              cRawCents: computeDualCpmRawCentsFromRow(r, cpmCfg),
-            }));
-
-          const maxCap = Number(maxEarningsPerCreator || 0);
-          const { milestoneCappedBySubmissionId } =
-            buildDualRewardCreatorCapSplitMaps(dualRows, maxCap);
-
           let milestoneAmount =
-            milestoneCappedBySubmissionId.get(String(submissionFull.id)) ?? 0;
+            capMaps.milestoneCappedBySubmissionId.get(
+              String(submissionFull.id),
+            ) ?? 0;
 
           const adjPct = Number(
             (contest as any).payout_adjustment_percentage ?? 0,
@@ -1083,52 +1042,10 @@ export async function POST(request: Request) {
                         .milestones
                     : [];
                   if (milestones.length > 0) {
-                    const { data: payoutEligibleSubs } = await supabaseAdmin
-                      .from("submissions")
-                      .select(
-                        "id, creator_id, status, views, created_at, platform, other_stats",
-                      )
-                      .eq("contest_id", submissionFull.contest_id)
-                      .in("status", ["pending", "verified", "paid"])
-                      .order("created_at", { ascending: true });
-                    if (payoutEligibleSubs) {
-                      const records = payoutEligibleSubs.map((sub: any) => ({
-                        id: String(sub.id),
-                        creator_id: sub.creator_id,
-                        created_at: sub.created_at,
-                        status: sub.status,
-                        views: sub.views,
-                        platform: sub.platform,
-                        other_stats: sub.other_stats,
-                      }));
-                      const payoutBySubmissionId =
-                        buildMilestoneSubmissionPayoutCentsMap(
-                          records,
-                          milestones,
-                        );
-                      const dualRows = records
-                        .filter(
-                          (r: any) =>
-                            String(r.creator_id) ===
-                            String(submissionFull.creator_id),
-                        )
-                        .sort(
-                          (a: any, b: any) =>
-                            new Date(a.created_at).getTime() -
-                            new Date(b.created_at).getTime(),
-                        )
-                        .map((r: any) => ({
-                          id: String(r.id),
-                          created_at: String(r.created_at || ""),
-                          mRawCents: Number(
-                            payoutBySubmissionId.get(String(r.id)) || 0,
-                          ),
-                          cRawCents: computeDualCpmRawCentsFromRow(r, cpm),
-                        }));
-                      const { cpmCappedBySubmissionId } =
-                        buildDualRewardCreatorCapSplitMaps(dualRows, maxCap);
+                    const capMaps = await ensureDualCreatorCapMaps();
+                    if (!dualCreatorCapFetchError) {
                       finalCpmCappedAmount =
-                        cpmCappedBySubmissionId.get(
+                        capMaps.cpmCappedBySubmissionId.get(
                           String(submissionFull.id),
                         ) ?? rawAmount;
                     }
@@ -1332,61 +1249,20 @@ export async function POST(request: Request) {
               ? (contest as any).contest_based_details.milestone_contest
                   .milestones
               : [];
-            const cpmCfg = (contest as any)?.contest_based_details?.cpm_contest;
-            const { data: payoutEligibleSubs, error: payoutSubsErr } =
-              await supabaseAdmin
-                .from("submissions")
-                .select(
-                  "id, creator_id, status, views, created_at, platform, other_stats",
-                )
-                .eq("contest_id", submissionFull.contest_id)
-                .in("status", ["pending", "verified", "paid"])
-                .order("created_at", { ascending: true });
-
-            if (payoutSubsErr || !Array.isArray(payoutEligibleSubs)) {
+            const capMaps = await ensureDualCreatorCapMaps();
+            if (dualCreatorCapFetchError) {
               return NextResponse.json(
                 {
                   error:
                     "Failed to validate dual payment against creator cap",
-                  details: payoutSubsErr?.message,
+                  details: dualCreatorCapFetchError,
                 },
                 { status: 500 },
               );
             }
 
-            const records = payoutEligibleSubs.map((sub: any) => ({
-              id: String(sub.id),
-              creator_id: sub.creator_id,
-              created_at: sub.created_at,
-              status: sub.status,
-              views: sub.views,
-              platform: sub.platform,
-              other_stats: sub.other_stats,
-            }));
-            const payoutBySubmissionId = buildMilestoneSubmissionPayoutCentsMap(
-              records,
-              milestones,
-            );
-
-            const dualRows = records
-              .filter(
-                (r: any) =>
-                  String(r.creator_id) === String(submissionFull.creator_id),
-              )
-              .sort(
-                (a: any, b: any) =>
-                  new Date(a.created_at).getTime() -
-                  new Date(b.created_at).getTime(),
-              )
-              .map((r: any) => ({
-                id: String(r.id),
-                created_at: String(r.created_at || ""),
-                mRawCents: Number(payoutBySubmissionId.get(String(r.id)) || 0),
-                cRawCents: computeDualCpmRawCentsFromRow(r, cpmCfg),
-              }));
-            const maxCap = Number(maxEarningsPerCreator || 0);
             const { milestoneCappedBySubmissionId, cpmCappedBySubmissionId } =
-              buildDualRewardCreatorCapSplitMaps(dualRows, maxCap);
+              capMaps;
             const mCap =
               milestoneCappedBySubmissionId.get(String(submissionFull.id)) ?? 0;
             const cCap =

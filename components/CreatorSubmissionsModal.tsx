@@ -809,9 +809,7 @@ export function CreatorSubmissionsModal({
       (payoutAdjustmentMode === "combined" ||
         payoutAdjustmentMode === "cpm_and_milestone" ||
         payoutAdjustmentMode === "dual_rewards_only" ||
-        payoutAdjustmentMode === "milestone_only" ||
-        (contest?.contest_type === "dual_rewards" &&
-          payoutAdjustmentMode === "bonus_only"));
+        payoutAdjustmentMode === "milestone_only");
     const cpmExpected = shouldAdjustDualCpmComponent
       ? applyPayoutAdjustment(cpmCappedBase, payoutAdjustmentPercentage)
       : cpmCappedBase;
@@ -1006,8 +1004,7 @@ export function CreatorSubmissionsModal({
     (payoutAdjustmentMode === "combined" ||
       payoutAdjustmentMode === "cpm_and_milestone" ||
       payoutAdjustmentMode === "dual_rewards_only" ||
-      payoutAdjustmentMode === "milestone_only" ||
-      payoutAdjustmentMode === "bonus_only");
+      payoutAdjustmentMode === "milestone_only");
   const showDualPayoutAdjBreakdownColumns =
     isDualRewardsContest &&
     hasPayoutAdjustment &&

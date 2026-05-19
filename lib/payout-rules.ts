@@ -94,3 +94,30 @@ export function adjustBonusCents(
 export function clampNonNegative(n: number): number {
   return Number.isFinite(n) ? Math.max(0, Math.round(n)) : 0;
 }
+
+/** Dual rewards: adjustment applies to capped CPM (not milestone ladder or flat-fee bonus). */
+export function dualRewardsPayoutAdjustmentAppliesToCpm(
+  mode: PayoutAdjustmentMode | string | null | undefined,
+): boolean {
+  return (
+    mode === "combined" ||
+    mode === "cpm_and_milestone" ||
+    mode === "dual_rewards_only" ||
+    mode === "cpm_only"
+  );
+}
+
+/**
+ * Dual rewards: adjustment applies to milestone ladder pay (`mark_bonus_paid` / custom milestone).
+ * `bonus_only` adjusts flat-fee bonus only (see `shouldAdjustBonus`), not the ladder.
+ */
+export function dualRewardsPayoutAdjustmentAppliesToMilestone(
+  mode: PayoutAdjustmentMode | string | null | undefined,
+): boolean {
+  return (
+    mode === "combined" ||
+    mode === "cpm_and_milestone" ||
+    mode === "dual_rewards_only" ||
+    mode === "milestone_only"
+  );
+}

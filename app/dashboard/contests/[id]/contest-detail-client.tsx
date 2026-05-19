@@ -1104,7 +1104,6 @@ export default function ContestDetailClient({
     (contestPayoutAdjMode === "combined" ||
       contestPayoutAdjMode === "cpm_and_milestone" ||
       contestPayoutAdjMode === "dual_rewards_only" ||
-      contestPayoutAdjMode === "bonus_only" ||
       contestPayoutAdjMode === "milestone_only");
   const showDualPayoutAdjustedColumns =
     hasContestPayoutAdj &&
@@ -13618,13 +13617,20 @@ export default function ContestDetailClient({
                                     if (m === "milestone_only") {
                                       return "milestone_only";
                                     }
+                                    if (
+                                      isDualRewardsContestType(
+                                        currentContest.contest_type,
+                                      ) &&
+                                      m === "bonus_only"
+                                    ) {
+                                      return "milestone_only";
+                                    }
                                     return m ?? "combined";
                                   })()}
                                   onChange={(e) => {
                                     const value = e.target.value as
                                       | "cpm_only"
                                       | "milestone_only"
-                                      | "bonus_only"
                                       | "combined"
                                       | "cpm_and_milestone"
                                       | "bonus";
@@ -13645,7 +13651,7 @@ export default function ContestDetailClient({
                                   ) ? (
                                     <>
                                       <option value="cpm_only">CPM only</option>
-                                      <option value="bonus_only">
+                                      <option value="milestone_only">
                                         Milestone only
                                       </option>
                                       <option value="cpm_and_milestone">
@@ -16135,11 +16141,7 @@ export default function ContestDetailClient({
                                       "cpm_and_milestone" ||
                                     payoutAdjustmentMode ===
                                       "dual_rewards_only" ||
-                                    payoutAdjustmentMode === "milestone_only" ||
-                                    (isDualRewardsContestType(
-                                      currentContest.contest_type,
-                                    ) &&
-                                      payoutAdjustmentMode === "bonus_only"));
+                                    payoutAdjustmentMode === "milestone_only");
 
                                 if (
                                   currentContest.contest_type === "leaderboard"

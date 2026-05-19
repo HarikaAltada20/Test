@@ -20,6 +20,9 @@ export type InstagramInsightsExportSelection = {
   customUntil?: number;
 };
 
+/** Max creator IDs per instagram-archives API request (server enforces the same cap). */
+export const INSTAGRAM_ARCHIVES_BATCH_SIZE = 500;
+
 export const INSTAGRAM_INSIGHTS_EXPORT_PRESETS: ReadonlyArray<{
   id: AccountInsightsPreset;
   label: string;

@@ -44,6 +44,7 @@ import {
 import { toast } from "sonner";
 import type { AccountInsightsPreset } from "@/lib/instagram-account-insights";
 import {
+  INSTAGRAM_ARCHIVES_BATCH_SIZE,
   INSTAGRAM_INSIGHTS_EXPORT_PRESETS,
   type InstagramInsightsExportSelection,
 } from "@/lib/instagram-analytics-export";
@@ -95,7 +96,7 @@ export type SubmissionLeaderboardExportDialogProps = {
   defaultSelectedColumnIds?: string[];
 } & (SubmissionExportProps | CreatorExportProps);
 
-async function fetchInstagramArchivesForExport(
+async function fetchInstagramArchivesBatch(
   contestId: string,
   creatorIds: string[],
 ): Promise<{
@@ -121,6 +122,34 @@ async function fetchInstagramArchivesForExport(
       InstagramProfileSnapshot | null
     >,
   };
+}
+
+/** Loads Instagram archives for export; chunks requests to match API batch size. */
+async function fetchInstagramArchivesForExport(
+  contestId: string,
+  creatorIds: string[],
+): Promise<{
+  archives: Record<string, unknown>;
+  profileSummaries: Record<string, InstagramProfileSnapshot | null>;
+}> {
+  const uniqueIds = [
+    ...new Set(creatorIds.map((id) => String(id).trim()).filter(Boolean)),
+  ];
+  if (uniqueIds.length === 0) {
+    return { archives: {}, profileSummaries: {} };
+  }
+
+  const archives: Record<string, unknown> = {};
+  const profileSummaries: Record<string, InstagramProfileSnapshot | null> = {};
+
+  for (let i = 0; i < uniqueIds.length; i += INSTAGRAM_ARCHIVES_BATCH_SIZE) {
+    const chunk = uniqueIds.slice(i, i + INSTAGRAM_ARCHIVES_BATCH_SIZE);
+    const batch = await fetchInstagramArchivesBatch(contestId, chunk);
+    Object.assign(archives, batch.archives);
+    Object.assign(profileSummaries, batch.profileSummaries);
+  }
+
+  return { archives, profileSummaries };
 }
 
 export function SubmissionLeaderboardExportDialog(
