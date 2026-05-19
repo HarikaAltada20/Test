@@ -64,7 +64,9 @@ export function stripDualComponentTagFromRemarks(
     .trim();
 }
 
-function parseDualRewardsPayoutJson(raw: unknown): DualRewardsPayoutJson | null {
+export function parseDualRewardsPayoutJson(
+  raw: unknown,
+): DualRewardsPayoutJson | null {
   if (raw == null) return null;
   let o: Record<string, unknown>;
   if (typeof raw === "string") {
@@ -176,6 +178,70 @@ export function getDualPayoutScopeFromSubmission(
     if (inferred) return inferred;
   }
   return null;
+}
+
+/** Remaining payable per component after prior dual-rewards payouts. */
+export function getDualRemainingPayableCents(
+  component: DualRewardPayoutScope,
+  cpmExpectedCents: number,
+  milestoneExpectedCents: number,
+  dualPayoutRaw: unknown,
+): {
+  cpmRemaining: number;
+  milestoneRemaining: number;
+  totalRemaining: number;
+} {
+  const prev = parseDualRewardsPayoutJson(dualPayoutRaw);
+  const prevCpm = Math.max(0, prev?.cpm_cents ?? 0);
+  const prevMs = Math.max(0, prev?.milestone_cents ?? 0);
+  const cpmRemaining = Math.max(
+    0,
+    Math.round(Number(cpmExpectedCents) || 0) - prevCpm,
+  );
+  const milestoneRemaining = Math.max(
+    0,
+    Math.round(Number(milestoneExpectedCents) || 0) - prevMs,
+  );
+  const totalRemaining =
+    component === "cpm"
+      ? cpmRemaining
+      : component === "milestone"
+        ? milestoneRemaining
+        : cpmRemaining + milestoneRemaining;
+  return { cpmRemaining, milestoneRemaining, totalRemaining };
+}
+
+/** Split reversal total into CPM / milestone using stored `dual_rewards_payout`. */
+export function splitDualReversalRefundFromPayout(
+  dualPayoutRaw: unknown,
+  reversalTotalCents: number,
+  fallbackMainCents: number,
+  fallbackBonusCents: number,
+): { cpmCents: number; milestoneCents: number } {
+  const total = Math.max(0, Math.round(Number(reversalTotalCents) || 0));
+  if (total <= 0) return { cpmCents: 0, milestoneCents: 0 };
+
+  const dual = parseDualRewardsPayoutJson(dualPayoutRaw);
+  const cpmStored = Math.max(0, dual?.cpm_cents ?? 0);
+  const msStored = Math.max(0, dual?.milestone_cents ?? 0);
+  const splitTotal = cpmStored + msStored;
+
+  if (splitTotal > 0) {
+    const scale = total / splitTotal;
+    let cpmCents = Math.round(cpmStored * scale);
+    let milestoneCents = Math.round(msStored * scale);
+    const drift = total - cpmCents - milestoneCents;
+    if (drift !== 0) {
+      if (msStored >= cpmStored) milestoneCents += drift;
+      else cpmCents += drift;
+    }
+    return { cpmCents, milestoneCents };
+  }
+
+  const main = Math.max(0, Math.round(Number(fallbackMainCents) || 0));
+  const bonus = Math.max(0, Math.round(Number(fallbackBonusCents) || 0));
+  if (bonus > 0) return { cpmCents: main, milestoneCents: bonus };
+  return { cpmCents: total, milestoneCents: 0 };
 }
 
 export function dualRewardsPayoutJsonToRowValue(

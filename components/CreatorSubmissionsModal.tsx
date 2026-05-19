@@ -61,7 +61,15 @@ import {
   buildDualRewardCreatorCapSplitMaps,
   splitDualPaidTotalByExpectedWeights,
 } from "@/lib/dual-rewards-creator-cap";
-import { getDualPayoutScopeFromSubmission } from "@/lib/dual-rewards-payout";
+import {
+  getDualPayoutScopeFromSubmission,
+  getDualRemainingPayableCents,
+  parseDualRewardsPayoutJson,
+} from "@/lib/dual-rewards-payout";
+import {
+  formatDualBulkPaymentToastDescription,
+  getBulkPaymentToastMeta,
+} from "@/lib/bulk-payment-toast";
 import { buildFlatFeeBonusExpectedCentsBySubmissionId } from "@/lib/twitter-cpm-bonus-expected";
 import { YouTubeAnalyticsPanel } from "@/components/youtube/YouTubeAnalyticsPanel";
 import {
@@ -103,6 +111,7 @@ interface Submission {
   deleted_at?: string | null;
   insights_status?: "ok" | "temporary_failure" | "permanent_failure" | null;
   metadata?: any;
+  dual_rewards_payout?: unknown;
 }
 
 /** TikTok Display API uses *_count; older rows may only have views/likes/comments/shares. */
@@ -458,15 +467,53 @@ export function CreatorSubmissionsModal({
       if (isDual) {
         let successCount = 0;
         let skippedCount = 0;
+        let totalCpmCents = 0;
+        let totalMilestoneCents = 0;
         const component =
           type === "standard" ? "cpm" : type === "bonus" ? "milestone" : "both";
-        for (const sub of sortedSubs) {
+
+        const dualPayableSubs = sortedSubs.filter((sub) => {
+          const { cpmExpected, milestoneExpected } =
+            computeDualExpectedPayableForSubmission(sub);
+          return (
+            getDualRemainingPayableCents(
+              component,
+              cpmExpected,
+              milestoneExpected,
+              sub.dual_rewards_payout,
+            ).totalRemaining > 0
+          );
+        });
+
+        if (dualPayableSubs.length === 0) {
+          const componentLabel =
+            component === "cpm"
+              ? "CPM"
+              : component === "milestone"
+                ? "Milestone"
+                : "CPM and milestone";
+          toast({
+            title: "Cannot pay",
+            description: `No selected submissions have unpaid ${componentLabel.toLowerCase()} remaining. They may already be paid or have $0 expected for this component.`,
+            variant: "destructive",
+          });
+          return;
+        }
+
+        skippedCount = sortedSubs.length - dualPayableSubs.length;
+
+        for (const sub of dualPayableSubs) {
           try {
-            const paid = await handleDualSubmissionPayment(sub, component, {
+            const payResult = await handleDualSubmissionPayment(sub, component, {
               skipReload: true,
             });
-            if (paid) successCount++;
-            else skippedCount++;
+            if (payResult.paid) {
+              successCount++;
+              totalCpmCents += payResult.cpmCents;
+              totalMilestoneCents += payResult.milestoneCents;
+            } else {
+              skippedCount++;
+            }
           } catch (error) {
             console.error(
               `Dual payment skipped for submission ${sub.id}:`,
@@ -475,18 +522,21 @@ export function CreatorSubmissionsModal({
             skippedCount++;
           }
         }
+        const dualBulkToast = getBulkPaymentToastMeta(successCount, skippedCount);
         toast({
-          title: "Bulk payment successful",
-          description: [
-            `Paid items: ${successCount}`,
-            `Skipped: ${skippedCount}`,
-          ].join("\n"),
-          variant: "payment",
+          title: dualBulkToast.title,
+          description: formatDualBulkPaymentToastDescription({
+            successCount,
+            skippedCount,
+            totalCpmCents,
+            totalMilestoneCents,
+          }),
+          variant: dualBulkToast.variant,
         });
         if (skippedCount === 0) {
           setSelectedSubmissions(new Set());
         }
-        window.location.reload();
+        setTimeout(() => window.location.reload(), 700);
         return;
       }
 
@@ -783,11 +833,7 @@ export function CreatorSubmissionsModal({
     return dualAndCpmCapMaps.cpmMap.get(submission.id) ?? 0;
   };
 
-  const handleDualSubmissionPayment = async (
-    submission: Submission,
-    component: "cpm" | "milestone" | "both",
-    options?: { skipReload?: boolean },
-  ): Promise<boolean> => {
+  const computeDualExpectedPayableForSubmission = (submission: Submission) => {
     const cpmExpectedRaw = calculateRawSubmissionCpmExpectedReward(submission);
     const milestoneExpectedRaw = Math.max(
       Number(milestoneExpectedPayoutBySubmissionId?.get(submission.id) || 0),
@@ -798,42 +844,70 @@ export function CreatorSubmissionsModal({
     const milestoneCappedBase =
       dualAndCpmCapMaps.dualMilestoneCappedMap.get(submission.id) ??
       milestoneExpectedRaw;
-    const shouldAdjustDualCpmComponent =
-      hasPayoutAdjustment &&
-      (payoutAdjustmentMode === "combined" ||
-        payoutAdjustmentMode === "cpm_and_milestone" ||
-        payoutAdjustmentMode === "dual_rewards_only" ||
-        payoutAdjustmentMode === "cpm_only");
-    const shouldAdjustDualMilestoneComponent =
-      hasPayoutAdjustment &&
-      (payoutAdjustmentMode === "combined" ||
-        payoutAdjustmentMode === "cpm_and_milestone" ||
-        payoutAdjustmentMode === "dual_rewards_only" ||
-        payoutAdjustmentMode === "milestone_only");
-    const cpmExpected = shouldAdjustDualCpmComponent
-      ? applyPayoutAdjustment(cpmCappedBase, payoutAdjustmentPercentage)
+    const pct = Number((contest as any)?.payout_adjustment_percentage ?? 0);
+    const mode = (contest as any)?.payout_adjustment_mode as string | null;
+    const hasAdj = pct > 0 && !!mode;
+    const adjCpm =
+      hasAdj &&
+      (mode === "combined" ||
+        mode === "cpm_and_milestone" ||
+        mode === "dual_rewards_only" ||
+        mode === "cpm_only");
+    const adjMs =
+      hasAdj &&
+      (mode === "combined" ||
+        mode === "cpm_and_milestone" ||
+        mode === "dual_rewards_only" ||
+        mode === "milestone_only");
+    const cpmExpected = adjCpm
+      ? applyPayoutAdjustment(cpmCappedBase, pct)
       : cpmCappedBase;
-    const milestoneExpected = shouldAdjustDualMilestoneComponent
-      ? applyPayoutAdjustment(
-          milestoneCappedBase,
-          payoutAdjustmentPercentage,
-        )
+    const milestoneExpected = adjMs
+      ? applyPayoutAdjustment(milestoneCappedBase, pct)
       : milestoneCappedBase;
-    const amountInCents =
-      component === "cpm"
-        ? cpmExpected
-        : component === "milestone"
-          ? milestoneExpected
-          : cpmExpected + milestoneExpected;
-    if (amountInCents <= 0) {
-      toast({
-        title: "Nothing to pay",
-        description:
-          "Computed payout is 0 for this component. Check views, milestone eligibility, creator cap, or payout adjustment.",
-        variant: "default",
-      });
-      return false;
+    return { cpmExpected, milestoneExpected };
+  };
+
+  const handleDualSubmissionPayment = async (
+    submission: Submission,
+    component: "cpm" | "milestone" | "both",
+    options?: { skipReload?: boolean },
+  ): Promise<{ paid: boolean; cpmCents: number; milestoneCents: number }> => {
+    const emptyResult = { paid: false, cpmCents: 0, milestoneCents: 0 };
+    const { cpmExpected, milestoneExpected } =
+      computeDualExpectedPayableForSubmission(submission);
+    const { cpmRemaining, milestoneRemaining, totalRemaining } =
+      getDualRemainingPayableCents(
+        component,
+        cpmExpected,
+        milestoneExpected,
+        submission.dual_rewards_payout,
+      );
+    if (totalRemaining <= 0) {
+      if (!options?.skipReload) {
+        const componentLabel =
+          component === "cpm"
+            ? "CPM"
+            : component === "milestone"
+              ? "Milestone"
+              : "CPM and milestone";
+        toast({
+          title: "Nothing to pay",
+          description:
+            cpmRemaining <= 0 &&
+            milestoneRemaining <= 0 &&
+            (cpmExpected > 0 || milestoneExpected > 0)
+              ? `${componentLabel} is already paid for this submission.`
+              : `No payable ${componentLabel.toLowerCase()} amount. Check views, milestone eligibility, creator cap, or payout adjustment.`,
+          variant: "default",
+        });
+      }
+      return emptyResult;
     }
+    const prevPayout = parseDualRewardsPayoutJson(submission.dual_rewards_payout);
+    const prevCpmCents = prevPayout?.cpm_cents ?? 0;
+    const prevMilestoneCents = prevPayout?.milestone_cents ?? 0;
+    const amountInCents = totalRemaining;
     const res = await fetch("/api/admin/verify-submission", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -850,10 +924,31 @@ export function CreatorSubmissionsModal({
     const result = await res.json();
     if (!res.ok) throw new Error(result?.error || "Failed to pay submission");
 
+    const nextPayout = parseDualRewardsPayoutJson(
+      result.submission?.dual_rewards_payout,
+    );
+    let cpmPaidCents = Math.max(0, (nextPayout?.cpm_cents ?? 0) - prevCpmCents);
+    let milestonePaidCents = Math.max(
+      0,
+      (nextPayout?.milestone_cents ?? 0) - prevMilestoneCents,
+    );
+    if (cpmPaidCents === 0 && milestonePaidCents === 0) {
+      if (component === "cpm") cpmPaidCents = cpmRemaining;
+      else if (component === "milestone") milestonePaidCents = milestoneRemaining;
+      else {
+        cpmPaidCents = cpmRemaining;
+        milestonePaidCents = milestoneRemaining;
+      }
+    }
+
     if (!options?.skipReload) {
       setTimeout(() => window.location.reload(), 800);
     }
-    return true;
+    return {
+      paid: true,
+      cpmCents: cpmPaidCents,
+      milestoneCents: milestonePaidCents,
+    };
   };
 
   const calculateSubmissionBaseExpectedReward = (

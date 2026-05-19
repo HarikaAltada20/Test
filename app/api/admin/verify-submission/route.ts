@@ -34,6 +34,7 @@ import {
   parseDualRewardPayoutScopeFromRemarks,
   stripDualComponentTagFromRemarks,
   buildDualRewardsPayoutPersistValue,
+  splitDualReversalRefundFromPayout,
 } from "@/lib/dual-rewards-payout";
 
 function getTransactionPayoutCycle(metadata: any): number {
@@ -53,6 +54,8 @@ export async function POST(request: Request) {
       reward_refunded_cents: number;
       bonus_refunded_cents: number;
       total_refunded_cents: number;
+      cpm_refunded_cents?: number;
+      milestone_refunded_cents?: number;
     } | null = null;
     const { submissionId, action, reason, paymentDetails } =
       await request.json();
@@ -1626,11 +1629,27 @@ export async function POST(request: Request) {
 
       const reversalAmount = mainReversalAmount + bonusReversalAmount;
 
-      paidStatusReversalSummary = {
-        reward_refunded_cents: mainReversalAmount,
-        bonus_refunded_cents: bonusReversalAmount,
-        total_refunded_cents: reversalAmount,
-      };
+      if (contest.contest_type === "dual_rewards") {
+        const { cpmCents, milestoneCents } = splitDualReversalRefundFromPayout(
+          submissionFull.dual_rewards_payout,
+          reversalAmount,
+          mainReversalAmount,
+          bonusReversalAmount,
+        );
+        paidStatusReversalSummary = {
+          reward_refunded_cents: cpmCents,
+          bonus_refunded_cents: milestoneCents,
+          total_refunded_cents: reversalAmount,
+          cpm_refunded_cents: cpmCents,
+          milestone_refunded_cents: milestoneCents,
+        };
+      } else {
+        paidStatusReversalSummary = {
+          reward_refunded_cents: mainReversalAmount,
+          bonus_refunded_cents: bonusReversalAmount,
+          total_refunded_cents: reversalAmount,
+        };
+      }
 
       if (reversalAmount > 0) {
         // Debit creator wallet once, then write explicit refund ledger rows.
@@ -1734,7 +1753,9 @@ export async function POST(request: Request) {
       const s = paidStatusReversalSummary;
       const refundDetail =
         s.total_refunded_cents > 0
-          ? ` Verification complete: refunded from creator withdrawable balance — ${formatCurrencyFromCents(s.reward_refunded_cents)} reward, ${formatCurrencyFromCents(s.bonus_refunded_cents)} bonus (${formatCurrencyFromCents(s.total_refunded_cents)} total).`
+          ? contest.contest_type === "dual_rewards"
+            ? ` Verification complete: refunded from creator withdrawable balance — ${formatCurrencyFromCents(s.cpm_refunded_cents ?? s.reward_refunded_cents)} CPM, ${formatCurrencyFromCents(s.milestone_refunded_cents ?? s.bonus_refunded_cents)} milestone (${formatCurrencyFromCents(s.total_refunded_cents)} total).`
+            : ` Verification complete: refunded from creator withdrawable balance — ${formatCurrencyFromCents(s.reward_refunded_cents)} reward, ${formatCurrencyFromCents(s.bonus_refunded_cents)} bonus (${formatCurrencyFromCents(s.total_refunded_cents)} total).`
           : ` Verification complete: no reward or bonus was debited from the creator (nothing on record to refund). Paid and bonus-paid flags were cleared.`;
       message += refundDetail;
     }
