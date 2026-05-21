@@ -39,6 +39,8 @@ import {
 import {
   checkDualRewardsPoolBudgetForPayment,
   getDualRewardsSubmissionPaidComponents,
+  rollbackDualRewardsPoolCommit,
+  type DualPoolBudgetPaymentResult,
 } from "@/lib/dual-rewards-pool-budget";
 
 function getTransactionPayoutCycle(metadata: any): number {
@@ -574,15 +576,15 @@ export async function POST(request: Request) {
               milestoneCents: paidComponents.milestoneCents + milestoneAmount,
             },
           });
-          if (!poolResult.check.allowed) {
-            const poolCheck = poolResult.check;
+          if (!poolResult.ok) {
+            const denied = poolResult.check;
             return NextResponse.json(
               {
-                error: poolCheck.error,
+                error: denied.error,
                 details: {
-                  poolBudgetCents: poolCheck.poolBudgetCents,
-                  projectedSpentCents: poolCheck.projectedSpentCents,
-                  remainingCents: poolCheck.remainingCents,
+                  poolBudgetCents: denied.poolBudgetCents,
+                  projectedSpentCents: denied.projectedSpentCents,
+                  remainingCents: denied.remainingCents,
                   additionalMilestoneCents: milestoneAmount,
                 },
               },
@@ -645,6 +647,14 @@ export async function POST(request: Request) {
           );
 
           if (!creditResult.success) {
+            if (poolResult.ok && poolResult.check.committed) {
+              await rollbackDualRewardsPoolCommit(
+                supabaseAdmin,
+                submissionFull.contest_id,
+                submissionId,
+                poolResult.check.previousDualRewardsPayout,
+              );
+            }
             return NextResponse.json(
               {
                 error: `Failed to credit milestone reward: ${creditResult.error}`,
@@ -653,6 +663,11 @@ export async function POST(request: Request) {
             );
           }
 
+          const committedMilestonePayout = {
+            cpm_cents: paidComponents.cpmCents,
+            milestone_cents: paidComponents.milestoneCents + milestoneAmount,
+          };
+
           const { data: afterBonusUpdate, error: bonusUpdateError } =
             await supabaseAdmin
               .from("submissions")
@@ -660,6 +675,13 @@ export async function POST(request: Request) {
                 bonus_paid: true,
                 bonus_paid_at: new Date().toISOString(),
                 bonus_amount: milestoneAmount,
+                dual_rewards_payout: buildDualRewardsPayoutPersistValue(
+                  committedMilestonePayout,
+                  {
+                    updatedBy: currentUserId,
+                    customRemarks: paymentDetails?.customRemarks ?? null,
+                  },
+                ),
                 milestone_bonus_paid: {
                   ...(submissionFull.milestone_bonus_paid || {}),
                   paid_at: new Date().toISOString(),
@@ -1390,6 +1412,8 @@ export async function POST(request: Request) {
               !r?.metadata?.bonus_type && !r?.metadata?.payout_component,
           );
 
+          let dualRewardsPoolCommit: DualPoolBudgetPaymentResult | undefined;
+
           if (mainRewardInThisCycle.length === 0) {
             if (contest.contest_type === "dual_rewards") {
               const paidComponents = getDualRewardsSubmissionPaidComponents({
@@ -1404,7 +1428,7 @@ export async function POST(request: Request) {
                 cpm_cents: rewardAmount,
                 milestone_cents: 0,
               };
-              const poolResult = await checkDualRewardsPoolBudgetForPayment({
+              dualRewardsPoolCommit = await checkDualRewardsPoolBudgetForPayment({
                 supabaseAdmin,
                 contest: contest as any,
                 contestId: submissionFull.contest_id,
@@ -1417,15 +1441,15 @@ export async function POST(request: Request) {
                   ),
                 },
               });
-              if (!poolResult.check.allowed) {
-                const poolCheck = poolResult.check;
+              if (!dualRewardsPoolCommit.ok) {
+                const denied = dualRewardsPoolCommit.check;
                 return NextResponse.json(
                   {
-                    error: poolCheck.error,
+                    error: denied.error,
                     details: {
-                      poolBudgetCents: poolCheck.poolBudgetCents,
-                      projectedSpentCents: poolCheck.projectedSpentCents,
-                      remainingCents: poolCheck.remainingCents,
+                      poolBudgetCents: denied.poolBudgetCents,
+                      projectedSpentCents: denied.projectedSpentCents,
+                      remainingCents: denied.remainingCents,
                       attemptedCpmCents: split.cpm_cents,
                       attemptedMilestoneCents: split.milestone_cents,
                     },
@@ -1461,6 +1485,14 @@ export async function POST(request: Request) {
               },
             );
             if (!creditRes.success) {
+              if (dualRewardsPoolCommit?.ok && dualRewardsPoolCommit.check.committed) {
+                await rollbackDualRewardsPoolCommit(
+                  supabaseAdmin,
+                  submissionFull.contest_id,
+                  submissionId,
+                  dualRewardsPoolCommit.check.previousDualRewardsPayout,
+                );
+              }
               return NextResponse.json(
                 { error: `Failed to credit creator: ${creditRes.error}` },
                 { status: 500 },

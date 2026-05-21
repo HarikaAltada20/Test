@@ -94,6 +94,15 @@ export async function POST(
         { status: 400 }
       );
     }
+    if (contest.contest_type === "dual_rewards") {
+      return NextResponse.json(
+        {
+          error:
+            "Dual rewards contests use per-submission payout (CPM and milestone). Use verify-submission instead of bulk Twitter CPM pay.",
+        },
+        { status: 400 },
+      );
+    }
     if (contest.contest_type !== "cpm") {
       return NextResponse.json(
         { error: "Bulk Twitter payout is only for CPM contests" },

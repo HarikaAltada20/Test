@@ -15,7 +15,9 @@ import {
 import { isMilestoneContestType, isDualRewardsContestType } from "@/lib/contest-type";
 import {
   checkDualRewardsPoolBudgetForPayment,
+  rollbackDualRewardsPoolCommit,
   getDualRewardsSubmissionPaidComponents,
+  type DualPoolBudgetPaymentResult,
 } from "@/lib/dual-rewards-pool-budget";
 import {
   adjustBonusCents,
@@ -444,6 +446,8 @@ export async function POST(
       );
     }
 
+    let dualRewardsPoolCommit: DualPoolBudgetPaymentResult | undefined;
+
     if (isDualRewardsContestType(contest.contest_type)) {
       const paidComponents = getDualRewardsSubmissionPaidComponents({
         id: String(target.id),
@@ -454,7 +458,7 @@ export async function POST(
         dual_rewards_payout: (target as { dual_rewards_payout?: unknown })
           .dual_rewards_payout,
       });
-      const poolResult = await checkDualRewardsPoolBudgetForPayment({
+      dualRewardsPoolCommit = await checkDualRewardsPoolBudgetForPayment({
         supabaseAdmin,
         contest: contest as any,
         contestId,
@@ -464,15 +468,15 @@ export async function POST(
           milestoneCents: paidComponents.milestoneCents + creditCents,
         },
       });
-      if (!poolResult.check.allowed) {
-        const poolCheck = poolResult.check;
+      if (!dualRewardsPoolCommit.ok) {
+        const denied = dualRewardsPoolCommit.check;
         return NextResponse.json(
           {
-            error: poolCheck.error,
+            error: denied.error,
             details: {
-              poolBudgetCents: poolCheck.poolBudgetCents,
-              projectedSpentCents: poolCheck.projectedSpentCents,
-              remainingCents: poolCheck.remainingCents,
+              poolBudgetCents: denied.poolBudgetCents,
+              projectedSpentCents: denied.projectedSpentCents,
+              remainingCents: denied.remainingCents,
               additionalBonusCents: creditCents,
             },
           },
@@ -518,6 +522,14 @@ export async function POST(
     );
 
     if (!creditResult.success) {
+      if (dualRewardsPoolCommit?.ok && dualRewardsPoolCommit.check.committed) {
+        await rollbackDualRewardsPoolCommit(
+          supabaseAdmin,
+          contestId,
+          String(target.id),
+          dualRewardsPoolCommit.check.previousDualRewardsPayout,
+        );
+      }
       return NextResponse.json(
         {
           error: creditResult.error || "Failed to credit creator balance",

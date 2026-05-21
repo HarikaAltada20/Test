@@ -16,20 +16,31 @@ export type DualPoolSpendComponents = {
   milestoneCents: number;
 };
 
+export type DualPoolBudgetCheckAllowed = {
+  allowed: true;
+  poolBudgetCents: number;
+  projectedSpentCents: number;
+  remainingCents?: number;
+  committed?: boolean;
+  previousDualRewardsPayout?: unknown | null;
+};
+
+export type DualPoolBudgetCheckDenied = {
+  allowed: false;
+  error: string;
+  poolBudgetCents: number;
+  projectedSpentCents: number;
+  remainingCents: number;
+  committed?: boolean;
+};
+
 export type DualPoolBudgetCheckResult =
-  | {
-      allowed: true;
-      poolBudgetCents: number;
-      projectedSpentCents: number;
-      remainingCents?: number;
-    }
-  | {
-      allowed: false;
-      error: string;
-      poolBudgetCents: number;
-      projectedSpentCents: number;
-      remainingCents: number;
-    };
+  | DualPoolBudgetCheckAllowed
+  | DualPoolBudgetCheckDenied;
+
+export type DualPoolBudgetPaymentResult =
+  | { ok: true; check: DualPoolBudgetCheckAllowed }
+  | { ok: false; check: DualPoolBudgetCheckDenied };
 
 export const DUAL_REWARDS_POOL_NOT_CONFIGURED_ERROR =
   "Contest prize pool is not configured";
@@ -212,12 +223,21 @@ function parseRpcPoolBudgetResult(raw: unknown): DualPoolBudgetCheckResult {
     0,
     Math.round(Number(o.remaining_cents) || 0),
   );
+  const committed = o.committed === true;
+  const previousDualRewardsPayout = Object.prototype.hasOwnProperty.call(
+    o,
+    "previous_dual_rewards_payout",
+  )
+    ? o.previous_dual_rewards_payout
+    : undefined;
   if (allowed) {
     return {
       allowed: true,
       poolBudgetCents,
       projectedSpentCents,
       remainingCents,
+      committed,
+      previousDualRewardsPayout,
     };
   }
   return {
@@ -229,12 +249,22 @@ function parseRpcPoolBudgetResult(raw: unknown): DualPoolBudgetCheckResult {
     poolBudgetCents,
     projectedSpentCents,
     remainingCents,
+    committed: false,
   };
 }
 
+function isRpcMissingError(rpcError: { message?: string; code?: string } | null) {
+  return (
+    rpcError &&
+    (/function.*does not exist|could not find/i.test(rpcError.message || "") ||
+      rpcError.code === "42883")
+  );
+}
+
 /**
- * Serialized pool check (Postgres advisory lock). Falls back to in-app validation
- * if the RPC is not deployed yet.
+ * Serialized pool check (Postgres advisory lock). When `commit` is true, persists
+ * `dual_rewards_payout` on the target row in the same DB transaction so concurrent
+ * payouts cannot both pass validation.
  */
 export async function assertDualRewardsPoolBudgetAllowsPayment(
   supabaseAdmin: SupabaseClient,
@@ -247,37 +277,64 @@ export async function assertDualRewardsPoolBudgetAllowsPayment(
   contestId: string,
   targetSubmissionId: string,
   targetAfter: DualPoolSpendComponents,
+  options?: { commit?: boolean },
 ): Promise<DualPoolBudgetCheckResult> {
   const poolBudgetCents = getDualRewardsPoolBudgetCents(contest);
   const targetCpm = Math.max(0, Math.round(targetAfter.cpmCents));
   const targetMs = Math.max(0, Math.round(targetAfter.milestoneCents));
+  const commit = options?.commit === true;
+
+  const rpcArgs: Record<string, unknown> = {
+    p_contest_id: contestId,
+    p_target_submission_id: targetSubmissionId,
+    p_target_cpm_cents: targetCpm,
+    p_target_milestone_cents: targetMs,
+  };
+  if (commit) {
+    rpcArgs.p_commit = true;
+  }
 
   const { data: rpcData, error: rpcError } = await supabaseAdmin.rpc(
     "dual_rewards_assert_pool_budget",
-    {
-      p_contest_id: contestId,
-      p_target_submission_id: targetSubmissionId,
-      p_target_cpm_cents: targetCpm,
-      p_target_milestone_cents: targetMs,
-    },
+    rpcArgs,
   );
 
   if (!rpcError && rpcData != null) {
-    return parseRpcPoolBudgetResult(rpcData);
+    const parsed = parseRpcPoolBudgetResult(rpcData);
+    if (commit && parsed.allowed && parsed.committed !== true) {
+      return {
+        allowed: false,
+        error:
+          "Pool budget commit did not persist (deploy migration 20260521130000_dual_rewards_pool_budget_commit)",
+        poolBudgetCents: parsed.poolBudgetCents,
+        projectedSpentCents: parsed.projectedSpentCents,
+        remainingCents: parsed.remainingCents ?? 0,
+        committed: false,
+      };
+    }
+    return parsed;
   }
 
-  const rpcMissing =
-    rpcError &&
-    (/function.*does not exist|could not find/i.test(rpcError.message) ||
-      rpcError.code === "42883");
-
-  if (!rpcMissing) {
+  if (!isRpcMissingError(rpcError)) {
     return {
       allowed: false,
       error: `Failed to verify contest pool budget: ${rpcError?.message || "unknown"}`,
       poolBudgetCents,
       projectedSpentCents: 0,
       remainingCents: 0,
+      committed: false,
+    };
+  }
+
+  if (commit) {
+    return {
+      allowed: false,
+      error:
+        "Pool budget commit RPC is not deployed; run Supabase migrations before processing dual-rewards payouts",
+      poolBudgetCents,
+      projectedSpentCents: 0,
+      remainingCents: 0,
+      committed: false,
     };
   }
 
@@ -296,6 +353,7 @@ export async function assertDualRewardsPoolBudgetAllowsPayment(
       poolBudgetCents,
       projectedSpentCents: 0,
       remainingCents: 0,
+      committed: false,
     };
   }
 
@@ -308,7 +366,26 @@ export async function assertDualRewardsPoolBudgetAllowsPayment(
   });
 }
 
-/** HTTP-friendly helper for dual-rewards payout routes. */
+/** Undo a pool commit when wallet credit fails after dual_rewards_payout was reserved. */
+export async function rollbackDualRewardsPoolCommit(
+  supabaseAdmin: SupabaseClient,
+  contestId: string,
+  targetSubmissionId: string,
+  previousDualRewardsPayout: unknown | null | undefined,
+): Promise<{ ok: boolean; error?: string }> {
+  const { error } = await supabaseAdmin
+    .from("submissions")
+    .update({ dual_rewards_payout: previousDualRewardsPayout ?? null })
+    .eq("id", targetSubmissionId)
+    .eq("contest_id", contestId);
+
+  if (error) {
+    return { ok: false, error: error.message };
+  }
+  return { ok: true };
+}
+
+/** HTTP-friendly helper for dual-rewards payout routes (commits pool slot by default). */
 export async function checkDualRewardsPoolBudgetForPayment(params: {
   supabaseAdmin: SupabaseClient;
   contest: {
@@ -320,16 +397,17 @@ export async function checkDualRewardsPoolBudgetForPayment(params: {
   contestId: string;
   targetSubmissionId: string;
   targetAfter: DualPoolSpendComponents;
-}): Promise<
-  | { ok: true; check: DualPoolBudgetCheckResult }
-  | { ok: false; check: DualPoolBudgetCheckResult }
-> {
+  /** When false, dry-run only (no dual_rewards_payout write). Default true for payouts. */
+  commit?: boolean;
+}): Promise<DualPoolBudgetPaymentResult> {
+  const commit = params.commit !== false;
   const check = await assertDualRewardsPoolBudgetAllowsPayment(
     params.supabaseAdmin,
     params.contest,
     params.contestId,
     params.targetSubmissionId,
     params.targetAfter,
+    { commit },
   );
   if (check.allowed) {
     return { ok: true, check };
