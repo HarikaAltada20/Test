@@ -58,6 +58,11 @@ import { cn } from "@/lib/utils";
 import { toast } from "@/hooks/use-toast";
 import { applyPayoutAdjustment } from "@/lib/payout-adjustment";
 import {
+  dualRewardsPayoutAdjustmentAppliesToCpm,
+  dualRewardsPayoutAdjustmentAppliesToMilestone,
+  parsePayoutAdjustment,
+} from "@/lib/payout-rules";
+import {
   buildDualRewardCreatorCapSplitMaps,
   splitDualPaidTotalByExpectedWeights,
 } from "@/lib/dual-rewards-creator-cap";
@@ -844,21 +849,11 @@ export function CreatorSubmissionsModal({
     const milestoneCappedBase =
       dualAndCpmCapMaps.dualMilestoneCappedMap.get(submission.id) ??
       milestoneExpectedRaw;
-    const pct = Number((contest as any)?.payout_adjustment_percentage ?? 0);
     const mode = (contest as any)?.payout_adjustment_mode as string | null;
+    const pct = Number((contest as any)?.payout_adjustment_percentage ?? 0);
     const hasAdj = pct > 0 && !!mode;
-    const adjCpm =
-      hasAdj &&
-      (mode === "combined" ||
-        mode === "cpm_and_milestone" ||
-        mode === "dual_rewards_only" ||
-        mode === "cpm_only");
-    const adjMs =
-      hasAdj &&
-      (mode === "combined" ||
-        mode === "cpm_and_milestone" ||
-        mode === "dual_rewards_only" ||
-        mode === "milestone_only");
+    const adjCpm = hasAdj && dualRewardsPayoutAdjustmentAppliesToCpm(mode);
+    const adjMs = hasAdj && dualRewardsPayoutAdjustmentAppliesToMilestone(mode);
     const cpmExpected = adjCpm
       ? applyPayoutAdjustment(cpmCappedBase, pct)
       : cpmCappedBase;
@@ -1047,32 +1042,16 @@ export function CreatorSubmissionsModal({
   const flatFeeBonus = getFlatFeeBonus();
   const hasFlatFeeBonus = flatFeeBonus > 0;
 
-  // Simple contest-level payout adjustment (percentage + mode)
-  const payoutAdjustmentPercentage = Number(
-    (contest as any)?.payout_adjustment_percentage ?? 0,
+  const payoutAdjustment = parsePayoutAdjustment(
+    (contest as any)?.payout_adjustment_percentage,
+    (contest as any)?.payout_adjustment_mode,
+    { contestType: contest?.contest_type ?? null },
   );
-  const payoutAdjustmentMode = (contest as any)?.payout_adjustment_mode as
-    | "cpm_only"
-    | "milestone_only"
-    | "bonus_only"
-    | "combined"
-    | "cpm_and_milestone"
-    | "dual_rewards_only"
-    | null;
-  const hasPayoutAdjustment =
-    payoutAdjustmentPercentage > 0 && !!payoutAdjustmentMode;
-  const shouldAdjustReward =
-    hasPayoutAdjustment &&
-    (payoutAdjustmentMode === "combined" ||
-      payoutAdjustmentMode === "cpm_and_milestone" ||
-      payoutAdjustmentMode === "dual_rewards_only" ||
-      payoutAdjustmentMode === "cpm_only" ||
-      payoutAdjustmentMode === "milestone_only");
-  const shouldAdjustBonus =
-    hasPayoutAdjustment &&
-    (payoutAdjustmentMode === "combined" ||
-      payoutAdjustmentMode === "dual_rewards_only" ||
-      payoutAdjustmentMode === "bonus_only");
+  const payoutAdjustmentPercentage = payoutAdjustment.percentage;
+  const payoutAdjustmentMode = payoutAdjustment.mode;
+  const hasPayoutAdjustment = payoutAdjustment.hasAdjustment;
+  const shouldAdjustReward = payoutAdjustment.shouldAdjustReward;
+  const shouldAdjustBonus = payoutAdjustment.shouldAdjustBonus;
 
   const isTwitterLeaderboardContest =
     contest?.contest_type === "leaderboard" &&
@@ -1089,17 +1068,11 @@ export function CreatorSubmissionsModal({
   const dualAdjustCpmForModal =
     isDualRewardsContest &&
     hasPayoutAdjustment &&
-    (payoutAdjustmentMode === "combined" ||
-      payoutAdjustmentMode === "cpm_and_milestone" ||
-      payoutAdjustmentMode === "dual_rewards_only" ||
-      payoutAdjustmentMode === "cpm_only");
+    dualRewardsPayoutAdjustmentAppliesToCpm(payoutAdjustmentMode);
   const dualAdjustMilestoneForModal =
     isDualRewardsContest &&
     hasPayoutAdjustment &&
-    (payoutAdjustmentMode === "combined" ||
-      payoutAdjustmentMode === "cpm_and_milestone" ||
-      payoutAdjustmentMode === "dual_rewards_only" ||
-      payoutAdjustmentMode === "milestone_only");
+    dualRewardsPayoutAdjustmentAppliesToMilestone(payoutAdjustmentMode);
   const showDualPayoutAdjBreakdownColumns =
     isDualRewardsContest &&
     hasPayoutAdjustment &&

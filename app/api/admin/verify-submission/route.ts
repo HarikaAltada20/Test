@@ -36,6 +36,12 @@ import {
   buildDualRewardsPayoutPersistValue,
   splitDualReversalRefundFromPayout,
 } from "@/lib/dual-rewards-payout";
+import {
+  fetchDualRewardsPoolSpendRows,
+  getDualRewardsPoolBudgetCents,
+  getDualRewardsSubmissionPaidComponents,
+  validateDualRewardsPoolBudget,
+} from "@/lib/dual-rewards-pool-budget";
 
 function getTransactionPayoutCycle(metadata: any): number {
   const rawCycle = metadata?.payout_cycle;
@@ -552,6 +558,54 @@ export async function POST(request: Request) {
             );
           }
 
+          const poolBudgetCents = getDualRewardsPoolBudgetCents(contest as any);
+          if (poolBudgetCents > 0) {
+            const poolFetch = await fetchDualRewardsPoolSpendRows(
+              supabaseAdmin,
+              submissionFull.contest_id,
+            );
+            if (poolFetch.error) {
+              return NextResponse.json(
+                {
+                  error: "Failed to verify contest pool budget",
+                  details: poolFetch.error,
+                },
+                { status: 500 },
+              );
+            }
+            const paidComponents = getDualRewardsSubmissionPaidComponents({
+              id: String(submissionFull.id),
+              earnings: submissionFull.earnings,
+              paid: submissionFull.paid,
+              bonus_amount: submissionFull.bonus_amount,
+              bonus_paid: submissionFull.bonus_paid,
+              dual_rewards_payout: submissionFull.dual_rewards_payout,
+            });
+            const poolCheck = validateDualRewardsPoolBudget({
+              poolBudgetCents,
+              rows: poolFetch.rows ?? [],
+              targetSubmissionId: submissionId,
+              targetAfter: {
+                cpmCents: paidComponents.cpmCents,
+                milestoneCents: paidComponents.milestoneCents + milestoneAmount,
+              },
+            });
+            if (!poolCheck.allowed) {
+              return NextResponse.json(
+                {
+                  error: poolCheck.error,
+                  details: {
+                    poolBudgetCents: poolCheck.poolBudgetCents,
+                    projectedSpentCents: poolCheck.projectedSpentCents,
+                    remainingCents: poolCheck.remainingCents,
+                    additionalMilestoneCents: milestoneAmount,
+                  },
+                },
+                { status: 400 },
+              );
+            }
+          }
+
           const [
             { data: existingBonusRewards },
             { data: existingBonusRefunds },
@@ -1035,68 +1089,13 @@ export async function POST(request: Request) {
               let finalCpmCappedAmount = rawAmount;
               
               if (maxEarningsPerCreator && maxEarningsPerCreator > 0) {
-                const maxCap = Number(maxEarningsPerCreator);
                 if (contest.contest_type === "dual_rewards") {
-                  const milestones = Array.isArray(
-                    (contest as any)?.contest_based_details?.milestone_contest
-                      ?.milestones,
-                  )
-                    ? (contest as any).contest_based_details.milestone_contest
-                        .milestones
-                    : [];
-                  if (milestones.length > 0) {
-                    const capMaps = await ensureDualCreatorCapMaps();
-                    if (!dualCreatorCapFetchError) {
-                      finalCpmCappedAmount =
-                        capMaps.cpmCappedBySubmissionId.get(
-                          String(submissionFull.id),
-                        ) ?? rawAmount;
-                    }
-                  } else {
-                    const { data: creatorSubs } = await supabaseAdmin
-                      .from("submissions")
-                      .select("id, views, status")
-                      .eq("contest_id", submissionFull.contest_id)
-                      .eq("creator_id", submissionFull.creator_id)
-                      .in("status", ["pending", "verified", "paid"])
-                      .order("created_at", { ascending: true });
-
-                    if (creatorSubs) {
-                      let runningTotal = 0;
-                      for (const sub of creatorSubs) {
-                        let subViews = sub.views || 0;
-                        if (
-                          typeof cpm?.min_views === "number" &&
-                          subViews < cpm.min_views
-                        )
-                          subViews = 0;
-                        if (
-                          typeof cpm?.max_views === "number" &&
-                          subViews > cpm.max_views
-                        )
-                          subViews = cpm.max_views;
-                        const subRawAmount = Math.round(
-                          ((subViews * rate) / 1000) * 100,
-                        );
-
-                        let subCapped = subRawAmount;
-                        if (
-                          runningTotal + subRawAmount >
-                          maxEarningsPerCreator
-                        ) {
-                          subCapped = Math.max(
-                            0,
-                            maxEarningsPerCreator - runningTotal,
-                          );
-                        }
-
-                        if (String(sub.id) === String(submissionFull.id)) {
-                          finalCpmCappedAmount = subCapped;
-                          break;
-                        }
-                        runningTotal += subCapped;
-                      }
-                    }
+                  const capMaps = await ensureDualCreatorCapMaps();
+                  if (!dualCreatorCapFetchError) {
+                    finalCpmCappedAmount =
+                      capMaps.cpmCappedBySubmissionId.get(
+                        String(submissionFull.id),
+                      ) ?? rawAmount;
                   }
                 } else {
                   const { data: creatorSubs } = await supabaseAdmin
@@ -1408,6 +1407,66 @@ export async function POST(request: Request) {
           );
 
           if (mainRewardInThisCycle.length === 0) {
+            if (contest.contest_type === "dual_rewards") {
+              const poolBudgetCents = getDualRewardsPoolBudgetCents(
+                contest as any,
+              );
+              if (poolBudgetCents > 0) {
+                const poolFetch = await fetchDualRewardsPoolSpendRows(
+                  supabaseAdmin,
+                  submissionFull.contest_id,
+                );
+                if (poolFetch.error) {
+                  return NextResponse.json(
+                    {
+                      error: "Failed to verify contest pool budget",
+                      details: poolFetch.error,
+                    },
+                    { status: 500 },
+                  );
+                }
+                const paidComponents = getDualRewardsSubmissionPaidComponents({
+                  id: String(submissionFull.id),
+                  earnings: submissionFull.earnings,
+                  paid: submissionFull.paid,
+                  bonus_amount: submissionFull.bonus_amount,
+                  bonus_paid: submissionFull.bonus_paid,
+                  dual_rewards_payout: submissionFull.dual_rewards_payout,
+                });
+                const split = dualRewardsPayoutJson ?? {
+                  cpm_cents: rewardAmount,
+                  milestone_cents: 0,
+                };
+                const poolCheck = validateDualRewardsPoolBudget({
+                  poolBudgetCents,
+                  rows: poolFetch.rows ?? [],
+                  targetSubmissionId: submissionId,
+                  targetAfter: {
+                    cpmCents: Math.max(paidComponents.cpmCents, split.cpm_cents),
+                    milestoneCents: Math.max(
+                      paidComponents.milestoneCents,
+                      split.milestone_cents,
+                    ),
+                  },
+                });
+                if (!poolCheck.allowed) {
+                  return NextResponse.json(
+                    {
+                      error: poolCheck.error,
+                      details: {
+                        poolBudgetCents: poolCheck.poolBudgetCents,
+                        projectedSpentCents: poolCheck.projectedSpentCents,
+                        remainingCents: poolCheck.remainingCents,
+                        attemptedCpmCents: split.cpm_cents,
+                        attemptedMilestoneCents: split.milestone_cents,
+                      },
+                    },
+                    { status: 400 },
+                  );
+                }
+              }
+            }
+
             const creditRes = await creditCreatorWithdrawableBalance(
               submissionFull.creator_id,
               rewardAmount,

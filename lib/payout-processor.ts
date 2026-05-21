@@ -61,6 +61,12 @@ export async function processQueuedPayouts(batchSize: number = 10): Promise<Payo
         .single();
       if (contestErr || !contest) throw new Error(`Contest not found: ${contestErr?.message || ''}`);
 
+      if ((contest as { contest_type?: string }).contest_type === 'dual_rewards') {
+        throw new Error(
+          'Dual rewards contests require per-component payout via admin verify-submission; queued payout jobs are not supported.',
+        );
+      }
+
       // Compute reward amount with support for custom payload
       let rewardAmount = sub.earnings || 0; // cents
       let payoutType: 'custom' | 'standard' = 'standard';
@@ -77,10 +83,7 @@ export async function processQueuedPayouts(batchSize: number = 10): Promise<Payo
       }
 
       if (!rewardAmount || rewardAmount <= 0) {
-        if (
-          (contest as any).contest_type === "cpm" ||
-          (contest as any).contest_type === "dual_rewards"
-        ) {
+        if ((contest as any).contest_type === "cpm") {
           const cpm = (contest as any)?.contest_based_details?.cpm_contest;
           const rate = typeof cpm?.cpm_rate_usd === 'number' ? cpm.cpm_rate_usd : 0;
           let effectiveViews = sub.views || 0;

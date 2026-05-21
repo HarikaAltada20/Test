@@ -10,6 +10,7 @@ import {
   REVERSAL_TRANSACTION_REMARK,
 } from "@/lib/payment-utils";
 import { applyPayoutAdjustment } from "@/lib/payout-adjustment";
+import { parsePayoutAdjustment } from "@/lib/payout-rules";
 import { countRefundsForCreatorContest } from "@/lib/contest-payout-idempotency";
 import {
   sumBonusRewards,
@@ -122,32 +123,13 @@ export async function POST(
     const maxEarningsPerCreator =
       contest.max_earnings_per_creator ?? cpmContest.max_earnings_per_creator ?? null;
 
-    const payoutAdjustmentPercentage =
-      typeof contest.payout_adjustment_percentage === "number"
-        ? contest.payout_adjustment_percentage
-        : typeof contest.payout_adjustment_percentage === "string"
-          ? parseFloat(contest.payout_adjustment_percentage) || 0
-          : 0;
-    const payoutAdjustmentMode = contest.payout_adjustment_mode as
-      | "cpm_only"
-      | "milestone_only"
-      | "bonus_only"
-      | "combined"
-      | "dual_rewards_only"
-      | null;
-    const hasPayoutAdjustment =
-      payoutAdjustmentPercentage > 0 && !!payoutAdjustmentMode;
-    const shouldAdjustReward =
-      hasPayoutAdjustment &&
-      (payoutAdjustmentMode === "combined" ||
-        payoutAdjustmentMode === "dual_rewards_only" ||
-        payoutAdjustmentMode === "cpm_only" ||
-        payoutAdjustmentMode === "milestone_only");
-    const shouldAdjustBonus =
-      hasPayoutAdjustment &&
-      (payoutAdjustmentMode === "combined" ||
-        payoutAdjustmentMode === "dual_rewards_only" ||
-        payoutAdjustmentMode === "bonus_only");
+    const payoutAdjustment = parsePayoutAdjustment(
+      contest.payout_adjustment_percentage,
+      contest.payout_adjustment_mode,
+      { contestType: contest.contest_type },
+    );
+    const shouldAdjustReward = payoutAdjustment.shouldAdjustReward;
+    const shouldAdjustBonus = payoutAdjustment.shouldAdjustBonus;
 
     const supabaseAdmin = createAdminClient();
 
@@ -393,7 +375,7 @@ export async function POST(
             }
             const adjusted =
               raw > 0 && shouldAdjustReward
-                ? applyPayoutAdjustment(raw, payoutAdjustmentPercentage)
+                ? applyPayoutAdjustment(raw, payoutAdjustment.percentage)
                 : raw;
             if (adjusted > 0) {
               runningCapTotal += adjusted;
@@ -421,7 +403,7 @@ export async function POST(
           }
           const adjustedBonus =
             bonusAmt > 0 && shouldAdjustBonus
-              ? applyPayoutAdjustment(bonusAmt, payoutAdjustmentPercentage)
+              ? applyPayoutAdjustment(bonusAmt, payoutAdjustment.percentage)
               : bonusAmt;
           if (adjustedBonus > 0) {
             bonusBreakdown[String(tweetId)] =

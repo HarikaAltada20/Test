@@ -12,7 +12,13 @@ import {
   buildMilestoneMostVerifiedBonusByCreatorMap,
   type MilestoneBudgetSubmission,
 } from "@/lib/milestone-contest-expected-spend";
-import { isMilestoneContestType } from "@/lib/contest-type";
+import { isMilestoneContestType, isDualRewardsContestType } from "@/lib/contest-type";
+import {
+  fetchDualRewardsPoolSpendRows,
+  getDualRewardsPoolBudgetCents,
+  getDualRewardsSubmissionPaidComponents,
+  validateDualRewardsPoolBudget,
+} from "@/lib/dual-rewards-pool-budget";
 import {
   adjustBonusCents,
   parsePayoutAdjustment,
@@ -105,7 +111,7 @@ export async function POST(
     const { data: subs, error: subsError } = await supabaseAdmin
       .from("submissions")
       .select(
-        "id, creator_id, status, views, created_at, bonus_paid, bonus_amount, milestone_bonus_paid, metadata",
+        "id, creator_id, status, views, created_at, bonus_paid, bonus_amount, milestone_bonus_paid, metadata, earnings, paid, dual_rewards_payout",
       )
       .eq("contest_id", contestId);
 
@@ -438,6 +444,57 @@ export async function POST(
         },
         { status: 400 },
       );
+    }
+
+    if (isDualRewardsContestType(contest.contest_type)) {
+      const poolBudgetCents = getDualRewardsPoolBudgetCents(contest as any);
+      if (poolBudgetCents > 0) {
+        const poolFetch = await fetchDualRewardsPoolSpendRows(
+          supabaseAdmin,
+          contestId,
+        );
+        if (poolFetch.error) {
+          return NextResponse.json(
+            {
+              error: "Failed to verify contest pool budget",
+              details: poolFetch.error,
+            },
+            { status: 500 },
+          );
+        }
+        const paidComponents = getDualRewardsSubmissionPaidComponents({
+          id: String(target.id),
+          earnings: target.earnings,
+          paid: target.paid,
+          bonus_amount: target.bonus_amount,
+          bonus_paid: target.bonus_paid,
+          dual_rewards_payout: (target as { dual_rewards_payout?: unknown })
+            .dual_rewards_payout,
+        });
+        const poolCheck = validateDualRewardsPoolBudget({
+          poolBudgetCents,
+          rows: poolFetch.rows ?? [],
+          targetSubmissionId: String(target.id),
+          targetAfter: {
+            cpmCents: paidComponents.cpmCents,
+            milestoneCents: paidComponents.milestoneCents + creditCents,
+          },
+        });
+        if (!poolCheck.allowed) {
+          return NextResponse.json(
+            {
+              error: poolCheck.error,
+              details: {
+                poolBudgetCents: poolCheck.poolBudgetCents,
+                projectedSpentCents: poolCheck.projectedSpentCents,
+                remainingCents: poolCheck.remainingCents,
+                additionalBonusCents: creditCents,
+              },
+            },
+            { status: 400 },
+          );
+        }
+      }
     }
 
     const paidTrackRewardsCount = (paidRewards || []).filter(
