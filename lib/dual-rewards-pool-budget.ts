@@ -21,6 +21,7 @@ export type DualPoolBudgetCheckResult =
       allowed: true;
       poolBudgetCents: number;
       projectedSpentCents: number;
+      remainingCents?: number;
     }
   | {
       allowed: false;
@@ -29,6 +30,9 @@ export type DualPoolBudgetCheckResult =
       projectedSpentCents: number;
       remainingCents: number;
     };
+
+export const DUAL_REWARDS_POOL_NOT_CONFIGURED_ERROR =
+  "Contest prize pool is not configured";
 
 const POOL_SPEND_SELECT =
   "id, earnings, paid, bonus_amount, bonus_paid, dual_rewards_payout";
@@ -108,11 +112,24 @@ export function getDualRewardsPoolBudgetCents(contest: {
   return Number.isFinite(rowBudget) && rowBudget > 0 ? rowBudget : 0;
 }
 
+export function poolBudgetNotConfiguredResult(
+  projectedSpentCents = 0,
+): DualPoolBudgetCheckResult {
+  return {
+    allowed: false,
+    error: DUAL_REWARDS_POOL_NOT_CONFIGURED_ERROR,
+    poolBudgetCents: 0,
+    projectedSpentCents,
+    remainingCents: 0,
+  };
+}
+
 export function validateDualRewardsPoolBudget(params: {
   poolBudgetCents: number;
   rows: DualPoolSpendSubmissionRow[];
   targetSubmissionId: string;
   targetAfter: DualPoolSpendComponents;
+  requirePositivePool?: boolean;
 }): DualPoolBudgetCheckResult {
   const poolBudgetCents = Math.max(
     0,
@@ -125,11 +142,19 @@ export function validateDualRewardsPoolBudget(params: {
   );
 
   if (poolBudgetCents <= 0) {
+    if (params.requirePositivePool !== false) {
+      return poolBudgetNotConfiguredResult(projectedSpentCents);
+    }
     return { allowed: true, poolBudgetCents, projectedSpentCents };
   }
 
   if (projectedSpentCents <= poolBudgetCents) {
-    return { allowed: true, poolBudgetCents, projectedSpentCents };
+    return {
+      allowed: true,
+      poolBudgetCents,
+      projectedSpentCents,
+      remainingCents: poolBudgetCents - projectedSpentCents,
+    };
   }
 
   return {
@@ -169,7 +194,48 @@ export async function fetchDualRewardsPoolSpendRows(
   };
 }
 
-/** Load rows and validate a projected payout against the contest pool. */
+function parseRpcPoolBudgetResult(raw: unknown): DualPoolBudgetCheckResult {
+  const o =
+    raw && typeof raw === "object" && !Array.isArray(raw)
+      ? (raw as Record<string, unknown>)
+      : {};
+  const allowed = o.allowed === true;
+  const poolBudgetCents = Math.max(
+    0,
+    Math.round(Number(o.pool_budget_cents) || 0),
+  );
+  const projectedSpentCents = Math.max(
+    0,
+    Math.round(Number(o.projected_spent_cents) || 0),
+  );
+  const remainingCents = Math.max(
+    0,
+    Math.round(Number(o.remaining_cents) || 0),
+  );
+  if (allowed) {
+    return {
+      allowed: true,
+      poolBudgetCents,
+      projectedSpentCents,
+      remainingCents,
+    };
+  }
+  return {
+    allowed: false,
+    error:
+      typeof o.error === "string" && o.error.trim()
+        ? o.error
+        : "Contest prize pool budget check failed",
+    poolBudgetCents,
+    projectedSpentCents,
+    remainingCents,
+  };
+}
+
+/**
+ * Serialized pool check (Postgres advisory lock). Falls back to in-app validation
+ * if the RPC is not deployed yet.
+ */
 export async function assertDualRewardsPoolBudgetAllowsPayment(
   supabaseAdmin: SupabaseClient,
   contest: {
@@ -183,12 +249,40 @@ export async function assertDualRewardsPoolBudgetAllowsPayment(
   targetAfter: DualPoolSpendComponents,
 ): Promise<DualPoolBudgetCheckResult> {
   const poolBudgetCents = getDualRewardsPoolBudgetCents(contest);
-  if (poolBudgetCents <= 0) {
+  const targetCpm = Math.max(0, Math.round(targetAfter.cpmCents));
+  const targetMs = Math.max(0, Math.round(targetAfter.milestoneCents));
+
+  const { data: rpcData, error: rpcError } = await supabaseAdmin.rpc(
+    "dual_rewards_assert_pool_budget",
+    {
+      p_contest_id: contestId,
+      p_target_submission_id: targetSubmissionId,
+      p_target_cpm_cents: targetCpm,
+      p_target_milestone_cents: targetMs,
+    },
+  );
+
+  if (!rpcError && rpcData != null) {
+    return parseRpcPoolBudgetResult(rpcData);
+  }
+
+  const rpcMissing =
+    rpcError &&
+    (/function.*does not exist|could not find/i.test(rpcError.message) ||
+      rpcError.code === "42883");
+
+  if (!rpcMissing) {
     return {
-      allowed: true,
-      poolBudgetCents: 0,
+      allowed: false,
+      error: `Failed to verify contest pool budget: ${rpcError?.message || "unknown"}`,
+      poolBudgetCents,
       projectedSpentCents: 0,
+      remainingCents: 0,
     };
+  }
+
+  if (poolBudgetCents <= 0) {
+    return poolBudgetNotConfiguredResult();
   }
 
   const fetchResult = await fetchDualRewardsPoolSpendRows(
@@ -209,6 +303,36 @@ export async function assertDualRewardsPoolBudgetAllowsPayment(
     poolBudgetCents,
     rows: fetchResult.rows ?? [],
     targetSubmissionId,
-    targetAfter,
+    targetAfter: { cpmCents: targetCpm, milestoneCents: targetMs },
+    requirePositivePool: true,
   });
+}
+
+/** HTTP-friendly helper for dual-rewards payout routes. */
+export async function checkDualRewardsPoolBudgetForPayment(params: {
+  supabaseAdmin: SupabaseClient;
+  contest: {
+    id?: string;
+    contest_type?: string | null;
+    contest_based_details?: unknown;
+    total_budget?: number | null;
+  };
+  contestId: string;
+  targetSubmissionId: string;
+  targetAfter: DualPoolSpendComponents;
+}): Promise<
+  | { ok: true; check: DualPoolBudgetCheckResult }
+  | { ok: false; check: DualPoolBudgetCheckResult }
+> {
+  const check = await assertDualRewardsPoolBudgetAllowsPayment(
+    params.supabaseAdmin,
+    params.contest,
+    params.contestId,
+    params.targetSubmissionId,
+    params.targetAfter,
+  );
+  if (check.allowed) {
+    return { ok: true, check };
+  }
+  return { ok: false, check };
 }

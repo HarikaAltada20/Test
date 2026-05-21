@@ -14,10 +14,8 @@ import {
 } from "@/lib/milestone-contest-expected-spend";
 import { isMilestoneContestType, isDualRewardsContestType } from "@/lib/contest-type";
 import {
-  fetchDualRewardsPoolSpendRows,
-  getDualRewardsPoolBudgetCents,
+  checkDualRewardsPoolBudgetForPayment,
   getDualRewardsSubmissionPaidComponents,
-  validateDualRewardsPoolBudget,
 } from "@/lib/dual-rewards-pool-budget";
 import {
   adjustBonusCents,
@@ -447,53 +445,39 @@ export async function POST(
     }
 
     if (isDualRewardsContestType(contest.contest_type)) {
-      const poolBudgetCents = getDualRewardsPoolBudgetCents(contest as any);
-      if (poolBudgetCents > 0) {
-        const poolFetch = await fetchDualRewardsPoolSpendRows(
-          supabaseAdmin,
-          contestId,
-        );
-        if (poolFetch.error) {
-          return NextResponse.json(
-            {
-              error: "Failed to verify contest pool budget",
-              details: poolFetch.error,
+      const paidComponents = getDualRewardsSubmissionPaidComponents({
+        id: String(target.id),
+        earnings: target.earnings,
+        paid: target.paid,
+        bonus_amount: target.bonus_amount,
+        bonus_paid: target.bonus_paid,
+        dual_rewards_payout: (target as { dual_rewards_payout?: unknown })
+          .dual_rewards_payout,
+      });
+      const poolResult = await checkDualRewardsPoolBudgetForPayment({
+        supabaseAdmin,
+        contest: contest as any,
+        contestId,
+        targetSubmissionId: String(target.id),
+        targetAfter: {
+          cpmCents: paidComponents.cpmCents,
+          milestoneCents: paidComponents.milestoneCents + creditCents,
+        },
+      });
+      if (!poolResult.check.allowed) {
+        const poolCheck = poolResult.check;
+        return NextResponse.json(
+          {
+            error: poolCheck.error,
+            details: {
+              poolBudgetCents: poolCheck.poolBudgetCents,
+              projectedSpentCents: poolCheck.projectedSpentCents,
+              remainingCents: poolCheck.remainingCents,
+              additionalBonusCents: creditCents,
             },
-            { status: 500 },
-          );
-        }
-        const paidComponents = getDualRewardsSubmissionPaidComponents({
-          id: String(target.id),
-          earnings: target.earnings,
-          paid: target.paid,
-          bonus_amount: target.bonus_amount,
-          bonus_paid: target.bonus_paid,
-          dual_rewards_payout: (target as { dual_rewards_payout?: unknown })
-            .dual_rewards_payout,
-        });
-        const poolCheck = validateDualRewardsPoolBudget({
-          poolBudgetCents,
-          rows: poolFetch.rows ?? [],
-          targetSubmissionId: String(target.id),
-          targetAfter: {
-            cpmCents: paidComponents.cpmCents,
-            milestoneCents: paidComponents.milestoneCents + creditCents,
           },
-        });
-        if (!poolCheck.allowed) {
-          return NextResponse.json(
-            {
-              error: poolCheck.error,
-              details: {
-                poolBudgetCents: poolCheck.poolBudgetCents,
-                projectedSpentCents: poolCheck.projectedSpentCents,
-                remainingCents: poolCheck.remainingCents,
-                additionalBonusCents: creditCents,
-              },
-            },
-            { status: 400 },
-          );
-        }
+          { status: 400 },
+        );
       }
     }
 

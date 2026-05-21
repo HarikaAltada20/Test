@@ -37,10 +37,8 @@ import {
   splitDualReversalRefundFromPayout,
 } from "@/lib/dual-rewards-payout";
 import {
-  fetchDualRewardsPoolSpendRows,
-  getDualRewardsPoolBudgetCents,
+  checkDualRewardsPoolBudgetForPayment,
   getDualRewardsSubmissionPaidComponents,
-  validateDualRewardsPoolBudget,
 } from "@/lib/dual-rewards-pool-budget";
 
 function getTransactionPayoutCycle(metadata: any): number {
@@ -558,52 +556,38 @@ export async function POST(request: Request) {
             );
           }
 
-          const poolBudgetCents = getDualRewardsPoolBudgetCents(contest as any);
-          if (poolBudgetCents > 0) {
-            const poolFetch = await fetchDualRewardsPoolSpendRows(
-              supabaseAdmin,
-              submissionFull.contest_id,
-            );
-            if (poolFetch.error) {
-              return NextResponse.json(
-                {
-                  error: "Failed to verify contest pool budget",
-                  details: poolFetch.error,
+          const paidComponents = getDualRewardsSubmissionPaidComponents({
+            id: String(submissionFull.id),
+            earnings: submissionFull.earnings,
+            paid: submissionFull.paid,
+            bonus_amount: submissionFull.bonus_amount,
+            bonus_paid: submissionFull.bonus_paid,
+            dual_rewards_payout: submissionFull.dual_rewards_payout,
+          });
+          const poolResult = await checkDualRewardsPoolBudgetForPayment({
+            supabaseAdmin,
+            contest: contest as any,
+            contestId: submissionFull.contest_id,
+            targetSubmissionId: submissionId,
+            targetAfter: {
+              cpmCents: paidComponents.cpmCents,
+              milestoneCents: paidComponents.milestoneCents + milestoneAmount,
+            },
+          });
+          if (!poolResult.check.allowed) {
+            const poolCheck = poolResult.check;
+            return NextResponse.json(
+              {
+                error: poolCheck.error,
+                details: {
+                  poolBudgetCents: poolCheck.poolBudgetCents,
+                  projectedSpentCents: poolCheck.projectedSpentCents,
+                  remainingCents: poolCheck.remainingCents,
+                  additionalMilestoneCents: milestoneAmount,
                 },
-                { status: 500 },
-              );
-            }
-            const paidComponents = getDualRewardsSubmissionPaidComponents({
-              id: String(submissionFull.id),
-              earnings: submissionFull.earnings,
-              paid: submissionFull.paid,
-              bonus_amount: submissionFull.bonus_amount,
-              bonus_paid: submissionFull.bonus_paid,
-              dual_rewards_payout: submissionFull.dual_rewards_payout,
-            });
-            const poolCheck = validateDualRewardsPoolBudget({
-              poolBudgetCents,
-              rows: poolFetch.rows ?? [],
-              targetSubmissionId: submissionId,
-              targetAfter: {
-                cpmCents: paidComponents.cpmCents,
-                milestoneCents: paidComponents.milestoneCents + milestoneAmount,
               },
-            });
-            if (!poolCheck.allowed) {
-              return NextResponse.json(
-                {
-                  error: poolCheck.error,
-                  details: {
-                    poolBudgetCents: poolCheck.poolBudgetCents,
-                    projectedSpentCents: poolCheck.projectedSpentCents,
-                    remainingCents: poolCheck.remainingCents,
-                    additionalMilestoneCents: milestoneAmount,
-                  },
-                },
-                { status: 400 },
-              );
-            }
+              { status: 400 },
+            );
           }
 
           const [
@@ -1408,62 +1392,46 @@ export async function POST(request: Request) {
 
           if (mainRewardInThisCycle.length === 0) {
             if (contest.contest_type === "dual_rewards") {
-              const poolBudgetCents = getDualRewardsPoolBudgetCents(
-                contest as any,
-              );
-              if (poolBudgetCents > 0) {
-                const poolFetch = await fetchDualRewardsPoolSpendRows(
-                  supabaseAdmin,
-                  submissionFull.contest_id,
-                );
-                if (poolFetch.error) {
-                  return NextResponse.json(
-                    {
-                      error: "Failed to verify contest pool budget",
-                      details: poolFetch.error,
+              const paidComponents = getDualRewardsSubmissionPaidComponents({
+                id: String(submissionFull.id),
+                earnings: submissionFull.earnings,
+                paid: submissionFull.paid,
+                bonus_amount: submissionFull.bonus_amount,
+                bonus_paid: submissionFull.bonus_paid,
+                dual_rewards_payout: submissionFull.dual_rewards_payout,
+              });
+              const split = dualRewardsPayoutJson ?? {
+                cpm_cents: rewardAmount,
+                milestone_cents: 0,
+              };
+              const poolResult = await checkDualRewardsPoolBudgetForPayment({
+                supabaseAdmin,
+                contest: contest as any,
+                contestId: submissionFull.contest_id,
+                targetSubmissionId: submissionId,
+                targetAfter: {
+                  cpmCents: Math.max(paidComponents.cpmCents, split.cpm_cents),
+                  milestoneCents: Math.max(
+                    paidComponents.milestoneCents,
+                    split.milestone_cents,
+                  ),
+                },
+              });
+              if (!poolResult.check.allowed) {
+                const poolCheck = poolResult.check;
+                return NextResponse.json(
+                  {
+                    error: poolCheck.error,
+                    details: {
+                      poolBudgetCents: poolCheck.poolBudgetCents,
+                      projectedSpentCents: poolCheck.projectedSpentCents,
+                      remainingCents: poolCheck.remainingCents,
+                      attemptedCpmCents: split.cpm_cents,
+                      attemptedMilestoneCents: split.milestone_cents,
                     },
-                    { status: 500 },
-                  );
-                }
-                const paidComponents = getDualRewardsSubmissionPaidComponents({
-                  id: String(submissionFull.id),
-                  earnings: submissionFull.earnings,
-                  paid: submissionFull.paid,
-                  bonus_amount: submissionFull.bonus_amount,
-                  bonus_paid: submissionFull.bonus_paid,
-                  dual_rewards_payout: submissionFull.dual_rewards_payout,
-                });
-                const split = dualRewardsPayoutJson ?? {
-                  cpm_cents: rewardAmount,
-                  milestone_cents: 0,
-                };
-                const poolCheck = validateDualRewardsPoolBudget({
-                  poolBudgetCents,
-                  rows: poolFetch.rows ?? [],
-                  targetSubmissionId: submissionId,
-                  targetAfter: {
-                    cpmCents: Math.max(paidComponents.cpmCents, split.cpm_cents),
-                    milestoneCents: Math.max(
-                      paidComponents.milestoneCents,
-                      split.milestone_cents,
-                    ),
                   },
-                });
-                if (!poolCheck.allowed) {
-                  return NextResponse.json(
-                    {
-                      error: poolCheck.error,
-                      details: {
-                        poolBudgetCents: poolCheck.poolBudgetCents,
-                        projectedSpentCents: poolCheck.projectedSpentCents,
-                        remainingCents: poolCheck.remainingCents,
-                        attemptedCpmCents: split.cpm_cents,
-                        attemptedMilestoneCents: split.milestone_cents,
-                      },
-                    },
-                    { status: 400 },
-                  );
-                }
+                  { status: 400 },
+                );
               }
             }
 
