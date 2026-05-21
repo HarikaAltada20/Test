@@ -1,17 +1,14 @@
--- Atomically reserve pool spend by persisting dual_rewards_payout under the contest advisory lock.
--- Prevents concurrent admin payouts from both passing a check-then-pay race.
+-- Persist full dual_rewards_payout JSON on pool commit (not only cpm/milestone fields).
 
--- Replace 4-arg assert from 20260521120000; CREATE OR REPLACE alone would add a second overload.
-DROP FUNCTION IF EXISTS public.dual_rewards_assert_pool_budget(uuid, uuid, bigint, bigint);
 DROP FUNCTION IF EXISTS public.dual_rewards_assert_pool_budget(uuid, uuid, bigint, bigint, boolean);
-DROP FUNCTION IF EXISTS public.dual_rewards_pool_budget_cents_from_contest(text, jsonb, bigint);
 
 CREATE OR REPLACE FUNCTION public.dual_rewards_assert_pool_budget(
   p_contest_id uuid,
   p_target_submission_id uuid,
   p_target_cpm_cents bigint,
   p_target_milestone_cents bigint,
-  p_commit boolean DEFAULT false
+  p_commit boolean DEFAULT false,
+  p_commit_payout jsonb DEFAULT NULL
 )
 RETURNS jsonb
 LANGUAGE plpgsql
@@ -145,9 +142,15 @@ BEGIN
       );
     END IF;
 
-    v_new_payout := COALESCE(v_previous, '{}'::jsonb);
-    IF jsonb_typeof(v_new_payout) IS DISTINCT FROM 'object' THEN
-      v_new_payout := '{}'::jsonb;
+    IF p_commit_payout IS NOT NULL
+      AND jsonb_typeof(p_commit_payout) = 'object'
+    THEN
+      v_new_payout := p_commit_payout;
+    ELSE
+      v_new_payout := COALESCE(v_previous, '{}'::jsonb);
+      IF jsonb_typeof(v_new_payout) IS DISTINCT FROM 'object' THEN
+        v_new_payout := '{}'::jsonb;
+      END IF;
     END IF;
 
     v_new_payout :=
@@ -182,7 +185,7 @@ BEGIN
 END;
 $$;
 
-COMMENT ON FUNCTION public.dual_rewards_assert_pool_budget(uuid, uuid, bigint, bigint, boolean) IS
-  'Locks contest pool, validates projected CPM+milestone spend; optional p_commit persists dual_rewards_payout on the target row in the same transaction.';
+COMMENT ON FUNCTION public.dual_rewards_assert_pool_budget(uuid, uuid, bigint, bigint, boolean, jsonb) IS
+  'Locks contest pool, validates projected spend; p_commit persists dual_rewards_payout (optional full p_commit_payout JSON).';
 
-GRANT EXECUTE ON FUNCTION public.dual_rewards_assert_pool_budget(uuid, uuid, bigint, bigint, boolean) TO service_role;
+GRANT EXECUTE ON FUNCTION public.dual_rewards_assert_pool_budget(uuid, uuid, bigint, bigint, boolean, jsonb) TO service_role;

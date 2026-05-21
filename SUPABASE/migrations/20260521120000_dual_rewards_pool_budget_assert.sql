@@ -55,10 +55,10 @@ BEGIN
 END;
 $$;
 
+-- Pool budget lives in contest_based_details only (contests has no total_budget column).
 CREATE OR REPLACE FUNCTION public.dual_rewards_pool_budget_cents_from_contest(
   p_contest_type text,
-  p_details jsonb,
-  p_total_budget bigint
+  p_details jsonb
 )
 RETURNS bigint
 LANGUAGE plpgsql
@@ -94,13 +94,11 @@ BEGIN
     RETURN v_cpm;
   END IF;
 
-  IF p_total_budget IS NOT NULL AND p_total_budget > 0 THEN
-    RETURN p_total_budget;
-  END IF;
-
   RETURN 0;
 END;
 $$;
+
+DROP FUNCTION IF EXISTS public.dual_rewards_pool_budget_cents_from_contest(text, jsonb, bigint);
 
 CREATE OR REPLACE FUNCTION public.dual_rewards_assert_pool_budget(
   p_contest_id uuid,
@@ -130,8 +128,7 @@ BEGIN
   SELECT
     c.id,
     c.contest_type::text AS contest_type,
-    c.contest_based_details,
-    c.total_budget
+    c.contest_based_details
   INTO v_contest
   FROM public.contests c
   WHERE c.id = p_contest_id;
@@ -158,8 +155,7 @@ BEGIN
 
   v_pool_budget := public.dual_rewards_pool_budget_cents_from_contest(
     v_contest.contest_type,
-    v_contest.contest_based_details,
-    v_contest.total_budget
+    v_contest.contest_based_details
   );
 
   IF v_pool_budget <= 0 THEN
@@ -221,7 +217,7 @@ BEGIN
 END;
 $$;
 
-COMMENT ON FUNCTION public.dual_rewards_assert_pool_budget IS
+COMMENT ON FUNCTION public.dual_rewards_assert_pool_budget(uuid, uuid, bigint, bigint) IS
   'Locks contest pool, sums paid CPM+milestone cents, rejects if projected spend exceeds configured pool.';
 
-GRANT EXECUTE ON FUNCTION public.dual_rewards_assert_pool_budget TO service_role;
+GRANT EXECUTE ON FUNCTION public.dual_rewards_assert_pool_budget(uuid, uuid, bigint, bigint) TO service_role;

@@ -473,6 +473,7 @@ export async function POST(
 
     let dualRewardsPoolCommit: DualPoolBudgetPaymentResult | undefined;
     let dualPaidComponents: DualPoolSpendComponents | null = null;
+    let dualCommitPayout: Record<string, unknown> | undefined;
 
     if (isDualRewardsContestType(contest.contest_type)) {
       dualPaidComponents = getDualRewardsSubmissionPaidComponents({
@@ -484,15 +485,27 @@ export async function POST(
         dual_rewards_payout: (target as { dual_rewards_payout?: unknown })
           .dual_rewards_payout,
       });
+      const dualTargetAfter = {
+        cpmCents: dualPaidComponents.cpmCents,
+        milestoneCents: dualPaidComponents.milestoneCents + creditCents,
+      };
+      dualCommitPayout = buildDualRewardsPayoutPersistValue(
+        {
+          cpm_cents: dualTargetAfter.cpmCents,
+          milestone_cents: dualTargetAfter.milestoneCents,
+        },
+        {
+          updatedBy: adminUser.id,
+          customRemarks: `Milestone most verified ${track} bonus`,
+        },
+      );
       dualRewardsPoolCommit = await checkDualRewardsPoolBudgetForPayment({
         supabaseAdmin,
         contest: contest as any,
         contestId,
         targetSubmissionId: String(target.id),
-        targetAfter: {
-          cpmCents: dualPaidComponents.cpmCents,
-          milestoneCents: dualPaidComponents.milestoneCents + creditCents,
-        },
+        targetAfter: dualTargetAfter,
+        commitPayout: dualCommitPayout,
       });
       if (!dualRewardsPoolCommit.ok) {
         const denied = dualRewardsPoolCommit.check;
@@ -612,6 +625,7 @@ export async function POST(
 
     if (dualPaidComponents) {
       creditSubmissionUpdate.dual_rewards_payout =
+        dualCommitPayout ??
         buildDualRewardsPayoutPersistValue(
           {
             cpm_cents: dualPaidComponents.cpmCents,
@@ -635,12 +649,13 @@ export async function POST(
         contestId,
         String(target.id),
         dualRewardsPoolCommit,
+        { walletCredited: true },
       );
       return NextResponse.json(
         {
           error:
             updErr.message ||
-            "Bonus was credited but failed to update submission — retry safely; duplicate wallet credits are suppressed by idempotency.",
+            "Bonus was credited but failed to update submission — retry safely; duplicate wallet credits are suppressed by idempotency. Pool reservation was kept because the wallet was already credited.",
         },
         { status: 500 },
       );

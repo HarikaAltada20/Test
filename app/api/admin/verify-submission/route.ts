@@ -566,15 +566,27 @@ export async function POST(request: Request) {
             bonus_paid: submissionFull.bonus_paid,
             dual_rewards_payout: submissionFull.dual_rewards_payout,
           });
+          const milestoneTargetAfter = {
+            cpmCents: paidComponents.cpmCents,
+            milestoneCents: paidComponents.milestoneCents + milestoneAmount,
+          };
+          const milestoneCommitPayout = buildDualRewardsPayoutPersistValue(
+            {
+              cpm_cents: milestoneTargetAfter.cpmCents,
+              milestone_cents: milestoneTargetAfter.milestoneCents,
+            },
+            {
+              updatedBy: currentUserId,
+              customRemarks: paymentDetails?.customRemarks ?? null,
+            },
+          );
           const poolResult = await checkDualRewardsPoolBudgetForPayment({
             supabaseAdmin,
             contest: contest as any,
             contestId: submissionFull.contest_id,
             targetSubmissionId: submissionId,
-            targetAfter: {
-              cpmCents: paidComponents.cpmCents,
-              milestoneCents: paidComponents.milestoneCents + milestoneAmount,
-            },
+            targetAfter: milestoneTargetAfter,
+            commitPayout: milestoneCommitPayout,
           });
           if (!poolResult.ok) {
             const denied = poolResult.check;
@@ -661,11 +673,6 @@ export async function POST(request: Request) {
             );
           }
 
-          const committedMilestonePayout = {
-            cpm_cents: paidComponents.cpmCents,
-            milestone_cents: paidComponents.milestoneCents + milestoneAmount,
-          };
-
           const { data: afterBonusUpdate, error: bonusUpdateError } =
             await supabaseAdmin
               .from("submissions")
@@ -673,13 +680,7 @@ export async function POST(request: Request) {
                 bonus_paid: true,
                 bonus_paid_at: new Date().toISOString(),
                 bonus_amount: milestoneAmount,
-                dual_rewards_payout: buildDualRewardsPayoutPersistValue(
-                  committedMilestonePayout,
-                  {
-                    updatedBy: currentUserId,
-                    customRemarks: paymentDetails?.customRemarks ?? null,
-                  },
-                ),
+                dual_rewards_payout: milestoneCommitPayout,
                 milestone_bonus_paid: {
                   ...(submissionFull.milestone_bonus_paid || {}),
                   paid_at: new Date().toISOString(),
@@ -698,11 +699,12 @@ export async function POST(request: Request) {
               submissionFull.contest_id,
               submissionId,
               poolResult,
+              { walletCredited: true },
             );
             return NextResponse.json(
               {
                 error:
-                  "Milestone reward was credited but failed to mark submission bonus_paid — retry; duplicate wallet credits are suppressed by idempotency.",
+                  "Milestone reward was credited but failed to mark submission bonus_paid — retry; duplicate wallet credits are suppressed by idempotency. Pool reservation was kept because the wallet was already credited.",
                 details: bonusUpdateError.message,
               },
               { status: 500 },
@@ -1417,6 +1419,8 @@ export async function POST(request: Request) {
           );
 
           let dualRewardsPoolCommit: DualPoolBudgetPaymentResult | undefined;
+          let mainPayWalletCredited = false;
+          let mainPayCommitPayout: Record<string, unknown> | undefined;
 
           if (mainRewardInThisCycle.length === 0) {
             if (contest.contest_type === "dual_rewards") {
@@ -1432,18 +1436,33 @@ export async function POST(request: Request) {
                 cpm_cents: rewardAmount,
                 milestone_cents: 0,
               };
+              const targetAfter = {
+                cpmCents: Math.max(paidComponents.cpmCents, split.cpm_cents),
+                milestoneCents: Math.max(
+                  paidComponents.milestoneCents,
+                  split.milestone_cents,
+                ),
+              };
+              mainPayCommitPayout =
+                rewardAmount > 0
+                  ? buildDualRewardsPayoutPersistValue(
+                      {
+                        cpm_cents: targetAfter.cpmCents,
+                        milestone_cents: targetAfter.milestoneCents,
+                      },
+                      {
+                        updatedBy: currentUserId,
+                        customRemarks: customRemarks ?? null,
+                      },
+                    )
+                  : undefined;
               dualRewardsPoolCommit = await checkDualRewardsPoolBudgetForPayment({
                 supabaseAdmin,
                 contest: contest as any,
                 contestId: submissionFull.contest_id,
                 targetSubmissionId: submissionId,
-                targetAfter: {
-                  cpmCents: Math.max(paidComponents.cpmCents, split.cpm_cents),
-                  milestoneCents: Math.max(
-                    paidComponents.milestoneCents,
-                    split.milestone_cents,
-                  ),
-                },
+                targetAfter,
+                commitPayout: mainPayCommitPayout,
               });
               if (!dualRewardsPoolCommit.ok) {
                 const denied = dualRewardsPoolCommit.check;
@@ -1500,6 +1519,7 @@ export async function POST(request: Request) {
                 { status: 500 },
               );
             }
+            mainPayWalletCredited = true;
           }
 
           const shouldPersistEarnings =
@@ -1512,18 +1532,7 @@ export async function POST(request: Request) {
             contest.contest_type === "dual_rewards"
               ? {
                   dual_rewards_payout:
-                    rewardAmount > 0
-                      ? buildDualRewardsPayoutPersistValue(
-                          dualRewardsPayoutJson ?? {
-                            cpm_cents: rewardAmount,
-                            milestone_cents: 0,
-                          },
-                          {
-                            updatedBy: currentUserId,
-                            customRemarks: customRemarks ?? null,
-                          },
-                        )
-                      : null,
+                    rewardAmount > 0 ? mainPayCommitPayout ?? null : null,
                 }
               : {};
 
@@ -1561,11 +1570,14 @@ export async function POST(request: Request) {
               submissionFull.contest_id,
               submissionId,
               dualRewardsPoolCommit,
+              { walletCredited: mainPayWalletCredited },
             );
             return NextResponse.json(
               {
                 error:
-                  "Reward was credited (or skipped as duplicate) but failed to mark submission paid — retry the same operation; duplicate wallet credits are suppressed by idempotency.",
+                  mainPayWalletCredited
+                    ? "Reward was credited but failed to mark submission paid — retry the same operation; duplicate wallet credits are suppressed by idempotency. Pool reservation was kept because the wallet was already credited."
+                    : "Failed to mark submission paid — retry the same operation.",
                 details: paidPersistError.message,
               },
               { status: 500 },
