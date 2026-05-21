@@ -1,6 +1,11 @@
 -- Atomically reserve pool spend by persisting dual_rewards_payout under the contest advisory lock.
 -- Prevents concurrent admin payouts from both passing a check-then-pay race.
 
+-- Replace 4-arg assert from 20260521120000; CREATE OR REPLACE alone would add a second overload.
+DROP FUNCTION IF EXISTS public.dual_rewards_assert_pool_budget(uuid, uuid, bigint, bigint);
+DROP FUNCTION IF EXISTS public.dual_rewards_assert_pool_budget(uuid, uuid, bigint, bigint, boolean);
+DROP FUNCTION IF EXISTS public.dual_rewards_pool_budget_cents_from_contest(text, jsonb, bigint);
+
 CREATE OR REPLACE FUNCTION public.dual_rewards_assert_pool_budget(
   p_contest_id uuid,
   p_target_submission_id uuid,
@@ -34,8 +39,7 @@ BEGIN
   SELECT
     c.id,
     c.contest_type::text AS contest_type,
-    c.contest_based_details,
-    c.total_budget
+    c.contest_based_details
   INTO v_contest
   FROM public.contests c
   WHERE c.id = p_contest_id;
@@ -64,8 +68,7 @@ BEGIN
 
   v_pool_budget := public.dual_rewards_pool_budget_cents_from_contest(
     v_contest.contest_type,
-    v_contest.contest_based_details,
-    v_contest.total_budget
+    v_contest.contest_based_details
   );
 
   IF v_pool_budget <= 0 THEN
@@ -179,7 +182,7 @@ BEGIN
 END;
 $$;
 
-COMMENT ON FUNCTION public.dual_rewards_assert_pool_budget IS
+COMMENT ON FUNCTION public.dual_rewards_assert_pool_budget(uuid, uuid, bigint, bigint, boolean) IS
   'Locks contest pool, validates projected CPM+milestone spend; optional p_commit persists dual_rewards_payout on the target row in the same transaction.';
 
-GRANT EXECUTE ON FUNCTION public.dual_rewards_assert_pool_budget TO service_role;
+GRANT EXECUTE ON FUNCTION public.dual_rewards_assert_pool_budget(uuid, uuid, bigint, bigint, boolean) TO service_role;
