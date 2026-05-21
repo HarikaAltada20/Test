@@ -15,7 +15,7 @@ import {
 import { isMilestoneContestType, isDualRewardsContestType } from "@/lib/contest-type";
 import {
   checkDualRewardsPoolBudgetForPayment,
-  rollbackDualRewardsPoolCommit,
+  rollbackDualRewardsPoolCommitIfNeeded,
   getDualRewardsSubmissionPaidComponents,
   type DualPoolBudgetPaymentResult,
 } from "@/lib/dual-rewards-pool-budget";
@@ -522,14 +522,12 @@ export async function POST(
     );
 
     if (!creditResult.success) {
-      if (dualRewardsPoolCommit?.ok && dualRewardsPoolCommit.check.committed) {
-        await rollbackDualRewardsPoolCommit(
-          supabaseAdmin,
-          contestId,
-          String(target.id),
-          dualRewardsPoolCommit.check.previousDualRewardsPayout,
-        );
-      }
+      await rollbackDualRewardsPoolCommitIfNeeded(
+        supabaseAdmin,
+        contestId,
+        String(target.id),
+        dualRewardsPoolCommit,
+      );
       return NextResponse.json(
         {
           error: creditResult.error || "Failed to credit creator balance",
@@ -590,6 +588,12 @@ export async function POST(
       .eq("id", target.id);
 
     if (updErr) {
+      await rollbackDualRewardsPoolCommitIfNeeded(
+        supabaseAdmin,
+        contestId,
+        String(target.id),
+        dualRewardsPoolCommit,
+      );
       return NextResponse.json(
         {
           error:

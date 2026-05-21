@@ -48,6 +48,32 @@ export const DUAL_REWARDS_POOL_NOT_CONFIGURED_ERROR =
 const POOL_SPEND_SELECT =
   "id, earnings, paid, bonus_amount, bonus_paid, dual_rewards_payout";
 
+function readDualPayoutFieldCents(
+  raw: unknown,
+  key: "cpm_cents" | "milestone_cents",
+): number | null {
+  if (raw == null || typeof raw !== "object" || Array.isArray(raw)) {
+    return null;
+  }
+  const o = raw as Record<string, unknown>;
+  const camelKey = key === "cpm_cents" ? "cpmCents" : "milestoneCents";
+  const n = Number(o[key] ?? o[camelKey]);
+  if (!Number.isFinite(n)) return null;
+  return Math.max(0, Math.round(n));
+}
+
+function legacyDualPaidComponents(
+  row: DualPoolSpendSubmissionRow,
+): DualPoolSpendComponents {
+  const cpmCents =
+    row.paid === true ? Math.max(0, Math.round(Number(row.earnings) || 0)) : 0;
+  const milestoneCents =
+    row.bonus_paid === true
+      ? Math.max(0, Math.round(Number(row.bonus_amount) || 0))
+      : 0;
+  return { cpmCents, milestoneCents };
+}
+
 /** Paid CPM + milestone cents recorded for one submission (JSON preferred). */
 export function getDualRewardsSubmissionPaidComponents(
   row: DualPoolSpendSubmissionRow,
@@ -59,13 +85,19 @@ export function getDualRewardsSubmissionPaidComponents(
       milestoneCents: Math.max(0, Math.round(dual.milestone_cents)),
     };
   }
-  const cpmCents =
-    row.paid === true ? Math.max(0, Math.round(Number(row.earnings) || 0)) : 0;
-  const milestoneCents =
-    row.bonus_paid === true
-      ? Math.max(0, Math.round(Number(row.bonus_amount) || 0))
-      : 0;
-  return { cpmCents, milestoneCents };
+  const cpmFromJson = readDualPayoutFieldCents(row.dual_rewards_payout, "cpm_cents");
+  const msFromJson = readDualPayoutFieldCents(
+    row.dual_rewards_payout,
+    "milestone_cents",
+  );
+  if (cpmFromJson != null || msFromJson != null) {
+    const legacy = legacyDualPaidComponents(row);
+    return {
+      cpmCents: cpmFromJson ?? legacy.cpmCents,
+      milestoneCents: msFromJson ?? legacy.milestoneCents,
+    };
+  }
+  return legacyDualPaidComponents(row);
 }
 
 /** Sum paid components across all contest submissions. */
@@ -383,6 +415,27 @@ export async function rollbackDualRewardsPoolCommit(
     return { ok: false, error: error.message };
   }
   return { ok: true };
+}
+
+/** Roll back pool reservation after credit or submission persist fails. */
+export async function rollbackDualRewardsPoolCommitIfNeeded(
+  supabaseAdmin: SupabaseClient,
+  contestId: string,
+  targetSubmissionId: string,
+  poolPayment: DualPoolBudgetPaymentResult | undefined,
+): Promise<{ rolledBack: boolean; error?: string }> {
+  if (!poolPayment?.ok || !poolPayment.check.committed) {
+    return { rolledBack: false };
+  }
+  const result = await rollbackDualRewardsPoolCommit(
+    supabaseAdmin,
+    contestId,
+    targetSubmissionId,
+    poolPayment.check.previousDualRewardsPayout,
+  );
+  return result.ok
+    ? { rolledBack: true }
+    : { rolledBack: false, error: result.error };
 }
 
 /** HTTP-friendly helper for dual-rewards payout routes (commits pool slot by default). */

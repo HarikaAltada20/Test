@@ -39,7 +39,7 @@ import {
 import {
   checkDualRewardsPoolBudgetForPayment,
   getDualRewardsSubmissionPaidComponents,
-  rollbackDualRewardsPoolCommit,
+  rollbackDualRewardsPoolCommitIfNeeded,
   type DualPoolBudgetPaymentResult,
 } from "@/lib/dual-rewards-pool-budget";
 
@@ -647,14 +647,12 @@ export async function POST(request: Request) {
           );
 
           if (!creditResult.success) {
-            if (poolResult.ok && poolResult.check.committed) {
-              await rollbackDualRewardsPoolCommit(
-                supabaseAdmin,
-                submissionFull.contest_id,
-                submissionId,
-                poolResult.check.previousDualRewardsPayout,
-              );
-            }
+            await rollbackDualRewardsPoolCommitIfNeeded(
+              supabaseAdmin,
+              submissionFull.contest_id,
+              submissionId,
+              poolResult,
+            );
             return NextResponse.json(
               {
                 error: `Failed to credit milestone reward: ${creditResult.error}`,
@@ -695,6 +693,12 @@ export async function POST(request: Request) {
               .single();
 
           if (bonusUpdateError) {
+            await rollbackDualRewardsPoolCommitIfNeeded(
+              supabaseAdmin,
+              submissionFull.contest_id,
+              submissionId,
+              poolResult,
+            );
             return NextResponse.json(
               {
                 error:
@@ -1485,14 +1489,12 @@ export async function POST(request: Request) {
               },
             );
             if (!creditRes.success) {
-              if (dualRewardsPoolCommit?.ok && dualRewardsPoolCommit.check.committed) {
-                await rollbackDualRewardsPoolCommit(
-                  supabaseAdmin,
-                  submissionFull.contest_id,
-                  submissionId,
-                  dualRewardsPoolCommit.check.previousDualRewardsPayout,
-                );
-              }
+              await rollbackDualRewardsPoolCommitIfNeeded(
+                supabaseAdmin,
+                submissionFull.contest_id,
+                submissionId,
+                dualRewardsPoolCommit,
+              );
               return NextResponse.json(
                 { error: `Failed to credit creator: ${creditRes.error}` },
                 { status: 500 },
@@ -1554,6 +1556,12 @@ export async function POST(request: Request) {
           }
 
           if (paidPersistError) {
+            await rollbackDualRewardsPoolCommitIfNeeded(
+              supabaseAdmin,
+              submissionFull.contest_id,
+              submissionId,
+              dualRewardsPoolCommit,
+            );
             return NextResponse.json(
               {
                 error:

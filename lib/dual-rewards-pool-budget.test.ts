@@ -32,6 +32,19 @@ describe("getDualRewardsSubmissionPaidComponents", () => {
     assert.equal(c.cpmCents, 200);
     assert.equal(c.milestoneCents, 75);
   });
+
+  it("uses per-field JSON with legacy fallback for the other component", () => {
+    const c = getDualRewardsSubmissionPaidComponents({
+      id: "1",
+      paid: true,
+      earnings: 999,
+      bonus_paid: true,
+      bonus_amount: 50,
+      dual_rewards_payout: { milestone_cents: 120 },
+    });
+    assert.equal(c.cpmCents, 999);
+    assert.equal(c.milestoneCents, 120);
+  });
 });
 
 describe("validateDualRewardsPoolBudget", () => {
