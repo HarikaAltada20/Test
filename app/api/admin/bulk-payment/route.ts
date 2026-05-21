@@ -127,6 +127,16 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    if (contest.contest_type === "dual_rewards") {
+      return NextResponse.json(
+        {
+          error:
+            "Dual rewards contests use per-submission payout (CPM and milestone components). Use the contest submissions UI or verify-submission API instead of bulk payment.",
+        },
+        { status: 400 },
+      );
+    }
+
     // Filter to verified (or legacy "approved") submissions — same notion as verify-submission / UI.
     // For bonus-only payouts, also accept rows whose standard reward was already paid
     // (status="paid" or paid=true) but whose flat-fee bonus is still unpaid. This mirrors
@@ -223,37 +233,13 @@ export async function POST(request: NextRequest) {
       contestDetails?.max_earnings_per_creator ||
       null;
 
-    // Simple contest-level payout adjustment (percentage + mode)
-    const payoutAdjustmentPercentage =
-      typeof contest.payout_adjustment_percentage === "number"
-        ? contest.payout_adjustment_percentage
-        : typeof contest.payout_adjustment_percentage === "string"
-          ? parseFloat(contest.payout_adjustment_percentage) || 0
-          : 0;
-    const payoutAdjustmentMode = contest.payout_adjustment_mode as
-      | "cpm_only"
-      | "milestone_only"
-      | "bonus_only"
-      | "combined"
-      | "dual_rewards_only"
-      | null;
-    const payoutAdjustment = {
-      percentage: payoutAdjustmentPercentage,
-      mode: payoutAdjustmentMode,
-    };
-    const hasPayoutAdjustment =
-      payoutAdjustmentPercentage > 0 && !!payoutAdjustmentMode;
-    const shouldAdjustReward =
-      hasPayoutAdjustment &&
-      (payoutAdjustmentMode === "combined" ||
-        payoutAdjustmentMode === "dual_rewards_only" ||
-        payoutAdjustmentMode === "cpm_only" ||
-        payoutAdjustmentMode === "milestone_only");
-    const shouldAdjustBonus =
-      hasPayoutAdjustment &&
-      (payoutAdjustmentMode === "combined" ||
-        payoutAdjustmentMode === "dual_rewards_only" ||
-        payoutAdjustmentMode === "bonus_only");
+    const payoutAdjustment = parsePayoutAdjustment(
+      contest.payout_adjustment_percentage,
+      contest.payout_adjustment_mode,
+      { contestType: contest.contest_type },
+    );
+    const shouldAdjustReward = payoutAdjustment.shouldAdjustReward;
+    const shouldAdjustBonus = payoutAdjustment.shouldAdjustBonus;
 
     // Check bonus budget/cap before processing
     if (

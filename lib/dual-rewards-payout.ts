@@ -244,6 +244,35 @@ export function splitDualReversalRefundFromPayout(
   return { cpmCents: total, milestoneCents: 0 };
 }
 
+/**
+ * Build `dual_rewards_payout` after milestone-only pool total changes (e.g.
+ * most-verified bonus pay/reversal). Preserves audit fields when present.
+ * Returns null when both components are zero (clears pool reservation).
+ */
+export function dualRewardsPayoutForMilestoneTotal(
+  dualPayoutRaw: unknown,
+  cpmCents: number,
+  milestoneTotalCents: number,
+): Record<string, unknown> | null {
+  const cpm = Math.max(0, Math.round(cpmCents));
+  const milestone = Math.max(0, Math.round(milestoneTotalCents));
+  if (cpm <= 0 && milestone <= 0) return null;
+
+  const prev = parseDualRewardsPayoutJson(dualPayoutRaw);
+  if (prev) {
+    return dualRewardsPayoutJsonToRowValue({
+      ...prev,
+      cpm_cents: cpm,
+      milestone_cents: milestone,
+    });
+  }
+
+  return {
+    cpm_cents: cpm,
+    milestone_cents: milestone,
+  };
+}
+
 export function dualRewardsPayoutJsonToRowValue(
   j: DualRewardsPayoutJson,
 ): Record<string, unknown> {

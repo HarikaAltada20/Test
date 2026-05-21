@@ -12,11 +12,22 @@ import {
   buildMilestoneMostVerifiedBonusByCreatorMap,
   type MilestoneBudgetSubmission,
 } from "@/lib/milestone-contest-expected-spend";
-import { isMilestoneContestType } from "@/lib/contest-type";
+import { isMilestoneContestType, isDualRewardsContestType } from "@/lib/contest-type";
+import {
+  checkDualRewardsPoolBudgetForPayment,
+  rollbackDualRewardsPoolCommitIfNeeded,
+  getDualRewardsSubmissionPaidComponents,
+  type DualPoolBudgetPaymentResult,
+  type DualPoolSpendComponents,
+} from "@/lib/dual-rewards-pool-budget";
 import {
   adjustBonusCents,
   parsePayoutAdjustment,
 } from "@/lib/payout-rules";
+import {
+  buildDualRewardsPayoutPersistValue,
+  dualRewardsPayoutForMilestoneTotal,
+} from "@/lib/dual-rewards-payout";
 
 function normalizeStatus(raw: string | null | undefined): string {
   const t = String(raw || "pending").toLowerCase();
@@ -54,8 +65,8 @@ export async function POST(
       );
     }
 
-    const { isAdmin } = await verifyAdminAccess();
-    if (!isAdmin) {
+    const { isAdmin, user: adminUser } = await verifyAdminAccess();
+    if (!isAdmin || !adminUser) {
       return NextResponse.json(
         { error: "Admin access required" },
         { status: 403 },
@@ -105,7 +116,7 @@ export async function POST(
     const { data: subs, error: subsError } = await supabaseAdmin
       .from("submissions")
       .select(
-        "id, creator_id, status, views, created_at, bonus_paid, bonus_amount, milestone_bonus_paid, metadata",
+        "id, creator_id, status, views, created_at, bonus_paid, bonus_amount, milestone_bonus_paid, metadata, earnings, paid, dual_rewards_payout",
       )
       .eq("contest_id", contestId);
 
@@ -338,15 +349,35 @@ export async function POST(
       const { milestone_bonus_paid: _legacyMilestoneBonusPaid, ...metaWithoutLegacy } =
         prevMeta || {};
 
+      const reversalSubmissionUpdate: Record<string, unknown> = {
+        bonus_paid: stillBonusPaid,
+        bonus_paid_at: stillBonusPaid ? (target as any).bonus_paid_at : null,
+        bonus_amount: newBonusAmount,
+        milestone_bonus_paid: nextTrackPaid,
+        metadata: metaWithoutLegacy,
+      };
+
+      if (isDualRewardsContestType(contest.contest_type)) {
+        const paidComponents = getDualRewardsSubmissionPaidComponents({
+          id: String(target.id),
+          earnings: (target as { earnings?: number | null }).earnings,
+          paid: (target as { paid?: boolean | null }).paid,
+          bonus_amount: target.bonus_amount,
+          bonus_paid: target.bonus_paid,
+          dual_rewards_payout: (target as { dual_rewards_payout?: unknown })
+            .dual_rewards_payout,
+        });
+        reversalSubmissionUpdate.dual_rewards_payout =
+          dualRewardsPayoutForMilestoneTotal(
+            (target as { dual_rewards_payout?: unknown }).dual_rewards_payout,
+            paidComponents.cpmCents,
+            Math.max(0, paidComponents.milestoneCents - reversalAmount),
+          );
+      }
+
       const { error: updErr } = await supabaseAdmin
         .from("submissions")
-        .update({
-          bonus_paid: stillBonusPaid,
-          bonus_paid_at: stillBonusPaid ? (target as any).bonus_paid_at : null,
-          bonus_amount: newBonusAmount,
-          milestone_bonus_paid: nextTrackPaid,
-          metadata: metaWithoutLegacy,
-        })
+        .update(reversalSubmissionUpdate)
         .eq("id", target.id);
 
       if (updErr) {
@@ -440,6 +471,46 @@ export async function POST(
       );
     }
 
+    let dualRewardsPoolCommit: DualPoolBudgetPaymentResult | undefined;
+    let dualPaidComponents: DualPoolSpendComponents | null = null;
+
+    if (isDualRewardsContestType(contest.contest_type)) {
+      dualPaidComponents = getDualRewardsSubmissionPaidComponents({
+        id: String(target.id),
+        earnings: target.earnings,
+        paid: target.paid,
+        bonus_amount: target.bonus_amount,
+        bonus_paid: target.bonus_paid,
+        dual_rewards_payout: (target as { dual_rewards_payout?: unknown })
+          .dual_rewards_payout,
+      });
+      dualRewardsPoolCommit = await checkDualRewardsPoolBudgetForPayment({
+        supabaseAdmin,
+        contest: contest as any,
+        contestId,
+        targetSubmissionId: String(target.id),
+        targetAfter: {
+          cpmCents: dualPaidComponents.cpmCents,
+          milestoneCents: dualPaidComponents.milestoneCents + creditCents,
+        },
+      });
+      if (!dualRewardsPoolCommit.ok) {
+        const denied = dualRewardsPoolCommit.check;
+        return NextResponse.json(
+          {
+            error: denied.error,
+            details: {
+              poolBudgetCents: denied.poolBudgetCents,
+              projectedSpentCents: denied.projectedSpentCents,
+              remainingCents: denied.remainingCents,
+              additionalBonusCents: creditCents,
+            },
+          },
+          { status: 400 },
+        );
+      }
+    }
+
     const paidTrackRewardsCount = (paidRewards || []).filter(
       (tx: any) =>
         String(tx?.metadata?.bonus_type || "") ===
@@ -477,6 +548,12 @@ export async function POST(
     );
 
     if (!creditResult.success) {
+      await rollbackDualRewardsPoolCommitIfNeeded(
+        supabaseAdmin,
+        contestId,
+        String(target.id),
+        dualRewardsPoolCommit,
+      );
       return NextResponse.json(
         {
           error: creditResult.error || "Failed to credit creator balance",
@@ -525,18 +602,40 @@ export async function POST(
     const { milestone_bonus_paid: _legacyMilestoneBonusPaid, ...metaWithoutLegacy } =
       prevMeta || {};
 
+    const creditSubmissionUpdate: Record<string, unknown> = {
+      bonus_paid: true,
+      bonus_paid_at: new Date().toISOString(),
+      bonus_amount: prevAmount + creditCents,
+      milestone_bonus_paid: nextTrackPaid,
+      metadata: metaWithoutLegacy,
+    };
+
+    if (dualPaidComponents) {
+      creditSubmissionUpdate.dual_rewards_payout =
+        buildDualRewardsPayoutPersistValue(
+          {
+            cpm_cents: dualPaidComponents.cpmCents,
+            milestone_cents: dualPaidComponents.milestoneCents + creditCents,
+          },
+          {
+            updatedBy: adminUser.id,
+            customRemarks: `Milestone most verified ${track} bonus`,
+          },
+        );
+    }
+
     const { error: updErr } = await supabaseAdmin
       .from("submissions")
-      .update({
-        bonus_paid: true,
-        bonus_paid_at: new Date().toISOString(),
-        bonus_amount: prevAmount + creditCents,
-        milestone_bonus_paid: nextTrackPaid,
-        metadata: metaWithoutLegacy,
-      })
+      .update(creditSubmissionUpdate)
       .eq("id", target.id);
 
     if (updErr) {
+      await rollbackDualRewardsPoolCommitIfNeeded(
+        supabaseAdmin,
+        contestId,
+        String(target.id),
+        dualRewardsPoolCommit,
+      );
       return NextResponse.json(
         {
           error:

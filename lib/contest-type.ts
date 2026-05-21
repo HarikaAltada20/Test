@@ -35,10 +35,11 @@ export function getPoolBudgetCentsFromDetails(
   if (contestType === "dual_rewards") {
     const root = details.total_budget_cents;
     if (typeof root === "number" && root > 0) return root;
-    // For dual rewards, if root is missing, sum the components
-    const ms = details.milestone_contest?.total_budget_cents || 0;
-    const cpm = details.cpm_contest?.total_budget || 0;
-    return ms + cpm;
+    const ms = details.milestone_contest?.total_budget_cents ?? 0;
+    const cpm = details.cpm_contest?.total_budget ?? 0;
+    // Legacy: nested budgets may mirror the same pool — never sum both.
+    if (ms > 0 && cpm > 0) return Math.max(ms, cpm);
+    return ms > 0 ? ms : cpm > 0 ? cpm : 0;
   }
   if (contestType === "cpm") {
     const cpm = details.cpm_contest?.total_budget;
