@@ -1,6 +1,9 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { getPoolBudgetCentsFromDetails } from "@/lib/contest-type";
-import { parseDualRewardsPayoutJson } from "@/lib/dual-rewards-payout";
+import {
+  parseDualRewardsPayoutJson,
+  splitDualReversalRefundFromPayout,
+} from "@/lib/dual-rewards-payout";
 
 export type DualPoolSpendSubmissionRow = {
   id: string;
@@ -98,6 +101,390 @@ export function getDualRewardsSubmissionPaidComponents(
     };
   }
   return legacyDualPaidComponents(row);
+}
+
+export type MoneyTxnRow = {
+  amount?: number | null;
+  remarks?: string | null;
+  metadata?: Record<string, unknown> | null;
+};
+
+export type DualRewardsSubmissionReversalDue = {
+  totalCents: number;
+  mainCents: number;
+  bonusCents: number;
+  bonusReversals: { bonusType: string; amount: number }[];
+};
+
+export function submissionIdFromMoneyTxnMetadata(
+  metadata: Record<string, unknown> | null | undefined,
+): string {
+  const m = metadata ?? {};
+  return String(
+    (m.submission_id as string) ||
+      (m.source_submission_id as string) ||
+      "",
+  );
+}
+
+export function moneyTxnBelongsToContest(params: {
+  tx: MoneyTxnRow;
+  contestId: string;
+  contestSubmissionIds: ReadonlySet<string>;
+}): boolean {
+  const m = params.tx.metadata ?? {};
+  if (String(m.contest_id || "") === String(params.contestId)) return true;
+  const sid = submissionIdFromMoneyTxnMetadata(m);
+  return sid.length > 0 && params.contestSubmissionIds.has(sid);
+}
+
+export function filterMoneyTxnsForContest(
+  rows: MoneyTxnRow[] | null | undefined,
+  contestId: string,
+  contestSubmissionIds: ReadonlySet<string>,
+): MoneyTxnRow[] {
+  return (rows ?? []).filter((tx) =>
+    moneyTxnBelongsToContest({ tx, contestId, contestSubmissionIds }),
+  );
+}
+
+export function computeSubmissionGrossWalletNetCents(
+  rewardTxns: MoneyTxnRow[],
+  refundTxns: MoneyTxnRow[],
+  submissionId: string,
+  reversalRemark: string,
+): number {
+  const sid = String(submissionId);
+  const isSubTx = (tx: MoneyTxnRow) =>
+    submissionIdFromMoneyTxnMetadata(tx.metadata) === sid;
+  const isReversalRefund = (tx: MoneyTxnRow) =>
+    !tx.remarks || tx.remarks === reversalRemark;
+  const sum = (rows: MoneyTxnRow[]) =>
+    rows.reduce((s, tx) => s + Math.max(0, Number(tx.amount) || 0), 0);
+
+  const grossRewards = sum(rewardTxns.filter(isSubTx));
+  const grossRefunds = sum(
+    refundTxns.filter((tx) => isSubTx(tx) && isReversalRefund(tx)),
+  );
+  return Math.max(0, grossRewards - grossRefunds);
+}
+
+export function resolveDualRewardsPaidReversalAmounts(
+  row: DualPoolSpendSubmissionRow,
+  ledgerMainCents: number,
+  ledgerBonusCents: number,
+  submissionWalletNetCents?: number,
+): { mainCents: number; bonusCents: number; totalCents: number } {
+  const paid = getDualRewardsSubmissionPaidComponents(row);
+  const dualTotal = paid.cpmCents + paid.milestoneCents;
+  const main = Math.max(0, Math.round(Number(ledgerMainCents) || 0));
+  const bonus = Math.max(0, Math.round(Number(ledgerBonusCents) || 0));
+  const ledgerTotal = main + bonus;
+  const walletNet = Math.max(
+    ledgerTotal,
+    Math.max(0, Math.round(Number(submissionWalletNetCents) || 0)),
+  );
+
+  const splitFromTotal = (total: number) => {
+    const { cpmCents, milestoneCents } = splitDualReversalRefundFromPayout(
+      row.dual_rewards_payout,
+      total,
+      main,
+      bonus,
+    );
+    return {
+      mainCents: cpmCents,
+      bonusCents: milestoneCents,
+      totalCents: total,
+    };
+  };
+
+  const hasDualJson = parseDualRewardsPayoutJson(row.dual_rewards_payout) != null;
+
+  if (walletNet > ledgerTotal) {
+    if (hasDualJson && dualTotal >= walletNet) {
+      return {
+        mainCents: paid.cpmCents,
+        bonusCents: paid.milestoneCents,
+        totalCents: dualTotal,
+      };
+    }
+    return splitFromTotal(walletNet);
+  }
+
+  if (dualTotal <= 0) {
+    return { mainCents: main, bonusCents: bonus, totalCents: ledgerTotal };
+  }
+
+  if (dualTotal > ledgerTotal && walletNet <= 0) {
+    return {
+      mainCents: paid.cpmCents,
+      bonusCents: paid.milestoneCents,
+      totalCents: dualTotal,
+    };
+  }
+
+  if (walletNet > 0) {
+    return splitFromTotal(walletNet);
+  }
+
+  return { mainCents: main, bonusCents: bonus, totalCents: ledgerTotal };
+}
+
+/** Granted amount to reverse for one dual-rewards submission (matches per-row UI breakdown). */
+export function computeDualRewardsSubmissionReversalDue(params: {
+  submissionRow: DualPoolSpendSubmissionRow;
+  submissionId: string;
+  rewardTxns: MoneyTxnRow[];
+  refundTxns: MoneyTxnRow[];
+  reversalRemark: string;
+  wasPaidBeforeReversal: boolean;
+}): DualRewardsSubmissionReversalDue {
+  const {
+    submissionRow,
+    submissionId,
+    rewardTxns,
+    refundTxns,
+    reversalRemark,
+    wasPaidBeforeReversal,
+  } = params;
+  const sid = String(submissionId);
+
+  const isReversalRefund = (tx: MoneyTxnRow) =>
+    !tx.remarks || tx.remarks === reversalRemark;
+  const isMainSubmissionTx = (tx: MoneyTxnRow) => {
+    const m = tx.metadata ?? {};
+    return (
+      submissionIdFromMoneyTxnMetadata(m) === sid &&
+      !m.bonus_type &&
+      !m.payout_component
+    );
+  };
+  const isBonusSubmissionTx = (tx: MoneyTxnRow) => {
+    const m = tx.metadata ?? {};
+    if (!m.bonus_type && !m.payout_component) return false;
+    return submissionIdFromMoneyTxnMetadata(m) === sid;
+  };
+  const sumAmount = (rows: MoneyTxnRow[]) =>
+    rows.reduce((s, tx) => s + Math.max(0, Number(tx.amount) || 0), 0);
+
+  const mainRewardNet = Math.max(
+    0,
+    sumAmount(rewardTxns.filter(isMainSubmissionTx)) -
+      sumAmount(
+        refundTxns.filter(
+          (tx) => isReversalRefund(tx) && isMainSubmissionTx(tx),
+        ),
+      ),
+  );
+  const earningsCents = Math.max(0, Number(submissionRow.earnings) || 0);
+  let mainReversalAmount = Math.max(mainRewardNet, earningsCents);
+
+  const submissionWalletNet = computeSubmissionGrossWalletNetCents(
+    rewardTxns,
+    refundTxns,
+    submissionId,
+    reversalRemark,
+  );
+
+  const bonusByType = new Map<string, number>();
+  for (const tx of rewardTxns.filter(isBonusSubmissionTx)) {
+    const m = tx.metadata ?? {};
+    const key = String(
+      m.bonus_type || m.payout_component || "milestone",
+    );
+    bonusByType.set(key, (bonusByType.get(key) || 0) + (Number(tx.amount) || 0));
+  }
+  for (const tx of refundTxns.filter(
+    (tx) => isReversalRefund(tx) && isBonusSubmissionTx(tx),
+  )) {
+    const m = tx.metadata ?? {};
+    const key = String(
+      m.bonus_type || m.payout_component || "milestone",
+    );
+    bonusByType.set(key, (bonusByType.get(key) || 0) - (Number(tx.amount) || 0));
+  }
+  let bonusReversals = Array.from(bonusByType.entries())
+    .map(([bonusType, amount]) => ({
+      bonusType,
+      amount: Math.max(0, amount),
+    }))
+    .filter((row) => row.amount > 0);
+  let bonusReversalAmount = bonusReversals.reduce(
+    (sum, row) => sum + row.amount,
+    0,
+  );
+
+  const storedBonusCents =
+    submissionRow.bonus_paid === true
+      ? Math.max(0, Number(submissionRow.bonus_amount) || 0)
+      : 0;
+  if (storedBonusCents > bonusReversalAmount) {
+    bonusReversalAmount = storedBonusCents;
+    bonusReversals = [
+      { bonusType: "milestone", amount: storedBonusCents },
+    ];
+  }
+
+  const paid = getDualRewardsSubmissionPaidComponents(submissionRow);
+  const paidTotal = paid.cpmCents + paid.milestoneCents;
+
+  const isSubTx = (tx: MoneyTxnRow) =>
+    submissionIdFromMoneyTxnMetadata(tx.metadata) === sid;
+  const grossRewardCents = sumAmount(rewardTxns.filter(isSubTx));
+
+  // Wallet ledger net (rewards − reversal refunds) is the primary due amount.
+  let dualDueCents = submissionWalletNet;
+
+  const recordedGrantCents = getDualRewardsRecordedGrantCents(submissionRow);
+  if (
+    wasPaidBeforeReversal &&
+    recordedGrantCents > 0 &&
+    submissionWalletNet > recordedGrantCents
+  ) {
+    dualDueCents = recordedGrantCents;
+  }
+
+  if (dualDueCents <= 0 && wasPaidBeforeReversal) {
+    dualDueCents = Math.min(
+      paidTotal > 0 ? paidTotal : 0,
+      grossRewardCents,
+      Math.max(mainReversalAmount + bonusReversalAmount, earningsCents + storedBonusCents),
+    );
+  }
+
+  if (grossRewardCents > 0) {
+    dualDueCents = Math.min(dualDueCents, grossRewardCents);
+  }
+
+  let mainCents = mainReversalAmount;
+  let bonusCents = bonusReversalAmount;
+  let totalCents = dualDueCents;
+
+  if (dualDueCents > 0) {
+    const split = splitDualReversalRefundFromPayout(
+      submissionRow.dual_rewards_payout,
+      dualDueCents,
+      mainReversalAmount,
+      bonusReversalAmount,
+    );
+    mainCents = split.cpmCents;
+    bonusCents = split.milestoneCents;
+    totalCents = dualDueCents;
+    if (bonusCents > 0) {
+      const milestoneType =
+        bonusReversals.find((r) => r.bonusType === "milestone")?.bonusType ??
+        bonusReversals[0]?.bonusType ??
+        "milestone";
+      bonusReversals = [{ bonusType: milestoneType, amount: bonusCents }];
+    } else {
+      bonusReversals = [];
+    }
+  }
+
+  return {
+    totalCents,
+    mainCents,
+    bonusCents,
+    bonusReversals,
+  };
+}
+
+/** Cents recorded on the submission row (earnings/bonus + dual_rewards_payout). */
+export function getDualRewardsRecordedGrantCents(
+  row: DualPoolSpendSubmissionRow,
+): number {
+  const paid = getDualRewardsSubmissionPaidComponents(row);
+  const paidTotal = paid.cpmCents + paid.milestoneCents;
+  const legacyMain = Math.max(0, Math.round(Number(row.earnings) || 0));
+  const legacyBonus =
+    row.bonus_paid === true
+      ? Math.max(0, Math.round(Number(row.bonus_amount) || 0))
+      : 0;
+  const legacyTotal = legacyMain + legacyBonus;
+  return Math.max(paidTotal, legacyTotal);
+}
+
+function scaleOneDualReversalDue(
+  due: DualRewardsSubmissionReversalDue,
+  newTotalCents: number,
+): DualRewardsSubmissionReversalDue {
+  const newTotal = Math.max(0, Math.round(newTotalCents));
+  if (newTotal <= 0) {
+    return {
+      totalCents: 0,
+      mainCents: 0,
+      bonusCents: 0,
+      bonusReversals: [],
+    };
+  }
+  if (due.totalCents <= 0) {
+    return { ...due, totalCents: newTotal, mainCents: newTotal, bonusCents: 0 };
+  }
+  const mainCents = Math.min(
+    due.mainCents,
+    Math.round((due.mainCents * newTotal) / due.totalCents),
+  );
+  const bonusCents = Math.max(0, newTotal - mainCents);
+  let bonusReversals = due.bonusReversals;
+  if (bonusCents > 0) {
+    const milestoneType =
+      due.bonusReversals.find((r) => r.bonusType === "milestone")?.bonusType ??
+      due.bonusReversals[0]?.bonusType ??
+      "milestone";
+    bonusReversals = [{ bonusType: milestoneType, amount: bonusCents }];
+  } else {
+    bonusReversals = [];
+  }
+  return {
+    totalCents: newTotal,
+    mainCents,
+    bonusCents,
+    bonusReversals,
+  };
+}
+
+/**
+ * When ledger net exceeds withdrawable balance (e.g. refunds logged without wallet debits),
+ * scale per-submission dues so the bulk debit matches what can actually be recovered.
+ */
+export function scaleDualReversalDuesToTotalCap(
+  dues: Map<string, DualRewardsSubmissionReversalDue>,
+  capTotalCents: number,
+): Map<string, DualRewardsSubmissionReversalDue> {
+  const cap = Math.max(0, Math.round(capTotalCents));
+  let sum = 0;
+  for (const due of dues.values()) {
+    sum += due.totalCents;
+  }
+  if (sum <= 0 || cap >= sum) {
+    return new Map(dues);
+  }
+
+  const ids = [...dues.keys()];
+  const scaled = new Map<string, DualRewardsSubmissionReversalDue>();
+  const fractions: { id: string; frac: number; floor: number }[] = [];
+  let floored = 0;
+
+  for (const id of ids) {
+    const due = dues.get(id)!;
+    const exact = (due.totalCents * cap) / sum;
+    const floor = Math.floor(exact);
+    fractions.push({ id, frac: exact - floor, floor });
+    floored += floor;
+    scaled.set(id, scaleOneDualReversalDue(due, floor));
+  }
+
+  let remainder = cap - floored;
+  fractions.sort((a, b) => b.frac - a.frac);
+  for (const f of fractions) {
+    if (remainder <= 0) break;
+    const due = dues.get(f.id)!;
+    scaled.set(f.id, scaleOneDualReversalDue(due, f.floor + 1));
+    remainder--;
+  }
+
+  return scaled;
 }
 
 /** Sum paid components across all contest submissions. */

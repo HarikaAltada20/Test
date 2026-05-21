@@ -2,8 +2,10 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import {
   computeDualRewardsProjectedPoolSpentCents,
+  computeDualRewardsSubmissionReversalDue,
   DUAL_REWARDS_POOL_NOT_CONFIGURED_ERROR,
   getDualRewardsSubmissionPaidComponents,
+  scaleDualReversalDuesToTotalCap,
   validateDualRewardsPoolBudget,
 } from "./dual-rewards-pool-budget";
 
@@ -44,6 +46,106 @@ describe("getDualRewardsSubmissionPaidComponents", () => {
     });
     assert.equal(c.cpmCents, 999);
     assert.equal(c.milestoneCents, 120);
+  });
+});
+
+describe("computeDualRewardsSubmissionReversalDue", () => {
+  const reversalRemark = "Forfeited due to status reversal";
+
+  it("uses wallet ledger net when dual_rewards_payout overstates the grant", () => {
+    const due = computeDualRewardsSubmissionReversalDue({
+      submissionRow: {
+        id: "sub-1",
+        paid: true,
+        earnings: 885,
+        bonus_paid: false,
+        dual_rewards_payout: { cpm_cents: 1200, milestone_cents: 200 },
+      },
+      submissionId: "sub-1",
+      rewardTxns: [
+        {
+          amount: 973,
+          metadata: { submission_id: "sub-1", contest_id: "c1" },
+        },
+      ],
+      refundTxns: [],
+      reversalRemark,
+      wasPaidBeforeReversal: true,
+    });
+    assert.equal(due.totalCents, 973);
+    assert.equal(due.mainCents + due.bonusCents, 973);
+  });
+
+  it("sums six submissions to ledger total not uncapped JSON", () => {
+    const perSubReward = 973;
+    let total = 0;
+    for (let i = 0; i < 6; i++) {
+      const due = computeDualRewardsSubmissionReversalDue({
+        submissionRow: {
+          id: `sub-${i}`,
+          paid: true,
+          earnings: 885,
+          dual_rewards_payout: { cpm_cents: 1200, milestone_cents: 200 },
+        },
+        submissionId: `sub-${i}`,
+        rewardTxns: [
+          { amount: perSubReward, metadata: { submission_id: `sub-${i}` } },
+        ],
+        refundTxns: [],
+        reversalRemark,
+        wasPaidBeforeReversal: true,
+      });
+      total += due.totalCents;
+    }
+    assert.equal(total, perSubReward * 6);
+    assert.ok(total < 8172);
+  });
+
+  it("caps due by recorded grant when ledger net exceeds submission row", () => {
+    const due = computeDualRewardsSubmissionReversalDue({
+      submissionRow: {
+        id: "sub-1",
+        paid: true,
+        earnings: 5750,
+        bonus_paid: false,
+        dual_rewards_payout: { cpm_cents: 5310, milestone_cents: 440 },
+      },
+      submissionId: "sub-1",
+      rewardTxns: [
+        { amount: 3000, metadata: { submission_id: "sub-1" } },
+        { amount: 3000, metadata: { submission_id: "sub-1" } },
+      ],
+      refundTxns: [
+        {
+          amount: 250,
+          remarks: reversalRemark,
+          metadata: { submission_id: "sub-1" },
+        },
+      ],
+      reversalRemark,
+      wasPaidBeforeReversal: true,
+    });
+    assert.equal(due.totalCents, 5750);
+  });
+});
+
+describe("scaleDualReversalDuesToTotalCap", () => {
+  it("scales six submission dues down to withdrawable balance", () => {
+    const dues = new Map<string, ReturnType<typeof computeDualRewardsSubmissionReversalDue>>();
+    for (let i = 0; i < 6; i++) {
+      dues.set(`sub-${i}`, {
+        totalCents: 1087,
+        mainCents: 1000,
+        bonusCents: 87,
+        bonusReversals: [{ bonusType: "milestone", amount: 87 }],
+      });
+    }
+    const scaled = scaleDualReversalDuesToTotalCap(dues, 5750);
+    let sum = 0;
+    for (const due of scaled.values()) {
+      sum += due.totalCents;
+    }
+    assert.equal(sum, 5750);
   });
 });
 
