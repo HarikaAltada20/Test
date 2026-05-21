@@ -298,15 +298,6 @@ function isRpcMissingError(rpcError: { message?: string; code?: string } | null)
  * `dual_rewards_payout` on the target row in the same DB transaction so concurrent
  * payouts cannot both pass validation.
  */
-/** Whether a pool commit should be rolled back after a payout step fails. */
-export function shouldRollbackDualRewardsPoolCommit(
-  poolPayment: DualPoolBudgetPaymentResult | undefined,
-  options?: { walletCredited?: boolean },
-): boolean {
-  if (options?.walletCredited) return false;
-  return !!(poolPayment?.ok && poolPayment.check.committed);
-}
-
 export async function assertDualRewardsPoolBudgetAllowsPayment(
   supabaseAdmin: SupabaseClient,
   contest: {
@@ -318,11 +309,7 @@ export async function assertDualRewardsPoolBudgetAllowsPayment(
   contestId: string,
   targetSubmissionId: string,
   targetAfter: DualPoolSpendComponents,
-  options?: {
-    commit?: boolean;
-    /** Full JSON written on commit (avoids partial cpm/milestone-only rows). */
-    commitPayout?: Record<string, unknown>;
-  },
+  options?: { commit?: boolean },
 ): Promise<DualPoolBudgetCheckResult> {
   const poolBudgetCents = getDualRewardsPoolBudgetCents(contest);
   const targetCpm = Math.max(0, Math.round(targetAfter.cpmCents));
@@ -337,13 +324,6 @@ export async function assertDualRewardsPoolBudgetAllowsPayment(
   };
   if (commit) {
     rpcArgs.p_commit = true;
-    if (
-      options?.commitPayout &&
-      typeof options.commitPayout === "object" &&
-      !Array.isArray(options.commitPayout)
-    ) {
-      rpcArgs.p_commit_payout = options.commitPayout;
-    }
   }
 
   const { data: rpcData, error: rpcError } = await supabaseAdmin.rpc(
@@ -437,27 +417,15 @@ export async function rollbackDualRewardsPoolCommit(
   return { ok: true };
 }
 
-export type DualRewardsPoolRollbackOptions = {
-  /**
-   * When true, the creator wallet was already credited — do not roll back pool
-   * reservation (retry must only complete submission flags / payout JSON).
-   */
-  walletCredited?: boolean;
-};
-
-/** Roll back pool reservation only when wallet credit did not succeed. */
+/** Roll back pool reservation after credit or submission persist fails. */
 export async function rollbackDualRewardsPoolCommitIfNeeded(
   supabaseAdmin: SupabaseClient,
   contestId: string,
   targetSubmissionId: string,
   poolPayment: DualPoolBudgetPaymentResult | undefined,
-  options?: DualRewardsPoolRollbackOptions,
-): Promise<{ rolledBack: boolean; skippedBecauseWalletCredited?: boolean; error?: string }> {
-  if (!shouldRollbackDualRewardsPoolCommit(poolPayment, options)) {
-    return {
-      rolledBack: false,
-      skippedBecauseWalletCredited: options?.walletCredited === true,
-    };
+): Promise<{ rolledBack: boolean; error?: string }> {
+  if (!poolPayment?.ok || !poolPayment.check.committed) {
+    return { rolledBack: false };
   }
   const result = await rollbackDualRewardsPoolCommit(
     supabaseAdmin,
@@ -484,8 +452,6 @@ export async function checkDualRewardsPoolBudgetForPayment(params: {
   targetAfter: DualPoolSpendComponents;
   /** When false, dry-run only (no dual_rewards_payout write). Default true for payouts. */
   commit?: boolean;
-  /** Full payout JSON persisted on commit (recommended). */
-  commitPayout?: Record<string, unknown>;
 }): Promise<DualPoolBudgetPaymentResult> {
   const commit = params.commit !== false;
   const check = await assertDualRewardsPoolBudgetAllowsPayment(
@@ -494,7 +460,7 @@ export async function checkDualRewardsPoolBudgetForPayment(params: {
     params.contestId,
     params.targetSubmissionId,
     params.targetAfter,
-    { commit, commitPayout: params.commitPayout },
+    { commit },
   );
   if (check.allowed) {
     return { ok: true, check };

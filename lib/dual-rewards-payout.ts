@@ -22,9 +22,11 @@ export type DualPayoutScopeHint = {
   milestoneExpectedCents: number;
 };
 
+const PAID_SCOPE_MATCH_TOL_CENTS = 2;
+
 /**
- * Match `paidTotalCents` exactly to expected CPM / milestone / sum (cents).
- * Returns null when zero or more than one interpretation matches (UI-only).
+ * Match `paidTotalCents` to adjusted expected CPM / milestone / sum so UI does not
+ * mis-split a milestone-only payment across columns via proportional weights.
  */
 export function inferDualPayoutScopeFromPaidTotal(
   paidTotalCents: number,
@@ -36,16 +38,12 @@ export function inferDualPayoutScopeFromPaidTotal(
   const cpm = Math.round(Number(cpmExpectedCents) || 0);
   const ms = Math.round(Number(milestoneExpectedCents) || 0);
   const combined = cpm + ms;
+  const near = (a: number, b: number) =>
+    Math.abs(a - b) <= PAID_SCOPE_MATCH_TOL_CENTS;
 
-  const matches: DualRewardPayoutScope[] = [];
-  if (combined > 0 && paid === combined) matches.push("both");
-  if (cpm > 0 && paid === cpm) matches.push("cpm");
-  if (ms > 0 && paid === ms) matches.push("milestone");
-
-  if (matches.length === 1) return matches[0];
-  if (matches.length === 0) return null;
-
-  if (paid === combined && matches.includes("both")) return "both";
+  if (ms > 0 && near(paid, ms) && !near(paid, cpm)) return "milestone";
+  if (cpm > 0 && near(paid, cpm) && !near(paid, ms)) return "cpm";
+  if (combined > 0 && near(paid, combined)) return "both";
   return null;
 }
 
