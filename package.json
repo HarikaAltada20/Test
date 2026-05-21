@@ -13,6 +13,7 @@
     "update:all": "node scripts/update_all.js",
     "convert-images": "node ./scripts/convert-images.mjs",
     "backfill-geo-data": "node scripts/backfill-geo-data.js",
+    "test": "npx --yes tsx --test lib/dual-rewards-pool-budget.test.ts lib/dual-rewards-creator-cap.test.ts lib/contest-type-pool.test.ts lib/dual-rewards-payout-milestone-pool.test.ts",
     "test-phantom-wallet": "node scripts/test-phantom-wallet-integration.js",
     "download-ytdlp": "node scripts/download-ytdlp-binary.js"
   },
@@ -84,6 +85,8 @@
     "i18n-iso-countries": "^7.14.0",
     "input-otp": "1.4.1",
     "iso-639-1": "^2.1.15",
+    "jspdf": "^4.2.1",
+    "jspdf-autotable": "^5.0.7",
     "leaflet": "^1.9.4",
     "lucide-react": "^0.454.0",
     "next": "15.5.12",
@@ -109,6 +112,7 @@
     "tailwindcss-animate": "^1.0.7",
     "vaul": "^0.9.6",
     "world-countries": "^5.1.0",
+    "xlsx": "^0.18.5",
     "ytdlp-nodejs": "^2.3.5",
     "zod": "^3.24.1"
   },

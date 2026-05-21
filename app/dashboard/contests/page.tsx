@@ -7,6 +7,7 @@ import {
   type CreatorRouteNotice,
 } from "./ContestsPageClient";
 import { getAdvertiserContestsWithCalculatedBudgets } from "@/lib/contest-service";
+import { PageLoadingSpinner } from "@/components/loading/LoadingSpinner";
 
 export default async function ContestsPage({
   searchParams,
@@ -84,11 +85,19 @@ export default async function ContestsPage({
 
   return (
     // <RouteGuard allowedUserTypes={['advertiser', 'admin']} fallbackPath="/dashboard/opportunities">
-    <ContestsPageClient
-      initialContests={typedContests}
-      userId={data.user.id}
-      creatorRouteNotice={creatorRouteNotice}
-    />
+    <Suspense
+      fallback={
+        <div className="flex min-h-[50vh] w-full items-center justify-center py-16">
+          <PageLoadingSpinner mode="light" />
+        </div>
+      }
+    >
+      <ContestsPageClient
+        initialContests={typedContests}
+        userId={data.user.id}
+        creatorRouteNotice={creatorRouteNotice}
+      />
+    </Suspense>
     // </RouteGuard>
   );
 }

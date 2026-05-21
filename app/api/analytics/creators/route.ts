@@ -90,11 +90,39 @@ export async function GET(request: NextRequest) {
         }
       }
 
-      // Get creator's submissions for this advertiser's contests
-      let submissionsQuery = supabase
-        .from("submissions")
-        .select(
-          `
+      // Get creator's submissions for this advertiser's contests (paginated to bypass row cap)
+      const CREATOR_PAGE_SIZE = 1000;
+      const submissionsAll: any[] = [];
+
+      // Build base filters to apply per page
+      const applyCreatorFilters = (q: any) => {
+        let query = q
+          .eq("creator_id", creatorId)
+          .eq("contests.advertiser_id", user.id);
+        if (contestIdsForFilter && contestIdsForFilter.length > 0) {
+          query = query.in("contest_id", contestIdsForFilter);
+        } else if (contestTypeFilter && contestTypeFilter !== "all") {
+          query = query.in("contest_id", []);
+        }
+        if (notRejected) {
+          query = query.neq("status", "rejected");
+        } else if (submissionStatus && submissionStatus !== "all") {
+          if (submissionStatus === "verifiedPaid") {
+            query = query.in("status", ["verified", "paid"]);
+          } else {
+            query = query.eq("status", submissionStatus);
+          }
+        }
+        return query;
+      };
+
+      for (let page = 0; ; page++) {
+        const from = page * CREATOR_PAGE_SIZE;
+        const to = from + CREATOR_PAGE_SIZE - 1;
+        const baseQuery = supabase
+          .from("submissions")
+          .select(
+            `
           id,
           views,
           created_at,
@@ -110,44 +138,16 @@ export async function GET(request: NextRequest) {
             contest_based_details
           )
         `,
-        )
-        .eq("creator_id", creatorId)
-        .eq("contests.advertiser_id", user.id);
-
-      if (contestIdsForFilter && contestIdsForFilter.length > 0) {
-        submissionsQuery = submissionsQuery.in(
-          "contest_id",
-          contestIdsForFilter,
-        );
-      } else if (contestTypeFilter && contestTypeFilter !== "all") {
-        // No contests of this type — return empty
-        submissionsQuery = submissionsQuery.in("contest_id", []);
+          )
+          .range(from, to)
+          .order("created_at", { ascending: false });
+        const { data: pageData, error: pageErr } =
+          await applyCreatorFilters(baseQuery);
+        if (pageErr) break;
+        if (pageData && pageData.length > 0) submissionsAll.push(...pageData);
+        if (!pageData || pageData.length < CREATOR_PAGE_SIZE) break;
       }
-
-      // Apply status filter if provided
-      if (notRejected) {
-        submissionsQuery = submissionsQuery.neq("status", "rejected");
-      } else if (submissionStatus && submissionStatus !== "all") {
-        if (submissionStatus === "verifiedPaid") {
-          submissionsQuery = submissionsQuery.in("status", [
-            "verified",
-            "paid",
-          ]);
-        } else {
-          submissionsQuery = submissionsQuery.eq("status", submissionStatus);
-        }
-      }
-
-      const { data: submissions } = await submissionsQuery.order("created_at", {
-        ascending: false,
-      });
-
-      if (!submissions) {
-        return NextResponse.json(
-          { error: "Failed to fetch submissions" },
-          { status: 500 },
-        );
-      }
+      const submissions = submissionsAll;
 
       // Calculate creator-specific metrics for this advertiser
       const totalSubmissions = submissions.length;
@@ -318,11 +318,18 @@ export async function GET(request: NextRequest) {
         });
       let twitterContestTypeCounts: Record<string, number> = {};
 
-      // Get leaderboard of creators (submissions table) - only for video contests when in scope
-      let submissionsQuery = supabase
-        .from("submissions")
-        .select(
-          `
+      // Get leaderboard of creators (paginated to bypass PostgREST row cap)
+      const LIST_PAGE_SIZE = 1000;
+      const submissionsRawAll: any[] = [];
+
+      if (videoContestIds.length > 0) {
+        for (let page = 0; ; page++) {
+          const from = page * LIST_PAGE_SIZE;
+          const to = from + LIST_PAGE_SIZE - 1;
+          let pageQuery = supabase
+            .from("submissions")
+            .select(
+              `
           id,
           views,
           created_at,
@@ -349,40 +356,27 @@ export async function GET(request: NextRequest) {
             contest_type
           )
         `,
-        )
-        .eq("contests.advertiser_id", user.id);
-
-      if (videoContestIds.length > 0) {
-        submissionsQuery = submissionsQuery.in("contest_id", videoContestIds);
-      }
-      if (notRejected) {
-        submissionsQuery = submissionsQuery.neq("status", "rejected");
-      } else if (statusNorm && statusNorm !== "all") {
-        if (statusNorm === "verifiedpaid") {
-          submissionsQuery = submissionsQuery.in("status", [
-            "verified",
-            "paid",
-          ]);
-        } else {
-          submissionsQuery = submissionsQuery.eq("status", statusNorm);
+            )
+            .eq("contests.advertiser_id", user.id)
+            .in("contest_id", videoContestIds)
+            .range(from, to)
+            .order("created_at", { ascending: false });
+          if (notRejected) {
+            pageQuery = pageQuery.neq("status", "rejected");
+          } else if (statusNorm && statusNorm !== "all") {
+            if (statusNorm === "verifiedpaid") {
+              pageQuery = pageQuery.in("status", ["verified", "paid"]);
+            } else {
+              pageQuery = pageQuery.eq("status", statusNorm);
+            }
+          }
+          const { data: pageData } = await pageQuery;
+          if (pageData && pageData.length > 0)
+            submissionsRawAll.push(...pageData);
+          if (!pageData || pageData.length < LIST_PAGE_SIZE) break;
         }
       }
-
-      const { data: submissionsRaw } = await submissionsQuery.order(
-        "created_at",
-        {
-          ascending: false,
-        },
-      );
-      const submissions =
-        videoContestIds.length > 0 ? (submissionsRaw ?? []) : [];
-
-      if (!submissions) {
-        return NextResponse.json(
-          { error: "Failed to fetch submissions" },
-          { status: 500 },
-        );
-      }
+      const submissions = submissionsRawAll;
 
       // Twitter: aggregate by creator from twitter_campaign_tweets and leaderboard
       const twitterByCreator: Record<

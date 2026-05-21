@@ -4,6 +4,10 @@ import { REVERSAL_TRANSACTION_REMARK } from "@/lib/payment-utils";
 import { redirect } from "next/navigation";
 import ContestDetailClient from "./contest-detail-client"; // Import the new client component
 import { TooltipProvider } from "@/components/ui/tooltip";
+import {
+  isCpmContestType,
+  isMilestoneContestType,
+} from "@/lib/contest-type";
 
 /** Load all matching twitter_campaign_tweets in chunks (SSR). Default 50-row cap hid tweets from UI. */
 async function fetchTwitterTweetsAllPages(
@@ -176,6 +180,7 @@ export default async function ContestDetailPage({
       bonus_paid_at,
       bonus_amount,
       milestone_bonus_paid,
+      dual_rewards_payout,
       metadata,
       insights_status,
       last_insights_update
@@ -406,6 +411,7 @@ export default async function ContestDetailPage({
           id,
           youtube_account,
           instagram_account,
+          instagram_archive,
           twitter_account
         `
         )
@@ -638,7 +644,7 @@ export default async function ContestDetailPage({
     string,
     { viewsPaidCents: number; reelsPaidCents: number }
   > = {};
-  if (contestData.contest_type === "milestone") {
+  if (isMilestoneContestType(contestData.contest_type)) {
     try {
       const supabaseAdmin = createAdminClient();
       const [{ data: milestoneRewards }, { data: milestoneRefunds }] =
@@ -785,7 +791,7 @@ export default async function ContestDetailPage({
 
       // Get moderation_status (default to "pending" if column doesn't exist)
       const moderationStatus = (tweet as any).moderation_status || "pending";
-      const isCpm = contestData.contest_type === "cpm";
+      const isCpm = isCpmContestType(contestData.contest_type);
       const cpmRate =
         (contestData.contest_based_details as any)?.cpm_contest
           ?.cpm_rate_usd || 0;
@@ -996,7 +1002,9 @@ export default async function ContestDetailPage({
           username: creatorUsername,
           profile_picture_url: creatorAvatarUrl,
           full_name: creatorDisplayName,
+          instagram_archive: creatorProfile?.instagram_archive ?? null,
         },
+        creator_instagram_archive: creatorProfile?.instagram_archive ?? null,
         metadata: sub.metadata ?? null,
         insights_status: sub.insights_status ?? null,
         last_insights_update: sub.last_insights_update ?? null,

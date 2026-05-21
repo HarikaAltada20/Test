@@ -17,6 +17,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { formatCurrencyFromCents } from "@/lib/currency-utils";
+import { getPoolBudgetCentsFromDetails } from "@/lib/contest-type";
 import { cn } from "@/lib/utils";
 import { useAnalyticsDarkMode } from "@/hooks/use-analytics-dark-mode";
 
@@ -338,6 +339,12 @@ export default function ContestTile({
       Number(contest.contest_based_details?.milestone_contest?.budget_spent_cents) ||
       0;
     moneyMetricLabel = "Budget Spent";
+  } else if (contest.contest_type === "dual_rewards") {
+    moneyMetricCents = getPoolBudgetCentsFromDetails(
+      "dual_rewards",
+      contest.contest_based_details,
+    );
+    moneyMetricLabel = "Prize Pool";
   }
 
   const daysRemaining = getDaysRemaining(contest.end_date);

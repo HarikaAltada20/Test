@@ -13,7 +13,12 @@ interface ContestAnalyticsProps {
   contentType?: "video" | "text_image";
   videoPlatform?: string;
   twitterAnalytics?: boolean;
-  contestTypeFilter?: "all" | "leaderboard" | "cpm" | "milestone";
+  contestTypeFilter?:
+    | "all"
+    | "leaderboard"
+    | "cpm"
+    | "milestone"
+    | "dual_rewards";
 }
 
 interface Contest {

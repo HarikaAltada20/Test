@@ -1,7 +1,7 @@
 "use client";
 
-import React, { Suspense, useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import React, { Suspense, useCallback, useEffect, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { ContestListClient } from "./ContestListClient";
 import { Button } from "@/components/ui/button";
 import { Plus, Loader2, Phone } from "lucide-react";
@@ -18,6 +18,14 @@ import {
 } from "@/components/ui/dialog";
 import { createClient } from "@/utils/supabase/client";
 import { ButtonLoadingSpinner } from "@/components/loading/LoadingSpinner";
+import {
+  BRAND_CONTEST_LIST_TAB_KEY,
+  DEFAULT_CAMPAIGN_LIST_TAB,
+  normalizeBrandContestTabFromUrl,
+  readStoredCampaignListTab,
+  writeStoredCampaignListTab,
+  BRAND_CONTEST_TAB_IDS,
+} from "@/lib/campaign-list-tab-storage";
 
 const BOOK_A_CALL_URL = "https://calendly.com/guptavishesh2/30min";
 
@@ -45,9 +53,33 @@ export function ContestsPageClient({
   creatorRouteNotice = null,
 }: ContestsPageClientProps) {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [showModal, setShowModal] = useState(false);
   const { handleCreateContest } = useContestCreation(userId);
-  const [selectedTab, setSelectedTab] = useState("all");
+  const [selectedTab, setSelectedTabState] = useState(DEFAULT_CAMPAIGN_LIST_TAB);
+  const [tabHydrated, setTabHydrated] = useState(false);
+
+  useEffect(() => {
+    const urlTab = normalizeBrandContestTabFromUrl(
+      searchParams.get("tab") ?? "",
+    );
+    const stored = readStoredCampaignListTab(
+      BRAND_CONTEST_LIST_TAB_KEY,
+      BRAND_CONTEST_TAB_IDS,
+      DEFAULT_CAMPAIGN_LIST_TAB,
+    );
+    setSelectedTabState(urlTab ?? stored);
+    setTabHydrated(true);
+  }, [searchParams]);
+
+  useEffect(() => {
+    if (!tabHydrated) return;
+    writeStoredCampaignListTab(BRAND_CONTEST_LIST_TAB_KEY, selectedTab);
+  }, [selectedTab, tabHydrated]);
+
+  const setSelectedTab = useCallback((tab: string) => {
+    setSelectedTabState(tab);
+  }, []);
   const [loading, setLoading] = useState(false);
   const [mode, setMode] = useState<"light" | "dark">("light");
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");

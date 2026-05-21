@@ -23,7 +23,7 @@ interface PaidPlanUpgradeModalProps {
 export function PaidPlanUpgradeModal({
   isOpen,
   onClose,
-  featureName = "CPM Contests",
+  featureName = "CPM Contest",
 }: PaidPlanUpgradeModalProps) {
   const router = useRouter();
   const [mode, setMode] = useState<"light" | "dark">("light");
@@ -52,12 +52,27 @@ export function PaidPlanUpgradeModal({
 
   const isDark = mode === "dark";
 
-  const benefits = [
-    "Access CPM contests — pay per 1,000 views",
-    "Scale content campaigns predictably",
-    "Unlock higher creator limits & lower commission",
-    "Priority support & dedicated account management",
-  ];
+  const normalizedFeature = featureName.toLowerCase();
+  const benefits = normalizedFeature.includes("dual")
+    ? [
+        "Access dual rewards contests with combined payout models",
+        "Reward creators through both milestone and CPM performance",
+        "Run blended campaigns under one controlled budget",
+        "Priority support & dedicated account management",
+      ]
+    : normalizedFeature.includes("milestone")
+      ? [
+          "Access milestone contests with target-based payouts",
+          "Set clear reward tiers tied to view milestones",
+          "Control campaign spend with structured payout ladders",
+          "Priority support & dedicated account management",
+        ]
+      : [
+          "Access CPM contests and pay per 1,000 views",
+          "Scale content campaigns with predictable performance costs",
+          "Unlock higher creator limits & lower commission",
+          "Priority support & dedicated account management",
+        ];
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose} isdark={isDark}>
@@ -99,7 +114,7 @@ export function PaidPlanUpgradeModal({
               isDark ? "text-gray-300" : "text-gray-500"
             )}
           >
-            {featureName} are available on paid plans. Upgrade now to unlock
+            {featureName} is available on paid plans. Upgrade now to unlock
             this feature and grow your brand faster.
           </p>
         </DialogHeader>

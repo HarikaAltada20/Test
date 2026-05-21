@@ -45,6 +45,11 @@ import {
   toUTCISOString,
   validateImageFile,
 } from "@/lib/utils";
+import {
+  getPoolBudgetCentsFromDetails,
+  isCpmContestType,
+  isMilestoneContestType,
+} from "@/lib/contest-type";
 import { formatCurrencyFromCents } from "@/lib/currency-utils";
 import { toast } from "@/hooks/use-toast"; // Added import
 import dynamic from "next/dynamic";
@@ -331,7 +336,7 @@ export default function CreateContestPage({
 
   // Contest Type and CPM-specific state
   const [contestType, setContestType] = useState<
-    "leaderboard" | "cpm" | "milestone"
+    "leaderboard" | "cpm" | "milestone" | "dual_rewards"
   >("leaderboard");
   const [cpmRate, setCpmRate] = useState<number | string>("");
   const [minViews, setMinViews] = useState<number | string>("");
@@ -660,9 +665,9 @@ export default function CreateContestPage({
       startDate ||
       endDate ||
       winnerAmounts.some((amount) => amount > 0) ||
-      (contestType === "cpm" &&
+      (isCpmContestType(contestType) &&
         (cpmRate || minViews || maxViews || totalBudget || termsConditions)) ||
-      (contestType === "milestone" &&
+      (isMilestoneContestType(contestType) &&
         (milestoneRows.some(
           (r) =>
             r.target_views !== "" ||
@@ -736,7 +741,10 @@ export default function CreateContestPage({
   const isRaidTwitter = platform === "twitter" && contentType === "raid";
 
   useEffect(() => {
-    if (contestFormat !== "video" && contestType === "milestone") {
+    if (
+      contestFormat !== "video" &&
+      (contestType === "milestone" || contestType === "dual_rewards")
+    ) {
       setContestType("leaderboard");
     }
   }, [contestFormat, contestType]);
@@ -1151,7 +1159,18 @@ export default function CreateContestPage({
                         total_budget_cents: 0,
                       },
                     }
-                  : null,
+                  : contestType === "dual_rewards"
+                    ? {
+                        cpm_contest: {
+                          cpm_rate_usd: 0,
+                          terms_conditions: "",
+                        },
+                        milestone_contest: {
+                          milestones: [],
+                        },
+                        total_budget_cents: 0,
+                      }
+                    : null,
           // Categories, subcategories, and interests
           categories: contestCategories.length > 0 ? contestCategories : null,
           subcategories: (() => {
@@ -1777,7 +1796,9 @@ export default function CreateContestPage({
             };
           }
         }
-      } else if (contestType === "milestone") {
+      }
+      if (contestType === "milestone" || contestType === "dual_rewards") {
+        const milestonePoolBudget = totalBudget;
         if (contestFormat !== "video") {
           return {
             isValid: false,
@@ -1800,7 +1821,10 @@ export default function CreateContestPage({
           };
         }
 
-        if (!totalBudget || parseFloat(totalBudget.toString()) <= 0) {
+        if (
+          !milestonePoolBudget ||
+          parseFloat(milestonePoolBudget.toString()) <= 0
+        ) {
           return {
             isValid: false,
             error: "Total contest budget is required for milestone contests.",
@@ -1808,7 +1832,7 @@ export default function CreateContestPage({
         }
 
         const budgetCents = Math.round(
-          parseFloat(totalBudget.toString()) * 100,
+          parseFloat(milestonePoolBudget.toString()) * 100,
         );
         if (budgetCents < planFeatures.minContestBudget) {
           return {
@@ -1943,7 +1967,8 @@ export default function CreateContestPage({
             };
           }
         }
-      } else if (contestType === "cpm") {
+      }
+      if (contestType === "cpm" || contestType === "dual_rewards") {
         // CPM validation
         if (!cpmRate || parseFloat(cpmRate.toString()) <= 0) {
           return {
@@ -2146,9 +2171,11 @@ export default function CreateContestPage({
           };
         }
 
-        // Validate: Flat fee bonus selected but total budget missing
+        // Validate: Flat fee bonus (CPM-only; not used for dual rewards)
         const flatFeeBonusValue =
-          flatFeeBonus && parseFloat(flatFeeBonus.toString()) > 0;
+          contestType === "cpm" &&
+          flatFeeBonus &&
+          parseFloat(flatFeeBonus.toString()) > 0;
         if (flatFeeBonusValue) {
           if (!totalBudget || parseFloat(totalBudget.toString()) <= 0) {
             return {
@@ -2169,7 +2196,9 @@ export default function CreateContestPage({
 
         // Validate: Flat Fee Bonus Cap must be greater than or equal to Flat Fee Bonus (CPM)
         const flatFeeBonusCapValue =
-          flatFeeBonusCap && parseFloat(flatFeeBonusCap.toString()) > 0;
+          contestType === "cpm" &&
+          flatFeeBonusCap &&
+          parseFloat(flatFeeBonusCap.toString()) > 0;
         if (flatFeeBonusValue && flatFeeBonusCapValue) {
           const bonusDollars = parseFloat(flatFeeBonus.toString());
           const capDollars = parseFloat(flatFeeBonusCap.toString());
@@ -2233,7 +2262,11 @@ export default function CreateContestPage({
       }
 
       // 6. Plan and subscription validation
-      if (contestType === "cpm" || contestType === "milestone") {
+      if (
+        contestType === "cpm" ||
+        contestType === "milestone" ||
+        contestType === "dual_rewards"
+      ) {
         const hasCpmAccess =
           planFeatures.contestTypes &&
           planFeatures.contestTypes.includes("cpm");
@@ -2399,7 +2432,14 @@ export default function CreateContestPage({
             ...(totalBudgetCents && { total_budget: totalBudgetCents }), // Only include if set
           },
         };
-      } else if (contestType === "milestone") {
+      } else {
+        const includeMilestone =
+          contestType === "milestone" || contestType === "dual_rewards";
+        const includeCpm =
+          contestType === "cpm" || contestType === "dual_rewards";
+        const milestoneBudgetForSubmit = totalBudget;
+
+        if (includeMilestone) {
         const effectiveMilestoneRows = milestoneRows.filter(
           (r) =>
             r.target_views !== "" ||
@@ -2536,7 +2576,10 @@ export default function CreateContestPage({
               return;
             }
           }
-          if (!totalBudget || parseFloat(totalBudget.toString()) <= 0) {
+          if (
+            !milestoneBudgetForSubmit ||
+            parseFloat(milestoneBudgetForSubmit.toString()) <= 0
+          ) {
             setFormFeedback(
               "Total contest budget is required for milestone contests.",
             );
@@ -2647,20 +2690,27 @@ export default function CreateContestPage({
         }
 
         const totalBudgetCentsMilestone = Math.round(
-          (parseFloat(totalBudget.toString()) || 0) * 100,
+          (parseFloat(milestoneBudgetForSubmit.toString()) || 0) * 100,
         );
 
         contestBasedDetails = {
+          ...contestBasedDetails,
           milestone_contest: {
             milestones: milestonesPayload.map((m, idx) => ({
               ...m,
               order: idx + 1,
             })),
-            total_budget_cents: totalBudgetCentsMilestone,
+            ...(contestType !== "dual_rewards"
+              ? { total_budget_cents: totalBudgetCentsMilestone }
+              : {}),
             ...(bonusPayload ? { bonus: bonusPayload } : {}),
           },
+          ...(contestType === "dual_rewards"
+            ? { total_budget_cents: totalBudgetCentsMilestone }
+            : {}),
         };
-      } else if (contestType === "cpm") {
+        }
+        if (includeCpm) {
         if (!isDraft) {
           if (!cpmRate || parseFloat(cpmRate.toString()) <= 0) {
             setFormFeedback("CPM Rate must be a positive number."); // Footer feedback
@@ -2733,12 +2783,16 @@ export default function CreateContestPage({
           }
         }
         const flatFeeBonusCents =
-          flatFeeBonus && parseFloat(flatFeeBonus.toString()) > 0
+          contestType !== "dual_rewards" &&
+          flatFeeBonus &&
+          parseFloat(flatFeeBonus.toString()) > 0
             ? Math.round(parseFloat(flatFeeBonus.toString()) * 100)
             : undefined;
 
         const flatFeeBonusCapCents =
-          flatFeeBonusCap && parseFloat(flatFeeBonusCap.toString()) > 0
+          contestType !== "dual_rewards" &&
+          flatFeeBonusCap &&
+          parseFloat(flatFeeBonusCap.toString()) > 0
             ? Math.round(parseFloat(flatFeeBonusCap.toString()) * 100)
             : undefined;
 
@@ -2746,11 +2800,16 @@ export default function CreateContestPage({
         const isTwitterCpmContest =
           platform === "twitter" &&
           contestFormat === "text_image" &&
-          contestType === "cpm";
+          (contestType === "cpm" || contestType === "dual_rewards");
 
+        const poolCents = Math.round(
+          (parseFloat(totalBudget.toString()) || 0) * 100,
+        );
         const cpmContestDetails: any = {
           cpm_rate_usd: parseFloat(cpmRate.toString()) || 0,
-          total_budget: (parseFloat(totalBudget.toString()) || 0) * 100, // Convert to cents
+          ...(contestType !== "dual_rewards"
+            ? { total_budget: poolCents }
+            : {}),
           budget_spent: 0, // Initial value
           terms_conditions: termsConditions,
           ...(flatFeeBonusCents && { flat_fee_bonus: flatFeeBonusCents }), // Only include if set
@@ -2774,8 +2833,10 @@ export default function CreateContestPage({
         }
 
         contestBasedDetails = {
+          ...contestBasedDetails,
           cpm_contest: cpmContestDetails,
         };
+        }
       }
 
       // Build Twitter campaign config and merge with contestBasedDetails
@@ -2803,7 +2864,7 @@ export default function CreateContestPage({
           twitterCampaign.max_participants = maxParticipants;
         }
 
-        if (contestType === "cpm") {
+        if (isCpmContestType(contestType)) {
           // CPM-based Twitter contests (Points Model): configure metric weights
           // Stored in contest_based_details.twitter_campaign.points_config
           const commentsWeight =
@@ -3031,7 +3092,11 @@ export default function CreateContestPage({
         const planFeatures = getPlanFeatures(userPlan);
 
         // Validate contest type access
-        if (contestType === "cpm" || contestType === "milestone") {
+        if (
+          contestType === "cpm" ||
+          contestType === "milestone" ||
+          contestType === "dual_rewards"
+        ) {
           const hasCpmAccess =
             planFeatures.contestTypes &&
             planFeatures.contestTypes.includes("cpm");
@@ -3070,9 +3135,16 @@ export default function CreateContestPage({
             setUploadProgress(null);
             return;
           }
-        } else if (contestType === "cpm" || contestType === "milestone") {
-          const budgetInCents = (parseFloat(totalBudget.toString()) || 0) * 100;
-          if (budgetInCents < planFeatures.minContestBudget) {
+        } else if (
+          contestType === "cpm" ||
+          contestType === "milestone" ||
+          contestType === "dual_rewards"
+        ) {
+          const poolCents = (parseFloat(totalBudget.toString()) || 0) * 100;
+          const poolsToCheck = [poolCents];
+          if (
+            poolsToCheck.some((c) => c > 0 && c < planFeatures.minContestBudget)
+          ) {
             setFormFeedback(
               `The minimum contest budget for your plan is ${formatCurrencyFromCents(
                 planFeatures.minContestBudget,
@@ -3927,7 +3999,7 @@ export default function CreateContestPage({
           twitterCampaign.max_participants = maxParticipants;
         }
 
-        if (contestType === "cpm") {
+        if (isCpmContestType(contestType)) {
           // CPM-based Twitter contests (Points Model): configure metric weights
           const likesWeight =
             parseFloat(twitterPointsConfig.likesWeight.toString()) || 0;
@@ -4251,10 +4323,10 @@ export default function CreateContestPage({
       const isTwitterCpmContest =
         platform?.toLowerCase() === "twitter" &&
         contestFormat === "text_image" &&
-        contestType === "cpm";
+        isCpmContestType(contestType);
 
       // Update Twitter campaign points_config with multipliers
-      if (isTwitterCpmContest && contestType === "cpm") {
+      if (isTwitterCpmContest && isCpmContestType(contestType)) {
         const existingTwitterCampaign = existingDetails.twitter_campaign || {};
         const existingPointsConfig =
           existingTwitterCampaign.points_config || {};
@@ -4493,7 +4565,11 @@ export default function CreateContestPage({
         }
 
         // Validate contest type access
-        if (contestType === "cpm" || contestType === "milestone") {
+        if (
+          contestType === "cpm" ||
+          contestType === "milestone" ||
+          contestType === "dual_rewards"
+        ) {
           const planFeatures = getPlanFeatures(userPlan);
           const hasCpmAccess =
             planFeatures.contestTypes &&
@@ -5075,7 +5151,8 @@ export default function CreateContestPage({
     // Milestone contest (video)
     if (
       contestDetails.milestone_contest &&
-      draft.contest_type === "milestone"
+      (draft.contest_type === "milestone" ||
+        draft.contest_type === "dual_rewards")
     ) {
       const mc = contestDetails.milestone_contest;
       if (Array.isArray(mc.milestones) && mc.milestones.length > 0) {
@@ -5095,11 +5172,20 @@ export default function CreateContestPage({
           })),
         );
       }
-      if (
+      if (draft.contest_type === "dual_rewards") {
+        const unified = getPoolBudgetCentsFromDetails(
+          "dual_rewards",
+          contestDetails,
+        );
+        if (unified > 0) {
+          setTotalBudget((unified / 100).toString());
+        }
+      } else if (
         typeof mc.total_budget_cents === "number" &&
         mc.total_budget_cents > 0
       ) {
-        setTotalBudget((mc.total_budget_cents / 100).toString());
+        const dollars = (mc.total_budget_cents / 100).toString();
+        setTotalBudget(dollars);
       }
       const bonus = mc.bonus;
       if (bonus && typeof bonus === "object") {
@@ -5134,11 +5220,18 @@ export default function CreateContestPage({
     }
 
     // CPM contest details (rate, views, total budget, terms, flat fee bonus & cap)
-    if (contestDetails.cpm_contest && draft.contest_type === "cpm") {
+    if (
+      contestDetails.cpm_contest &&
+      (draft.contest_type === "cpm" ||
+        draft.contest_type === "dual_rewards")
+    ) {
       const cc = contestDetails.cpm_contest;
 
-      // Ensure contest type is CPM when CPM details exist
-      setContestType("cpm");
+      if (draft.contest_type === "cpm") {
+        setContestType("cpm");
+      } else if (draft.contest_type === "dual_rewards") {
+        setContestType("dual_rewards");
+      }
 
       if (
         typeof cc.cpm_rate_usd === "number" &&
@@ -5156,11 +5249,12 @@ export default function CreateContestPage({
       }
 
       if (
+        draft.contest_type !== "dual_rewards" &&
         typeof cc.total_budget === "number" &&
         !isNaN(cc.total_budget) &&
         cc.total_budget > 0
       ) {
-        // Stored in cents, convert back to dollars
+        // Stored in cents, convert back to dollars (dual pool is at contest_based_details root)
         setTotalBudget((cc.total_budget / 100).toString());
       }
 
@@ -6057,8 +6151,9 @@ export default function CreateContestPage({
                           </div>
                         )}
 
-                        {/* CPM Rate Info - Only show for CPM contests */}
-                        {contestType === "cpm" && (
+                        {/* CPM Rate Info - CPM and dual rewards */}
+                        {(contestType === "cpm" ||
+                          contestType === "dual_rewards") && (
                           <div
                             className={cn(
                               "border rounded-xl p-4 flex flex-col justify-between shadow-sm",
@@ -6114,7 +6209,8 @@ export default function CreateContestPage({
                           </div>
                         )}
 
-                        {contestType === "milestone" && (
+                        {(contestType === "milestone" ||
+                          contestType === "dual_rewards") && (
                           <div
                             className={cn(
                               "border rounded-xl p-4 flex flex-col justify-between shadow-sm",
@@ -6539,7 +6635,8 @@ export default function CreateContestPage({
                         )}
 
                         {/* Show CPM info for CPM contests */}
-                        {contestType === "cpm" && (
+                        {(contestType === "cpm" ||
+                          contestType === "dual_rewards") && (
                           <div className="flex items-start gap-3 group">
                             <div className="w-3 h-3 mt-2 flex-shrink-0 group-hover:scale-110 transition-transform"></div>
                             <div>
@@ -6547,13 +6644,14 @@ export default function CreateContestPage({
                                 Performance-based rewards
                               </span>
                               <span className="text-xs opacity-75 block">
-                                (No winner limits - CPM)
+                                (No winner limits — CPM)
                               </span>
                             </div>
                           </div>
                         )}
 
-                        {contestType === "milestone" && (
+                        {(contestType === "milestone" ||
+                          contestType === "dual_rewards") && (
                           <div className="flex items-start gap-3 group">
                             <div className="w-3 h-3 mt-2 flex-shrink-0 group-hover:scale-110 transition-transform"></div>
                             <div>
@@ -6904,7 +7002,10 @@ export default function CreateContestPage({
                   </Alert>
                 )}
               </>
-            ) : contestType === "milestone" ? (
+            ) : (
+              <>
+                {(contestType === "milestone" ||
+                  contestType === "dual_rewards") && (
               <>
                 <div className="space-y-6 py-4 px-1">
                   <h3 className="text-lg font-medium">
@@ -7087,96 +7188,102 @@ export default function CreateContestPage({
                       Add milestone
                     </Button>
                   </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="milestoneTotalBudget">
-                      Total contest budget (USD){" "}
-                      <span className="text-red-500">*</span>
-                    </Label>
-                    <Input
-                      id="milestoneTotalBudget"
-                      type="number"
-                      value={totalBudget}
-                      onChange={(e) => setTotalBudget(e.target.value)}
-                      min="1"
-                      step="0.01"
-                      className={cn(
-                        isDark
-                          ? "bg-[#180438] border border-gray-600 text-white"
-                          : "bg-white",
-                      )}
-                      placeholder="Maximum amount reserved for this contest"
-                    />
-                    <p className="text-xs text-muted-foreground">
-                      This is the pool you fund upfront (similar to a CPM
-                      budget). Payouts are drawn from it as creators hit
-                      milestones.
-                    </p>
-                  </div>
-                  <div
-                    className={cn(
-                      "space-y-3 p-4 border rounded-lg",
-                      isDark
-                        ? "bg-blue-950/50 border-blue-800"
-                        : "bg-blue-50 border-blue-200",
-                    )}
-                  >
-                    <div className="flex items-center gap-2">
-                      <span className="text-2xl">🎯</span>
-                      <Label
-                        htmlFor="milestoneMaxEarnings"
-                        className="text-base font-semibold"
-                      >
-                        Maximum Earnings Per Creator (Optional)
+                  {contestType !== "dual_rewards" && (
+                    <div className="space-y-2">
+                      <Label htmlFor="milestoneTotalBudget">
+                        Total contest budget (USD){" "}
+                        <span className="text-red-500">*</span>
                       </Label>
+                      <Input
+                        id="milestoneTotalBudget"
+                        type="number"
+                        value={totalBudget}
+                        onChange={(e) => setTotalBudget(e.target.value)}
+                        min="1"
+                        step="0.01"
+                        className={cn(
+                          isDark
+                            ? "bg-[#180438] border border-gray-600 text-white"
+                            : "bg-white",
+                        )}
+                        placeholder="Maximum amount reserved for this contest"
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        This is the pool you fund upfront (similar to a CPM
+                        budget). Payouts are drawn from it as creators hit
+                        milestones.
+                      </p>
                     </div>
-                    <Input
-                      id="milestoneMaxEarnings"
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      value={maxEarningsPerCreator}
+                  )}
+                  {contestType !== "dual_rewards" && (
+                    <div
                       className={cn(
+                        "space-y-3 p-4 border rounded-lg",
                         isDark
-                          ? "bg-[#180438] border border-gray-600 text-white"
-                          : "bg-white text-black",
+                          ? "bg-blue-950/50 border-blue-800"
+                          : "bg-blue-50 border-blue-200",
                       )}
-                      onChange={(e) => setMaxEarningsPerCreator(e.target.value)}
-                      placeholder="e.g., 500 for $500 max per creator"
-                    />
-                    <p className="text-sm text-muted-foreground">
-                      Set a maximum earning cap per creator for{" "}
-                      <strong>THIS CONTEST ONLY</strong>. Once reached, they can
-                      still submit but won't earn more from this campaign. This
-                      does NOT affect their earnings from other contests on the
-                      platform. Helps ensure fair reward distribution within this
-                      campaign.
-                    </p>
-                    {maxEarningsPerCreator &&
-                      parseFloat(maxEarningsPerCreator.toString()) > 0 && (
-                        <Alert
-                          className={cn(
-                            isDark
-                              ? "bg-blue-900/30 border-blue-900"
-                              : "bg-blue-100 border-blue-300",
-                          )}
+                    >
+                      <div className="flex items-center gap-2">
+                        <span className="text-2xl">🎯</span>
+                        <Label
+                          htmlFor="milestoneMaxEarnings"
+                          className="text-base font-semibold"
                         >
-                          <AlertDescription
+                          Maximum Earnings Per Creator (Optional)
+                        </Label>
+                      </div>
+                      <Input
+                        id="milestoneMaxEarnings"
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={maxEarningsPerCreator}
+                        className={cn(
+                          isDark
+                            ? "bg-[#180438] border border-gray-600 text-white"
+                            : "bg-white text-black",
+                        )}
+                        onChange={(e) =>
+                          setMaxEarningsPerCreator(e.target.value)
+                        }
+                        placeholder="e.g., 500 for $500 max per creator"
+                      />
+                      <p className="text-sm text-muted-foreground">
+                        Set a maximum earning cap per creator for{" "}
+                        <strong>THIS CONTEST ONLY</strong>. Once reached, they
+                        can still submit but won't earn more from this campaign.
+                        This does NOT affect their earnings from other contests on
+                        the platform. Helps ensure fair reward distribution within
+                        this campaign.
+                      </p>
+                      {maxEarningsPerCreator &&
+                        parseFloat(maxEarningsPerCreator.toString()) > 0 && (
+                          <Alert
                             className={cn(
-                              isDark ? "text-blue-200" : "text-blue-800",
+                              isDark
+                                ? "bg-blue-900/30 border-blue-900"
+                                : "bg-blue-100 border-blue-300",
                             )}
                           >
-                            ℹ️ Each creator can earn up to{" "}
-                            <strong>
-                              $
-                              {parseFloat(
-                                maxEarningsPerCreator.toString(),
-                              ).toFixed(2)}
-                            </strong>{" "}
-                            from this contest.
-                          </AlertDescription>
-                        </Alert>
-                      )}
-                  </div>
+                            <AlertDescription
+                              className={cn(
+                                isDark ? "text-blue-200" : "text-blue-800",
+                              )}
+                            >
+                              ℹ️ Each creator can earn up to{" "}
+                              <strong>
+                                $
+                                {parseFloat(
+                                  maxEarningsPerCreator.toString(),
+                                ).toFixed(2)}
+                              </strong>{" "}
+                              from this contest.
+                            </AlertDescription>
+                          </Alert>
+                        )}
+                    </div>
+                  )}
                   <div
                     className={cn(
                       "space-y-4 p-4 border rounded-lg",
@@ -7364,7 +7471,9 @@ export default function CreateContestPage({
                     </Alert>
                   )}
               </>
-            ) : (
+                )}
+                {(contestType === "cpm" ||
+                  contestType === "dual_rewards") && (
               <>
                 <div className="space-y-6 py-4 px-1">
                   <h3 className="text-lg font-medium">
@@ -8170,7 +8279,8 @@ export default function CreateContestPage({
                   )}
                   <div className="space-y-2">
                     <Label htmlFor="totalBudgetPrize">
-                      Total Contest Budget (USD){" "}
+                     
+                        Total Contest Budget (USD)
                       <span className="text-red-500">*</span>
                     </Label>
                     <Input
@@ -8191,8 +8301,9 @@ export default function CreateContestPage({
                       min="1"
                     />
                     <p className="text-xs text-muted-foreground">
-                      Required: The maximum total amount to be paid out for this
-                      contest. This is the effective prize pool.
+                      {contestType === "dual_rewards"
+                        ? "One funded amount: the same budget backs both per-view (CPM) payouts and milestone payouts."
+                        : "Required: The maximum total amount to be paid out for this contest. This is the effective prize pool."}
                     </p>
                   </div>
                   <div className="space-y-2">
@@ -8238,6 +8349,8 @@ export default function CreateContestPage({
                     </Alert>
                   )}
               </>
+                )}
+              </>
             )}
 
             {/* Creator earning opportunities */}
@@ -8260,65 +8373,69 @@ export default function CreateContestPage({
 
               {contestType !== "milestone" && (
                 <>
-                  {/* Flat Fee Bonus */}
-                  <div
-                    className={`space-y-3 p-4 border rounded-lg ${
-                      isDark
-                        ? "bg-green-950/40 border-green-800"
-                        : "bg-gradient-to-r from-green-50 to-emerald-50 border-green-200"
-                    }`}
-                  >
-                    <div className="flex items-center gap-2">
-                      <span className="text-2xl">🎁</span>
-                      <Label
-                        htmlFor="flatFeeBonus"
-                        className="text-base font-semibold"
-                      >
-                        Flat Fee Bonus (Per Verified Submission)
-                      </Label>
-                    </div>
-                    <Input
-                      id="flatFeeBonus"
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      value={flatFeeBonus}
-                      onChange={(e) => setFlatFeeBonus(e.target.value)}
-                      placeholder="e.g., 10 for $10 per submission"
-                      className={cn(
+                  {/* Flat Fee Bonus — hidden for dual rewards (CPM + milestone pools only) */}
+                  {contestType !== "dual_rewards" && (
+                    <div
+                      className={`space-y-3 p-4 border rounded-lg ${
                         isDark
-                          ? "bg-green-950/40 border border-gray-600 text-white"
-                          : "bg-white",
-                      )}
-                    />
-                    <p className="text-sm text-muted-foreground">
-                      Optional: Give creators a guaranteed payment for each
-                      verified submission, regardless of views or ranking. This
-                      bonus is paid after the contest ends. Great for encouraging
-                      participation!
-                    </p>
-                    {flatFeeBonus && parseFloat(flatFeeBonus.toString()) > 0 && (
-                      <Alert
+                          ? "bg-green-950/40 border-green-800"
+                          : "bg-gradient-to-r from-green-50 to-emerald-50 border-green-200"
+                      }`}
+                    >
+                      <div className="flex items-center gap-2">
+                        <span className="text-2xl">🎁</span>
+                        <Label
+                          htmlFor="flatFeeBonus"
+                          className="text-base font-semibold"
+                        >
+                          Flat Fee Bonus (Per Verified Submission)
+                        </Label>
+                      </div>
+                      <Input
+                        id="flatFeeBonus"
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={flatFeeBonus}
+                        onChange={(e) => setFlatFeeBonus(e.target.value)}
+                        placeholder="e.g., 10 for $10 per submission"
                         className={cn(
-                          "border",
                           isDark
-                            ? "bg-[#C9A7FF26] border-[#C9A7FF] text-white"
-                            : "bg-[#F0E7FD] border-[#4A00BE] text-green-800",
+                            ? "bg-green-950/40 border border-gray-600 text-white"
+                            : "bg-white",
                         )}
-                      >
-                        <AlertDescription>
-                          ✓ Creators will earn{" "}
-                          <strong>
-                            ${parseFloat(flatFeeBonus.toString()).toFixed(2)}
-                          </strong>{" "}
-                          for each verified submission!
-                        </AlertDescription>
-                      </Alert>
-                    )}
-                  </div>
+                      />
+                      <p className="text-sm text-muted-foreground">
+                        Optional: Give creators a guaranteed payment for each
+                        verified submission, regardless of views or ranking. This
+                        bonus is paid after the contest ends. Great for encouraging
+                        participation!
+                      </p>
+                      {flatFeeBonus &&
+                        parseFloat(flatFeeBonus.toString()) > 0 && (
+                          <Alert
+                            className={cn(
+                              "border",
+                              isDark
+                                ? "bg-[#C9A7FF26] border-[#C9A7FF] text-white"
+                                : "bg-[#F0E7FD] border-[#4A00BE] text-green-800",
+                            )}
+                          >
+                            <AlertDescription>
+                              ✓ Creators will earn{" "}
+                              <strong>
+                                ${parseFloat(flatFeeBonus.toString()).toFixed(2)}
+                              </strong>{" "}
+                              for each verified submission!
+                            </AlertDescription>
+                          </Alert>
+                        )}
+                    </div>
+                  )}
 
               {/* Flat Fee Bonus Cap (Only for CPM contests with flat fee bonus) */}
-              {contestType === "cpm" &&
+              {isCpmContestType(contestType) &&
+                contestType !== "dual_rewards" &&
                 flatFeeBonus &&
                 parseFloat(flatFeeBonus.toString()) > 0 && (
                   <div
@@ -8459,8 +8576,9 @@ export default function CreateContestPage({
                   </div>
                 )}
 
-                  {/* Max Earnings Per Creator */}
-                  {multipleSubmissionsEnabled && (
+                  {/* Max Earnings Per Creator (dual rewards: only here, not in milestone block above) */}
+                  {(multipleSubmissionsEnabled ||
+                    contestType === "dual_rewards") && (
                     <div
                       className={cn(
                         "space-y-3 p-4 border rounded-lg",
@@ -8469,62 +8587,64 @@ export default function CreateContestPage({
                           : "bg-blue-50 border-blue-200",
                       )}
                     >
-                  <div className="flex items-center gap-2">
-                    <span className="text-2xl">🎯</span>
-                    <Label
-                      htmlFor="maxEarnings"
-                      className="text-base font-semibold"
-                    >
-                      Maximum Earnings Per Creator (Optional)
-                    </Label>
-                  </div>
-                  <Input
-                    id="maxEarnings"
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    value={maxEarningsPerCreator}
-                    className={cn(
-                      isDark
-                        ? "bg-[#180438] border border-gray-600 text-white"
-                        : "bg-white text-black",
-                    )}
-                    onChange={(e) => setMaxEarningsPerCreator(e.target.value)}
-                    placeholder="e.g., 500 for $500 max per creator"
-                  />
-                  <p className="text-sm text-muted-foreground">
-                    Set a maximum earning cap per creator for{" "}
-                    <strong>THIS CONTEST ONLY</strong>. Once reached, they can
-                    still submit but won't earn more from this campaign. This
-                    does NOT affect their earnings from other contests on the
-                    platform. Helps ensure fair reward distribution within this
-                    campaign.
-                  </p>
-                  {maxEarningsPerCreator &&
-                    parseFloat(maxEarningsPerCreator.toString()) > 0 && (
-                      <Alert
+                      <div className="flex items-center gap-2">
+                        <span className="text-2xl">🎯</span>
+                        <Label
+                          htmlFor="maxEarnings"
+                          className="text-base font-semibold"
+                        >
+                          Maximum Earnings Per Creator (Optional)
+                        </Label>
+                      </div>
+                      <Input
+                        id="maxEarnings"
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={maxEarningsPerCreator}
                         className={cn(
                           isDark
-                            ? "bg-blue-900/30 border-blue-900"
-                            : "bg-blue-100 border-blue-300",
+                            ? "bg-[#180438] border border-gray-600 text-white"
+                            : "bg-white text-black",
                         )}
-                      >
-                        <AlertDescription
-                          className={cn(
-                            isDark ? "text-blue-200" : "text-blue-800",
-                          )}
-                        >
-                          ℹ️ Each creator can earn up to{" "}
-                          <strong>
-                            $
-                            {parseFloat(
-                              maxEarningsPerCreator.toString(),
-                            ).toFixed(2)}
-                          </strong>{" "}
-                          from this contest.
-                        </AlertDescription>
-                      </Alert>
-                    )}
+                        onChange={(e) =>
+                          setMaxEarningsPerCreator(e.target.value)
+                        }
+                        placeholder="e.g., 500 for $500 max per creator"
+                      />
+                      <p className="text-sm text-muted-foreground">
+                        Set a maximum earning cap per creator for{" "}
+                        <strong>THIS CONTEST ONLY</strong>. Once reached, they
+                        can still submit but won't earn more from this campaign.
+                        This does NOT affect their earnings from other contests
+                        on the platform. Helps ensure fair reward distribution
+                        within this campaign.
+                      </p>
+                      {maxEarningsPerCreator &&
+                        parseFloat(maxEarningsPerCreator.toString()) > 0 && (
+                          <Alert
+                            className={cn(
+                              isDark
+                                ? "bg-blue-900/30 border-blue-900"
+                                : "bg-blue-100 border-blue-300",
+                            )}
+                          >
+                            <AlertDescription
+                              className={cn(
+                                isDark ? "text-blue-200" : "text-blue-800",
+                              )}
+                            >
+                              ℹ️ Each creator can earn up to{" "}
+                              <strong>
+                                $
+                                {parseFloat(
+                                  maxEarningsPerCreator.toString(),
+                                ).toFixed(2)}
+                              </strong>{" "}
+                              from this contest.
+                            </AlertDescription>
+                          </Alert>
+                        )}
                     </div>
                   )}
                 </>
@@ -9659,7 +9779,11 @@ export default function CreateContestPage({
                 <RadioGroup
                   value={contestType}
                   onValueChange={(
-                    value: "leaderboard" | "cpm" | "milestone",
+                    value:
+                      | "leaderboard"
+                      | "cpm"
+                      | "milestone"
+                      | "dual_rewards",
                   ) => {
                     const planFeatures = getPlanFeatures(userPlan);
                     const hasCpmAccess =
@@ -9667,12 +9791,17 @@ export default function CreateContestPage({
                       planFeatures.contestTypes.includes("cpm");
 
                     if (
-                      (value === "cpm" || value === "milestone") &&
+                      (value === "cpm" ||
+                        value === "milestone" ||
+                        value === "dual_rewards") &&
                       !hasCpmAccess
                     ) {
                       return;
                     }
-                    if (value === "milestone" && contestFormat !== "video") {
+                    if (
+                      (value === "milestone" || value === "dual_rewards") &&
+                      contestFormat !== "video"
+                    ) {
                       return;
                     }
                     setContestType(value);
@@ -9856,6 +9985,84 @@ export default function CreateContestPage({
                               <div className="mt-2 flex items-center gap-2">
                                 {isFreePlan && (
                                   <button
+                                    className={cn(
+                                      "text-white text-md px-3 rounded-full py-1 h-8",
+                                      isDark ? "bg-[#7F39EC]" : "bg-[#4A00BE]",
+                                    )}
+                                  >
+                                    <Link href="/dashboard/billing?tab=subscription">
+                                      Upgrade Plan
+                                    </Link>
+                                  </button>
+                                )}
+                                <p
+                                  className={cn(
+                                    "text-sm font-medium",
+                                    isDark ? "text-white" : "text-black",
+                                  )}
+                                >
+                                  Available in paid plans only
+                                </p>
+                              </div>
+                            )}
+                          </Label>
+                        </div>
+                      );
+                    })()}
+                  {contestFormat === "video" &&
+                    (() => {
+                      const planFeatures = getPlanFeatures(userPlan);
+                      const hasCpmAccess =
+                        planFeatures.contestTypes &&
+                        planFeatures.contestTypes.includes("cpm");
+                      const currentPlan = dbSubscriptionPlans.find(
+                        (p) => p.id === userPlan,
+                      );
+                      const isFreePlan = !currentPlan || currentPlan.price === 0;
+                      const isDisabled = !hasCpmAccess;
+
+                      return (
+                        <div
+                          className={`flex items-center space-x-2 p-4 border ${
+                            isDark ? "border-gray-600" : "border-gray-300"
+                          } rounded-lg flex-1 min-w-[220px] ${
+                            isDisabled
+                              ? isDark
+                                ? "opacity-50 cursor-not-allowed bg-slate-800"
+                                : "opacity-50 cursor-not-allowed bg-gray-50"
+                              : `cursor-pointer hover:bg-[#D9C0FF26] ${
+                                  contestType === "dual_rewards"
+                                    ? "bg-[#D9C0FF26] border-[#7F39EC]"
+                                    : ""
+                                }`
+                          }`}
+                        >
+                          <RadioGroupItem
+                            value="dual_rewards"
+                            id="dual_rewards"
+                            disabled={isDisabled}
+                          />
+                          <Label
+                            htmlFor="dual_rewards"
+                            className={
+                              isDisabled
+                                ? "cursor-not-allowed"
+                                : "cursor-pointer"
+                            }
+                          >
+                            <span className="font-semibold text-lg">
+                              Dual Rewards Contest
+                            </span>
+                            <p className="text-[14px] leading-tight mt-[2px] text-muted-foreground">
+                              Earn per view at your CPM rate plus unlock
+                              milestone rewards as creators hit view targets
+                              (video contests).
+                            </p>
+                            {!hasCpmAccess && (
+                              <div className="mt-2 flex items-center gap-2">
+                                {isFreePlan && (
+                                  <button
+                                    type="button"
                                     className={cn(
                                       "text-white text-md px-3 rounded-full py-1 h-8",
                                       isDark ? "bg-[#7F39EC]" : "bg-[#4A00BE]",

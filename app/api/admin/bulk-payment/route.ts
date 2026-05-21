@@ -127,6 +127,16 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    if (contest.contest_type === "dual_rewards") {
+      return NextResponse.json(
+        {
+          error:
+            "Dual rewards contests use per-submission payout (CPM and milestone components). Use the contest submissions UI or verify-submission API instead of bulk payment.",
+        },
+        { status: 400 },
+      );
+    }
+
     // Filter to verified (or legacy "approved") submissions — same notion as verify-submission / UI.
     // For bonus-only payouts, also accept rows whose standard reward was already paid
     // (status="paid" or paid=true) but whose flat-fee bonus is still unpaid. This mirrors
@@ -218,14 +228,85 @@ export async function POST(request: NextRequest) {
     const totalBudget = contestDetails?.total_budget || null;
     const flatFeeBonusCap = contestDetails?.flat_fee_bonus_cap || null;
 
-    const maxEarnings = contest.max_earnings_per_creator || null;
+    const maxEarnings =
+      contest.max_earnings_per_creator ||
+      contestDetails?.max_earnings_per_creator ||
+      null;
 
     const payoutAdjustment = parsePayoutAdjustment(
       contest.payout_adjustment_percentage,
       contest.payout_adjustment_mode,
+      { contestType: contest.contest_type },
     );
     const shouldAdjustReward = payoutAdjustment.shouldAdjustReward;
     const shouldAdjustBonus = payoutAdjustment.shouldAdjustBonus;
+
+    // Check bonus budget/cap before processing
+    if (
+      (payment_type === "bonus" || payment_type === "both") &&
+      flatFeeBonus > 0
+    ) {
+      // Calculate current bonus spending
+      const { data: bonusSpendingData } = await supabaseAdmin
+        .from("submissions")
+        .select("bonus_amount")
+        .eq("contest_id", contest_id)
+        .eq("bonus_paid", true);
+
+      const currentBonusSpent = (bonusSpendingData || []).reduce(
+        (sum, sub) => sum + (sub.bonus_amount || 0),
+        0,
+      );
+
+      // Calculate potential bonus spending for this bulk payment (only unpaid bonuses)
+      const unpaidBonusSubmissions = verifiedSubmissions.filter(
+        (s) => !s.bonus_paid,
+      );
+      const potentialBonusSpending =
+        unpaidBonusSubmissions.length * flatFeeBonus;
+
+      // For leaderboard contests with total_budget, check if budget would be exceeded
+      if (contest.contest_type === "leaderboard" && totalBudget) {
+        if (currentBonusSpent + potentialBonusSpending > totalBudget) {
+          return NextResponse.json(
+            {
+              error: "Total budget would be exceeded",
+              details: {
+                currentSpent: currentBonusSpent,
+                potentialSpending: potentialBonusSpending,
+                budgetLimit: totalBudget,
+                remaining: totalBudget - currentBonusSpent,
+                maxSubmissions: Math.floor(
+                  (totalBudget - currentBonusSpent) / flatFeeBonus,
+                ),
+              },
+            },
+            { status: 400 },
+          );
+        }
+      }
+
+      // For CPM contests with flat_fee_bonus_cap, check if cap would be exceeded
+      if (contest.contest_type === "cpm" && flatFeeBonusCap) {
+        if (currentBonusSpent + potentialBonusSpending > flatFeeBonusCap) {
+          return NextResponse.json(
+            {
+              error: "Flat fee bonus cap would be exceeded",
+              details: {
+                currentSpent: currentBonusSpent,
+                potentialSpending: potentialBonusSpending,
+                capLimit: flatFeeBonusCap,
+                remaining: flatFeeBonusCap - currentBonusSpent,
+                maxSubmissions: Math.floor(
+                  (flatFeeBonusCap - currentBonusSpent) / flatFeeBonus,
+                ),
+              },
+            },
+            { status: 400 },
+          );
+        }
+      }
+    }
 
     // Calculate earnings for each submission
     let runningTotal = 0;

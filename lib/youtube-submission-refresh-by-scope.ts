@@ -294,15 +294,13 @@ export async function updateYouTubeSubmissionForScope(
             updates.avg_view_duration_seconds = analytics.avg_view_duration_seconds;
             updates.avg_view_percentage = analytics.avg_view_percentage;
             updates.engaged_views = analytics.engaged_views;
-            updates.likes = analytics.likes;
-            updates.dislikes = analytics.dislikes;
-            updates.comments = analytics.comments;
+            // Likes/comments/dislikes from Analytics API are windowed (startDate→today), not
+            // lifetime totals. Use Data API (basic/all) or preserve existing via merge.
             updates.shares = analytics.shares;
             updates.subscribers_gained = analytics.subscribers_gained;
             updates.subscribers_lost = analytics.subscribers_lost;
             updates.videos_added_to_playlists = analytics.videos_added_to_playlists;
             updates.videos_removed_from_playlists = analytics.videos_removed_from_playlists;
-            updates.last_basic_update = now;
           }
         } catch (err: unknown) {
           const code = (err as { code?: number; status?: number })?.code ?? (err as { status?: number })?.status;

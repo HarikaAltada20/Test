@@ -17,10 +17,11 @@ const LABELS: Record<string, string> = {
   leaderboard: "Leaderboard",
   cpm: "CPM",
   milestone: "Milestone",
+  dual_rewards: "Dual Rewards",
 };
 
 interface ContestTypeFilterProps {
-  value?: "all" | "leaderboard" | "cpm" | "milestone";
+  value?: "all" | "leaderboard" | "cpm" | "milestone" | "dual_rewards";
   onChange?: (value: string) => void;
 }
 
@@ -160,6 +161,21 @@ export default function ContestTypeFilter({
           )}
           {value !== "milestone" && <span className="w-4" />}
           Milestone
+        </DropdownMenuItem>
+        <DropdownMenuItem
+          className={cn(
+            "flex items-center gap-2 cursor-pointer font-medium",
+            isDark ? "text-white focus:bg-white/10" : "text-gray-900",
+          )}
+          onClick={() => onChange("dual_rewards")}
+        >
+          {value === "dual_rewards" && (
+            <span className="w-4 h-4 flex items-center justify-center text-xs">
+              ✓
+            </span>
+          )}
+          {value !== "dual_rewards" && <span className="w-4" />}
+          Dual Rewards
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>

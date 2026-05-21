@@ -1,6 +1,11 @@
 "use client";
 
 import { calculateMilestoneBudgetSpent } from "@/lib/contest-utils-client";
+import {
+  getPoolBudgetCentsFromDetails,
+  isCpmContestType,
+  isMilestoneContestType,
+} from "@/lib/contest-type";
 import { cn } from "@/lib/utils";
 import { useEffect, useMemo, useState } from "react";
 
@@ -48,10 +53,9 @@ export function BudgetProgress({
 }: BudgetProgressProps) {
   const [mode, setMode] = useState<"light" | "dark">("light");
   // Get contest config outside useMemo so it's available in the component
-  const cpmConfig =
-    contest.contest_type === "cpm"
-      ? (contest.contest_based_details as any)?.cpm_contest
-      : null;
+  const cpmConfig = isCpmContestType(contest.contest_type)
+    ? (contest.contest_based_details as any)?.cpm_contest
+    : null;
   const leaderboardConfig =
     contest.contest_type === "leaderboard"
       ? (contest.contest_based_details as any)?.leaderboard_contest
@@ -59,18 +63,19 @@ export function BudgetProgress({
 
   const flatFeeBonus =
     cpmConfig?.flat_fee_bonus || leaderboardConfig?.flat_fee_bonus || 0;
-  const milestoneContestConfig =
-    contest.contest_type === "milestone"
-      ? (contest.contest_based_details as any)?.milestone_contest
-      : null;
+  const milestoneContestConfig = isMilestoneContestType(
+    contest.contest_type,
+  )
+    ? (contest.contest_based_details as any)?.milestone_contest
+    : null;
   const milestoneCreatorBonusConfigured = Boolean(
     milestoneContestConfig?.bonus?.enabled &&
       (milestoneContestConfig?.bonus?.most_verified_views ||
         milestoneContestConfig?.bonus?.most_verified_reels),
   );
   const hasFlatFeeBonus =
-    flatFeeBonus > 0 ||
-    (contest.contest_type === "milestone" &&
+    (contest.contest_type !== "dual_rewards" && flatFeeBonus > 0) ||
+    (isMilestoneContestType(contest.contest_type) &&
       (milestoneCreatorBonusConfigured ||
         (typeof milestoneCreatorBonusExpectedCents === "number" &&
           milestoneCreatorBonusExpectedCents > 0) ||
@@ -91,8 +96,17 @@ export function BudgetProgress({
     bonusSpent,
     totalSpent,
   } = useMemo(() => {
-    // Use total_budget from the contest object (works for CPM, Leaderboard, and Milestone)
-    const totalBudget = contest.total_budget || 0;
+    // Use contest row total_budget when set; else pool from contest_based_details (dual: root total_budget_cents via helper)
+    let totalBudget =
+      contest.total_budget && contest.total_budget > 0
+        ? contest.total_budget
+        : 0;
+    if (totalBudget <= 0 && contest.contest_type !== "leaderboard") {
+      totalBudget = getPoolBudgetCentsFromDetails(
+        contest.contest_type,
+        contest.contest_based_details,
+      );
+    }
 
     const prizePoolTotal =
       contest.contest_type === "leaderboard"
@@ -102,7 +116,7 @@ export function BudgetProgress({
     // For CPM contests, use flat_fee_bonus_cap if configured, otherwise total_budget
     // For leaderboard contests, use total_budget
     const bonusBudget =
-      contest.contest_type === "cpm" && cpmConfig?.flat_fee_bonus_cap
+      isCpmContestType(contest.contest_type) && cpmConfig?.flat_fee_bonus_cap
         ? cpmConfig.flat_fee_bonus_cap
         : contest.total_budget || 0;
 
@@ -272,6 +286,8 @@ export function BudgetProgress({
       }
     });
 
+    const isDualRewards = contest.contest_type === "dual_rewards";
+
     for (const sub of sortedSubmissions) {
       const creatorId = (sub as any).creator_id;
       if (!creatorEarnings.has(creatorId)) {
@@ -295,7 +311,7 @@ export function BudgetProgress({
             2
           )}`
         );
-      } else if (sub.paid && sub.earnings != null) {
+      } else if (!isDualRewards && sub.paid && sub.earnings != null) {
         // Use actual paid earnings from database for non-Twitter platforms (YouTube, Instagram)
         submissionEarnings = sub.earnings / 100; // Convert cents to dollars
         console.log(
@@ -304,7 +320,10 @@ export function BudgetProgress({
           } Paid] earnings=${submissionEarnings.toFixed(2)}`
         );
       } else {
-        // Calculate expected earnings for verified unpaid (YouTube, Instagram)
+        // Calculate expected earnings from CPM formula.
+        // For dual rewards we intentionally keep CPM contribution formula-based
+        // (not from custom paid amount), so CPM + milestone tracker never drops
+        // after paying one component.
         let views = (sub as any).views || 0;
         if (minViews != null && views < minViews) views = 0;
         if (maxViews != null && views > maxViews) views = maxViews;
@@ -336,12 +355,12 @@ export function BudgetProgress({
         const actualBonus = (sub as any).bonus_amount / 100;
         creatorData.bonusTotal += actualBonus;
         totalBonusSpentSoFar += actualBonus;
-      } else if (flatFeeBonus > 0) {
+      } else if (flatFeeBonus > 0 && contest.contest_type !== "dual_rewards") {
         // For both CPM and leaderboard contests, check if we can add this bonus
         const bonusAmount = flatFeeBonus / 100;
         let budgetCap = null;
 
-        if (contest.contest_type === "cpm" && capInDollars !== null) {
+        if (isCpmContestType(contest.contest_type) && capInDollars !== null) {
           budgetCap = capInDollars;
         } else if (contest.contest_type === "leaderboard" && totalBudget > 0) {
           // For leaderboard contests, use total_budget as the cap for flat fee bonuses
@@ -374,7 +393,7 @@ export function BudgetProgress({
 
     const manualAdjustments = creatorManualPointsAdjustments || {};
     if (
-      contest.contest_type === "cpm" &&
+      isCpmContestType(contest.contest_type) &&
       cpmRate > 0 &&
       Object.keys(manualAdjustments).length > 0
     ) {
@@ -416,8 +435,75 @@ export function BudgetProgress({
       bonusTotal += earnings.bonusTotal;
     }
 
-    const cpmPaid = Math.round(cpmTotal * 100); // Convert back to cents
-    const bonusPaid = Math.round(bonusTotal * 100); // Convert back to cents
+    let cpmPaid = Math.round(cpmTotal * 100); // Convert back to cents
+    let bonusPaid = Math.round(bonusTotal * 100); // Convert back to cents
+
+    if (contest.contest_type === "dual_rewards") {
+      const milestoneContest = (contest.contest_based_details as any)
+        ?.milestone_contest;
+      const milestones = milestoneContest?.milestones || [];
+      const normalizeMilestoneStatus = (raw: unknown) => {
+        const st = String(raw || "").toLowerCase();
+        return st === "approved" ? "verified" : st;
+      };
+      const subsForMilestone = submissions.map((s) => ({
+        ...(s as object),
+        status: normalizeMilestoneStatus((s as any).status),
+      }));
+
+      const useDetailMilestone =
+        typeof milestoneExpectedPayoutCents === "number" &&
+        !Number.isNaN(milestoneExpectedPayoutCents) &&
+        milestoneExpectedPayoutCents >= 0;
+      const aggregateMilestoneCents =
+        milestones.length > 0
+          ? Math.round(
+              calculateMilestoneBudgetSpent(
+                subsForMilestone as any,
+                milestones,
+              ) * 100,
+            )
+          : 0;
+      const milestoneCents = useDetailMilestone
+        ? Math.round(milestoneExpectedPayoutCents!)
+        : aggregateMilestoneCents;
+
+      let bonusPaidFromSubmissions = 0;
+      for (const s of submissions) {
+        const st = normalizeMilestoneStatus((s as any).status).toLowerCase();
+        if (st !== "verified" && st !== "paid") continue;
+        if (twitterExcluded(s)) continue;
+        if ((s as any).bonus_paid && (s as any).bonus_amount != null) {
+          bonusPaidFromSubmissions += Number((s as any).bonus_amount) || 0;
+        }
+      }
+
+      const useDetailBonusExpected =
+        typeof milestoneCreatorBonusExpectedCents === "number" &&
+        !Number.isNaN(milestoneCreatorBonusExpectedCents) &&
+        milestoneCreatorBonusExpectedCents >= 0;
+      const bonusExpectedCents = useDetailBonusExpected
+        ? Math.round(milestoneCreatorBonusExpectedCents)
+        : 0;
+
+      const useDetailBonusPaidMap =
+        typeof milestoneCreatorBonusPaidCents === "number" &&
+        !Number.isNaN(milestoneCreatorBonusPaidCents) &&
+        milestoneCreatorBonusPaidCents >= 0;
+      const bonusPaidFromMap = useDetailBonusPaidMap
+        ? Math.round(milestoneCreatorBonusPaidCents)
+        : null;
+
+      const creatorBonusCents = useDetailBonusExpected
+        ? bonusExpectedCents
+        : bonusPaidFromMap !== null && bonusPaidFromMap > 0
+          ? bonusPaidFromMap
+          : bonusPaidFromSubmissions;
+
+      cpmPaid = cpmPaid + milestoneCents;
+      bonusPaid = creatorBonusCents;
+    }
+
     const totalSpent = cpmPaid + bonusPaid;
 
     // For leaderboard contests, calculate prize pool spending (from actual paid submissions)
@@ -488,11 +574,12 @@ export function BudgetProgress({
   const remaining = Math.max(0, totalBudget - totalSpent);
   const isNearLimit = totalPercentage >= 80;
 
-  // Only show for CPM, leaderboard, and milestone contests
+  // Only show for CPM, leaderboard, milestone, and dual rewards contests
   if (
     contest.contest_type !== "cpm" &&
     contest.contest_type !== "leaderboard" &&
-    contest.contest_type !== "milestone"
+    contest.contest_type !== "milestone" &&
+    contest.contest_type !== "dual_rewards"
   ) {
     return null;
   }
@@ -689,24 +776,32 @@ export function BudgetProgress({
                 )} | Creator bonus: ${formatCurrency(
                   bonusPaid,
                 )} | Total: ${formatCurrency(totalSpent)}`
-              : `${
-                  contest.contest_type === "cpm" ? "CPM" : "Contest"
-                } Earnings: ${formatCurrency(
-                  cpmPaid,
-                )} | Flat Fee Bonus: ${formatCurrency(bonusPaid)}${
-                  contest.contest_type === "cpm" &&
-                  bonusBudget &&
-                  bonusBudget > 0
-                    ? ` / ${formatCurrency(bonusBudget)} cap`
-                    : ""
-                } | Total: ${formatCurrency(totalSpent)}`
+              : contest.contest_type === "dual_rewards"
+                ? `CPM + Milestone (expected): ${formatCurrency(
+                    cpmPaid,
+                  )} | Creator bonus: ${formatCurrency(
+                    bonusPaid,
+                  )} | Total: ${formatCurrency(totalSpent)}`
+                : `${
+                    contest.contest_type === "cpm" ? "CPM" : "Contest"
+                  } Earnings: ${formatCurrency(
+                    cpmPaid,
+                  )} | Flat Fee Bonus: ${formatCurrency(bonusPaid)}${
+                    contest.contest_type === "cpm" &&
+                    bonusBudget &&
+                    bonusBudget > 0
+                      ? ` / ${formatCurrency(bonusBudget)} cap`
+                      : ""
+                  } | Total: ${formatCurrency(totalSpent)}`
             : contest.contest_type === "milestone"
               ? `Milestone payouts (expected): ${formatCurrency(cpmPaid)}`
-              : `Total ${
-                  contest.contest_type === "cpm"
-                    ? "CPM earnings (based on platform)"
-                    : "contest earnings"
-                }: ${formatCurrency(cpmPaid)}`
+              : contest.contest_type === "dual_rewards"
+                ? `CPM + Milestone (expected): ${formatCurrency(cpmPaid)}`
+                : `Total ${
+                    contest.contest_type === "cpm"
+                      ? "CPM earnings (based on platform)"
+                      : "contest earnings"
+                  }: ${formatCurrency(cpmPaid)}`
         }
       >
         {/* CPM/Leaderboard earnings portion */}
@@ -714,7 +809,7 @@ export function BudgetProgress({
           className="absolute h-full bg-gradient-to-r from-blue-500 to-blue-600 transition-all duration-300"
           style={{ width: `${Math.min(cpmPercentage, 100)}%` }}
         />
-        {/* Flat fee bonus portion */}
+        {/* Flat fee bonus (CPM) or creator bonus (milestone / dual) */}
         {hasFlatFeeBonus && bonusPaid > 0 && (
           <div
             className="absolute h-full bg-gradient-to-r from-green-500 to-green-600 transition-all duration-300"
@@ -744,11 +839,13 @@ export function BudgetProgress({
                 isDark ? "text-gray-300" : "text-gray-700"
               )}
             >
-              {contest.contest_type === "cpm"
-                ? "CPM Earnings"
-                : contest.contest_type === "milestone"
-                  ? "Milestone payouts"
-                  : "Contest Earnings"}
+              {contest.contest_type === "dual_rewards"
+                ? "CPM + Milestone earnings"
+                : contest.contest_type === "cpm"
+                  ? "CPM Earnings"
+                  : contest.contest_type === "milestone"
+                    ? "Milestone payouts"
+                    : "Contest Earnings"}
             </p>
             <p
               className={cn(
@@ -770,7 +867,8 @@ export function BudgetProgress({
                   isDark ? "text-gray-300" : "text-gray-700"
                 )}
               >
-                {contest.contest_type === "milestone"
+                {contest.contest_type === "milestone" ||
+                contest.contest_type === "dual_rewards"
                   ? "Creator bonus"
                   : "Flat Fee Bonus"}
               </p>
@@ -781,7 +879,8 @@ export function BudgetProgress({
                 )}
               >
                 {formatCurrency(bonusPaid)}
-                {contest.contest_type === "cpm" &&
+                {isCpmContestType(contest.contest_type) &&
+                  contest.contest_type !== "dual_rewards" &&
                   bonusBudget &&
                   bonusBudget > 0 && (
                     <span

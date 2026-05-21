@@ -17,6 +17,7 @@ import {
 } from "@/lib/instagram-insights";
 import { insertMetaGraphUsageLogRow } from "@/lib/meta-graph/meta-graph-usage-log";
 import type { MetaGraphUsageAccumulator } from "@/lib/meta-graph/usage-accumulator";
+import { insightsRefreshInsightsStatusOrFilter } from "@/lib/insights-refresh-eligibility";
 
 async function mapLimit<T, R>(
   items: readonly T[],
@@ -94,7 +95,7 @@ export async function POST(
       .eq("platform", "instagram")
       .neq("status", "rejected")
       .not("video_id", "is", null)
-      .or("insights_status.is.null,insights_status.neq.permanent_failure")
+      .or(insightsRefreshInsightsStatusOrFilter())
       .or(`last_insights_update.is.null,last_insights_update.lt.${runStartedAt}`)
       .order("last_insights_update", { ascending: true, nullsFirst: true })
       .order("id", { ascending: true })

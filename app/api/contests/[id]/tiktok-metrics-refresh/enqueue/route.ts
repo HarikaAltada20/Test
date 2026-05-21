@@ -21,6 +21,7 @@ import {
   isQStashEnabled,
   triggerProcessTikTokMetricsQueue,
 } from "@/lib/qstash";
+import { insightsRefreshInsightsStatusOrFilter } from "@/lib/insights-refresh-eligibility";
 
 const BATCH_SIZE = 50;
 
@@ -181,7 +182,7 @@ export async function POST(
       .eq("platform", "tiktok")
       .neq("status", "rejected")
       .or("video_id.not.is.null,content_link.not.is.null")
-      .or("insights_status.is.null,insights_status.neq.permanent_failure");
+      .or(insightsRefreshInsightsStatusOrFilter());
     if (eligibleCountError) {
       return NextResponse.json(
         { error: "Failed to count eligible submissions" },

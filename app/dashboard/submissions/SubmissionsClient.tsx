@@ -81,7 +81,12 @@ interface SubmissionsClientProps {
   fetchError?: string;
 }
 
-type ContestTypeFilter = "all" | "leaderboard" | "cpm" | "milestone";
+type ContestTypeFilter =
+  | "all"
+  | "leaderboard"
+  | "cpm"
+  | "milestone"
+  | "dual_rewards";
 type StatusFilter =
   | "all"
   | "pending"
@@ -249,8 +254,12 @@ export default function SubmissionsClient({
   const [filteredSubmissions, setFilteredSubmissions] =
     useState<SubmissionWithContest[]>(initialSubmissions);
 
-  const [contestTypeFilter, setContestTypeFilter] =
-    useState<string[]>(["leaderboard", "cpm", "milestone"]);
+  const [contestTypeFilter, setContestTypeFilter] = useState<string[]>([
+    "leaderboard",
+    "cpm",
+    "milestone",
+    "dual_rewards",
+  ]);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [platformFilter, setPlatformFilter] = useState<string[]>([
     "youtube", "instagram", "tiktok"
@@ -287,6 +296,12 @@ export default function SubmissionsClient({
   const isPayoutsProcessed = (c: any) => c?.post_contest_status === "payouts_processed";
   const isSubmissionPaid = (s: SubmissionWithContest) =>
     (s.status as string || "").toLowerCase() === "paid" || (s as any).paid === true;
+
+  const formatContestTypeFilterLabel = (id: string) => {
+    if (id === "dual_rewards") return "Dual Rewards";
+    if (id === "cpm") return "CPM";
+    return id.charAt(0).toUpperCase() + id.slice(1);
+  };
 
   const getMilestoneMatchForSubmission = (
     submission: SubmissionWithContest,
@@ -338,10 +353,31 @@ export default function SubmissionsClient({
     return Number(submission.views ?? 0);
   };
 
+  /** CPM-only portion of dual_rewards (cents), before contest-level payout adjustment. */
+  const getDualRewardsCpmEstimatedCents = (
+    submission: SubmissionWithContest,
+    contest: any,
+  ) => {
+    const cpmConfig =
+      contest.contest_based_details &&
+        typeof contest.contest_based_details === "object" &&
+        "cpm_contest" in (contest.contest_based_details as any)
+        ? ((contest.contest_based_details as any).cpm_contest as unknown as CpmContestDetails)
+        : null;
+    const views = getPlatformEffectiveViews(submission);
+    let effectiveViews = views;
+    if (cpmConfig?.min_views != null && views < cpmConfig.min_views) effectiveViews = 0;
+    else if (cpmConfig?.max_views != null && views > cpmConfig.max_views)
+      effectiveViews = cpmConfig.max_views;
+    const rateUsd = cpmConfig?.cpm_rate_usd ?? 0;
+    return Math.round((effectiveViews * rateUsd) / 10);
+  };
+
   const applyContestRewardAdjustment = (amountCents: number, contest: any) => {
     const adjustment = parsePayoutAdjustment(
       contest?.payout_adjustment_percentage,
       contest?.payout_adjustment_mode,
+      { contestType: contest?.contest_type ?? null },
     );
     return adjustRewardCents(amountCents, {
       shouldAdjustReward: adjustment.shouldAdjustReward,
@@ -385,6 +421,15 @@ export default function SubmissionsClient({
       if (subStatus === "rejected") return 0;
       return applyContestRewardAdjustment(
         getMilestoneEstimatedEarningsCents(submission, contest),
+        contest,
+      );
+    }
+
+    if (contest?.contest_type === "dual_rewards") {
+      if (subStatus === "rejected") return 0;
+      return applyContestRewardAdjustment(
+        getDualRewardsCpmEstimatedCents(submission, contest) +
+          getMilestoneEstimatedEarningsCents(submission, contest),
         contest,
       );
     }
@@ -457,6 +502,26 @@ export default function SubmissionsClient({
 
       return applyContestRewardAdjustment(
         getMilestoneEstimatedEarningsCents(submission, contest),
+        contest,
+      );
+    }
+
+    if (contest?.contest_type === "dual_rewards") {
+      if (subStatus === "rejected") return 0;
+
+      const isVerificationComplete =
+        postContestStatus === "verification_complete";
+      if (isVerificationComplete) {
+        const isConfirmed =
+          subStatus === "verified" ||
+          subStatus === "paid" ||
+          (submission as any).paid === true;
+        if (!isConfirmed) return 0;
+      }
+
+      return applyContestRewardAdjustment(
+        getDualRewardsCpmEstimatedCents(submission, contest) +
+          getMilestoneEstimatedEarningsCents(submission, contest),
         contest,
       );
     }
@@ -768,7 +833,7 @@ export default function SubmissionsClient({
     let submissions = [...allSubmissions];
 
     // Filter by contest type
-    if (contestTypeFilter.length < 3) {
+    if (contestTypeFilter.length < 4) {
       submissions = submissions.filter(
         (sub) => sub.contests?.contest_type && contestTypeFilter.includes(sub.contests.contest_type)
       );
@@ -1129,14 +1194,6 @@ export default function SubmissionsClient({
 
   const renderSubmissionCard = (submission: SubmissionWithContest) => {
     const contest = submission.contests;
-    const cpmConfig =
-      contest?.contest_type === "cpm" &&
-        contest.contest_based_details &&
-        typeof contest.contest_based_details === "object" &&
-        contest.contest_based_details !== null &&
-        "cpm_contest" in contest.contest_based_details
-        ? (contest.contest_based_details.cpm_contest as unknown as CpmContestDetails)
-        : null;
 
     const displayStatus = getDisplayStatus(submission);
     const views = submission.views ?? 0;
@@ -1164,7 +1221,8 @@ export default function SubmissionsClient({
     const totalEarningsCents = getSubmissionDisplayEarningsAmount(submission);
     const earningsInDollars = centsToDollars(totalEarningsCents);
     const milestoneMatch =
-      contest?.contest_type === "milestone"
+      contest?.contest_type === "milestone" ||
+      contest?.contest_type === "dual_rewards"
         ? getMilestoneMatchForSubmission(submission, contest)
         : null;
 
@@ -1179,7 +1237,11 @@ export default function SubmissionsClient({
         // Finalized, fully earned amount in dark green
         color: "text-green-700",
       };
-    } else if (contest?.contest_type === "cpm" || contest?.contest_type === "milestone") {
+    } else if (
+      contest?.contest_type === "cpm" ||
+      contest?.contest_type === "milestone" ||
+      contest?.contest_type === "dual_rewards"
+    ) {
       const label = isPayoutsProcessedVal
         ? "Amount Earned"
         : "Estimated Earnings";
@@ -1209,7 +1271,9 @@ export default function SubmissionsClient({
     // Status-based color overrides for CPM submissions
     if (
       earningsDisplay &&
-      (contest?.contest_type === "cpm" || contest?.contest_type === "milestone")
+      (contest?.contest_type === "cpm" ||
+        contest?.contest_type === "milestone" ||
+        contest?.contest_type === "dual_rewards")
     ) {
       if (isPaidCard && isPayoutsProcessedVal) {
         // Fully finalized
@@ -1427,7 +1491,15 @@ export default function SubmissionsClient({
             </span>
             <span className="opacity-40 flex-shrink-0">•</span>
             <Badge variant="outline" className="text-[10px] font-bold uppercase tracking-wider px-2 py-0 rounded-full border-slate-300 dark:border-slate-600">
-              {contest?.contest_type === "leaderboard" ? "Leaderboard" : contest?.contest_type === "cpm" ? "CPM" : contest?.contest_type || "—"}
+              {contest?.contest_type === "leaderboard"
+                ? "Leaderboard"
+                : contest?.contest_type === "cpm"
+                  ? "CPM"
+                  : contest?.contest_type === "milestone"
+                    ? "Milestone"
+                    : contest?.contest_type === "dual_rewards"
+                      ? "Dual Rewards"
+                      : contest?.contest_type || "—"}
             </Badge>
             {contest?.contest_type === "leaderboard" && null}
           </div>
@@ -1459,6 +1531,15 @@ export default function SubmissionsClient({
                         ? `Milestone ${milestoneMatch.order}`
                         : "Milestone"}{" "}
                       • Required Views: {milestoneMatch.targetViews.toLocaleString()}
+                    </p>
+                  )}
+                {contest?.contest_type === "dual_rewards" && milestoneMatch && (
+                    <p className={cn("text-[12px] font-medium", isDark ? "text-slate-300" : "text-slate-600")}>
+                      {milestoneMatch.order > 0
+                        ? `Milestone ${milestoneMatch.order}`
+                        : "Milestone"}{" "}
+                      • Required Views:{" "}
+                      {milestoneMatch.targetViews.toLocaleString()}
                     </p>
                   )}
                 {isPayoutsProcessedVal && (submission as any).paid_at && (
@@ -1678,7 +1759,8 @@ export default function SubmissionsClient({
 
             {/* Contest meta: CPM rate, bonus availability, submissions allowed */}
             <div className="mt-2 flex flex-wrap gap-2">
-              {contest?.contest_type === "cpm" &&
+              {(contest?.contest_type === "cpm" ||
+                contest?.contest_type === "dual_rewards") &&
                 cpmRateUsd != null &&
                 !Number.isNaN(cpmRateUsd) &&
                 cpmRateUsd > 0 && (
@@ -2119,8 +2201,8 @@ export default function SubmissionsClient({
             >
               <Trophy className="mr-2 h-4 w-4 opacity-70" />
               <span className="truncate">
-                {contestTypeFilter.length === 3 ? "All Types" :
-                  contestTypeFilter.map(t => t.charAt(0).toUpperCase() + t.slice(1)).join(", ")}
+                {contestTypeFilter.length === 4 ? "All Types" :
+                  contestTypeFilter.map((t) => formatContestTypeFilterLabel(t)).join(", ")}
               </span>
               <ChevronRight className="ml-auto h-4 w-4 opacity-50 rotate-90" />
             </Button>
@@ -2130,7 +2212,8 @@ export default function SubmissionsClient({
               {[
                 { id: "leaderboard", label: "Leaderboard" },
                 { id: "cpm", label: "CPM" },
-                { id: "milestone", label: "Milestone" }
+                { id: "milestone", label: "Milestone" },
+                { id: "dual_rewards", label: "Dual Rewards" },
               ].map(type => (
                 <div
                   key={type.id}
@@ -2495,14 +2578,6 @@ export default function SubmissionsClient({
           <div className="flex flex-col gap-4 mt-4 w-full min-w-0">
             {selectedContestGroup?.submissions?.map((submission: SubmissionWithContest) => {
               const contest = submission.contests;
-              const cpmConfig =
-                contest?.contest_type === "cpm" &&
-                  contest.contest_based_details &&
-                  typeof contest.contest_based_details === "object" &&
-                  contest.contest_based_details !== null &&
-                  "cpm_contest" in contest.contest_based_details
-                  ? (contest.contest_based_details.cpm_contest as unknown as CpmContestDetails)
-                  : null;
               const views = submission.views ?? 0;
               const contestId = contest?.id;
               const isEnded = contest?.end_date ? new Date(contest.end_date) < new Date() : false;
@@ -2563,7 +2638,8 @@ export default function SubmissionsClient({
               const totalEarningsCents = getSubmissionDisplayEarningsAmount(submission);
               const earningsInDollars = centsToDollars(totalEarningsCents);
               const milestoneMatchModal =
-                contest?.contest_type === "milestone"
+                contest?.contest_type === "milestone" ||
+                contest?.contest_type === "dual_rewards"
                   ? getMilestoneMatchForSubmission(submission, contest)
                   : null;
 
@@ -2596,7 +2672,11 @@ export default function SubmissionsClient({
                   amount: centsToDollars(submission.earnings ?? 0).toFixed(2),
                   color: "text-green-700",
                 };
-              } else if (contest?.contest_type === "cpm" || contest?.contest_type === "milestone") {
+              } else if (
+                contest?.contest_type === "cpm" ||
+                contest?.contest_type === "milestone" ||
+                contest?.contest_type === "dual_rewards"
+              ) {
                 const label = isPayoutsProcessed
                   ? "Amount Earned"
                   : "Estimated Earnings";
@@ -2623,10 +2703,12 @@ export default function SubmissionsClient({
                 };
               }
 
-              // Status-based color overrides for CPM submissions in modal
+              // Status-based color overrides for CPM / milestone / dual in modal
               if (
                 earningsDisplay &&
-                (contest?.contest_type === "cpm" || contest?.contest_type === "milestone")
+                (contest?.contest_type === "cpm" ||
+                  contest?.contest_type === "milestone" ||
+                  contest?.contest_type === "dual_rewards")
               ) {
                 if (isPaidModal && isPayoutsProcessed) {
                   earningsDisplay.color = "text-green-700";
@@ -2727,7 +2809,15 @@ export default function SubmissionsClient({
                       <Eye className="w-3 h-3 shrink-0" /> {views.toLocaleString()}
                     </span>
                     <span className={cn("inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-bold uppercase tracking-wider flex-shrink-0 border", isDark ? "bg-slate-800 text-slate-300 border-slate-600" : "bg-slate-100 text-slate-600 border-slate-200")}>
-                      {contest?.contest_type === "leaderboard" ? "Leaderboard" : contest?.contest_type === "cpm" ? "CPM" : contest?.contest_type || "—"}
+                      {contest?.contest_type === "leaderboard"
+                        ? "Leaderboard"
+                        : contest?.contest_type === "cpm"
+                          ? "CPM"
+                          : contest?.contest_type === "milestone"
+                            ? "Milestone"
+                            : contest?.contest_type === "dual_rewards"
+                              ? "Dual Rewards"
+                              : contest?.contest_type || "—"}
                     </span>
                     {contest?.contest_type === "leaderboard" && null}
                   </div>
@@ -2756,6 +2846,15 @@ export default function SubmissionsClient({
                               ? `Milestone ${milestoneMatchModal.order}`
                               : "Milestone"}{" "}
                             • Required Views: {milestoneMatchModal.targetViews.toLocaleString()}
+                          </p>
+                        )}
+                      {contest?.contest_type === "dual_rewards" && milestoneMatchModal && (
+                          <p className={cn("text-[11px] font-semibold mt-1", isDark ? "text-slate-300" : "text-slate-600")}>
+                            {milestoneMatchModal.order > 0
+                              ? `Milestone ${milestoneMatchModal.order}`
+                              : "Milestone"}{" "}
+                            • Required Views:{" "}
+                            {milestoneMatchModal.targetViews.toLocaleString()}
                           </p>
                         )}
                       {isPayoutsProcessed && (submission as any).paid_at && (

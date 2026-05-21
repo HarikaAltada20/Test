@@ -3,6 +3,8 @@ import { createAdminClient } from "@/utils/supabase/admin";
 import { verifyAdminAccess } from "@/utils/admin-auth";
 import {
   creditCreatorWithdrawableBalance,
+  debitCreatorWithdrawableBalance,
+  logTransactionAsAdmin,
   REVERSAL_TRANSACTION_REMARK,
 } from "@/lib/payment-utils";
 import { revalidateLeaderboardCache } from "@/lib/leaderboard-cache";
@@ -10,6 +12,22 @@ import {
   buildMilestoneMostVerifiedBonusByCreatorMap,
   type MilestoneBudgetSubmission,
 } from "@/lib/milestone-contest-expected-spend";
+import { isMilestoneContestType, isDualRewardsContestType } from "@/lib/contest-type";
+import {
+  checkDualRewardsPoolBudgetForPayment,
+  rollbackDualRewardsPoolCommitIfNeeded,
+  getDualRewardsSubmissionPaidComponents,
+  type DualPoolBudgetPaymentResult,
+  type DualPoolSpendComponents,
+} from "@/lib/dual-rewards-pool-budget";
+import {
+  adjustBonusCents,
+  parsePayoutAdjustment,
+} from "@/lib/payout-rules";
+import {
+  buildDualRewardsPayoutPersistValue,
+  dualRewardsPayoutForMilestoneTotal,
+} from "@/lib/dual-rewards-payout";
 
 function normalizeStatus(raw: string | null | undefined): string {
   const t = String(raw || "pending").toLowerCase();
@@ -25,7 +43,9 @@ function isVerifiedLike(st: string): boolean {
  * Admin: credit creator wallet and record bonus_amount on a submission for
  * milestone "most verified views" or "most verified reels" winner payout.
  *
- * Body: { creatorId: string, track: "views" | "reels" }
+ * Body: { creatorId: string, track: "views" | "reels", reversal?: boolean }
+ * When `reversal` is true, debits the creator by the net amount paid for that
+ * track (from ledger), logs a refund row, and decrements `milestone_bonus_paid` / `bonus_amount` on the same submission used for payouts.
  */
 export async function POST(
   request: Request,
@@ -36,6 +56,7 @@ export async function POST(
     const body = await request.json();
     const creatorId = body?.creatorId as string | undefined;
     const track = body?.track as "views" | "reels" | undefined;
+    const reversal = Boolean(body?.reversal);
 
     if (!creatorId || (track !== "views" && track !== "reels")) {
       return NextResponse.json(
@@ -44,8 +65,8 @@ export async function POST(
       );
     }
 
-    const { isAdmin } = await verifyAdminAccess();
-    if (!isAdmin) {
+    const { isAdmin, user: adminUser } = await verifyAdminAccess();
+    if (!isAdmin || !adminUser) {
       return NextResponse.json(
         { error: "Admin access required" },
         { status: 403 },
@@ -57,7 +78,7 @@ export async function POST(
     const { data: contest, error: contestError } = await supabaseAdmin
       .from("contests")
       .select(
-        "id, title, contest_type, contest_based_details, post_contest_status",
+        "id, title, contest_type, contest_based_details, post_contest_status, payout_adjustment_percentage, payout_adjustment_mode",
       )
       .eq("id", contestId)
       .single();
@@ -66,9 +87,9 @@ export async function POST(
       return NextResponse.json({ error: "Contest not found" }, { status: 404 });
     }
 
-    if (contest.contest_type !== "milestone") {
+    if (!isMilestoneContestType(contest.contest_type)) {
       return NextResponse.json(
-        { error: "Contest is not a milestone contest" },
+        { error: "Contest is not a milestone or dual rewards contest" },
         { status: 400 },
       );
     }
@@ -95,7 +116,7 @@ export async function POST(
     const { data: subs, error: subsError } = await supabaseAdmin
       .from("submissions")
       .select(
-        "id, creator_id, status, views, created_at, bonus_paid, bonus_amount, milestone_bonus_paid, metadata",
+        "id, creator_id, status, views, created_at, bonus_paid, bonus_amount, milestone_bonus_paid, metadata, earnings, paid, dual_rewards_payout",
       )
       .eq("contest_id", contestId);
 
@@ -187,26 +208,229 @@ export async function POST(
       reels: Math.max(0, rewardedByTrack.reels - refundedByTrack.reels),
     };
 
-    let creditCents = 0;
-    if (track === "views") {
-      if (V <= 0) {
+    if (reversal) {
+      const reversalAmount =
+        track === "views" ? paidByTrack.views : paidByTrack.reels;
+      if (reversalAmount <= 0) {
         return NextResponse.json(
-          { error: "This creator is not eligible for the most verified views bonus" },
+          { error: "Nothing paid for this track to reverse" },
           { status: 400 },
         );
       }
-      const viewsPaid = Math.min(paidByTrack.views, V);
-      creditCents = Math.max(0, V - viewsPaid);
-    } else {
-      if (R <= 0) {
+
+      const creatorSubs = (subs || []).filter(
+        (s: any) => s.creator_id === creatorId,
+      );
+
+      const verifiedLike = creatorSubs.filter((s: any) =>
+        isVerifiedLike(normalizeStatus(s.status)),
+      );
+      const withBonus = creatorSubs.filter((s: any) => s.bonus_paid === true);
+      let target: (typeof creatorSubs)[0] | undefined;
+      if (withBonus.length > 0) {
+        target = [...withBonus].sort(
+          (a: any, b: any) =>
+            (Number(b.bonus_amount) || 0) - (Number(a.bonus_amount) || 0),
+        )[0];
+      } else if (verifiedLike.length > 0) {
+        target = [...verifiedLike].sort(
+          (a: any, b: any) =>
+            new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
+        )[0];
+      }
+
+      if (!target) {
         return NextResponse.json(
-          { error: "This creator is not eligible for the most verified reels bonus" },
+          {
+            error:
+              "No submission found for this creator to update bonus records",
+          },
           { status: 400 },
         );
       }
-      const paidReels = Math.min(paidByTrack.reels, R);
-      creditCents = Math.max(0, R - paidReels);
+
+      const debitRes = await debitCreatorWithdrawableBalance(
+        creatorId,
+        reversalAmount,
+      );
+      if (!debitRes.success) {
+        return NextResponse.json(
+          { error: debitRes.error || "Failed to debit creator balance" },
+          { status: 400 },
+        );
+      }
+
+      const paidTrackRefundsForCycle = (paidRefunds || []).filter(
+        (tx: any) =>
+          (!tx.remarks || tx.remarks === REVERSAL_TRANSACTION_REMARK) &&
+          String(tx?.metadata?.bonus_type || "") ===
+            `milestone_most_verified_${track}`,
+      ).length;
+      const nextReversalCycle = paidTrackRefundsForCycle + 1;
+
+      const refundLogged = await logTransactionAsAdmin(
+        creatorId,
+        "refund",
+        reversalAmount,
+        "success",
+        `Reversal: Milestone most verified ${
+          track === "views" ? "views" : "reels"
+        } bonus — ${contest.title || "Contest"}`,
+        {
+          remarks: REVERSAL_TRANSACTION_REMARK,
+          paymentMethod: "refund",
+          metadata: {
+            contest_id: contestId,
+            bonus_type: `milestone_most_verified_${track}`,
+            submission_id: `${target.id}:milestone_most_verified_${track}:reverse`,
+            source_submission_id: target.id,
+            payout_cycle: nextReversalCycle,
+          },
+        },
+      );
+
+      if (!refundLogged) {
+        await creditCreatorWithdrawableBalance(
+          creatorId,
+          reversalAmount,
+          `Rollback: milestone MV bonus reversal ledger log failed (${contestId} ${track})`,
+          {
+            idempotencyKey: `milestone_mv_bonus_rev_log_fail:${contestId}:${creatorId}:${track}:${nextReversalCycle}`,
+            metadata: { contest_id: contestId },
+          },
+        );
+        return NextResponse.json(
+          {
+            error:
+              "Could not record the refund transaction; creator balance was restored.",
+          },
+          { status: 500 },
+        );
+      }
+
+      const prevAmount = Number(target.bonus_amount) || 0;
+      const prevMeta =
+        target?.metadata && typeof target.metadata === "object"
+          ? { ...target.metadata }
+          : {};
+      const prevTrackPaidRawFromColumn =
+        (target as any)?.milestone_bonus_paid &&
+        typeof (target as any).milestone_bonus_paid === "object"
+          ? (target as any).milestone_bonus_paid
+          : null;
+      const prevTrackPaidRawFromMeta =
+        prevMeta?.milestone_bonus_paid &&
+        typeof prevMeta.milestone_bonus_paid === "object"
+          ? prevMeta.milestone_bonus_paid
+          : null;
+      const prevTrackPaidRaw =
+        prevTrackPaidRawFromColumn || prevTrackPaidRawFromMeta || {};
+      const prevTrackPaid = {
+        views: Number(prevTrackPaidRaw?.views || 0),
+        reels: Number(prevTrackPaidRaw?.reels || 0),
+      };
+      const nextTrackPaid = {
+        views:
+          track === "views"
+            ? Math.max(0, prevTrackPaid.views - reversalAmount)
+            : prevTrackPaid.views,
+        reels:
+          track === "reels"
+            ? Math.max(0, prevTrackPaid.reels - reversalAmount)
+            : prevTrackPaid.reels,
+      };
+      const newBonusAmount = Math.max(0, prevAmount - reversalAmount);
+      const stillBonusPaid =
+        newBonusAmount > 0 ||
+        nextTrackPaid.views > 0 ||
+        nextTrackPaid.reels > 0;
+
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const { milestone_bonus_paid: _legacyMilestoneBonusPaid, ...metaWithoutLegacy } =
+        prevMeta || {};
+
+      const reversalSubmissionUpdate: Record<string, unknown> = {
+        bonus_paid: stillBonusPaid,
+        bonus_paid_at: stillBonusPaid ? (target as any).bonus_paid_at : null,
+        bonus_amount: newBonusAmount,
+        milestone_bonus_paid: nextTrackPaid,
+        metadata: metaWithoutLegacy,
+      };
+
+      if (isDualRewardsContestType(contest.contest_type)) {
+        const paidComponents = getDualRewardsSubmissionPaidComponents({
+          id: String(target.id),
+          earnings: (target as { earnings?: number | null }).earnings,
+          paid: (target as { paid?: boolean | null }).paid,
+          bonus_amount: target.bonus_amount,
+          bonus_paid: target.bonus_paid,
+          dual_rewards_payout: (target as { dual_rewards_payout?: unknown })
+            .dual_rewards_payout,
+        });
+        reversalSubmissionUpdate.dual_rewards_payout =
+          dualRewardsPayoutForMilestoneTotal(
+            (target as { dual_rewards_payout?: unknown }).dual_rewards_payout,
+            paidComponents.cpmCents,
+            Math.max(0, paidComponents.milestoneCents - reversalAmount),
+          );
+      }
+
+      const { error: updErr } = await supabaseAdmin
+        .from("submissions")
+        .update(reversalSubmissionUpdate)
+        .eq("id", target.id);
+
+      if (updErr) {
+        console.error(
+          "[mark-milestone-most-verified-bonus] reversal submission update failed",
+          updErr,
+        );
+        return NextResponse.json(
+          {
+            error:
+              updErr.message ||
+              "Wallet was debited and refund logged, but updating the submission failed. Reconcile manually.",
+          },
+          { status: 500 },
+        );
+      }
+
+      revalidateLeaderboardCache(contestId);
+      return NextResponse.json({
+        success: true,
+        reversedCents: reversalAmount,
+        submissionId: target.id,
+        track,
+      });
     }
+
+    const payoutAdjustment = parsePayoutAdjustment(
+      (contest as any).payout_adjustment_percentage,
+      (contest as any).payout_adjustment_mode,
+      { contestType: contest.contest_type },
+    );
+
+    const configuredCents = track === "views" ? V : R;
+    if (configuredCents <= 0) {
+      return NextResponse.json(
+        {
+          error:
+            track === "views"
+              ? "This creator is not eligible for the most verified views bonus"
+              : "This creator is not eligible for the most verified reels bonus",
+        },
+        { status: 400 },
+      );
+    }
+
+    const targetTotalForTrack = adjustBonusCents(configuredCents, {
+      shouldAdjustBonus:
+        payoutAdjustment.shouldAdjustMostVerifiedMilestoneBonus,
+      percentage: payoutAdjustment.percentage,
+    });
+    const alreadyPaid =
+      track === "views" ? paidByTrack.views : paidByTrack.reels;
+    const creditCents = Math.max(0, targetTotalForTrack - alreadyPaid);
 
     if (creditCents <= 0) {
       return NextResponse.json(
@@ -247,6 +471,46 @@ export async function POST(
       );
     }
 
+    let dualRewardsPoolCommit: DualPoolBudgetPaymentResult | undefined;
+    let dualPaidComponents: DualPoolSpendComponents | null = null;
+
+    if (isDualRewardsContestType(contest.contest_type)) {
+      dualPaidComponents = getDualRewardsSubmissionPaidComponents({
+        id: String(target.id),
+        earnings: target.earnings,
+        paid: target.paid,
+        bonus_amount: target.bonus_amount,
+        bonus_paid: target.bonus_paid,
+        dual_rewards_payout: (target as { dual_rewards_payout?: unknown })
+          .dual_rewards_payout,
+      });
+      dualRewardsPoolCommit = await checkDualRewardsPoolBudgetForPayment({
+        supabaseAdmin,
+        contest: contest as any,
+        contestId,
+        targetSubmissionId: String(target.id),
+        targetAfter: {
+          cpmCents: dualPaidComponents.cpmCents,
+          milestoneCents: dualPaidComponents.milestoneCents + creditCents,
+        },
+      });
+      if (!dualRewardsPoolCommit.ok) {
+        const denied = dualRewardsPoolCommit.check;
+        return NextResponse.json(
+          {
+            error: denied.error,
+            details: {
+              poolBudgetCents: denied.poolBudgetCents,
+              projectedSpentCents: denied.projectedSpentCents,
+              remainingCents: denied.remainingCents,
+              additionalBonusCents: creditCents,
+            },
+          },
+          { status: 400 },
+        );
+      }
+    }
+
     const paidTrackRewardsCount = (paidRewards || []).filter(
       (tx: any) =>
         String(tx?.metadata?.bonus_type || "") ===
@@ -284,6 +548,12 @@ export async function POST(
     );
 
     if (!creditResult.success) {
+      await rollbackDualRewardsPoolCommitIfNeeded(
+        supabaseAdmin,
+        contestId,
+        String(target.id),
+        dualRewardsPoolCommit,
+      );
       return NextResponse.json(
         {
           error: creditResult.error || "Failed to credit creator balance",
@@ -332,18 +602,40 @@ export async function POST(
     const { milestone_bonus_paid: _legacyMilestoneBonusPaid, ...metaWithoutLegacy } =
       prevMeta || {};
 
+    const creditSubmissionUpdate: Record<string, unknown> = {
+      bonus_paid: true,
+      bonus_paid_at: new Date().toISOString(),
+      bonus_amount: prevAmount + creditCents,
+      milestone_bonus_paid: nextTrackPaid,
+      metadata: metaWithoutLegacy,
+    };
+
+    if (dualPaidComponents) {
+      creditSubmissionUpdate.dual_rewards_payout =
+        buildDualRewardsPayoutPersistValue(
+          {
+            cpm_cents: dualPaidComponents.cpmCents,
+            milestone_cents: dualPaidComponents.milestoneCents + creditCents,
+          },
+          {
+            updatedBy: adminUser.id,
+            customRemarks: `Milestone most verified ${track} bonus`,
+          },
+        );
+    }
+
     const { error: updErr } = await supabaseAdmin
       .from("submissions")
-      .update({
-        bonus_paid: true,
-        bonus_paid_at: new Date().toISOString(),
-        bonus_amount: prevAmount + creditCents,
-        milestone_bonus_paid: nextTrackPaid,
-        metadata: metaWithoutLegacy,
-      })
+      .update(creditSubmissionUpdate)
       .eq("id", target.id);
 
     if (updErr) {
+      await rollbackDualRewardsPoolCommitIfNeeded(
+        supabaseAdmin,
+        contestId,
+        String(target.id),
+        dualRewardsPoolCommit,
+      );
       return NextResponse.json(
         {
           error:

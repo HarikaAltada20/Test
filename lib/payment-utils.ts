@@ -767,6 +767,48 @@ export async function creditCreatorWithdrawableBalance(
   }
 }
 
+async function debitCreatorWithdrawableBalanceLegacy(
+  creatorId: string,
+  amountInCents: number,
+): Promise<{ success: boolean; newBalance?: number; error?: string }> {
+  const supabase = createAdminClient();
+  const { data: profile, error: readErr } = await supabase
+    .from("creator_profiles")
+    .select("withdrawable_balance, total_money_won")
+    .eq("id", creatorId)
+    .single();
+
+  if (readErr) {
+    return { success: false, error: readErr.message };
+  }
+
+  const currentBalance = profile?.withdrawable_balance || 0;
+  const currentTotalWon = profile?.total_money_won || 0;
+  if (currentBalance < amountInCents) {
+    return {
+      success: false,
+      error: `Insufficient withdrawable balance to reverse ${amountInCents} cents`,
+    };
+  }
+
+  const newBalance = currentBalance - amountInCents;
+  const newTotalWon = Math.max(0, currentTotalWon - amountInCents);
+
+  const { error: updateErr } = await supabase
+    .from("creator_profiles")
+    .update({
+      withdrawable_balance: newBalance,
+      total_money_won: newTotalWon,
+    })
+    .eq("id", creatorId);
+
+  if (updateErr) {
+    return { success: false, error: updateErr.message };
+  }
+
+  return { success: true, newBalance };
+}
+
 export async function debitCreatorWithdrawableBalance(
   creatorId: string,
   amountInCents: number
@@ -776,41 +818,41 @@ export async function debitCreatorWithdrawableBalance(
       return { success: false, error: "Amount must be positive" };
     }
 
-    // Use service role to bypass RLS when touching other users
     const supabase = createAdminClient();
 
-    const { data: profile, error: readErr } = await supabase
-      .from("creator_profiles")
-      .select("withdrawable_balance, total_money_won")
-      .eq("id", creatorId)
-      .single();
+    const { data: rpcRaw, error: rpcErr } = await supabase.rpc(
+      "creator_payout_debit_atomic",
+      {
+        p_creator_id: creatorId,
+        p_amount_cents: amountInCents,
+      },
+    );
 
-    if (readErr) {
-      return { success: false, error: readErr.message };
+    if (rpcErr) {
+      const msg = rpcErr.message || "Debit failed";
+      if (
+        msg.includes("creator_payout_debit_atomic") &&
+        (msg.includes("Could not find") || msg.includes("does not exist"))
+      ) {
+        return debitCreatorWithdrawableBalanceLegacy(creatorId, amountInCents);
+      }
+      if (msg.toLowerCase().includes("insufficient withdrawable balance")) {
+        return {
+          success: false,
+          error: `Insufficient withdrawable balance to reverse ${amountInCents} cents`,
+        };
+      }
+      return { success: false, error: msg };
     }
 
-    const currentBalance = profile?.withdrawable_balance || 0;
-    const currentTotalWon = profile?.total_money_won || 0;
-    if (currentBalance < amountInCents) {
+    const row = rpcRaw as { new_balance?: number | string } | null;
+    const newBalance =
+      row?.new_balance == null ? NaN : Number(row.new_balance);
+    if (!Number.isFinite(newBalance)) {
       return {
         success: false,
-        error: `Insufficient withdrawable balance to reverse ${amountInCents} cents`,
+        error: "creator_payout_debit_atomic returned unexpected payload",
       };
-    }
-
-    const newBalance = currentBalance - amountInCents;
-    const newTotalWon = Math.max(0, currentTotalWon - amountInCents);
-
-    const { error: updateErr } = await supabase
-      .from("creator_profiles")
-      .update({
-        withdrawable_balance: newBalance,
-        total_money_won: newTotalWon,
-      })
-      .eq("id", creatorId);
-
-    if (updateErr) {
-      return { success: false, error: updateErr.message };
     }
 
     return { success: true, newBalance };

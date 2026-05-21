@@ -1,4 +1,5 @@
 import type { MilestonePayoutRule } from "@/lib/contest-utils-client";
+import { adjustBonusCents } from "@/lib/payout-rules";
 
 /** Minimal submission row for milestone budget (list / opportunities / server). */
 export type MilestoneBudgetSubmission = {
@@ -124,6 +125,107 @@ export function buildMilestoneSubmissionPayoutCentsMap(
   return result;
 }
 
+/** True when milestone slots are FCFS across the whole contest (requires contest-wide scan). */
+export function milestonesRequireContestWideFcfs(
+  milestones: Pick<MilestonePayoutRule, "winner_limit">[],
+): boolean {
+  return milestones.some(
+    (m) => m.winner_limit != null && Number(m.winner_limit) > 0,
+  );
+}
+
+/** Milestone payout from views only (no winner_limit / FCFS). */
+export function getMilestonePayoutCentsFromViews(
+  views: number,
+  milestones: MilestonePayoutRule[],
+): number {
+  if (!milestones?.length) return 0;
+  const sortedMilestones = [...milestones].sort(
+    (a, b) => (b.target_views || 0) - (a.target_views || 0),
+  );
+  for (const milestone of sortedMilestones) {
+    if (views >= Number(milestone.target_views || 0)) {
+      return Number(milestone.payout_cents || 0);
+    }
+  }
+  return 0;
+}
+
+/**
+ * Same FCFS rules as `buildMilestoneSubmissionPayoutCentsMap`, but only stores
+ * payouts for one creator (one contest-wide pass, no full Map for every submission).
+ */
+export function buildMilestoneSubmissionPayoutCentsMapForCreator(
+  submissions: MilestoneBudgetSubmission[],
+  milestones: MilestonePayoutRule[],
+  creatorId: string,
+): Map<string, number> {
+  const result = new Map<string, number>();
+  if (!submissions?.length || !milestones?.length) return result;
+
+  const sortedMilestones = [...milestones].sort(
+    (a, b) => (b.target_views || 0) - (a.target_views || 0),
+  );
+  const winnerCountsByMilestone = new Map<number, number>();
+  const creatorKey = String(creatorId);
+
+  const eligible = submissions
+    .map((s) => ({
+      id: s.id,
+      creator_id: s.creator_id,
+      created_at: s.created_at,
+      status: normalizeStatus(s.status),
+      deleted_at: s.deleted_at,
+      views: getMilestoneEligibleViewsFromRow({
+        views: s.views,
+        platform: s.platform,
+        other_stats: s.other_stats,
+      }),
+    }))
+    .filter(
+      (s) =>
+        (s.status === "pending" ||
+          s.status === "verified" ||
+          s.status === "paid") &&
+        (s.deleted_at == null || s.deleted_at === ""),
+    )
+    .sort(
+      (a, b) =>
+        new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
+    );
+
+  for (const submission of eligible) {
+    let payoutCents = 0;
+    const submissionViews = submission.views;
+
+    for (const milestone of sortedMilestones) {
+      const targetViews = Number(milestone.target_views || 0);
+      if (submissionViews < targetViews) continue;
+
+      if (milestone.winner_limit != null) {
+        const currentWinners =
+          winnerCountsByMilestone.get(milestone.target_views) || 0;
+        if (currentWinners >= milestone.winner_limit) {
+          continue;
+        }
+        winnerCountsByMilestone.set(
+          milestone.target_views,
+          currentWinners + 1,
+        );
+      }
+
+      payoutCents = Number(milestone.payout_cents || 0);
+      break;
+    }
+
+    if (String(submission.creator_id) === creatorKey) {
+      result.set(submission.id, payoutCents);
+    }
+  }
+
+  return result;
+}
+
 /**
  * Per-creator earnings cap in submission `created_at` order (same rule as
  * CreatorSubmissionsModal expectedRewardsMap for milestone).
@@ -211,6 +313,12 @@ export type MilestoneMostVerifiedBonusPaidByCreator = Record<
   }
 >;
 
+/** Same flags as UI / mark-bonus API so inferred "paid" caps match actual credits. */
+export type MilestoneMostVerifiedBonusMapAdjustment = {
+  shouldAdjustMostVerifiedMilestoneBonus: boolean;
+  percentage: number;
+};
+
 /**
  * Per-creator expected vs paid for milestone "most verified views" / "most verified reels"
  * bonuses (same allocation rules as contest-detail-client milestoneReelsBonusByCreator).
@@ -219,6 +327,7 @@ export function buildMilestoneMostVerifiedBonusByCreatorMap(
   submissions: MilestoneBudgetSubmission[],
   bonus: MilestoneBonusConfig | null | undefined,
   paidByCreatorTrack?: MilestoneMostVerifiedBonusPaidByCreator,
+  mvBonusAdjustment?: MilestoneMostVerifiedBonusMapAdjustment | null,
 ): Map<string, MilestoneMostVerifiedBonusCreatorRow> {
   const empty = new Map<string, MilestoneMostVerifiedBonusCreatorRow>();
   if (!bonus?.enabled) return empty;
@@ -236,6 +345,14 @@ export function buildMilestoneMostVerifiedBonusByCreatorMap(
   const viewsMinReels = Number(viewsConfig?.min_verified_reels || 0);
   const viewsPayout = Number(viewsConfig?.payout_cents || 0);
 
+  const mvAdj = mvBonusAdjustment ?? null;
+  const mvAdjustArg = {
+    shouldAdjustBonus: Boolean(mvAdj?.shouldAdjustMostVerifiedMilestoneBonus),
+    percentage: Number(mvAdj?.percentage ?? 0),
+  };
+  const viewsCap = adjustBonusCents(viewsPayout, mvAdjustArg);
+  const reelsCap = adjustBonusCents(reelsPayout, mvAdjustArg);
+
   type CreatorAgg = {
     creatorId: string;
     verifiedReels: number;
@@ -246,12 +363,14 @@ export function buildMilestoneMostVerifiedBonusByCreatorMap(
     totalPaidBonusCents: number;
     viewsPaidCentsFromMetadata: number;
     reelsPaidCentsFromMetadata: number;
+    /** Any bonus_paid row exposed a `milestone_bonus_paid` object (zeros are meaningful after reversals). */
+    hasExplicitMilestoneBonusPaidBreakdown: boolean;
   };
 
   const creators = new Map<string, CreatorAgg>();
 
   for (const sub of submissions) {
-    const creatorId = sub.creator_id;
+    const creatorId = String(sub.creator_id ?? "").trim();
     if (!creatorId) continue;
     if (sub.deleted_at != null && sub.deleted_at !== "") continue;
 
@@ -266,17 +385,19 @@ export function buildMilestoneMostVerifiedBonusByCreatorMap(
         totalPaidBonusCents: 0,
         viewsPaidCentsFromMetadata: 0,
         reelsPaidCentsFromMetadata: 0,
+        hasExplicitMilestoneBonusPaidBreakdown: false,
       });
     }
     const agg = creators.get(creatorId)!;
     if (sub.bonus_paid === true) {
       agg.totalPaidBonusCents += Number(sub.bonus_amount || 0);
-    }
-    const milestoneBonusPaid =
-      sub?.milestone_bonus_paid ?? sub?.metadata?.milestone_bonus_paid;
-    if (milestoneBonusPaid && typeof milestoneBonusPaid === "object") {
-      agg.viewsPaidCentsFromMetadata += Number(milestoneBonusPaid.views || 0);
-      agg.reelsPaidCentsFromMetadata += Number(milestoneBonusPaid.reels || 0);
+      const milestoneBonusPaid =
+        sub?.milestone_bonus_paid ?? sub?.metadata?.milestone_bonus_paid;
+      if (milestoneBonusPaid && typeof milestoneBonusPaid === "object") {
+        agg.hasExplicitMilestoneBonusPaidBreakdown = true;
+        agg.viewsPaidCentsFromMetadata += Number(milestoneBonusPaid.views || 0);
+        agg.reelsPaidCentsFromMetadata += Number(milestoneBonusPaid.reels || 0);
+      }
     }
 
     const st = normalizeStatus(sub.status);
@@ -367,45 +488,85 @@ export function buildMilestoneMostVerifiedBonusByCreatorMap(
   const viewsWinnerId = eligibleViews[0]?.creatorId || null;
 
   creators.forEach((agg, creatorId) => {
-    const hasTrackPaid =
-      paidByCreatorTrack &&
-      Object.prototype.hasOwnProperty.call(paidByCreatorTrack, creatorId);
-    const trackPaid = paidByCreatorTrack?.[creatorId];
-    const viewsPaidFromTrack = Number(trackPaid?.viewsPaidCents || 0);
-    const reelsPaidFromTrack = Number(trackPaid?.reelsPaidCents || 0);
+    let resolvedLedger:
+      | { viewsPaidCents?: number; reelsPaidCents?: number }
+      | undefined;
+    if (paidByCreatorTrack) {
+      if (
+        Object.prototype.hasOwnProperty.call(paidByCreatorTrack, creatorId)
+      ) {
+        resolvedLedger = paidByCreatorTrack[creatorId];
+      } else {
+        const hit = Object.entries(paidByCreatorTrack).find(
+          ([k]) => String(k).trim() === creatorId,
+        );
+        resolvedLedger = hit?.[1];
+      }
+    }
+    const useCreatorLedgerResolved = resolvedLedger !== undefined;
+    const viewsPaidFromTrack = Number(resolvedLedger?.viewsPaidCents || 0);
+    const reelsPaidFromTrack = Number(resolvedLedger?.reelsPaidCents || 0);
+
     const viewsPaidFromMetadata = Number(agg.viewsPaidCentsFromMetadata || 0);
     const reelsPaidFromMetadata = Number(agg.reelsPaidCentsFromMetadata || 0);
-    const hasAnyTrackSpecificEvidence =
-      hasTrackPaid || viewsPaidFromMetadata > 0 || reelsPaidFromMetadata > 0;
 
-    const fallbackViewsPaid =
-      creatorId === viewsWinnerId && viewsPayout > 0
-        ? Math.min(agg.totalPaidBonusCents, viewsPayout)
+    // Infer per-track paid from combined `bonus_amount` when ledger + per-track metadata are absent.
+    // Use adjusted caps (same as wallet credits), not raw config payout_cents, so views+reels split matches reality.
+    const viewsTakenForSplit =
+      creatorId === viewsWinnerId && viewsCap > 0
+        ? Math.min(agg.totalPaidBonusCents, viewsCap)
         : 0;
+    const fallbackViewsPaid = viewsTakenForSplit;
 
     let fallbackReelsPaid = 0;
-    if (creatorId === reelsWinnerId && reelsPayout > 0) {
-      let unassignedPaid = agg.totalPaidBonusCents;
-      if (creatorId === viewsWinnerId && viewsPayout > 0) {
-        unassignedPaid = Math.max(0, unassignedPaid - viewsPayout);
-      }
-      fallbackReelsPaid = Math.min(unassignedPaid, reelsPayout);
+    if (creatorId === reelsWinnerId && reelsCap > 0) {
+      const remainingAfterViews = Math.max(
+        0,
+        agg.totalPaidBonusCents - viewsTakenForSplit,
+      );
+      fallbackReelsPaid = Math.min(remainingAfterViews, reelsCap);
     }
 
-    const viewsPaidCandidate = hasAnyTrackSpecificEvidence
-      ? Math.max(viewsPaidFromMetadata, hasTrackPaid ? viewsPaidFromTrack : 0)
-      : fallbackViewsPaid;
-    const reelsPaidCandidate = hasAnyTrackSpecificEvidence
-      ? Math.max(reelsPaidFromMetadata, hasTrackPaid ? reelsPaidFromTrack : 0)
-      : fallbackReelsPaid;
+    const metaSum =
+      Number(viewsPaidFromMetadata) + Number(reelsPaidFromMetadata);
+    const totalPaidBonus = Number(agg.totalPaidBonusCents) || 0;
+    const ledgerSum = viewsPaidFromTrack + reelsPaidFromTrack;
+    const ledgerReconcilesWithBonusTotal =
+      useCreatorLedgerResolved &&
+      Math.abs(ledgerSum - totalPaidBonus) <= 1;
+    const metadataReconcilesWithBonusTotal =
+      agg.hasExplicitMilestoneBonusPaidBreakdown &&
+      Math.abs(metaSum - totalPaidBonus) <= 1;
+
+    let viewsPaidCandidate: number;
+    let reelsPaidCandidate: number;
+    if (ledgerReconcilesWithBonusTotal) {
+      viewsPaidCandidate = viewsPaidFromTrack;
+      reelsPaidCandidate = reelsPaidFromTrack;
+    } else if (metadataReconcilesWithBonusTotal) {
+      viewsPaidCandidate = viewsPaidFromMetadata;
+      reelsPaidCandidate = reelsPaidFromMetadata;
+    } else if (useCreatorLedgerResolved) {
+      viewsPaidCandidate = viewsPaidFromTrack;
+      reelsPaidCandidate = reelsPaidFromTrack;
+    } else {
+      viewsPaidCandidate =
+        viewsPaidFromMetadata > 0
+          ? viewsPaidFromMetadata
+          : fallbackViewsPaid;
+      reelsPaidCandidate =
+        reelsPaidFromMetadata > 0
+          ? reelsPaidFromMetadata
+          : fallbackReelsPaid;
+    }
 
     const viewsPaidCents =
-      creatorId === viewsWinnerId && viewsPayout > 0
-        ? Math.min(viewsPaidCandidate, viewsPayout)
+      creatorId === viewsWinnerId && viewsCap > 0
+        ? Math.min(viewsPaidCandidate, viewsCap)
         : 0;
     const paidCents =
-      creatorId === reelsWinnerId && reelsPayout > 0
-        ? Math.min(reelsPaidCandidate, reelsPayout)
+      creatorId === reelsWinnerId && reelsCap > 0
+        ? Math.min(reelsPaidCandidate, reelsCap)
         : 0;
 
     empty.set(creatorId, {

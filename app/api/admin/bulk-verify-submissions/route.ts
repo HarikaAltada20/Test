@@ -1,5 +1,8 @@
 import { POST as verifySubmission } from "../verify-submission/route";
 import { NextResponse } from "next/server";
+import { createAdminClient } from "@/utils/supabase/admin";
+import { verifyAdminAccess } from "@/utils/admin-auth";
+import { applyBulkDualRewardsWalletReversals } from "@/lib/dual-rewards-bulk-reversal";
 
 /** Default matches previous behavior (10 parallel verifies). Override via env if you see DB/connect saturation. */
 function getVerifyConcurrency(): number {
@@ -8,6 +11,10 @@ function getVerifyConcurrency(): number {
   const n = parseInt(raw, 10);
   if (!Number.isFinite(n) || n < 1) return 10;
   return Math.min(n, 25);
+}
+
+function isPaidReversalBulkAction(action: string): boolean {
+  return action === "verified" || action === "pending" || action === "rejected";
 }
 
 function isTransientVerifyNetworkError(err: unknown): boolean {
@@ -63,18 +70,65 @@ async function invokeVerifyWithRetries(
 
 export async function POST(request: Request) {
   try {
-    const { submissionIds, action, reason, paymentDetails } = await request.json();
+    const { submissionIds, action, reason, paymentDetails } =
+      await request.json();
 
     if (!Array.isArray(submissionIds)) {
       return NextResponse.json(
         { error: "submissionIds must be an array" },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
-    const results: any[] = [];
-    const errors: any[] = [];
-    const concurrency = getVerifyConcurrency();
+    const { isAdmin, error: adminError } = await verifyAdminAccess();
+    if (!isAdmin) {
+      return NextResponse.json(
+        { error: adminError || "Admin access required" },
+        { status: 403 },
+      );
+    }
+
+    const skipWalletDebitIds = new Set<string>();
+    const bulkRefundSummaryById = new Map<
+      string,
+      {
+        reward_refunded_cents: number;
+        bonus_refunded_cents: number;
+        total_refunded_cents: number;
+        cpm_refunded_cents: number;
+        milestone_refunded_cents: number;
+      }
+    >();
+
+    if (isPaidReversalBulkAction(action)) {
+      const supabaseAdmin = createAdminClient();
+      const walletResult = await applyBulkDualRewardsWalletReversals({
+        supabaseAdmin,
+        submissionIds,
+      });
+      if (!walletResult.ok) {
+        return NextResponse.json(
+          {
+            error: walletResult.error,
+            failed: walletResult.failedSubmissionIds?.length ?? submissionIds.length,
+            failedSubmissionIds: walletResult.failedSubmissionIds,
+          },
+          { status: 500 },
+        );
+      }
+      for (const id of walletResult.skipWalletDebitIds) {
+        skipWalletDebitIds.add(id);
+      }
+      walletResult.refundSummaryBySubmissionId.forEach((summary, id) => {
+        bulkRefundSummaryById.set(id, summary);
+      });
+    }
+
+    const results: { id: string; data: unknown }[] = [];
+    const errors: { id: string; error: string }[] = [];
+    const concurrency = isPaidReversalBulkAction(action)
+      ? 1
+      : getVerifyConcurrency();
 
     const headers = new Headers();
     request.headers.forEach((value, key) => headers.set(key, value));
@@ -92,12 +146,13 @@ export async function POST(request: Request) {
                 action,
                 reason,
                 paymentDetails,
+                skipWalletDebit: skipWalletDebitIds.has(String(id)),
               }),
             });
 
           const res = await invokeVerifyWithRetries(buildRequest);
 
-          let data: any;
+          let data: unknown;
           const contentType = res.headers.get("content-type") || "";
           if (contentType.includes("application/json")) {
             data = await res.json();
@@ -107,10 +162,19 @@ export async function POST(request: Request) {
 
           if (!res.ok) {
             const errorMessage =
-              typeof data === "string" ? data : data?.error || "Failed to verify submission";
+              typeof data === "string"
+                ? data
+                : (data as { error?: string })?.error ||
+                  "Failed to verify submission";
             throw new Error(errorMessage);
           }
-          return data;
+
+          const payload = data as Record<string, unknown>;
+          const bulkSummary = bulkRefundSummaryById.get(String(id));
+          if (bulkSummary && skipWalletDebitIds.has(String(id))) {
+            payload.refund_summary = bulkSummary;
+          }
+          return payload;
         }),
       );
 
@@ -127,17 +191,22 @@ export async function POST(request: Request) {
     }
 
     return NextResponse.json({
-      success: true,
+      success: errors.length === 0,
       processed: results.length,
       failed: errors.length,
       results,
       errors,
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("[bulk-verify-submissions] Error:", error);
     return NextResponse.json(
-      { error: error?.message || "Unexpected error in bulk verify" },
-      { status: 500 }
+      {
+        error:
+          error instanceof Error
+            ? error.message
+            : "Unexpected error in bulk verify",
+      },
+      { status: 500 },
     );
   }
 }
