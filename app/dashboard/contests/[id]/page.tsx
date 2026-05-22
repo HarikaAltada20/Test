@@ -1,6 +1,7 @@
 import { createClient } from "@/utils/supabase/server";
 import { createAdminClient } from "@/utils/supabase/admin";
 import { REVERSAL_TRANSACTION_REMARK } from "@/lib/payment-utils";
+import { fetchContestSubmissionsAllPages } from "@/lib/fetch-contest-submissions";
 import { redirect } from "next/navigation";
 import ContestDetailClient from "./contest-detail-client"; // Import the new client component
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -158,11 +159,8 @@ export default async function ContestDetailPage({
     isTwitterCampaign,
   });
 
-  // Fetch submissions (for YouTube/Instagram - manual submissions)
-  const { data: submissionsData, error: submissionsError } = await supabase
-    .from("submissions")
-    .select(
-      `
+  // Fetch submissions (paginated; PostgREST caps at 1000 rows per request)
+  const SUBMISSIONS_SELECT = `
       id,
       created_at,
       content_link,
@@ -185,10 +183,13 @@ export default async function ContestDetailPage({
       metadata,
       insights_status,
       last_insights_update
-    `
-    )
-    .eq("contest_id", contestId)
-    .order("created_at", { ascending: false });
+    `;
+  const { data: submissionsData, error: submissionsError } =
+    await fetchContestSubmissionsAllPages(
+      supabase,
+      contestId,
+      SUBMISSIONS_SELECT,
+    );
 
   if (submissionsError) {
     console.error(
