@@ -48,7 +48,7 @@ export async function updateYouTubeCpmContestBudgets(
 
       const maxEarningsPerCreator = contestDetails?.max_earnings_per_creator || null;
 
-      const { data: submissions } =
+      const { data: submissions, error: submissionsError } =
         await fetchContestSubmissionsAllPages<CpmBudgetSubmissionRow>(
           supabaseAdmin,
           contest.id,
@@ -58,6 +58,15 @@ export async function updateYouTubeCpmContestBudgets(
             order: { column: "created_at", ascending: true },
           },
         );
+
+      if (submissionsError) {
+        console.error(
+          "[youtube-cpm-contest-budgets] Failed to load submissions:",
+          contest.id,
+          submissionsError,
+        );
+        continue;
+      }
 
       if (!submissions?.length) continue;
 

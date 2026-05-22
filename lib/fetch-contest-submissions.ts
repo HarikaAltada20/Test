@@ -2,6 +2,14 @@
 const DEFAULT_CHUNK_SIZE = 1000;
 const DEFAULT_MAX_ROWS = 50_000;
 
+const ID_TIEBREAK_ORDER = { column: "id", ascending: true } as const;
+
+export type FetchContestSubmissionsOrder = {
+  column: string;
+  ascending: boolean;
+  nullsFirst?: boolean;
+};
+
 export type FetchContestSubmissionsOptions = {
   chunkSize?: number;
   maxRows?: number;
@@ -11,18 +19,41 @@ export type FetchContestSubmissionsOptions = {
   platform?: string;
   bonusPaid?: boolean;
   paid?: boolean;
-  order?:
-    | {
-        column: string;
-        ascending: boolean;
-        nullsFirst?: boolean;
-      }
-    | Array<{
-        column: string;
-        ascending: boolean;
-        nullsFirst?: boolean;
-      }>;
+  order?: FetchContestSubmissionsOrder | FetchContestSubmissionsOrder[];
+  /** When true, do not append `id` as a secondary sort (caller supplies full ordering). */
+  skipIdTiebreak?: boolean;
 };
+
+export type FetchContestSubmissionsResult<T> = {
+  data: T[];
+  error: unknown | null;
+  /** True when row cap was hit and the last page was full (more rows may exist). */
+  truncated?: boolean;
+};
+
+export function formatSubmissionFetchError(error: unknown): string {
+  if (error && typeof error === "object" && "message" in error) {
+    const msg = (error as { message?: unknown }).message;
+    if (typeof msg === "string" && msg.trim()) return msg;
+  }
+  if (typeof error === "string" && error.trim()) return error;
+  return "Failed to load submissions";
+}
+
+function resolveSubmissionOrders(
+  options?: FetchContestSubmissionsOptions,
+): FetchContestSubmissionsOrder[] {
+  const orders: FetchContestSubmissionsOrder[] = options?.order
+    ? Array.isArray(options.order)
+      ? [...options.order]
+      : [options.order]
+    : [{ column: "created_at", ascending: false }];
+
+  if (!options?.skipIdTiebreak && !orders.some((o) => o.column === "id")) {
+    orders.push({ ...ID_TIEBREAK_ORDER });
+  }
+  return orders;
+}
 
 function buildContestSubmissionsQuery(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -52,13 +83,7 @@ function buildContestSubmissionsQuery(
     query = query.eq("paid", options.paid);
   }
 
-  const orders = options?.order
-    ? Array.isArray(options.order)
-      ? options.order
-      : [options.order]
-    : [{ column: "created_at", ascending: false }];
-
-  for (const order of orders) {
+  for (const order of resolveSubmissionOrders(options)) {
     query = query.order(order.column, {
       ascending: order.ascending,
       ...(order.nullsFirst !== undefined ? { nullsFirst: order.nullsFirst } : {}),
@@ -76,11 +101,12 @@ export async function fetchContestSubmissionsAllPages<
   contestId: string,
   select: string,
   options?: FetchContestSubmissionsOptions,
-): Promise<{ data: T[]; error: unknown }> {
+): Promise<FetchContestSubmissionsResult<T>> {
   const chunkSize = options?.chunkSize ?? DEFAULT_CHUNK_SIZE;
   const maxRows = options?.maxRows ?? DEFAULT_MAX_ROWS;
   const rows: T[] = [];
   let rangeFrom = 0;
+  let lastPageFull = false;
 
   while (rows.length < maxRows) {
     const rangeTo = Math.min(rangeFrom + chunkSize - 1, maxRows - 1);
@@ -92,18 +118,26 @@ export async function fetchContestSubmissionsAllPages<
     ).range(rangeFrom, rangeTo);
 
     if (error) {
-      return { data: rows, error };
+      return { data: [], error, truncated: false };
     }
 
     const page = (chunk || []) as T[];
     if (page.length === 0) break;
 
     rows.push(...page);
-    if (page.length < chunkSize) break;
+    lastPageFull = page.length === chunkSize;
+    if (!lastPageFull) break;
     rangeFrom += chunkSize;
   }
 
-  return { data: rows, error: null };
+  const truncated = rows.length >= maxRows && lastPageFull;
+  if (truncated) {
+    console.warn(
+      `[fetchContestSubmissionsAllPages] Contest ${contestId} hit maxRows=${maxRows}; results truncated.`,
+    );
+  }
+
+  return { data: rows, error: null, truncated };
 }
 
 export type FetchContestTwitterTweetsOptions = {
@@ -113,7 +147,8 @@ export type FetchContestTwitterTweetsOptions = {
   deletedAtNull?: boolean;
   moderationStatusIn?: string[];
   orFilter?: string;
-  order?: { column: string; ascending: boolean };
+  order?: FetchContestSubmissionsOrder | FetchContestSubmissionsOrder[];
+  skipIdTiebreak?: boolean;
 };
 
 function buildContestTwitterTweetsQuery(
@@ -141,11 +176,22 @@ function buildContestTwitterTweetsQuery(
     query = query.in("moderation_status", options.moderationStatusIn);
   }
 
-  const order = options?.order ?? {
-    column: "tweet_created_at",
-    ascending: false,
-  };
-  query = query.order(order.column, { ascending: order.ascending });
+  const orders: FetchContestSubmissionsOrder[] = options?.order
+    ? Array.isArray(options.order)
+      ? [...options.order]
+      : [options.order]
+    : [{ column: "tweet_created_at", ascending: false }];
+
+  if (!options?.skipIdTiebreak && !orders.some((o) => o.column === "id")) {
+    orders.push({ ...ID_TIEBREAK_ORDER });
+  }
+
+  for (const order of orders) {
+    query = query.order(order.column, {
+      ascending: order.ascending,
+      ...(order.nullsFirst !== undefined ? { nullsFirst: order.nullsFirst } : {}),
+    });
+  }
 
   return query;
 }
@@ -158,11 +204,12 @@ export async function fetchContestTwitterTweetsAllPages<
   contestId: string,
   select: string,
   options?: FetchContestTwitterTweetsOptions,
-): Promise<{ data: T[]; error: unknown }> {
+): Promise<FetchContestSubmissionsResult<T>> {
   const chunkSize = options?.chunkSize ?? DEFAULT_CHUNK_SIZE;
   const maxRows = options?.maxRows ?? DEFAULT_MAX_ROWS;
   const rows: T[] = [];
   let rangeFrom = 0;
+  let lastPageFull = false;
 
   while (rows.length < maxRows) {
     const rangeTo = Math.min(rangeFrom + chunkSize - 1, maxRows - 1);
@@ -174,16 +221,24 @@ export async function fetchContestTwitterTweetsAllPages<
     ).range(rangeFrom, rangeTo);
 
     if (error) {
-      return { data: rows, error };
+      return { data: [], error, truncated: false };
     }
 
     const page = (chunk || []) as T[];
     if (page.length === 0) break;
 
     rows.push(...page);
-    if (page.length < chunkSize) break;
+    lastPageFull = page.length === chunkSize;
+    if (!lastPageFull) break;
     rangeFrom += chunkSize;
   }
 
-  return { data: rows, error: null };
+  const truncated = rows.length >= maxRows && lastPageFull;
+  if (truncated) {
+    console.warn(
+      `[fetchContestTwitterTweetsAllPages] Contest ${contestId} hit maxRows=${maxRows}; results truncated.`,
+    );
+  }
+
+  return { data: rows, error: null, truncated };
 }

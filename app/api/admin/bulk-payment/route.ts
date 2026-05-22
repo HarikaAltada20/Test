@@ -249,12 +249,22 @@ export async function POST(request: NextRequest) {
       flatFeeBonus > 0
     ) {
       // Calculate current bonus spending
-      const { data: bonusSpendingData } = await fetchContestSubmissionsAllPages(
+      const { data: bonusSpendingData, error: bonusSpendErr } =
+        await fetchContestSubmissionsAllPages(
         supabaseAdmin,
         contest_id,
         "bonus_amount",
         { bonusPaid: true, order: { column: "created_at", ascending: true } },
       );
+
+      if (bonusSpendErr) {
+        return NextResponse.json(
+          {
+            error: `Failed to load bonus spending: ${String((bonusSpendErr as { message?: string })?.message ?? bonusSpendErr)}`,
+          },
+          { status: 500 },
+        );
+      }
 
       const currentBonusSpent = (bonusSpendingData || []).reduce(
         (sum, sub) => sum + (Number(sub.bonus_amount) || 0),
@@ -321,12 +331,21 @@ export async function POST(request: NextRequest) {
     let bonusReasonCounts: Record<string, number> = {};
     let globalExpectedBonusMap = new Map<string, number>();
 
-    const { data: bonusSpendingData } = await fetchContestSubmissionsAllPages(
+    const { data: bonusSpendingData, error: bonusSpendErr2 } =
+      await fetchContestSubmissionsAllPages(
       supabaseAdmin,
       contest_id,
       "bonus_amount",
       { bonusPaid: true, order: { column: "created_at", ascending: true } },
     );
+    if (bonusSpendErr2) {
+      return NextResponse.json(
+        {
+          error: `Failed to load bonus spending: ${String((bonusSpendErr2 as { message?: string })?.message ?? bonusSpendErr2)}`,
+        },
+        { status: 500 },
+      );
+    }
     const currentBonusSpent = (bonusSpendingData || []).reduce(
       (sum, sub) => sum + (Number(sub.bonus_amount) || 0),
       0,
@@ -338,12 +357,21 @@ export async function POST(request: NextRequest) {
       // We intentionally avoid pre-filtering with `.or(...)` on Supabase because the
       // PostgREST `.or()` syntax parses commas inside `in.(...)` as top-level filter
       // separators, which yields an empty result and silently breaks the bonus map.
-      const { data: contestEligibleSubs } = await fetchContestSubmissionsAllPages(
+      const { data: contestEligibleSubs, error: contestEligibleErr } =
+        await fetchContestSubmissionsAllPages(
         supabaseAdmin,
         contest_id,
         "id, created_at, status, paid",
         { order: { column: "created_at", ascending: true } },
       );
+      if (contestEligibleErr) {
+        return NextResponse.json(
+          {
+            error: `Failed to load contest submissions for bonus map: ${String((contestEligibleErr as { message?: string })?.message ?? contestEligibleErr)}`,
+          },
+          { status: 500 },
+        );
+      }
       globalExpectedBonusMap = buildFlatFeeBonusExpectedCentsBySubmissionId(
         contest as any,
         (contestEligibleSubs || []).map((s: any) => ({
@@ -356,7 +384,8 @@ export async function POST(request: NextRequest) {
     }
 
     // Check how much has already been paid to this creator
-    const { data: previousSubmissions } = await fetchContestSubmissionsAllPages(
+    const { data: previousSubmissions, error: previousSubsErr } =
+      await fetchContestSubmissionsAllPages(
       supabaseAdmin,
       contest_id,
       "earnings, paid",
@@ -366,6 +395,14 @@ export async function POST(request: NextRequest) {
         order: { column: "created_at", ascending: true },
       },
     );
+    if (previousSubsErr) {
+      return NextResponse.json(
+        {
+          error: `Failed to load creator payment history: ${String((previousSubsErr as { message?: string })?.message ?? previousSubsErr)}`,
+        },
+        { status: 500 },
+      );
+    }
 
     const alreadyPaidAmount =
       previousSubmissions?.reduce(

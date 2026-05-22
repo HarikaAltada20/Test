@@ -52,6 +52,40 @@ import {
   fetchContestSubmissionsAllPages,
   fetchContestTwitterTweetsAllPages,
 } from "@/lib/fetch-contest-submissions";
+
+type LeaderboardBudgetSubmissionRow = {
+  paid: boolean;
+  earnings: number | null;
+  bonus_paid: boolean;
+  bonus_amount?: number | null;
+  creator_id: string;
+  created_at: string;
+  status?: string;
+  views?: number;
+};
+
+type TwitterLeaderboardTweetRow = {
+  id: string;
+  creator_id: string;
+  tweet_created_at: string | null;
+  moderation_status: string;
+  is_eligible?: boolean;
+  deleted_at?: string | null;
+};
+
+type CpmBudgetSubmissionRow = {
+  id: string;
+  creator_id: string;
+  created_at: string;
+  status?: string;
+  paid: boolean;
+  earnings: number | null;
+  views?: number;
+  platform?: string;
+  other_stats?: unknown;
+  bonus_paid: boolean;
+  bonus_amount?: number | null;
+};
 import { getPlatformIconWithFallback } from "@/lib/platform-icons";
 import { cn } from "@/lib/utils";
 import { EnhancedTabs } from "@/components/ui/enhancedTabs";
@@ -713,9 +747,11 @@ export default function OpportunitiesPage({
                 ?.flat_fee_bonus > 0
             ) {
               let leaderboardSubmissions: Submission[] = [];
+              let leaderboardFetchOk = false;
 
               if (isTwitterTextImage) {
-                const { data: twitterTweets } = await fetchContestTwitterTweetsAllPages(
+                const { data: twitterTweets, error: twitterErr } =
+                  await fetchContestTwitterTweetsAllPages<TwitterLeaderboardTweetRow>(
                   supabase,
                   contest.id,
                   "id, creator_id, tweet_created_at, moderation_status, is_eligible, deleted_at",
@@ -727,9 +763,12 @@ export default function OpportunitiesPage({
                   },
                 );
 
+                if (!twitterErr) {
+                  leaderboardFetchOk = true;
                 leaderboardSubmissions = (twitterTweets || [])
                   .filter((tweet) => tweet.creator_id)
-                  .map((tweet) => ({
+                  .map(
+                    (tweet): Submission & { id: string; is_twitter_tweet: true } => ({
                     id: tweet.id,
                     creator_id: tweet.creator_id,
                     created_at:
@@ -742,9 +781,12 @@ export default function OpportunitiesPage({
                     earnings: null,
                     bonus_paid: false,
                     platform: "twitter",
-                  }));
+                  }),
+                  );
+                }
               } else {
-                const { data: submissions } = await fetchContestSubmissionsAllPages(
+                const { data: submissions, error: subsErr } =
+                  await fetchContestSubmissionsAllPages<LeaderboardBudgetSubmissionRow>(
                   supabase,
                   contest.id,
                   "paid, earnings, bonus_paid, bonus_amount, creator_id, created_at, status, views",
@@ -754,7 +796,24 @@ export default function OpportunitiesPage({
                   },
                 );
 
-                leaderboardSubmissions = (submissions || []) as Submission[];
+                if (!subsErr) {
+                  leaderboardFetchOk = true;
+                  leaderboardSubmissions = (submissions || []).map((s) => ({
+                    paid: !!s.paid,
+                    earnings: s.earnings ?? null,
+                    bonus_paid: !!s.bonus_paid,
+                    bonus_amount:
+                      s.bonus_amount != null ? Number(s.bonus_amount) : undefined,
+                    creator_id: s.creator_id,
+                    created_at: s.created_at,
+                    status: s.status,
+                    views: s.views,
+                  }));
+                }
+              }
+
+              if (!leaderboardFetchOk) {
+                return updatedContest;
               }
 
               const actualBudgetSpent = calculateLeaderboardBudgetSpent(
@@ -784,7 +843,8 @@ export default function OpportunitiesPage({
               contest.platform === "twitter" &&
               contest.contest_based_details?.cpm_contest?.cpm_rate_usd > 0
             ) {
-              const { data: twitterTweets } = await fetchContestTwitterTweetsAllPages(
+              const { data: twitterTweets, error: twitterCpmErr } =
+                await fetchContestTwitterTweetsAllPages(
                 supabase,
                 contest.id,
                 "id, creator_id, tweet_created_at, points, moderation_status, manual_points_adjustment, is_eligible, deleted_at",
@@ -795,6 +855,10 @@ export default function OpportunitiesPage({
                   order: { column: "tweet_created_at", ascending: true },
                 },
               );
+
+              if (twitterCpmErr) {
+                return updatedContest;
+              }
 
               const submissions =
                 twitterTweets?.map((tweet: any) => ({
@@ -851,7 +915,8 @@ export default function OpportunitiesPage({
               contest.contest_based_details?.cpm_contest?.cpm_rate_usd > 0 &&
               !["twitter", "x"].includes((contest.platform || "").toLowerCase())
             ) {
-              const { data: submissions } = await fetchContestSubmissionsAllPages(
+              const { data: submissions, error: cpmSubsErr } =
+                await fetchContestSubmissionsAllPages<CpmBudgetSubmissionRow>(
                 supabase,
                 contest.id,
                 "id, creator_id, created_at, status, paid, earnings, views, platform, other_stats, bonus_paid, bonus_amount",
@@ -861,20 +926,27 @@ export default function OpportunitiesPage({
                 },
               );
 
-              const submissionRecords = (submissions || []).map(
+              if (cpmSubsErr) {
+                return updatedContest;
+              }
+
+              const submissionRecords: Submission[] = (submissions || []).map(
                 (submission) => ({
                   id: submission.id,
                   creator_id: submission.creator_id,
                   created_at: submission.created_at,
                   status: submission.status,
-                  paid: submission.paid,
-                  earnings: submission.earnings,
+                  paid: !!submission.paid,
+                  earnings: submission.earnings ?? null,
                   views: submission.views,
                   platform: submission.platform,
                   other_stats: submission.other_stats,
                   manual_points_adjustment: 0,
-                  bonus_paid: submission.bonus_paid ?? false,
-                  bonus_amount: submission.bonus_amount ?? undefined,
+                  bonus_paid: !!submission.bonus_paid,
+                  bonus_amount:
+                    submission.bonus_amount != null
+                      ? Number(submission.bonus_amount)
+                      : undefined,
                 }),
               );
 
@@ -908,7 +980,8 @@ export default function OpportunitiesPage({
               treatAsMilestonePool &&
               contest.contest_based_details?.milestone_contest
             ) {
-              const { data: submissions } = await fetchContestSubmissionsAllPages(
+              const { data: submissions, error: milestoneSubsErr } =
+                await fetchContestSubmissionsAllPages(
                 supabase,
                 contest.id,
                 "id, creator_id, created_at, status, paid, paid_at, earnings, views, platform, other_stats, bonus_paid, bonus_amount, metadata, milestone_bonus_paid",
@@ -918,6 +991,7 @@ export default function OpportunitiesPage({
                 },
               );
 
+              if (!milestoneSubsErr) {
               const submissionRecords = (submissions || []).map(
                 (submission: any) => ({
                   id: submission.id,
@@ -957,6 +1031,7 @@ export default function OpportunitiesPage({
                   },
                 },
               };
+              }
             }
 
             return updatedContest;

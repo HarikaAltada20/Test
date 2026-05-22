@@ -1123,7 +1123,8 @@ export default function SubmitContentPage({
       setContest(contestData);
 
       // Fetch existing submissions for progress tracking
-      const { data: existingSubmissions } = await fetchContestSubmissionsAllPages(
+      const { data: existingSubmissions, error: existingSubsErr } =
+        await fetchContestSubmissionsAllPages(
         supabase,
         contestId,
         "*",
@@ -1133,7 +1134,12 @@ export default function SubmitContentPage({
         },
       );
 
-      if (existingSubmissions && existingSubmissions.length > 0) {
+      if (existingSubsErr) {
+        console.error(
+          "[submit] Failed to load existing submissions:",
+          existingSubsErr,
+        );
+      } else if (existingSubmissions && existingSubmissions.length > 0) {
         // Track submitted videos and progress
         const videoIds = existingSubmissions.map(
           (sub: any) => sub.video_id || sub.content_link,

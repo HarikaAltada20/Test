@@ -124,6 +124,7 @@ async function enrichContestWithCalculatedBudgets(
     leaderboard?.flat_fee_bonus > 0
   ) {
     let leaderboardSubmissions: Submission[] = [];
+    let leaderboardFetchOk = false;
 
     if (isTwitterTextImage) {
       const { data: twitterTweets, error: twitterError } =
@@ -139,8 +140,15 @@ async function enrichContestWithCalculatedBudgets(
           },
         );
 
-      if (!twitterError && twitterTweets) {
-        leaderboardSubmissions = twitterTweets
+      if (twitterError) {
+        console.error(
+          "Failed to load leaderboard Twitter tweets for contest",
+          contest.id,
+          String((twitterError as { message?: string })?.message ?? twitterError),
+        );
+      } else {
+        leaderboardFetchOk = true;
+        leaderboardSubmissions = (twitterTweets || [])
           .filter((tweet: any) => tweet.creator_id)
           .map((tweet: any) => ({
             id: tweet.id,
@@ -157,14 +165,23 @@ async function enrichContestWithCalculatedBudgets(
           }));
       }
     } else {
-      const { data: submissions } = await fetchContestSubmissionsAllPages(
+      const { data: submissions, error: submissionsError } =
+        await fetchContestSubmissionsAllPages(
         supabase,
         contest.id,
         "id, paid, earnings, bonus_paid, bonus_amount, creator_id, created_at, status, views",
         { statusIn: ["verified", "paid"], order: { column: "created_at", ascending: true } },
       );
 
-      leaderboardSubmissions = (submissions || []).map((submission: any) => ({
+      if (submissionsError) {
+        console.error(
+          "Failed to load leaderboard submissions for contest",
+          contest.id,
+          String((submissionsError as { message?: string })?.message ?? submissionsError),
+        );
+      } else {
+        leaderboardFetchOk = true;
+        leaderboardSubmissions = (submissions || []).map((submission: any) => ({
         id: submission.id,
         paid: submission.paid,
         earnings: submission.earnings,
@@ -179,8 +196,10 @@ async function enrichContestWithCalculatedBudgets(
         status: submission.status || undefined,
         views: submission.views,
       }));
+      }
     }
 
+    if (leaderboardFetchOk) {
     const actualBudgetSpent = calculateLeaderboardBudgetSpent(
       leaderboardSubmissions,
       leaderboard.flat_fee_bonus,
@@ -196,6 +215,7 @@ async function enrichContestWithCalculatedBudgets(
         },
       },
     };
+    }
   }
 
   const platformSlug = (contest.platform || "").toLowerCase();
@@ -203,7 +223,8 @@ async function enrichContestWithCalculatedBudgets(
   const isTwitterPlatform = platformSlug === "twitter" || platformSlug === "x";
 
   if (contest.contest_type === "cpm" && isTwitterPlatform && hasCpmRate) {
-    const { data: twitterTweets } = await fetchContestTwitterTweetsAllPages(
+    const { data: twitterTweets, error: twitterCpmError } =
+      await fetchContestTwitterTweetsAllPages(
       supabase,
       contest.id,
       `
@@ -224,6 +245,13 @@ async function enrichContestWithCalculatedBudgets(
       },
     );
 
+    if (twitterCpmError) {
+      console.error(
+        "Failed to load Twitter CPM tweets for contest",
+        contest.id,
+        String((twitterCpmError as { message?: string })?.message ?? twitterCpmError),
+      );
+    } else {
     const submissions =
       (twitterTweets?.map((tweet: any) => ({
         id: tweet.id,
@@ -284,6 +312,7 @@ async function enrichContestWithCalculatedBudgets(
         },
       },
     };
+    }
   } else if (isCpmContestType(contest.contest_type) && hasCpmRate) {
     const { data: submissions, error: submissionsError } =
       await fetchContestSubmissionsAllPages(

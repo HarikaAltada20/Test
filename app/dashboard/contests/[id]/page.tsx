@@ -1,7 +1,10 @@
 import { createClient } from "@/utils/supabase/server";
 import { createAdminClient } from "@/utils/supabase/admin";
 import { REVERSAL_TRANSACTION_REMARK } from "@/lib/payment-utils";
-import { fetchContestSubmissionsAllPages } from "@/lib/fetch-contest-submissions";
+import {
+  fetchContestSubmissionsAllPages,
+  formatSubmissionFetchError,
+} from "@/lib/fetch-contest-submissions";
 import { redirect } from "next/navigation";
 import ContestDetailClient from "./contest-detail-client"; // Import the new client component
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -184,12 +187,20 @@ export default async function ContestDetailPage({
       insights_status,
       last_insights_update
     `;
+  type ContestSubmissionRow = {
+    creator_id?: string | null;
+    [key: string]: unknown;
+  };
   const { data: submissionsData, error: submissionsError } =
-    await fetchContestSubmissionsAllPages(
+    await fetchContestSubmissionsAllPages<ContestSubmissionRow>(
       supabase,
       contestId,
       SUBMISSIONS_SELECT,
     );
+
+  const submissionsFetchError = submissionsError
+    ? formatSubmissionFetchError(submissionsError)
+    : undefined;
 
   if (submissionsError) {
     console.error(
@@ -392,7 +403,9 @@ export default async function ContestDetailPage({
   const allCreatorIds = new Set<string>();
   if (submissionsData && submissionsData.length > 0) {
     submissionsData.forEach((sub) => {
-      if (sub.creator_id) allCreatorIds.add(sub.creator_id);
+      const creatorId =
+        typeof sub.creator_id === "string" ? sub.creator_id.trim() : "";
+      if (creatorId) allCreatorIds.add(creatorId);
     });
   }
   if (twitterTweetsData && twitterTweetsData.length > 0) {
@@ -1040,6 +1053,7 @@ export default async function ContestDetailPage({
         user={user}
         creatorModerationData={creatorModerationData}
         milestoneBonusPaidByCreator={milestoneBonusPaidByCreator}
+        submissionsFetchError={submissionsFetchError}
       />
     </TooltipProvider>
   );

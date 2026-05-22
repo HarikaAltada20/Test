@@ -151,7 +151,8 @@ export async function applyBulkDualRewardsWalletReversals(params: {
       )?.title ||
       "Contest";
 
-    const { data: contestSubRows } = await fetchContestSubmissionsAllPages(
+    const { data: contestSubRows, error: contestSubErr } =
+      await fetchContestSubmissionsAllPages(
       params.supabaseAdmin,
       contestId,
       "id",
@@ -160,6 +161,15 @@ export async function applyBulkDualRewardsWalletReversals(params: {
         order: { column: "created_at", ascending: true },
       },
     );
+
+    if (contestSubErr) {
+      console.error(
+        "[dual-rewards-bulk-reversal] Failed to load contest submissions:",
+        contestId,
+        contestSubErr,
+      );
+      continue;
+    }
 
     const contestSubmissionIds = new Set(
       (contestSubRows || []).map((r) => String(r.id)),

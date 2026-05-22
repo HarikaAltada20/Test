@@ -28,7 +28,10 @@ import {
 } from "@/lib/payout-rules";
 import { allocateFlatFeeBonusCents } from "@/lib/bonus-allocation";
 import { buildFlatFeeBonusExpectedCentsBySubmissionId } from "@/lib/twitter-cpm-bonus-expected";
-import { fetchContestSubmissionsAllPages } from "@/lib/fetch-contest-submissions";
+import {
+  fetchContestSubmissionsAllPages,
+  formatSubmissionFetchError,
+} from "@/lib/fetch-contest-submissions";
 import { formatCurrencyFromCents } from "@/lib/currency-utils";
 import { applyPayoutAdjustment } from "@/lib/payout-adjustment";
 import {
@@ -753,13 +756,19 @@ export async function POST(request: Request) {
         // apply its internal eligibility rule (status in verified/approved/paid OR paid=true).
         // Pre-filtering with PostgREST `.or(...)` is unsafe here because commas inside
         // `in.(...)` collide with the `.or()` separator and return an empty result.
-        const { data: allEligibleContestSubs } =
+        const { data: allEligibleContestSubs, error: allEligibleErr } =
           await fetchContestSubmissionsAllPages(
             supabaseAdmin,
             submissionFull.contest_id,
             "id, created_at, status, paid",
             { order: { column: "created_at", ascending: true } },
           );
+        if (allEligibleErr) {
+          return NextResponse.json(
+            { error: formatSubmissionFetchError(allEligibleErr) },
+            { status: 500 },
+          );
+        }
         const expectedBonusMap = buildFlatFeeBonusExpectedCentsBySubmissionId(
           contest as any,
           (allEligibleContestSubs || []).map((s: any) => ({
@@ -787,7 +796,8 @@ export async function POST(request: Request) {
         }
 
         // Calculate current bonus spending
-        const { data: bonusSpendingData } = await fetchContestSubmissionsAllPages(
+        const { data: bonusSpendingData, error: bonusSpendErr } =
+          await fetchContestSubmissionsAllPages<{ bonus_amount?: number | null }>(
           supabaseAdmin,
           submissionFull.contest_id,
           "bonus_amount",
@@ -796,9 +806,15 @@ export async function POST(request: Request) {
             order: { column: "created_at", ascending: true },
           },
         );
+        if (bonusSpendErr) {
+          return NextResponse.json(
+            { error: formatSubmissionFetchError(bonusSpendErr) },
+            { status: 500 },
+          );
+        }
 
           const currentBonusSpent = (bonusSpendingData || []).reduce(
-            (sum, sub) => sum + (sub.bonus_amount || 0),
+            (sum, sub) => sum + (Number(sub.bonus_amount) || 0),
             0,
           );
 
@@ -1036,7 +1052,13 @@ export async function POST(request: Request) {
                 },
               );
 
-            if (!payoutSubsErr && Array.isArray(payoutEligibleSubs)) {
+            if (payoutSubsErr) {
+              return NextResponse.json(
+                { error: formatSubmissionFetchError(payoutSubsErr) },
+                { status: 500 },
+              );
+            }
+            if (Array.isArray(payoutEligibleSubs)) {
               const records = payoutEligibleSubs.map((sub: any) => ({
                 id: String(sub.id),
                 creator_id: sub.creator_id,
@@ -1123,7 +1145,12 @@ export async function POST(request: Request) {
                       ) ?? rawAmount;
                   }
                 } else {
-                  const { data: creatorSubs } = await fetchContestSubmissionsAllPages(
+                  const { data: creatorSubs } =
+                    await fetchContestSubmissionsAllPages<{
+                      id: string;
+                      views?: number | null;
+                      status?: string;
+                    }>(
                     supabaseAdmin,
                     submissionFull.contest_id,
                     "id, views, status",
@@ -1137,7 +1164,7 @@ export async function POST(request: Request) {
                   if (creatorSubs) {
                     let runningTotal = 0;
                     for (const sub of creatorSubs) {
-                      let subViews = sub.views || 0;
+                      let subViews = Number(sub.views) || 0;
                       if (
                         typeof cpm?.min_views === "number" &&
                         subViews < cpm.min_views
@@ -1630,7 +1657,9 @@ export async function POST(request: Request) {
     };
 
     const shouldRunPaidReversal =
-      wasPaidBeforeReversal || reversalSubmissionRow.bonus_paid === true;
+      wasPaidBeforeReversal ||
+      reversalSubmissionRow.paid === true ||
+      reversalSubmissionRow.bonus_paid === true;
 
     if (
       (action === SUBMISSION_STATUS.verified ||

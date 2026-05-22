@@ -6,7 +6,10 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { verifyAdminAccess } from "@/utils/admin-auth";
 import { isMilestoneContestType } from "@/lib/contest-type";
 import { REVERSAL_TRANSACTION_REMARK } from "@/lib/payment-utils";
-import { fetchContestSubmissionsAllPages } from "@/lib/fetch-contest-submissions";
+import {
+  fetchContestSubmissionsAllPages,
+  formatSubmissionFetchError,
+} from "@/lib/fetch-contest-submissions";
 
 async function fetchTwitterTweetsAllPages(
   supabase: any,
@@ -172,6 +175,10 @@ export default async function AdminContestDetailPage({
         contestId,
         SUBMISSIONS_SELECT,
       );
+
+    const submissionsFetchError = submissionsError
+      ? formatSubmissionFetchError(submissionsError)
+      : undefined;
 
     if (submissionsError) {
       console.error(
@@ -843,6 +850,7 @@ export default async function AdminContestDetailPage({
           isAdminView={true}
           creatorModerationData={creatorModerationData}
           milestoneBonusPaidByCreator={milestoneBonusPaidByCreator}
+          submissionsFetchError={submissionsFetchError}
         />
       </TooltipProvider>
     );
