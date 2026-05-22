@@ -101,6 +101,26 @@ describe("computeDualRewardsSubmissionReversalDue", () => {
     assert.ok(total < 8172);
   });
 
+  it("returns zero due for verified-only rows with expected earnings but no wallet credit", () => {
+    const due = computeDualRewardsSubmissionReversalDue({
+      submissionRow: {
+        id: "sub-verified",
+        paid: false,
+        earnings: 4790,
+        bonus_paid: false,
+        dual_rewards_payout: { cpm_cents: 4790, milestone_cents: 0 },
+      },
+      submissionId: "sub-verified",
+      rewardTxns: [],
+      refundTxns: [],
+      reversalRemark,
+      wasPaidBeforeReversal: false,
+    });
+    assert.equal(due.totalCents, 0);
+    assert.equal(due.mainCents, 0);
+    assert.equal(due.bonusCents, 0);
+  });
+
   it("caps due by recorded grant when ledger net exceeds submission row", () => {
     const due = computeDualRewardsSubmissionReversalDue({
       submissionRow: {

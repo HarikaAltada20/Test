@@ -1,8 +1,70 @@
 import { POST as verifySubmission } from "../verify-submission/route";
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/utils/supabase/admin";
+import { createClient } from "@/utils/supabase/server";
 import { verifyAdminAccess } from "@/utils/admin-auth";
 import { applyBulkDualRewardsWalletReversals } from "@/lib/dual-rewards-bulk-reversal";
+
+const PAYMENT_BULK_ACTIONS = new Set([
+  "paid",
+  "mark_bonus_paid",
+  "mark_both_paid",
+]);
+
+function getContestAdvertiserId(
+  contests:
+    | { advertiser_id: string }
+    | { advertiser_id: string }[]
+    | null
+    | undefined,
+): string | undefined {
+  if (!contests) return undefined;
+  if (Array.isArray(contests)) return contests[0]?.advertiser_id;
+  return contests.advertiser_id;
+}
+
+async function assertAdvertiserOwnsSubmissions(
+  submissionIds: string[],
+  advertiserId: string,
+): Promise<NextResponse | null> {
+  if (submissionIds.length === 0) {
+    return null;
+  }
+
+  const supabase = await createClient();
+  const { data: rows, error } = await supabase
+    .from("submissions")
+    .select("id, contests!inner(advertiser_id)")
+    .in("id", submissionIds);
+
+  if (error) {
+    return NextResponse.json(
+      { error: "Failed to verify submission ownership" },
+      { status: 500 },
+    );
+  }
+
+  const foundIds = new Set((rows ?? []).map((r) => r.id));
+  const missing = submissionIds.filter((id) => !foundIds.has(id));
+  if (missing.length > 0) {
+    return NextResponse.json(
+      { error: "One or more submissions were not found" },
+      { status: 404 },
+    );
+  }
+
+  const unauthorized = (rows ?? []).some(
+    (row) => getContestAdvertiserId(row.contests) !== advertiserId,
+  );
+  if (unauthorized) {
+    return NextResponse.json(
+      { error: "You can only manage submissions for your own contests" },
+      { status: 403 },
+    );
+  }
+
+  return null;
+}
 
 /** Default matches previous behavior (10 parallel verifies). Override via env if you see DB/connect saturation. */
 function getVerifyConcurrency(): number {
@@ -81,11 +143,48 @@ export async function POST(request: Request) {
     }
 
     const { isAdmin, error: adminError } = await verifyAdminAccess();
+
     if (!isAdmin) {
-      return NextResponse.json(
-        { error: adminError || "Admin access required" },
-        { status: 403 },
+      const supabase = await createClient();
+      const {
+        data: { user: authUser },
+        error: userError,
+      } = await supabase.auth.getUser();
+
+      if (userError || !authUser) {
+        return NextResponse.json(
+          { error: "Authentication required" },
+          { status: 401 },
+        );
+      }
+
+      const { data: userData, error: userDataError } = await supabase
+        .from("users")
+        .select("user_type")
+        .eq("id", authUser.id)
+        .single();
+
+      if (userDataError || !userData || userData.user_type !== "advertiser") {
+        return NextResponse.json(
+          { error: adminError || "Admin access required" },
+          { status: 403 },
+        );
+      }
+
+      if (PAYMENT_BULK_ACTIONS.has(action)) {
+        return NextResponse.json(
+          { error: "Admin access required for payment actions" },
+          { status: 403 },
+        );
+      }
+
+      const ownershipError = await assertAdvertiserOwnsSubmissions(
+        submissionIds,
+        authUser.id,
       );
+      if (ownershipError) {
+        return ownershipError;
+      }
     }
 
     const skipWalletDebitIds = new Set<string>();
@@ -126,9 +225,8 @@ export async function POST(request: Request) {
 
     const results: { id: string; data: unknown }[] = [];
     const errors: { id: string; error: string }[] = [];
-    const concurrency = isPaidReversalBulkAction(action)
-      ? 1
-      : getVerifyConcurrency();
+    // Wallet reversals run once above; per-item verify uses skipWalletDebit — safe to parallelize.
+    const concurrency = getVerifyConcurrency();
 
     const headers = new Headers();
     request.headers.forEach((value, key) => headers.set(key, value));
