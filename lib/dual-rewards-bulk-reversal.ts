@@ -52,13 +52,37 @@ function toSpendRow(row: SubmissionRow): DualPoolSpendSubmissionRow {
   };
 }
 
+type ContestJoinRow = {
+  contest_type?: string | null;
+  title?: string | null;
+};
+
+/** Supabase may type `contests!inner(...)` as an object or a one-element array. */
+function contestJoinFromRow(row: {
+  contests?: ContestJoinRow | ContestJoinRow[] | null;
+}): ContestJoinRow | null {
+  const contests = row.contests;
+  if (contests == null) return null;
+  return Array.isArray(contests) ? (contests[0] ?? null) : contests;
+}
+
 function dueToRefundSummary(
   due: DualRewardsSubmissionReversalDue,
 ): BulkDualReversalRefundSummary {
+  const total = Math.max(0, Math.round(due.totalCents));
+  if (total <= 0) {
+    return {
+      reward_refunded_cents: 0,
+      bonus_refunded_cents: 0,
+      total_refunded_cents: 0,
+      cpm_refunded_cents: 0,
+      milestone_refunded_cents: 0,
+    };
+  }
   return {
     reward_refunded_cents: due.mainCents,
     bonus_refunded_cents: due.bonusCents,
-    total_refunded_cents: due.totalCents,
+    total_refunded_cents: total,
     cpm_refunded_cents: due.mainCents,
     milestone_refunded_cents: due.bonusCents,
   };
@@ -89,10 +113,14 @@ export async function applyBulkDualRewardsWalletReversals(params: {
     return { ok: false, error: rowsErr.message };
   }
 
-  const dualRows = (rows || []).filter(
-    (r: { contests?: { contest_type?: string } }) =>
-      r.contests?.contest_type === "dual_rewards",
-  ) as (SubmissionRow & { contests?: { title?: string } })[];
+  const dualRows = (rows || []).filter((r) => {
+    const contest = contestJoinFromRow(
+      r as SubmissionRow & {
+        contests?: ContestJoinRow | ContestJoinRow[] | null;
+      },
+    );
+    return contest?.contest_type === "dual_rewards";
+  }) as SubmissionRow[];
 
   if (dualRows.length === 0) {
     return { ok: true, skipWalletDebitIds: new Set(), refundSummaryBySubmissionId: new Map() };
@@ -112,9 +140,14 @@ export async function applyBulkDualRewardsWalletReversals(params: {
   for (const [, groupRows] of byCreatorContest) {
     const creatorId = groupRows[0].creator_id;
     const contestId = groupRows[0].contest_id;
+    const sourceRow = (rows || []).find(
+      (r) => String(r.id) === String(groupRows[0].id),
+    );
     const contestTitle =
       params.contestTitle ||
-      (groupRows[0] as { contests?: { title?: string } }).contests?.title ||
+      contestJoinFromRow(
+        sourceRow as { contests?: ContestJoinRow | ContestJoinRow[] | null },
+      )?.title ||
       "Contest";
 
     const { data: contestSubRows } = await params.supabaseAdmin
@@ -169,6 +202,9 @@ export async function applyBulkDualRewardsWalletReversals(params: {
         wasPaidBeforeReversal: wasPaid,
       });
       perSubDue.set(row.id, due);
+      if (due.totalCents <= 0) {
+        continue;
+      }
       totalDueCents += due.totalCents;
       refundSummaryBySubmissionId.set(row.id, dueToRefundSummary(due));
       skipWalletDebitIds.add(row.id);
@@ -200,61 +236,35 @@ export async function applyBulkDualRewardsWalletReversals(params: {
     let debitCents = totalDueCents;
     if (availableCents < totalDueCents) {
       if (availableCents <= 0) {
-        const selectedIds = new Set(groupRows.map((r) => r.id));
-        const selectedRewardSum = rewardTxns
-          .filter((tx) =>
-            selectedIds.has(submissionIdFromMoneyTxnMetadata(tx.metadata)),
-          )
-          .reduce((s, tx) => s + Math.max(0, Number(tx.amount) || 0), 0);
-        const alreadyReversedCents = refundTxns
-          .filter(
-            (tx) =>
-              selectedIds.has(submissionIdFromMoneyTxnMetadata(tx.metadata)) &&
-              (!tx.remarks || tx.remarks === REVERSAL_TRANSACTION_REMARK),
-          )
-          .reduce((s, tx) => s + Math.max(0, Number(tx.amount) || 0), 0);
+        // Creator already withdrew funds; close the ledger with refund rows only.
+        debitCents = 0;
+      } else {
+        const scaled = scaleDualReversalDuesToTotalCap(perSubDue, availableCents);
+        perSubDue.clear();
+        for (const [id, due] of scaled) {
+          perSubDue.set(id, due);
+          refundSummaryBySubmissionId.set(id, dueToRefundSummary(due));
+        }
+        debitCents = availableCents;
+      }
+    }
 
+    if (debitCents > 0) {
+      const debitRes = await debitCreatorWithdrawableBalance(
+        creatorId,
+        debitCents,
+      );
+      if (!debitRes.success) {
         for (const row of groupRows) {
           skipWalletDebitIds.delete(row.id);
           refundSummaryBySubmissionId.delete(row.id);
         }
         return {
           ok: false,
-          error:
-            `Insufficient withdrawable balance for bulk reversal: need ${totalDueCents}¢ ` +
-            `for ${groupRows.length} selected submission(s), but none is available. ` +
-            (alreadyReversedCents > 0
-              ? `${alreadyReversedCents}¢ already recorded as reversed in the ledger. `
-              : "") +
-            `Credited for selection was ${selectedRewardSum}¢.`,
+          error: `Failed to reverse creator credit (${debitCents}¢ for ${groupRows.length} submission(s)): ${debitRes.error}`,
           failedSubmissionIds: groupRows.map((r) => r.id),
         };
       }
-
-      const scaled = scaleDualReversalDuesToTotalCap(perSubDue, availableCents);
-      perSubDue.clear();
-      for (const [id, due] of scaled) {
-        perSubDue.set(id, due);
-        refundSummaryBySubmissionId.set(id, dueToRefundSummary(due));
-      }
-      debitCents = availableCents;
-      totalDueCents = debitCents;
-    }
-
-    const debitRes = await debitCreatorWithdrawableBalance(
-      creatorId,
-      debitCents,
-    );
-    if (!debitRes.success) {
-      for (const row of groupRows) {
-        skipWalletDebitIds.delete(row.id);
-        refundSummaryBySubmissionId.delete(row.id);
-      }
-      return {
-        ok: false,
-        error: `Failed to reverse creator credit (${debitCents}¢ for ${groupRows.length} submission(s)): ${debitRes.error}`,
-        failedSubmissionIds: groupRows.map((r) => r.id),
-      };
     }
 
     for (const row of groupRows) {
