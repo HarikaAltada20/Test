@@ -1610,13 +1610,8 @@ export async function POST(request: Request) {
         freshPaidRow?.dual_rewards_payout ?? submissionFull.dual_rewards_payout,
     };
 
-    const paidComponentsForGate =
-      getDualRewardsSubmissionPaidComponents(reversalSubmissionRow);
-    const paidComponentsTotalCents =
-      paidComponentsForGate.cpmCents + paidComponentsForGate.milestoneCents;
-
     const shouldRunPaidReversal =
-      wasPaidBeforeReversal || paidComponentsTotalCents > 0;
+      wasPaidBeforeReversal || reversalSubmissionRow.bonus_paid === true;
 
     if (
       (action === SUBMISSION_STATUS.verified ||
@@ -1734,56 +1729,58 @@ export async function POST(request: Request) {
           0,
           Math.round(Number(reversalProfile?.withdrawable_balance) || 0),
         );
+
+        let walletDebitCents = reversalAmount;
         if (reversalAvailableCents < reversalAmount) {
           if (reversalAvailableCents <= 0) {
-            return NextResponse.json(
-              {
-                error: `Failed to reverse creator credit: insufficient withdrawable balance (need ${reversalAmount}¢, available 0¢)`,
-              },
-              { status: 500 },
+            walletDebitCents = 0;
+          } else {
+            const scaled = scaleDualReversalDuesToTotalCap(
+              new Map([
+                [
+                  submissionId,
+                  {
+                    totalCents: reversalAmount,
+                    mainCents: mainReversalAmount,
+                    bonusCents: bonusReversalAmount,
+                    bonusReversals,
+                  },
+                ],
+              ]),
+              reversalAvailableCents,
             );
-          }
-          const scaled = scaleDualReversalDuesToTotalCap(
-            new Map([
-              [
-                submissionId,
-                {
-                  totalCents: reversalAmount,
-                  mainCents: mainReversalAmount,
-                  bonusCents: bonusReversalAmount,
-                  bonusReversals,
-                },
-              ],
-            ]),
-            reversalAvailableCents,
-          );
-          const capped = scaled.get(submissionId)!;
-          mainReversalAmount = capped.mainCents;
-          bonusReversalAmount = capped.bonusCents;
-          bonusReversals = capped.bonusReversals;
-          reversalAmount = capped.totalCents;
-          if (paidStatusReversalSummary) {
-            paidStatusReversalSummary = {
-              ...paidStatusReversalSummary,
-              reward_refunded_cents: mainReversalAmount,
-              bonus_refunded_cents: bonusReversalAmount,
-              total_refunded_cents: reversalAmount,
-              cpm_refunded_cents: mainReversalAmount,
-              milestone_refunded_cents: bonusReversalAmount,
-            };
+            const capped = scaled.get(submissionId)!;
+            mainReversalAmount = capped.mainCents;
+            bonusReversalAmount = capped.bonusCents;
+            bonusReversals = capped.bonusReversals;
+            walletDebitCents = capped.totalCents;
+            reversalAmount = capped.totalCents;
+            if (paidStatusReversalSummary) {
+              paidStatusReversalSummary = {
+                ...paidStatusReversalSummary,
+                reward_refunded_cents: mainReversalAmount,
+                bonus_refunded_cents: bonusReversalAmount,
+                total_refunded_cents: reversalAmount,
+                cpm_refunded_cents: mainReversalAmount,
+                milestone_refunded_cents: bonusReversalAmount,
+              };
+            }
           }
         }
 
-        const debitRes = await debitCreatorWithdrawableBalance(
-          submissionFull.creator_id,
-          reversalAmount,
-        );
-        if (!debitRes.success) {
-          return NextResponse.json(
-            { error: `Failed to reverse creator credit: ${debitRes.error}` },
-            { status: 500 },
+        if (walletDebitCents > 0) {
+          const debitRes = await debitCreatorWithdrawableBalance(
+            submissionFull.creator_id,
+            walletDebitCents,
           );
+          if (!debitRes.success) {
+            return NextResponse.json(
+              { error: `Failed to reverse creator credit: ${debitRes.error}` },
+              { status: 500 },
+            );
+          }
         }
+
         if (mainReversalAmount > 0) {
           await logTransactionAsAdmin(
             submissionFull.creator_id,
