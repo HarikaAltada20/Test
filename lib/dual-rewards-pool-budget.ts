@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { fetchContestSubmissionsAllPages } from "@/lib/fetch-contest-submissions";
 import { getPoolBudgetCentsFromDetails } from "@/lib/contest-type";
 import {
   parseDualRewardsPayoutJson,
@@ -278,7 +279,9 @@ export function computeDualRewardsSubmissionReversalDue(params: {
       ),
   );
   const earningsCents = Math.max(0, Number(submissionRow.earnings) || 0);
-  let mainReversalAmount = Math.max(mainRewardNet, earningsCents);
+  let mainReversalAmount = wasPaidBeforeReversal
+    ? Math.max(mainRewardNet, earningsCents)
+    : mainRewardNet;
 
   const submissionWalletNet = computeSubmissionGrossWalletNetCents(
     rewardTxns,
@@ -286,6 +289,17 @@ export function computeDualRewardsSubmissionReversalDue(params: {
     submissionId,
     reversalRemark,
   );
+
+  // Verified / pending review only — no wallet credit was released; do not treat
+  // row earnings or dual_rewards_payout JSON as money to reverse.
+  if (!wasPaidBeforeReversal && submissionWalletNet <= 0) {
+    return {
+      totalCents: 0,
+      mainCents: 0,
+      bonusCents: 0,
+      bonusReversals: [],
+    };
+  }
 
   const bonusByType = new Map<string, number>();
   for (const tx of rewardTxns.filter(isBonusSubmissionTx)) {
@@ -603,13 +617,15 @@ export async function fetchDualRewardsPoolSpendRows(
   | { rows: DualPoolSpendSubmissionRow[]; error?: undefined }
   | { rows?: undefined; error: string }
 > {
-  const { data, error } = await supabaseAdmin
-    .from("submissions")
-    .select(POOL_SPEND_SELECT)
-    .eq("contest_id", contestId);
+  const { data, error } = await fetchContestSubmissionsAllPages(
+    supabaseAdmin,
+    contestId,
+    POOL_SPEND_SELECT,
+    { order: { column: "created_at", ascending: true } },
+  );
 
   if (error) {
-    return { error: error.message };
+    return { error: String((error as { message?: string })?.message ?? error) };
   }
 
   return {

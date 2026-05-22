@@ -73,6 +73,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { createClient } from "@/utils/supabase/client";
+import { fetchContestTwitterTweetsAllPages } from "@/lib/fetch-contest-submissions";
 import {
   getMetricsRefreshCooldownInfoOpportunities,
   formatRemainingTime,
@@ -1872,11 +1873,10 @@ export function ContestClientPage({
     setLoadingAnalyticsTweets(true);
 
     try {
-      // Fetch all tweets from database (including rejected ones for analytics)
-      const { data: tweetsData, error } = await supabase
-        .from("twitter_campaign_tweets")
-        .select(
-          `
+      const { data: tweetsData, error } = await fetchContestTwitterTweetsAllPages(
+        supabase,
+        contestId,
+        `
           id,
           tweet_id,
           tweet_url,
@@ -1898,12 +1898,14 @@ export function ContestClientPage({
           target_tweet_id,
           tweet_type
         `,
-        )
-        .eq("contest_id", contestId)
-        .order("tweet_created_at", { ascending: false });
+        { order: { column: "tweet_created_at", ascending: false } },
+      );
 
       if (error) {
-        throw new Error(error.message || "Failed to fetch tweets");
+        throw new Error(
+          String((error as { message?: string })?.message ?? error) ||
+            "Failed to fetch tweets",
+        );
       }
 
       if (isMounted) {

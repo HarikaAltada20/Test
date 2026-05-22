@@ -1,6 +1,10 @@
 import { createClient } from "@/utils/supabase/server";
 import { createAdminClient } from "@/utils/supabase/admin";
 import { REVERSAL_TRANSACTION_REMARK } from "@/lib/payment-utils";
+import {
+  fetchContestSubmissionsAllPages,
+  formatSubmissionFetchError,
+} from "@/lib/fetch-contest-submissions";
 import { redirect } from "next/navigation";
 import ContestDetailClient from "./contest-detail-client"; // Import the new client component
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -158,11 +162,8 @@ export default async function ContestDetailPage({
     isTwitterCampaign,
   });
 
-  // Fetch submissions (for YouTube/Instagram - manual submissions)
-  const { data: submissionsData, error: submissionsError } = await supabase
-    .from("submissions")
-    .select(
-      `
+  // Fetch submissions (paginated; PostgREST caps at 1000 rows per request)
+  const SUBMISSIONS_SELECT = `
       id,
       created_at,
       content_link,
@@ -171,6 +172,7 @@ export default async function ContestDetailPage({
       earnings,
       other_stats,
       platform,
+      video_id,
       video_thumbnail_url,
       video_title,
       creator_id,
@@ -184,10 +186,21 @@ export default async function ContestDetailPage({
       metadata,
       insights_status,
       last_insights_update
-    `
-    )
-    .eq("contest_id", contestId)
-    .order("created_at", { ascending: false });
+    `;
+  type ContestSubmissionRow = {
+    creator_id?: string | null;
+    [key: string]: unknown;
+  };
+  const { data: submissionsData, error: submissionsError } =
+    await fetchContestSubmissionsAllPages<ContestSubmissionRow>(
+      supabase,
+      contestId,
+      SUBMISSIONS_SELECT,
+    );
+
+  const submissionsFetchError = submissionsError
+    ? formatSubmissionFetchError(submissionsError)
+    : undefined;
 
   if (submissionsError) {
     console.error(
@@ -390,7 +403,9 @@ export default async function ContestDetailPage({
   const allCreatorIds = new Set<string>();
   if (submissionsData && submissionsData.length > 0) {
     submissionsData.forEach((sub) => {
-      if (sub.creator_id) allCreatorIds.add(sub.creator_id);
+      const creatorId =
+        typeof sub.creator_id === "string" ? sub.creator_id.trim() : "";
+      if (creatorId) allCreatorIds.add(creatorId);
     });
   }
   if (twitterTweetsData && twitterTweetsData.length > 0) {
@@ -982,6 +997,7 @@ export default async function ContestDetailPage({
         earnings: sub.earnings,
         other_stats: sub.other_stats,
         platform: sub.platform,
+        video_id: sub.video_id ?? null,
         video_thumbnail_url: sub.video_thumbnail_url,
         video_title: sub.video_title,
         paid: sub.paid,
@@ -1037,6 +1053,7 @@ export default async function ContestDetailPage({
         user={user}
         creatorModerationData={creatorModerationData}
         milestoneBonusPaidByCreator={milestoneBonusPaidByCreator}
+        submissionsFetchError={submissionsFetchError}
       />
     </TooltipProvider>
   );

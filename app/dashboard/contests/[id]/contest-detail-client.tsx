@@ -118,6 +118,7 @@ import {
 import { adjustBonusCents, parsePayoutAdjustment } from "@/lib/payout-rules";
 import { YouTubeAnalyticsPanel } from "@/components/youtube/YouTubeAnalyticsPanel";
 import { SubmissionLeaderboardExportDialog } from "@/components/submissions/SubmissionLeaderboardExportDialog";
+import { InlineSubmissionVideoPlayer } from "@/components/InlineSubmissionVideoPlayer";
 import { ContestAnalyticsExportDialog } from "@/components/contests/ContestAnalyticsExportDialog";
 import {
   getAnalyticsTabCounts,
@@ -249,6 +250,7 @@ const YT_TRAFFIC_SOURCE_LABELS: Record<string, string> = {
 };
 const YT_COLUMN_IDS = YT_TABLE_COLUMNS.map((c) => c.id);
 const YT_VISIBLE_COLUMNS_STORAGE_KEY = "goviral_yt_visible_columns";
+const DETAILED_VIEW_STORAGE_KEY = "goviral_submissions_detailed_view";
 // Column ids that require "Show Core Analytics" (hidden in customize modal when brand doesn't have access)
 const YT_CORE_COLUMN_IDS = [
   "shares",
@@ -347,6 +349,7 @@ interface Submission {
   last_insights_update?: string | null;
   platform: string | null;
   video_thumbnail_url: string | null;
+  video_id?: string | null;
   video_title?: string | null; // For YouTube/Instagram video submissions
   creator_display_name: string | null;
   creator_username: string | null;
@@ -476,6 +479,8 @@ interface ContestDetailClientProps {
     }
   >;
   milestoneBonusPaidByCreator?: MilestoneMostVerifiedBonusPaidByCreator;
+  /** Set when SSR failed to load submissions (avoid silent empty/partial list). */
+  submissionsFetchError?: string;
 }
 
 const sanitizeTwitterList = (value: unknown): string[] => {
@@ -869,6 +874,7 @@ export default function ContestDetailClient({
   user,
   creatorModerationData = {},
   milestoneBonusPaidByCreator = {},
+  submissionsFetchError,
 }: ContestDetailClientProps) {
   const supabase = createClient();
   const { toast, toasts } = useToast();
@@ -1679,6 +1685,21 @@ export default function ContestDetailClient({
   /** Loading shown in Creator Submissions modal while parent completes verify/bulk after paid-reversal confirm */
   const [creatorModalParentBulkLoading, setCreatorModalParentBulkLoading] =
     useState(false);
+  const [normalViewSelectedSubmissions, setNormalViewSelectedSubmissions] =
+    useState<Set<string>>(new Set());
+  const [normalViewBulkActiveAction, setNormalViewBulkActiveAction] = useState<
+    "verify" | "reject" | "pending" | null
+  >(null);
+  const normalViewBulkStatusActionsBusy =
+    normalViewBulkActiveAction !== null || creatorModalParentBulkLoading;
+  const normalViewBulkLoadingText = (
+    action: "verify" | "reject" | "pending",
+  ): string => {
+    if (creatorModalParentBulkLoading) return "Processing updates...";
+    if (action === "verify") return "Verifying submissions...";
+    if (action === "pending") return "Setting to pending...";
+    return "Rejecting submissions...";
+  };
   const [confirmTwitterCreatorReversal, setConfirmTwitterCreatorReversal] =
     useState<{
       creatorId: string;
@@ -1733,8 +1754,18 @@ export default function ContestDetailClient({
     setSortOption(isTwitterTextImageContest ? "points_desc" : "views_desc");
   }, [currentContest?.id, isTwitterTextImageContest]);
 
-  // Creator-wise view state
+  // Creator-wise view + optional inline video playback (Detailed View checkbox)
   const [viewMode, setViewMode] = useState<"normal" | "creator-wise">("normal");
+  const [detailedViewEnabled, setDetailedViewEnabled] = useState(false);
+
+  const isSubmissionTableView = viewMode === "normal";
+  const supportsInlineContentEmbed =
+    !!currentContest.platform &&
+    ["youtube", "instagram", "tiktok"].some((p) =>
+      currentContest.platform!.toLowerCase().includes(p),
+    );
+  const useInlineContentPlayer =
+    isSubmissionTableView && detailedViewEnabled && supportsInlineContentEmbed;
   const [selectedCreatorForModal, setSelectedCreatorForModal] = useState<
     string | null
   >(null);
@@ -2036,6 +2067,111 @@ export default function ContestDetailClient({
     (currentPage - 1) * itemsPerPage,
     currentPage * itemsPerPage,
   );
+
+  const normalViewSelectionIncludesPaid = useMemo(() => {
+    for (const id of normalViewSelectedSubmissions) {
+      const sub = currentSubmissions.find((s) => s.id === id);
+      if (submissionIsPaidRow(sub)) {
+        return true;
+      }
+    }
+    return false;
+  }, [normalViewSelectedSubmissions, currentSubmissions]);
+
+  const showNormalViewBulkModeration =
+    currentContest.post_contest_status !== "payouts_processed" &&
+    (currentContest.post_contest_status !== "verification_complete" ||
+      activeStatusTab === "paid" ||
+      normalViewSelectionIncludesPaid);
+
+  const handleNormalViewSelectAll = () => {
+    const ids = sortedSubmissions.map((s) => s.id);
+    const allSelected =
+      ids.length > 0 &&
+      ids.every((id) => normalViewSelectedSubmissions.has(id));
+    if (allSelected) {
+      setNormalViewSelectedSubmissions(new Set());
+    } else {
+      setNormalViewSelectedSubmissions(new Set(ids));
+    }
+  };
+
+  const handleNormalViewCheckboxChange = (
+    submissionId: string,
+    checked: boolean,
+  ) => {
+    const newSet = new Set(normalViewSelectedSubmissions);
+    if (checked) {
+      newSet.add(submissionId);
+    } else {
+      newSet.delete(submissionId);
+    }
+    setNormalViewSelectedSubmissions(newSet);
+  };
+
+  const handleNormalViewBulkAction = async (
+    action: "verify" | "reject" | "pending",
+  ) => {
+    const selectedIds = Array.from(normalViewSelectedSubmissions);
+    if (selectedIds.length === 0) return;
+
+    if (action === "verify") {
+      if (
+        currentContest.post_contest_status !== "payouts_processed" &&
+        selectionIncludesPaidRow(currentSubmissions, selectedIds)
+      ) {
+        setConfirmReversal({
+          submissionIds: selectedIds,
+          target: "verified",
+        });
+        return;
+      }
+      setNormalViewBulkActiveAction("verify");
+      try {
+        await handleBulkUpdateSubmissionStatus(selectedIds, "verified");
+        setNormalViewSelectedSubmissions(new Set());
+      } finally {
+        setNormalViewBulkActiveAction(null);
+      }
+      return;
+    }
+
+    if (action === "reject") {
+      if (selectedIds.length === 0) return;
+      if (
+        currentContest.post_contest_status !== "payouts_processed" &&
+        selectionIncludesPaidRow(currentSubmissions, selectedIds)
+      ) {
+        setConfirmReversal({
+          submissionIds: selectedIds,
+          target: "rejected",
+          needRejectionReason: true,
+        });
+        return;
+      }
+      setPendingRejectionSubmissionIds(selectedIds);
+      setRejectionModalOpen(true);
+      return;
+    }
+
+    if (
+      currentContest.post_contest_status !== "payouts_processed" &&
+      selectionIncludesPaidRow(currentSubmissions, selectedIds)
+    ) {
+      setConfirmReversal({
+        submissionIds: selectedIds,
+        target: "pending",
+      });
+      return;
+    }
+    setNormalViewBulkActiveAction("pending");
+    try {
+      await handleBulkUpdateSubmissionStatus(selectedIds, "pending");
+      setNormalViewSelectedSubmissions(new Set());
+    } finally {
+      setNormalViewBulkActiveAction(null);
+    }
+  };
 
   const normalViewFlatFeeBonusExpectedCentsBySubmissionId = useMemo(
     () =>
@@ -4076,6 +4212,21 @@ export default function ContestDetailClient({
     ],
   );
 
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (!supportsInlineContentEmbed) {
+      setDetailedViewEnabled(false);
+      return;
+    }
+    try {
+      setDetailedViewEnabled(
+        localStorage.getItem(DETAILED_VIEW_STORAGE_KEY) === "true",
+      );
+    } catch (_) {
+      setDetailedViewEnabled(false);
+    }
+  }, [supportsInlineContentEmbed]);
+
   // Reset to page 1 when filter or sort changes
   useEffect(() => {
     setCurrentPage(1);
@@ -4955,7 +5106,7 @@ export default function ContestDetailClient({
             };
           case "rejected":
             return {
-              title: "❌ Submission Rejected",
+              title: "Submission Rejected",
               description: reason
                 ? `Rejected: ${reason.split("\n")[0]}`
                 : "Submission has been rejected",
@@ -5328,8 +5479,9 @@ export default function ContestDetailClient({
       let errorMessage = "";
       let totalProcessed = 0;
       const refundAggregate = { rewardCents: 0, bonusCents: 0 };
-      let normalRefundRewardCents = 0;
-      let normalRefundBonusCents = 0;
+      let normalRefundTotalCents = 0;
+      let normalRefundCpmCents = 0;
+      let normalRefundMilestoneCents = 0;
 
       // Update state internally
       const updatedSubmissionsMap = new Map();
@@ -5351,12 +5503,26 @@ export default function ContestDetailClient({
                 | {
                     reward_refunded_cents?: number;
                     bonus_refunded_cents?: number;
+                    total_refunded_cents?: number;
+                    cpm_refunded_cents?: number;
+                    milestone_refunded_cents?: number;
                   }
                 | undefined;
               if (rs) {
-                normalRefundRewardCents +=
-                  Number(rs.reward_refunded_cents) || 0;
-                normalRefundBonusCents += Number(rs.bonus_refunded_cents) || 0;
+                const rowTotal = Math.max(
+                  0,
+                  Number(rs.total_refunded_cents) || 0,
+                );
+                if (rowTotal > 0) {
+                  normalRefundTotalCents += rowTotal;
+                  normalRefundCpmCents +=
+                    Number(rs.cpm_refunded_cents ?? rs.reward_refunded_cents) ||
+                    0;
+                  normalRefundMilestoneCents +=
+                    Number(
+                      rs.milestone_refunded_cents ?? rs.bonus_refunded_cents,
+                    ) || 0;
+                }
               }
             } else if (data?.success) {
               accumulateTwitterModerationRefund(
@@ -5381,6 +5547,22 @@ export default function ContestDetailClient({
                 ...(twitterAction === "reject"
                   ? { manual_points_reason: reason }
                   : {}),
+              });
+              totalProcessed++;
+            } else if (
+              data &&
+              (data as { success?: boolean }).success !== false
+            ) {
+              updatedSubmissionsMap.set(item.id, {
+                id: item.id,
+                status:
+                  action === "pending"
+                    ? "pending"
+                    : action === "rejected" || action === "reject"
+                      ? "rejected"
+                      : action === "verified" || action === "approve"
+                        ? "verified"
+                        : action,
               });
               totalProcessed++;
             }
@@ -5416,48 +5598,46 @@ export default function ContestDetailClient({
         );
       }
 
-      if (hasError) {
-        toast({
-          title: "Warning",
-          description: errorMessage || "Completed with some errors.",
-          variant: "destructive",
-        });
-      } else {
-        const actionText =
-          action === "verified" || action === "approve"
-            ? "Verified"
-            : action === "rejected" || action === "reject"
-              ? "Rejected"
-              : action === "pending"
-                ? "Set to Pending"
-                : "Updated";
-        const isRejectBulk = action === "rejected" || action === "reject";
-        const isPendingBulk = action === "pending";
-        const isVerifiedBulk = action === "verified" || action === "approve";
-        const isPaidBulk = action === "paid";
-        const bulkVariant = isRejectBulk
-          ? "destructive"
-          : isPendingBulk
-            ? "pending"
-            : isVerifiedBulk
-              ? "success"
-              : isPaidBulk
-                ? "payment"
-                : "default";
-        const normalRefundTotal =
-          normalRefundRewardCents + normalRefundBonusCents;
-        const twitterRefundTotal =
-          refundAggregate.rewardCents + refundAggregate.bonusCents;
-        const isDualRefundContest = isDualRewardsContestType(
-          currentContest?.contest_type,
-        );
-        let bulkDescription = `Successfully ${actionText} ${totalProcessed} submission(s).`;
-        if (normalRefundTotal > 0) {
+      const succeededCount =
+        totalProcessed > 0 ? totalProcessed : updatedSubmissionsMap.size;
+      const apiProcessedFallback = results.reduce(
+        (sum, r) =>
+          sum + (Number((r as { processed?: number }).processed) || 0),
+        0,
+      );
+      const finalSucceededCount =
+        succeededCount > 0 ? succeededCount : apiProcessedFallback;
+
+      const actionText =
+        action === "verified" || action === "approve"
+          ? "Verified"
+          : action === "rejected" || action === "reject"
+            ? "Rejected"
+            : action === "pending"
+              ? "Set to Pending"
+              : "Updated";
+      const isRejectBulk = action === "rejected" || action === "reject";
+      const isPendingBulk = action === "pending";
+      const isPaidBulk = action === "paid";
+      const twitterRefundTotal =
+        refundAggregate.rewardCents + refundAggregate.bonusCents;
+      const isDualRefundContest = isDualRewardsContestType(
+        currentContest?.contest_type,
+      );
+
+      if (finalSucceededCount > 0) {
+        let bulkDescription = `Successfully ${actionText} ${finalSucceededCount} submission(s).`;
+        if (hasError && errorMessage) {
+          bulkDescription += ` ${errorMessage}`;
+        }
+        if (normalRefundTotalCents > 0) {
           bulkDescription += ` ${formatRefundReversalToastLine(
             {
-              reward_refunded_cents: normalRefundRewardCents,
-              bonus_refunded_cents: normalRefundBonusCents,
-              total_refunded_cents: normalRefundTotal,
+              reward_refunded_cents: normalRefundCpmCents,
+              bonus_refunded_cents: normalRefundMilestoneCents,
+              total_refunded_cents: normalRefundTotalCents,
+              cpm_refunded_cents: normalRefundCpmCents,
+              milestone_refunded_cents: normalRefundMilestoneCents,
             },
             formatMoney,
             { isDualRewards: isDualRefundContest },
@@ -5472,16 +5652,30 @@ export default function ContestDetailClient({
         }
         toast({
           title: isRejectBulk
-            ? "Bulk rejection complete"
+            ? "Rejected"
             : isPendingBulk
-              ? "Bulk update complete"
-              : "✅ Success",
+              ? "Pending"
+              : isPaidBulk
+                ? "Payment"
+                : "✅ Success",
           description: bulkDescription,
-          variant: bulkVariant,
+          variant: isRejectBulk
+            ? "destructive"
+            : isPendingBulk
+              ? "pending"
+              : isPaidBulk
+                ? "payment"
+                : "success",
         });
         if (options?.closeCreatorModalOnSuccess) {
           setSelectedCreatorForModal(null);
         }
+      } else if (hasError) {
+        toast({
+          title: "Warning",
+          description: errorMessage || "Completed with some errors.",
+          variant: "destructive",
+        });
       }
 
       // Refresh UI to sync database states completely
@@ -5526,6 +5720,8 @@ export default function ContestDetailClient({
 
     if (closeModal) {
       setCreatorModalParentBulkLoading(true);
+    } else {
+      setNormalViewBulkActiveAction("reject");
     }
     try {
       await handleBulkUpdateSubmissionStatus(
@@ -5537,11 +5733,14 @@ export default function ContestDetailClient({
     } finally {
       if (closeModal) {
         setCreatorModalParentBulkLoading(false);
+      } else {
+        setNormalViewBulkActiveAction(null);
       }
     }
 
     setRejectionModalOpen(false);
     setPendingRejectionSubmissionIds([]);
+    setNormalViewSelectedSubmissions(new Set());
   };
 
   const handleMarkAsPaid = (submissionId: string) => {
@@ -6017,6 +6216,14 @@ export default function ContestDetailClient({
       : undefined;
     if (closeCreatorModalOnSuccess) {
       setCreatorModalParentBulkLoading(true);
+    } else {
+      setNormalViewBulkActiveAction(
+        target === "verified"
+          ? "verify"
+          : target === "pending"
+            ? "pending"
+            : "reject",
+      );
     }
     try {
       if (submissionIds.length === 1) {
@@ -6038,8 +6245,11 @@ export default function ContestDetailClient({
     } finally {
       if (closeCreatorModalOnSuccess) {
         setCreatorModalParentBulkLoading(false);
+      } else {
+        setNormalViewBulkActiveAction(null);
       }
     }
+    setNormalViewSelectedSubmissions(new Set());
   };
 
   const handleUpdateContestStatus = async () => {
@@ -7360,93 +7570,95 @@ export default function ContestDetailClient({
     }, 0);
   }
 
-  const analyticsSnapshotContext = useMemo((): ContestAnalyticsSnapshotContext => {
-    const raidTarget =
-      currentContest?.contest_based_details?.twitter_campaign?.raid_target;
-    const targetMetrics = raidTarget?.metrics || {};
-    const isRaid =
-      (currentContest as { content_type?: string }).content_type === "raid" &&
-      currentContest?.contest_format === "text_image";
+  const analyticsSnapshotContext =
+    useMemo((): ContestAnalyticsSnapshotContext => {
+      const raidTarget =
+        currentContest?.contest_based_details?.twitter_campaign?.raid_target;
+      const targetMetrics = raidTarget?.metrics || {};
+      const isRaid =
+        (currentContest as { content_type?: string }).content_type === "raid" &&
+        currentContest?.contest_format === "text_image";
 
-    const twitterRaid = isRaid
-      ? {
-          targetTweetUrl:
-            twitterMetrics?.target_tweet_url || raidTarget?.link || null,
-          targetLikes:
-            twitterMetrics?.target_likes ??
-            (targetMetrics.likes
-              ? parseInt(String(targetMetrics.likes), 10)
-              : null),
-          targetComments:
-            twitterMetrics?.target_comments ??
-            (targetMetrics.comments
-              ? parseInt(String(targetMetrics.comments), 10)
-              : null),
-          targetRetweets:
-            twitterMetrics?.target_retweets ??
-            (targetMetrics.retweets
-              ? parseInt(String(targetMetrics.retweets), 10)
-              : null),
-          targetQuoteReposts:
-            twitterMetrics?.target_quote_reposts ??
-            (targetMetrics.quote_reposts
-              ? parseInt(String(targetMetrics.quote_reposts), 10)
-              : null),
-          currentLikes: twitterMetrics?.target_current_likes ?? null,
-          currentComments: twitterMetrics?.target_current_comments ?? null,
-          currentRetweets: twitterMetrics?.target_current_retweets ?? null,
-          currentQuoteReposts:
-            twitterMetrics?.target_current_quote_reposts ?? null,
-          currentViews: twitterMetrics?.target_current_views ?? null,
-          targetsReached: twitterMetrics?.targets_reached ?? null,
-        }
-      : null;
+      const twitterRaid = isRaid
+        ? {
+            targetTweetUrl:
+              twitterMetrics?.target_tweet_url || raidTarget?.link || null,
+            targetLikes:
+              twitterMetrics?.target_likes ??
+              (targetMetrics.likes
+                ? parseInt(String(targetMetrics.likes), 10)
+                : null),
+            targetComments:
+              twitterMetrics?.target_comments ??
+              (targetMetrics.comments
+                ? parseInt(String(targetMetrics.comments), 10)
+                : null),
+            targetRetweets:
+              twitterMetrics?.target_retweets ??
+              (targetMetrics.retweets
+                ? parseInt(String(targetMetrics.retweets), 10)
+                : null),
+            targetQuoteReposts:
+              twitterMetrics?.target_quote_reposts ??
+              (targetMetrics.quote_reposts
+                ? parseInt(String(targetMetrics.quote_reposts), 10)
+                : null),
+            currentLikes: twitterMetrics?.target_current_likes ?? null,
+            currentComments: twitterMetrics?.target_current_comments ?? null,
+            currentRetweets: twitterMetrics?.target_current_retweets ?? null,
+            currentQuoteReposts:
+              twitterMetrics?.target_current_quote_reposts ?? null,
+            currentViews: twitterMetrics?.target_current_views ?? null,
+            targetsReached: twitterMetrics?.targets_reached ?? null,
+          }
+        : null;
 
-    return {
-      contestTitle: currentContest?.title || "Contest",
-      contestType: currentContest?.contest_type,
-      postContestStatus: currentContest?.post_contest_status,
+      return {
+        contestTitle: currentContest?.title || "Contest",
+        contestType: currentContest?.contest_type,
+        postContestStatus: currentContest?.post_contest_status,
+        durationDays,
+        totalSubmissionCount: currentSubmissions.length,
+        approvedCount: currentSubmissions.filter((s) => {
+          const status = getStatus(s);
+          return status === "verified" || status === "paid";
+        }).length,
+        isTwitterTextImage: isTwitterTextImageContest,
+        isTwitterPlatform,
+        contestFormat: currentContest?.contest_format,
+        platform: currentContest?.platform,
+        contentType: (currentContest as { content_type?: string }).content_type,
+        leaderboardTotalPrizeCents:
+          Number(
+            currentContest?.contest_based_details?.leaderboard_contest
+              ?.total_prize,
+          ) || 0,
+        allSubmissions:
+          currentSubmissions as ContestAnalyticsExportSubmission[],
+        getStatus: (submission) => getStatus(submission as Submission),
+        getSubmissionExpectedCents: (submission) =>
+          getSubmissionAnalyticsExpectedCents(submission as Submission),
+        getCreatorManualAdjustment,
+        creatorModerationData,
+        twitterRaid,
+        formatMoney,
+      };
+    }, [
+      currentContest?.title,
+      currentContest?.contest_type,
+      currentContest?.contest_format,
+      currentContest?.platform,
+      currentContest?.contest_based_details,
+      currentContest?.post_contest_status,
+      currentSubmissions,
       durationDays,
-      totalSubmissionCount: currentSubmissions.length,
-      approvedCount: currentSubmissions.filter((s) => {
-        const status = getStatus(s);
-        return status === "verified" || status === "paid";
-      }).length,
-      isTwitterTextImage: isTwitterTextImageContest,
+      isTwitterTextImageContest,
       isTwitterPlatform,
-      contestFormat: currentContest?.contest_format,
-      platform: currentContest?.platform,
-      contentType: (currentContest as { content_type?: string }).content_type,
-      leaderboardTotalPrizeCents:
-        Number(
-          currentContest?.contest_based_details?.leaderboard_contest?.total_prize,
-        ) || 0,
-      allSubmissions:
-        currentSubmissions as ContestAnalyticsExportSubmission[],
-      getStatus: (submission) => getStatus(submission as Submission),
-      getSubmissionExpectedCents: (submission) =>
-        getSubmissionAnalyticsExpectedCents(submission as Submission),
-      getCreatorManualAdjustment,
+      twitterMetrics,
       creatorModerationData,
-      twitterRaid,
-      formatMoney,
-    };
-  }, [
-    currentContest?.title,
-    currentContest?.contest_type,
-    currentContest?.contest_format,
-    currentContest?.platform,
-    currentContest?.contest_based_details,
-    currentContest?.post_contest_status,
-    currentSubmissions,
-    durationDays,
-    isTwitterTextImageContest,
-    isTwitterPlatform,
-    twitterMetrics,
-    creatorModerationData,
-    cappedExpectedRewardBySubmissionId,
-    milestoneSubmissionExpectedPayoutCents,
-  ]);
+      cappedExpectedRewardBySubmissionId,
+      milestoneSubmissionExpectedPayoutCents,
+    ]);
 
   const getAnalyticsSnapshotsForTabs = useCallback(
     (tabs: ContestAnalyticsTabId[]) =>
@@ -7940,16 +8152,14 @@ export default function ContestDetailClient({
       );
 
       const tweetModerationVariant =
-        action === "approve"
+        action === "approve" || action === "reject"
           ? "success"
-          : action === "reject"
-            ? "destructive"
-            : action === "paid"
-              ? "payment"
-              : "pending";
+          : action === "paid"
+            ? "payment"
+            : "pending";
       const tweetModerationTitle =
         action === "reject"
-          ? "Tweet rejected"
+          ? "✅ Tweet Rejected"
           : action === "pending"
             ? "Tweet set to pending"
             : "Success";
@@ -8502,6 +8712,16 @@ export default function ContestDetailClient({
 
   return (
     <div>
+      {submissionsFetchError ? (
+        <Alert variant="destructive" className="mb-6">
+          <AlertTriangle className="h-4 w-4" />
+          <AlertDescription>
+            Could not load submissions for this contest ({submissionsFetchError}
+            ). Counts and moderation data may be incomplete — refresh the page or
+            contact support if this persists.
+          </AlertDescription>
+        </Alert>
+      ) : null}
       <header
         className={cn(
           "mb-8 px-1 pb-6 border-b",
@@ -15777,11 +15997,45 @@ export default function ContestDetailClient({
                               </DialogContent>
                             </Dialog>
                           )}
+                          {supportsInlineContentEmbed &&
+                            isSubmissionTableView && (
+                              <div className="flex items-center gap-2 h-12">
+                                <Checkbox
+                                  id="detailed-view-inline"
+                                  checked={detailedViewEnabled}
+                                  onCheckedChange={(checked) => {
+                                    const enabled = checked === true;
+                                    setDetailedViewEnabled(enabled);
+                                    try {
+                                      if (enabled) {
+                                        localStorage.setItem(
+                                          DETAILED_VIEW_STORAGE_KEY,
+                                          "true",
+                                        );
+                                      } else {
+                                        localStorage.removeItem(
+                                          DETAILED_VIEW_STORAGE_KEY,
+                                        );
+                                      }
+                                    } catch (_) {}
+                                  }}
+                                />
+                                <Label
+                                  htmlFor="detailed-view-inline"
+                                  className={cn(
+                                    "text-sm font-medium cursor-pointer whitespace-nowrap",
+                                    isDark ? "text-white" : "text-slate-700",
+                                  )}
+                                >
+                                  Detailed View
+                                </Label>
+                              </div>
+                            )}
                           <Button
                             variant="outline"
                             size="sm"
                             disabled={
-                              (viewMode === "normal"
+                              (isSubmissionTableView
                                 ? sortedSubmissions.length === 0
                                 : (filteredCreatorGroups?.length ?? 0) === 0) ||
                               anyYtRefreshInProgress
@@ -15806,7 +16060,7 @@ export default function ContestDetailClient({
                           </Button>
                         </div>
                       </div>
-                      {viewMode === "normal" ? (
+                      {isSubmissionTableView ? (
                         <SubmissionLeaderboardExportDialog
                           key="export-submission"
                           exportKind="submission"
@@ -15828,7 +16082,11 @@ export default function ContestDetailClient({
                           defaultSelectedColumnIds={
                             submissionExportDefaultColumnIds
                           }
-                          viewLabel="Normal View"
+                          viewLabel={
+                            detailedViewEnabled
+                              ? "Detailed View"
+                              : "Normal View"
+                          }
                           sortLabel={exportSortLabel}
                         />
                       ) : (
@@ -15856,7 +16114,7 @@ export default function ContestDetailClient({
                           sortLabel={exportSortLabel}
                         />
                       )}
-                      {isTwitterTextImageContest && viewMode === "normal" && (
+                      {isTwitterTextImageContest && isSubmissionTableView && (
                         <TwitterContestSubmissionStatusTabs
                           activeStatusTab={activeStatusTab}
                           onValueChange={(v) => {
@@ -15868,7 +16126,110 @@ export default function ContestDetailClient({
                           getStatus={getStatus}
                         />
                       )}
-                      {viewMode === "normal" && (
+                      {isSubmissionTableView &&
+                        showNormalViewBulkModeration &&
+                        normalViewSelectedSubmissions.size > 0 && (
+                          <div
+                            className={cn(
+                              "border-b p-2 sm:p-3 mb-3 rounded-lg",
+                              isDark ? "bg-blue-900/20" : "bg-blue-50",
+                            )}
+                          >
+                            <div className="flex flex-wrap items-center gap-x-2 gap-y-2">
+                              <div className="flex shrink-0 items-center gap-2">
+                                <span
+                                  className={cn(
+                                    "text-sm font-medium",
+                                    isDark ? "text-blue-300" : "text-blue-900",
+                                  )}
+                                >
+                                  {normalViewSelectedSubmissions.size} selected
+                                </span>
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  onClick={() =>
+                                    setNormalViewSelectedSubmissions(new Set())
+                                  }
+                                  disabled={normalViewBulkStatusActionsBusy}
+                                  className={cn(
+                                    "h-8 text-sm",
+                                    isDark ? "text-white" : "text-gray-600",
+                                  )}
+                                >
+                                  Clear
+                                </Button>
+                              </div>
+                              <Button
+                                size="sm"
+                                onClick={() =>
+                                  handleNormalViewBulkAction("verify")
+                                }
+                                loading={
+                                  normalViewBulkActiveAction === "verify"
+                                }
+                                loadingText={normalViewBulkLoadingText(
+                                  "verify",
+                                )}
+                                disabled={normalViewBulkStatusActionsBusy}
+                                className={cn(
+                                  "h-8 shrink-0 whitespace-nowrap rounded-md",
+                                  isDark
+                                    ? "border bg-green-900/30 text-green-400 border-green-500"
+                                    : "bg-green-600 text-white hover:bg-green-700",
+                                )}
+                              >
+                                <CheckCircle className="h-4 w-4 mr-1" />
+                                Mark as Verified
+                              </Button>
+                              <Button
+                                size="sm"
+                                onClick={() =>
+                                  handleNormalViewBulkAction("reject")
+                                }
+                                loading={
+                                  normalViewBulkActiveAction === "reject"
+                                }
+                                loadingText={normalViewBulkLoadingText(
+                                  "reject",
+                                )}
+                                disabled={normalViewBulkStatusActionsBusy}
+                                className={cn(
+                                  "h-8 shrink-0 whitespace-nowrap rounded-md",
+                                  isDark
+                                    ? "border bg-red-900/30 text-red-400 border-red-500"
+                                    : "bg-red-600 text-white hover:bg-red-700",
+                                )}
+                              >
+                                <XCircle className="h-4 w-4 mr-1" />
+                                Mark as Rejected
+                              </Button>
+                              <Button
+                                size="sm"
+                                onClick={() =>
+                                  handleNormalViewBulkAction("pending")
+                                }
+                                loading={
+                                  normalViewBulkActiveAction === "pending"
+                                }
+                                loadingText={normalViewBulkLoadingText(
+                                  "pending",
+                                )}
+                                disabled={normalViewBulkStatusActionsBusy}
+                                className={cn(
+                                  "h-8 shrink-0 whitespace-nowrap rounded-md",
+                                  isDark
+                                    ? "border bg-yellow-900/30 text-yellow-400 border-yellow-500"
+                                    : "bg-yellow-600 text-white hover:bg-yellow-700",
+                                )}
+                              >
+                                <Clock className="h-4 w-4 mr-1" />
+                                Mark as Pending
+                              </Button>
+                            </div>
+                          </div>
+                        )}
+                      {isSubmissionTableView && (
                         <Table>
                           <TableHeader>
                             <TableRow
@@ -15879,7 +16240,26 @@ export default function ContestDetailClient({
                                   : "bg-slate-100 hover:bg-slate-100 border-slate-200",
                               )}
                             >
+                              {showNormalViewBulkModeration && (
+                                <TableHead className="w-12">
+                                  <Checkbox
+                                    checked={
+                                      sortedSubmissions.length > 0 &&
+                                      sortedSubmissions.every((s) =>
+                                        normalViewSelectedSubmissions.has(s.id),
+                                      )
+                                    }
+                                    onCheckedChange={handleNormalViewSelectAll}
+                                    aria-label="Select all submissions in current view"
+                                  />
+                                </TableHead>
+                              )}
                               <TableHead className="w-12">#</TableHead>
+                              {useInlineContentPlayer && (
+                                <TableHead className="w-[400px] min-w-[400px] text-center">
+                                  Video
+                                </TableHead>
+                              )}
                               <TableHead>Creator</TableHead>
                               {/* For Twitter campaigns, show tweet content column */}
                               {(currentContest.platform?.toLowerCase() ===
@@ -17033,6 +17413,22 @@ export default function ContestDetailClient({
                                         : "bg-gradient-to-r from-yellow-50 to-transparent border-l-4 border-l-yellow-400"),
                                   )}
                                 >
+                                  {showNormalViewBulkModeration && (
+                                    <TableCell>
+                                      <Checkbox
+                                        checked={normalViewSelectedSubmissions.has(
+                                          submission.id,
+                                        )}
+                                        onCheckedChange={(checked) =>
+                                          handleNormalViewCheckboxChange(
+                                            submission.id,
+                                            checked as boolean,
+                                          )
+                                        }
+                                        aria-label={`Select submission ${rank}`}
+                                      />
+                                    </TableCell>
+                                  )}
                                   <TableCell className="font-bold text-center">
                                     <div className="flex items-center justify-center">
                                       {rank <= 3 && (
@@ -17052,6 +17448,21 @@ export default function ContestDetailClient({
                                       {rank}
                                     </div>
                                   </TableCell>
+                                  {useInlineContentPlayer && (
+                                    <TableCell className="align-top p-4 w-[400px] min-w-[400px]">
+                                      <InlineSubmissionVideoPlayer
+                                        submissionId={submission.id}
+                                        contentLink={submission.content_link}
+                                        platform={submission.platform}
+                                        videoId={submission.video_id}
+                                        videoThumbnailUrl={
+                                          submission.video_thumbnail_url
+                                        }
+                                        isDark={isDark}
+                                        className="mx-auto"
+                                      />
+                                    </TableCell>
+                                  )}
                                   <TableCell>
                                     <div className="flex items-center gap-3">
                                       <Avatar className="bg-violet-100 text-violet-600 font-semibold text-xs sm:text-base">
@@ -19721,8 +20132,8 @@ export default function ContestDetailClient({
                         </Table>
                       )}
 
-                      {/* Pagination Controls for Normal View */}
-                      {viewMode === "normal" &&
+                      {/* Pagination Controls for submission table views */}
+                      {isSubmissionTableView &&
                         sortedSubmissions.length > 0 && (
                           <div className="mt-6 px-4">
                             <PaginationControls
@@ -25105,7 +25516,9 @@ export default function ContestDetailClient({
                                           (sum, s) =>
                                             sum +
                                             Number(s.earnings || 0) +
-                                            Number((s as any).bonus_amount || 0),
+                                            Number(
+                                              (s as any).bonus_amount || 0,
+                                            ),
                                           0,
                                         ) || 0;
                                   }
@@ -25888,6 +26301,7 @@ export default function ContestDetailClient({
           onArchiveUpdated={syncInstagramArchiveForCreator}
         />
       )}
+
     </div>
   );
 }

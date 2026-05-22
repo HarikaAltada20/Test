@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { fetchContestSubmissionsAllPages } from "@/lib/fetch-contest-submissions";
 import type { MilestonePayoutRule } from "@/lib/contest-utils-client";
 import {
   buildMilestoneSubmissionPayoutCentsMapForCreator,
@@ -127,16 +128,19 @@ async function fetchCreatorPayoutSubmissions(
   | { records: DualPayoutEligibleRecord[]; error?: undefined }
   | { records?: undefined; error: string }
 > {
-  const { data, error } = await supabaseAdmin
-    .from("submissions")
-    .select(DUAL_PAYOUT_ELIGIBLE_SUBMISSION_SELECT)
-    .eq("contest_id", contestId)
-    .eq("creator_id", creatorId)
-    .in("status", [...DUAL_PAYOUT_ELIGIBLE_STATUSES])
-    .order("created_at", { ascending: true });
+  const { data, error } = await fetchContestSubmissionsAllPages(
+    supabaseAdmin,
+    contestId,
+    DUAL_PAYOUT_ELIGIBLE_SUBMISSION_SELECT,
+    {
+      creatorId,
+      statusIn: [...DUAL_PAYOUT_ELIGIBLE_STATUSES],
+      order: { column: "created_at", ascending: true },
+    },
+  );
 
   if (error) {
-    return { error: error.message };
+    return { error: String((error as { message?: string })?.message ?? error) };
   }
   return { records: toDualPayoutEligibleRecords(data || []) };
 }
@@ -148,15 +152,18 @@ async function fetchContestMilestoneFcfsRows(
   | { records: DualPayoutEligibleRecord[]; error?: undefined }
   | { records?: undefined; error: string }
 > {
-  const { data, error } = await supabaseAdmin
-    .from("submissions")
-    .select(DUAL_PAYOUT_MILESTONE_FCFS_SELECT)
-    .eq("contest_id", contestId)
-    .in("status", [...DUAL_PAYOUT_ELIGIBLE_STATUSES])
-    .order("created_at", { ascending: true });
+  const { data, error } = await fetchContestSubmissionsAllPages(
+    supabaseAdmin,
+    contestId,
+    DUAL_PAYOUT_MILESTONE_FCFS_SELECT,
+    {
+      statusIn: [...DUAL_PAYOUT_ELIGIBLE_STATUSES],
+      order: { column: "created_at", ascending: true },
+    },
+  );
 
   if (error) {
-    return { error: error.message };
+    return { error: String((error as { message?: string })?.message ?? error) };
   }
   return { records: toDualPayoutEligibleRecords(data || []) };
 }
@@ -225,15 +232,18 @@ export async function fetchDualPayoutEligibleSubmissions(
   | { records: DualPayoutEligibleRecord[]; error?: undefined }
   | { records?: undefined; error: string }
 > {
-  const { data, error } = await supabaseAdmin
-    .from("submissions")
-    .select(DUAL_PAYOUT_ELIGIBLE_SUBMISSION_SELECT)
-    .eq("contest_id", contestId)
-    .in("status", [...DUAL_PAYOUT_ELIGIBLE_STATUSES])
-    .order("created_at", { ascending: true });
+  const { data, error } = await fetchContestSubmissionsAllPages(
+    supabaseAdmin,
+    contestId,
+    DUAL_PAYOUT_ELIGIBLE_SUBMISSION_SELECT,
+    {
+      statusIn: [...DUAL_PAYOUT_ELIGIBLE_STATUSES],
+      order: { column: "created_at", ascending: true },
+    },
+  );
 
   if (error) {
-    return { error: error.message };
+    return { error: String((error as { message?: string })?.message ?? error) };
   }
   return { records: toDualPayoutEligibleRecords(data || []) };
 }

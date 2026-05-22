@@ -14,6 +14,10 @@ import {
 } from "@/lib/cache-utils";
 import { computeMilestoneContestExpectedSpendCents } from "@/lib/milestone-contest-expected-spend";
 import { isCpmContestType, isMilestoneContestType } from "@/lib/contest-type";
+import {
+  fetchContestSubmissionsAllPages,
+  fetchContestTwitterTweetsAllPages,
+} from "@/lib/fetch-contest-submissions";
 
 type ContestWithDetails = {
   id: string;
@@ -120,22 +124,33 @@ async function enrichContestWithCalculatedBudgets(
     leaderboard?.flat_fee_bonus > 0
   ) {
     let leaderboardSubmissions: Submission[] = [];
+    let leaderboardFetchOk = false;
 
     if (isTwitterTextImage) {
-      const { data: twitterTweets, error: twitterError } = await supabase
-        .from("twitter_campaign_tweets")
-        .select(
+      const { data: twitterTweets, error: twitterError } =
+        await fetchContestTwitterTweetsAllPages(
+          supabase,
+          contest.id,
           "id, creator_id, tweet_created_at, moderation_status, is_eligible, deleted_at",
-        )
-        .eq("contest_id", contest.id)
-        .eq("is_eligible", true)
-        .is("deleted_at", null)
-        .in("moderation_status", ["verified", "paid"]);
+          {
+            isEligible: true,
+            deletedAtNull: true,
+            moderationStatusIn: ["verified", "paid"],
+            order: { column: "tweet_created_at", ascending: true },
+          },
+        );
 
-      if (!twitterError && twitterTweets) {
-        leaderboardSubmissions = twitterTweets
-          .filter((tweet) => tweet.creator_id)
-          .map((tweet) => ({
+      if (twitterError) {
+        console.error(
+          "Failed to load leaderboard Twitter tweets for contest",
+          contest.id,
+          String((twitterError as { message?: string })?.message ?? twitterError),
+        );
+      } else {
+        leaderboardFetchOk = true;
+        leaderboardSubmissions = (twitterTweets || [])
+          .filter((tweet: any) => tweet.creator_id)
+          .map((tweet: any) => ({
             id: tweet.id,
             creator_id: tweet.creator_id,
             created_at: tweet.tweet_created_at || new Date().toISOString(),
@@ -150,15 +165,23 @@ async function enrichContestWithCalculatedBudgets(
           }));
       }
     } else {
-      const { data: submissions } = await supabase
-        .from("submissions")
-        .select(
-          "id, paid, earnings, bonus_paid, bonus_amount, creator_id, created_at, status, views",
-        )
-        .eq("contest_id", contest.id)
-        .in("status", ["verified", "paid"]);
+      const { data: submissions, error: submissionsError } =
+        await fetchContestSubmissionsAllPages(
+        supabase,
+        contest.id,
+        "id, paid, earnings, bonus_paid, bonus_amount, creator_id, created_at, status, views",
+        { statusIn: ["verified", "paid"], order: { column: "created_at", ascending: true } },
+      );
 
-      leaderboardSubmissions = (submissions || []).map((submission) => ({
+      if (submissionsError) {
+        console.error(
+          "Failed to load leaderboard submissions for contest",
+          contest.id,
+          String((submissionsError as { message?: string })?.message ?? submissionsError),
+        );
+      } else {
+        leaderboardFetchOk = true;
+        leaderboardSubmissions = (submissions || []).map((submission: any) => ({
         id: submission.id,
         paid: submission.paid,
         earnings: submission.earnings,
@@ -173,8 +196,10 @@ async function enrichContestWithCalculatedBudgets(
         status: submission.status || undefined,
         views: submission.views,
       }));
+      }
     }
 
+    if (leaderboardFetchOk) {
     const actualBudgetSpent = calculateLeaderboardBudgetSpent(
       leaderboardSubmissions,
       leaderboard.flat_fee_bonus,
@@ -190,6 +215,7 @@ async function enrichContestWithCalculatedBudgets(
         },
       },
     };
+    }
   }
 
   const platformSlug = (contest.platform || "").toLowerCase();
@@ -197,10 +223,11 @@ async function enrichContestWithCalculatedBudgets(
   const isTwitterPlatform = platformSlug === "twitter" || platformSlug === "x";
 
   if (contest.contest_type === "cpm" && isTwitterPlatform && hasCpmRate) {
-    const { data: twitterTweets } = await supabase
-      .from("twitter_campaign_tweets")
-      .select(
-        `
+    const { data: twitterTweets, error: twitterCpmError } =
+      await fetchContestTwitterTweetsAllPages(
+      supabase,
+      contest.id,
+      `
             id,
             creator_id,
             tweet_created_at,
@@ -210,14 +237,23 @@ async function enrichContestWithCalculatedBudgets(
             is_eligible,
             deleted_at
           `,
-      )
-      .eq("contest_id", contest.id)
-      .eq("is_eligible", true)
-      .is("deleted_at", null)
-      .in("moderation_status", ["verified", "paid"]);
+      {
+        isEligible: true,
+        deletedAtNull: true,
+        moderationStatusIn: ["verified", "paid"],
+        order: { column: "tweet_created_at", ascending: true },
+      },
+    );
 
+    if (twitterCpmError) {
+      console.error(
+        "Failed to load Twitter CPM tweets for contest",
+        contest.id,
+        String((twitterCpmError as { message?: string })?.message ?? twitterCpmError),
+      );
+    } else {
     const submissions =
-      (twitterTweets?.map((tweet) => ({
+      (twitterTweets?.map((tweet: any) => ({
         id: tweet.id,
         creator_id: tweet.creator_id,
         created_at: tweet.tweet_created_at,
@@ -276,10 +312,12 @@ async function enrichContestWithCalculatedBudgets(
         },
       },
     };
+    }
   } else if (isCpmContestType(contest.contest_type) && hasCpmRate) {
-    const { data: submissions, error: submissionsError } = await supabase
-      .from("submissions")
-      .select(
+    const { data: submissions, error: submissionsError } =
+      await fetchContestSubmissionsAllPages(
+        supabase,
+        contest.id,
         `
               id,
               creator_id,
@@ -293,13 +331,14 @@ async function enrichContestWithCalculatedBudgets(
               bonus_paid,
               bonus_amount
             `,
-      )
-      .eq("contest_id", contest.id)
-      .in("status", ["verified", "paid"])
-      .order("created_at", { ascending: true });
+        {
+          statusIn: ["verified", "paid"],
+          order: { column: "created_at", ascending: true },
+        },
+      );
 
     if (!submissionsError) {
-      const submissionRecords = (submissions || []).map((submission) => ({
+      const submissionRecords = (submissions || []).map((submission: any) => ({
         id: submission.id,
         creator_id: submission.creator_id,
         created_at: submission.created_at,
@@ -356,7 +395,7 @@ async function enrichContestWithCalculatedBudgets(
       console.error(
         "Failed to calculate CPM budget for contest",
         contest.id,
-        submissionsError.message,
+        String((submissionsError as { message?: string })?.message ?? submissionsError),
       );
     }
   }
@@ -370,14 +409,15 @@ async function enrichContestWithCalculatedBudgets(
     milestoneContestDetails.milestones.length > 0
   ) {
     const { data: milestoneSubmissions, error: milestoneSubErr } =
-      await supabase
-        .from("submissions")
-        .select(
-          "id, creator_id, created_at, status, paid, paid_at, earnings, views, platform, other_stats, bonus_paid, bonus_amount, metadata, milestone_bonus_paid",
-        )
-        .eq("contest_id", contest.id)
-        .in("status", ["pending", "verified", "paid"])
-        .order("created_at", { ascending: true });
+      await fetchContestSubmissionsAllPages(
+        supabase,
+        contest.id,
+        "id, creator_id, created_at, status, paid, paid_at, earnings, views, platform, other_stats, bonus_paid, bonus_amount, metadata, milestone_bonus_paid",
+        {
+          statusIn: ["pending", "verified", "paid"],
+          order: { column: "created_at", ascending: true },
+        },
+      );
 
     if (!milestoneSubErr) {
       const milestoneRecords = (milestoneSubmissions || []).map((s: any) => ({
@@ -417,7 +457,7 @@ async function enrichContestWithCalculatedBudgets(
       console.error(
         "Failed to calculate milestone budget for contest",
         contest.id,
-        milestoneSubErr.message,
+        String((milestoneSubErr as { message?: string })?.message ?? milestoneSubErr),
       );
     }
   }

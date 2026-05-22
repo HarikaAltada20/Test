@@ -6,6 +6,10 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { verifyAdminAccess } from "@/utils/admin-auth";
 import { isMilestoneContestType } from "@/lib/contest-type";
 import { REVERSAL_TRANSACTION_REMARK } from "@/lib/payment-utils";
+import {
+  fetchContestSubmissionsAllPages,
+  formatSubmissionFetchError,
+} from "@/lib/fetch-contest-submissions";
 
 async function fetchTwitterTweetsAllPages(
   supabase: any,
@@ -137,11 +141,8 @@ export default async function AdminContestDetailPage({
       isTwitterCampaign,
     });
 
-    // Fetch submissions (for YouTube/Instagram - manual submissions)
-    const { data: submissionsData, error: submissionsError } = await supabase
-      .from("submissions")
-      .select(
-        `
+    // Fetch submissions (paginated; PostgREST caps at 1000 rows per request)
+    const SUBMISSIONS_SELECT = `
         id,
         created_at,
         content_link,
@@ -152,6 +153,7 @@ export default async function AdminContestDetailPage({
         insights_status,
         last_insights_update,
         platform,
+        video_id,
         video_thumbnail_url,
         video_title,
         creator_id,
@@ -162,10 +164,21 @@ export default async function AdminContestDetailPage({
         bonus_amount,
         milestone_bonus_paid,
         metadata
-      `
-      )
-      .eq("contest_id", contestId)
-      .order("created_at", { ascending: false });
+      `;
+    type AdminContestSubmissionRow = {
+      creator_id?: string | null;
+      [key: string]: unknown;
+    };
+    const { data: submissionsData, error: submissionsError } =
+      await fetchContestSubmissionsAllPages<AdminContestSubmissionRow>(
+        supabase,
+        contestId,
+        SUBMISSIONS_SELECT,
+      );
+
+    const submissionsFetchError = submissionsError
+      ? formatSubmissionFetchError(submissionsError)
+      : undefined;
 
     if (submissionsError) {
       console.error(
@@ -431,7 +444,7 @@ export default async function AdminContestDetailPage({
     const allCreatorIds = new Set<string>();
     if (submissionsData && submissionsData.length > 0) {
       submissionsData.forEach((sub) => {
-        if (sub.creator_id) allCreatorIds.add(sub.creator_id);
+        if (sub.creator_id) allCreatorIds.add(String(sub.creator_id));
       });
     }
     if (twitterTweetsData && twitterTweetsData.length > 0) {
@@ -786,6 +799,7 @@ export default async function AdminContestDetailPage({
           insights_status: (sub as any).insights_status ?? null,
           last_insights_update: (sub as any).last_insights_update ?? null,
           platform: sub.platform,
+          video_id: sub.video_id ?? null,
           video_thumbnail_url: sub.video_thumbnail_url,
           video_title: sub.video_title,
           creator_display_name: creatorDisplayName,
@@ -836,6 +850,7 @@ export default async function AdminContestDetailPage({
           isAdminView={true}
           creatorModerationData={creatorModerationData}
           milestoneBonusPaidByCreator={milestoneBonusPaidByCreator}
+          submissionsFetchError={submissionsFetchError}
         />
       </TooltipProvider>
     );

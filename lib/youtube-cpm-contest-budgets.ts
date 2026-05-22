@@ -1,3 +1,14 @@
+import { fetchContestSubmissionsAllPages } from "@/lib/fetch-contest-submissions";
+
+type CpmBudgetSubmissionRow = {
+  creator_id: string;
+  views?: number | null;
+  paid?: boolean | null;
+  bonus_paid?: boolean | null;
+  earnings?: number | null;
+  bonus_amount?: number | null;
+};
+
 /**
  * CPM budget rollup for YouTube (and shared contest CPM config). Used by the
  * YouTube metrics cron and the queue processor after a refresh run completes.
@@ -37,14 +48,25 @@ export async function updateYouTubeCpmContestBudgets(
 
       const maxEarningsPerCreator = contestDetails?.max_earnings_per_creator || null;
 
-      const { data: submissions } = await supabaseAdmin
-        .from("submissions")
-        .select(
-          "views, creator_id, created_at, paid, bonus_paid, earnings, bonus_amount"
-        )
-        .eq("contest_id", contest.id)
-        .in("status", ["verified", "paid"])
-        .order("created_at", { ascending: true });
+      const { data: submissions, error: submissionsError } =
+        await fetchContestSubmissionsAllPages<CpmBudgetSubmissionRow>(
+          supabaseAdmin,
+          contest.id,
+          "views, creator_id, created_at, paid, bonus_paid, earnings, bonus_amount",
+          {
+            statusIn: ["verified", "paid"],
+            order: { column: "created_at", ascending: true },
+          },
+        );
+
+      if (submissionsError) {
+        console.error(
+          "[youtube-cpm-contest-budgets] Failed to load submissions:",
+          contest.id,
+          submissionsError,
+        );
+        continue;
+      }
 
       if (!submissions?.length) continue;
 
