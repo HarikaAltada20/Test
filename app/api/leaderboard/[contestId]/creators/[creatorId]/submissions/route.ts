@@ -1,5 +1,6 @@
 import { createClient } from "@/utils/supabase/server";
 import { NextResponse } from "next/server";
+import { fetchContestSubmissionsAllPages } from "@/lib/fetch-contest-submissions";
 
 export const dynamic = "force-dynamic";
 
@@ -26,21 +27,26 @@ export async function GET(
   }
 
   try {
-    // Fetch only this creator's submissions (scalable: no full contest scan)
-    const { data: creatorSubmissions, error: subError } = await supabase
-      .from("submissions")
-      .select(
+    const { data: creatorSubmissions, error: subError } =
+      await fetchContestSubmissionsAllPages(
+        supabase,
+        contestId,
         "id, creator_id, video_title, video_thumbnail_url, views, earnings, status, created_at, content_link, platform",
-      )
-      .eq("contest_id", contestId)
-      .eq("creator_id", creatorId)
-      .neq("status", "rejected")
-      .order("views", { ascending: false, nullsFirst: false })
-      .order("created_at", { ascending: true });
+        {
+          creatorId,
+          statusNeq: "rejected",
+          order: [
+            { column: "views", ascending: false, nullsFirst: false },
+            { column: "created_at", ascending: true },
+          ],
+        },
+      );
 
     if (subError) {
       console.error("Error fetching creator submissions:", subError);
-      throw new Error(`Failed to fetch submissions: ${subError.message}`);
+      throw new Error(
+        `Failed to fetch submissions: ${String((subError as { message?: string })?.message ?? subError)}`,
+      );
     }
 
     const subs = creatorSubmissions || [];

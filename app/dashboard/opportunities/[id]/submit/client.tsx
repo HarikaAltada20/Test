@@ -39,6 +39,7 @@ import {
 } from "@/components/ui/enhanced-tabs";
 import { redirect } from "next/navigation";
 import { createClient } from "@/utils/supabase/client";
+import { fetchContestSubmissionsAllPages } from "@/lib/fetch-contest-submissions";
 import type { UserResponse } from "@supabase/supabase-js";
 import dayjs from "dayjs";
 import { useToast } from "@/hooks/use-toast";
@@ -1122,11 +1123,15 @@ export default function SubmitContentPage({
       setContest(contestData);
 
       // Fetch existing submissions for progress tracking
-      const { data: existingSubmissions } = await supabase
-        .from("submissions")
-        .select("*")
-        .eq("contest_id", contestId)
-        .eq("creator_id", user.id);
+      const { data: existingSubmissions } = await fetchContestSubmissionsAllPages(
+        supabase,
+        contestId,
+        "*",
+        {
+          creatorId: user.id,
+          order: { column: "created_at", ascending: false },
+        },
+      );
 
       if (existingSubmissions && existingSubmissions.length > 0) {
         // Track submitted videos and progress

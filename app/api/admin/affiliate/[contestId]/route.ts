@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyAdminAccess } from '@/utils/admin-auth';
 import { createAdminClient } from '@/utils/supabase/admin';
+import { fetchContestSubmissionsAllPages } from '@/lib/fetch-contest-submissions';
 
 export async function GET(
   req: NextRequest,
@@ -15,11 +16,18 @@ export async function GET(
     const supabase = createAdminClient();
 
     // 1) Fetch submissions for contest with earnings > 0 (winners). Prefer status 'paid'. Include affiliate flags
-    const { data: submissions, error: subsErr } = await supabase
-      .from('submissions')
-      .select('id, contest_id, creator_id, earnings, status, affiliate_paid, affiliate_metadata')
-      .eq('contest_id', contestId);
-    if (subsErr) return NextResponse.json({ error: subsErr.message }, { status: 500 });
+    const { data: submissions, error: subsErr } = await fetchContestSubmissionsAllPages(
+      supabase,
+      contestId,
+      'id, contest_id, creator_id, earnings, status, affiliate_paid, affiliate_metadata',
+      { order: { column: "created_at", ascending: true } },
+    );
+    if (subsErr) {
+      return NextResponse.json(
+        { error: String((subsErr as { message?: string })?.message ?? subsErr) },
+        { status: 500 },
+      );
+    }
 
     const winnerSubs = (submissions || []).filter((s: any) => (s.earnings || 0) > 0 && s.status === 'paid');
     if (winnerSubs.length === 0) {

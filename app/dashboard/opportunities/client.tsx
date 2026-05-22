@@ -48,6 +48,10 @@ import {
   isMilestoneContestType,
 } from "@/lib/contest-type";
 import { computeMilestoneContestExpectedSpendCents } from "@/lib/milestone-contest-expected-spend";
+import {
+  fetchContestSubmissionsAllPages,
+  fetchContestTwitterTweetsAllPages,
+} from "@/lib/fetch-contest-submissions";
 import { getPlatformIconWithFallback } from "@/lib/platform-icons";
 import { cn } from "@/lib/utils";
 import { EnhancedTabs } from "@/components/ui/enhancedTabs";
@@ -711,15 +715,17 @@ export default function OpportunitiesPage({
               let leaderboardSubmissions: Submission[] = [];
 
               if (isTwitterTextImage) {
-                const { data: twitterTweets } = await supabase
-                  .from("twitter_campaign_tweets")
-                  .select(
-                    "id, creator_id, tweet_created_at, moderation_status, is_eligible, deleted_at",
-                  )
-                  .eq("contest_id", contest.id)
-                  .eq("is_eligible", true)
-                  .is("deleted_at", null)
-                  .in("moderation_status", ["verified", "paid"]);
+                const { data: twitterTweets } = await fetchContestTwitterTweetsAllPages(
+                  supabase,
+                  contest.id,
+                  "id, creator_id, tweet_created_at, moderation_status, is_eligible, deleted_at",
+                  {
+                    isEligible: true,
+                    deletedAtNull: true,
+                    moderationStatusIn: ["verified", "paid"],
+                    order: { column: "tweet_created_at", ascending: true },
+                  },
+                );
 
                 leaderboardSubmissions = (twitterTweets || [])
                   .filter((tweet) => tweet.creator_id)
@@ -738,13 +744,15 @@ export default function OpportunitiesPage({
                     platform: "twitter",
                   }));
               } else {
-                const { data: submissions } = await supabase
-                  .from("submissions")
-                  .select(
-                    "paid, earnings, bonus_paid, bonus_amount, creator_id, created_at, status, views",
-                  )
-                  .eq("contest_id", contest.id)
-                  .in("status", ["verified", "paid"]);
+                const { data: submissions } = await fetchContestSubmissionsAllPages(
+                  supabase,
+                  contest.id,
+                  "paid, earnings, bonus_paid, bonus_amount, creator_id, created_at, status, views",
+                  {
+                    statusIn: ["verified", "paid"],
+                    order: { column: "created_at", ascending: true },
+                  },
+                );
 
                 leaderboardSubmissions = (submissions || []) as Submission[];
               }
@@ -776,18 +784,20 @@ export default function OpportunitiesPage({
               contest.platform === "twitter" &&
               contest.contest_based_details?.cpm_contest?.cpm_rate_usd > 0
             ) {
-              const { data: twitterTweets } = await supabase
-                .from("twitter_campaign_tweets")
-                .select(
-                  "id, creator_id, tweet_created_at, points, moderation_status, manual_points_adjustment, is_eligible, deleted_at",
-                )
-                .eq("contest_id", contest.id)
-                .eq("is_eligible", true)
-                .is("deleted_at", null)
-                .in("moderation_status", ["verified", "paid"]);
+              const { data: twitterTweets } = await fetchContestTwitterTweetsAllPages(
+                supabase,
+                contest.id,
+                "id, creator_id, tweet_created_at, points, moderation_status, manual_points_adjustment, is_eligible, deleted_at",
+                {
+                  isEligible: true,
+                  deletedAtNull: true,
+                  moderationStatusIn: ["verified", "paid"],
+                  order: { column: "tweet_created_at", ascending: true },
+                },
+              );
 
               const submissions =
-                twitterTweets?.map((tweet) => ({
+                twitterTweets?.map((tweet: any) => ({
                   id: tweet.id,
                   creator_id: tweet.creator_id,
                   created_at: tweet.tweet_created_at,
@@ -841,14 +851,15 @@ export default function OpportunitiesPage({
               contest.contest_based_details?.cpm_contest?.cpm_rate_usd > 0 &&
               !["twitter", "x"].includes((contest.platform || "").toLowerCase())
             ) {
-              const { data: submissions } = await supabase
-                .from("submissions")
-                .select(
-                  "id, creator_id, created_at, status, paid, earnings, views, platform, other_stats, bonus_paid, bonus_amount",
-                )
-                .eq("contest_id", contest.id)
-                .in("status", ["verified", "paid"])
-                .order("created_at", { ascending: true });
+              const { data: submissions } = await fetchContestSubmissionsAllPages(
+                supabase,
+                contest.id,
+                "id, creator_id, created_at, status, paid, earnings, views, platform, other_stats, bonus_paid, bonus_amount",
+                {
+                  statusIn: ["verified", "paid"],
+                  order: { column: "created_at", ascending: true },
+                },
+              );
 
               const submissionRecords = (submissions || []).map(
                 (submission) => ({
@@ -897,17 +908,18 @@ export default function OpportunitiesPage({
               treatAsMilestonePool &&
               contest.contest_based_details?.milestone_contest
             ) {
-              const { data: submissions } = await supabase
-                .from("submissions")
-                .select(
-                  "id, creator_id, created_at, status, paid, paid_at, earnings, views, platform, other_stats, bonus_paid, bonus_amount, metadata, milestone_bonus_paid",
-                )
-                .eq("contest_id", contest.id)
-                .in("status", ["pending", "verified", "paid"])
-                .order("created_at", { ascending: true });
+              const { data: submissions } = await fetchContestSubmissionsAllPages(
+                supabase,
+                contest.id,
+                "id, creator_id, created_at, status, paid, paid_at, earnings, views, platform, other_stats, bonus_paid, bonus_amount, metadata, milestone_bonus_paid",
+                {
+                  statusIn: ["pending", "verified", "paid"],
+                  order: { column: "created_at", ascending: true },
+                },
+              );
 
               const submissionRecords = (submissions || []).map(
-                (submission) => ({
+                (submission: any) => ({
                   id: submission.id,
                   creator_id: submission.creator_id,
                   created_at: submission.created_at,

@@ -162,8 +162,12 @@ export default async function AdminContestDetailPage({
         milestone_bonus_paid,
         metadata
       `;
+    type AdminContestSubmissionRow = {
+      creator_id?: string | null;
+      [key: string]: unknown;
+    };
     const { data: submissionsData, error: submissionsError } =
-      await fetchContestSubmissionsAllPages(
+      await fetchContestSubmissionsAllPages<AdminContestSubmissionRow>(
         supabase,
         contestId,
         SUBMISSIONS_SELECT,
@@ -433,7 +437,7 @@ export default async function AdminContestDetailPage({
     const allCreatorIds = new Set<string>();
     if (submissionsData && submissionsData.length > 0) {
       submissionsData.forEach((sub) => {
-        if (sub.creator_id) allCreatorIds.add(sub.creator_id);
+        if (sub.creator_id) allCreatorIds.add(String(sub.creator_id));
       });
     }
     if (twitterTweetsData && twitterTweetsData.length > 0) {

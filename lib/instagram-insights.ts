@@ -4,6 +4,7 @@
  */
 
 import dayjs from "dayjs";
+import { fetchContestSubmissionsAllPages } from "@/lib/fetch-contest-submissions";
 import { instagramGraphFetch } from "@/lib/meta-graph/instagram-graph-fetch";
 import type { MetaGraphUsageAccumulator } from "@/lib/meta-graph/usage-accumulator";
 
@@ -230,12 +231,15 @@ export async function updateCpmContestBudgets(supabaseAdmin: any, contestId?: st
         .eq("id", contest.id)
         .single();
       const maxEarningsPerCreator = contestDetails?.max_earnings_per_creator ?? null;
-      const { data: submissions } = await supabaseAdmin
-        .from("submissions")
-        .select("views, creator_id, created_at, paid, bonus_paid, earnings, bonus_amount")
-        .eq("contest_id", contest.id)
-        .in("status", ["verified", "paid"])
-        .order("created_at", { ascending: true });
+      const { data: submissions } = await fetchContestSubmissionsAllPages(
+        supabaseAdmin,
+        contest.id,
+        "views, creator_id, created_at, paid, bonus_paid, earnings, bonus_amount",
+        {
+          statusIn: ["verified", "paid"],
+          order: { column: "created_at", ascending: true },
+        },
+      );
       if (!submissions?.length) continue;
 
       const creatorEarnings = new Map<string, { cpmTotal: number; bonusTotal: number }>();
