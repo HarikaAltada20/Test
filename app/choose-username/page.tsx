@@ -717,11 +717,9 @@ export default function ChooseUsernamePage() {
             await supabase
               .from("users")
               .select("id")
-              .or(
-                `username.eq.${finalReferralCode},referral_code.eq.${finalReferralCode}`,
-              )
+              .eq("username", finalReferralCode)
               .neq("id", userData.id) // Prevent self-referral
-              .maybeSingle();
+              .single();
 
           if (fetchReferrerError || !referrerUser) {
             console.warn(
