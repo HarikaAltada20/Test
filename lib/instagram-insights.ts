@@ -4,6 +4,16 @@
  */
 
 import dayjs from "dayjs";
+import { fetchContestSubmissionsAllPages } from "@/lib/fetch-contest-submissions";
+
+type CpmBudgetSubmissionRow = {
+  creator_id: string;
+  views?: number | null;
+  paid?: boolean | null;
+  bonus_paid?: boolean | null;
+  earnings?: number | null;
+  bonus_amount?: number | null;
+};
 import { instagramGraphFetch } from "@/lib/meta-graph/instagram-graph-fetch";
 import type { MetaGraphUsageAccumulator } from "@/lib/meta-graph/usage-accumulator";
 
@@ -230,12 +240,24 @@ export async function updateCpmContestBudgets(supabaseAdmin: any, contestId?: st
         .eq("id", contest.id)
         .single();
       const maxEarningsPerCreator = contestDetails?.max_earnings_per_creator ?? null;
-      const { data: submissions } = await supabaseAdmin
-        .from("submissions")
-        .select("views, creator_id, created_at, paid, bonus_paid, earnings, bonus_amount")
-        .eq("contest_id", contest.id)
-        .in("status", ["verified", "paid"])
-        .order("created_at", { ascending: true });
+      const { data: submissions, error: submissionsError } =
+        await fetchContestSubmissionsAllPages<CpmBudgetSubmissionRow>(
+        supabaseAdmin,
+        contest.id,
+        "views, creator_id, created_at, paid, bonus_paid, earnings, bonus_amount",
+        {
+          statusIn: ["verified", "paid"],
+          order: { column: "created_at", ascending: true },
+        },
+      );
+      if (submissionsError) {
+        console.error(
+          "[instagram-insights] Failed to load submissions for CPM budget:",
+          contest.id,
+          submissionsError,
+        );
+        continue;
+      }
       if (!submissions?.length) continue;
 
       const creatorEarnings = new Map<string, { cpmTotal: number; bonusTotal: number }>();
@@ -248,10 +270,12 @@ export async function updateCpmContestBudgets(supabaseAdmin: any, contestId?: st
         const creatorId = sub.creator_id;
         if (!creatorEarnings.has(creatorId)) creatorEarnings.set(creatorId, { cpmTotal: 0, bonusTotal: 0 });
         const creatorData = creatorEarnings.get(creatorId)!;
+        const earnings = Number(sub.earnings);
+        const bonusAmount = Number(sub.bonus_amount);
         if (sub.paid && sub.earnings != null) {
-          creatorData.cpmTotal += sub.earnings / 100;
+          creatorData.cpmTotal += earnings / 100;
         } else {
-          let views = sub.views || 0;
+          let views = Number(sub.views) || 0;
           if (cpmConfig.min_views && views < cpmConfig.min_views) views = 0;
           if (cpmConfig.max_views && views > cpmConfig.max_views) views = cpmConfig.max_views;
           const submissionEarnings = (views * cpmConfig.cpm_rate_usd) / 1000;
@@ -263,8 +287,8 @@ export async function updateCpmContestBudgets(supabaseAdmin: any, contestId?: st
           }
         }
         if (sub.bonus_paid && sub.bonus_amount != null) {
-          creatorData.bonusTotal += sub.bonus_amount / 100;
-          totalBonusSpentSoFar += sub.bonus_amount / 100;
+          creatorData.bonusTotal += bonusAmount / 100;
+          totalBonusSpentSoFar += bonusAmount / 100;
         } else if (flatFeeBonus > 0) {
           const bonusAmount = flatFeeBonus / 100;
           if (capInDollars === null || totalBonusSpentSoFar + bonusAmount <= capInDollars) {

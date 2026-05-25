@@ -23,6 +23,8 @@ function getContestAdvertiserId(
   return contests.advertiser_id;
 }
 
+const OWNERSHIP_ID_CHUNK_SIZE = 200;
+
 async function assertAdvertiserOwnsSubmissions(
   submissionIds: string[],
   advertiserId: string,
@@ -32,19 +34,27 @@ async function assertAdvertiserOwnsSubmissions(
   }
 
   const supabase = await createClient();
-  const { data: rows, error } = await supabase
-    .from("submissions")
-    .select("id, contests!inner(advertiser_id)")
-    .in("id", submissionIds);
+  const rows: { id: string; contests: { advertiser_id: string } | { advertiser_id: string }[] }[] =
+    [];
 
-  if (error) {
-    return NextResponse.json(
-      { error: "Failed to verify submission ownership" },
-      { status: 500 },
-    );
+  for (let i = 0; i < submissionIds.length; i += OWNERSHIP_ID_CHUNK_SIZE) {
+    const chunk = submissionIds.slice(i, i + OWNERSHIP_ID_CHUNK_SIZE);
+    const { data: chunkRows, error } = await supabase
+      .from("submissions")
+      .select("id, contests!inner(advertiser_id)")
+      .in("id", chunk);
+
+    if (error) {
+      return NextResponse.json(
+        { error: "Failed to verify submission ownership" },
+        { status: 500 },
+      );
+    }
+
+    rows.push(...((chunkRows ?? []) as typeof rows));
   }
 
-  const foundIds = new Set((rows ?? []).map((r) => r.id));
+  const foundIds = new Set(rows.map((r) => r.id));
   const missing = submissionIds.filter((id) => !foundIds.has(id));
   if (missing.length > 0) {
     return NextResponse.json(
@@ -53,7 +63,7 @@ async function assertAdvertiserOwnsSubmissions(
     );
   }
 
-  const unauthorized = (rows ?? []).some(
+  const unauthorized = rows.some(
     (row) => getContestAdvertiserId(row.contests) !== advertiserId,
   );
   if (unauthorized) {

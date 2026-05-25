@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/utils/supabase/admin";
+import { fetchContestSubmissionsAllPages } from "@/lib/fetch-contest-submissions";
 import { verifyAdminAccess } from "@/utils/admin-auth";
 import {
   creditCreatorWithdrawableBalance,
@@ -36,6 +37,24 @@ function normalizeStatus(raw: string | null | undefined): string {
 
 function isVerifiedLike(st: string): boolean {
   return st === "verified" || st === "paid" || st === "approved";
+}
+
+type MilestoneMostVerifiedSubmissionRow = MilestoneBudgetSubmission & {
+  dual_rewards_payout?: unknown;
+  bonus_paid_at?: string | null;
+};
+
+function submissionMetadataRecord(
+  metadata: MilestoneMostVerifiedSubmissionRow["metadata"],
+): Record<string, unknown> {
+  if (
+    metadata &&
+    typeof metadata === "object" &&
+    !Array.isArray(metadata)
+  ) {
+    return { ...(metadata as Record<string, unknown>) };
+  }
+  return {};
 }
 
 /**
@@ -113,21 +132,26 @@ export async function POST(
       );
     }
 
-    const { data: subs, error: subsError } = await supabaseAdmin
-      .from("submissions")
-      .select(
+    const { data: subs, error: subsError } =
+      await fetchContestSubmissionsAllPages<MilestoneMostVerifiedSubmissionRow>(
+        supabaseAdmin,
+        contestId,
         "id, creator_id, status, views, created_at, bonus_paid, bonus_amount, milestone_bonus_paid, metadata, earnings, paid, dual_rewards_payout",
-      )
-      .eq("contest_id", contestId);
+        { order: { column: "created_at", ascending: true } },
+      );
 
     if (subsError) {
       return NextResponse.json(
-        { error: subsError.message || "Failed to load submissions" },
+        {
+          error:
+            String((subsError as { message?: string })?.message ?? subsError) ||
+            "Failed to load submissions",
+        },
         { status: 500 },
       );
     }
 
-    const submissions = (subs || []) as MilestoneBudgetSubmission[];
+    const submissions = subs || [];
     const map = buildMilestoneMostVerifiedBonusByCreatorMap(submissions, bonus);
     const row = map.get(creatorId);
     if (!row) {
@@ -218,23 +242,22 @@ export async function POST(
         );
       }
 
-      const creatorSubs = (subs || []).filter(
-        (s: any) => s.creator_id === creatorId,
+      const creatorSubs = submissions.filter(
+        (s) => s.creator_id === creatorId,
       );
 
-      const verifiedLike = creatorSubs.filter((s: any) =>
+      const verifiedLike = creatorSubs.filter((s) =>
         isVerifiedLike(normalizeStatus(s.status)),
       );
-      const withBonus = creatorSubs.filter((s: any) => s.bonus_paid === true);
-      let target: (typeof creatorSubs)[0] | undefined;
+      const withBonus = creatorSubs.filter((s) => s.bonus_paid === true);
+      let target: MilestoneMostVerifiedSubmissionRow | undefined;
       if (withBonus.length > 0) {
         target = [...withBonus].sort(
-          (a: any, b: any) =>
-            (Number(b.bonus_amount) || 0) - (Number(a.bonus_amount) || 0),
+          (a, b) => (Number(b.bonus_amount) || 0) - (Number(a.bonus_amount) || 0),
         )[0];
       } else if (verifiedLike.length > 0) {
         target = [...verifiedLike].sort(
-          (a: any, b: any) =>
+          (a, b) =>
             new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
         )[0];
       }
@@ -309,17 +332,14 @@ export async function POST(
       }
 
       const prevAmount = Number(target.bonus_amount) || 0;
-      const prevMeta =
-        target?.metadata && typeof target.metadata === "object"
-          ? { ...target.metadata }
-          : {};
+      const prevMeta = submissionMetadataRecord(target.metadata);
       const prevTrackPaidRawFromColumn =
-        (target as any)?.milestone_bonus_paid &&
-        typeof (target as any).milestone_bonus_paid === "object"
-          ? (target as any).milestone_bonus_paid
+        target.milestone_bonus_paid &&
+        typeof target.milestone_bonus_paid === "object"
+          ? target.milestone_bonus_paid
           : null;
       const prevTrackPaidRawFromMeta =
-        prevMeta?.milestone_bonus_paid &&
+        prevMeta.milestone_bonus_paid &&
         typeof prevMeta.milestone_bonus_paid === "object"
           ? prevMeta.milestone_bonus_paid
           : null;
@@ -351,7 +371,7 @@ export async function POST(
 
       const reversalSubmissionUpdate: Record<string, unknown> = {
         bonus_paid: stillBonusPaid,
-        bonus_paid_at: stillBonusPaid ? (target as any).bonus_paid_at : null,
+        bonus_paid_at: stillBonusPaid ? target.bonus_paid_at : null,
         bonus_amount: newBonusAmount,
         milestone_bonus_paid: nextTrackPaid,
         metadata: metaWithoutLegacy,
@@ -360,16 +380,15 @@ export async function POST(
       if (isDualRewardsContestType(contest.contest_type)) {
         const paidComponents = getDualRewardsSubmissionPaidComponents({
           id: String(target.id),
-          earnings: (target as { earnings?: number | null }).earnings,
-          paid: (target as { paid?: boolean | null }).paid,
+          earnings: target.earnings,
+          paid: target.paid,
           bonus_amount: target.bonus_amount,
           bonus_paid: target.bonus_paid,
-          dual_rewards_payout: (target as { dual_rewards_payout?: unknown })
-            .dual_rewards_payout,
+          dual_rewards_payout: target.dual_rewards_payout,
         });
         reversalSubmissionUpdate.dual_rewards_payout =
           dualRewardsPayoutForMilestoneTotal(
-            (target as { dual_rewards_payout?: unknown }).dual_rewards_payout,
+            target.dual_rewards_payout,
             paidComponents.cpmCents,
             Math.max(0, paidComponents.milestoneCents - reversalAmount),
           );
@@ -439,24 +458,21 @@ export async function POST(
       );
     }
 
-    const creatorSubs = (subs || []).filter(
-      (s: any) => s.creator_id === creatorId,
-    );
+    const creatorSubs = submissions.filter((s) => s.creator_id === creatorId);
 
-    const verifiedLike = creatorSubs.filter((s: any) =>
+    const verifiedLike = creatorSubs.filter((s) =>
       isVerifiedLike(normalizeStatus(s.status)),
     );
 
-    const withBonus = creatorSubs.filter((s: any) => s.bonus_paid === true);
-    let target: (typeof creatorSubs)[0] | undefined;
+    const withBonus = creatorSubs.filter((s) => s.bonus_paid === true);
+    let target: MilestoneMostVerifiedSubmissionRow | undefined;
     if (withBonus.length > 0) {
       target = [...withBonus].sort(
-        (a: any, b: any) =>
-          (Number(b.bonus_amount) || 0) - (Number(a.bonus_amount) || 0),
+        (a, b) => (Number(b.bonus_amount) || 0) - (Number(a.bonus_amount) || 0),
       )[0];
     } else if (verifiedLike.length > 0) {
       target = [...verifiedLike].sort(
-        (a: any, b: any) =>
+        (a, b) =>
           new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
       )[0];
     }
@@ -481,8 +497,7 @@ export async function POST(
         paid: target.paid,
         bonus_amount: target.bonus_amount,
         bonus_paid: target.bonus_paid,
-        dual_rewards_payout: (target as { dual_rewards_payout?: unknown })
-          .dual_rewards_payout,
+        dual_rewards_payout: target.dual_rewards_payout,
       });
       dualRewardsPoolCommit = await checkDualRewardsPoolBudgetForPayment({
         supabaseAdmin,
@@ -565,18 +580,15 @@ export async function POST(
     const prevAmount = target.bonus_paid
       ? Number(target.bonus_amount) || 0
       : 0;
-    const prevMeta =
-      target?.metadata && typeof target.metadata === "object"
-        ? { ...target.metadata }
-        : {};
+    const prevMeta = submissionMetadataRecord(target.metadata);
     // Prefer the first-class column; fall back to legacy metadata during rollout.
     const prevTrackPaidRawFromColumn =
-      (target as any)?.milestone_bonus_paid &&
-      typeof (target as any).milestone_bonus_paid === "object"
-        ? (target as any).milestone_bonus_paid
+      target.milestone_bonus_paid &&
+      typeof target.milestone_bonus_paid === "object"
+        ? target.milestone_bonus_paid
         : null;
     const prevTrackPaidRawFromMeta =
-      prevMeta?.milestone_bonus_paid &&
+      prevMeta.milestone_bonus_paid &&
       typeof prevMeta.milestone_bonus_paid === "object"
         ? prevMeta.milestone_bonus_paid
         : null;

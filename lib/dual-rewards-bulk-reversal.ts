@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { fetchContestSubmissionsAllPages } from "@/lib/fetch-contest-submissions";
 import {
   debitCreatorWithdrawableBalance,
   logTransactionAsAdmin,
@@ -150,14 +151,28 @@ export async function applyBulkDualRewardsWalletReversals(params: {
       )?.title ||
       "Contest";
 
-    const { data: contestSubRows } = await params.supabaseAdmin
-      .from("submissions")
-      .select("id")
-      .eq("contest_id", contestId)
-      .eq("creator_id", creatorId);
+    const { data: contestSubRows, error: contestSubErr } =
+      await fetchContestSubmissionsAllPages(
+      params.supabaseAdmin,
+      contestId,
+      "id",
+      {
+        creatorId,
+        order: { column: "created_at", ascending: true },
+      },
+    );
+
+    if (contestSubErr) {
+      console.error(
+        "[dual-rewards-bulk-reversal] Failed to load contest submissions:",
+        contestId,
+        contestSubErr,
+      );
+      continue;
+    }
 
     const contestSubmissionIds = new Set(
-      (contestSubRows || []).map((r: { id: string }) => String(r.id)),
+      (contestSubRows || []).map((r) => String(r.id)),
     );
     for (const r of groupRows) {
       contestSubmissionIds.add(String(r.id));

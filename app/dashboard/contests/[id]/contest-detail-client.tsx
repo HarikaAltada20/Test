@@ -479,6 +479,8 @@ interface ContestDetailClientProps {
     }
   >;
   milestoneBonusPaidByCreator?: MilestoneMostVerifiedBonusPaidByCreator;
+  /** Set when SSR failed to load submissions (avoid silent empty/partial list). */
+  submissionsFetchError?: string;
 }
 
 const sanitizeTwitterList = (value: unknown): string[] => {
@@ -872,6 +874,7 @@ export default function ContestDetailClient({
   user,
   creatorModerationData = {},
   milestoneBonusPaidByCreator = {},
+  submissionsFetchError,
 }: ContestDetailClientProps) {
   const supabase = createClient();
   const { toast, toasts } = useToast();
@@ -8768,6 +8771,16 @@ export default function ContestDetailClient({
 
   return (
     <div>
+      {submissionsFetchError ? (
+        <Alert variant="destructive" className="mb-6">
+          <AlertTriangle className="h-4 w-4" />
+          <AlertDescription>
+            Could not load submissions for this contest ({submissionsFetchError}
+            ). Counts and moderation data may be incomplete — refresh the page or
+            contact support if this persists.
+          </AlertDescription>
+        </Alert>
+      ) : null}
       <header
         className={cn(
           "mb-8 px-1 pb-6 border-b",

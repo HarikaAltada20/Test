@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { fetchContestSubmissionsAllPages } from "@/lib/fetch-contest-submissions";
 import { getPoolBudgetCentsFromDetails } from "@/lib/contest-type";
 import {
   parseDualRewardsPayoutJson,
@@ -616,13 +617,15 @@ export async function fetchDualRewardsPoolSpendRows(
   | { rows: DualPoolSpendSubmissionRow[]; error?: undefined }
   | { rows?: undefined; error: string }
 > {
-  const { data, error } = await supabaseAdmin
-    .from("submissions")
-    .select(POOL_SPEND_SELECT)
-    .eq("contest_id", contestId);
+  const { data, error } = await fetchContestSubmissionsAllPages(
+    supabaseAdmin,
+    contestId,
+    POOL_SPEND_SELECT,
+    { order: { column: "created_at", ascending: true } },
+  );
 
   if (error) {
-    return { error: error.message };
+    return { error: String((error as { message?: string })?.message ?? error) };
   }
 
   return {

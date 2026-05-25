@@ -16,6 +16,7 @@ import { allocateFlatFeeBonusCents } from "@/lib/bonus-allocation";
 import { buildMilestoneSubmissionPayoutCentsMap } from "@/lib/milestone-contest-expected-spend";
 import { countRefundsForCreatorContest } from "@/lib/contest-payout-idempotency";
 import { buildFlatFeeBonusExpectedCentsBySubmissionId } from "@/lib/twitter-cpm-bonus-expected";
+import { fetchContestSubmissionsAllPages } from "@/lib/fetch-contest-submissions";
 
 export async function POST(request: NextRequest) {
   const supabaseAdmin = await createClient();
@@ -180,14 +181,15 @@ export async function POST(request: NextRequest) {
 
       if (milestones.length > 0) {
         const { data: payoutEligibleSubs, error: payoutEligibleErr } =
-          await supabaseAdmin
-            .from("submissions")
-            .select(
-              "id, creator_id, status, views, created_at, platform, other_stats",
-            )
-            .eq("contest_id", contest_id)
-            .in("status", ["pending", "verified", "paid"])
-            .order("created_at", { ascending: true });
+          await fetchContestSubmissionsAllPages(
+            supabaseAdmin,
+            contest_id,
+            "id, creator_id, status, views, created_at, platform, other_stats",
+            {
+              statusIn: ["pending", "verified", "paid"],
+              order: { column: "created_at", ascending: true },
+            },
+          );
 
         if (payoutEligibleErr) {
           console.error(
@@ -196,7 +198,7 @@ export async function POST(request: NextRequest) {
           );
           return NextResponse.json(
             {
-              error: `Milestone allocation failed: ${payoutEligibleErr.message}. Try again or contact support.`,
+              error: `Milestone allocation failed: ${String((payoutEligibleErr as { message?: string })?.message ?? payoutEligibleErr)}. Try again or contact support.`,
             },
             { status: 500 },
           );
@@ -247,14 +249,25 @@ export async function POST(request: NextRequest) {
       flatFeeBonus > 0
     ) {
       // Calculate current bonus spending
-      const { data: bonusSpendingData } = await supabaseAdmin
-        .from("submissions")
-        .select("bonus_amount")
-        .eq("contest_id", contest_id)
-        .eq("bonus_paid", true);
+      const { data: bonusSpendingData, error: bonusSpendErr } =
+        await fetchContestSubmissionsAllPages(
+        supabaseAdmin,
+        contest_id,
+        "bonus_amount",
+        { bonusPaid: true, order: { column: "created_at", ascending: true } },
+      );
+
+      if (bonusSpendErr) {
+        return NextResponse.json(
+          {
+            error: `Failed to load bonus spending: ${String((bonusSpendErr as { message?: string })?.message ?? bonusSpendErr)}`,
+          },
+          { status: 500 },
+        );
+      }
 
       const currentBonusSpent = (bonusSpendingData || []).reduce(
-        (sum, sub) => sum + (sub.bonus_amount || 0),
+        (sum, sub) => sum + (Number(sub.bonus_amount) || 0),
         0,
       );
 
@@ -318,13 +331,23 @@ export async function POST(request: NextRequest) {
     let bonusReasonCounts: Record<string, number> = {};
     let globalExpectedBonusMap = new Map<string, number>();
 
-    const { data: bonusSpendingData } = await supabaseAdmin
-      .from("submissions")
-      .select("bonus_amount")
-      .eq("contest_id", contest_id)
-      .eq("bonus_paid", true);
+    const { data: bonusSpendingData, error: bonusSpendErr2 } =
+      await fetchContestSubmissionsAllPages(
+      supabaseAdmin,
+      contest_id,
+      "bonus_amount",
+      { bonusPaid: true, order: { column: "created_at", ascending: true } },
+    );
+    if (bonusSpendErr2) {
+      return NextResponse.json(
+        {
+          error: `Failed to load bonus spending: ${String((bonusSpendErr2 as { message?: string })?.message ?? bonusSpendErr2)}`,
+        },
+        { status: 500 },
+      );
+    }
     const currentBonusSpent = (bonusSpendingData || []).reduce(
-      (sum, sub) => sum + (sub.bonus_amount || 0),
+      (sum, sub) => sum + (Number(sub.bonus_amount) || 0),
       0,
     );
     let runningBonusSpent = currentBonusSpent;
@@ -334,10 +357,21 @@ export async function POST(request: NextRequest) {
       // We intentionally avoid pre-filtering with `.or(...)` on Supabase because the
       // PostgREST `.or()` syntax parses commas inside `in.(...)` as top-level filter
       // separators, which yields an empty result and silently breaks the bonus map.
-      const { data: contestEligibleSubs } = await supabaseAdmin
-        .from("submissions")
-        .select("id, created_at, status, paid")
-        .eq("contest_id", contest_id);
+      const { data: contestEligibleSubs, error: contestEligibleErr } =
+        await fetchContestSubmissionsAllPages(
+        supabaseAdmin,
+        contest_id,
+        "id, created_at, status, paid",
+        { order: { column: "created_at", ascending: true } },
+      );
+      if (contestEligibleErr) {
+        return NextResponse.json(
+          {
+            error: `Failed to load contest submissions for bonus map: ${String((contestEligibleErr as { message?: string })?.message ?? contestEligibleErr)}`,
+          },
+          { status: 500 },
+        );
+      }
       globalExpectedBonusMap = buildFlatFeeBonusExpectedCentsBySubmissionId(
         contest as any,
         (contestEligibleSubs || []).map((s: any) => ({
@@ -350,15 +384,31 @@ export async function POST(request: NextRequest) {
     }
 
     // Check how much has already been paid to this creator
-    const { data: previousSubmissions } = await supabaseAdmin
-      .from("submissions")
-      .select("earnings, paid")
-      .eq("contest_id", contest_id)
-      .eq("creator_id", creator_id)
-      .eq("paid", true);
+    const { data: previousSubmissions, error: previousSubsErr } =
+      await fetchContestSubmissionsAllPages(
+      supabaseAdmin,
+      contest_id,
+      "earnings, paid",
+      {
+        creatorId: creator_id,
+        paid: true,
+        order: { column: "created_at", ascending: true },
+      },
+    );
+    if (previousSubsErr) {
+      return NextResponse.json(
+        {
+          error: `Failed to load creator payment history: ${String((previousSubsErr as { message?: string })?.message ?? previousSubsErr)}`,
+        },
+        { status: 500 },
+      );
+    }
 
     const alreadyPaidAmount =
-      previousSubmissions?.reduce((sum, s) => sum + (s.earnings || 0), 0) || 0;
+      previousSubmissions?.reduce(
+        (sum, s) => sum + (Number(s.earnings) || 0),
+        0,
+      ) || 0;
     runningTotal = alreadyPaidAmount;
 
     for (const sub of sortedSubmissions) {
