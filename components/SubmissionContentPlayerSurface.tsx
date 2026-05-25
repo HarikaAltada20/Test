@@ -32,6 +32,7 @@ export function SubmissionContentPlayerSurface({
   const videoRef = useRef<HTMLVideoElement>(null);
   const [started, setStarted] = useState(false);
   const [mediaReady, setMediaReady] = useState(false);
+  const [embedLoaded, setEmbedLoaded] = useState(false);
   const [thumbFailed, setThumbFailed] = useState(false);
 
   const previewKey =
@@ -44,23 +45,48 @@ export function SubmissionContentPlayerSurface({
   useEffect(() => {
     setStarted(false);
     setMediaReady(false);
+    setEmbedLoaded(false);
   }, [previewKey]);
 
   useEffect(() => {
     setThumbFailed(false);
   }, [thumbnailUrl]);
 
-  const showPlayer = started && preview && !error;
-  const showThumbnail =
-    !!thumbnailUrl && !thumbFailed && !mediaReady;
   const isInstagram = platform === "instagram";
-  const showInstagramPlaceholder =
-    isInstagram && !showThumbnail && !showPlayer && !error;
+  const isTiktok = platform === "tiktok";
+  const isTiktokIframe = isTiktok && preview?.mode === "iframe" && !!preview.embedUrl;
 
-  const embedSrc =
-    showPlayer && preview.mode === "iframe"
-      ? withEmbedAutoplay(preview.embedUrl, platform)
+  const iframeSrc =
+    preview?.mode === "iframe" && preview.embedUrl
+      ? isTiktok
+        ? started
+          ? withEmbedAutoplay(preview.embedUrl, platform)
+          : preview.embedUrl
+        : started
+          ? withEmbedAutoplay(preview.embedUrl, platform)
+          : null
       : null;
+
+  useEffect(() => {
+    if (!isTiktokIframe) return;
+    setEmbedLoaded(false);
+    setMediaReady(false);
+  }, [iframeSrc, isTiktokIframe]);
+
+  const showPlayer = started && preview && !error;
+  const showIframe = !!iframeSrc && (isTiktokIframe || showPlayer);
+  const showTiktokPoster = isTiktokIframe && embedLoaded && !started;
+  const showThumbnail =
+    !!thumbnailUrl &&
+    !thumbFailed &&
+    !mediaReady &&
+    !(isTiktok && embedLoaded);
+  const showInstagramPlaceholder =
+    isInstagram && !showThumbnail && !showTiktokPoster && !showPlayer && !error;
+  const showTiktokPlaceholder =
+    isTiktok && !showThumbnail && !showTiktokPoster && !showPlayer && !error;
+  const showPlatformPlaceholder =
+    showInstagramPlaceholder || showTiktokPlaceholder;
 
   const handlePlay = useCallback(() => {
     if (!preview || error) return;
@@ -68,6 +94,7 @@ export function SubmissionContentPlayerSurface({
   }, [preview, error]);
 
   const onMediaReady = useCallback(() => {
+    setEmbedLoaded(true);
     setMediaReady(true);
   }, []);
 
@@ -83,6 +110,7 @@ export function SubmissionContentPlayerSurface({
         <img
           src={thumbnailUrl!}
           alt=""
+          referrerPolicy="no-referrer"
           className="absolute inset-0 h-full w-full object-cover"
           loading="eager"
           decoding="async"
@@ -99,17 +127,26 @@ export function SubmissionContentPlayerSurface({
         />
       )}
 
-      {(thumbnailLoading || (thumbFailed && isInstagram && !showPlayer)) &&
-        !showPlayer && (
+      {showTiktokPlaceholder && (
+        <div
+          className={cn(
+            "absolute inset-0 bg-gradient-to-br from-slate-950 via-cyan-950 to-pink-950",
+            thumbnailLoading && "animate-pulse",
+          )}
+        />
+      )}
+
+      {(thumbnailLoading ||
+        (thumbFailed && (isInstagram || isTiktok) && !showPlayer) ||
+        (isTiktokIframe && !embedLoaded && !started)) &&
+        !showPlayer &&
+        !showTiktokPoster && (
           <div className="absolute inset-0 z-10 flex items-center justify-center bg-black/30">
             <Loader2 className="h-6 w-6 animate-spin text-white/90" />
           </div>
         )}
 
-      {!thumbnailUrl &&
-        !showInstagramPlaceholder &&
-        !showPlayer &&
-        !error && (
+      {!thumbnailUrl && !showPlatformPlaceholder && !showPlayer && !error && (
         <div
           className={cn(
             "absolute inset-0",
@@ -133,14 +170,16 @@ export function SubmissionContentPlayerSurface({
         />
       )}
 
-      {showPlayer && preview.mode === "iframe" && embedSrc && (
+      {showIframe && preview.mode === "iframe" && iframeSrc && (
         <iframe
-          src={embedSrc}
+          src={iframeSrc}
           title={title}
           onLoad={onMediaReady}
           className={cn(
-            "absolute inset-0 h-full w-full border-0 bg-black z-10",
-            !mediaReady && "opacity-0",
+            "absolute inset-0 h-full w-full border-0 bg-black",
+            showTiktokPoster ? "z-[5]" : "z-10",
+            !embedLoaded && "opacity-0",
+            showPlayer && !mediaReady && "opacity-0",
           )}
           allow={
             platform === "tiktok"

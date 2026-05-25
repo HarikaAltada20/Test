@@ -3506,9 +3506,8 @@ export default function ContestDetailClient({
             (sum: number, sub: any) => {
               const raw = String(getStatus(sub) || "").toLowerCase();
               const st = raw === "approved" ? "verified" : raw;
-              // Keep milestone expected aligned with other contest types:
-              // only verified/paid contribute to expected financial totals.
-              if (st !== "verified" && st !== "paid") return sum;
+              // Match per-submission milestone FCFS: pending/verified/paid can earn; rejected cannot.
+              if (st === "rejected") return sum;
               return sum + (payoutMap.get(sub.id) ?? 0);
             },
             0,
@@ -3586,6 +3585,53 @@ export default function ContestDetailClient({
     milestoneSubmissionExpectedPayoutCents,
     getStatus,
     cappedExpectedRewardBySubmissionId,
+  ]);
+
+  /** Stable creator for CreatorSubmissionsModal when parent status filter excludes rejected rows from groups. */
+  const creatorForSubmissionsModal = useMemo(() => {
+    if (!selectedCreatorForModal) return null;
+
+    const fromGroup = (groupSubmissionsByCreator as any[])?.find(
+      (g: any) => g.creator?.id === selectedCreatorForModal,
+    )?.creator;
+    if (fromGroup?.username) return fromGroup;
+
+    const subs = (currentSubmissions || []).filter(
+      (s: any) => s.creator_id === selectedCreatorForModal,
+    );
+    const sub = subs[0];
+    if (!sub) {
+      return {
+        id: selectedCreatorForModal,
+        username: "Unknown",
+        profile_picture_url: null,
+        full_name: null,
+      };
+    }
+
+    const nested = (sub as any).creator;
+    if (nested?.username) {
+      return {
+        id: selectedCreatorForModal,
+        username: nested.username,
+        profile_picture_url: nested.profile_picture_url ?? null,
+        full_name: nested.full_name ?? null,
+      };
+    }
+
+    return {
+      id: selectedCreatorForModal,
+      username:
+        (sub as any).creator_username ||
+        (sub as any).creator_display_name ||
+        "Unknown",
+      profile_picture_url: (sub as any).creator_avatar_url ?? null,
+      full_name: (sub as any).creator_display_name ?? null,
+    };
+  }, [
+    selectedCreatorForModal,
+    groupSubmissionsByCreator,
+    currentSubmissions,
   ]);
 
   // Creator ranking for Twitter leaderboard contests (based on total points per creator)
@@ -5587,8 +5633,21 @@ export default function ContestDetailClient({
           prev.map((sub) => {
             if (updatedSubmissionsMap.has(sub.id)) {
               const updates = updatedSubmissionsMap.get(sub.id);
-              // ensure we don't erase existing other fields
-              return { ...sub, ...updates };
+              // API returns partial rows — preserve nested creator and display fields
+              return {
+                ...sub,
+                ...updates,
+                creator: (updates as any)?.creator ?? (sub as any).creator,
+                creator_username:
+                  (updates as any)?.creator_username ??
+                  (sub as any).creator_username,
+                creator_display_name:
+                  (updates as any)?.creator_display_name ??
+                  (sub as any).creator_display_name,
+                creator_avatar_url:
+                  (updates as any)?.creator_avatar_url ??
+                  (sub as any).creator_avatar_url,
+              };
             }
             return sub;
           }),
@@ -26147,11 +26206,7 @@ export default function ContestDetailClient({
         <CreatorSubmissionsModal
           isOpen={!!selectedCreatorForModal}
           onClose={() => setSelectedCreatorForModal(null)}
-          creator={
-            (groupSubmissionsByCreator as any[]).find(
-              (g: any) => g.creator.id === selectedCreatorForModal,
-            )?.creator || {}
-          }
+          creator={creatorForSubmissionsModal ?? { id: selectedCreatorForModal, username: "Unknown", profile_picture_url: null, full_name: null }}
           submissions={(() => {
             const g = (groupSubmissionsByCreator as any[]).find(
               (row: any) => row.creator.id === selectedCreatorForModal,
