@@ -11,6 +11,16 @@ export function isValidImageUrl(url: string | null | undefined): boolean {
   }
 }
 
+/** Stored submission thumbnails — HTTPS only (user-controlled DB values). */
+export function isValidHttpsImageUrl(url: string | null | undefined): boolean {
+  if (!url?.trim()) return false;
+  try {
+    return new URL(url.trim()).protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
 /** Best-effort thumbnail URL for instant preview (no API). */
 export function getSubmissionThumbnailUrl(
   contentLink: string | null | undefined,

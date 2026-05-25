@@ -3509,7 +3509,7 @@ export default function ContestDetailClient({
             (sum: number, sub: any) => {
               const raw = String(getStatus(sub) || "").toLowerCase();
               const st = raw === "approved" ? "verified" : raw;
-              // Match per-submission milestone FCFS: pending/verified/paid can earn; rejected cannot.
+              // Align with per-submission loop above: FCFS map includes pending; rejected excluded.
               if (st === "rejected") return sum;
               return sum + (payoutMap.get(sub.id) ?? 0);
             },
@@ -3636,6 +3636,14 @@ export default function ContestDetailClient({
     groupSubmissionsByCreator,
     currentSubmissions,
   ]);
+
+  /** Full creator submission list for modal (not status-filtered group rows). */
+  const creatorModalSubmissions = useMemo(() => {
+    if (!selectedCreatorForModal) return [];
+    return (currentSubmissions || []).filter(
+      (s: any) => s.creator_id === selectedCreatorForModal,
+    );
+  }, [selectedCreatorForModal, currentSubmissions]);
 
   // Creator ranking for Twitter leaderboard contests (based on total points per creator)
   const creatorRankingMap = useMemo(() => {
@@ -26215,26 +26223,16 @@ export default function ContestDetailClient({
       </Dialog>
 
       {/* Creator Submissions Modal - use currentSubmissions so hydrated bonus_paid/bonus_amount are included */}
-      {selectedCreatorForModal && groupSubmissionsByCreator && (
+      {selectedCreatorForModal && (
         <CreatorSubmissionsModal
           isOpen={!!selectedCreatorForModal}
           onClose={() => setSelectedCreatorForModal(null)}
           creator={creatorForSubmissionsModal ?? { id: selectedCreatorForModal, username: "Unknown", profile_picture_url: null, full_name: null }}
-          submissions={(() => {
-            const g = (groupSubmissionsByCreator as any[]).find(
-              (row: any) => row.creator.id === selectedCreatorForModal,
-            );
-            if (g?.submissions?.length) {
-              return g.submissions as React.ComponentProps<
-                typeof CreatorSubmissionsModal
-              >["submissions"];
-            }
-            return (currentSubmissions || []).filter(
-              (s: any) => s.creator_id === selectedCreatorForModal,
-            ) as React.ComponentProps<
+          submissions={
+            creatorModalSubmissions as React.ComponentProps<
               typeof CreatorSubmissionsModal
-            >["submissions"];
-          })()}
+            >["submissions"]
+          }
           contest={currentContest}
           creatorRank={
             creatorRankingMap.get(selectedCreatorForModal) ?? undefined

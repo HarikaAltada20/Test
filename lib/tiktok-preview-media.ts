@@ -23,6 +23,8 @@ export async function fetchTikTokMediaPreview(
   }
 }
 
+const OEMBED_FETCH_TIMEOUT_MS = 8_000;
+
 /** Public video thumbnail via TikTok oEmbed (no creator token). */
 export async function fetchTikTokOembedThumbnail(
   contentLink: string,
@@ -32,7 +34,10 @@ export async function fetchTikTokOembedThumbnail(
 
   for (let attempt = 0; attempt < 3; attempt++) {
     try {
-      const res = await fetch(oembedUrl.toString(), { cache: "no-store" });
+      const res = await fetch(oembedUrl.toString(), {
+        cache: "no-store",
+        signal: AbortSignal.timeout(OEMBED_FETCH_TIMEOUT_MS),
+      });
       const data = await res.json().catch(() => ({}));
       if (!res.ok || data?.error) {
         if (res.status === 400 && attempt < 2) continue;

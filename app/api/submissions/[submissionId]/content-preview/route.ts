@@ -16,7 +16,7 @@ import {
   fetchTikTokMediaPreview,
   fetchTikTokOembedThumbnail,
 } from "@/lib/tiktok-preview-media";
-import { isValidImageUrl } from "@/lib/submission-thumbnail";
+import { isValidHttpsImageUrl } from "@/lib/submission-thumbnail";
 
 function submissionPlatformIncludes(
   platform: string | null | undefined,
@@ -65,7 +65,7 @@ async function resolveTikTokThumbnail(
   if (oembedThumb) return oembedThumb;
 
   const stored = storedThumbnailUrl?.trim();
-  if (stored && isValidImageUrl(stored)) return stored;
+  if (stored && isValidHttpsImageUrl(stored)) return stored;
 
   return null;
 }

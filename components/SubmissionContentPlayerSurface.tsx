@@ -57,13 +57,13 @@ export function SubmissionContentPlayerSurface({
   const isTiktokIframe = isTiktok && preview?.mode === "iframe" && !!preview.embedUrl;
 
   const iframeSrc =
-    preview?.mode === "iframe" && preview.embedUrl
-      ? isTiktok
-        ? started
-          ? withEmbedAutoplay(preview.embedUrl, platform)
-          : preview.embedUrl
-        : started
-          ? withEmbedAutoplay(preview.embedUrl, platform)
+    preview?.mode === "iframe" &&
+    preview.embedUrl &&
+    (isTiktok || started)
+      ? started
+        ? withEmbedAutoplay(preview.embedUrl, platform)
+        : isTiktok
+          ? preview.embedUrl
           : null
       : null;
 

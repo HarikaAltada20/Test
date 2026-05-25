@@ -165,6 +165,7 @@ export function useSubmissionContentPreview({
     contentLink,
     platform,
     videoId,
+    videoThumbnailUrl,
     fallbackEmbed.embedUrl,
     fallbackEmbed.platform,
   ]);
