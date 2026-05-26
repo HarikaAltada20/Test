@@ -11,6 +11,16 @@ export function isValidImageUrl(url: string | null | undefined): boolean {
   }
 }
 
+/** Stored submission thumbnails — HTTPS only (user-controlled DB values). */
+export function isValidHttpsImageUrl(url: string | null | undefined): boolean {
+  if (!url?.trim()) return false;
+  try {
+    return new URL(url.trim()).protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
 /** Best-effort thumbnail URL for instant preview (no API). */
 export function getSubmissionThumbnailUrl(
   contentLink: string | null | undefined,
@@ -34,14 +44,17 @@ export function submissionPlatformIncludes(
   return (platform || "").toLowerCase().includes(needle);
 }
 
-/** Whether a background API call may upgrade playback (e.g. Instagram direct MP4). */
+/** Whether a background API call may upgrade playback/thumbnails (Instagram, TikTok). */
 export function shouldFetchContentPreviewApi(
   platform: string | null | undefined,
   contentLink: string | null | undefined,
 ): boolean {
+  const embedPlatform = getContentEmbedInfo(contentLink, { platform }).platform;
   if (
     submissionPlatformIncludes(platform, "instagram") ||
-    getContentEmbedInfo(contentLink, { platform }).platform === "instagram"
+    embedPlatform === "instagram" ||
+    submissionPlatformIncludes(platform, "tiktok") ||
+    embedPlatform === "tiktok"
   ) {
     return true;
   }

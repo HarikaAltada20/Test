@@ -3509,9 +3509,8 @@ export default function ContestDetailClient({
             (sum: number, sub: any) => {
               const raw = String(getStatus(sub) || "").toLowerCase();
               const st = raw === "approved" ? "verified" : raw;
-              // Keep milestone expected aligned with other contest types:
-              // only verified/paid contribute to expected financial totals.
-              if (st !== "verified" && st !== "paid") return sum;
+              // Align with per-submission loop above: FCFS map includes pending; rejected excluded.
+              if (st === "rejected") return sum;
               return sum + (payoutMap.get(sub.id) ?? 0);
             },
             0,
@@ -3590,6 +3589,61 @@ export default function ContestDetailClient({
     getStatus,
     cappedExpectedRewardBySubmissionId,
   ]);
+
+  /** Stable creator for CreatorSubmissionsModal when parent status filter excludes rejected rows from groups. */
+  const creatorForSubmissionsModal = useMemo(() => {
+    if (!selectedCreatorForModal) return null;
+
+    const fromGroup = (groupSubmissionsByCreator as any[])?.find(
+      (g: any) => g.creator?.id === selectedCreatorForModal,
+    )?.creator;
+    if (fromGroup?.username) return fromGroup;
+
+    const subs = (currentSubmissions || []).filter(
+      (s: any) => s.creator_id === selectedCreatorForModal,
+    );
+    const sub = subs[0];
+    if (!sub) {
+      return {
+        id: selectedCreatorForModal,
+        username: "Unknown",
+        profile_picture_url: null,
+        full_name: null,
+      };
+    }
+
+    const nested = (sub as any).creator;
+    if (nested?.username) {
+      return {
+        id: selectedCreatorForModal,
+        username: nested.username,
+        profile_picture_url: nested.profile_picture_url ?? null,
+        full_name: nested.full_name ?? null,
+      };
+    }
+
+    return {
+      id: selectedCreatorForModal,
+      username:
+        (sub as any).creator_username ||
+        (sub as any).creator_display_name ||
+        "Unknown",
+      profile_picture_url: (sub as any).creator_avatar_url ?? null,
+      full_name: (sub as any).creator_display_name ?? null,
+    };
+  }, [
+    selectedCreatorForModal,
+    groupSubmissionsByCreator,
+    currentSubmissions,
+  ]);
+
+  /** Full creator submission list for modal (not status-filtered group rows). */
+  const creatorModalSubmissions = useMemo(() => {
+    if (!selectedCreatorForModal) return [];
+    return (currentSubmissions || []).filter(
+      (s: any) => s.creator_id === selectedCreatorForModal,
+    );
+  }, [selectedCreatorForModal, currentSubmissions]);
 
   // Creator ranking for Twitter leaderboard contests (based on total points per creator)
   const creatorRankingMap = useMemo(() => {
@@ -5590,8 +5644,21 @@ export default function ContestDetailClient({
           prev.map((sub) => {
             if (updatedSubmissionsMap.has(sub.id)) {
               const updates = updatedSubmissionsMap.get(sub.id);
-              // ensure we don't erase existing other fields
-              return { ...sub, ...updates };
+              // API returns partial rows — preserve nested creator and display fields
+              return {
+                ...sub,
+                ...updates,
+                creator: (updates as any)?.creator ?? (sub as any).creator,
+                creator_username:
+                  (updates as any)?.creator_username ??
+                  (sub as any).creator_username,
+                creator_display_name:
+                  (updates as any)?.creator_display_name ??
+                  (sub as any).creator_display_name,
+                creator_avatar_url:
+                  (updates as any)?.creator_avatar_url ??
+                  (sub as any).creator_avatar_url,
+              };
             }
             return sub;
           }),
@@ -26156,30 +26223,16 @@ export default function ContestDetailClient({
       </Dialog>
 
       {/* Creator Submissions Modal - use currentSubmissions so hydrated bonus_paid/bonus_amount are included */}
-      {selectedCreatorForModal && groupSubmissionsByCreator && (
+      {selectedCreatorForModal && (
         <CreatorSubmissionsModal
           isOpen={!!selectedCreatorForModal}
           onClose={() => setSelectedCreatorForModal(null)}
-          creator={
-            (groupSubmissionsByCreator as any[]).find(
-              (g: any) => g.creator.id === selectedCreatorForModal,
-            )?.creator || {}
-          }
-          submissions={(() => {
-            const g = (groupSubmissionsByCreator as any[]).find(
-              (row: any) => row.creator.id === selectedCreatorForModal,
-            );
-            if (g?.submissions?.length) {
-              return g.submissions as React.ComponentProps<
-                typeof CreatorSubmissionsModal
-              >["submissions"];
-            }
-            return (currentSubmissions || []).filter(
-              (s: any) => s.creator_id === selectedCreatorForModal,
-            ) as React.ComponentProps<
+          creator={creatorForSubmissionsModal ?? { id: selectedCreatorForModal, username: "Unknown", profile_picture_url: null, full_name: null }}
+          submissions={
+            creatorModalSubmissions as React.ComponentProps<
               typeof CreatorSubmissionsModal
-            >["submissions"];
-          })()}
+            >["submissions"]
+          }
           contest={currentContest}
           creatorRank={
             creatorRankingMap.get(selectedCreatorForModal) ?? undefined

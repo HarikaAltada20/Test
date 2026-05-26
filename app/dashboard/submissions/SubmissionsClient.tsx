@@ -1383,10 +1383,13 @@ export default function SubmissionsClient({
         <div className="relative w-full md:w-[280px] aspect-[16/9] md:aspect-[4/3] rounded-[12px] overflow-hidden border border-slate-200 dark:border-slate-800 shrink-0 bg-slate-100 dark:bg-slate-900 group/thumb">
 
           {(() => {
-            const isInstagram = (submission.platform || "").toLowerCase() === "instagram";
+            const platformLower = (submission.platform || "").toLowerCase();
+            const isInstagram = platformLower === "instagram";
+            const isTiktok = platformLower.includes("tiktok");
             const isBroken = !!brokenThumbs[submission.id];
             const hasThumb = !!bestThumbnail;
             const shouldShowIgPoster = isInstagram && (!hasThumb || isBroken);
+            const shouldShowTiktokPoster = isTiktok && (!hasThumb || isBroken);
 
             if (shouldShowIgPoster) {
               return (
@@ -1394,6 +1397,15 @@ export default function SubmissionsClient({
                   src="/instagram-poster.svg"
                   alt="Instagram content"
                   className="absolute inset-0 w-full h-full object-cover"
+                />
+              );
+            }
+
+            if (shouldShowTiktokPoster) {
+              return (
+                <div
+                  className="absolute inset-0 w-full h-full bg-gradient-to-br from-slate-950 via-cyan-950 to-pink-950"
+                  aria-label="TikTok content"
                 />
               );
             }
@@ -2719,7 +2731,9 @@ export default function SubmissionsClient({
                 }
               }
 
-              const isInstagram = (submission.platform || "").toLowerCase() === "instagram";
+              const platformLowerModal = (submission.platform || "").toLowerCase();
+              const isInstagram = platformLowerModal === "instagram";
+              const isTiktok = platformLowerModal.includes("tiktok");
               const isBroken = !!brokenThumbs[submission.id];
               const hasThumb = !!bestThumbnail;
 
@@ -2735,6 +2749,11 @@ export default function SubmissionsClient({
                   <div className="relative w-full h-[160px] bg-slate-100 dark:bg-slate-900">
                     {isInstagram && (!hasThumb || isBroken) ? (
                       <img src="/instagram-poster.svg" alt="Instagram content" className="absolute inset-0 w-full h-full object-cover" />
+                    ) : isTiktok && (!hasThumb || isBroken) ? (
+                      <div
+                        className="absolute inset-0 w-full h-full bg-gradient-to-br from-slate-950 via-cyan-950 to-pink-950"
+                        aria-label="TikTok content"
+                      />
                     ) : hasThumb && !isBroken ? (
                       <img
                         src={bestThumbnail}

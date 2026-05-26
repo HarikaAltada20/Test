@@ -72,6 +72,7 @@ import { PageLoadingSpinner } from "@/components/loading/LoadingSpinner";
 
 import { hasSubmitted } from "@/lib/form-submissions";
 import { cn } from "@/lib/utils";
+import { buildReferralLinks, getReferralCode } from "@/lib/referral-links";
 import { useClientAuth } from "@/hooks/use-client-auth";
 import Link from "next/link";
 import { formatCurrencyFromCents } from "@/lib/currency-utils";
@@ -150,6 +151,9 @@ export default function SettingsPage({
     null,
   );
   const [username, setUsername] = useState<string | null>(null);
+  const [storedReferralCode, setStoredReferralCode] = useState<string | null>(
+    null,
+  );
   const [pageLoading, setPageLoading] = useState(true);
   const [hasPassword, setHasPassword] = useState(true); // Track if user has a password
   const supabase = createClient();
@@ -702,11 +706,12 @@ export default function SettingsPage({
       if (!user?.id) return;
       const { data, error } = await supabase
         .from("users")
-        .select("username, user_type")
+        .select("username, user_type, referral_code")
         .eq("id", user.id)
         .maybeSingle();
       if (!error && data) {
         setUsername(data.username || null);
+        setStoredReferralCode(data.referral_code || null);
         setUserType((data.user_type as any) || null);
       }
     };
@@ -779,17 +784,16 @@ export default function SettingsPage({
   };
 
   
-  const buildReferralLinks = () => {
-    const base =
+  const getShareReferralCode = () =>
+    getReferralCode(storedReferralCode, username);
+
+  const getShareReferralLinks = () => {
+    const code = getShareReferralCode();
+    const origin =
       typeof window !== "undefined"
         ? window.location.origin
         : "https://www.gameofcreators.com";
-    const code = username || "";
-    return {
-      general: `${base}/?ref=${code}`,
-      creators: `${base}/creators?ref=${code}`,
-      brands: `${base}/brands?ref=${code}`,
-    };
+    return code ? buildReferralLinks(code, origin) : null;
   };
 
   const copyToClipboard = async (text: string) => {
@@ -3690,14 +3694,15 @@ export default function SettingsPage({
             <DialogDescription
               className={cn(isDark ? "text-gray-300" : "text-gray-600")}
             >
-              Invite others with your referral code embedded. Choose the right
-              landing page.
+              Invite others with your referral link. Choose the right landing
+              page.
             </DialogDescription>
           </DialogHeader>
-          {username ? (
+          {getShareReferralCode() ? (
             <div className="space-y-4">
               {(() => {
-                const links = buildReferralLinks();
+                const links = getShareReferralLinks();
+                if (!links) return null;
                 return (
                   <div className="space-y-4">
                     <div className="space-y-2">

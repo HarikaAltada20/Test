@@ -6,6 +6,7 @@ import {
   getSubmissionThumbnailUrl,
   isValidImageUrl,
   shouldFetchContentPreviewApi,
+  submissionPlatformIncludes,
 } from "@/lib/submission-thumbnail";
 import { isYoutubeShortUrl } from "@/lib/youtube-url";
 
@@ -96,7 +97,9 @@ export function useSubmissionContentPreview({
     const instant = buildInstantPreview(contentLink, platform, videoId);
     setPreview(instant);
     setError(instant ? null : "This link cannot be embedded.");
-    setApiThumbnailUrl(null);
+    if (!videoThumbnailUrl?.trim()) {
+      setApiThumbnailUrl(null);
+    }
 
     if (!submissionId) {
       setPlayerLoading(false);
@@ -123,8 +126,12 @@ export function useSubmissionContentPreview({
       .then((data) => {
         if (cancelled) return;
         setPreview(data);
-        if (data.thumbnailUrl && isValidImageUrl(data.thumbnailUrl)) {
-          setApiThumbnailUrl(data.thumbnailUrl);
+        const thumb =
+          data.mode === "iframe" || data.mode === "direct"
+            ? data.thumbnailUrl
+            : undefined;
+        if (thumb && isValidImageUrl(thumb)) {
+          setApiThumbnailUrl(thumb);
         }
       })
       .catch((err: Error) => {
@@ -158,11 +165,13 @@ export function useSubmissionContentPreview({
     contentLink,
     platform,
     videoId,
+    videoThumbnailUrl,
     fallbackEmbed.embedUrl,
     fallbackEmbed.platform,
   ]);
 
   const resolvedPlatform = preview?.platform ?? fallbackEmbed.platform;
+  const isTiktokPreview = submissionPlatformIncludes(resolvedPlatform, "tiktok");
   const isVertical =
     resolvedPlatform === "tiktok" ||
     resolvedPlatform === "instagram" ||
@@ -171,9 +180,11 @@ export function useSubmissionContentPreview({
     resolvedPlatform === "youtube" && !isVertical;
 
   return {
-    /** True while fetching Instagram preview/thumbnail from API. */
+    /** True while fetching Instagram/TikTok preview/thumbnail from API. */
     playerLoading,
-    thumbnailLoading: playerLoading && !thumbnailUrl,
+    /** TikTok uses embed preload for poster; skip spinner when only waiting on API thumb. */
+    thumbnailLoading:
+      playerLoading && !thumbnailUrl && !isTiktokPreview,
     error: preview ? null : error,
     preview,
     thumbnailUrl,
