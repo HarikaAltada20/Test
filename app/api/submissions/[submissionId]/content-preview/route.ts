@@ -11,6 +11,12 @@ import {
   fetchInstagramMediaPreview,
   fetchInstagramOembedThumbnail,
 } from "@/lib/instagram-preview-media";
+import { ensureFreshTikTokToken } from "@/lib/tiktok/ensure-fresh-tiktok-token";
+import {
+  fetchTikTokMediaPreview,
+  fetchTikTokOembedThumbnail,
+} from "@/lib/tiktok-preview-media";
+import { isValidHttpsImageUrl } from "@/lib/submission-thumbnail";
 
 function submissionPlatformIncludes(
   platform: string | null | undefined,
@@ -35,6 +41,33 @@ async function resolveInstagramThumbnail(
   }
 
   return fetchInstagramOembedThumbnail(contentLink);
+}
+
+async function resolveTikTokThumbnail(
+  contentLink: string,
+  videoId: string | null,
+  creatorId: string,
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  storedThumbnailUrl: string | null,
+): Promise<string | null> {
+  if (videoId) {
+    const tokenResult = await ensureFreshTikTokToken(supabase, creatorId);
+    if (tokenResult.ok) {
+      const { thumbnailUrl } = await fetchTikTokMediaPreview(
+        videoId,
+        tokenResult.accessToken,
+      );
+      if (thumbnailUrl) return thumbnailUrl;
+    }
+  }
+
+  const oembedThumb = await fetchTikTokOembedThumbnail(contentLink);
+  if (oembedThumb) return oembedThumb;
+
+  const stored = storedThumbnailUrl?.trim();
+  if (stored && isValidHttpsImageUrl(stored)) return stored;
+
+  return null;
 }
 
 export async function GET(_request: Request, context: RouteContext) {
@@ -180,10 +213,20 @@ export async function GET(_request: Request, context: RouteContext) {
           { status: 400 },
         );
       }
+
+      const thumbnailUrl = await resolveTikTokThumbnail(
+        contentLink,
+        submission.video_id,
+        submission.creator_id,
+        supabase,
+        submission.video_thumbnail_url,
+      );
+
       return NextResponse.json({
         mode: "iframe",
         platform: "tiktok",
         embedUrl: buildTikTokPlayerEmbedUrl(tiktokVideoId),
+        thumbnailUrl: thumbnailUrl ?? undefined,
         fallbackMessage: submission.video_id
           ? undefined
           : "No TikTok video ID on submission; parsed from content link.",

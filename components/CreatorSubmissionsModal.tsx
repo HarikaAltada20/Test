@@ -1379,6 +1379,10 @@ export function CreatorSubmissionsModal({
     }).length,
   };
   const isDark = mode === "dark";
+  const creatorDisplayName =
+    creator.username?.trim() ||
+    creator.full_name?.trim() ||
+    "Unknown";
 
   return (
     <>
@@ -1389,7 +1393,7 @@ export function CreatorSubmissionsModal({
           onOpenAutoFocus={(e) => e.preventDefault()}
         >
           <DialogTitle className="sr-only">
-            {creator.username}'s Submissions
+            {creatorDisplayName}&apos;s Submissions
           </DialogTitle>
           <div className="flex flex-col h-[98vh] min-h-0 overflow-hidden relative">
             {parentBulkActionLoading && (
@@ -1417,7 +1421,7 @@ export function CreatorSubmissionsModal({
                 <Avatar className="h-12 w-12">
                   <AvatarImage src={creator.profile_picture_url || undefined} />
                   <AvatarFallback>
-                    {creator.username?.[0]?.toUpperCase() || "U"}
+                    {creatorDisplayName[0]?.toUpperCase() || "U"}
                   </AvatarFallback>
                 </Avatar>
                 <div>
@@ -1427,7 +1431,7 @@ export function CreatorSubmissionsModal({
                       isDark ? "text-white" : "text-gray-900",
                     )}
                   >
-                    {creator.username}'s Submissions
+                    {creatorDisplayName}&apos;s Submissions
                   </h2>
                   <p
                     className={cn(

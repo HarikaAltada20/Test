@@ -717,7 +717,7 @@ export default function ChooseUsernamePage() {
             await supabase
               .from("users")
               .select("id")
-              .eq("username", finalReferralCode) // Usernames are used as referral codes
+              .eq("username", finalReferralCode)
               .neq("id", userData.id) // Prevent self-referral
               .single();
 

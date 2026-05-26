@@ -21,7 +21,7 @@ import {
   Eye,
   Coins,
   Loader2,
-  MessageSquare,
+  Gift,
 } from "lucide-react";
 import { formatLocalDateTime, cn } from "@/lib/utils";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -33,10 +33,12 @@ import { useIsMobile } from "@/hooks/use-mobile";
 
 import { ContestCreationModal } from "@/components/ContestCreationModal";
 import { useContestCreation } from "@/hooks/use-contest-creation";
-import { PageLoadingSpinner, ButtonLoadingSpinner } from "@/components/loading/LoadingSpinner";
+import {
+  PageLoadingSpinner,
+  ButtonLoadingSpinner,
+} from "@/components/loading/LoadingSpinner";
 import GettingStartedModal from "@/components/GettingStartedModal";
-import { SurveyModal } from "@/components/SurveyModal";
-import { hasSubmitted } from "@/lib/form-submissions";
+import { ReferralEarnModal } from "@/components/ReferralEarnModal";
 
 function DashboardPage() {
   const router = useRouter();
@@ -56,20 +58,18 @@ function DashboardPage() {
   const [userCoins, setUserCoins] = useState(0);
   const [isMounted, setIsMounted] = useState(false);
   const [hasProcessedSuccess, setHasProcessedSuccess] = useState(false);
-  const [userDetails, setUserDetails] = useState<{
-    email: string;
-    username: string;
-    fullName: string;
-  } | null>(null);
+  const [referralCode, setReferralCode] = useState<string | null>(null);
+  const [username, setUsername] = useState<string | null>(null);
 
   const [showModal, setShowModal] = useState(false);
   const [loading, setLoading] = useState(false);
   const { handleCreateContest } = useContestCreation(user?.id);
   const [showPopup, setShowPopup] = useState(false);
-  const [isSurveyModalOpen, setIsSurveyModalOpen] = useState(false);
-  const [isSurveyCompleted, setIsSurveyCompleted] = useState(false);
+  const [isReferralModalOpen, setIsReferralModalOpen] = useState(false);
   const [isNavigating, setIsNavigating] = useState(false);
-  const [viewButtonsLoading, setViewButtonsLoading] = useState<Record<string, boolean>>({});
+  const [viewButtonsLoading, setViewButtonsLoading] = useState<
+    Record<string, boolean>
+  >({});
 
   const handleNavigation = () => {
     setIsNavigating(true);
@@ -112,7 +112,7 @@ function DashboardPage() {
 
     if (success === "true" && sessionId && user && !hasProcessedSuccess) {
       console.log(
-        "🎉 Payment successful in dashboard, refreshing profile data..."
+        "🎉 Payment successful in dashboard, refreshing profile data...",
       );
       setHasProcessedSuccess(true);
 
@@ -164,21 +164,6 @@ function DashboardPage() {
     }
   }, [profile]);
 
-  // Check survey completion status
-  useEffect(() => {
-    const checkSurveyStatus = async () => {
-      if (userDetails?.email) {
-        try {
-          const submitted = await hasSubmitted(userDetails.email);
-          setIsSurveyCompleted(submitted);
-        } catch (error) {
-          console.error("Error checking survey status:", error);
-        }
-      }
-    };
-    checkSurveyStatus();
-  }, [userDetails?.email]);
-
   useEffect(() => {
     setIsMounted(true);
   }, []);
@@ -198,14 +183,18 @@ function DashboardPage() {
       try {
         const { data: userData, error: userError } = await supabase
           .from("users")
-          .select("user_type, coins, email, username, full_name")
+          .select("user_type, coins, email, username, full_name, referral_code")
           .eq("id", user.id)
           .single();
 
         if (!isMounted) return;
 
         if (userError) {
-          console.error("Error fetching user data:", userError.message, userError.details);
+          console.error(
+            "Error fetching user data:",
+            userError.message,
+            userError.details,
+          );
           if (isMounted) setIsFetchingData(false);
           return;
         }
@@ -213,12 +202,8 @@ function DashboardPage() {
         const userType = userData?.user_type;
         setUserCoins(userData?.coins || 0);
 
-        // Set user details for survey
-        setUserDetails({
-          email: userData?.email || user?.email || "",
-          username: userData?.username || "",
-          fullName: userData?.full_name || user?.user_metadata?.full_name || "",
-        });
+        setUsername(userData?.username || null);
+        setReferralCode(userData?.referral_code || userData?.username || null);
 
         if (userType === "advertiser") {
           // Fetch advertiser profile
@@ -231,7 +216,11 @@ function DashboardPage() {
 
           if (!isMounted) return;
           if (profileError) {
-            console.error("Error fetching advertiser profile:", profileError.message, profileError.details);
+            console.error(
+              "Error fetching advertiser profile:",
+              profileError.message,
+              profileError.details,
+            );
           }
 
           // Fetch contests data for accurate calculations
@@ -282,7 +271,7 @@ function DashboardPage() {
                   sum +
                   getPoolBudgetCentsFromDetails(
                     "milestone",
-                    contest.contest_based_details
+                    contest.contest_based_details,
                   )
                 );
               } else if (contest.contest_type === "dual_rewards") {
@@ -290,7 +279,7 @@ function DashboardPage() {
                   sum +
                   getPoolBudgetCentsFromDetails(
                     "dual_rewards",
-                    contest.contest_based_details
+                    contest.contest_based_details,
                   )
                 );
               }
@@ -314,7 +303,7 @@ function DashboardPage() {
               ?.sort(
                 (a, b) =>
                   new Date(b.created_at).getTime() -
-                  new Date(a.created_at).getTime()
+                  new Date(a.created_at).getTime(),
               ) || [];
 
           setRecentContests(recentContests);
@@ -327,20 +316,24 @@ function DashboardPage() {
 
           if (!isMounted) return;
           if (profileError) {
-            console.error("Error fetching creator profile:", profileError.message, profileError.details);
+            console.error(
+              "Error fetching creator profile:",
+              profileError.message,
+              profileError.details,
+            );
           } else {
             setProfile(creatorProfile);
           }
 
           const { data: recentRows, error: recentError } = await supabase.rpc(
-            "creator_dashboard_recent_activity"
+            "creator_dashboard_recent_activity",
           );
 
           if (!isMounted) return;
           if (recentError) {
             console.error(
               "Error fetching creator recent activity:",
-              recentError
+              recentError,
             );
             setRecentContests([]);
           } else if (recentRows?.length) {
@@ -409,32 +402,36 @@ function DashboardPage() {
         <h2
           className={cn(
             "w-full pl-2 text-2xl font-bold tracking-tight sm:w-auto text-left md:text-3xl",
-            isDark ? "text-white" : "text-slate-900"
+            isDark ? "text-white" : "text-slate-900",
           )}
         >
           Dashboard
         </h2>
         <div className="flex w-full flex-col items-stretch gap-2 sm:w-auto sm:flex-row sm:items-center sm:gap-3">
-          {/* Survey Button - Only show for creators and if survey not completed */}
-          {!isAdvertiser && !isSurveyCompleted && (
-            <button
-              onClick={() => setIsSurveyModalOpen(true)}
-              className={cn(
-                "flex w-full items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-md font-medium text-white sm:w-auto",
-                isDark ? "bg-[#5F2BB1]" : "bg-[#4A00BE]"
-              )}
-            >
-              <MessageSquare className="h-4 w-4" />
+          {/* Referral CTA — survey button disabled per REFERRAL_PROGRAM.md */}
+          {/* {!isAdvertiser && !isSurveyCompleted && (
+            <button onClick={() => setIsSurveyModalOpen(true)} ...>
               Fill survey and earn upto $5
             </button>
-          )}
+          )} */}
+          <button
+            onClick={() => setIsReferralModalOpen(true)}
+            className={cn(
+              "flex w-full items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-md font-medium text-white sm:w-auto",
+              isDark ? "bg-[#5F2BB1]" : "bg-[#4A00BE]",
+            )}
+          >
+            <Gift className="h-4 w-4" />
+            {isAdvertiser ? "Refer & earn 30% commission" : "Refer and earn upto $100"}
+        
+          </button>
           {isAdvertiser && (
             <button
               onClick={handleCreateContestClick}
               disabled={loading}
               className={cn(
                 "flex w-full items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-md font-medium text-white sm:w-auto",
-                isDark ? "bg-[#5F2BB1]" : "bg-[#4A00BE]"
+                isDark ? "bg-[#5F2BB1]" : "bg-[#4A00BE]",
               )}
             >
               {loading ? (
@@ -455,7 +452,7 @@ function DashboardPage() {
             <div
               className={cn(
                 "rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-2",
-                isDark ? "bg-[#170337]" : "bg-white"
+                isDark ? "bg-[#170337]" : "bg-white",
               )}
             >
               <CardContent className="p-4">
@@ -463,7 +460,7 @@ function DashboardPage() {
                   <div
                     className={cn(
                       "flex-1 space-y-2",
-                      isDark ? "text-white" : "text-black"
+                      isDark ? "text-white" : "text-black",
                     )}
                   >
                     <p className="text-lg font-medium">Total Spent</p>
@@ -477,7 +474,7 @@ function DashboardPage() {
                       "w-10 h-10 flex items-center justify-center rounded-full  mb-4",
                       isDark
                         ? "bg-[#FFFFFF36] text-white"
-                        : "bg-[#D8C3FF] text-[#4A00BE]"
+                        : "bg-[#D8C3FF] text-[#4A00BE]",
                     )}
                   >
                     <DollarSign className="w-5 h-5" />
@@ -490,7 +487,7 @@ function DashboardPage() {
             <div
               className={cn(
                 "rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-2",
-                isDark ? "bg-[#170337]" : "bg-white"
+                isDark ? "bg-[#170337]" : "bg-white",
               )}
             >
               <CardContent className="p-4">
@@ -498,7 +495,7 @@ function DashboardPage() {
                   <div
                     className={cn(
                       "flex-1 space-y-2",
-                      isDark ? "text-white" : "text-black"
+                      isDark ? "text-white" : "text-black",
                     )}
                   >
                     <p className="text-lg font-medium">Total Contests</p>
@@ -512,7 +509,7 @@ function DashboardPage() {
                       "w-10 h-10 flex items-center justify-center rounded-full  mb-4",
                       isDark
                         ? "bg-[#FFFFFF36] text-white"
-                        : "bg-[#D8C3FF] text-[#4A00BE]"
+                        : "bg-[#D8C3FF] text-[#4A00BE]",
                     )}
                   >
                     <Trophy className="h-5 w-5" />
@@ -526,7 +523,7 @@ function DashboardPage() {
             <div
               className={cn(
                 "rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-2",
-                isDark ? "bg-[#170337]" : "bg-white"
+                isDark ? "bg-[#170337]" : "bg-white",
               )}
             >
               <CardContent className="p-4">
@@ -534,7 +531,7 @@ function DashboardPage() {
                   <div
                     className={cn(
                       "flex-1 space-y-2",
-                      isDark ? "text-white" : "text-black"
+                      isDark ? "text-white" : "text-black",
                     )}
                   >
                     <p className="text-lg font-medium">Total Earnings</p>
@@ -550,7 +547,7 @@ function DashboardPage() {
                       "w-10 h-10 flex items-center justify-center rounded-full  mb-4",
                       isDark
                         ? "bg-[#FFFFFF36] text-white"
-                        : "bg-[#D8C3FF] text-[#4A00BE]"
+                        : "bg-[#D8C3FF] text-[#4A00BE]",
                     )}
                   >
                     <DollarSign className="h-6 w-6" />
@@ -584,7 +581,7 @@ function DashboardPage() {
             <div
               className={cn(
                 "rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-2",
-                isDark ? "bg-[#170337]" : "bg-white"
+                isDark ? "bg-[#170337]" : "bg-white",
               )}
             >
               <CardContent className="p-4">
@@ -592,7 +589,7 @@ function DashboardPage() {
                   <div
                     className={cn(
                       "flex-1 space-y-2",
-                      isDark ? "text-white" : "text-black"
+                      isDark ? "text-white" : "text-black",
                     )}
                   >
                     <p className="text-lg font-medium">Contests Won</p>
@@ -609,7 +606,7 @@ function DashboardPage() {
                       "w-10 h-10 flex items-center justify-center rounded-full  mb-4",
                       isDark
                         ? "bg-[#FFFFFF36] text-white"
-                        : "bg-[#D8C3FF] text-[#4A00BE]"
+                        : "bg-[#D8C3FF] text-[#4A00BE]",
                     )}
                   >
                     <Trophy className="h-6 w-6" />
@@ -645,7 +642,7 @@ function DashboardPage() {
         <div
           className={cn(
             "rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-2",
-            isDark ? "bg-[#170337]" : "bg-white"
+            isDark ? "bg-[#170337]" : "bg-white",
           )}
         >
           <CardContent className="p-4">
@@ -653,7 +650,7 @@ function DashboardPage() {
               <div
                 className={cn(
                   "flex-1 space-y-2",
-                  isDark ? "text-white" : "text-black"
+                  isDark ? "text-white" : "text-black",
                 )}
               >
                 <p className="text-lg font-medium">Total Views</p>
@@ -671,7 +668,7 @@ function DashboardPage() {
                   "w-10 h-10 flex items-center justify-center rounded-full  mb-4",
                   isDark
                     ? "bg-[#FFFFFF36] text-white"
-                    : "bg-[#D8C3FF] text-[#4A00BE]"
+                    : "bg-[#D8C3FF] text-[#4A00BE]",
                 )}
               >
                 <Eye className="h-6 w-6" />
@@ -684,7 +681,7 @@ function DashboardPage() {
         <div
           className={cn(
             "rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-2",
-            isDark ? "bg-[#170337]" : "bg-white"
+            isDark ? "bg-[#170337]" : "bg-white",
           )}
         >
           <CardContent className="p-4">
@@ -692,7 +689,7 @@ function DashboardPage() {
               <div
                 className={cn(
                   "flex-1 space-y-2",
-                  isDark ? "text-white" : "text-black"
+                  isDark ? "text-white" : "text-black",
                 )}
               >
                 <p className="text-lg font-medium">Available Coins</p>
@@ -704,7 +701,7 @@ function DashboardPage() {
                   "w-10 h-10 flex items-center justify-center rounded-full  mb-4",
                   isDark
                     ? "bg-[#FFFFFF36] text-white"
-                    : "bg-[#D8C3FF] text-[#4A00BE]"
+                    : "bg-[#D8C3FF] text-[#4A00BE]",
                 )}
               >
                 <Coins className="w-5 h-5" />
@@ -722,7 +719,7 @@ function DashboardPage() {
               "mb-6  rounded-xl",
               isDark
                 ? "bg-[#170337] border border-[#170337]"
-                : "bg-white border border-gray-300"
+                : "bg-white border border-gray-300",
             )}
           >
             <CardContent className="p-4 sm:p-6">
@@ -733,7 +730,7 @@ function DashboardPage() {
                       "p-3 rounded-full flex-shrink-0",
                       isDark
                         ? "bg-[#FFFFFF36] text-white"
-                        : "bg-purple-100 dark:bg-purple-900 text-purple-600 dark:text-purple-400"
+                        : "bg-purple-100 dark:bg-purple-900 text-purple-600 dark:text-purple-400",
                     )}
                   >
                     <HelpCircle className="w-6 h-6" />
@@ -742,7 +739,7 @@ function DashboardPage() {
                     <h3
                       className={cn(
                         "text-base sm:text-lg font-semibold mb-1",
-                        isDark ? "text-white" : "text-gray-900 dark:text-white"
+                        isDark ? "text-white" : "text-gray-900 dark:text-white",
                       )}
                     >
                       New to Game Of Creators?
@@ -752,7 +749,7 @@ function DashboardPage() {
                         "text-sm sm:text-base",
                         isDark
                           ? "text-white"
-                          : "text-gray-600 dark:text-gray-300"
+                          : "text-gray-600 dark:text-gray-300",
                       )}
                     >
                       Learn about our two contest types: Leaderboard and CPM
@@ -771,11 +768,15 @@ function DashboardPage() {
                     "text-white flex items-center justify-center sm:justify-start px-4 py-2",
                     isDark
                       ? "bg-[#5F2BB1] text-white"
-                      : "bg-purple-600 hover:bg-purple-700"
+                      : "bg-purple-600 hover:bg-purple-700",
                   )}
                   onClick={() => setShowPopup(true)}
                 >
-                  {isNavigating ? <ButtonLoadingSpinner /> : <HelpCircle className="w-4 h-4" />}
+                  {isNavigating ? (
+                    <ButtonLoadingSpinner />
+                  ) : (
+                    <HelpCircle className="w-4 h-4" />
+                  )}
                   Get Started
                 </Button>
                 <GettingStartedModal
@@ -790,14 +791,14 @@ function DashboardPage() {
       <div
         className={cn(
           "grid gap-6",
-          isAdvertiser ? "md:grid-cols-2" : "md:grid-cols-1"
+          isAdvertiser ? "md:grid-cols-2" : "md:grid-cols-1",
         )}
       >
         <div
           className={cn(
             "rounded-xl shadow-md flex flex-col",
             isAdvertiser ? "min-h-[300px]" : "min-h-[350px]",
-            isDark ? "bg-[#210B43]" : "bg-white"
+            isDark ? "bg-[#210B43]" : "bg-white",
           )}
         >
           <CardHeader>
@@ -807,7 +808,7 @@ function DashboardPage() {
             <CardDescription
               className={cn(
                 "text-md",
-                isDark ? "text-[#808080]" : "text-slate-600"
+                isDark ? "text-[#808080]" : "text-slate-600",
               )}
             >
               {isAdvertiser
@@ -850,7 +851,7 @@ function DashboardPage() {
                               })
                             : contest.last_submission_at
                               ? `Last submission ${formatLocalDateTime(
-                                  contest.last_submission_at
+                                  contest.last_submission_at,
                                 )}`
                               : "Last submission —"}
                         </p>
@@ -864,10 +865,13 @@ function DashboardPage() {
                       }
                       className="block w-full sm:w-auto"
                     >
-                      <button 
+                      <button
                         className="w-full px-4 py-2 rounded-xl bg-[#6C43D0] text-white flex items-center justify-center gap-2"
                         onClick={() => {
-                          setViewButtonsLoading(prev => ({ ...prev, [contest.id]: true }));
+                          setViewButtonsLoading((prev) => ({
+                            ...prev,
+                            [contest.id]: true,
+                          }));
                           setTimeout(() => {
                             window.location.href = isAdvertiser
                               ? `/dashboard/contests/${contest.id}`
@@ -901,7 +905,7 @@ function DashboardPage() {
           <div
             className={cn(
               "rounded-xl shadow-md",
-              isDark ? "bg-[#210B43]" : "bg-white"
+              isDark ? "bg-[#210B43]" : "bg-white",
             )}
           >
             <CardHeader>
@@ -923,13 +927,13 @@ function DashboardPage() {
                   "flex h-[270px] items-center justify-center border rounded-xl",
                   isDark
                     ? "bg-[#170337] border-[#170337]"
-                    : "bg-[#7F39EC26] border-[#D1B7F9]"
+                    : "bg-[#7F39EC26] border-[#D1B7F9]",
                 )}
               >
                 <p
                   className={cn(
                     "text-lg font-semibold",
-                    isDark ? "text-white" : "text-black"
+                    isDark ? "text-white" : "text-black",
                   )}
                 >
                   Detailed analytics available soon
@@ -944,10 +948,12 @@ function DashboardPage() {
         onClose={() => setShowModal(false)}
         userId={user?.id || ""}
       />
-      {/* Survey Modal */}
-      <SurveyModal
-        isOpen={isSurveyModalOpen}
-        onClose={() => setIsSurveyModalOpen(false)}
+      <ReferralEarnModal
+        isOpen={isReferralModalOpen}
+        onClose={() => setIsReferralModalOpen(false)}
+        audience={isAdvertiser ? "advertiser" : "creator"}
+        referralCode={referralCode}
+        username={username}
       />
     </div>
   );
