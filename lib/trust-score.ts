@@ -71,6 +71,168 @@ export function getTrustMetricsFromStatuses(statuses: SubmissionStatus[]): Trust
   return buildTrustScoreMetricsFromCounts(counts);
 }
 
+export type StoredCreatorTrustMetrics = {
+  trust_score: number | null;
+  total_reels: number | null;
+  verified_reels: number | null;
+  rejected_reels: number | null;
+  pending_reels: number | null;
+  updated_at: string | null;
+};
+
+export function parseStoredCreatorTrustMetrics(
+  raw: unknown,
+): StoredCreatorTrustMetrics | null {
+  let parsed: Record<string, unknown> | null = null;
+
+  if (raw && typeof raw === "object") {
+    parsed = raw as Record<string, unknown>;
+  } else if (typeof raw === "string") {
+    try {
+      const json = JSON.parse(raw);
+      parsed = json && typeof json === "object" ? json : null;
+    } catch {
+      parsed = null;
+    }
+  }
+
+  if (!parsed) return null;
+
+  return {
+    trust_score:
+      parsed.trust_score === null || parsed.trust_score === undefined
+        ? null
+        : Number(parsed.trust_score),
+    total_reels:
+      parsed.total_reels === null || parsed.total_reels === undefined
+        ? null
+        : Number(parsed.total_reels),
+    verified_reels:
+      parsed.verified_reels === null || parsed.verified_reels === undefined
+        ? null
+        : Number(parsed.verified_reels),
+    rejected_reels:
+      parsed.rejected_reels === null || parsed.rejected_reels === undefined
+        ? null
+        : Number(parsed.rejected_reels),
+    pending_reels:
+      parsed.pending_reels === null || parsed.pending_reels === undefined
+        ? null
+        : Number(parsed.pending_reels),
+    updated_at:
+      typeof parsed.updated_at === "string" ? parsed.updated_at : null,
+  };
+}
+
+export function resolveCreatorTrustMetrics(
+  creatorProfile: { trust_score_metrics?: unknown } | null | undefined,
+  creatorId?: string | null,
+  liveByCreatorId?: Record<string, StoredCreatorTrustMetrics | null | undefined>,
+): StoredCreatorTrustMetrics | null {
+  const fromProfile = parseStoredCreatorTrustMetrics(
+    creatorProfile?.trust_score_metrics,
+  );
+  if (fromProfile) {
+    return fromProfile;
+  }
+
+  if (
+    creatorId &&
+    liveByCreatorId?.[creatorId] &&
+    typeof liveByCreatorId[creatorId] === "object"
+  ) {
+    return liveByCreatorId[creatorId] ?? null;
+  }
+
+  return null;
+}
+
+export function getCreatorTrustScoreFromMetrics(
+  creatorProfile: { trust_score_metrics?: unknown } | null | undefined,
+  creatorId?: string | null,
+  liveByCreatorId?: Record<string, StoredCreatorTrustMetrics | null | undefined>,
+): number | null {
+  const metrics = resolveCreatorTrustMetrics(
+    creatorProfile,
+    creatorId,
+    liveByCreatorId,
+  );
+  const raw = metrics?.trust_score;
+  if (raw === null || raw === undefined || Number.isNaN(raw)) return null;
+  return Number.isFinite(raw) ? raw : null;
+}
+
+export async function fetchLiveTrustMetricsByCreatorIds(
+  supabaseAdmin: any,
+  creatorIds: string[],
+): Promise<Record<string, StoredCreatorTrustMetrics>> {
+  if (creatorIds.length === 0) return {};
+
+  const { data: rows, error } = await supabaseAdmin
+    .from("submissions")
+    .select("creator_id, status")
+    .in("creator_id", creatorIds);
+
+  if (error) {
+    console.error(
+      "[trust-score] Failed to fetch submissions for live trust metrics:",
+      error,
+    );
+    return {};
+  }
+
+  const countsByCreator: Record<
+    string,
+    {
+      total_reels: number;
+      verified_reels: number;
+      rejected_reels: number;
+      pending_reels: number;
+    }
+  > = {};
+
+  (rows || []).forEach((row: any) => {
+    const creatorId =
+      typeof row?.creator_id === "string" ? row.creator_id.trim() : "";
+    if (!creatorId) return;
+
+    if (!countsByCreator[creatorId]) {
+      countsByCreator[creatorId] = {
+        total_reels: 0,
+        verified_reels: 0,
+        rejected_reels: 0,
+        pending_reels: 0,
+      };
+    }
+
+    const bucket = countsByCreator[creatorId];
+    bucket.total_reels += 1;
+    const status = String(row?.status || "").toLowerCase();
+    if (status === "verified" || status === "paid") {
+      bucket.verified_reels += 1;
+    } else if (status === "rejected") {
+      bucket.rejected_reels += 1;
+    } else if (status === "pending") {
+      bucket.pending_reels += 1;
+    }
+  });
+
+  const liveByCreatorId: Record<string, StoredCreatorTrustMetrics> = {};
+  Object.entries(countsByCreator).forEach(([creatorId, counts]) => {
+    const metrics = buildTrustScoreMetricsFromCounts(counts);
+    liveByCreatorId[creatorId] = {
+      trust_score: metrics.trust_score,
+      total_reels: metrics.total_reels,
+      verified_reels: metrics.verified_reels,
+      rejected_reels: metrics.rejected_reels,
+      pending_reels: metrics.pending_reels,
+      updated_at: new Date().toISOString(),
+    };
+  });
+
+  return liveByCreatorId;
+}
+
 export async function recomputeCreatorTrustMetrics(
   supabase: any,
   creatorId: string,

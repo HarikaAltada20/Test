@@ -12,6 +12,11 @@ import {
   isCpmContestType,
   isMilestoneContestType,
 } from "@/lib/contest-type";
+import {
+  fetchLiveTrustMetricsByCreatorIds,
+  getCreatorTrustScoreFromMetrics,
+  resolveCreatorTrustMetrics,
+} from "@/lib/trust-score";
 
 /** Load all matching twitter_campaign_tweets in chunks (SSR). Default 50-row cap hid tweets from UI. */
 async function fetchTwitterTweetsAllPages(
@@ -468,122 +473,30 @@ export default async function ContestDetailPage({
       // Fetch all-time submission statuses for these creators (across all contests)
       // and compute trust metrics live to ensure creator-wise trust includes other contests.
       const supabaseAdmin = createAdminClient();
-      const { data: allCreatorSubmissions, error: allCreatorSubmissionsError } =
-        await supabaseAdmin
-          .from("submissions")
-          .select("creator_id, status")
-          .in("creator_id", creatorIds);
-
-      if (allCreatorSubmissionsError) {
-        console.error(
-          `[page.tsx] Supabase error fetching global creator submissions:`,
-          allCreatorSubmissionsError
-        );
-      } else {
-        const countsByCreator: Record<
-          string,
-          {
-            total_reels: number;
-            verified_reels: number;
-            rejected_reels: number;
-            pending_reels: number;
-          }
-        > = {};
-
-        (allCreatorSubmissions || []).forEach((row: any) => {
-          const creatorId =
-            typeof row?.creator_id === "string" ? row.creator_id.trim() : "";
-          if (!creatorId) return;
-          if (!countsByCreator[creatorId]) {
-            countsByCreator[creatorId] = {
-              total_reels: 0,
-              verified_reels: 0,
-              rejected_reels: 0,
-              pending_reels: 0,
-            };
-          }
-          const bucket = countsByCreator[creatorId];
-          bucket.total_reels += 1;
-          const status = String(row?.status || "").toLowerCase();
-          if (status === "verified" || status === "paid") {
-            bucket.verified_reels += 1;
-          } else if (status === "rejected") {
-            bucket.rejected_reels += 1;
-          } else if (status === "pending") {
-            bucket.pending_reels += 1;
-          }
-        });
-
-        Object.entries(countsByCreator).forEach(([creatorId, counts]) => {
-          const total = counts.total_reels;
-          const rejected = counts.rejected_reels;
-          const trustScore =
-            total <= 0
-              ? 100
-              : Math.max(0, Math.round(100 - (rejected / total) * 100));
-          liveGlobalTrustMetricsByCreatorId[creatorId] = {
-            trust_score: trustScore,
-            total_reels: total,
-            verified_reels: counts.verified_reels,
-            rejected_reels: counts.rejected_reels,
-            pending_reels: counts.pending_reels,
-            updated_at: new Date().toISOString(),
-          };
-        });
-      }
+      liveGlobalTrustMetricsByCreatorId =
+        await fetchLiveTrustMetricsByCreatorIds(supabaseAdmin, creatorIds);
     }
   }
 
-  const parseCreatorTrustMetrics = (creatorProfile: any): any | null => {
-    if (!creatorProfile) return null;
-    const metrics = creatorProfile?.trust_score_metrics;
-    let parsedMetrics: any = null;
-
-    if (metrics && typeof metrics === "object") {
-      parsedMetrics = metrics;
-    } else if (typeof metrics === "string") {
-      try {
-        parsedMetrics = JSON.parse(metrics);
-      } catch {
-        parsedMetrics = null;
-      }
-    }
-    return parsedMetrics && typeof parsedMetrics === "object"
-      ? parsedMetrics
-      : null;
-  };
-
-  const getCreatorTrustMetrics = (creatorProfile: any, creatorId?: string | null) => {
-    if (
-      creatorId &&
-      liveGlobalTrustMetricsByCreatorId[creatorId] &&
-      typeof liveGlobalTrustMetricsByCreatorId[creatorId] === "object"
-    ) {
-      return liveGlobalTrustMetricsByCreatorId[creatorId];
-    }
-    const parsedMetrics = parseCreatorTrustMetrics(creatorProfile);
-    if (!parsedMetrics) return null;
-
-    return {
-      trust_score: parsedMetrics?.trust_score ?? null,
-      total_reels: parsedMetrics?.total_reels ?? null,
-      verified_reels: parsedMetrics?.verified_reels ?? null,
-      rejected_reels: parsedMetrics?.rejected_reels ?? null,
-      pending_reels: parsedMetrics?.pending_reels ?? null,
-      updated_at: parsedMetrics?.updated_at ?? null,
-    };
-  };
+  const getCreatorTrustMetrics = (
+    creatorProfile: any,
+    creatorId?: string | null,
+  ) =>
+    resolveCreatorTrustMetrics(
+      creatorProfile,
+      creatorId,
+      liveGlobalTrustMetricsByCreatorId,
+    );
 
   const getCreatorTrustScore = (
     creatorProfile: any,
-    creatorId?: string | null
-  ): number | null => {
-    const parsedMetrics = getCreatorTrustMetrics(creatorProfile, creatorId);
-    const raw = parsedMetrics?.trust_score;
-    if (raw === null || raw === undefined || raw === "") return null;
-    const parsed = Number(raw);
-    return Number.isFinite(parsed) ? parsed : null;
-  };
+    creatorId?: string | null,
+  ): number | null =>
+    getCreatorTrustScoreFromMetrics(
+      creatorProfile,
+      creatorId,
+      liveGlobalTrustMetricsByCreatorId,
+    );
 
   const isLive = contestData.status === "active";
 

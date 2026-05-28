@@ -278,6 +278,78 @@ function formatTrustScoreWithMax(score: number, max = 100): string {
   return `${formatTrustScore(score)}\u00A0/\u00A0${max}`;
 }
 
+function parseTrustMetricsValue(raw: unknown): Record<string, unknown> | null {
+  if (raw && typeof raw === "object") {
+    return raw as Record<string, unknown>;
+  }
+  if (typeof raw === "string") {
+    try {
+      const parsed = JSON.parse(raw);
+      return parsed && typeof parsed === "object" ? parsed : null;
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}
+
+function pickCreatorTrustDataFromSubmissions(submissions: any[]): {
+  trust_score: number | null;
+  trust_score_metrics: Record<string, unknown> | null;
+} {
+  for (const submission of submissions) {
+    const trustScoreMetrics =
+      parseTrustMetricsValue((submission as any)?.trust_score_metrics) ??
+      parseTrustMetricsValue(submission?.creator?.trust_score_metrics);
+    const rawTrustScore =
+      (submission as any)?.trust_score ?? submission?.creator?.trust_score;
+    const hasTrustScore =
+      rawTrustScore !== null &&
+      rawTrustScore !== undefined &&
+      rawTrustScore !== "";
+
+    if (trustScoreMetrics || hasTrustScore) {
+      const parsedScore = hasTrustScore ? Number(rawTrustScore) : NaN;
+      return {
+        trust_score: Number.isFinite(parsedScore)
+          ? parsedScore
+          : trustScoreMetrics?.trust_score !== null &&
+              trustScoreMetrics?.trust_score !== undefined
+            ? Number(trustScoreMetrics.trust_score)
+            : null,
+        trust_score_metrics: trustScoreMetrics,
+      };
+    }
+  }
+
+  return { trust_score: null, trust_score_metrics: null };
+}
+
+function resolveTrustScoreForDisplay(
+  trustMetrics: Record<string, unknown> | null,
+  fallbackCounts: {
+    total: number;
+    verified: number;
+    rejected: number;
+    pending: number;
+  },
+): number {
+  const storedScore = trustMetrics?.trust_score;
+  if (storedScore !== null && storedScore !== undefined && storedScore !== "") {
+    const parsed = Number(storedScore);
+    if (Number.isFinite(parsed)) return parsed;
+  }
+
+  if (fallbackCounts.total === 0) return 100;
+
+  return Math.max(
+    0,
+    Math.round(
+      100 - (fallbackCounts.rejected / fallbackCounts.total) * 100,
+    ),
+  );
+}
+
 // --- Local Type Definitions ---
 interface Contest {
   id: string;
@@ -1120,8 +1192,8 @@ export default function ContestDetailClient({
     [currentContest],
   );
 
-  /** Brand-set minimum from contest create (`trust_score`); hide creator-wise column when unset. */
-  const showCreatorWiseTrustScoreColumn = useMemo(() => {
+  /** Contest minimum trust score card on overview; shown when brand set a threshold. */
+  const showContestTrustScoreRequiredCard = useMemo(() => {
     const raw =
       currentContest.min_trust_score ?? currentContest.trust_score;
     if (raw === null || raw === undefined) return false;
@@ -1134,6 +1206,9 @@ export default function ContestDetailClient({
     currentContest.trust_score,
     currentContest.trust_score_enforced,
   ]);
+
+  /** Per-creator trust score in creator-wise table — admin only. */
+  const showCreatorWiseTrustScoreColumn = isAdminView;
 
   // Contest-level payout adjustment for dual_rewards granted display
   const contestPayoutAdjPct =
@@ -2619,15 +2694,28 @@ export default function ContestDetailClient({
             (s as any)?.creator?.trust_score !== undefined &&
             (s as any)?.creator?.trust_score !== "",
         ) as any;
+        const pickedTrustData =
+          pickCreatorTrustDataFromSubmissions(creatorSubmissions);
         const creatorTrustScore =
+          pickedTrustData.trust_score ??
           firstSubmissionWithTrustScore?.trust_score ??
           firstCreatorWithTrustScore?.creator?.trust_score ??
           null;
         const creatorTrustMetrics =
-          (firstSubmissionWithTrustScore as any)?.trust_score_metrics ??
-          (firstSubmissionWithTrustScore as any)?.creator?.trust_score_metrics ??
-          (firstCreatorWithTrustScore as any)?.trust_score_metrics ??
-          (firstCreatorWithTrustScore as any)?.creator?.trust_score_metrics ??
+          pickedTrustData.trust_score_metrics ??
+          parseTrustMetricsValue(
+            (firstSubmissionWithTrustScore as any)?.trust_score_metrics,
+          ) ??
+          parseTrustMetricsValue(
+            (firstSubmissionWithTrustScore as any)?.creator
+              ?.trust_score_metrics,
+          ) ??
+          parseTrustMetricsValue(
+            (firstCreatorWithTrustScore as any)?.trust_score_metrics,
+          ) ??
+          parseTrustMetricsValue(
+            (firstCreatorWithTrustScore as any)?.creator?.trust_score_metrics,
+          ) ??
           null;
 
         grouped[creatorId] = {
@@ -2649,9 +2737,14 @@ export default function ContestDetailClient({
               const status =
                 (s.is_twitter_tweet && (s as any).moderation_status) ||
                 s.status;
-              return status === "verified";
+              return status === "verified" && !s.paid;
             }).length,
-            paid: creatorSubmissions.filter((s: any) => s.paid).length,
+            paid: creatorSubmissions.filter((s: any) => {
+              const status =
+                (s.is_twitter_tweet && (s as any).moderation_status) ||
+                s.status;
+              return s.paid || status === "paid";
+            }).length,
             pending: creatorSubmissions.filter(
               (s: any) =>
                 (s.is_twitter_tweet &&
@@ -2887,6 +2980,9 @@ export default function ContestDetailClient({
         // Get creator-level moderation data if available
         const creatorModeration = creatorModerationData[creatorId] || {};
         const creatorManualAdjustment = getCreatorManualAdjustment(creatorId);
+        const initialTrustData = pickCreatorTrustDataFromSubmissions([
+          submission,
+        ]);
         acc[creatorId] = {
           creator: {
             id: creatorId,
@@ -2895,10 +2991,14 @@ export default function ContestDetailClient({
               submission.creator?.profile_picture_url || null,
             full_name: submission.creator?.full_name || null,
             trust_score:
-              submission.trust_score ?? submission.creator?.trust_score ?? null,
+              initialTrustData.trust_score ??
+              submission.trust_score ??
+              submission.creator?.trust_score ??
+              null,
             trust_score_metrics:
-              (submission as any).trust_score_metrics ??
-              submission.creator?.trust_score_metrics ??
+              initialTrustData.trust_score_metrics ??
+              parseTrustMetricsValue((submission as any).trust_score_metrics) ??
+              parseTrustMetricsValue(submission.creator?.trust_score_metrics) ??
               null,
           },
           instagram_archive:
@@ -2985,8 +3085,8 @@ export default function ContestDetailClient({
           submission.creator?.trust_score_metrics)
       ) {
         group.creator.trust_score_metrics =
-          (submission as any).trust_score_metrics ??
-          submission.creator?.trust_score_metrics ??
+          parseTrustMetricsValue((submission as any).trust_score_metrics) ??
+          parseTrustMetricsValue(submission.creator?.trust_score_metrics) ??
           null;
       }
       group.submissions.push(submission);
@@ -3026,14 +3126,18 @@ export default function ContestDetailClient({
         group.paid = true;
       }
 
+      const isPaidSubmission =
+        status === "paid" || Boolean((submission as any).paid);
+
       if (
         normalizedStatus === "verified" ||
         normalizedStatus === "approved" ||
         normalizedStatus === "paid"
       ) {
         if (
-          normalizedStatus === "verified" ||
-          normalizedStatus === "approved"
+          (normalizedStatus === "verified" ||
+            normalizedStatus === "approved") &&
+          !isPaidSubmission
         ) {
           group.statusCounts.verified++;
         }
@@ -10317,7 +10421,7 @@ export default function ContestDetailClient({
                 <div
                   className={cn(
                     "grid grid-cols-1 gap-4",
-                    showCreatorWiseTrustScoreColumn
+                    showContestTrustScoreRequiredCard
                       ? "md:grid-cols-3"
                       : "md:grid-cols-2",
                   )}
@@ -10404,7 +10508,7 @@ export default function ContestDetailClient({
                     </CardContent>
                   </div>
 
-                  {showCreatorWiseTrustScoreColumn && (
+                  {showContestTrustScoreRequiredCard && (
                     <div
                       className={cn(
                         "border rounded-xl transition-all duration-300",
@@ -10425,7 +10529,7 @@ export default function ContestDetailClient({
                           </div>
                           <div className="flex-1">
                             <p className="text-sm font-medium tracking-wide">
-                              Trust Score Required
+                              Trust Score 
                             </p>
                             <p className="text-lg font-bold">
                               {formatTrustScoreWithMax(
@@ -20843,29 +20947,22 @@ export default function ContestDetailClient({
                                       // Prefer global creator trust metrics (all contests).
                                       // Fallback to current contest status counts if missing.
                                       const rawTrustMetrics =
-                                        (group.creator as any)
-                                          ?.trust_score_metrics ??
-                                        (primarySubmission as any)
-                                          ?.trust_score_metrics ??
-                                        (primarySubmission as any)?.creator
-                                          ?.trust_score_metrics ??
-                                        null;
-                                      let trustMetrics: any = null;
-                                      if (
-                                        rawTrustMetrics &&
-                                        typeof rawTrustMetrics === "object"
-                                      ) {
-                                        trustMetrics = rawTrustMetrics;
-                                      } else if (
-                                        typeof rawTrustMetrics === "string"
-                                      ) {
-                                        try {
-                                          trustMetrics =
-                                            JSON.parse(rawTrustMetrics);
-                                        } catch {
-                                          trustMetrics = null;
-                                        }
-                                      }
+                                        parseTrustMetricsValue(
+                                          (group.creator as any)
+                                            ?.trust_score_metrics,
+                                        ) ??
+                                        parseTrustMetricsValue(
+                                          (primarySubmission as any)
+                                            ?.trust_score_metrics,
+                                        ) ??
+                                        parseTrustMetricsValue(
+                                          (primarySubmission as any)?.creator
+                                            ?.trust_score_metrics,
+                                        ) ??
+                                        pickCreatorTrustDataFromSubmissions(
+                                          group.submissions || [],
+                                        ).trust_score_metrics;
+                                      const trustMetrics = rawTrustMetrics;
                                       const totalReelsForTrust =
                                         trustMetrics?.total_reels !== null &&
                                         trustMetrics?.total_reels !== undefined
@@ -20896,17 +20993,15 @@ export default function ContestDetailClient({
                                               group.statusCounts?.pending || 0,
                                             );
                                       const trustScoreComputed =
-                                        totalReelsForTrust === 0
-                                          ? 100
-                                          : Math.max(
-                                              0,
-                                              Math.round(
-                                                100 -
-                                                  (rejectedReelsForTrust /
-                                                    totalReelsForTrust) *
-                                                    100,
-                                              ),
-                                            );
+                                        resolveTrustScoreForDisplay(
+                                          trustMetrics,
+                                          {
+                                            total: totalReelsForTrust,
+                                            verified: verifiedReelsForTrust,
+                                            rejected: rejectedReelsForTrust,
+                                            pending: pendingReelsForTrust,
+                                          },
+                                        );
                                       const trustScoreDisplay =
                                         formatTrustScoreWithMax(
                                           trustScoreComputed,
@@ -21102,17 +21197,13 @@ export default function ContestDetailClient({
                                                   </>
                                                 ) : (
                                                   <div className="flex flex-col flex-wrap gap-2 justify-center items-center">
-                                                    {(group.statusCounts
-                                                      .verified +
-                                                      group.statusCounts.paid >
-                                                      0) && (
+                                                    {group.statusCounts
+                                                      .verified > 0 && (
                                                       <Badge className="bg-green-100 text-green-700 border border-green-200 text-xs whitespace-nowrap">
                                                         Verified:{" "}
                                                         {
                                                           group.statusCounts
-                                                            .verified +
-                                                            group.statusCounts
-                                                              .paid
+                                                            .verified
                                                         }
                                                       </Badge>
                                                     )}

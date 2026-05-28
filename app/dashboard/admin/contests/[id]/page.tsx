@@ -10,6 +10,11 @@ import {
   fetchContestSubmissionsAllPages,
   formatSubmissionFetchError,
 } from "@/lib/fetch-contest-submissions";
+import {
+  fetchLiveTrustMetricsByCreatorIds,
+  getCreatorTrustScoreFromMetrics,
+  resolveCreatorTrustMetrics,
+} from "@/lib/trust-score";
 
 async function fetchTwitterTweetsAllPages(
   supabase: any,
@@ -442,6 +447,7 @@ export default async function AdminContestDetailPage({
     // Fetch creator profiles and user data for the submissions and Twitter tweets
     let creatorProfilesData: any[] = [];
     let usersData: any[] = [];
+    let liveGlobalTrustMetricsByCreatorId: Record<string, any> = {};
 
     // Combine creator IDs from both submissions and Twitter tweets
     const allCreatorIds = new Set<string>();
@@ -469,7 +475,8 @@ export default async function AdminContestDetailPage({
             youtube_account,
             instagram_account,
             instagram_archive,
-            twitter_account
+            twitter_account,
+            trust_score_metrics
           `
           )
           .in("id", creatorIds);
@@ -482,6 +489,10 @@ export default async function AdminContestDetailPage({
         } else {
           creatorProfilesData = profilesData || [];
         }
+
+        const supabaseAdmin = createAdminClient();
+        liveGlobalTrustMetricsByCreatorId =
+          await fetchLiveTrustMetricsByCreatorIds(supabaseAdmin, creatorIds);
 
         // Fetch users for additional fallbacks
         const { data: fetchedUsers, error: usersError } = await supabase
@@ -696,6 +707,16 @@ export default async function AdminContestDetailPage({
           creator_username: creatorUsername,
           creator_avatar_url: creatorAvatarUrl,
           creator_id: actualCreatorProfileId,
+          trust_score: getCreatorTrustScoreFromMetrics(
+            creatorProfile,
+            actualCreatorProfileId,
+            liveGlobalTrustMetricsByCreatorId,
+          ),
+          trust_score_metrics: resolveCreatorTrustMetrics(
+            creatorProfile,
+            actualCreatorProfileId,
+            liveGlobalTrustMetricsByCreatorId,
+          ),
           // Explicit username from users table for creator-wise view (main line); creator_username = platform handle (second line)
           user_username: user?.username || null,
           // Mark as Twitter tweet for UI handling
@@ -714,6 +735,16 @@ export default async function AdminContestDetailPage({
             username: creatorUsername,
             profile_picture_url: creatorAvatarUrl,
             full_name: creatorDisplayName,
+            trust_score: getCreatorTrustScoreFromMetrics(
+              creatorProfile,
+              actualCreatorProfileId,
+              liveGlobalTrustMetricsByCreatorId,
+            ),
+            trust_score_metrics: resolveCreatorTrustMetrics(
+              creatorProfile,
+              actualCreatorProfileId,
+              liveGlobalTrustMetricsByCreatorId,
+            ),
           },
         };
       })
@@ -810,6 +841,16 @@ export default async function AdminContestDetailPage({
           creator_username: creatorUsername,
           creator_avatar_url: creatorAvatarUrl,
           creator_id: actualCreatorProfileId,
+          trust_score: getCreatorTrustScoreFromMetrics(
+            creatorProfile,
+            actualCreatorProfileId,
+            liveGlobalTrustMetricsByCreatorId,
+          ),
+          trust_score_metrics: resolveCreatorTrustMetrics(
+            creatorProfile,
+            actualCreatorProfileId,
+            liveGlobalTrustMetricsByCreatorId,
+          ),
           // Explicit username from users table for creator-wise view (main line); creator_username = platform handle (second line)
           user_username: user?.username || null,
           paid: sub.paid,
@@ -825,6 +866,16 @@ export default async function AdminContestDetailPage({
             profile_picture_url: creatorAvatarUrl,
             full_name: creatorDisplayName,
             instagram_archive: creatorProfile?.instagram_archive ?? null,
+            trust_score: getCreatorTrustScoreFromMetrics(
+              creatorProfile,
+              actualCreatorProfileId,
+              liveGlobalTrustMetricsByCreatorId,
+            ),
+            trust_score_metrics: resolveCreatorTrustMetrics(
+              creatorProfile,
+              actualCreatorProfileId,
+              liveGlobalTrustMetricsByCreatorId,
+            ),
           },
           creator_instagram_archive: creatorProfile?.instagram_archive ?? null,
         };
