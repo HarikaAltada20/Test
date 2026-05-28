@@ -259,6 +259,7 @@ export function ContestClientPage({
   const [submissionCount, setSubmissionCount] = useState(0);
   const [maxSubmissions, setMaxSubmissions] = useState(1);
   const [joinCampaignLoading, setJoinCampaignLoading] = useState(false);
+  const [creatorTrustScore, setCreatorTrustScore] = useState<number | null>(null);
   const [hasJoinedTwitterCampaign, setHasJoinedTwitterCampaign] =
     useState(false);
   const [twitterConnectStatus, setTwitterConnectStatus] = useState<
@@ -2107,6 +2108,21 @@ export function ContestClientPage({
         if (isMounted) {
           setContest(contestData);
           setContestType(contestData.contest_type ?? null);
+          if (user?.id) {
+            try {
+              const trustRes = await fetch("/api/creators/trust-score");
+              if (trustRes.ok) {
+                const trustData = await trustRes.json();
+                setCreatorTrustScore(
+                  typeof trustData?.trust_score === "number"
+                    ? trustData.trust_score
+                    : null,
+                );
+              }
+            } catch (trustError) {
+              console.warn("Failed to load creator trust score:", trustError);
+            }
+          }
 
           // No need to set separate lastMetricsUpdate state - it's part of contest state
         }
@@ -2442,7 +2458,24 @@ export function ContestClientPage({
     loadTwitterCampaignState();
   }, [contestId, isTwitterTextImageContest, user]);
 
+  const contestMinTrustScore =
+    typeof contest?.trust_score === "number" &&
+    Number.isFinite(contest.trust_score) &&
+    contest.trust_score > 0
+      ? contest.trust_score
+      : null;
+  const isTrustGateEnabled = contestMinTrustScore !== null;
+  const isTrustScoreBlocked =
+    !!user &&
+    isTrustGateEnabled &&
+    creatorTrustScore !== null &&
+    creatorTrustScore < contestMinTrustScore;
+  const trustScoreMessage = isTrustScoreBlocked
+    ? `Trust score too low to submit. Your trust score is ${creatorTrustScore}. This campaign requires at least ${contestMinTrustScore}. You can still view this campaign and your existing submissions. Submit new content after your score reaches ${contestMinTrustScore} or higher.`
+    : null;
+
   const handleSubmitContent = () => {
+    if (isTrustScoreBlocked) return;
     router.push(`/dashboard/opportunities/${contestId}/submit`);
   };
 
@@ -2938,7 +2971,10 @@ export function ContestClientPage({
                   <Button
                     size="lg"
                     onClick={handleSubmitContent}
-                    disabled={contest.status?.toLowerCase() !== "active"}
+                    disabled={
+                      contest.status?.toLowerCase() !== "active" ||
+                      isTrustScoreBlocked
+                    }
                     className={`relative overflow-hidden text-lg font-bold py-4 px-8 h-auto rounded-2xl shadow-xl transition-all duration-500 ease-out transform ${
                       contest.status?.toLowerCase() === "active"
                         ? "bg-[#4A00BE] text-white border-0 hover:shadow-2xl hover:scale-105"
@@ -2947,15 +2983,25 @@ export function ContestClientPage({
                   >
                     <span className="relative z-10">
                       {contest.status?.toLowerCase() === "active"
-                        ? `Submit More Videos (${
-                            maxSubmissions - submissionCount
-                          } remaining)`
+                        ? isTrustScoreBlocked
+                          ? "Trust Score Too Low"
+                          : `Submit More Videos (${
+                              maxSubmissions - submissionCount
+                            } remaining)`
                         : "Contest Not Active"}
                     </span>
                     {contest.status?.toLowerCase() === "active" && (
                       <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent transform -skew-x-12 -translate-x-full group-hover:translate-x-full transition-transform duration-1000 ease-out"></div>
                     )}
                   </Button>
+                  {trustScoreMessage && (
+                    <Alert
+                      variant="destructive"
+                      className="mt-4 max-w-xl mx-auto text-left"
+                    >
+                      <AlertDescription>{trustScoreMessage}</AlertDescription>
+                    </Alert>
+                  )}
                 </div>
               ) : (
                 <div>
@@ -3030,6 +3076,7 @@ export function ContestClientPage({
                     }
                     disabled={
                       contest.status?.toLowerCase() !== "active" ||
+                      isTrustScoreBlocked ||
                       joinCampaignLoading ||
                       (isTwitterTextImageContest && hasJoinedTwitterCampaign) ||
                       (!!user &&
@@ -3084,6 +3131,14 @@ export function ContestClientPage({
                       )}
                     </span>
                   </Button>
+                  {trustScoreMessage && (
+                    <Alert
+                      variant="destructive"
+                      className="mt-4 max-w-xl mx-auto text-left"
+                    >
+                      <AlertDescription>{trustScoreMessage}</AlertDescription>
+                    </Alert>
+                  )}
 
                   {user &&
                     twitterJoinError &&
@@ -5449,6 +5504,59 @@ export function ContestClientPage({
                         </div>
                       </div>
                     </div>
+
+                    {/* Trust Score Requirement Card */}
+                    {isTrustGateEnabled && (
+                      <div
+                        className={cn(
+                          "rounded-xl p-4 border shadow-sm",
+                          isDark
+                            ? "border-blue-400/50"
+                            : "bg-white border-blue-200 dark:border-blue-700/30",
+                        )}
+                      >
+                        <div className="flex items-center gap-3">
+                          <div
+                            className={cn(
+                              "p-3 rounded-full",
+                              isDark
+                                ? "bg-blue-500/30 text-blue-400"
+                                : "bg-blue-100 dark:bg-blue-900/30 text-blue-600",
+                            )}
+                          >
+                            <Star className="h-5 w-5" />
+                          </div>
+                          <div className="flex-1">
+                            <p
+                              className={cn(
+                                "text-xs font-medium uppercase tracking-wide",
+                                isDark ? "text-slate-300" : "text-slate-600",
+                              )}
+                            >
+                              Minimum Trust Score
+                            </p>
+                            <p
+                              className={cn(
+                                "text-lg font-bold",
+                                isDark ? "text-slate-100" : "text-slate-900",
+                              )}
+                            >
+                              {contestMinTrustScore} / 100
+                            </p>
+                            {/* <p
+                              className={cn(
+                                "text-xs mt-1",
+                                isDark ? "text-slate-300" : "text-slate-500",
+                              )}
+                            >
+                              {typeof creatorTrustScore === "number"
+                                ? `Your score: ${creatorTrustScore}`
+                                : "Your score will appear after loading"}
+                            </p> */}
+                          </div>
+                        </div>
+                      </div>
+                    )}
 
                     {/* Campaign Type Card - Only for Twitter campaigns */}
                     {(() => {

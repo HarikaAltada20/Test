@@ -53,6 +53,7 @@ export async function POST(
       "max_earnings_per_creator",
       "payout_adjustment_percentage",
       "payout_adjustment_mode",
+      "trust_score",
     ]);
 
     const updateData: Record<string, any> = {};

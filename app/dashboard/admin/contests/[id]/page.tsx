@@ -101,23 +101,26 @@ export default async function AdminContestDetailPage({
       redirect("/dashboard/admin/contests");
     }
 
-    // Payout adjustment lives on contests table; contests_with_status view may not include it
-    let payoutAdjustment: {
+    // Contest settings live on contests table; contests_with_status view may not include them
+    let contestSettings: {
       payout_adjustment_percentage: number | null;
       payout_adjustment_mode: string | null;
+      trust_score: number | null;
     } = {
       payout_adjustment_percentage: null,
       payout_adjustment_mode: null,
+      trust_score: null,
     };
     const { data: payoutRow } = await supabase
       .from("contests")
-      .select("payout_adjustment_percentage, payout_adjustment_mode")
+      .select("payout_adjustment_percentage, payout_adjustment_mode, trust_score")
       .eq("id", contestId)
       .maybeSingle();
     if (payoutRow) {
-      payoutAdjustment = {
+      contestSettings = {
         payout_adjustment_percentage: payoutRow.payout_adjustment_percentage ?? null,
         payout_adjustment_mode: payoutRow.payout_adjustment_mode ?? null,
+        trust_score: payoutRow.trust_score ?? null,
       };
     }
 
@@ -561,8 +564,9 @@ export default async function AdminContestDetailPage({
       // Twitter-specific fields (all stored in contest_based_details.twitter_campaign)
       contest_format: contestData.contest_format,
       // Payout adjustment (admin) – from contests table so they fill on refresh
-      payout_adjustment_percentage: payoutAdjustment.payout_adjustment_percentage,
-      payout_adjustment_mode: payoutAdjustment.payout_adjustment_mode,
+      payout_adjustment_percentage: contestSettings.payout_adjustment_percentage,
+      payout_adjustment_mode: contestSettings.payout_adjustment_mode,
+      trust_score: contestSettings.trust_score,
     };
 
     // Transform Twitter tweets into submission-like format for display

@@ -114,23 +114,26 @@ export default async function ContestDetailPage({
     redirect("/dashboard/contests");
   }
 
-  // Payout adjustment lives on contests table; contests_with_status view may not include it
-  let payoutAdjustment: {
+  // Contest settings live on contests table; contests_with_status view may not include them
+  let contestSettings: {
     payout_adjustment_percentage: number | null;
     payout_adjustment_mode: string | null;
+    trust_score: number | null;
   } = {
     payout_adjustment_percentage: null,
     payout_adjustment_mode: null,
+    trust_score: null,
   };
   const { data: payoutRow } = await supabase
     .from("contests")
-    .select("payout_adjustment_percentage, payout_adjustment_mode")
+    .select("payout_adjustment_percentage, payout_adjustment_mode, trust_score")
     .eq("id", contestId)
     .maybeSingle();
   if (payoutRow) {
-    payoutAdjustment = {
+    contestSettings = {
       payout_adjustment_percentage: payoutRow.payout_adjustment_percentage ?? null,
       payout_adjustment_mode: payoutRow.payout_adjustment_mode ?? null,
+      trust_score: payoutRow.trust_score ?? null,
     };
   }
 
@@ -398,6 +401,7 @@ export default async function ContestDetailPage({
   // Fetch creator profiles and user data for the submissions and Twitter tweets
   let creatorProfilesData: any[] = [];
   let usersData: any[] = [];
+  let liveGlobalTrustMetricsByCreatorId: Record<string, any> = {};
 
   // Combine creator IDs from both submissions and Twitter tweets
   const allCreatorIds = new Set<string>();
@@ -427,7 +431,8 @@ export default async function ContestDetailPage({
           youtube_account,
           instagram_account,
           instagram_archive,
-          twitter_account
+          twitter_account,
+          trust_score_metrics
         `
         )
         .in("id", creatorIds);
@@ -459,8 +464,126 @@ export default async function ContestDetailPage({
       } else {
         usersData = userData || [];
       }
+
+      // Fetch all-time submission statuses for these creators (across all contests)
+      // and compute trust metrics live to ensure creator-wise trust includes other contests.
+      const supabaseAdmin = createAdminClient();
+      const { data: allCreatorSubmissions, error: allCreatorSubmissionsError } =
+        await supabaseAdmin
+          .from("submissions")
+          .select("creator_id, status")
+          .in("creator_id", creatorIds);
+
+      if (allCreatorSubmissionsError) {
+        console.error(
+          `[page.tsx] Supabase error fetching global creator submissions:`,
+          allCreatorSubmissionsError
+        );
+      } else {
+        const countsByCreator: Record<
+          string,
+          {
+            total_reels: number;
+            verified_reels: number;
+            rejected_reels: number;
+            pending_reels: number;
+          }
+        > = {};
+
+        (allCreatorSubmissions || []).forEach((row: any) => {
+          const creatorId =
+            typeof row?.creator_id === "string" ? row.creator_id.trim() : "";
+          if (!creatorId) return;
+          if (!countsByCreator[creatorId]) {
+            countsByCreator[creatorId] = {
+              total_reels: 0,
+              verified_reels: 0,
+              rejected_reels: 0,
+              pending_reels: 0,
+            };
+          }
+          const bucket = countsByCreator[creatorId];
+          bucket.total_reels += 1;
+          const status = String(row?.status || "").toLowerCase();
+          if (status === "verified" || status === "paid") {
+            bucket.verified_reels += 1;
+          } else if (status === "rejected") {
+            bucket.rejected_reels += 1;
+          } else if (status === "pending") {
+            bucket.pending_reels += 1;
+          }
+        });
+
+        Object.entries(countsByCreator).forEach(([creatorId, counts]) => {
+          const total = counts.total_reels;
+          const rejected = counts.rejected_reels;
+          const trustScore =
+            total <= 0
+              ? 100
+              : Math.max(0, Math.round(100 - (rejected / total) * 100));
+          liveGlobalTrustMetricsByCreatorId[creatorId] = {
+            trust_score: trustScore,
+            total_reels: total,
+            verified_reels: counts.verified_reels,
+            rejected_reels: counts.rejected_reels,
+            pending_reels: counts.pending_reels,
+            updated_at: new Date().toISOString(),
+          };
+        });
+      }
     }
   }
+
+  const parseCreatorTrustMetrics = (creatorProfile: any): any | null => {
+    if (!creatorProfile) return null;
+    const metrics = creatorProfile?.trust_score_metrics;
+    let parsedMetrics: any = null;
+
+    if (metrics && typeof metrics === "object") {
+      parsedMetrics = metrics;
+    } else if (typeof metrics === "string") {
+      try {
+        parsedMetrics = JSON.parse(metrics);
+      } catch {
+        parsedMetrics = null;
+      }
+    }
+    return parsedMetrics && typeof parsedMetrics === "object"
+      ? parsedMetrics
+      : null;
+  };
+
+  const getCreatorTrustMetrics = (creatorProfile: any, creatorId?: string | null) => {
+    if (
+      creatorId &&
+      liveGlobalTrustMetricsByCreatorId[creatorId] &&
+      typeof liveGlobalTrustMetricsByCreatorId[creatorId] === "object"
+    ) {
+      return liveGlobalTrustMetricsByCreatorId[creatorId];
+    }
+    const parsedMetrics = parseCreatorTrustMetrics(creatorProfile);
+    if (!parsedMetrics) return null;
+
+    return {
+      trust_score: parsedMetrics?.trust_score ?? null,
+      total_reels: parsedMetrics?.total_reels ?? null,
+      verified_reels: parsedMetrics?.verified_reels ?? null,
+      rejected_reels: parsedMetrics?.rejected_reels ?? null,
+      pending_reels: parsedMetrics?.pending_reels ?? null,
+      updated_at: parsedMetrics?.updated_at ?? null,
+    };
+  };
+
+  const getCreatorTrustScore = (
+    creatorProfile: any,
+    creatorId?: string | null
+  ): number | null => {
+    const parsedMetrics = getCreatorTrustMetrics(creatorProfile, creatorId);
+    const raw = parsedMetrics?.trust_score;
+    if (raw === null || raw === undefined || raw === "") return null;
+    const parsed = Number(raw);
+    return Number.isFinite(parsed) ? parsed : null;
+  };
 
   const isLive = contestData.status === "active";
 
@@ -527,8 +650,9 @@ export default async function ContestDetailPage({
     // Twitter-specific fields (all stored in contest_based_details.twitter_campaign)
     contest_format: contestData.contest_format,
     // Payout adjustment (admin) – from contests table so they survive refresh
-    payout_adjustment_percentage: payoutAdjustment.payout_adjustment_percentage,
-    payout_adjustment_mode: payoutAdjustment.payout_adjustment_mode,
+    payout_adjustment_percentage: contestSettings.payout_adjustment_percentage,
+    payout_adjustment_mode: contestSettings.payout_adjustment_mode,
+    trust_score: contestSettings.trust_score,
   };
 
   // For Twitter campaigns: fetch bonus-paid status from money_transactions so Bonus Granted column is correct
@@ -894,6 +1018,11 @@ export default async function ContestDetailPage({
         user_username: user?.username || null,
         creator_avatar_url: creatorAvatarUrl,
         creator_id: actualCreatorProfileId,
+        trust_score: getCreatorTrustScore(creatorProfile, actualCreatorProfileId),
+        trust_score_metrics: getCreatorTrustMetrics(
+          creatorProfile,
+          actualCreatorProfileId
+        ),
         // Mark as Twitter tweet for UI handling
         is_twitter_tweet: true,
         tweet_id: tweet.tweet_id,
@@ -910,6 +1039,11 @@ export default async function ContestDetailPage({
           username: creatorUsername,
           profile_picture_url: creatorAvatarUrl,
           full_name: creatorDisplayName,
+          trust_score: getCreatorTrustScore(creatorProfile, actualCreatorProfileId),
+          trust_score_metrics: getCreatorTrustMetrics(
+            creatorProfile,
+            actualCreatorProfileId
+          ),
         },
       };
     })
@@ -1012,6 +1146,11 @@ export default async function ContestDetailPage({
         user_username: user?.username || null,
         creator_avatar_url: creatorAvatarUrl,
         creator_id: actualCreatorProfileId,
+        trust_score: getCreatorTrustScore(creatorProfile, actualCreatorProfileId),
+        trust_score_metrics: getCreatorTrustMetrics(
+          creatorProfile,
+          actualCreatorProfileId
+        ),
         // Add nested creator object for creator-wise grouping compatibility
         creator: {
           id: actualCreatorProfileId,
@@ -1019,6 +1158,11 @@ export default async function ContestDetailPage({
           profile_picture_url: creatorAvatarUrl,
           full_name: creatorDisplayName,
           instagram_archive: creatorProfile?.instagram_archive ?? null,
+          trust_score: getCreatorTrustScore(creatorProfile, actualCreatorProfileId),
+          trust_score_metrics: getCreatorTrustMetrics(
+            creatorProfile,
+            actualCreatorProfileId
+          ),
         },
         creator_instagram_archive: creatorProfile?.instagram_archive ?? null,
         metadata: sub.metadata ?? null,

@@ -294,6 +294,7 @@ export default function SubmitContentPage({
   const [isFetchingInstagramMedia, setIsFetchingInstagramMedia] =
     useState(false);
   const [contest, setContest] = useState<any>(null); // Store full contest data including contest_type
+  const [creatorTrustScore, setCreatorTrustScore] = useState<number | null>(null);
 
   const { toast } = useToast();
 
@@ -317,6 +318,17 @@ export default function SubmitContentPage({
     tiktokCurrentPage * ITEMS_PER_PAGE,
   );
   const totalTiktokPages = Math.ceil(userTiktokVideos.length / ITEMS_PER_PAGE);
+
+  const contestMinTrustScore =
+    typeof contest?.trust_score === "number" ? contest.trust_score : null;
+  const isTrustGateEnabled = contestMinTrustScore !== null;
+  const isTrustScoreBlocked =
+    isTrustGateEnabled &&
+    creatorTrustScore !== null &&
+    creatorTrustScore < contestMinTrustScore;
+  const trustScoreWarning = isTrustScoreBlocked
+    ? `Trust score too low to submit. Your trust score is ${creatorTrustScore}. This campaign requires at least ${contestMinTrustScore}. You can still view this campaign and your existing submissions. Submit new content after your score reaches ${contestMinTrustScore} or higher.`
+    : null;
 
   // Helper function for 2-hour validation
   const isContentTooOld = (publishedAt: string): boolean => {
@@ -1101,7 +1113,7 @@ export default function SubmitContentPage({
       const { data: contestData, error: contestError } = await supabase
         .from("contests")
         .select(
-          "id, title, platform, contest_type, multiple_submissions_enabled, max_submissions_per_creator, content_type, bonus_details, contest_based_details",
+          "id, title, platform, contest_type, multiple_submissions_enabled, max_submissions_per_creator, content_type, bonus_details, contest_based_details, trust_score",
         ) // Include new feature fields
         .eq("id", contestId)
         .single();
@@ -1121,6 +1133,19 @@ export default function SubmitContentPage({
 
       // Store full contest data
       setContest(contestData);
+      try {
+        const trustRes = await fetch("/api/creators/trust-score");
+        if (trustRes.ok) {
+          const trustData = await trustRes.json();
+          setCreatorTrustScore(
+            typeof trustData?.trust_score === "number"
+              ? trustData.trust_score
+              : null,
+          );
+        }
+      } catch (trustError) {
+        console.warn("Failed to fetch trust score:", trustError);
+      }
 
       // Fetch existing submissions for progress tracking
       const { data: existingSubmissions, error: existingSubsErr } =
@@ -2537,6 +2562,16 @@ export default function SubmitContentPage({
       return;
     }
 
+    if (isTrustScoreBlocked) {
+      setError(trustScoreWarning || "Trust score too low to submit.");
+      toast({
+        title: "Trust score too low to submit",
+        description: trustScoreWarning || "Trust score too low to submit.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     setIsLoading(true);
     setError(null);
     setMessage(null);
@@ -3029,6 +3064,11 @@ export default function SubmitContentPage({
               <AlertDescription>{message}</AlertDescription>
             </Alert>
           )}
+          {trustScoreWarning && (
+            <Alert variant="destructive" className="mb-4">
+              <AlertDescription>{trustScoreWarning}</AlertDescription>
+            </Alert>
+          )}
 
           {/* Submit and Cancel Buttons - Moved to top */}
           <div className="flex flex-col gap-4 sm:flex-row items-center justify-between py-6 mb-6">
@@ -3058,6 +3098,7 @@ export default function SubmitContentPage({
                 type="button"
                 onClick={handleSubmit}
                 disabled={
+                  isTrustScoreBlocked ||
                   isLoading ||
                   isFetchingVideo ||
                   isFetchingInstagramMedia ||
@@ -3084,7 +3125,7 @@ export default function SubmitContentPage({
                 {isLoading ? (
                   <RefreshCw className="animate-spin mr-2 h-4 w-4" />
                 ) : null}
-                Submit Content
+                {isTrustScoreBlocked ? "Trust Score Too Low" : "Submit Content"}
               </Button>
             </div>
           </div>

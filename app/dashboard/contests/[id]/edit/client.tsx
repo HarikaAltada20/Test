@@ -300,6 +300,7 @@ type ContestData = {
   // New features (2025-10-01)
   multiple_submissions_enabled?: boolean;
   max_submissions_per_creator?: number;
+  trust_score?: number | null;
   content_type?: "ugc" | "clipping" | "other" | null;
   contest_format?: string | null; // Text/image vs video contest format
   bonus_details?: { description_html?: string; description_json?: any } | null;
@@ -558,6 +559,8 @@ export default function EditContestPage({
   });
 
   // New features state (2025-10-01)
+  const [trustScoreEnabled, setTrustScoreEnabled] = useState(false);
+  const [contestTrustScore, setContestTrustScore] = useState<number | "">("");
   const [multipleSubmissionsEnabled, setMultipleSubmissionsEnabled] =
     useState(false);
   const [maxSubmissionsPerCreator, setMaxSubmissionsPerCreator] =
@@ -1367,6 +1370,13 @@ export default function EditContestPage({
               data.multiple_submissions_enabled || false,
             );
             setMaxSubmissionsPerCreator(data.max_submissions_per_creator || 1);
+            if (typeof data.trust_score === "number") {
+              setTrustScoreEnabled(true);
+              setContestTrustScore(data.trust_score);
+            } else {
+              setTrustScoreEnabled(false);
+              setContestTrustScore("");
+            }
             setContentType(data.content_type || "other");
             setCategory(data.category || "technology");
 
@@ -3245,6 +3255,10 @@ export default function EditContestPage({
       updatePayload.max_submissions_per_creator = multipleSubmissionsEnabled
         ? maxSubmissionsPerCreator
         : 1;
+      updatePayload.trust_score =
+        trustScoreEnabled && contestTrustScore !== ""
+          ? Number(contestTrustScore)
+          : null;
       updatePayload.content_type = contentType || null;
       updatePayload.category = category || null;
 
@@ -5269,6 +5283,10 @@ export default function EditContestPage({
           max_submissions_per_creator: multipleSubmissionsEnabled
             ? maxSubmissionsPerCreator
             : 1,
+          trust_score:
+            trustScoreEnabled && contestTrustScore !== ""
+              ? Number(contestTrustScore)
+              : null,
           content_type: contentType || null,
           category: category || null,
           moderation_status: "draft", // Save as draft after successful payment
@@ -5907,6 +5925,10 @@ export default function EditContestPage({
           max_submissions_per_creator: multipleSubmissionsEnabled
             ? maxSubmissionsPerCreator
             : 1,
+          trust_score:
+            trustScoreEnabled && contestTrustScore !== ""
+              ? Number(contestTrustScore)
+              : null,
           content_type: contentType || null,
           category: category || null,
           moderation_status: "draft", // Save as draft after successful payment
@@ -7503,6 +7525,10 @@ export default function EditContestPage({
       updatePayload.max_submissions_per_creator = multipleSubmissionsEnabled
         ? maxSubmissionsPerCreator
         : 1;
+      updatePayload.trust_score =
+        trustScoreEnabled && contestTrustScore !== ""
+          ? Number(contestTrustScore)
+          : null;
       updatePayload.content_type = contentType || null;
       updatePayload.category = category || null;
 
@@ -12409,6 +12435,82 @@ export default function EditContestPage({
                   empty if not applicable.
                 </p>
               </div> */}
+
+              <div
+                className={cn(
+                  "space-y-3 rounded-lg border p-4",
+                  isDark
+                    ? "border-purple-600/50 bg-purple-900/20"
+                    : "border-purple-200 bg-purple-100/30",
+                )}
+              >
+                <div className="flex items-center justify-between">
+                  <div className="flex-1">
+                    <Label
+                      htmlFor="trust-score-enabled"
+                      className={cn(
+                        "text-base font-medium",
+                        isDark ? "text-white" : "text-black",
+                      )}
+                    >
+                      Trust Score
+                    </Label>
+                    <p
+                      className={cn(
+                        "text-sm text-muted-foreground mt-1",
+                        isDark ? "text-white" : "text-black",
+                      )}
+                    >
+                     Enable trust score requirements to allow only reliable creators to participate.
+  Trust scores may decrease for rejected for not meeting contest requirements, low-quality content,
+  spam, or policy violations.Creators below the required score cannot submit to this contest.
+                    </p>
+                  </div>
+                  <Checkbox
+                    id="trust-score-enabled"
+                    checked={trustScoreEnabled}
+                    onCheckedChange={(checked) => {
+                      setTrustScoreEnabled(checked as boolean);
+                      if (!checked) {
+                        setContestTrustScore("");
+                      } else if (contestTrustScore === "") {
+                        setContestTrustScore(70);
+                      }
+                    }}
+                    className="h-5 w-5 data-[state=checked]:bg-purple-600 data-[state=checked]:border-purple-600 data-[state=checked]:text-white"
+                  />
+                </div>
+
+                {trustScoreEnabled && (
+                  <div className="space-y-2 pt-3 border-t border-purple-200">
+                    <Label htmlFor="trust-score-input">Trust Score</Label>
+                    <Input
+                      id="trust-score-input"
+                      type="number"
+                      min="0"
+                      max="100"
+                      value={contestTrustScore}
+                      onChange={(e) => {
+                        const raw = e.target.value;
+                        if (raw === "") {
+                          setContestTrustScore("");
+                          return;
+                        }
+                        const value = Number.parseInt(raw, 10);
+                        if (!Number.isNaN(value) && value >= 0 && value <= 100) {
+                          setContestTrustScore(value);
+                        }
+                      }}
+                      className={cn(
+                        isDark
+                          ? "bg-purple-900/20 border border-gray-600 text-white"
+                          : "bg-white text-black",
+                      )}
+                      placeholder="Enter trust score between 0-100"
+                    />
+                  </div>
+                )}
+              </div>
 
               {/* Multiple Submissions Toggle */}
               <div

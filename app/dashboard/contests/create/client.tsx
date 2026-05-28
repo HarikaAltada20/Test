@@ -414,6 +414,8 @@ export default function CreateContestPage({
   // End Contest Type and CPM-specific state
 
   // New features state (2025-10-01)
+  const [trustScoreEnabled, setTrustScoreEnabled] = useState(false);
+  const [contestTrustScore, setContestTrustScore] = useState<number | "">("");
   const [multipleSubmissionsEnabled, setMultipleSubmissionsEnabled] =
     useState(false);
   const [maxSubmissionsPerCreator, setMaxSubmissionsPerCreator] =
@@ -1195,6 +1197,7 @@ export default function CreateContestPage({
           // New features (2025-10-01)
           multiple_submissions_enabled: false,
           max_submissions_per_creator: 1,
+          trust_score: null,
           content_type: null,
           bonus_details: null,
           max_earnings_per_creator: null,
@@ -3492,6 +3495,12 @@ export default function CreateContestPage({
         max_submissions_per_creator: multipleSubmissionsEnabled
           ? maxSubmissionsPerCreator
           : 1,
+        trust_score:
+          contestFormat === "video" &&
+          trustScoreEnabled &&
+          contestTrustScore !== ""
+            ? Number(contestTrustScore)
+            : null,
         content_type: contentType || null,
         bonus_details:
           bonusEnabled && bonusHtml
@@ -10203,6 +10212,86 @@ export default function CreateContestPage({
                   creators filter opportunities.
                 </p>
               </div>
+
+              {contestFormat === "video" && (
+                <div
+                  className={cn(
+                    "space-y-4 p-4 border rounded-lg",
+                    isDark
+                      ? "bg-[#C9A7FF26] border border-[#C9A7FF]"
+                      : "bg-gray-50",
+                  )}
+                >
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <Label
+                        htmlFor="trustScoreRequirement"
+                        className="text-base font-semibold"
+                      >
+                        Trust Score
+                      </Label>
+                      <p
+                        className={cn(
+                          "text-sm mt-1",
+                          isDark ? "text-gray-300" : "text-gray-600",
+                        )}
+                      >
+                        Enable trust score requirements to allow only reliable creators to participate.
+    Trust scores may decrease for rejected, low-quality, or policy-violating
+    submissions. Creators below the required score cannot submit to this contest.
+                      </p>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <Checkbox
+                        id="trustScoreRequirement"
+                        checked={trustScoreEnabled}
+                        onCheckedChange={(checked: any) => {
+                          setTrustScoreEnabled(Boolean(checked));
+                          if (!checked) {
+                            setContestTrustScore("");
+                          } else if (contestTrustScore === "") {
+                            setContestTrustScore(70);
+                          }
+                        }}
+                        className={cn(
+                          "border h-5 w-5",
+                          isDark ? "border-gray-300" : "border-gray-500",
+                        )}
+                      />
+                    </div>
+                  </div>
+
+                  {trustScoreEnabled && (
+                    <div className="space-y-2 pt-2 border-t">
+                      <Label htmlFor="trustScoreInput">Trust Score</Label>
+                      <Input
+                        id="trustScoreInput"
+                        type="number"
+                        min="0"
+                        max="100"
+                        value={contestTrustScore}
+                        onChange={(e) => {
+                          const raw = e.target.value;
+                          if (raw === "") {
+                            setContestTrustScore("");
+                            return;
+                          }
+                          const value = parseInt(raw, 10);
+                          if (!Number.isNaN(value) && value >= 0 && value <= 100) {
+                            setContestTrustScore(value);
+                          }
+                        }}
+                        className={cn(
+                          isDark
+                            ? "bg-[#C9A7FF26] border border-gray-400 text-white"
+                            : "bg-white text-black",
+                        )}
+                        placeholder="Enter trust score between 0-100"
+                      />
+                    </div>
+                  )}
+                </div>
+              )}
 
               {/* Multiple Submissions Configuration */}
               <div

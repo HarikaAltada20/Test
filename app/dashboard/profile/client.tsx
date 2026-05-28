@@ -44,6 +44,8 @@ import {
 import { PageLoadingSpinner } from "@/components/loading/LoadingSpinner";
 import { cn } from "@/lib/utils";
 import { EmailChangeModal } from "@/components/EmailChangeModal";
+import { TrustScoreCard } from "@/components/TrustScoreCard";
+import type { TrustScoreMetrics } from "@/lib/trust-score";
 // import PhoneInput from "react-phone-number-input";
 // import "react-phone-number-input/style.css";
 import { Country, State, City } from "country-state-city";
@@ -150,6 +152,8 @@ export default function ProfilePage({
   const [referrer, setReferrer] = useState<string | null>(null);
   const [hasNetworkError, setHasNetworkError] = useState(false);
   const [hasReceivedProfileBonus, setHasReceivedProfileBonus] = useState(false);
+  const [trustMetrics, setTrustMetrics] = useState<TrustScoreMetrics | null>(null);
+  const [trustMetricsLoading, setTrustMetricsLoading] = useState(false);
   const supabase = createClient();
   const { toast } = useToast();
 
@@ -374,6 +378,18 @@ export default function ProfilePage({
 
             if (!profileError && profile) {
               setCreatorProfile(profile as CreatorProfile);
+              setTrustMetricsLoading(true);
+              try {
+                const trustRes = await fetch("/api/creators/trust-score");
+                if (trustRes.ok) {
+                  const trustData = await trustRes.json();
+                  setTrustMetrics(trustData as TrustScoreMetrics);
+                }
+              } catch (trustError) {
+                console.warn("Error fetching trust metrics:", trustError);
+              } finally {
+                setTrustMetricsLoading(false);
+              }
               // Initialize the new profile fields
               // setEditedPhone(profile.phone_number || "");
               setEditedDateOfBirth(profile.date_of_birth || "");
@@ -1838,6 +1854,9 @@ export default function ProfilePage({
           Manage your Profile Information
         </p>
       </div>
+      {userData.user_type === "creator" && (
+        <TrustScoreCard metrics={trustMetrics} loading={trustMetricsLoading} isDark={isDark} />
+      )}
       <div>
         <div
           className={cn(
