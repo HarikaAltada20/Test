@@ -50,6 +50,7 @@ import {
 } from "@/components/ui/sheet";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import ChatSuppport from "@/components/ChatSupport";
+import { UserNotificationsBell } from "@/components/UserNotificationsBell";
 import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
 import { createClient } from "@/utils/supabase/client";
@@ -248,6 +249,8 @@ function DashboardContent({
   const [hasProcessedSuccess, setHasProcessedSuccess] = useState(false);
   const [open, setOpen] = useState(false);
   const [isChatOpen, setIsChatOpen] = useState(false);
+  const [supportChatEnabled, setSupportChatEnabled] = useState(true);
+  const [supportThreadId, setSupportThreadId] = useState<string | null>(null);
   const [isReviewModalOpen, setIsReviewModalOpen] = useState(false);
   const userRole =
     (user?.user_type as "advertiser" | "creator" | "admin") || null;
@@ -314,6 +317,29 @@ function DashboardContent({
     isClient: isFullscreenClient,
     toggleFullscreen,
   } = useFullscreen();
+
+  useEffect(() => {
+    const threadParam = searchParams.get("supportThread");
+    if (threadParam) {
+      setSupportThreadId(threadParam);
+      setIsChatOpen(true);
+    }
+  }, [searchParams]);
+
+  useEffect(() => {
+    if (!user || userRole === "admin") return;
+    fetch("/api/support/status")
+      .then((r) => r.json())
+      .then((d) => {
+        if (typeof d.enabled === "boolean") setSupportChatEnabled(d.enabled);
+      })
+      .catch(() => {});
+  }, [user, userRole]);
+
+  const openSupportThread = (threadId: string) => {
+    setSupportThreadId(threadId);
+    setIsChatOpen(true);
+  };
 
   const handleSignOut = async () => {
     setIsSigningOut(true);
@@ -1179,6 +1205,7 @@ function DashboardContent({
                 onReviewOpen={handleReviewOpen}
                 collapsed={sidebarCollapsed}
                 mode={currentMode}
+                supportChatEnabled={supportChatEnabled}
               />
             )}
           </div>
@@ -1419,6 +1446,7 @@ function DashboardContent({
                               onReviewOpen={handleReviewOpen}
                               collapsed={false}
                               mode={currentMode}
+                              supportChatEnabled={supportChatEnabled}
                             />
                           )}
                         </div>
@@ -1482,6 +1510,13 @@ function DashboardContent({
 
                 {/* Right Side: Actions */}
                 <div className="flex items-center gap-3">
+                  {userRole && userRole !== "admin" && (
+                    <UserNotificationsBell
+                      isDark={currentMode === "dark"}
+                      onOpenSupportThread={openSupportThread}
+                    />
+                  )}
+
                   {/* Full Screen Toggle Button */}
                   {isFullscreenClient && isFullscreenSupported && (
                     <Button
@@ -2725,9 +2760,14 @@ function DashboardContent({
               {/* Chat Popup */}
               {isChatOpen && (
                 <ChatSuppport
-                  onClose={() => setIsChatOpen(false)}
+                  onClose={() => {
+                    setIsChatOpen(false);
+                    setSupportThreadId(null);
+                  }}
                   email={displayEmail}
                   userType={userRole as any}
+                  initialThreadId={supportThreadId}
+                  supportChatEnabled={supportChatEnabled}
                 />
               )}
 

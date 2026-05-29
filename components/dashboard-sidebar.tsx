@@ -39,6 +39,7 @@ interface DashboardSidebarProps {
   onChatOpen: () => void;
   onReviewOpen: () => void;
   mode?: "light" | "dark";
+  supportChatEnabled?: boolean;
 }
 
 export function DashboardSidebar({
@@ -47,6 +48,7 @@ export function DashboardSidebar({
   onReviewOpen,
   collapsed = false,
   mode,
+  supportChatEnabled = true,
 }: DashboardSidebarProps) {
   const pathname = usePathname();
   const [showScrollbar, setShowScrollbar] = useState(false);
@@ -799,10 +801,21 @@ export function DashboardSidebar({
                     </div>
                   </div>
                   <button
-                    onClick={onChatOpen}
-                    className="w-full rounded-xl bg-purple-600 text-white py-2 transition hover:bg-purple-700"
+                    onClick={supportChatEnabled ? onChatOpen : undefined}
+                    disabled={!supportChatEnabled}
+                    title={
+                      supportChatEnabled
+                        ? "Chat with support"
+                        : "Support chat is unavailable for your account"
+                    }
+                    className={cn(
+                      "w-full rounded-xl py-2 transition text-white",
+                      supportChatEnabled
+                        ? "bg-purple-600 hover:bg-purple-700"
+                        : "bg-gray-400 cursor-not-allowed opacity-70",
+                    )}
                   >
-                    Chat with Us
+                    {supportChatEnabled ? "Chat with Us" : "Chat unavailable"}
                   </button>
 
                   {/* Show Book a Call only for advertisers */}
@@ -841,12 +854,20 @@ export function DashboardSidebar({
               ) : (
                 <div className="flex flex-col items-center gap-3">
                   <button
-                    onClick={onChatOpen}
+                    onClick={supportChatEnabled ? onChatOpen : undefined}
+                    disabled={!supportChatEnabled}
+                    title={
+                      supportChatEnabled
+                        ? "Chat with support"
+                        : "Support chat unavailable"
+                    }
                     className={cn(
                       "rounded-full text-white w-10 h-10 flex items-center justify-center",
-                      isDark
-                        ? "bg-purple-700 hover:bg-purple-600"
-                        : "bg-[#7F39EC] hover:bg-purple-700",
+                      supportChatEnabled
+                        ? isDark
+                          ? "bg-purple-700 hover:bg-purple-600"
+                          : "bg-[#7F39EC] hover:bg-purple-700"
+                        : "bg-gray-400 cursor-not-allowed opacity-70",
                     )}
                   >
                     <MessageCircle size={18} />

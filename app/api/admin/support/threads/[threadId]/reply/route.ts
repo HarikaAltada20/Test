@@ -1,0 +1,71 @@
+import { NextRequest, NextResponse } from "next/server";
+import { verifyAdminAccess } from "@/utils/admin-auth";
+import { createAdminClient } from "@/utils/supabase/admin";
+import { normalizeSupportBody } from "@/lib/support/validation";
+
+export const dynamic = "force-dynamic";
+
+type RouteContext = { params: Promise<{ threadId: string }> };
+
+export async function POST(req: NextRequest, context: RouteContext) {
+  const { isAdmin, user } = await verifyAdminAccess();
+  if (!isAdmin || !user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const { threadId } = await context.params;
+  const body = normalizeSupportBody((await req.json())?.body);
+  if (!body) {
+    return NextResponse.json({ error: "Message body is required" }, { status: 400 });
+  }
+
+  const supabase = createAdminClient();
+
+  const { data: rpcResult, error: rpcError } = await supabase.rpc(
+    "support_admin_reply",
+    {
+      p_thread_id: threadId,
+      p_admin_user_id: user.id,
+      p_body: body,
+    },
+  );
+
+  if (rpcError) {
+    const msg = rpcError.message || "";
+    if (msg.includes("thread_not_found") || rpcError.code === "P0002") {
+      return NextResponse.json({ error: "Thread not found" }, { status: 404 });
+    }
+    console.error("support_admin_reply error:", rpcError);
+    return NextResponse.json(
+      { error: "Failed to send reply. Notification may not have been created." },
+      { status: 500 },
+    );
+  }
+
+  const result = rpcResult as {
+    message_id: string;
+    notification_id: string;
+    thread_id: string;
+    status: string;
+    last_message_at: string;
+  };
+
+  const { data: message } = await supabase
+    .from("support_messages")
+    .select("id, body, created_at, sender_role")
+    .eq("id", result.message_id)
+    .single();
+
+  return NextResponse.json({
+    success: true,
+    message,
+    thread: {
+      id: result.thread_id,
+      status: result.status,
+      last_message_at: result.last_message_at,
+    },
+    notification: {
+      id: result.notification_id,
+    },
+  });
+}

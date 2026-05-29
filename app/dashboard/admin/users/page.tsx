@@ -55,6 +55,7 @@ import {
   getSubscriptionPlanById,
 } from "@/lib/subscription-utils-client";
 import REGIONS_AND_COUNTRIES_DATA from "@/data/regions-and-countries.json";
+import { SupportChatToggle } from "@/components/admin/SupportChatToggle";
 
 const UsersMap = dynamic(
   () => import("./UsersMap").then((m) => ({ default: m.UsersMap })),
@@ -303,6 +304,7 @@ const allColumns = {
     { id: "full_name", label: "Full Name" },
     { id: "profile", label: "Profile" },
     { id: "email", label: "Email" },
+    { id: "support_chat", label: "Support Chat" },
     { id: "user_type", label: "User Type" },
     { id: "referral_code", label: "Referral Code" },
     { id: "referred_by", label: "Referred By" },
@@ -324,6 +326,7 @@ const allColumns = {
     { id: "full_name", label: "Full Name" },
     { id: "profile", label: "Profile" },
     { id: "email", label: "Email" },
+    { id: "support_chat", label: "Support Chat" },
     { id: "username", label: "Username" },
     { id: "company_name", label: "Company Name" },
     { id: "website_url", label: "Website URL" },
@@ -340,6 +343,7 @@ const allColumns = {
     { id: "full_name", label: "Full Name" },
     { id: "profile", label: "Profile" },
     { id: "email", label: "Email" },
+    { id: "support_chat", label: "Support Chat" },
     { id: "username", label: "Username" },
     { id: "youtube_account", label: "YouTube Account" },
     { id: "instagram_account", label: "Instagram Account" },
@@ -1623,7 +1627,8 @@ export default function AdminUsersPage() {
                 if (!tt) return "";
                 try {
                   const account = typeof tt === "string" ? JSON.parse(tt) : tt;
-                  const rawName = account?.display_name || account?.username || "";
+                  const rawName =
+                    account?.display_name || account?.username || "";
                   return normalizeForAlphabetSort(rawName);
                 } catch {
                   return "";
@@ -2500,6 +2505,11 @@ export default function AdminUsersPage() {
                     )}
                     {isColumnVisible("email") && (
                       <SortableHeader columnId="email" label="Email" />
+                    )}
+                    {isColumnVisible("support_chat") && (
+                      <TableHead className="whitespace-nowrap border-r">
+                        Support Chat
+                      </TableHead>
                     )}
                     {activeTab === "advertisers" && (
                       <>
@@ -4064,8 +4074,7 @@ export default function AdminUsersPage() {
                                                   viewBox="0 0 24 24"
                                                   xmlns="http://www.w3.org/2000/svg"
                                                 >
-                                                  <path d="M12.525.02c1.31-.02 2.61-.01 3.91-.02.08 1.53.63 3.09 1.75 4.17 1.12 1.11 2.7 1.62 4.24 1.79v4.03c-1.44-.05-2.89-.35-4.2-.97-.57-.26-1.1-.59-1.62-.93-.01 2.92.01 5.84-.02 8.75-.08 2.22-1.15 4.39-2.91 5.74-1.76 1.34-4.11 1.83-6.26 1.37-2.14-.45-4.01-1.83-5.02-3.79-1-1.95-1.07-4.32-.2-6.32.88-1.99 2.65-3.5 4.75-4.04 1.15-.3 2.37-.33 3.54-.15V13.4c-1.29-.16-2.65-.05-3.83.6-1.18.66-2.07 1.82-2.3 3.16-.23 1.32.13 2.74 1.05 3.65.91.9 2.31 1.25 3.55.93 1.24-.31 2.19-1.32 2.47-2.55.28-1.21.05-5.91.05-7.14V.02zm-3.14 0"
-                                                  />
+                                                  <path d="M12.525.02c1.31-.02 2.61-.01 3.91-.02.08 1.53.63 3.09 1.75 4.17 1.12 1.11 2.7 1.62 4.24 1.79v4.03c-1.44-.05-2.89-.35-4.2-.97-.57-.26-1.1-.59-1.62-.93-.01 2.92.01 5.84-.02 8.75-.08 2.22-1.15 4.39-2.91 5.74-1.76 1.34-4.11 1.83-6.26 1.37-2.14-.45-4.01-1.83-5.02-3.79-1-1.95-1.07-4.32-.2-6.32.88-1.99 2.65-3.5 4.75-4.04 1.15-.3 2.37-.33 3.54-.15V13.4c-1.29-.16-2.65-.05-3.83.6-1.18.66-2.07 1.82-2.3 3.16-.23 1.32.13 2.74 1.05 3.65.91.9 2.31 1.25 3.55.93 1.24-.31 2.19-1.32 2.47-2.55.28-1.21.05-5.91.05-7.14V.02zm-3.14 0" />
                                                 </svg>
                                               </a>
                                             )}

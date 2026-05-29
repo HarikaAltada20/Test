@@ -185,7 +185,7 @@ Indexes: `(user_id, last_message_at DESC)`, `(deleted_at) WHERE deleted_at IS NU
 |--------|------|--------|
 | `id` | `uuid` | PK |
 | `thread_id` | `uuid` | FK → `support_threads.id` ON DELETE CASCADE |
-| `sender_role` | `text` | `user` \| `admin` |
+| `sender_role` | `text` | `creator` \| `advertiser` \| `admin` (thread owner uses their `user_type`; staff uses `admin`) |
 | `sender_user_id` | `uuid` | User id or admin id |
 | `body` | `text` | NOT NULL |
 | `created_at` | `timestamptz` | |
@@ -204,7 +204,7 @@ ALTER TABLE public.users
 
 ### 3.2 Migration from legacy `queries`
 
-1. For each existing `queries` row, create one `support_threads` + one `support_messages` (`sender_role = 'user'`, `body = query_text`).
+1. For each existing `queries` row, create one `support_threads` + one `support_messages` (`sender_role` = row's `user_type`, `body = query_text`).
 2. Keep `queries` read-only for a release cycle, then drop or rename to `queries_legacy`.
 3. Point `POST /api/queries` at new tables (or deprecate in favor of `POST /api/support/threads`).
 
