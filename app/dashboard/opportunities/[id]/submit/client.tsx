@@ -45,6 +45,28 @@ import dayjs from "dayjs";
 import { useToast } from "@/hooks/use-toast";
 import { PageLoadingSpinner } from "@/components/loading/LoadingSpinner";
 import { cn } from "@/lib/utils";
+import {
+  getContestMinTrustScoreForGate,
+  getTrustSubmissionBlockedMessage,
+  isCreatorTrustSubmissionBlocked,
+} from "@/lib/trust-score";
+
+function formatSubmissionInsertError(error: { message?: string }): string {
+  const msg = error?.message || "";
+  if (msg.includes("trust_score_too_low")) {
+    return "Trust score too low to submit to this campaign.";
+  }
+  return msg || "Failed to submit content";
+}
+
+/** Refresh persisted creator_profiles.trust_score_metrics after a new submission. */
+async function refreshTrustMetricsAfterSubmit() {
+  try {
+    await fetch("/api/creators/trust-score", { method: "PATCH" });
+  } catch (error) {
+    console.warn("Failed to refresh trust metrics after submit:", error);
+  }
+}
 
 /** Bust server leaderboard cache so rankings update immediately after a new submission */
 async function bustLeaderboardCache(contestId: string) {
@@ -295,6 +317,8 @@ export default function SubmitContentPage({
     useState(false);
   const [contest, setContest] = useState<any>(null); // Store full contest data including contest_type
   const [creatorTrustScore, setCreatorTrustScore] = useState<number | null>(null);
+  const [creatorTrustScoreLoaded, setCreatorTrustScoreLoaded] = useState(false);
+  const [creatorTrustScoreLoading, setCreatorTrustScoreLoading] = useState(false);
 
   const { toast } = useToast();
 
@@ -319,20 +343,25 @@ export default function SubmitContentPage({
   );
   const totalTiktokPages = Math.ceil(userTiktokVideos.length / ITEMS_PER_PAGE);
 
-  const contestMinTrustScore =
-    typeof contest?.trust_score === "number" &&
-    Number.isFinite(contest.trust_score) &&
-    contest.trust_score > 0
-      ? contest.trust_score
-      : null;
-  const isTrustGateEnabled = contestMinTrustScore !== null;
-  const isTrustScoreBlocked =
-    isTrustGateEnabled &&
-    creatorTrustScore !== null &&
-    creatorTrustScore < contestMinTrustScore;
-  const trustScoreWarning = isTrustScoreBlocked
-    ? `Trust score too low to submit. Your trust score is ${creatorTrustScore}. This campaign requires at least ${contestMinTrustScore}. You can still view this campaign and your existing submissions. Submit new content after your score reaches ${contestMinTrustScore} or higher.`
+  const contestMinTrustScore = contest
+    ? getContestMinTrustScoreForGate(contest)
     : null;
+  const isTrustGateEnabled = contestMinTrustScore !== null;
+  const isTrustScoreBlocked = isCreatorTrustSubmissionBlocked({
+    minScore: contestMinTrustScore,
+    creatorScore: creatorTrustScore,
+    scoreLoaded: creatorTrustScoreLoaded,
+    scoreLoading: creatorTrustScoreLoading,
+  });
+  const trustScoreWarning =
+    isTrustScoreBlocked && contestMinTrustScore !== null
+      ? getTrustSubmissionBlockedMessage({
+          minScore: contestMinTrustScore,
+          creatorScore: creatorTrustScore,
+          scoreLoading: creatorTrustScoreLoading,
+          scoreLoaded: creatorTrustScoreLoaded,
+        })
+      : null;
 
   // Helper function for 2-hour validation
   const isContentTooOld = (publishedAt: string): boolean => {
@@ -1117,7 +1146,7 @@ export default function SubmitContentPage({
       const { data: contestData, error: contestError } = await supabase
         .from("contests")
         .select(
-          "id, title, platform, contest_type, multiple_submissions_enabled, max_submissions_per_creator, content_type, bonus_details, contest_based_details, trust_score",
+          "id, title, platform, contest_type, contest_format, multiple_submissions_enabled, max_submissions_per_creator, content_type, bonus_details, contest_based_details, trust_score",
         ) // Include new feature fields
         .eq("id", contestId)
         .single();
@@ -1137,6 +1166,8 @@ export default function SubmitContentPage({
 
       // Store full contest data
       setContest(contestData);
+      setCreatorTrustScoreLoading(true);
+      setCreatorTrustScoreLoaded(false);
       try {
         const trustRes = await fetch("/api/creators/trust-score");
         if (trustRes.ok) {
@@ -1146,9 +1177,17 @@ export default function SubmitContentPage({
               ? trustData.trust_score
               : null,
           );
+          setCreatorTrustScoreLoaded(true);
+        } else {
+          setCreatorTrustScore(null);
+          setCreatorTrustScoreLoaded(false);
         }
       } catch (trustError) {
         console.warn("Failed to fetch trust score:", trustError);
+        setCreatorTrustScore(null);
+        setCreatorTrustScoreLoaded(false);
+      } finally {
+        setCreatorTrustScoreLoading(false);
       }
 
       // Fetch existing submissions for progress tracking
@@ -2125,7 +2164,7 @@ export default function SubmitContentPage({
       .select();
 
     if (submissionError) {
-      throw submissionError;
+      throw new Error(formatSubmissionInsertError(submissionError));
     }
     await bustLeaderboardCache(contestId);
   };
@@ -2213,7 +2252,7 @@ export default function SubmitContentPage({
       .select();
 
     if (submissionError) {
-      throw submissionError;
+      throw new Error(formatSubmissionInsertError(submissionError));
     }
     await bustLeaderboardCache(contestId);
   };
@@ -2413,7 +2452,7 @@ export default function SubmitContentPage({
       .select();
 
     if (submissionError) {
-      throw submissionError;
+      throw new Error(formatSubmissionInsertError(submissionError));
     }
     await bustLeaderboardCache(contestId);
   };
@@ -2576,6 +2615,40 @@ export default function SubmitContentPage({
       return;
     }
 
+    if (isTrustGateEnabled) {
+      try {
+        const trustCheckRes = await fetch("/api/creators/trust-score", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ contestId }),
+        });
+        if (!trustCheckRes.ok) {
+          const trustCheckBody = await trustCheckRes.json().catch(() => ({}));
+          const msg =
+            (trustCheckBody as { error?: string })?.error ||
+            "Trust score requirement not met.";
+          setError(msg);
+          toast({
+            title: "Cannot submit",
+            description: msg,
+            variant: "destructive",
+          });
+          return;
+        }
+      } catch {
+        const msg =
+          trustScoreWarning ||
+          "Unable to verify trust score. Please try again.";
+        setError(msg);
+        toast({
+          title: "Cannot submit",
+          description: msg,
+          variant: "destructive",
+        });
+        return;
+      }
+    }
+
     setIsLoading(true);
     setError(null);
     setMessage(null);
@@ -2621,6 +2694,8 @@ export default function SubmitContentPage({
           body: JSON.stringify({ contestId }),
         });
       } catch { }
+
+      await refreshTrustMetricsAfterSubmit();
 
       // Success - This toast will be overridden by the specific messages in handleMultipleSubmissions
       // For single submissions, show this message

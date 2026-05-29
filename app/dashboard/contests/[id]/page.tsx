@@ -15,6 +15,7 @@ import {
 import {
   fetchLiveTrustMetricsByCreatorIds,
   getCreatorTrustScoreFromMetrics,
+  isVideoContestFormat,
   resolveCreatorTrustMetrics,
 } from "@/lib/trust-score";
 
@@ -118,6 +119,8 @@ export default async function ContestDetailPage({
   if (!contestData) {
     redirect("/dashboard/contests");
   }
+
+  const isVideoContest = isVideoContestFormat(contestData.contest_format);
 
   // Contest settings live on contests table; contests_with_status view may not include them
   let contestSettings: {
@@ -470,11 +473,11 @@ export default async function ContestDetailPage({
         usersData = userData || [];
       }
 
-      // Fetch all-time submission statuses for these creators (across all contests)
-      // and compute trust metrics live to ensure creator-wise trust includes other contests.
-      const supabaseAdmin = createAdminClient();
-      liveGlobalTrustMetricsByCreatorId =
-        await fetchLiveTrustMetricsByCreatorIds(supabaseAdmin, creatorIds);
+      if (isVideoContest) {
+        const supabaseAdmin = createAdminClient();
+        liveGlobalTrustMetricsByCreatorId =
+          await fetchLiveTrustMetricsByCreatorIds(supabaseAdmin, creatorIds);
+      }
     }
   }
 
@@ -482,21 +485,25 @@ export default async function ContestDetailPage({
     creatorProfile: any,
     creatorId?: string | null,
   ) =>
-    resolveCreatorTrustMetrics(
-      creatorProfile,
-      creatorId,
-      liveGlobalTrustMetricsByCreatorId,
-    );
+    isVideoContest
+      ? resolveCreatorTrustMetrics(
+          creatorProfile,
+          creatorId,
+          liveGlobalTrustMetricsByCreatorId,
+        )
+      : null;
 
   const getCreatorTrustScore = (
     creatorProfile: any,
     creatorId?: string | null,
   ): number | null =>
-    getCreatorTrustScoreFromMetrics(
-      creatorProfile,
-      creatorId,
-      liveGlobalTrustMetricsByCreatorId,
-    );
+    isVideoContest
+      ? getCreatorTrustScoreFromMetrics(
+          creatorProfile,
+          creatorId,
+          liveGlobalTrustMetricsByCreatorId,
+        )
+      : null;
 
   const isLive = contestData.status === "active";
 
@@ -565,7 +572,7 @@ export default async function ContestDetailPage({
     // Payout adjustment (admin) – from contests table so they survive refresh
     payout_adjustment_percentage: contestSettings.payout_adjustment_percentage,
     payout_adjustment_mode: contestSettings.payout_adjustment_mode,
-    trust_score: contestSettings.trust_score,
+    trust_score: isVideoContest ? contestSettings.trust_score : null,
   };
 
   // For Twitter campaigns: fetch bonus-paid status from money_transactions so Bonus Granted column is correct

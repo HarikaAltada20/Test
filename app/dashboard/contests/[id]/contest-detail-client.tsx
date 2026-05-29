@@ -1191,20 +1191,26 @@ export default function ContestDetailClient({
     [currentContest],
   );
 
-  /** Campaign minimum trust score from contests.trust_score (NULL = no requirement). */
+  const isVideoContestFormat =
+    currentContest?.contest_format !== "text_image";
+
+  /** Campaign minimum trust score (video contests only). */
   const contestMinTrustScore = useMemo(() => {
+    if (!isVideoContestFormat) return null;
     const raw = currentContest.trust_score;
     if (raw === null || raw === undefined) return null;
     const value = Number(raw);
     if (!Number.isFinite(value) || value <= 0) return null;
     return value;
-  }, [currentContest.trust_score]);
+  }, [currentContest.trust_score, isVideoContestFormat]);
 
   /** Contest minimum trust score card on overview; shown when brand set a threshold. */
-  const showContestTrustScoreRequiredCard = contestMinTrustScore !== null;
+  const showContestTrustScoreRequiredCard =
+    isVideoContestFormat && contestMinTrustScore !== null;
 
-  /** Per-creator trust score in creator-wise table — admin only. */
-  const showCreatorWiseTrustScoreColumn = isAdminView;
+  /** Per-creator trust score in creator-wise table — admin only, video contests. */
+  const showCreatorWiseTrustScoreColumn =
+    isAdminView && isVideoContestFormat;
 
   // Contest-level payout adjustment for dual_rewards granted display
   const contestPayoutAdjPct =

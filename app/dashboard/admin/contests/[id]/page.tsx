@@ -13,6 +13,7 @@ import {
 import {
   fetchLiveTrustMetricsByCreatorIds,
   getCreatorTrustScoreFromMetrics,
+  isVideoContestFormat,
   resolveCreatorTrustMetrics,
 } from "@/lib/trust-score";
 
@@ -105,6 +106,8 @@ export default async function AdminContestDetailPage({
     if (!contestData) {
       redirect("/dashboard/admin/contests");
     }
+
+    const isVideoContest = isVideoContestFormat(contestData.contest_format);
 
     // Contest settings live on contests table; contests_with_status view may not include them
     let contestSettings: {
@@ -490,9 +493,11 @@ export default async function AdminContestDetailPage({
           creatorProfilesData = profilesData || [];
         }
 
-        const supabaseAdmin = createAdminClient();
-        liveGlobalTrustMetricsByCreatorId =
-          await fetchLiveTrustMetricsByCreatorIds(supabaseAdmin, creatorIds);
+        if (isVideoContest) {
+          const supabaseAdmin = createAdminClient();
+          liveGlobalTrustMetricsByCreatorId =
+            await fetchLiveTrustMetricsByCreatorIds(supabaseAdmin, creatorIds);
+        }
 
         // Fetch users for additional fallbacks
         const { data: fetchedUsers, error: usersError } = await supabase
@@ -514,6 +519,30 @@ export default async function AdminContestDetailPage({
         }
       }
     }
+
+    const getCreatorTrustMetrics = (
+      creatorProfile: any,
+      creatorId?: string | null,
+    ) =>
+      isVideoContest
+        ? resolveCreatorTrustMetrics(
+            creatorProfile,
+            creatorId,
+            liveGlobalTrustMetricsByCreatorId,
+          )
+        : null;
+
+    const getCreatorTrustScore = (
+      creatorProfile: any,
+      creatorId?: string | null,
+    ): number | null =>
+      isVideoContest
+        ? getCreatorTrustScoreFromMetrics(
+            creatorProfile,
+            creatorId,
+            liveGlobalTrustMetricsByCreatorId,
+          )
+        : null;
 
     const calculateDurationDays = (
       start: string | null,
@@ -577,7 +606,7 @@ export default async function AdminContestDetailPage({
       // Payout adjustment (admin) – from contests table so they fill on refresh
       payout_adjustment_percentage: contestSettings.payout_adjustment_percentage,
       payout_adjustment_mode: contestSettings.payout_adjustment_mode,
-      trust_score: contestSettings.trust_score,
+      trust_score: isVideoContest ? contestSettings.trust_score : null,
     };
 
     // Transform Twitter tweets into submission-like format for display
@@ -707,15 +736,13 @@ export default async function AdminContestDetailPage({
           creator_username: creatorUsername,
           creator_avatar_url: creatorAvatarUrl,
           creator_id: actualCreatorProfileId,
-          trust_score: getCreatorTrustScoreFromMetrics(
+          trust_score: getCreatorTrustScore(
             creatorProfile,
             actualCreatorProfileId,
-            liveGlobalTrustMetricsByCreatorId,
           ),
-          trust_score_metrics: resolveCreatorTrustMetrics(
+          trust_score_metrics: getCreatorTrustMetrics(
             creatorProfile,
             actualCreatorProfileId,
-            liveGlobalTrustMetricsByCreatorId,
           ),
           // Explicit username from users table for creator-wise view (main line); creator_username = platform handle (second line)
           user_username: user?.username || null,
@@ -735,15 +762,13 @@ export default async function AdminContestDetailPage({
             username: creatorUsername,
             profile_picture_url: creatorAvatarUrl,
             full_name: creatorDisplayName,
-            trust_score: getCreatorTrustScoreFromMetrics(
+            trust_score: getCreatorTrustScore(
               creatorProfile,
               actualCreatorProfileId,
-              liveGlobalTrustMetricsByCreatorId,
             ),
-            trust_score_metrics: resolveCreatorTrustMetrics(
+            trust_score_metrics: getCreatorTrustMetrics(
               creatorProfile,
               actualCreatorProfileId,
-              liveGlobalTrustMetricsByCreatorId,
             ),
           },
         };
@@ -841,15 +866,13 @@ export default async function AdminContestDetailPage({
           creator_username: creatorUsername,
           creator_avatar_url: creatorAvatarUrl,
           creator_id: actualCreatorProfileId,
-          trust_score: getCreatorTrustScoreFromMetrics(
+          trust_score: getCreatorTrustScore(
             creatorProfile,
             actualCreatorProfileId,
-            liveGlobalTrustMetricsByCreatorId,
           ),
-          trust_score_metrics: resolveCreatorTrustMetrics(
+          trust_score_metrics: getCreatorTrustMetrics(
             creatorProfile,
             actualCreatorProfileId,
-            liveGlobalTrustMetricsByCreatorId,
           ),
           // Explicit username from users table for creator-wise view (main line); creator_username = platform handle (second line)
           user_username: user?.username || null,
@@ -866,15 +889,13 @@ export default async function AdminContestDetailPage({
             profile_picture_url: creatorAvatarUrl,
             full_name: creatorDisplayName,
             instagram_archive: creatorProfile?.instagram_archive ?? null,
-            trust_score: getCreatorTrustScoreFromMetrics(
+            trust_score: getCreatorTrustScore(
               creatorProfile,
               actualCreatorProfileId,
-              liveGlobalTrustMetricsByCreatorId,
             ),
-            trust_score_metrics: resolveCreatorTrustMetrics(
+            trust_score_metrics: getCreatorTrustMetrics(
               creatorProfile,
               actualCreatorProfileId,
-              liveGlobalTrustMetricsByCreatorId,
             ),
           },
           creator_instagram_archive: creatorProfile?.instagram_archive ?? null,

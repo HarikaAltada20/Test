@@ -62,6 +62,11 @@ import {
   isCpmContestType,
   isMilestoneContestType,
 } from "@/lib/contest-type";
+import {
+  getContestMinTrustScoreForGate,
+  getTrustSubmissionBlockedMessage,
+  isCreatorTrustSubmissionBlocked,
+} from "@/lib/trust-score";
 import { renderStatusBadge } from "@/lib/status-badges";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -260,6 +265,8 @@ export function ContestClientPage({
   const [maxSubmissions, setMaxSubmissions] = useState(1);
   const [joinCampaignLoading, setJoinCampaignLoading] = useState(false);
   const [creatorTrustScore, setCreatorTrustScore] = useState<number | null>(null);
+  const [creatorTrustScoreLoaded, setCreatorTrustScoreLoaded] = useState(false);
+  const [creatorTrustScoreLoading, setCreatorTrustScoreLoading] = useState(false);
   const [hasJoinedTwitterCampaign, setHasJoinedTwitterCampaign] =
     useState(false);
   const [twitterConnectStatus, setTwitterConnectStatus] = useState<
@@ -2109,6 +2116,8 @@ export function ContestClientPage({
           setContest(contestData);
           setContestType(contestData.contest_type ?? null);
           if (user?.id) {
+            setCreatorTrustScoreLoading(true);
+            setCreatorTrustScoreLoaded(false);
             try {
               const trustRes = await fetch("/api/creators/trust-score");
               if (trustRes.ok) {
@@ -2118,9 +2127,17 @@ export function ContestClientPage({
                     ? trustData.trust_score
                     : null,
                 );
+                setCreatorTrustScoreLoaded(true);
+              } else {
+                setCreatorTrustScore(null);
+                setCreatorTrustScoreLoaded(false);
               }
             } catch (trustError) {
               console.warn("Failed to load creator trust score:", trustError);
+              setCreatorTrustScore(null);
+              setCreatorTrustScoreLoaded(false);
+            } finally {
+              setCreatorTrustScoreLoading(false);
             }
           }
 
@@ -2458,21 +2475,55 @@ export function ContestClientPage({
     loadTwitterCampaignState();
   }, [contestId, isTwitterTextImageContest, user]);
 
-  const contestMinTrustScore =
-    typeof contest?.trust_score === "number" &&
-    Number.isFinite(contest.trust_score) &&
-    contest.trust_score > 0
-      ? contest.trust_score
-      : null;
+  useEffect(() => {
+    if (!justSubmitted || !user?.id) return;
+
+    const refreshTrustAfterSubmit = async () => {
+      setCreatorTrustScoreLoading(true);
+      setCreatorTrustScoreLoaded(false);
+      try {
+        await fetch("/api/creators/trust-score", { method: "PATCH" });
+        const trustRes = await fetch("/api/creators/trust-score");
+        if (trustRes.ok) {
+          const trustData = await trustRes.json();
+          setCreatorTrustScore(
+            typeof trustData?.trust_score === "number"
+              ? trustData.trust_score
+              : null,
+          );
+          setCreatorTrustScoreLoaded(true);
+        }
+      } catch (trustError) {
+        console.warn("Failed to refresh trust score after submit:", trustError);
+      } finally {
+        setCreatorTrustScoreLoading(false);
+      }
+    };
+
+    void refreshTrustAfterSubmit();
+  }, [justSubmitted, user?.id]);
+
+  const contestMinTrustScore = contest
+    ? getContestMinTrustScoreForGate(contest)
+    : null;
   const isTrustGateEnabled = contestMinTrustScore !== null;
   const isTrustScoreBlocked =
     !!user &&
-    isTrustGateEnabled &&
-    creatorTrustScore !== null &&
-    creatorTrustScore < contestMinTrustScore;
-  const trustScoreMessage = isTrustScoreBlocked
-    ? `Trust score too low to submit. Your trust score is ${creatorTrustScore}. This campaign requires at least ${contestMinTrustScore}. You can still view this campaign and your existing submissions. Submit new content after your score reaches ${contestMinTrustScore} or higher.`
-    : null;
+    isCreatorTrustSubmissionBlocked({
+      minScore: contestMinTrustScore,
+      creatorScore: creatorTrustScore,
+      scoreLoaded: creatorTrustScoreLoaded,
+      scoreLoading: creatorTrustScoreLoading,
+    });
+  const trustScoreMessage =
+    isTrustScoreBlocked && contestMinTrustScore !== null
+      ? getTrustSubmissionBlockedMessage({
+          minScore: contestMinTrustScore,
+          creatorScore: creatorTrustScore,
+          scoreLoading: creatorTrustScoreLoading,
+          scoreLoaded: creatorTrustScoreLoaded,
+        })
+      : null;
 
   const handleSubmitContent = () => {
     if (isTrustScoreBlocked) return;

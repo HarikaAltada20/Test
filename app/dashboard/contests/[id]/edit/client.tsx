@@ -3256,7 +3256,9 @@ export default function EditContestPage({
         ? maxSubmissionsPerCreator
         : 1;
       updatePayload.trust_score =
-        trustScoreEnabled && contestTrustScore !== ""
+        contest?.contest_format === "video" &&
+        trustScoreEnabled &&
+        contestTrustScore !== ""
           ? Number(contestTrustScore)
           : null;
       updatePayload.content_type = contentType || null;
@@ -5284,7 +5286,9 @@ export default function EditContestPage({
             ? maxSubmissionsPerCreator
             : 1,
           trust_score:
-            trustScoreEnabled && contestTrustScore !== ""
+            contest?.contest_format === "video" &&
+            trustScoreEnabled &&
+            contestTrustScore !== ""
               ? Number(contestTrustScore)
               : null,
           content_type: contentType || null,
@@ -5926,7 +5930,9 @@ export default function EditContestPage({
             ? maxSubmissionsPerCreator
             : 1,
           trust_score:
-            trustScoreEnabled && contestTrustScore !== ""
+            contest?.contest_format === "video" &&
+            trustScoreEnabled &&
+            contestTrustScore !== ""
               ? Number(contestTrustScore)
               : null,
           content_type: contentType || null,
@@ -7526,7 +7532,9 @@ export default function EditContestPage({
         ? maxSubmissionsPerCreator
         : 1;
       updatePayload.trust_score =
-        trustScoreEnabled && contestTrustScore !== ""
+        contest?.contest_format === "video" &&
+        trustScoreEnabled &&
+        contestTrustScore !== ""
           ? Number(contestTrustScore)
           : null;
       updatePayload.content_type = contentType || null;
@@ -12436,6 +12444,7 @@ export default function EditContestPage({
                 </p>
               </div> */}
 
+              {contest?.contest_format === "video" && (
               <div
                 className={cn(
                   "space-y-3 rounded-lg border p-4",
@@ -12511,6 +12520,7 @@ export default function EditContestPage({
                   </div>
                 )}
               </div>
+              )}
 
               {/* Multiple Submissions Toggle */}
               <div

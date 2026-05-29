@@ -233,6 +233,153 @@ export async function fetchLiveTrustMetricsByCreatorIds(
   return liveByCreatorId;
 }
 
+/** Video campaigns use contest_format !== "text_image" (legacy null counts as video). */
+export function isVideoContestFormat(
+  contestFormat?: string | null,
+): boolean {
+  return contestFormat !== "text_image";
+}
+
+export function parseContestMinTrustScore(trustScore: unknown): number | null {
+  if (trustScore === null || trustScore === undefined) return null;
+  const value = Number(trustScore);
+  if (!Number.isFinite(value) || value <= 0) return null;
+  return value;
+}
+
+export function getContestMinTrustScoreForGate(contest: {
+  contest_format?: string | null;
+  trust_score?: unknown;
+}): number | null {
+  if (!isVideoContestFormat(contest.contest_format)) return null;
+  return parseContestMinTrustScore(contest.trust_score);
+}
+
+export function isVideoContestTrustGateActive(contest: {
+  contest_format?: string | null;
+  trust_score?: unknown;
+}): boolean {
+  return getContestMinTrustScoreForGate(contest) !== null;
+}
+
+/** Fail-closed: block while loading, on load failure, or when score is below minimum. */
+export function isCreatorTrustSubmissionBlocked(input: {
+  minScore: number | null;
+  creatorScore: number | null;
+  scoreLoaded: boolean;
+  scoreLoading: boolean;
+}): boolean {
+  if (input.minScore === null) return false;
+  if (input.scoreLoading || !input.scoreLoaded) return true;
+  if (input.creatorScore === null) return true;
+  return input.creatorScore < input.minScore;
+}
+
+export function getTrustSubmissionBlockedMessage(input: {
+  minScore: number;
+  creatorScore: number | null;
+  scoreLoading: boolean;
+  scoreLoaded: boolean;
+}): string {
+  if (input.scoreLoading) {
+    return `Loading trust score… This campaign requires at least ${input.minScore}.`;
+  }
+  if (!input.scoreLoaded || input.creatorScore === null) {
+    return `Unable to verify your trust score. This campaign requires at least ${input.minScore}. Please refresh or try again later.`;
+  }
+  return `Trust score too low to submit. Your trust score is ${input.creatorScore}. This campaign requires at least ${input.minScore}. You can still view this campaign and your existing submissions. Submit new content after your score reaches ${input.minScore} or higher.`;
+}
+
+export async function getCreatorTrustScoreForUser(
+  supabase: any,
+  creatorId: string,
+): Promise<number> {
+  const { data: profile } = await supabase
+    .from("creator_profiles")
+    .select("trust_score_metrics")
+    .eq("id", creatorId)
+    .maybeSingle();
+
+  const stored = parseStoredCreatorTrustMetrics(profile?.trust_score_metrics);
+  if (
+    stored?.trust_score !== null &&
+    stored?.trust_score !== undefined &&
+    Number.isFinite(stored.trust_score)
+  ) {
+    return stored.trust_score;
+  }
+
+  const { data: rows, error } = await supabase
+    .from("submissions")
+    .select("status")
+    .eq("creator_id", creatorId);
+
+  if (error) {
+    throw new Error(error.message || "Failed to load submissions for trust score");
+  }
+
+  return getTrustMetricsFromStatuses(
+    (rows || []).map((row: { status: SubmissionStatus }) => row.status),
+  ).trust_score;
+}
+
+export async function assertCreatorMeetsContestTrustRequirement(
+  supabase: any,
+  contestId: string,
+  creatorId: string,
+): Promise<{ ok: true } | { ok: false; error: string; status: number }> {
+  const { data: contest, error: contestError } = await supabase
+    .from("contests")
+    .select("trust_score, contest_format")
+    .eq("id", contestId)
+    .maybeSingle();
+
+  if (contestError || !contest) {
+    return {
+      ok: false,
+      error: contestError?.message || "Contest not found",
+      status: 404,
+    };
+  }
+
+  const minScore = getContestMinTrustScoreForGate(contest);
+  if (minScore === null) {
+    return { ok: true };
+  }
+
+  try {
+    const creatorScore = await getCreatorTrustScoreForUser(supabase, creatorId);
+    if (creatorScore < minScore) {
+      return {
+        ok: false,
+        error: `Trust score too low to submit. Your trust score is ${creatorScore}. This campaign requires at least ${minScore}.`,
+        status: 403,
+      };
+    }
+    return { ok: true };
+  } catch (err: unknown) {
+    const message =
+      err instanceof Error ? err.message : "Failed to verify trust score";
+    return { ok: false, error: message, status: 500 };
+  }
+}
+
+export async function recomputeTrustForCreatorIds(
+  supabase: any,
+  creatorIds: string[],
+): Promise<void> {
+  const uniqueIds = [...new Set(creatorIds.filter(Boolean))];
+  for (const creatorId of uniqueIds) {
+    const result = await recomputeCreatorTrustMetrics(supabase, creatorId);
+    if (!result.ok) {
+      console.error(
+        `[trust-score] Failed to recompute trust for creator ${creatorId}:`,
+        result.error,
+      );
+    }
+  }
+}
+
 export async function recomputeCreatorTrustMetrics(
   supabase: any,
   creatorId: string,
