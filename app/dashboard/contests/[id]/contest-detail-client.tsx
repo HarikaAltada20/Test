@@ -409,9 +409,8 @@ interface Contest {
   rejection_reason?: string | null;
   payout_adjustment_percentage?: number | null;
   payout_adjustment_mode?: string | null;
+  /** Optional campaign minimum creator trust score (0–100). NULL = no requirement. */
   trust_score?: number | null;
-  min_trust_score?: number | null;
-  trust_score_enforced?: boolean | null;
 }
 
 interface Submission {
@@ -1192,20 +1191,17 @@ export default function ContestDetailClient({
     [currentContest],
   );
 
-  /** Contest minimum trust score card on overview; shown when brand set a threshold. */
-  const showContestTrustScoreRequiredCard = useMemo(() => {
-    const raw =
-      currentContest.min_trust_score ?? currentContest.trust_score;
-    if (raw === null || raw === undefined) return false;
+  /** Campaign minimum trust score from contests.trust_score (NULL = no requirement). */
+  const contestMinTrustScore = useMemo(() => {
+    const raw = currentContest.trust_score;
+    if (raw === null || raw === undefined) return null;
     const value = Number(raw);
-    if (!Number.isFinite(value)) return false;
-    if (currentContest.trust_score_enforced === false) return false;
-    return true;
-  }, [
-    currentContest.min_trust_score,
-    currentContest.trust_score,
-    currentContest.trust_score_enforced,
-  ]);
+    if (!Number.isFinite(value) || value <= 0) return null;
+    return value;
+  }, [currentContest.trust_score]);
+
+  /** Contest minimum trust score card on overview; shown when brand set a threshold. */
+  const showContestTrustScoreRequiredCard = contestMinTrustScore !== null;
 
   /** Per-creator trust score in creator-wise table — admin only. */
   const showCreatorWiseTrustScoreColumn = isAdminView;
@@ -10532,12 +10528,7 @@ export default function ContestDetailClient({
                               Trust Score 
                             </p>
                             <p className="text-lg font-bold">
-                              {formatTrustScoreWithMax(
-                                Number(
-                                  currentContest.min_trust_score ??
-                                    currentContest.trust_score,
-                                ),
-                              )}
+                              {formatTrustScoreWithMax(contestMinTrustScore!)}
                             </p>
                           </div>
                         </div>
@@ -21008,27 +20999,13 @@ export default function ContestDetailClient({
                                         );
                                       const trustScoreDisplayShort =
                                         formatTrustScore(trustScoreComputed);
-                                      const requiredTrustScoreRaw =
-                                        (currentContest as any)
-                                          ?.min_trust_score ??
-                                        (currentContest as any)?.trust_score;
                                       const requiredTrustScore =
-                                        requiredTrustScoreRaw !== null &&
-                                        requiredTrustScoreRaw !== undefined &&
-                                        requiredTrustScoreRaw !== ""
-                                          ? Number(requiredTrustScoreRaw)
-                                          : null;
-                                      const isTrustScoreEnforced =
-                                        (currentContest as any)
-                                          ?.trust_score_enforced !== false;
+                                        contestMinTrustScore;
                                       const hasTrustThreshold =
-                                        isTrustScoreEnforced &&
-                                        requiredTrustScore !== null &&
-                                        Number.isFinite(requiredTrustScore);
+                                        requiredTrustScore !== null;
                                       const trustScoreBelowThreshold =
                                         hasTrustThreshold &&
-                                        trustScoreComputed <
-                                          (requiredTrustScore as number);
+                                        trustScoreComputed < requiredTrustScore;
                                       const inferredPaidReelsForTrust = Math.max(
                                         0,
                                         totalReelsForTrust -

@@ -320,7 +320,11 @@ export default function SubmitContentPage({
   const totalTiktokPages = Math.ceil(userTiktokVideos.length / ITEMS_PER_PAGE);
 
   const contestMinTrustScore =
-    typeof contest?.trust_score === "number" ? contest.trust_score : null;
+    typeof contest?.trust_score === "number" &&
+    Number.isFinite(contest.trust_score) &&
+    contest.trust_score > 0
+      ? contest.trust_score
+      : null;
   const isTrustGateEnabled = contestMinTrustScore !== null;
   const isTrustScoreBlocked =
     isTrustGateEnabled &&
