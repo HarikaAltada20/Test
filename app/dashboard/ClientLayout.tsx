@@ -1201,7 +1201,10 @@ function DashboardContent({
             {userRole && (
               <DashboardSidebar
                 userRole={userRole}
-                onChatOpen={() => setIsChatOpen(true)}
+                onChatOpen={() => {
+                  setSupportThreadId(null);
+                  setIsChatOpen(true);
+                }}
                 onReviewOpen={handleReviewOpen}
                 collapsed={sidebarCollapsed}
                 mode={currentMode}
@@ -1442,7 +1445,10 @@ function DashboardContent({
                           {userRole && (
                             <DashboardSidebar
                               userRole={userRole}
-                              onChatOpen={() => setIsChatOpen(true)}
+                              onChatOpen={() => {
+                  setSupportThreadId(null);
+                  setIsChatOpen(true);
+                }}
                               onReviewOpen={handleReviewOpen}
                               collapsed={false}
                               mode={currentMode}

@@ -14,12 +14,31 @@ export async function POST(req: NextRequest, context: RouteContext) {
   }
 
   const { threadId } = await context.params;
-  const body = normalizeSupportBody((await req.json())?.body);
+  const payload = await req.json();
+  const body = normalizeSupportBody(payload?.body);
+  const closeThread = payload?.close === true;
   if (!body) {
     return NextResponse.json({ error: "Message body is required" }, { status: 400 });
   }
 
   const supabase = createAdminClient();
+
+  const { data: existing } = await supabase
+    .from("support_threads")
+    .select("id, status")
+    .eq("id", threadId)
+    .is("deleted_at", null)
+    .maybeSingle();
+
+  if (!existing) {
+    return NextResponse.json({ error: "Thread not found" }, { status: 404 });
+  }
+  if (existing.status === "closed") {
+    return NextResponse.json(
+      { error: "Thread is closed. Reopen it to send a reply." },
+      { status: 400 },
+    );
+  }
 
   const { data: rpcResult, error: rpcError } = await supabase.rpc(
     "support_admin_reply",
@@ -27,11 +46,18 @@ export async function POST(req: NextRequest, context: RouteContext) {
       p_thread_id: threadId,
       p_admin_user_id: user.id,
       p_body: body,
+      p_close_thread: closeThread,
     },
   );
 
   if (rpcError) {
     const msg = rpcError.message || "";
+    if (msg.includes("thread_closed")) {
+      return NextResponse.json(
+        { error: "Thread is closed. Reopen it to send a reply." },
+        { status: 400 },
+      );
+    }
     if (msg.includes("thread_not_found") || rpcError.code === "P0002") {
       return NextResponse.json({ error: "Thread not found" }, { status: 404 });
     }
@@ -56,12 +82,23 @@ export async function POST(req: NextRequest, context: RouteContext) {
     .eq("id", result.message_id)
     .single();
 
+  let finalStatus = result.status;
+  if (closeThread && finalStatus !== "closed") {
+    const { data: closedRow } = await supabase
+      .from("support_threads")
+      .update({ status: "closed", updated_at: new Date().toISOString() })
+      .eq("id", threadId)
+      .select("status")
+      .single();
+    if (closedRow) finalStatus = closedRow.status;
+  }
+
   return NextResponse.json({
     success: true,
     message,
     thread: {
       id: result.thread_id,
-      status: result.status,
+      status: finalStatus,
       last_message_at: result.last_message_at,
     },
     notification: {

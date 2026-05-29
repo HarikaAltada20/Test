@@ -47,7 +47,13 @@ export async function POST(req: NextRequest, context: RouteContext) {
     return NextResponse.json({ error: "Thread not found" }, { status: 404 });
   }
   if (thread.status === "closed") {
-    return NextResponse.json({ error: "Thread is closed" }, { status: 400 });
+    return NextResponse.json(
+      {
+        error:
+          "This query is closed. Close this window and click Chat with us to submit a new query.",
+      },
+      { status: 400 },
+    );
   }
 
   const msgCount = await countUserMessagesInThreadToday(

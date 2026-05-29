@@ -27,6 +27,9 @@ type Thread = {
   created_at: string;
 };
 
+const CLOSED_THREAD_NOTICE =
+  "This query has been closed by support. Close this window and click Chat with us to submit a new query.";
+
 type Message = {
   id: string;
   sender_role: string;
@@ -56,6 +59,7 @@ const ChatSupport: React.FC<ChatProps> = ({
   const [selectedThreadId, setSelectedThreadId] = useState<string | null>(
     initialThreadId ?? null,
   );
+  const [activeThread, setActiveThread] = useState<Thread | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const { toast } = useToast();
 
@@ -115,6 +119,7 @@ const ChatSupport: React.FC<ChatProps> = ({
     const res = await fetch(`/api/support/threads/${threadId}`);
     const data = await res.json();
     if (res.ok) {
+      setActiveThread(data.thread ?? null);
       setMessages(data.messages ?? []);
     }
   }, []);
@@ -137,19 +142,29 @@ const ChatSupport: React.FC<ChatProps> = ({
     }
   }, [view, selectedThreadId, supportChatEnabled, loadThreadDetail]);
 
+  // Brand/advertiser should never see inbox list mode.
+  useEffect(() => {
+    if (userType === "advertiser" && view === "inbox") {
+      setView("compose");
+    }
+  }, [userType, view]);
+
   const handleBack = () => {
     if (view === "thread" || view === "inbox") {
-      setView("compose");
-      setSelectedThreadId(null);
-      setMessages([]);
+      onClose();
     }
   };
+
+  const canReplyInThread =
+    view === "thread" &&
+    selectedThreadId &&
+    activeThread?.status !== "closed";
 
   const handleSend = async () => {
     if (!composer.trim()) {
       toast({
         title: "Missing Query",
-        description: "Please enter your query before submitting.",
+        description: "Please enter your message before submitting.",
         variant: "destructive",
       });
       return;
@@ -157,39 +172,39 @@ const ChatSupport: React.FC<ChatProps> = ({
 
     setLoading(true);
     try {
-      let res: Response;
-      if (view === "thread" && selectedThreadId) {
-        res = await fetch(`/api/support/threads/${selectedThreadId}/messages`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ body: composer }),
-        });
-      } else {
-        res = await fetch("/api/support/threads", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ body: composer }),
-        });
-      }
+      const res = canReplyInThread
+        ? await fetch(`/api/support/threads/${selectedThreadId}/messages`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ body: composer }),
+          })
+        : await fetch("/api/support/threads", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ body: composer }),
+          });
 
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to save query");
+      if (!res.ok) throw new Error(data.error || "Failed to save message");
 
       setComposer("");
-      await loadThreads();
 
-      if (view === "compose") {
+      if (canReplyInThread && selectedThreadId) {
+        await loadThreadDetail(selectedThreadId);
         toast({
-          title: "Success",
-          description: "Your query has been submitted successfully!",
+          title: "Sent",
+          description: "Your message was sent to support.",
         });
       } else {
-        const threadId = selectedThreadId || data.thread?.id;
-        if (threadId) {
-          setSelectedThreadId(threadId);
-          await loadThreadDetail(threadId);
-        }
-        toast({ title: "Message sent" });
+        setView("compose");
+        setSelectedThreadId(null);
+        setActiveThread(null);
+        setMessages([]);
+        await loadThreads();
+        toast({
+          title: "Success",
+          description: "Your new query has been submitted successfully!",
+        });
       }
     } catch (err: unknown) {
       toast({
@@ -205,7 +220,7 @@ const ChatSupport: React.FC<ChatProps> = ({
   const headerTitle =
     view === "compose"
       ? "Get Touch with Us!"
-      : view === "inbox"
+      : view === "inbox" && userType === "creator"
         ? "My conversations"
         : "Support chat";
 
@@ -338,8 +353,18 @@ const ChatSupport: React.FC<ChatProps> = ({
   );
 
   const renderThread = () => (
-    <>
-      <div className="flex-1 overflow-y-auto space-y-3 min-h-[120px]">
+    <div className="flex-1 overflow-y-auto flex flex-col min-h-0">
+      {activeThread?.status === "closed" && (
+        <p
+          className={cn(
+            "text-sm rounded-md px-3 py-2 mb-3 shrink-0",
+            isDark ? "bg-slate-800 text-slate-200" : "bg-amber-50 text-amber-900 border border-amber-200",
+          )}
+        >
+          {CLOSED_THREAD_NOTICE}
+        </p>
+      )}
+      <div className="space-y-3 flex-1 min-h-0 overflow-y-auto">
         {messages.length === 0 ? (
           <p
             className={cn(
@@ -386,19 +411,25 @@ const ChatSupport: React.FC<ChatProps> = ({
           ))
         )}
       </div>
-      <textarea
-        placeholder="Type your message..."
-        value={composer}
-        onChange={(e) => setComposer(e.target.value)}
-        className={cn(
-          "w-full border px-3 py-2 rounded text-sm h-20 resize-none focus:outline-none focus:ring-1 focus:ring-purple-500 mt-2",
-          isDark
-            ? "bg-[#06021D] border-gray-500 text-white"
-            : "bg-white border-gray-300",
-        )}
-      />
-    </>
+      {activeThread?.status !== "closed" && (
+        <textarea
+          placeholder="Type your reply..."
+          value={composer}
+          onChange={(e) => setComposer(e.target.value)}
+          className={cn(
+            "w-full border px-3 py-2 rounded mt-3 text-sm h-[100px] resize-none shrink-0 focus:outline-none focus:ring-1 focus:ring-purple-500",
+            isDark
+              ? "bg-[#06021D] border-gray-500 text-white"
+              : "bg-white border-gray-300",
+          )}
+        />
+      )}
+    </div>
   );
+
+  const showSubmitButton =
+    view === "compose" ||
+    (view === "thread" && activeThread?.status !== "closed");
 
   return (
     <div
@@ -455,7 +486,7 @@ const ChatSupport: React.FC<ChatProps> = ({
               {view === "inbox" && renderInbox()}
               {view === "thread" && renderThread()}
 
-              {(view === "compose" || view === "thread") && (
+              {showSubmitButton && (
                 <button
                   type="button"
                   onClick={handleSend}
@@ -467,7 +498,11 @@ const ChatSupport: React.FC<ChatProps> = ({
                       : "bg-gradient-to-r from-[#7F39EC] to-[#B16FF4]",
                   )}
                 >
-                  {loading ? "Submitting..." : "SUBMIT"}
+                  {loading
+                    ? "Submitting..."
+                    : view === "thread"
+                      ? "SEND"
+                      : "SUBMIT"}
                 </button>
               )}
             </>

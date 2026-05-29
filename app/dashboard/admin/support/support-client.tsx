@@ -37,9 +37,7 @@ import {
   formatSenderRoleLabel,
   isSupportAdminMessage,
 } from "@/lib/support/sender-role";
-import { Eye, MessageSquare, Trash2, Loader2 } from "lucide-react";
-import Link from "next/link";
-
+import { MessageSquare, Trash2, Loader2, Lock, RotateCcw } from "lucide-react";
 type Contact = {
   id: string;
   created_at: string;
@@ -113,9 +111,11 @@ export default function SupportClient({
   const [detailThread, setDetailThread] = useState<SupportThread | null>(null);
   const [replyBody, setReplyBody] = useState("");
   const [replying, setReplying] = useState(false);
+  const [statusUpdating, setStatusUpdating] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState<
-    "single" | "bulk" | "retention" | null
+    "single" | "bulk" | "bulk-close" | "retention" | null
   >(null);
+  const [bulkClosing, setBulkClosing] = useState(false);
   const [retentionCount, setRetentionCount] = useState(0);
   const { toast } = useToast();
 
@@ -193,8 +193,49 @@ export default function SupportClient({
     }
   };
 
+  const updateThreadStatus = async (
+    threadId: string,
+    status: "open" | "closed",
+  ) => {
+    setStatusUpdating(true);
+    try {
+      const res = await fetch(`/api/admin/support/threads/${threadId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Status update failed");
+      await loadDetail(threadId);
+      await fetchThreads();
+      toast({
+        title: status === "closed" ? "Thread closed" : "Thread reopened",
+        description:
+          status === "closed"
+            ? "User cannot add more messages to this thread."
+            : "You can reply again on this thread.",
+      });
+    } catch (e: unknown) {
+      toast({
+        title: "Error",
+        description: e instanceof Error ? e.message : "Update failed",
+        variant: "destructive",
+      });
+    } finally {
+      setStatusUpdating(false);
+    }
+  };
+
   const handleReply = async () => {
     if (!detailId || !replyBody.trim()) return;
+    if (detailThread?.status === "closed") {
+      toast({
+        title: "Thread is closed",
+        description: "Reopen the thread before sending a reply.",
+        variant: "destructive",
+      });
+      return;
+    }
     setReplying(true);
     try {
       const res = await fetch(
@@ -210,7 +251,10 @@ export default function SupportClient({
       setReplyBody("");
       await loadDetail(detailId);
       await fetchThreads();
-      toast({ title: "Reply sent", description: "User has been notified in-app." });
+      toast({
+        title: "Reply sent",
+        description: "User has been notified in-app.",
+      });
     } catch (e: unknown) {
       toast({
         title: "Error",
@@ -287,6 +331,52 @@ export default function SupportClient({
     });
   };
 
+  const pageThreadIds = useMemo(() => threads.map((t) => t.id), [threads]);
+  const allPageSelected =
+    pageThreadIds.length > 0 &&
+    pageThreadIds.every((id) => selected.has(id));
+  const somePageSelected = pageThreadIds.some((id) => selected.has(id));
+
+  const toggleSelectAll = () => {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (allPageSelected) {
+        pageThreadIds.forEach((id) => next.delete(id));
+      } else {
+        pageThreadIds.forEach((id) => next.add(id));
+      }
+      return next;
+    });
+  };
+
+  const runBulkClose = async () => {
+    setBulkClosing(true);
+    try {
+      const res = await fetch("/api/admin/support/threads/bulk-close", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ thread_ids: Array.from(selected) }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Bulk close failed");
+      setSelected(new Set());
+      setConfirmDelete(null);
+      await fetchThreads();
+      toast({
+        title: "Threads closed",
+        description: `Closed ${data.closed_count ?? 0} thread(s).`,
+      });
+    } catch (e: unknown) {
+      toast({
+        title: "Error",
+        description: e instanceof Error ? e.message : "Bulk close failed",
+        variant: "destructive",
+      });
+    } finally {
+      setBulkClosing(false);
+    }
+  };
+
   const totalPages = Math.max(1, Math.ceil(total / limit));
   const detailUser = detailThread ? resolveUser(detailThread.users) : null;
 
@@ -336,8 +426,27 @@ export default function SupportClient({
               <SelectItem value="advertiser">Advertiser</SelectItem>
             </SelectContent>
           </Select>
-          <Button variant="outline" size="sm" onClick={() => fetchThreads()}>
+          {/* <Button variant="outline" size="sm" onClick={() => fetchThreads()}>
             Apply
+          </Button> */}
+          {selected.size > 0 && (
+            <span
+              className={cn(
+                "text-sm font-medium px-2",
+                isDark ? "text-slate-300" : "text-slate-600",
+              )}
+            >
+              {selected.size} selected
+            </span>
+          )}
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={selected.size === 0 || bulkClosing}
+            onClick={() => setConfirmDelete("bulk-close")}
+          >
+            <Lock className="h-4 w-4 mr-1" />
+            Close queries
           </Button>
           <Button
             variant="destructive"
@@ -345,7 +454,7 @@ export default function SupportClient({
             disabled={selected.size === 0}
             onClick={() => setConfirmDelete("bulk")}
           >
-            Delete selected ({selected.size})
+            Delete selected
           </Button>
           <Button variant="outline" size="sm" onClick={previewRetention}>
             Delete older than {SUPPORT_RETENTION_DAYS} days
@@ -356,10 +465,21 @@ export default function SupportClient({
           <table className="min-w-full text-sm">
             <thead>
               <tr className="text-left border-b">
-                <th className="py-2 pr-2 w-8" />
+                <th className="py-2 pr-2 w-8">
+                  <Checkbox
+                    checked={
+                      somePageSelected && !allPageSelected
+                        ? "indeterminate"
+                        : allPageSelected
+                    }
+                    onCheckedChange={toggleSelectAll}
+                    disabled={loading || threads.length === 0}
+                    aria-label="Select all on this page"
+                  />
+                </th>
                 <th className="py-2 pr-4">Updated</th>
                 <th className="py-2 pr-4">User Type</th>
-                <th className="py-2 pr-4">Last message</th>
+                <th className="py-2 pr-4 min-w-[200px] max-w-sm">Query</th>
                 <th className="py-2 pr-4">Email</th>
                 <th className="py-2 pr-4">Username</th>
                 <th className="py-2 pr-4">Status</th>
@@ -383,7 +503,7 @@ export default function SupportClient({
                 threads.map((t) => {
                   const u = resolveUser(t.users);
                   return (
-                    <tr key={t.id} className="border-b">
+                    <tr key={t.id} className="border-b align-top">
                       <td className="py-2 pr-2">
                         <Checkbox
                           checked={selected.has(t.id)}
@@ -394,7 +514,7 @@ export default function SupportClient({
                         {new Date(t.last_message_at).toLocaleString()}
                       </td>
                       <td className="py-2 pr-4">{t.user_type || "-"}</td>
-                      <td className="py-2 pr-4 max-w-[200px] truncate">
+                      <td className="py-2 pr-4 min-w-[200px] max-w-sm break-words whitespace-normal">
                         {t.last_message_preview || t.subject || "-"}
                       </td>
                       <td className="py-2 pr-4">{u?.email || "-"}</td>
@@ -405,19 +525,22 @@ export default function SupportClient({
                           <Button
                             variant="ghost"
                             size="icon"
-                            title="View"
-                            onClick={() => loadDetail(t.id)}
-                          >
-                            <Eye className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon"
                             title="Reply"
                             onClick={() => loadDetail(t.id)}
                           >
                             <MessageSquare className="h-4 w-4" />
                           </Button>
+                          {t.status !== "closed" && (
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              title="Close thread"
+                              onClick={() => updateThreadStatus(t.id, "closed")}
+                              disabled={statusUpdating}
+                            >
+                              <Lock className="h-4 w-4" />
+                            </Button>
+                          )}
                           <Button
                             variant="ghost"
                             size="icon"
@@ -559,12 +682,6 @@ export default function SupportClient({
                 <span className="opacity-70">Username:</span>{" "}
                 {detailUser.username || "—"}
               </p>
-              <Link
-                href={`/dashboard/admin/users`}
-                className="text-purple-500 underline text-xs"
-              >
-                User Management
-              </Link>
               <SupportChatToggle
                 userId={detailUser.id}
                 enabled={detailUser.support_chat_enabled !== false}
@@ -605,40 +722,58 @@ export default function SupportClient({
             ))}
           </div>
           <div className="border-t pt-4 space-y-2">
-            <textarea
-              className={cn(
-                "w-full border rounded px-3 py-2 text-sm h-24 resize-none",
-                isDark && "bg-[#06021D] border-slate-600",
-              )}
-              placeholder="Type your reply..."
-              value={replyBody}
-              onChange={(e) => setReplyBody(e.target.value)}
-            />
+            {detailThread?.status === "closed" ? (
+              <p
+                className={cn(
+                  "text-sm rounded-md px-3 py-2",
+                  isDark ? "bg-slate-800 text-slate-300" : "bg-gray-100 text-gray-700",
+                )}
+              >
+                This thread is closed. Reopen it to send another reply, or the user
+                can start a new query from their dashboard.
+              </p>
+            ) : (
+              <>
+                <textarea
+                  className={cn(
+                    "w-full border rounded px-3 py-2 text-sm h-24 resize-none",
+                    isDark && "bg-[#06021D] border-slate-600",
+                  )}
+                  placeholder="Type your reply..."
+                  value={replyBody}
+                  onChange={(e) => setReplyBody(e.target.value)}
+                />
+              </>
+            )}
             <div className="flex gap-2">
-              <Button
-                className="flex-1 bg-purple-600 hover:bg-purple-700"
-                disabled={replying || !replyBody.trim()}
-                onClick={handleReply}
-              >
-                {replying ? "Sending..." : "Send reply"}
-              </Button>
-              <Button
-                variant="outline"
-                onClick={() => {
-                  if (detailId) {
-                    fetch(`/api/admin/support/threads/${detailId}`, {
-                      method: "PATCH",
-                      headers: { "Content-Type": "application/json" },
-                      body: JSON.stringify({ status: "closed" }),
-                    }).then(() => {
-                      toast({ title: "Thread closed" });
-                      fetchThreads();
-                    });
-                  }
-                }}
-              >
-                Close
-              </Button>
+              {detailThread?.status !== "closed" ? (
+                <>
+                  <Button
+                    className="flex-1 bg-purple-600 hover:bg-purple-700"
+                    disabled={replying || !replyBody.trim() || statusUpdating}
+                    onClick={handleReply}
+                  >
+                    {replying ? "Sending..." : "Send reply"}
+                  </Button>
+                  <Button
+                    variant="outline"
+                    disabled={statusUpdating || replying}
+                    onClick={() => detailId && updateThreadStatus(detailId, "closed")}
+                  >
+                    Close
+                  </Button>
+                </>
+              ) : (
+                <Button
+                  variant="outline"
+                  className="flex-1"
+                  disabled={statusUpdating}
+                  onClick={() => detailId && updateThreadStatus(detailId, "open")}
+                >
+                  <RotateCcw className="h-4 w-4 mr-2" />
+                  Reopen thread
+                </Button>
+              )}
             </div>
           </div>
         </SheetContent>
@@ -647,8 +782,14 @@ export default function SupportClient({
       <Dialog open={!!confirmDelete} onOpenChange={() => setConfirmDelete(null)}>
         <DialogContent className={isDark ? "bg-[#06021D] text-white" : ""}>
           <DialogHeader>
-            <DialogTitle>Confirm delete</DialogTitle>
+            <DialogTitle>
+              {confirmDelete === "bulk-close"
+                ? "Close threads"
+                : "Confirm delete"}
+            </DialogTitle>
             <DialogDescription>
+              {confirmDelete === "bulk-close" &&
+                `Close ${selected.size} selected thread(s)? Users will not be able to reply on closed threads.`}
               {confirmDelete === "bulk" &&
                 `Delete ${selected.size} selected thread(s)? This cannot be undone easily.`}
               {confirmDelete === "single" &&
@@ -661,9 +802,15 @@ export default function SupportClient({
             <Button variant="outline" onClick={() => setConfirmDelete(null)}>
               Cancel
             </Button>
-            <Button variant="destructive" onClick={runDelete}>
-              Delete
-            </Button>
+            {confirmDelete === "bulk-close" ? (
+              <Button onClick={runBulkClose} disabled={bulkClosing}>
+                {bulkClosing ? "Closing..." : "Close threads"}
+              </Button>
+            ) : (
+              <Button variant="destructive" onClick={runDelete}>
+                Delete
+              </Button>
+            )}
           </DialogFooter>
         </DialogContent>
       </Dialog>

@@ -83,12 +83,13 @@ export async function GET(req: NextRequest) {
   if (threadIds.length > 0) {
     const { data: msgs } = await supabase
       .from("support_messages")
-      .select("thread_id, body, created_at")
+      .select("thread_id, body, created_at, sender_role")
       .in("thread_id", threadIds)
       .order("created_at", { ascending: false });
 
     for (const m of msgs ?? []) {
-      if (!lastMessages[m.thread_id]) {
+      // Show the latest customer message (creator/advertiser), not support/admin reply.
+      if (!lastMessages[m.thread_id] && m.sender_role !== "admin") {
         lastMessages[m.thread_id] = m.body;
       }
     }
