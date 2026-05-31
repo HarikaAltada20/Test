@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { EnhancedTabs } from "@/components/ui/enhancedTabs";
 import { Card, CardContent } from "@/components/ui/card";
 import { PaginationControls } from "@/components/ui/pagination-controls";
@@ -118,6 +119,10 @@ export default function SupportClient({
   const [bulkClosing, setBulkClosing] = useState(false);
   const [retentionCount, setRetentionCount] = useState(0);
   const { toast } = useToast();
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const suppressUrlOpenRef = useRef(false);
 
   const contacts = initialContacts || [];
   const [contactsPage, setContactsPage] = useState(1);
@@ -183,7 +188,7 @@ export default function SupportClient({
     if (activeTab === "queries") fetchThreads();
   }, [activeTab, fetchThreads]);
 
-  const loadDetail = async (threadId: string) => {
+  const loadDetail = useCallback(async (threadId: string) => {
     const res = await fetch(`/api/admin/support/threads/${threadId}`);
     const data = await res.json();
     if (res.ok) {
@@ -191,7 +196,35 @@ export default function SupportClient({
       setDetailMessages(data.messages ?? []);
       setDetailId(threadId);
     }
-  };
+  }, []);
+
+  const clearSupportThreadParam = useCallback(() => {
+    const params = new URLSearchParams(searchParams.toString());
+    if (!params.has("supportThread")) return;
+    params.delete("supportThread");
+    const qs = params.toString();
+    router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
+  }, [router, pathname, searchParams]);
+
+  const closeDetail = useCallback(() => {
+    suppressUrlOpenRef.current = true;
+    setDetailId(null);
+    setDetailThread(null);
+    setDetailMessages([]);
+    setReplyBody("");
+    clearSupportThreadParam();
+  }, [clearSupportThreadParam]);
+
+  useEffect(() => {
+    const threadParam = searchParams.get("supportThread");
+    if (!threadParam || activeTab !== "queries") return;
+    if (suppressUrlOpenRef.current) {
+      suppressUrlOpenRef.current = false;
+      return;
+    }
+    if (detailId === threadParam) return;
+    void loadDetail(threadParam);
+  }, [searchParams, activeTab, loadDetail, detailId]);
 
   const updateThreadStatus = async (
     threadId: string,
@@ -276,7 +309,7 @@ export default function SupportClient({
           const d = await res.json();
           throw new Error(d.error);
         }
-        setDetailId(null);
+        closeDetail();
       } else if (confirmDelete === "bulk") {
         const res = await fetch("/api/admin/support/threads/bulk-delete", {
           method: "POST",
@@ -379,6 +412,34 @@ export default function SupportClient({
 
   const totalPages = Math.max(1, Math.ceil(total / limit));
   const detailUser = detailThread ? resolveUser(detailThread.users) : null;
+
+  const syncSupportChatEnabled = useCallback(
+    (userId: string, enabled: boolean) => {
+      const patchUsers = (
+        users: ThreadUser | ThreadUser[] | null,
+      ): ThreadUser | ThreadUser[] | null => {
+        if (!users) return users;
+        const patch = (u: ThreadUser) =>
+          u.id === userId ? { ...u, support_chat_enabled: enabled } : u;
+        return Array.isArray(users) ? users.map(patch) : patch(users);
+      };
+
+      setThreads((prev) =>
+        prev.map((t) =>
+          resolveUser(t.users)?.id === userId
+            ? { ...t, users: patchUsers(t.users) }
+            : t,
+        ),
+      );
+
+      setDetailThread((prev) =>
+        prev && resolveUser(prev.users)?.id === userId
+          ? { ...prev, users: patchUsers(prev.users) }
+          : prev,
+      );
+    },
+    [],
+  );
 
   const paginatedContacts = useMemo(() => {
     const start = (contactsPage - 1) * contactsLimit;
@@ -483,19 +544,20 @@ export default function SupportClient({
                 <th className="py-2 pr-4">Email</th>
                 <th className="py-2 pr-4">Username</th>
                 <th className="py-2 pr-4">Status</th>
+                <th className="py-2 pr-4">Support Chat</th>
                 <th className="py-2 pr-4">Actions</th>
               </tr>
             </thead>
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={8} className="py-8 text-center">
+                  <td colSpan={9} className="py-8 text-center">
                     <Loader2 className="h-6 w-6 animate-spin mx-auto text-purple-500" />
                   </td>
                 </tr>
               ) : threads.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="py-8 text-center text-muted-foreground">
+                  <td colSpan={9} className="py-8 text-center text-muted-foreground">
                     No threads found
                   </td>
                 </tr>
@@ -520,6 +582,20 @@ export default function SupportClient({
                       <td className="py-2 pr-4">{u?.email || "-"}</td>
                       <td className="py-2 pr-4">{u?.username || "-"}</td>
                       <td className="py-2 pr-4">{statusBadge(t.status, isDark)}</td>
+                      <td className="py-2 pr-4 whitespace-nowrap">
+                        {u ? (
+                          <SupportChatToggle
+                            key={`${u.id}-${u.support_chat_enabled}`}
+                            userId={u.id}
+                            enabled={u.support_chat_enabled !== false}
+                            onUpdated={(enabled) =>
+                              syncSupportChatEnabled(u.id, enabled)
+                            }
+                          />
+                        ) : (
+                          "—"
+                        )}
+                      </td>
                       <td className="py-2 pr-4">
                         <div className="flex gap-1">
                           <Button
@@ -662,7 +738,7 @@ export default function SupportClient({
         {activeTab === "contacts" && renderContacts()}
       </div>
 
-      <Sheet open={!!detailId && !confirmDelete} onOpenChange={(o) => !o && setDetailId(null)}>
+      <Sheet open={!!detailId && !confirmDelete} onOpenChange={(o) => !o && closeDetail()}>
         <SheetContent
           side="right"
           className={cn(
@@ -683,9 +759,12 @@ export default function SupportClient({
                 {detailUser.username || "—"}
               </p>
               <SupportChatToggle
+                key={`${detailUser.id}-${detailUser.support_chat_enabled}`}
                 userId={detailUser.id}
                 enabled={detailUser.support_chat_enabled !== false}
-                isDark={isDark}
+                onUpdated={(enabled) =>
+                  syncSupportChatEnabled(detailUser.id, enabled)
+                }
               />
             </div>
           )}

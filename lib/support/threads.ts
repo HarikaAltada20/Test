@@ -11,7 +11,6 @@ export type SupportThreadRow = {
   created_at: string;
   updated_at: string;
   last_message_at: string;
-  deleted_at: string | null;
 };
 
 export type SupportMessageRow = {
@@ -31,7 +30,6 @@ export async function findActiveThreadForUser(
     .from("support_threads")
     .select("*")
     .eq("user_id", userId)
-    .is("deleted_at", null)
     .in("status", ["open", "replied"])
     .order("last_message_at", { ascending: false })
     .limit(1)
@@ -81,22 +79,16 @@ export function retentionCutoffDate(beforeDays = SUPPORT_RETENTION_DAYS): Date {
   return d;
 }
 
-export async function softDeleteThreads(
+export async function deleteThreads(
   supabase: SupabaseClient,
   threadIds: string[],
-  adminId: string,
 ): Promise<number> {
   if (threadIds.length === 0) return 0;
 
   const { data, error } = await supabase
     .from("support_threads")
-    .update({
-      deleted_at: new Date().toISOString(),
-      deleted_by: adminId,
-      updated_at: new Date().toISOString(),
-    })
+    .delete()
     .in("id", threadIds)
-    .is("deleted_at", null)
     .select("id");
 
   if (error) throw error;
@@ -110,25 +102,18 @@ export async function countThreadsBeforeDate(
   const { count } = await supabase
     .from("support_threads")
     .select("id", { count: "exact", head: true })
-    .is("deleted_at", null)
     .lt("last_message_at", before.toISOString());
 
   return count ?? 0;
 }
 
-export async function softDeleteThreadsBeforeDate(
+export async function deleteThreadsBeforeDate(
   supabase: SupabaseClient,
   before: Date,
-  adminId: string,
 ): Promise<number> {
   const { data, error } = await supabase
     .from("support_threads")
-    .update({
-      deleted_at: new Date().toISOString(),
-      deleted_by: adminId,
-      updated_at: new Date().toISOString(),
-    })
-    .is("deleted_at", null)
+    .delete()
     .lt("last_message_at", before.toISOString())
     .select("id");
 

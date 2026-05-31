@@ -39,7 +39,6 @@ export async function GET(req: NextRequest) {
     `,
       { count: "exact" },
     )
-    .is("deleted_at", null)
     .order("last_message_at", { ascending: false });
 
   if (status && status !== "all") {

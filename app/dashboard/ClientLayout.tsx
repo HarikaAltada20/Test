@@ -319,12 +319,13 @@ function DashboardContent({
   } = useFullscreen();
 
   useEffect(() => {
+    if (!userRole || userRole === "admin") return;
     const threadParam = searchParams.get("supportThread");
     if (threadParam) {
       setSupportThreadId(threadParam);
       setIsChatOpen(true);
     }
-  }, [searchParams]);
+  }, [searchParams, userRole]);
 
   useEffect(() => {
     if (!user || userRole === "admin") return;
@@ -339,6 +340,12 @@ function DashboardContent({
   const openSupportThread = (threadId: string) => {
     setSupportThreadId(threadId);
     setIsChatOpen(true);
+  };
+
+  const openAdminSupportThread = (threadId: string) => {
+    setIsChatOpen(false);
+    setSupportThreadId(null);
+    router.push(`/dashboard/admin/support?supportThread=${threadId}`);
   };
 
   const handleSignOut = async () => {
@@ -1516,10 +1523,15 @@ function DashboardContent({
 
                 {/* Right Side: Actions */}
                 <div className="flex items-center gap-3">
-                  {userRole && userRole !== "admin" && (
+                  {userRole && (
                     <UserNotificationsBell
                       isDark={currentMode === "dark"}
-                      onOpenSupportThread={openSupportThread}
+                      onOpenSupportThread={
+                        userRole === "admin" ? undefined : openSupportThread
+                      }
+                      onOpenAdminSupportThread={
+                        userRole === "admin" ? openAdminSupportThread : undefined
+                      }
                     />
                   )}
 
@@ -2763,8 +2775,8 @@ function DashboardContent({
                 </div>
               </Suspense>
 
-              {/* Chat Popup */}
-              {isChatOpen && (
+              {/* Chat Popup — creators/brands only; admins use /dashboard/admin/support */}
+              {isChatOpen && userRole && userRole !== "admin" && (
                 <ChatSuppport
                   onClose={() => {
                     setIsChatOpen(false);

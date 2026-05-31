@@ -2,14 +2,12 @@
 
 import { useState } from "react";
 import { Switch } from "@/components/ui/switch";
-import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 
 type Props = {
   userId: string;
   enabled: boolean;
-  isDark?: boolean;
   className?: string;
   onUpdated?: (enabled: boolean) => void;
 };
@@ -17,7 +15,6 @@ type Props = {
 export function SupportChatToggle({
   userId,
   enabled: initialEnabled,
-  isDark = false,
   className,
   onUpdated,
 }: Props) {
@@ -52,19 +49,16 @@ export function SupportChatToggle({
   };
 
   return (
-    <div className={cn("flex items-center gap-3", className)}>
+    <div className={cn("flex items-center", className)}>
       <Switch
         id={`support-chat-${userId}`}
         checked={enabled}
         disabled={loading}
         onCheckedChange={handleChange}
+        aria-label={
+          enabled ? "Support chat enabled" : "Support chat disabled"
+        }
       />
-      <Label
-        htmlFor={`support-chat-${userId}`}
-        className={cn("text-sm", isDark ? "text-slate-200" : "text-foreground")}
-      >
-        Support chat {enabled ? "On" : "Off"}
-      </Label>
     </div>
   );
 }

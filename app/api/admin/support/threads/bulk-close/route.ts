@@ -24,7 +24,6 @@ export async function POST(req: NextRequest) {
     .from("support_threads")
     .update({ status: "closed", updated_at: now })
     .in("id", thread_ids as string[])
-    .is("deleted_at", null)
     .neq("status", "closed")
     .select("id");
 

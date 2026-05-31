@@ -37,7 +37,6 @@ export async function POST(req: NextRequest, context: RouteContext) {
     .select("*")
     .eq("id", threadId)
     .eq("user_id", user.id)
-    .is("deleted_at", null)
     .maybeSingle();
 
   if (threadError) {

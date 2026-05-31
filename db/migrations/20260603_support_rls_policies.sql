@@ -11,10 +11,7 @@ CREATE POLICY "Users select own support threads"
   ON public.support_threads
   FOR SELECT
   TO authenticated
-  USING (
-    auth.uid() = user_id
-    AND deleted_at IS NULL
-  );
+  USING (auth.uid() = user_id);
 
 DROP POLICY IF EXISTS "Users insert own support threads" ON public.support_threads;
 CREATE POLICY "Users insert own support threads"
@@ -28,7 +25,7 @@ CREATE POLICY "Users update own support threads"
   ON public.support_threads
   FOR UPDATE
   TO authenticated
-  USING (auth.uid() = user_id AND deleted_at IS NULL)
+  USING (auth.uid() = user_id)
   WITH CHECK (auth.uid() = user_id);
 
 -- ---------- support_threads: admins ----------
@@ -54,7 +51,6 @@ CREATE POLICY "Users select messages on own threads"
       FROM public.support_threads st
       WHERE st.id = support_messages.thread_id
         AND st.user_id = auth.uid()
-        AND st.deleted_at IS NULL
     )
   );
 
@@ -70,7 +66,6 @@ CREATE POLICY "Users insert messages on own threads"
       FROM public.support_threads st
       WHERE st.id = thread_id
         AND st.user_id = auth.uid()
-        AND st.deleted_at IS NULL
         AND st.status <> 'closed'
     )
   );

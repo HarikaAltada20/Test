@@ -30,8 +30,15 @@ type NotificationRow = {
 
 type Props = {
   isDark?: boolean;
+  /** Creator/brand: open ChatSupport thread */
   onOpenSupportThread?: (threadId: string) => void;
+  /** Admin: navigate to support dashboard thread */
+  onOpenAdminSupportThread?: (threadId: string) => void;
 };
+
+function isSupportNotificationType(type: string): boolean {
+  return type === "support_reply" || type === "support_user_message";
+}
 
 function NotificationIcon({
   type,
@@ -40,7 +47,7 @@ function NotificationIcon({
   type: string;
   isDark: boolean;
 }) {
-  const isSupport = type === "support_reply";
+  const isSupport = isSupportNotificationType(type);
   const Icon = isSupport ? MessageCircle : Megaphone;
 
   return (
@@ -70,7 +77,8 @@ function NotificationCard({
   isDark: boolean;
   onClick: () => void;
 }) {
-  const isSupport = n.notification_type === "support_reply";
+  const isSupport = isSupportNotificationType(n.notification_type);
+  const isAdminSupportMessage = n.notification_type === "support_user_message";
   const createdAt = new Date(n.created_at);
   const relativeTime = formatDistanceToNow(createdAt, { addSuffix: true });
 
@@ -97,7 +105,12 @@ function NotificationCard({
           <div className="flex items-start justify-between gap-2">
             <div className="flex min-w-0 items-center gap-2">
               <span className="truncate text-sm font-semibold">
-                {n.title || (isSupport ? "Support replied" : "Notification")}
+                {n.title ||
+                  (n.notification_type === "support_user_message"
+                    ? "New support message"
+                    : isSupport
+                      ? "Support replied"
+                      : "Notification")}
               </span>
               {!n.is_read && (
                 <span
@@ -144,7 +157,7 @@ function NotificationCard({
                   : "text-purple-600 group-hover:text-purple-700",
               )}
             >
-              View conversation
+              {isAdminSupportMessage ? "Open in support" : "View conversation"}
               <ChevronRight className="h-3.5 w-3.5 transition-transform group-hover:translate-x-0.5" />
             </p>
           )}
@@ -157,12 +170,12 @@ function NotificationCard({
 export function UserNotificationsBell({
   isDark = false,
   onOpenSupportThread,
+  onOpenAdminSupportThread,
 }: Props) {
   const [open, setOpen] = useState(false);
   const [notifications, setNotifications] = useState<NotificationRow[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [loading, setLoading] = useState(false);
-  const [markingAll, setMarkingAll] = useState(false);
 
   const fetchNotifications = useCallback(async () => {
     setLoading(true);
@@ -199,25 +212,19 @@ export function UserNotificationsBell({
     await fetchNotifications();
   };
 
-  const markAllRead = async () => {
-    setMarkingAll(true);
-    try {
-      await fetch("/api/notifications", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ mark_all_read: true }),
-      });
-      await fetchNotifications();
-    } finally {
-      setMarkingAll(false);
-    }
-  };
-
   const handleClick = async (n: NotificationRow) => {
     if (!n.is_read) {
       await markRead([n.id]);
     }
-    if (n.support_thread_id && onOpenSupportThread) {
+    if (!n.support_thread_id) return;
+
+    if (n.notification_type === "support_user_message" && onOpenAdminSupportThread) {
+      onOpenAdminSupportThread(n.support_thread_id);
+      setOpen(false);
+      return;
+    }
+
+    if (onOpenSupportThread) {
       onOpenSupportThread(n.support_thread_id);
       setOpen(false);
     }
@@ -250,37 +257,20 @@ export function UserNotificationsBell({
         >
           <SheetHeader
             className={cn(
-              "flex flex-row items-center justify-between gap-3 px-6 py-4 border-b shrink-0 space-y-0",
+              "px-6 py-4 border-b shrink-0 space-y-0",
               isDark ? "border-slate-700" : "border-slate-200",
             )}
           >
-            <div>
-              <SheetTitle>Notifications</SheetTitle>
-              {unreadCount > 0 && (
-                <p
-                  className={cn(
-                    "text-xs mt-0.5",
-                    isDark ? "text-slate-400" : "text-muted-foreground",
-                  )}
-                >
-                  {unreadCount} unread
-                </p>
-              )}
-            </div>
+            <SheetTitle>Notifications</SheetTitle>
             {unreadCount > 0 && (
-              <Button
-                variant="ghost"
-                size="sm"
-                className="shrink-0 text-xs h-8 text-purple-600 hover:text-purple-700 hover:bg-purple-50"
-                disabled={markingAll}
-                onClick={markAllRead}
-              >
-                {markingAll ? (
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                ) : (
-                  "Mark all read"
+              <p
+                className={cn(
+                  "text-xs mt-0.5",
+                  isDark ? "text-slate-400" : "text-muted-foreground",
                 )}
-              </Button>
+              >
+                {unreadCount} unread
+              </p>
             )}
           </SheetHeader>
 

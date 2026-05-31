@@ -25,7 +25,6 @@ export async function GET() {
       "id, user_id, user_type, status, subject, created_at, updated_at, last_message_at",
     )
     .eq("user_id", user.id)
-    .is("deleted_at", null)
     .order("last_message_at", { ascending: false });
 
   if (listError) {

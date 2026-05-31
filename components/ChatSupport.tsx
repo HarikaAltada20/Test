@@ -11,6 +11,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { SOCIAL_LINKS } from "@/constants/socialLinks";
 import { cn } from "@/lib/utils";
+import { Skeleton } from "@/components/ui/skeleton";
 import { SUPPORT_DISABLED_MESSAGE } from "@/lib/constants/support";
 import {
   formatSenderRoleLabel,
@@ -61,6 +62,7 @@ const ChatSupport: React.FC<ChatProps> = ({
   );
   const [activeThread, setActiveThread] = useState<Thread | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
+  const [loadingThread, setLoadingThread] = useState(!!initialThreadId);
   const { toast } = useToast();
 
   const getInitialMode = (): "light" | "dark" => {
@@ -116,11 +118,16 @@ const ChatSupport: React.FC<ChatProps> = ({
   }, []);
 
   const loadThreadDetail = useCallback(async (threadId: string) => {
-    const res = await fetch(`/api/support/threads/${threadId}`);
-    const data = await res.json();
-    if (res.ok) {
-      setActiveThread(data.thread ?? null);
-      setMessages(data.messages ?? []);
+    setLoadingThread(true);
+    try {
+      const res = await fetch(`/api/support/threads/${threadId}`);
+      const data = await res.json();
+      if (res.ok) {
+        setActiveThread(data.thread ?? null);
+        setMessages(data.messages ?? []);
+      }
+    } finally {
+      setLoadingThread(false);
     }
   }, []);
 
@@ -330,6 +337,8 @@ const ChatSupport: React.FC<ChatProps> = ({
                 onClick={() => {
                   setSelectedThreadId(t.id);
                   setView("thread");
+                  setMessages([]);
+                  setLoadingThread(true);
                 }}
                 className={cn(
                   "w-full text-left px-1 py-3 border-b transition",
@@ -352,6 +361,42 @@ const ChatSupport: React.FC<ChatProps> = ({
     </div>
   );
 
+  const renderThreadSkeleton = () => (
+    <div className="space-y-3 flex-1 min-h-0 overflow-y-auto">
+      {[
+        { align: "start" as const, width: "w-48" },
+        { align: "end" as const, width: "w-56" },
+        { align: "start" as const, width: "w-40" },
+      ].map((item, i) => (
+        <div
+          key={i}
+          className={cn(
+            "flex",
+            item.align === "end" ? "justify-end" : "justify-start",
+          )}
+        >
+          <div className="max-w-[85%] space-y-1.5">
+            {item.align === "start" && (
+              <Skeleton
+                className={cn("h-2.5 w-14", isDark && "bg-slate-700")}
+              />
+            )}
+            <Skeleton
+              className={cn(
+                "h-14 rounded-lg",
+                item.width,
+                isDark && "bg-slate-700",
+              )}
+            />
+            <Skeleton
+              className={cn("h-2 w-20", isDark && "bg-slate-700")}
+            />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+
   const renderThread = () => (
     <div className="flex-1 overflow-y-auto flex flex-col min-h-0">
       {activeThread?.status === "closed" && (
@@ -364,6 +409,9 @@ const ChatSupport: React.FC<ChatProps> = ({
           {CLOSED_THREAD_NOTICE}
         </p>
       )}
+      {loadingThread && messages.length === 0 ? (
+        renderThreadSkeleton()
+      ) : (
       <div className="space-y-3 flex-1 min-h-0 overflow-y-auto">
         {messages.length === 0 ? (
           <p
@@ -411,6 +459,7 @@ const ChatSupport: React.FC<ChatProps> = ({
           ))
         )}
       </div>
+      )}
       {activeThread?.status !== "closed" && (
         <textarea
           placeholder="Type your reply..."

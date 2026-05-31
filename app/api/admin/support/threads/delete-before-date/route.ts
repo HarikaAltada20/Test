@@ -4,7 +4,7 @@ import { createAdminClient } from "@/utils/supabase/admin";
 import { SUPPORT_RETENTION_DAYS } from "@/lib/constants/support";
 import {
   retentionCutoffDate,
-  softDeleteThreadsBeforeDate,
+  deleteThreadsBeforeDate,
 } from "@/lib/support/threads";
 
 export const dynamic = "force-dynamic";
@@ -24,8 +24,8 @@ function resolveBeforeDate(body: {
 }
 
 export async function POST(req: NextRequest) {
-  const { isAdmin, user } = await verifyAdminAccess();
-  if (!isAdmin || !user) {
+  const { isAdmin } = await verifyAdminAccess();
+  if (!isAdmin) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -34,11 +34,7 @@ export async function POST(req: NextRequest) {
 
   const supabase = createAdminClient();
   try {
-    const deleted_count = await softDeleteThreadsBeforeDate(
-      supabase,
-      before,
-      user.id,
-    );
+    const deleted_count = await deleteThreadsBeforeDate(supabase, before);
     return NextResponse.json({ success: true, deleted_count });
   } catch (e: unknown) {
     const message = e instanceof Error ? e.message : "Delete failed";

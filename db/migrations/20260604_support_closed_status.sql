@@ -20,7 +20,7 @@ DECLARE
 BEGIN
   SELECT * INTO v_thread
   FROM public.support_threads
-  WHERE id = p_thread_id AND deleted_at IS NULL;
+  WHERE id = p_thread_id;
 
   IF NOT FOUND THEN
     RAISE EXCEPTION 'thread_not_found' USING ERRCODE = 'P0002';

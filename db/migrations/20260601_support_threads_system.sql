@@ -31,22 +31,14 @@ CREATE TABLE IF NOT EXISTS public.support_threads (
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now(),
   last_message_at timestamptz NOT NULL DEFAULT now(),
-  deleted_at timestamptz,
-  deleted_by uuid REFERENCES public.users (id),
   CONSTRAINT support_threads_pkey PRIMARY KEY (id)
 );
 
 CREATE INDEX IF NOT EXISTS idx_support_threads_user_last_message
-  ON public.support_threads (user_id, last_message_at DESC)
-  WHERE deleted_at IS NULL;
+  ON public.support_threads (user_id, last_message_at DESC);
 
 CREATE INDEX IF NOT EXISTS idx_support_threads_last_message
-  ON public.support_threads (last_message_at)
-  WHERE deleted_at IS NULL;
-
-CREATE INDEX IF NOT EXISTS idx_support_threads_deleted_at
-  ON public.support_threads (deleted_at)
-  WHERE deleted_at IS NULL;
+  ON public.support_threads (last_message_at);
 
 -- support_messages
 CREATE TABLE IF NOT EXISTS public.support_messages (
@@ -150,7 +142,7 @@ DECLARE
 BEGIN
   SELECT * INTO v_thread
   FROM public.support_threads
-  WHERE id = p_thread_id AND deleted_at IS NULL;
+  WHERE id = p_thread_id;
 
   IF NOT FOUND THEN
     RAISE EXCEPTION 'thread_not_found' USING ERRCODE = 'P0002';

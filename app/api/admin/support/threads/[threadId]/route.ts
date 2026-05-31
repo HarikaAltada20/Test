@@ -27,7 +27,6 @@ export async function GET(_req: NextRequest, context: RouteContext) {
     `,
     )
     .eq("id", threadId)
-    .is("deleted_at", null)
     .maybeSingle();
 
   if (threadError) {
@@ -68,7 +67,6 @@ export async function PATCH(req: NextRequest, context: RouteContext) {
     .from("support_threads")
     .update({ status, updated_at: new Date().toISOString() })
     .eq("id", threadId)
-    .is("deleted_at", null)
     .select()
     .single();
 
@@ -83,8 +81,8 @@ export async function PATCH(req: NextRequest, context: RouteContext) {
 }
 
 export async function DELETE(_req: NextRequest, context: RouteContext) {
-  const { isAdmin, user } = await verifyAdminAccess();
-  if (!isAdmin || !user) {
+  const { isAdmin } = await verifyAdminAccess();
+  if (!isAdmin) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -93,13 +91,8 @@ export async function DELETE(_req: NextRequest, context: RouteContext) {
 
   const { data, error } = await supabase
     .from("support_threads")
-    .update({
-      deleted_at: new Date().toISOString(),
-      deleted_by: user.id,
-      updated_at: new Date().toISOString(),
-    })
+    .delete()
     .eq("id", threadId)
-    .is("deleted_at", null)
     .select("id")
     .maybeSingle();
 

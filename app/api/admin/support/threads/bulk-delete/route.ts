@@ -1,13 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { verifyAdminAccess } from "@/utils/admin-auth";
 import { createAdminClient } from "@/utils/supabase/admin";
-import { softDeleteThreads } from "@/lib/support/threads";
+import { deleteThreads } from "@/lib/support/threads";
 
 export const dynamic = "force-dynamic";
 
 export async function POST(req: NextRequest) {
-  const { isAdmin, user } = await verifyAdminAccess();
-  if (!isAdmin || !user) {
+  const { isAdmin } = await verifyAdminAccess();
+  if (!isAdmin) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -21,10 +21,9 @@ export async function POST(req: NextRequest) {
 
   const supabase = createAdminClient();
   try {
-    const deleted_count = await softDeleteThreads(
+    const deleted_count = await deleteThreads(
       supabase,
       thread_ids as string[],
-      user.id,
     );
     return NextResponse.json({ success: true, deleted_count });
   } catch (e: unknown) {
