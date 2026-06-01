@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   X,
   ExternalLink,
@@ -63,6 +63,7 @@ const ChatSupport: React.FC<ChatProps> = ({
   const [activeThread, setActiveThread] = useState<Thread | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [loadingThread, setLoadingThread] = useState(!!initialThreadId);
+  const sendInFlightRef = useRef(false);
   const { toast } = useToast();
 
   const getInitialMode = (): "light" | "dark" => {
@@ -177,6 +178,9 @@ const ChatSupport: React.FC<ChatProps> = ({
       return;
     }
 
+    if (sendInFlightRef.current) return;
+
+    sendInFlightRef.current = true;
     setLoading(true);
     try {
       const res = canReplyInThread
@@ -220,6 +224,7 @@ const ChatSupport: React.FC<ChatProps> = ({
         variant: "destructive",
       });
     } finally {
+      sendInFlightRef.current = false;
       setLoading(false);
     }
   };

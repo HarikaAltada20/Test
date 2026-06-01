@@ -1,6 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAuthenticatedSupportUser } from "@/lib/support/auth";
 import { supportDbForUser } from "@/lib/support/supabase-for-user";
+import {
+  MESSAGE_SELECT_COLUMNS,
+  SUPPORT_MESSAGES_TABLE,
+  mapQueryRowsToMessages,
+} from "@/lib/support/queries-messages";
 
 export const dynamic = "force-dynamic";
 
@@ -28,9 +33,9 @@ export async function GET(_req: NextRequest, context: RouteContext) {
     return NextResponse.json({ error: "Thread not found" }, { status: 404 });
   }
 
-  const { data: messages, error: msgError } = await supabase
-    .from("support_messages")
-    .select("*")
+  const { data: messageRows, error: msgError } = await supabase
+    .from(SUPPORT_MESSAGES_TABLE)
+    .select(MESSAGE_SELECT_COLUMNS)
     .eq("thread_id", threadId)
     .order("created_at", { ascending: true });
 
@@ -38,5 +43,8 @@ export async function GET(_req: NextRequest, context: RouteContext) {
     return NextResponse.json({ error: msgError.message }, { status: 500 });
   }
 
-  return NextResponse.json({ thread, messages: messages ?? [] });
+  return NextResponse.json({
+    thread,
+    messages: mapQueryRowsToMessages(messageRows),
+  });
 }

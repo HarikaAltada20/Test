@@ -1,6 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { verifyAdminAccess } from "@/utils/admin-auth";
 import { createAdminClient } from "@/utils/supabase/admin";
+import {
+  MESSAGE_SELECT_COLUMNS,
+  SUPPORT_MESSAGES_TABLE,
+  mapQueryRowToMessage,
+} from "@/lib/support/queries-messages";
 
 export const dynamic = "force-dynamic";
 
@@ -81,15 +86,16 @@ export async function GET(req: NextRequest) {
   let lastMessages: Record<string, string> = {};
   if (threadIds.length > 0) {
     const { data: msgs } = await supabase
-      .from("support_messages")
-      .select("thread_id, body, created_at, sender_role")
+      .from(SUPPORT_MESSAGES_TABLE)
+      .select(MESSAGE_SELECT_COLUMNS)
       .in("thread_id", threadIds)
       .order("created_at", { ascending: false });
 
     for (const m of msgs ?? []) {
+      const message = mapQueryRowToMessage(m);
       // Show the latest customer message (creator/advertiser), not support/admin reply.
-      if (!lastMessages[m.thread_id] && m.sender_role !== "admin") {
-        lastMessages[m.thread_id] = m.body;
+      if (!lastMessages[message.thread_id] && message.sender_role !== "admin") {
+        lastMessages[message.thread_id] = message.body;
       }
     }
   }

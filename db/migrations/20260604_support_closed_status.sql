@@ -30,8 +30,8 @@ BEGIN
     RAISE EXCEPTION 'thread_closed' USING ERRCODE = 'P0002';
   END IF;
 
-  INSERT INTO public.support_messages (thread_id, sender_role, sender_user_id, body)
-  VALUES (p_thread_id, 'admin', p_admin_user_id, p_body)
+  INSERT INTO public.queries (thread_id, user_id, user_type, query_text)
+  VALUES (p_thread_id, p_admin_user_id, 'admin', p_body)
   RETURNING id INTO v_message_id;
 
   v_new_status := CASE WHEN p_close_thread THEN 'closed' ELSE 'replied' END;

@@ -9,6 +9,13 @@ import {
   SUPPORT_RATE_LIMIT_THREADS_PER_DAY,
 } from "@/lib/constants/support";
 import { customerSenderRole } from "@/lib/support/sender-role";
+import { notifyAdminsOfUserSupportMessage } from "@/lib/support/admin-notifications";
+import {
+  MESSAGE_SELECT_COLUMNS,
+  SUPPORT_MESSAGES_TABLE,
+  mapQueryRowToMessage,
+  messageInsertPayload,
+} from "@/lib/support/queries-messages";
 
 interface QueryRequestBody {
   email: string;
@@ -98,23 +105,35 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const { data: message, error: insertError } = await db
-      .from("support_messages")
-      .insert({
-        thread_id: thread.id,
-        sender_role: customerSenderRole(user.user_type),
-        sender_user_id: user.id,
-        body: messageBody,
-      })
-      .select()
+    const { data: messageRow, error: insertError } = await db
+      .from(SUPPORT_MESSAGES_TABLE)
+      .insert(
+        messageInsertPayload({
+          thread_id: thread.id,
+          sender_role: customerSenderRole(user.user_type),
+          sender_user_id: user.id,
+          body: messageBody,
+        }),
+      )
+      .select(MESSAGE_SELECT_COLUMNS)
       .single();
 
-    if (insertError) {
+    if (insertError || !messageRow) {
       return NextResponse.json(
-        { success: false, error: insertError.message },
+        { success: false, error: insertError?.message || "Failed to create message" },
         { status: 500 },
       );
     }
+
+    const message = mapQueryRowToMessage(messageRow);
+
+    await notifyAdminsOfUserSupportMessage({
+      messageId: message.id,
+      threadId: thread.id,
+      body: messageBody,
+      senderRole: customerSenderRole(user.user_type),
+      threadUserId: user.id,
+    });
 
     return NextResponse.json({
       success: true,

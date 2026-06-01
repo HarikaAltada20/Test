@@ -1208,9 +1208,9 @@ export default function ContestDetailClient({
   const showContestTrustScoreRequiredCard =
     isVideoContestFormat && contestMinTrustScore !== null;
 
-  /** Per-creator trust score in creator-wise table — admin only, video contests. */
+  /** Per-creator trust score in creator-wise table — admin only, video contests with a trust requirement. */
   const showCreatorWiseTrustScoreColumn =
-    isAdminView && isVideoContestFormat;
+    isAdminView && isVideoContestFormat && contestMinTrustScore !== null;
 
   // Contest-level payout adjustment for dual_rewards granted display
   const contestPayoutAdjPct =

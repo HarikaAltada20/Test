@@ -212,9 +212,25 @@ export function UserNotificationsBell({
     await fetchNotifications();
   };
 
+  const markThreadRead = async (threadId: string) => {
+    await fetch("/api/notifications", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ support_thread_id: threadId }),
+    });
+    await fetchNotifications();
+  };
+
   const handleClick = async (n: NotificationRow) => {
     if (!n.is_read) {
-      await markRead([n.id]);
+      if (
+        n.notification_type === "support_user_message" &&
+        n.support_thread_id
+      ) {
+        await markThreadRead(n.support_thread_id);
+      } else {
+        await markRead([n.id]);
+      }
     }
     if (!n.support_thread_id) return;
 

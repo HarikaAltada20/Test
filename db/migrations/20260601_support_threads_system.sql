@@ -1,4 +1,5 @@
--- In-built support system: threads, messages, notifications, user chat flag
+-- In-built support system: threads, messages (queries table), notifications, user chat flag
+-- Messages live in public.queries: user_id = sender, user_type = sender role, query_text = body.
 
 -- Notification type enum (includes support_reply)
 DO $$
@@ -17,9 +18,8 @@ END $$;
 -- users.support_chat_* columns
 ALTER TABLE public.users
   ADD COLUMN IF NOT EXISTS support_chat_enabled boolean NOT NULL DEFAULT true,
-  ADD COLUMN IF NOT EXISTS support_chat_disabled_at timestamptz,
-  ADD COLUMN IF NOT EXISTS support_chat_disabled_by uuid REFERENCES public.users (id),
-  ADD COLUMN IF NOT EXISTS support_chat_disable_reason text;
+  ADD COLUMN IF NOT EXISTS support_chat_disabled_at timestamptz;
+
 
 -- support_threads
 CREATE TABLE IF NOT EXISTS public.support_threads (
@@ -40,19 +40,12 @@ CREATE INDEX IF NOT EXISTS idx_support_threads_user_last_message
 CREATE INDEX IF NOT EXISTS idx_support_threads_last_message
   ON public.support_threads (last_message_at);
 
--- support_messages
-CREATE TABLE IF NOT EXISTS public.support_messages (
-  id uuid NOT NULL DEFAULT gen_random_uuid(),
-  thread_id uuid NOT NULL REFERENCES public.support_threads (id) ON DELETE CASCADE,
-  sender_role text NOT NULL CHECK (sender_role IN ('creator', 'advertiser', 'admin')),
-  sender_user_id uuid NOT NULL REFERENCES public.users (id),
-  body text NOT NULL,
-  created_at timestamptz NOT NULL DEFAULT now(),
-  CONSTRAINT support_messages_pkey PRIMARY KEY (id)
-);
+-- queries: add thread_id for support chat messages
+ALTER TABLE public.queries
+  ADD COLUMN IF NOT EXISTS thread_id uuid REFERENCES public.support_threads (id) ON DELETE CASCADE;
 
-CREATE INDEX IF NOT EXISTS idx_support_messages_thread_created
-  ON public.support_messages (thread_id, created_at ASC);
+CREATE INDEX IF NOT EXISTS idx_queries_thread_created
+  ON public.queries (thread_id, created_at ASC);
 
 -- user_notifications
 CREATE TABLE IF NOT EXISTS public.user_notifications (
@@ -77,7 +70,7 @@ CREATE INDEX IF NOT EXISTS idx_user_notifications_user_unread
   ON public.user_notifications (user_id)
   WHERE is_read = false;
 
--- Backfill legacy queries into support_threads + support_messages
+-- Backfill legacy queries into support_threads
 INSERT INTO public.support_threads (
   id,
   user_id,
@@ -99,28 +92,18 @@ SELECT
   q.created_at
 FROM public.queries q
 WHERE q.user_id IS NOT NULL
+  AND q.query_text IS NOT NULL
   AND NOT EXISTS (
     SELECT 1 FROM public.support_threads st WHERE st.id = q.id
   );
 
-INSERT INTO public.support_messages (
-  thread_id,
-  sender_role,
-  sender_user_id,
-  body,
-  created_at
-)
-SELECT
-  q.id,
-  COALESCE(NULLIF(q.user_type, ''), 'creator'),
-  q.user_id,
-  q.query_text,
-  q.created_at
-FROM public.queries q
-WHERE q.user_id IS NOT NULL
-  AND q.query_text IS NOT NULL
-  AND NOT EXISTS (
-    SELECT 1 FROM public.support_messages sm WHERE sm.thread_id = q.id
+-- Link legacy query rows to their thread (first message: thread_id = id)
+UPDATE public.queries q
+SET thread_id = q.id
+WHERE q.thread_id IS NULL
+  AND q.user_id IS NOT NULL
+  AND EXISTS (
+    SELECT 1 FROM public.support_threads st WHERE st.id = q.id
   );
 
 -- Transactional admin reply (message + thread update + notification)
@@ -148,8 +131,8 @@ BEGIN
     RAISE EXCEPTION 'thread_not_found' USING ERRCODE = 'P0002';
   END IF;
 
-  INSERT INTO public.support_messages (thread_id, sender_role, sender_user_id, body)
-  VALUES (p_thread_id, 'admin', p_admin_user_id, p_body)
+  INSERT INTO public.queries (thread_id, user_id, user_type, query_text)
+  VALUES (p_thread_id, p_admin_user_id, 'admin', p_body)
   RETURNING id INTO v_message_id;
 
   UPDATE public.support_threads

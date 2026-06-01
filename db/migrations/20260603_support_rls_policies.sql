@@ -1,7 +1,7 @@
 -- Row Level Security for support chat (authenticated users + admins)
 
 ALTER TABLE public.support_threads ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.support_messages ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.queries ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.user_notifications ENABLE ROW LEVEL SECURITY;
 
 -- ---------- support_threads: customers ----------
@@ -38,29 +38,31 @@ CREATE POLICY "Admins manage all support threads"
   USING (public.get_user_role() = 'admin')
   WITH CHECK (public.get_user_role() = 'admin');
 
--- ---------- support_messages: customers ----------
+-- ---------- queries (support messages): customers ----------
 
-DROP POLICY IF EXISTS "Users select messages on own threads" ON public.support_messages;
+DROP POLICY IF EXISTS "Users select messages on own threads" ON public.queries;
 CREATE POLICY "Users select messages on own threads"
-  ON public.support_messages
+  ON public.queries
   FOR SELECT
   TO authenticated
   USING (
-    EXISTS (
+    thread_id IS NOT NULL
+    AND EXISTS (
       SELECT 1
       FROM public.support_threads st
-      WHERE st.id = support_messages.thread_id
+      WHERE st.id = queries.thread_id
         AND st.user_id = auth.uid()
     )
   );
 
-DROP POLICY IF EXISTS "Users insert messages on own threads" ON public.support_messages;
+DROP POLICY IF EXISTS "Users insert messages on own threads" ON public.queries;
 CREATE POLICY "Users insert messages on own threads"
-  ON public.support_messages
+  ON public.queries
   FOR INSERT
   TO authenticated
   WITH CHECK (
-    sender_user_id = auth.uid()
+    thread_id IS NOT NULL
+    AND user_id = auth.uid()
     AND EXISTS (
       SELECT 1
       FROM public.support_threads st
@@ -70,11 +72,11 @@ CREATE POLICY "Users insert messages on own threads"
     )
   );
 
--- ---------- support_messages: admins ----------
+-- ---------- queries (support messages): admins ----------
 
-DROP POLICY IF EXISTS "Admins manage all support messages" ON public.support_messages;
+DROP POLICY IF EXISTS "Admins manage all support messages" ON public.queries;
 CREATE POLICY "Admins manage all support messages"
-  ON public.support_messages
+  ON public.queries
   FOR ALL
   TO authenticated
   USING (public.get_user_role() = 'admin')
@@ -100,5 +102,5 @@ CREATE POLICY "Users update own notifications"
 -- Inserts for user_notifications: support_admin_reply (SECURITY DEFINER) + service_role only
 
 GRANT SELECT, INSERT, UPDATE ON public.support_threads TO authenticated;
-GRANT SELECT, INSERT, UPDATE ON public.support_messages TO authenticated;
+GRANT SELECT, INSERT, UPDATE ON public.queries TO authenticated;
 GRANT SELECT, UPDATE ON public.user_notifications TO authenticated;

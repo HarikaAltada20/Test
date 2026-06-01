@@ -16,7 +16,7 @@ export const SUPPORT_RATE_LIMIT_MESSAGES_PER_THREAD_PER_DAY = parseInt(
 );
 
 export const SUPPORT_DISABLED_MESSAGE =
-  "Support chat is unavailable for your account. Please email support@goc.com for assistance.";
+  "Support chat is unavailable for your account. Please email for assistance.";
 
 export type SupportThreadStatus = "open" | "replied" | "closed";
 

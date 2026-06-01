@@ -195,6 +195,11 @@ export default function SupportClient({
       setDetailThread(data.thread);
       setDetailMessages(data.messages ?? []);
       setDetailId(threadId);
+      void fetch("/api/notifications", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ support_thread_id: threadId }),
+      });
     }
   }, []);
 

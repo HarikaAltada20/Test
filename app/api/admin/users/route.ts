@@ -72,7 +72,8 @@ export async function GET(req: NextRequest) {
       languages,
       categories,
       subcategories,
-      interests
+      interests,
+      trust_score_metrics
     `;
     let creatorProfiles: any[] = [];
     let profilesFrom = 0;

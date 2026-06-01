@@ -4,6 +4,13 @@ import { supportDbForUser } from "@/lib/support/supabase-for-user";
 
 export const dynamic = "force-dynamic";
 
+const NOTIFICATION_SELECT =
+  "id, notification_type, title, message_resolved, is_read, read_at, created_at, support_thread_id";
+
+function isAdminUser(userType: string): boolean {
+  return userType === "admin";
+}
+
 export async function GET(req: NextRequest) {
   const { user, error, status } = await getAuthenticatedSupportUser();
   if (!user) {
@@ -16,24 +23,41 @@ export async function GET(req: NextRequest) {
   );
 
   const supabase = supportDbForUser(user);
-  const { data, error: listError } = await supabase
+
+  let listQuery = supabase
     .from("user_notifications")
-    .select(
-      "id, notification_type, title, message_resolved, is_read, read_at, created_at, support_thread_id",
-    )
-    .eq("user_id", user.id)
+    .select(NOTIFICATION_SELECT)
     .order("created_at", { ascending: false })
     .limit(limit);
+
+  if (isAdminUser(user.user_type)) {
+    listQuery = listQuery.or(
+      `notification_type.eq.support_user_message,user_id.eq.${user.id}`,
+    );
+  } else {
+    listQuery = listQuery.eq("user_id", user.id);
+  }
+
+  const { data, error: listError } = await listQuery;
 
   if (listError) {
     return NextResponse.json({ error: listError.message }, { status: 500 });
   }
 
-  const { count: unreadCount } = await supabase
+  let unreadQuery = supabase
     .from("user_notifications")
     .select("id", { count: "exact", head: true })
-    .eq("user_id", user.id)
     .eq("is_read", false);
+
+  if (isAdminUser(user.user_type)) {
+    unreadQuery = unreadQuery.or(
+      `notification_type.eq.support_user_message,user_id.eq.${user.id}`,
+    );
+  } else {
+    unreadQuery = unreadQuery.eq("user_id", user.id);
+  }
+
+  const { count: unreadCount } = await unreadQuery;
 
   return NextResponse.json({
     notifications: data ?? [],
@@ -47,16 +71,47 @@ export async function PATCH(req: NextRequest) {
     return NextResponse.json({ error }, { status });
   }
 
-  const { notification_ids, mark_all_read } = await req.json();
+  const { notification_ids, mark_all_read, support_thread_id } =
+    await req.json();
   const supabase = supportDbForUser(user);
   const now = new Date().toISOString();
 
-  if (mark_all_read) {
-    const { error: updateError } = await supabase
+  if (support_thread_id && typeof support_thread_id === "string") {
+    let updateQuery = supabase
       .from("user_notifications")
       .update({ is_read: true, read_at: now })
-      .eq("user_id", user.id)
+      .eq("support_thread_id", support_thread_id)
       .eq("is_read", false);
+
+    if (isAdminUser(user.user_type)) {
+      updateQuery = updateQuery.eq("notification_type", "support_user_message");
+    } else {
+      updateQuery = updateQuery.eq("user_id", user.id);
+    }
+
+    const { error: updateError } = await updateQuery;
+
+    if (updateError) {
+      return NextResponse.json({ error: updateError.message }, { status: 500 });
+    }
+    return NextResponse.json({ success: true });
+  }
+
+  if (mark_all_read) {
+    let updateQuery = supabase
+      .from("user_notifications")
+      .update({ is_read: true, read_at: now })
+      .eq("is_read", false);
+
+    if (isAdminUser(user.user_type)) {
+      updateQuery = updateQuery.or(
+        `notification_type.eq.support_user_message,user_id.eq.${user.id}`,
+      );
+    } else {
+      updateQuery = updateQuery.eq("user_id", user.id);
+    }
+
+    const { error: updateError } = await updateQuery;
 
     if (updateError) {
       return NextResponse.json({ error: updateError.message }, { status: 500 });
@@ -71,11 +126,16 @@ export async function PATCH(req: NextRequest) {
     );
   }
 
-  const { error: updateError } = await supabase
+  let updateQuery = supabase
     .from("user_notifications")
     .update({ is_read: true, read_at: now })
-    .eq("user_id", user.id)
     .in("id", notification_ids);
+
+  if (!isAdminUser(user.user_type)) {
+    updateQuery = updateQuery.eq("user_id", user.id);
+  }
+
+  const { error: updateError } = await updateQuery;
 
   if (updateError) {
     return NextResponse.json({ error: updateError.message }, { status: 500 });

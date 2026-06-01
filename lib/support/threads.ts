@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { SUPPORT_RETENTION_DAYS } from "@/lib/constants/support";
 import { SUPPORT_ADMIN_SENDER_ROLE } from "@/lib/support/sender-role";
+import { SUPPORT_MESSAGES_TABLE } from "@/lib/support/queries-messages";
 
 export type SupportThreadRow = {
   id: string;
@@ -63,11 +64,11 @@ export async function countUserMessagesInThreadToday(
   start.setUTCHours(0, 0, 0, 0);
 
   const { count } = await supabase
-    .from("support_messages")
+    .from(SUPPORT_MESSAGES_TABLE)
     .select("id", { count: "exact", head: true })
     .eq("thread_id", threadId)
-    .eq("sender_user_id", userId)
-    .neq("sender_role", SUPPORT_ADMIN_SENDER_ROLE)
+    .eq("user_id", userId)
+    .neq("user_type", SUPPORT_ADMIN_SENDER_ROLE)
     .gte("created_at", start.toISOString());
 
   return count ?? 0;

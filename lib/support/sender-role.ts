@@ -1,10 +1,8 @@
-/** Role stored on support_messages for platform staff replies */
+/** Role stored in queries.user_type for platform staff replies */
 export const SUPPORT_ADMIN_SENDER_ROLE = "admin" as const;
 
-const CUSTOMER_SENDER_ROLES = new Set(["creator", "advertiser"]);
-
 /**
- * Maps users.user_type to the value stored in support_messages.sender_role
+ * Maps users.user_type to the value stored in queries.user_type
  * for thread-owner messages (not admin).
  */
 export function customerSenderRole(

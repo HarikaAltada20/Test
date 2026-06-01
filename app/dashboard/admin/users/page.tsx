@@ -55,7 +55,7 @@ import {
   getSubscriptionPlanById,
 } from "@/lib/subscription-utils-client";
 import REGIONS_AND_COUNTRIES_DATA from "@/data/regions-and-countries.json";
-import { SupportChatToggle } from "@/components/admin/SupportChatToggle";
+import { getCreatorTrustScoreFromMetrics } from "@/lib/trust-score";
 
 const UsersMap = dynamic(
   () => import("./UsersMap").then((m) => ({ default: m.UsersMap })),
@@ -96,6 +96,7 @@ type CreatorProfile = {
   categories?: any | null;
   subcategories?: any | null;
   interests?: string[] | any | null;
+  trust_score_metrics?: unknown | null;
 };
 
 type User = {
@@ -162,6 +163,20 @@ function getGeoField(
   if (typeof value !== "string") return null;
   const trimmed = value.trim();
   return trimmed || null;
+}
+
+function getCreatorProfileFromRow(user: User): CreatorProfile | null {
+  if (!user.creator_profiles) return null;
+  return Array.isArray(user.creator_profiles)
+    ? user.creator_profiles.length > 0
+      ? user.creator_profiles[0]
+      : null
+    : user.creator_profiles;
+}
+
+function getCreatorTrustScoreForRow(user: User): number {
+  const profile = getCreatorProfileFromRow(user);
+  return getCreatorTrustScoreFromMetrics(profile, user.id) ?? 100;
 }
 
 function SubcategoriesCell({
@@ -304,7 +319,6 @@ const allColumns = {
     { id: "full_name", label: "Full Name" },
     { id: "profile", label: "Profile" },
     { id: "email", label: "Email" },
-    { id: "support_chat", label: "Support Chat" },
     { id: "user_type", label: "User Type" },
     { id: "referral_code", label: "Referral Code" },
     { id: "referred_by", label: "Referred By" },
@@ -326,7 +340,6 @@ const allColumns = {
     { id: "full_name", label: "Full Name" },
     { id: "profile", label: "Profile" },
     { id: "email", label: "Email" },
-    { id: "support_chat", label: "Support Chat" },
     { id: "username", label: "Username" },
     { id: "company_name", label: "Company Name" },
     { id: "website_url", label: "Website URL" },
@@ -343,7 +356,6 @@ const allColumns = {
     { id: "full_name", label: "Full Name" },
     { id: "profile", label: "Profile" },
     { id: "email", label: "Email" },
-    { id: "support_chat", label: "Support Chat" },
     { id: "username", label: "Username" },
     { id: "youtube_account", label: "YouTube Account" },
     { id: "instagram_account", label: "Instagram Account" },
@@ -356,6 +368,7 @@ const allColumns = {
     { id: "withdrawable_balance", label: "Withdrawable Balance" },
     { id: "total_submissions_made", label: "Total Submissions Made" },
     { id: "total_submissions_won", label: "Total Submissions Won" },
+    { id: "trust_score", label: "Trust Score" },
     { id: "date_of_birth", label: "Date of Birth" },
     { id: "gender", label: "Gender" },
     { id: "country", label: "Country" },
@@ -806,6 +819,8 @@ export default function AdminUsersPage() {
           return profiles[0]?.total_submissions_won;
         }
         return null;
+      case "trust_score":
+        return getCreatorTrustScoreForRow(row);
       case "date_of_birth":
         if (row.creator_profiles) {
           const profiles = Array.isArray(row.creator_profiles)
@@ -1714,6 +1729,10 @@ export default function AdminUsersPage() {
               aValue = aProfile?.total_submissions_won || 0;
               bValue = bProfile?.total_submissions_won || 0;
               break;
+            case "trust_score":
+              aValue = getCreatorTrustScoreForRow(a);
+              bValue = getCreatorTrustScoreForRow(b);
+              break;
             case "date_of_birth":
               // Convert dates to timestamps for proper chronological sorting
               // Use Number.MAX_SAFE_INTEGER as sentinel for empty dates to ensure they sort last
@@ -1897,6 +1916,7 @@ export default function AdminUsersPage() {
           "total_views",
           "total_submissions_made",
           "total_submissions_won",
+          "trust_score",
           // Add "rankings" here when the field is available
         ];
 
@@ -1912,6 +1932,7 @@ export default function AdminUsersPage() {
           "total_views",
           "total_submissions_made",
           "total_submissions_won",
+          "trust_score",
           // Add "rankings" here when the field is available
         ];
 
@@ -2505,11 +2526,6 @@ export default function AdminUsersPage() {
                     )}
                     {isColumnVisible("email") && (
                       <SortableHeader columnId="email" label="Email" />
-                    )}
-                    {isColumnVisible("support_chat") && (
-                      <TableHead className="whitespace-nowrap border-r">
-                        Support Chat
-                      </TableHead>
                     )}
                     {activeTab === "advertisers" && (
                       <>
@@ -3182,6 +3198,12 @@ export default function AdminUsersPage() {
                               </DropdownMenu>
                             </div>
                           </TableHead>
+                        )}
+                        {isColumnVisible("trust_score") && (
+                          <SortableHeader
+                            columnId="trust_score"
+                            label="Trust Score"
+                          />
                         )}
                         {isColumnVisible("date_of_birth") && (
                           <SortableHeader
@@ -4228,6 +4250,11 @@ export default function AdminUsersPage() {
                                   {creatorProfile?.total_submissions_won || 0}
                                 </TableCell>
                               )}
+                              {isColumnVisible("trust_score") && (
+                                <TableCell className="whitespace-nowrap border-r">
+                                  {getCreatorTrustScoreForRow(r)}
+                                </TableCell>
+                              )}
                               {isColumnVisible("date_of_birth") && (
                                 <TableCell className="whitespace-nowrap border-r">
                                   {creatorProfile?.date_of_birth
@@ -4834,6 +4861,7 @@ export default function AdminUsersPage() {
                       "total_views",
                       "total_submissions_made",
                       "total_submissions_won",
+                      "trust_score",
                     ];
                     const dateFields = [
                       "created_at",
@@ -5336,6 +5364,7 @@ export default function AdminUsersPage() {
                           "total_views",
                           "total_submissions_made",
                           "total_submissions_won",
+                          "trust_score",
                         ];
                         const moneyFields = [
                           "total_money_spent",

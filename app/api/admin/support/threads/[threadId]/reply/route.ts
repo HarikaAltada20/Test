@@ -2,6 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { verifyAdminAccess } from "@/utils/admin-auth";
 import { createAdminClient } from "@/utils/supabase/admin";
 import { normalizeSupportBody } from "@/lib/support/validation";
+import {
+  MESSAGE_SELECT_COLUMNS,
+  SUPPORT_MESSAGES_TABLE,
+  mapQueryRowToMessage,
+} from "@/lib/support/queries-messages";
 
 export const dynamic = "force-dynamic";
 
@@ -75,11 +80,13 @@ export async function POST(req: NextRequest, context: RouteContext) {
     last_message_at: string;
   };
 
-  const { data: message } = await supabase
-    .from("support_messages")
-    .select("id, body, created_at, sender_role")
+  const { data: messageRow } = await supabase
+    .from(SUPPORT_MESSAGES_TABLE)
+    .select(MESSAGE_SELECT_COLUMNS)
     .eq("id", result.message_id)
     .single();
+
+  const message = messageRow ? mapQueryRowToMessage(messageRow) : null;
 
   let finalStatus = result.status;
   if (closeThread && finalStatus !== "closed") {

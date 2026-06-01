@@ -9,6 +9,13 @@ import {
 } from "@/lib/support/threads";
 import { normalizeSupportBody } from "@/lib/support/validation";
 import { customerSenderRole } from "@/lib/support/sender-role";
+import { notifyAdminsOfUserSupportMessage } from "@/lib/support/admin-notifications";
+import {
+  MESSAGE_SELECT_COLUMNS,
+  SUPPORT_MESSAGES_TABLE,
+  mapQueryRowToMessage,
+  messageInsertPayload,
+} from "@/lib/support/queries-messages";
 
 export const dynamic = "force-dynamic";
 
@@ -84,20 +91,32 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const { data: message, error: msgError } = await supabase
-    .from("support_messages")
-    .insert({
-      thread_id: thread.id,
-      sender_role: customerSenderRole(user.user_type),
-      sender_user_id: user.id,
-      body,
-    })
-    .select()
+  const { data: messageRow, error: msgError } = await supabase
+    .from(SUPPORT_MESSAGES_TABLE)
+    .insert(
+      messageInsertPayload({
+        thread_id: thread.id,
+        sender_role: customerSenderRole(user.user_type),
+        sender_user_id: user.id,
+        body,
+      }),
+    )
+    .select(MESSAGE_SELECT_COLUMNS)
     .single();
 
-  if (msgError) {
-    return NextResponse.json({ error: msgError.message }, { status: 500 });
+  if (msgError || !messageRow) {
+    return NextResponse.json({ error: msgError?.message || "Failed to create message" }, { status: 500 });
   }
+
+  const message = mapQueryRowToMessage(messageRow);
+
+  await notifyAdminsOfUserSupportMessage({
+    messageId: message.id,
+    threadId: thread.id,
+    body,
+    senderRole: customerSenderRole(user.user_type),
+    threadUserId: user.id,
+  });
 
   return NextResponse.json({ thread, message, continued: false });
 }
