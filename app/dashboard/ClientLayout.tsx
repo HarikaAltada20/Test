@@ -1526,6 +1526,7 @@ function DashboardContent({
                   {userRole && (
                     <UserNotificationsBell
                       isDark={currentMode === "dark"}
+                      userType={userRole}
                       onOpenSupportThread={
                         userRole === "admin" ? undefined : openSupportThread
                       }

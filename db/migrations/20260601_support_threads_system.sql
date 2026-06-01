@@ -60,6 +60,7 @@ CREATE TABLE IF NOT EXISTS public.user_notifications (
   is_read boolean NOT NULL DEFAULT false,
   read_at timestamptz,
   created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now(),
   CONSTRAINT user_notifications_pkey PRIMARY KEY (id)
 );
 

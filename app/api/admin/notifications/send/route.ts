@@ -42,6 +42,7 @@ export async function POST(req: NextRequest) {
     sendTiming?: SendTiming;
     scheduledAt?: string | null;
     timezoneLabel?: string;
+    contestId?: string | null;
   };
 
   try {
@@ -132,6 +133,21 @@ export async function POST(req: NextRequest) {
   const db = createAdminClient();
   const initialStatus = sendTiming === "scheduled" ? "scheduled" : "pending";
 
+  let contestId: string | null = body.contestId?.trim() || null;
+  if (contestId) {
+    const { data: contestRow, error: contestError } = await db
+      .from("contests")
+      .select("id")
+      .eq("id", contestId)
+      .maybeSingle();
+    if (contestError || !contestRow) {
+      return NextResponse.json(
+        { error: "Contest not found" },
+        { status: 400 },
+      );
+    }
+  }
+
   const { data: campaign, error: insertError } = await db
     .from("admin_notification_campaigns")
     .insert({
@@ -145,6 +161,7 @@ export async function POST(req: NextRequest) {
       status: initialStatus,
       scheduled_at: scheduledAt,
       timezone_label: body.timezoneLabel ?? "UTC",
+      contest_id: contestId,
     })
     .select("id")
     .single();

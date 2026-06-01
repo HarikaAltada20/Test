@@ -2,21 +2,41 @@ import type { RecipientUserRow } from "./types";
 
 const PLACEHOLDER_RE = /\{([a-z_]+)\}/g;
 
+export type ContestTemplateContext = {
+  id: string;
+  title: string;
+};
+
+/** Dashboard path for a contest notification deep link. */
+export function getContestDashboardPath(
+  contestId: string,
+  userType: string,
+): string {
+  if (userType === "advertiser") {
+    return `/dashboard/contests/${contestId}`;
+  }
+  if (userType === "admin") {
+    return `/dashboard/admin/contests/${contestId}`;
+  }
+  return `/dashboard/opportunities/${contestId}`;
+}
+
 export function resolveNotificationTemplate(
   template: string,
   user: RecipientUserRow,
-  timezone: "UTC" | "local" = "UTC",
+  _timezone: "UTC" | "local" = "UTC",
+  contest?: ContestTemplateContext | null,
 ): string {
   const vars: Record<string, string> = {
-    user_id: user.id,
     email: user.email ?? "",
     full_name: user.full_name ?? "",
     username: user.username ?? "",
     user_type: user.user_type ?? "",
-    coins: String(user.coins ?? 0),
-    referral_code: user.referral_code ?? "",
-    created_at: formatUserCreatedAt(user.created_at, timezone),
   };
+
+  if (contest) {
+    vars.contest_title = contest.title;
+  }
 
   return template.replace(PLACEHOLDER_RE, (match, key: string) => {
     if (key in vars) return vars[key];
@@ -24,28 +44,13 @@ export function resolveNotificationTemplate(
   });
 }
 
-function formatUserCreatedAt(
-  createdAt: string,
-  timezone: "UTC" | "local",
-): string {
-  try {
-    const d = new Date(createdAt);
-    if (timezone === "UTC") {
-      return d.toISOString();
-    }
-    return d.toLocaleString("en-US", { hour12: false });
-  } catch {
-    return createdAt;
-  }
-}
-
 export const TEMPLATE_VARIABLES = [
   { key: "full_name", label: "Full name" },
   { key: "email", label: "Email" },
   { key: "username", label: "Username" },
   { key: "user_type", label: "User type" },
-  { key: "coins", label: "Coins" },
-  { key: "referral_code", label: "Referral code" },
-  { key: "user_id", label: "User ID" },
-  { key: "created_at", label: "Created at" },
+] as const;
+
+export const CONTEST_TEMPLATE_VARIABLES = [
+  { key: "contest_title", label: "Contest title" },
 ] as const;

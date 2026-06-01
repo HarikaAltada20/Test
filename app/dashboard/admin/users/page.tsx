@@ -2283,32 +2283,10 @@ export default function AdminUsersPage() {
     });
   };
 
-  const toggleSelectAllOnPage = (checked: boolean) => {
-    setSelectAllFiltered(false);
-    setSelectedUserIds((prev) => {
-      const next = new Set(prev);
-      for (const u of paginatedData) {
-        if (checked) next.add(u.id);
-        else next.delete(u.id);
-      }
-      return next;
-    });
-  };
-
   const toggleSelectAllFiltered = (checked: boolean) => {
     setSelectAllFiltered(checked);
     if (checked) setSelectedUserIds(new Set());
   };
-
-  const pageAllSelected =
-    paginatedData.length > 0 &&
-    paginatedData.every((u) => selectedUserIds.has(u.id));
-
-  const pageSelectChecked: boolean | "indeterminate" = pageAllSelected
-    ? true
-    : paginatedData.some((u) => selectedUserIds.has(u.id))
-      ? "indeterminate"
-      : false;
 
   const headerSelectChecked: boolean | "indeterminate" = selectAllFiltered
     ? true
@@ -2611,6 +2589,25 @@ export default function AdminUsersPage() {
                 <Settings className="w-4 h-4" />
                 <span className="hidden sm:inline">Customize Tiles</span>
               </Button>
+              {viewMode === "table" && (
+                <Button
+                  size="sm"
+                  className="gap-1.5 px-2 sm:px-3"
+                  disabled={!hasNotificationSelection}
+                  onClick={() => setSendModalOpen(true)}
+                >
+                  <Send className="w-4 h-4" />
+                  <span className="hidden sm:inline">Send notification</span>
+                  {selectedCount > 0 && (
+                    <Badge
+                      variant="secondary"
+                      className="h-5 min-w-5 rounded-full px-1.5 text-xs bg-white/20 text-inherit"
+                    >
+                      {selectedCount}
+                    </Badge>
+                  )}
+                </Button>
+              )}
               <Button
                 variant="outline"
                 onClick={() => {
@@ -2663,55 +2660,6 @@ export default function AdminUsersPage() {
           )}
         >
           <CardContent className="px-6">
-            <div className="flex flex-wrap items-center gap-3 mb-4 py-2 border-b">
-              {selectedCount > 0 && (
-                <span
-                  className={cn(
-                    "text-sm font-medium tabular-nums",
-                    isDark ? "text-purple-200" : "text-purple-700",
-                  )}
-                >
-                  {selectedCount} selected
-                </span>
-              )}
-              <div className="flex items-center gap-2">
-                <Checkbox
-                  id="select-page"
-                  checked={pageSelectChecked}
-                  onCheckedChange={(c) => toggleSelectAllOnPage(!!c)}
-                  className={selectionCheckboxClass}
-                />
-                <label
-                  htmlFor="select-page"
-                  className="text-sm cursor-pointer select-none"
-                >
-                  Select all on page
-                </label>
-              </div>
-              <div className="flex items-center gap-2">
-                <Checkbox
-                  id="select-filtered"
-                  checked={headerSelectChecked}
-                  onCheckedChange={(c) => toggleSelectAllFiltered(!!c)}
-                  className={selectionCheckboxClass}
-                />
-                <label
-                  htmlFor="select-filtered"
-                  className="text-sm cursor-pointer select-none"
-                >
-                  Select all matching filters ({tabFiltered.length})
-                </label>
-              </div>
-              <Button
-                size="sm"
-                className="ml-auto gap-1.5"
-                disabled={!hasNotificationSelection}
-                onClick={() => setSendModalOpen(true)}
-              >
-                <Send className="w-4 h-4" />
-                Send notification
-              </Button>
-            </div>
             <div
               className={cn(
                 stickyHeader
@@ -4967,8 +4915,8 @@ export default function AdminUsersPage() {
             scheduleClientDelivery(result.campaignId, result.scheduledAt);
             const qstashNote =
               "qstashScheduled" in result && result.qstashScheduled
-                ? " QStash job created — check Upstash logs."
-                : " QStash not used — keep Users Management open or set QSTASH_CALLBACK_URL.";
+                ? ""
+                : "";
             toast({
               title: "Notification scheduled",
               description: `Scheduled for ${new Date(result.scheduledAt).toLocaleString()} (your local time).${qstashNote}`,

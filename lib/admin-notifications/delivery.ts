@@ -1,7 +1,31 @@
 import { createAdminClient } from "@/utils/supabase/admin";
-import { resolveNotificationTemplate } from "./template";
+import {
+  resolveNotificationTemplate,
+  type ContestTemplateContext,
+} from "./template";
 import type { RecipientUserRow } from "./types";
 import { PUBLIC_ANNOUNCEMENT_TITLE, SYNC_DELIVERY_LIMIT } from "./types";
+import {
+  userNotificationInsertTimestamps,
+  userNotificationNow,
+} from "@/lib/user-notifications/timestamps";
+
+async function loadContestTemplateContext(
+  contestId: string | null | undefined,
+): Promise<ContestTemplateContext | null> {
+  if (!contestId) return null;
+  const db = createAdminClient();
+  const { data } = await db
+    .from("contests")
+    .select("id, title")
+    .eq("id", contestId)
+    .maybeSingle();
+  if (!data) return null;
+  return {
+    id: data.id,
+    title: data.title?.trim() || "Untitled contest",
+  };
+}
 
 export async function deliverCampaignNotifications(
   campaignId: string,
@@ -15,7 +39,9 @@ export async function deliverCampaignNotifications(
 
   const { data: campaign, error: campaignError } = await db
     .from("admin_notification_campaigns")
-    .select("id, message_template, notification_type, timezone_label")
+    .select(
+      "id, message_template, notification_type, timezone_label, contest_id",
+    )
     .eq("id", campaignId)
     .single();
 
@@ -23,6 +49,7 @@ export async function deliverCampaignNotifications(
     throw new Error(campaignError?.message ?? "Campaign not found");
   }
 
+  const contest = await loadContestTemplateContext(campaign.contest_id);
   const tz =
     campaign.timezone_label === "local" ? "local" : ("UTC" as const);
   let successCount = 0;
@@ -34,15 +61,19 @@ export async function deliverCampaignNotifications(
       campaign.message_template,
       user,
       tz,
+      contest,
     );
 
+    const deliveredAt = userNotificationNow();
     const { error: notifError } = await db.from("user_notifications").insert({
       user_id: user.id,
       campaign_id: campaignId,
+      contest_id: contest?.id ?? null,
       notification_type: campaign.notification_type,
       title: PUBLIC_ANNOUNCEMENT_TITLE,
       message_template: campaign.message_template,
       message_resolved: messageResolved,
+      ...userNotificationInsertTimestamps(deliveredAt),
     });
 
     if (notifError) {
@@ -50,10 +81,7 @@ export async function deliverCampaignNotifications(
       failedUserIds.push(user.id);
       await db
         .from("admin_notification_campaign_recipients")
-        .update({
-          delivery_status: "failed",
-          error_message: notifError.message,
-        })
+        .update({ delivery_status: "failed" })
         .eq("campaign_id", campaignId)
         .eq("user_id", user.id);
       continue;
@@ -62,7 +90,7 @@ export async function deliverCampaignNotifications(
     successCount += 1;
     await db
       .from("admin_notification_campaign_recipients")
-      .update({ delivery_status: "delivered", error_message: null })
+      .update({ delivery_status: "delivered" })
       .eq("campaign_id", campaignId)
       .eq("user_id", user.id);
   }
@@ -197,7 +225,6 @@ export async function processScheduledCampaignById(
       .from("admin_notification_campaigns")
       .update({
         status: "failed",
-        error_summary: "No pending recipients",
         completed_at: now,
       })
       .eq("id", campaignId);
@@ -242,7 +269,6 @@ export async function processDueScheduledCampaigns(limit = 50): Promise<number> 
         .from("admin_notification_campaigns")
         .update({
           status: "failed",
-          error_summary: "No pending recipients",
           completed_at: now,
         })
         .eq("id", row.id);

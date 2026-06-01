@@ -1,20 +1,12 @@
 import { createAdminClient } from "@/utils/supabase/admin";
-import { formatSenderRoleLabel } from "@/lib/support/sender-role";
-
-function buildSupportUserMessagePreview(
-  senderRole: string,
-  threadUser: { email: string; username: string | null } | null,
-  body: string,
-): string {
-  const label = formatSenderRoleLabel(senderRole);
-  const who =
-    threadUser?.username?.trim() ||
-    threadUser?.email ||
-    "User";
-  const preview =
-    body.length > 200 ? `${body.slice(0, 200)}...` : body;
-  return `${label} · ${who}: ${preview}`;
-}
+import {
+  buildSupportMessagePreview,
+  resolveSupportSenderDisplayName,
+} from "@/lib/user-notifications/support-sender-display";
+import {
+  userNotificationInsertTimestamps,
+  userNotificationNow,
+} from "@/lib/user-notifications/timestamps";
 
 /**
  * Creates a single admin notification for a user support message.
@@ -42,7 +34,7 @@ export async function notifyAdminsOfUserSupportMessage(input: {
   const [{ data: threadUser }, { data: admin }] = await Promise.all([
     db
       .from("users")
-      .select("email, username")
+      .select("email, username, full_name, profile_picture_url")
       .eq("id", input.threadUserId)
       .maybeSingle(),
     db
@@ -58,19 +50,18 @@ export async function notifyAdminsOfUserSupportMessage(input: {
     return;
   }
 
-  const messageResolved = buildSupportUserMessagePreview(
-    input.senderRole,
-    threadUser,
-    input.body,
-  );
+  const senderDisplayName = resolveSupportSenderDisplayName(threadUser);
+  const messageResolved = buildSupportMessagePreview(input.body);
 
+  const createdAt = userNotificationNow();
   const { error } = await db.from("user_notifications").insert({
     user_id: admin.id,
     notification_type: "support_user_message",
     support_thread_id: input.threadId,
     support_message_id: input.messageId,
-    title: "New support message",
+    title: senderDisplayName,
     message_resolved: messageResolved,
+    ...userNotificationInsertTimestamps(createdAt),
   });
 
   // Unique index on support_message_id — ignore race duplicates.

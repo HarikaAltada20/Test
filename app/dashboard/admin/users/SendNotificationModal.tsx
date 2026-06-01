@@ -21,8 +21,15 @@ import {
 } from "@/components/ui/select";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { cn } from "@/lib/utils";
-import { TEMPLATE_VARIABLES } from "@/lib/admin-notifications/template";
-import { resolveNotificationTemplate } from "@/lib/admin-notifications/template";
+import {
+  CONTEST_TEMPLATE_VARIABLES,
+  TEMPLATE_VARIABLES,
+  resolveNotificationTemplate,
+} from "@/lib/admin-notifications/template";
+import {
+  ContestSearchSelect,
+  type ContestSearchOption,
+} from "@/components/admin/ContestSearchSelect";
 import {
   parseDatetimeLocalValue,
   toDatetimeLocalInputValue,
@@ -64,6 +71,8 @@ export function SendNotificationModal({
   onSuccess,
 }: Props) {
   const [messageBody, setMessageBody] = useState("");
+  const [selectedContest, setSelectedContest] =
+    useState<ContestSearchOption | null>(null);
   const [sendTiming, setSendTiming] = useState<"immediate" | "scheduled">(
     "immediate",
   );
@@ -85,10 +94,31 @@ export function SendNotificationModal({
   }, [selection]);
 
   const previewUser = selection?.users[0] ?? null;
+  const contestContext = useMemo(() => {
+    if (!selectedContest) return null;
+    return {
+      id: selectedContest.id,
+      title: selectedContest.title,
+    };
+  }, [selectedContest]);
+
+  const templateVariables = useMemo(
+    () =>
+      selectedContest
+        ? [...TEMPLATE_VARIABLES, ...CONTEST_TEMPLATE_VARIABLES]
+        : [...TEMPLATE_VARIABLES],
+    [selectedContest],
+  );
+
   const previewText = useMemo(() => {
     if (!previewUser || !messageBody.trim()) return "";
-    return resolveNotificationTemplate(messageBody, previewUser, timezone);
-  }, [messageBody, previewUser, timezone]);
+    return resolveNotificationTemplate(
+      messageBody,
+      previewUser,
+      timezone,
+      contestContext,
+    );
+  }, [messageBody, previewUser, timezone, contestContext]);
 
   const minScheduleDatetime = useMemo(
     () => toDatetimeLocalInputValue(new Date(Date.now() + 5 * 60 * 1000)),
@@ -148,6 +178,7 @@ export function SendNotificationModal({
           sendTiming,
           scheduledAt: scheduledAtIso,
           timezoneLabel: "local",
+          contestId: selectedContest?.id ?? null,
         }),
       });
       const data = await res.json();
@@ -164,6 +195,7 @@ export function SendNotificationModal({
         failureCount: data.failureCount,
       });
       setMessageBody("");
+      setSelectedContest(null);
       setSendTiming("immediate");
       setScheduleDatetime("");
       onOpenChange(false);
@@ -223,6 +255,12 @@ export function SendNotificationModal({
             </Select>
           </div>
 
+          <ContestSearchSelect
+            value={selectedContest}
+            onChange={setSelectedContest}
+            isDark={isDark}
+          />
+
           <div className="space-y-2">
             <Label htmlFor="notif-message">Message</Label>
             <Textarea
@@ -236,10 +274,10 @@ export function SendNotificationModal({
             />
             <p className="text-xs text-muted-foreground">
               Use {"{variable_name}"} for per-user values. Variables:{" "}
-              {TEMPLATE_VARIABLES.map((v) => `{${v.key}}`).join(", ")}
+              {templateVariables.map((v) => `{${v.key}}`).join(", ")}
             </p>
             <div className="flex flex-wrap gap-1">
-              {TEMPLATE_VARIABLES.map((v) => (
+              {templateVariables.map((v) => (
                 <Button
                   key={v.key}
                   type="button"

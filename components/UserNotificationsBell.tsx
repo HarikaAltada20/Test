@@ -1,7 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { formatDistanceToNow } from "date-fns";
+import { getContestDashboardPath } from "@/lib/admin-notifications/template";
 import {
   Bell,
   ChevronRight,
@@ -23,6 +25,10 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import {
+  parseLegacySupportMessageResolved,
+} from "@/lib/user-notifications/support-sender-display";
 import { cn } from "@/lib/utils";
 
 type NotificationRow = {
@@ -33,10 +39,40 @@ type NotificationRow = {
   is_read: boolean;
   created_at: string;
   support_thread_id: string | null;
+  contest_id: string | null;
+  sender_display_name?: string | null;
+  sender_avatar_url?: string | null;
+  sender_role_label?: string | null;
 };
+
+function supportMessagePreview(message: string): string {
+  const legacy = parseLegacySupportMessageResolved(message);
+  return legacy.displayName ? legacy.preview : message;
+}
+
+function getSupportUserMessageDisplay(n: NotificationRow) {
+  if (n.sender_display_name) {
+    return {
+      displayName: n.sender_display_name,
+      roleLabel: n.sender_role_label ?? null,
+      preview: supportMessagePreview(n.message_resolved),
+      avatarUrl: n.sender_avatar_url ?? null,
+    };
+  }
+  const legacy = parseLegacySupportMessageResolved(n.message_resolved);
+  const title =
+    n.title === "New support message" ? null : n.title;
+  return {
+    displayName: legacy.displayName || title || "User",
+    roleLabel: legacy.roleLabel,
+    preview: legacy.preview,
+    avatarUrl: null,
+  };
+}
 
 type Props = {
   isDark?: boolean;
+  userType?: string;
   /** Creator/brand: open ChatSupport thread */
   onOpenSupportThread?: (threadId: string) => void;
   /** Admin: navigate to support dashboard thread */
@@ -52,11 +88,58 @@ function isPublicAnnouncement(type: string): boolean {
 }
 
 function notificationTitle(n: NotificationRow): string {
+  if (n.notification_type === "support_user_message") {
+    return getSupportUserMessageDisplay(n).displayName;
+  }
+  if (n.notification_type === "support_reply") {
+    return "Message from the support team";
+  }
   if (n.title) return n.title;
-  if (n.notification_type === "support_user_message") return "New support message";
-  if (n.notification_type === "support_reply") return "Support replied";
   if (isPublicAnnouncement(n.notification_type)) return "Announcement";
   return "Notification";
+}
+
+function avatarInitial(name: string): string {
+  const trimmed = name.trim();
+  if (!trimmed) return "?";
+  const letter = trimmed.match(/[A-Za-z0-9]/)?.[0];
+  return (letter ?? trimmed[0]).toUpperCase();
+}
+
+function NotificationLead({
+  notification: n,
+  isDark,
+}: {
+  notification: NotificationRow;
+  isDark: boolean;
+}) {
+  if (n.notification_type === "support_user_message") {
+    const { displayName, avatarUrl } = getSupportUserMessageDisplay(n);
+    return (
+      <Avatar className="h-10 w-10 shrink-0">
+        {avatarUrl ? (
+          <AvatarImage
+            src={avatarUrl}
+            alt={displayName}
+            loading="lazy"
+            referrerPolicy="no-referrer"
+          />
+        ) : null}
+        <AvatarFallback
+          className={cn(
+            "text-sm font-semibold",
+            isDark
+              ? "bg-purple-500/20 text-purple-200"
+              : "bg-purple-100 text-purple-700",
+          )}
+        >
+          {avatarInitial(displayName)}
+        </AvatarFallback>
+      </Avatar>
+    );
+  }
+
+  return <NotificationIcon type={n.notification_type} isDark={isDark} />;
 }
 
 function NotificationIcon({
@@ -98,6 +181,12 @@ function NotificationCard({
 }) {
   const isSupport = isSupportNotificationType(n.notification_type);
   const isAdminSupportMessage = n.notification_type === "support_user_message";
+  const supportDisplay = isAdminSupportMessage
+    ? getSupportUserMessageDisplay(n)
+    : null;
+  const bodyText = supportDisplay?.preview ?? n.message_resolved;
+  const hasContestLink =
+    isPublicAnnouncement(n.notification_type) && !!n.contest_id;
   const createdAt = new Date(n.created_at);
   const relativeTime = formatDistanceToNow(createdAt, { addSuffix: true });
 
@@ -118,19 +207,31 @@ function NotificationCard({
       )}
     >
       <div className="flex gap-3">
-        <NotificationIcon type={n.notification_type} isDark={isDark} />
+        <NotificationLead notification={n} isDark={isDark} />
 
         <div className="min-w-0 flex-1">
           <div className="flex items-start justify-between gap-2">
-            <div className="flex min-w-0 items-center gap-2">
-              <span className="truncate text-sm font-semibold">
-                {notificationTitle(n)}
-              </span>
-              {!n.is_read && (
-                <span
-                  className="h-2 w-2 shrink-0 rounded-full bg-purple-600"
-                  aria-label="Unread"
-                />
+            <div className="min-w-0 flex-1">
+              <div className="flex min-w-0 items-center gap-2">
+                <span className="truncate text-sm font-semibold">
+                  {notificationTitle(n)}
+                </span>
+                {!n.is_read && (
+                  <span
+                    className="h-2 w-2 shrink-0 rounded-full bg-purple-600"
+                    aria-label="Unread"
+                  />
+                )}
+              </div>
+              {supportDisplay?.roleLabel && (
+                <p
+                  className={cn(
+                    "mt-0.5 truncate text-xs",
+                    isDark ? "text-slate-500" : "text-muted-foreground",
+                  )}
+                >
+                  {supportDisplay.roleLabel}
+                </p>
               )}
             </div>
             <time
@@ -158,10 +259,23 @@ function NotificationCard({
             )}
           >
             <p className="line-clamp-4 whitespace-pre-wrap break-words">
-              {n.message_resolved}
+              {bodyText}
             </p>
           </div>
 
+          {hasContestLink && (
+            <p
+              className={cn(
+                "mt-2.5 flex items-center gap-0.5 text-xs font-medium transition-colors",
+                isDark
+                  ? "text-purple-400 group-hover:text-purple-300"
+                  : "text-purple-600 group-hover:text-purple-700",
+              )}
+            >
+              View contest
+              <ChevronRight className="h-3.5 w-3.5 transition-transform group-hover:translate-x-0.5" />
+            </p>
+          )}
           {isSupport && n.support_thread_id && (
             <p
               className={cn(
@@ -183,9 +297,11 @@ function NotificationCard({
 
 export function UserNotificationsBell({
   isDark = false,
+  userType = "creator",
   onOpenSupportThread,
   onOpenAdminSupportThread,
 }: Props) {
+  const router = useRouter();
   const [open, setOpen] = useState(false);
   const [notifications, setNotifications] = useState<NotificationRow[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
@@ -250,6 +366,11 @@ export function UserNotificationsBell({
     }
 
     if (isPublicAnnouncement(n.notification_type)) {
+      if (n.contest_id) {
+        setOpen(false);
+        router.push(getContestDashboardPath(n.contest_id, userType));
+        return;
+      }
       setDetailNotification(n);
       return;
     }
@@ -266,15 +387,6 @@ export function UserNotificationsBell({
       onOpenSupportThread(n.support_thread_id);
       setOpen(false);
     }
-  };
-
-  const handleMarkAllRead = async () => {
-    await fetch("/api/notifications", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ mark_all_read: true }),
-    });
-    await fetchNotifications();
   };
 
   return (
@@ -308,19 +420,7 @@ export function UserNotificationsBell({
               isDark ? "border-slate-700" : "border-slate-200",
             )}
           >
-            <div className="flex items-center justify-between gap-2 pr-8">
-              <SheetTitle>Notifications</SheetTitle>
-              {unreadCount > 0 && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-8 text-xs shrink-0"
-                  onClick={handleMarkAllRead}
-                >
-                  Mark all read
-                </Button>
-              )}
-            </div>
+            <SheetTitle className="pr-8">Notifications</SheetTitle>
             {unreadCount > 0 && (
               <p
                 className={cn(
@@ -404,7 +504,19 @@ export function UserNotificationsBell({
               </p>
             </div>
           )}
-          <DialogFooter>
+          <DialogFooter className="gap-2 sm:gap-0">
+            {detailNotification?.contest_id && (
+              <Button
+                onClick={() => {
+                  const contestId = detailNotification.contest_id!;
+                  setDetailNotification(null);
+                  setOpen(false);
+                  router.push(getContestDashboardPath(contestId, userType));
+                }}
+              >
+                View contest
+              </Button>
+            )}
             <Button
               variant="outline"
               onClick={() => setDetailNotification(null)}

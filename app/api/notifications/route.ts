@@ -1,11 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAuthenticatedSupportUser } from "@/lib/support/auth";
 import { supportDbForUser } from "@/lib/support/supabase-for-user";
+import { enrichSupportUserMessageNotifications } from "@/lib/user-notifications/enrich-support-sender";
+import {
+  userNotificationMarkReadPatch,
+  userNotificationNow,
+} from "@/lib/user-notifications/timestamps";
 
 export const dynamic = "force-dynamic";
 
 const NOTIFICATION_SELECT =
-  "id, notification_type, title, message_resolved, is_read, read_at, created_at, support_thread_id";
+  "id, notification_type, title, message_resolved, is_read, read_at, created_at, updated_at, support_thread_id, contest_id";
 
 function isAdminUser(userType: string): boolean {
   return userType === "admin";
@@ -59,8 +64,13 @@ export async function GET(req: NextRequest) {
 
   const { count: unreadCount } = await unreadQuery;
 
+  const notifications = await enrichSupportUserMessageNotifications(
+    supabase,
+    data ?? [],
+  );
+
   return NextResponse.json({
-    notifications: data ?? [],
+    notifications,
     unread_count: unreadCount ?? 0,
   });
 }
@@ -74,12 +84,13 @@ export async function PATCH(req: NextRequest) {
   const { notification_ids, mark_all_read, support_thread_id } =
     await req.json();
   const supabase = supportDbForUser(user);
-  const now = new Date().toISOString();
+  const now = userNotificationNow();
+  const markReadPatch = userNotificationMarkReadPatch(now);
 
   if (support_thread_id && typeof support_thread_id === "string") {
     let updateQuery = supabase
       .from("user_notifications")
-      .update({ is_read: true, read_at: now })
+      .update(markReadPatch)
       .eq("support_thread_id", support_thread_id)
       .eq("is_read", false);
 
@@ -100,7 +111,7 @@ export async function PATCH(req: NextRequest) {
   if (mark_all_read) {
     let updateQuery = supabase
       .from("user_notifications")
-      .update({ is_read: true, read_at: now })
+      .update(markReadPatch)
       .eq("is_read", false);
 
     if (isAdminUser(user.user_type)) {
@@ -128,7 +139,7 @@ export async function PATCH(req: NextRequest) {
 
   let updateQuery = supabase
     .from("user_notifications")
-    .update({ is_read: true, read_at: now })
+    .update(markReadPatch)
     .in("id", notification_ids);
 
   if (!isAdminUser(user.user_type)) {

@@ -28,7 +28,8 @@ CREATE TABLE IF NOT EXISTS public.admin_notification_campaigns (
   status public.admin_notification_campaign_status_enum NOT NULL DEFAULT 'pending',
   scheduled_at timestamptz,
   timezone_label text,
-  error_summary text,
+  qstash_message_id text,
+  contest_id uuid REFERENCES public.contests (id) ON DELETE SET NULL,
   created_at timestamptz NOT NULL DEFAULT now(),
   completed_at timestamptz,
   CONSTRAINT admin_notification_campaigns_pkey PRIMARY KEY (id),
@@ -46,12 +47,21 @@ CREATE INDEX IF NOT EXISTS idx_admin_notification_campaigns_scheduled_due
   ON public.admin_notification_campaigns (scheduled_at)
   WHERE status = 'scheduled';
 
+CREATE INDEX IF NOT EXISTS idx_admin_notification_campaigns_contest_id
+  ON public.admin_notification_campaigns (contest_id)
+  WHERE contest_id IS NOT NULL;
+
+ALTER TABLE public.admin_notification_campaigns
+  ADD COLUMN IF NOT EXISTS qstash_message_id text;
+
+ALTER TABLE public.admin_notification_campaigns
+  ADD COLUMN IF NOT EXISTS contest_id uuid REFERENCES public.contests (id) ON DELETE SET NULL;
+
 CREATE TABLE IF NOT EXISTS public.admin_notification_campaign_recipients (
   campaign_id uuid NOT NULL REFERENCES public.admin_notification_campaigns (id) ON DELETE CASCADE,
   user_id uuid NOT NULL REFERENCES public.users (id) ON DELETE CASCADE,
   user_type_at_send text NOT NULL,
   delivery_status text NOT NULL DEFAULT 'pending',
-  error_message text,
   CONSTRAINT admin_notification_campaign_recipients_pkey PRIMARY KEY (campaign_id, user_id),
   CONSTRAINT admin_notification_campaign_recipients_delivery_status_check
     CHECK (delivery_status IN ('pending', 'delivered', 'failed'))
@@ -63,6 +73,9 @@ CREATE INDEX IF NOT EXISTS idx_admin_notification_campaign_recipients_campaign
 -- Link user_notifications to campaigns (column may already exist from support migration)
 ALTER TABLE public.user_notifications
   ADD COLUMN IF NOT EXISTS campaign_id uuid;
+
+ALTER TABLE public.user_notifications
+  ADD COLUMN IF NOT EXISTS contest_id uuid REFERENCES public.contests (id) ON DELETE SET NULL;
 
 DO $$
 BEGIN
