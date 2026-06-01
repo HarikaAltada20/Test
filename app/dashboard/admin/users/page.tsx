@@ -33,7 +33,20 @@ import {
   Clock,
   Map,
   List,
+  Bell,
+  Send,
 } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
+import {
+  scheduleClientDelivery,
+  useAdminScheduledNotificationDelivery,
+} from "@/hooks/useAdminScheduledNotificationDelivery";
+import {
+  SendNotificationModal,
+  type NotificationSelectionState,
+} from "./SendNotificationModal";
+import { AdminNotificationsView } from "./AdminNotificationsView";
+import type { RecipientUserRow } from "@/lib/admin-notifications/types";
 import { cn } from "@/lib/utils";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -385,6 +398,8 @@ const allColumns = {
 };
 
 export default function AdminUsersPage() {
+  useAdminScheduledNotificationDelivery(true);
+
   // Operator mapping for dropdown display
   const operatorMap: Record<string, { label: string; symbol: string }> = {
     "=": { label: "Equals", symbol: "=" },
@@ -566,7 +581,46 @@ export default function AdminUsersPage() {
   });
   const [showColumnSettings, setShowColumnSettings] = useState(false);
   const [stickyHeader, setStickyHeader] = useState(true);
-  const [viewMode, setViewMode] = useState<"table" | "map">("table");
+  const [viewMode, setViewMode] = useState<"table" | "map" | "notifications">(
+    () => {
+      if (typeof window !== "undefined") {
+        const saved = localStorage.getItem("users-management-view-mode");
+        if (saved === "table" || saved === "map" || saved === "notifications") {
+          return saved;
+        }
+      }
+      return "table";
+    },
+  );
+  const { toast } = useToast();
+  const [selectedUserIds, setSelectedUserIds] = useState<Set<string>>(
+    () => new Set(),
+  );
+  const [selectAllFiltered, setSelectAllFiltered] = useState(false);
+  const [sendModalOpen, setSendModalOpen] = useState(false);
+  const [highlightCampaignId, setHighlightCampaignId] = useState<string | null>(
+    null,
+  );
+
+  const setViewModePersisted = (mode: "table" | "map" | "notifications") => {
+    setViewMode(mode);
+    if (typeof window !== "undefined") {
+      localStorage.setItem("users-management-view-mode", mode);
+    }
+  };
+
+  const userToRecipientRow = (u: User): RecipientUserRow => ({
+    id: u.id,
+    email: u.email,
+    full_name: u.full_name,
+    username: u.username ?? null,
+    user_type: u.user_type,
+    coins: u.coins,
+    referral_code: u.referral_code ?? null,
+    created_at: u.created_at,
+    is_active: u.is_active,
+  });
+
   const [mapGroupBy, setMapGroupBy] = useState<
     "region" | "state" | "country" | "city"
   >("country");
@@ -2164,6 +2218,115 @@ export default function AdminUsersPage() {
   const hasNextPage = page < totalPages;
   const hasPreviousPage = page > 1;
 
+  const notificationSelection =
+    useMemo((): NotificationSelectionState | null => {
+      if (selectAllFiltered && tabFiltered.length > 0) {
+        const users = tabFiltered.map(userToRecipientRow);
+        return {
+          mode: "select_all_filtered",
+          userIds: users.map((u) => u.id),
+          users,
+          filterSnapshot: {
+            activeTab: activeTab as "all" | "advertisers" | "creators",
+            isActive: true,
+            filters: filters
+              .filter((f) => f.value.trim())
+              .map((f) => ({
+                column: f.column,
+                value: f.value,
+                operator: f.operator,
+              })),
+          },
+          label: `All users matching current filters (${tabFiltered.length})`,
+        };
+      }
+      if (selectedUserIds.size === 0) return null;
+      const usersFromTab = tabFiltered
+        .filter((u) => selectedUserIds.has(u.id))
+        .map(userToRecipientRow);
+      const allSelected = rows
+        .filter((u) => selectedUserIds.has(u.id))
+        .map(userToRecipientRow);
+      const mergedUsers =
+        usersFromTab.length >= selectedUserIds.size
+          ? usersFromTab
+          : allSelected.length > 0
+            ? allSelected
+            : usersFromTab;
+      const ids = [...selectedUserIds];
+      return {
+        mode: "selected_user_ids",
+        userIds: ids,
+        users: mergedUsers,
+        filterSnapshot: { isActive: true },
+        label: "Hand-picked selection",
+      };
+    }, [
+      selectAllFiltered,
+      tabFiltered,
+      selectedUserIds,
+      activeTab,
+      filters,
+      rows,
+    ]);
+
+  const hasNotificationSelection =
+    selectAllFiltered || selectedUserIds.size > 0;
+
+  const toggleUserSelection = (userId: string, checked: boolean) => {
+    setSelectAllFiltered(false);
+    setSelectedUserIds((prev) => {
+      const next = new Set(prev);
+      if (checked) next.add(userId);
+      else next.delete(userId);
+      return next;
+    });
+  };
+
+  const toggleSelectAllOnPage = (checked: boolean) => {
+    setSelectAllFiltered(false);
+    setSelectedUserIds((prev) => {
+      const next = new Set(prev);
+      for (const u of paginatedData) {
+        if (checked) next.add(u.id);
+        else next.delete(u.id);
+      }
+      return next;
+    });
+  };
+
+  const toggleSelectAllFiltered = (checked: boolean) => {
+    setSelectAllFiltered(checked);
+    if (checked) setSelectedUserIds(new Set());
+  };
+
+  const pageAllSelected =
+    paginatedData.length > 0 &&
+    paginatedData.every((u) => selectedUserIds.has(u.id));
+
+  const pageSelectChecked: boolean | "indeterminate" = pageAllSelected
+    ? true
+    : paginatedData.some((u) => selectedUserIds.has(u.id))
+      ? "indeterminate"
+      : false;
+
+  const headerSelectChecked: boolean | "indeterminate" = selectAllFiltered
+    ? true
+    : selectedUserIds.size > 0
+      ? "indeterminate"
+      : false;
+
+  const selectedCount = selectAllFiltered
+    ? tabFiltered.length
+    : selectedUserIds.size;
+
+  const selectionCheckboxClass = cn(
+    "relative z-10 shrink-0",
+    isDark
+      ? "border-gray-500 bg-[#170337] data-[state=checked]:bg-purple-600 data-[state=checked]:text-white"
+      : "border-gray-300 bg-white data-[state=checked]:bg-purple-600",
+  );
+
   // Markers for map view (users in current tab with lat/lon)
   const mapMarkers = useMemo(() => {
     return tabFiltered
@@ -2384,7 +2547,7 @@ export default function AdminUsersPage() {
                   variant={viewMode === "table" ? "secondary" : "ghost"}
                   size="sm"
                   className="rounded-none h-8 px-2 sm:px-3 gap-1.5"
-                  onClick={() => setViewMode("table")}
+                  onClick={() => setViewModePersisted("table")}
                 >
                   <List className="w-4 h-4" />
                   <span className="hidden sm:inline">Table</span>
@@ -2393,10 +2556,19 @@ export default function AdminUsersPage() {
                   variant={viewMode === "map" ? "secondary" : "ghost"}
                   size="sm"
                   className="rounded-none h-8 px-2 sm:px-3 gap-1.5"
-                  onClick={() => setViewMode("map")}
+                  onClick={() => setViewModePersisted("map")}
                 >
                   <Map className="w-4 h-4" />
                   <span className="hidden sm:inline">Map</span>
+                </Button>
+                <Button
+                  variant={viewMode === "notifications" ? "secondary" : "ghost"}
+                  size="sm"
+                  className="rounded-none h-8 px-2 sm:px-3 gap-1.5"
+                  onClick={() => setViewModePersisted("notifications")}
+                >
+                  <Bell className="w-4 h-4" />
+                  <span className="hidden sm:inline">Notifications</span>
                 </Button>
               </div>
               <Button
@@ -2463,19 +2635,24 @@ export default function AdminUsersPage() {
             </div>
           </div>
         </CardHeader>
-        <CardContent className="py-2 px-6">
-          <EnhancedTabs
-            tabs={[
-              { id: "all", label: `Users (${allUsersCount})` },
-              { id: "advertisers", label: `Advertisers (${advertisersCount})` },
-              { id: "creators", label: `Creators (${creatorsCount})` },
-            ]}
-            activeTab={activeTab}
-            onTabChange={setActiveTab}
-            className="w-full"
-            isDark={isDark}
-          />
-        </CardContent>
+        {viewMode !== "notifications" && (
+          <CardContent className="py-2 px-6">
+            <EnhancedTabs
+              tabs={[
+                { id: "all", label: `Users (${allUsersCount})` },
+                {
+                  id: "advertisers",
+                  label: `Advertisers (${advertisersCount})`,
+                },
+                { id: "creators", label: `Creators (${creatorsCount})` },
+              ]}
+              activeTab={activeTab}
+              onTabChange={setActiveTab}
+              className="w-full"
+              isDark={isDark}
+            />
+          </CardContent>
+        )}
       </Card>
 
       {viewMode === "table" && (
@@ -2486,6 +2663,55 @@ export default function AdminUsersPage() {
           )}
         >
           <CardContent className="px-6">
+            <div className="flex flex-wrap items-center gap-3 mb-4 py-2 border-b">
+              {selectedCount > 0 && (
+                <span
+                  className={cn(
+                    "text-sm font-medium tabular-nums",
+                    isDark ? "text-purple-200" : "text-purple-700",
+                  )}
+                >
+                  {selectedCount} selected
+                </span>
+              )}
+              <div className="flex items-center gap-2">
+                <Checkbox
+                  id="select-page"
+                  checked={pageSelectChecked}
+                  onCheckedChange={(c) => toggleSelectAllOnPage(!!c)}
+                  className={selectionCheckboxClass}
+                />
+                <label
+                  htmlFor="select-page"
+                  className="text-sm cursor-pointer select-none"
+                >
+                  Select all on page
+                </label>
+              </div>
+              <div className="flex items-center gap-2">
+                <Checkbox
+                  id="select-filtered"
+                  checked={headerSelectChecked}
+                  onCheckedChange={(c) => toggleSelectAllFiltered(!!c)}
+                  className={selectionCheckboxClass}
+                />
+                <label
+                  htmlFor="select-filtered"
+                  className="text-sm cursor-pointer select-none"
+                >
+                  Select all matching filters ({tabFiltered.length})
+                </label>
+              </div>
+              <Button
+                size="sm"
+                className="ml-auto gap-1.5"
+                disabled={!hasNotificationSelection}
+                onClick={() => setSendModalOpen(true)}
+              >
+                <Send className="w-4 h-4" />
+                Send notification
+              </Button>
+            </div>
             <div
               className={cn(
                 stickyHeader
@@ -2508,6 +2734,31 @@ export default function AdminUsersPage() {
                         : "bg-[#F9FAFB] border-b border-slate-200 text-gray-500",
                     )}
                   >
+                    <TableHead
+                      className={cn(
+                        "w-10 border-r px-2",
+                        isDark ? "bg-[#391A6A]" : "bg-[#F9FAFB]",
+                      )}
+                    >
+                      <div
+                        className={cn(
+                          "flex min-h-12 items-center justify-center",
+                          isDark ? "bg-[#391A6A]" : "bg-[#F9FAFB]",
+                        )}
+                      >
+                        <Checkbox
+                          aria-label={`Select all matching filters (${tabFiltered.length})`}
+                          checked={headerSelectChecked}
+                          onCheckedChange={(c) =>
+                            toggleSelectAllFiltered(!!c)
+                          }
+                          className={cn(
+                            selectionCheckboxClass,
+                            isDark ? "bg-[#391A6A]" : "bg-[#F9FAFB]",
+                          )}
+                        />
+                      </div>
+                    </TableHead>
                     {isColumnVisible("id") && (
                       <SortableHeader columnId="id" label="ID" />
                     )}
@@ -3654,6 +3905,19 @@ export default function AdminUsersPage() {
                     <>
                       {Array.from({ length: limit }).map((_, index) => (
                         <TableRow key={`skeleton-${index}`}>
+                          <TableCell
+                            className={cn(
+                              "w-10 border-r px-2",
+                              isDark ? "bg-[#170337]" : "bg-white",
+                            )}
+                          >
+                            <div
+                              className={cn(
+                                "h-4 w-4 rounded animate-pulse",
+                                isDark ? "bg-[#391A6A]/50" : "bg-gray-200",
+                              )}
+                            />
+                          </TableCell>
                           {Array.from({
                             length: getVisibleColumnsCount(),
                           }).map((_, colIndex) => (
@@ -3678,7 +3942,7 @@ export default function AdminUsersPage() {
                   ) : tabFiltered.length === 0 ? (
                     <TableRow>
                       <TableCell
-                        colSpan={getVisibleColumnsCount()}
+                        colSpan={getVisibleColumnsCount() + 1}
                         className="text-center text-sm text-muted-foreground"
                       >
                         No users found.
@@ -3701,8 +3965,32 @@ export default function AdminUsersPage() {
                           ? r.creator_profiles[0]
                           : null
                         : r.creator_profiles || null;
+                      const isSelected =
+                        selectAllFiltered || selectedUserIds.has(r.id);
                       return (
                         <TableRow key={r.id}>
+                          <TableCell
+                            className={cn(
+                              "w-10 border-r p-0",
+                              isDark ? "bg-[#170337]" : "bg-white",
+                            )}
+                          >
+                            <div
+                              className={cn(
+                                "flex min-h-12 items-center justify-center px-2",
+                                isDark ? "bg-[#170337]" : "bg-white",
+                              )}
+                            >
+                              <Checkbox
+                                checked={isSelected}
+                                disabled={selectAllFiltered}
+                                onCheckedChange={(c) =>
+                                  toggleUserSelection(r.id, !!c)
+                                }
+                                className={selectionCheckboxClass}
+                              />
+                            </div>
+                          </TableCell>
                           {isColumnVisible("id") && (
                             <TableCell className="font-mono text-xs whitespace-nowrap border-r">
                               {r.id}
@@ -4656,6 +4944,51 @@ export default function AdminUsersPage() {
           </CardContent>
         </Card>
       )}
+
+      {viewMode === "notifications" && (
+        <AdminNotificationsView
+          isDark={isDark}
+          timezone={timezone}
+          highlightCampaignId={highlightCampaignId}
+          onHighlightConsumed={() => setHighlightCampaignId(null)}
+        />
+      )}
+
+      <SendNotificationModal
+        open={sendModalOpen}
+        onOpenChange={setSendModalOpen}
+        selection={notificationSelection}
+        timezone={timezone}
+        isDark={isDark}
+        onSuccess={(result) => {
+          setSelectedUserIds(new Set());
+          setSelectAllFiltered(false);
+          if (result.status === "scheduled" && result.scheduledAt) {
+            scheduleClientDelivery(result.campaignId, result.scheduledAt);
+            const qstashNote =
+              "qstashScheduled" in result && result.qstashScheduled
+                ? " QStash job created — check Upstash logs."
+                : " QStash not used — keep Users Management open or set QSTASH_CALLBACK_URL.";
+            toast({
+              title: "Notification scheduled",
+              description: `Scheduled for ${new Date(result.scheduledAt).toLocaleString()} (your local time).${qstashNote}`,
+            });
+          } else if (result.failureCount && result.failureCount > 0) {
+            toast({
+              title: "Partially sent",
+              description: `${result.successCount ?? 0} sent, ${result.failureCount} failed`,
+              variant: "destructive",
+            });
+          } else {
+            toast({
+              title: "Notification sent",
+              description: `Notification sent to ${result.recipientCount} user(s)`,
+            });
+          }
+          setHighlightCampaignId(result.campaignId);
+          setViewModePersisted("notifications");
+        }}
+      />
 
       {/* Column Customization Dialog */}
       <Dialog

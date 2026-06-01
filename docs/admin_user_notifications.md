@@ -800,7 +800,7 @@ Success toast includes **View in Notifications** → sets `viewMode = "notificat
 1. Admin confirms → campaign `status = scheduled`, `scheduled_at` = chosen time.
 2. Expand recipients **now** (so admin sees count and can cancel); `delivery_status = pending` on recipient rows.
 3. **Do not** insert `user_notifications` yet.
-4. **Scheduler** (cron every 1 min, or Supabase pg_cron / Edge Function):
+4. **Scheduler** (QStash `notBefore` at `scheduled_at` per campaign; Vercel cron daily sweep as backup):
 
 ```sql
 select id from admin_notification_campaigns

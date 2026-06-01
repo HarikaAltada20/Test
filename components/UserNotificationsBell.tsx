@@ -9,6 +9,13 @@ import {
   MessageCircle,
   Megaphone,
 } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import {
   Sheet,
@@ -38,6 +45,18 @@ type Props = {
 
 function isSupportNotificationType(type: string): boolean {
   return type === "support_reply" || type === "support_user_message";
+}
+
+function isPublicAnnouncement(type: string): boolean {
+  return type === "public";
+}
+
+function notificationTitle(n: NotificationRow): string {
+  if (n.title) return n.title;
+  if (n.notification_type === "support_user_message") return "New support message";
+  if (n.notification_type === "support_reply") return "Support replied";
+  if (isPublicAnnouncement(n.notification_type)) return "Announcement";
+  return "Notification";
 }
 
 function NotificationIcon({
@@ -105,12 +124,7 @@ function NotificationCard({
           <div className="flex items-start justify-between gap-2">
             <div className="flex min-w-0 items-center gap-2">
               <span className="truncate text-sm font-semibold">
-                {n.title ||
-                  (n.notification_type === "support_user_message"
-                    ? "New support message"
-                    : isSupport
-                      ? "Support replied"
-                      : "Notification")}
+                {notificationTitle(n)}
               </span>
               {!n.is_read && (
                 <span
@@ -176,6 +190,8 @@ export function UserNotificationsBell({
   const [notifications, setNotifications] = useState<NotificationRow[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [loading, setLoading] = useState(false);
+  const [detailNotification, setDetailNotification] =
+    useState<NotificationRow | null>(null);
 
   const fetchNotifications = useCallback(async () => {
     setLoading(true);
@@ -232,6 +248,12 @@ export function UserNotificationsBell({
         await markRead([n.id]);
       }
     }
+
+    if (isPublicAnnouncement(n.notification_type)) {
+      setDetailNotification(n);
+      return;
+    }
+
     if (!n.support_thread_id) return;
 
     if (n.notification_type === "support_user_message" && onOpenAdminSupportThread) {
@@ -244,6 +266,15 @@ export function UserNotificationsBell({
       onOpenSupportThread(n.support_thread_id);
       setOpen(false);
     }
+  };
+
+  const handleMarkAllRead = async () => {
+    await fetch("/api/notifications", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ mark_all_read: true }),
+    });
+    await fetchNotifications();
   };
 
   return (
@@ -277,7 +308,19 @@ export function UserNotificationsBell({
               isDark ? "border-slate-700" : "border-slate-200",
             )}
           >
-            <SheetTitle>Notifications</SheetTitle>
+            <div className="flex items-center justify-between gap-2 pr-8">
+              <SheetTitle>Notifications</SheetTitle>
+              {unreadCount > 0 && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-8 text-xs shrink-0"
+                  onClick={handleMarkAllRead}
+                >
+                  Mark all read
+                </Button>
+              )}
+            </div>
             {unreadCount > 0 && (
               <p
                 className={cn(
@@ -318,7 +361,8 @@ export function UserNotificationsBell({
                     isDark ? "text-slate-500" : "text-muted-foreground",
                   )}
                 >
-                  New support replies and updates will show up here.
+                  Announcements, support replies, and platform updates will
+                  appear here.
                 </p>
               </div>
             ) : (
@@ -337,6 +381,39 @@ export function UserNotificationsBell({
           </div>
         </SheetContent>
       </Sheet>
+
+      <Dialog
+        open={!!detailNotification}
+        onOpenChange={(o) => !o && setDetailNotification(null)}
+      >
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>
+              {detailNotification
+                ? notificationTitle(detailNotification)
+                : "Announcement"}
+            </DialogTitle>
+          </DialogHeader>
+          {detailNotification && (
+            <div className="space-y-3">
+              <p className="text-xs text-muted-foreground">
+                {new Date(detailNotification.created_at).toLocaleString()}
+              </p>
+              <p className="text-sm whitespace-pre-wrap leading-relaxed">
+                {detailNotification.message_resolved}
+              </p>
+            </div>
+          )}
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setDetailNotification(null)}
+            >
+              Close
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </>
   );
 }

@@ -27,6 +27,10 @@
     {
       "path": "/api/cron/snapshot-monthly-challenge-winners",
       "schedule": "0 21 28-31 * *"
+    },
+    {
+      "path": "/api/cron/process-scheduled-notifications",
+      "schedule": "0 4 * * *"
     }
   ]
 }

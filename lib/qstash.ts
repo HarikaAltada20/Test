@@ -53,6 +53,56 @@ async function verifyQStashAgainstUrls(
   return false;
 }
 
+/**
+ * Public HTTPS origin for callbacks (QStash). Prefer the incoming request
+ * (Cloudflare tunnel / proxy) over NEXT_PUBLIC_APP_URL so the URL matches
+ * what the browser is actually using.
+ */
+export function resolvePublicBaseUrl(request?: Request): string {
+  if (request) {
+    const forwarded = getForwardedOrigin(request);
+    if (forwarded && !isLoopbackUrl(forwarded)) {
+      return forwarded.replace(/\/$/, "");
+    }
+    try {
+      const origin = new URL(request.url).origin;
+      if (!isLoopbackUrl(origin)) {
+        return origin.replace(/\/$/, "");
+      }
+    } catch {
+      // ignore
+    }
+  }
+  return getBaseUrl().replace(/\/$/, "");
+}
+
+/**
+ * Base URL QStash will POST to. Prefer QSTASH_CALLBACK_URL (set to your active
+ * cloudflared/ngrok URL), then NEXT_PUBLIC_APP_URL, then the incoming request origin.
+ */
+export function getQStashPublishBaseUrl(request?: Request): string {
+  const explicit = process.env.QSTASH_CALLBACK_URL?.trim();
+  if (explicit) {
+    try {
+      const origin = new URL(
+        explicit.includes("://") ? explicit : `https://${explicit}`,
+      ).origin;
+      if (!isLoopbackUrl(origin)) {
+        return origin.replace(/\/$/, "");
+      }
+    } catch {
+      // fall through
+    }
+  }
+
+  const fromEnv = getBaseUrl().replace(/\/$/, "");
+  if (!isLoopbackUrl(fromEnv)) {
+    return fromEnv;
+  }
+
+  return resolvePublicBaseUrl(request);
+}
+
 /** QStash cannot deliver to localhost; detect loopback so callers can fall back to direct POST. */
 export function isLoopbackUrl(url: string): boolean {
   try {
@@ -506,4 +556,155 @@ export async function authorizeProcessTokenRefreshQueue(
   const auth = request.headers.get("Authorization");
   if (cronSecret) return auth === `Bearer ${cronSecret}`;
   return true;
+}
+
+/** Canonical URL for the scheduled admin notifications processor. */
+export function getProcessScheduledNotificationsUrl(): string {
+  return `${getBaseUrl()}/api/cron/process-scheduled-notifications`;
+}
+
+async function verifyQStashSignatureScheduledNotifications(
+  request: Request,
+  rawBody: string,
+): Promise<boolean> {
+  const signature = request.headers.get("Upstash-Signature");
+  if (!signature || typeof signature !== "string") return false;
+  const currentKey = process.env.QSTASH_CURRENT_SIGNING_KEY?.trim();
+  const nextKey = process.env.QSTASH_NEXT_SIGNING_KEY?.trim();
+  if (!currentKey && !nextKey) return false;
+  try {
+    const receiver = new Receiver({
+      currentSigningKey: currentKey,
+      nextSigningKey: nextKey,
+    });
+    const forwardedOrigin = getForwardedOrigin(request);
+    const requestUrl = (() => {
+      try {
+        return new URL(request.url);
+      } catch {
+        return null;
+      }
+    })();
+    const candidates = uniqueStrings([
+      requestUrl?.toString() ?? null,
+      requestUrl
+        ? `${requestUrl.origin}/api/cron/process-scheduled-notifications`
+        : null,
+      forwardedOrigin
+        ? `${forwardedOrigin}/api/cron/process-scheduled-notifications`
+        : null,
+      getProcessScheduledNotificationsUrl(),
+    ]);
+    return verifyQStashAgainstUrls(receiver, signature, rawBody, candidates);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Authorize process-scheduled-notifications: QStash signature or Bearer CRON_SECRET.
+ */
+export async function authorizeProcessScheduledNotifications(
+  request: Request,
+  rawBody: string,
+): Promise<boolean> {
+  if (request.headers.get("Upstash-Signature")) {
+    return verifyQStashSignatureScheduledNotifications(request, rawBody);
+  }
+  const cronSecret = process.env.CRON_SECRET;
+  const auth = request.headers.get("Authorization");
+  if (cronSecret) {
+    return auth === `Bearer ${cronSecret}`;
+  }
+  return process.env.NODE_ENV === "development";
+}
+
+/**
+ * Schedule a one-shot QStash delivery for an admin notification campaign at scheduled_at.
+ */
+export async function scheduleAdminNotificationCampaign(
+  campaignId: string,
+  scheduledAt: Date,
+  baseUrl?: string,
+): Promise<{ messageId?: string; error?: string; publishUrl?: string }> {
+  const client = getQStashClient();
+  if (!client) {
+    return { error: "QStash not configured" };
+  }
+  const origin = (baseUrl ?? getQStashPublishBaseUrl()).replace(/\/$/, "");
+  const publishUrl = `${origin}/api/cron/process-scheduled-notifications`;
+  if (isLoopbackUrl(publishUrl)) {
+    return {
+      error:
+        "Loopback URL; set QSTASH_CALLBACK_URL or NEXT_PUBLIC_APP_URL to your public tunnel",
+      publishUrl,
+    };
+  }
+
+  const deduplicationId = `admin-notification-campaign-${campaignId}-${scheduledAt.getTime()}`;
+  const msUntil = scheduledAt.getTime() - Date.now();
+  const body = { campaignId };
+
+  try {
+    let res: { messageId?: string };
+    if (msUntil <= 0) {
+      res = (await client.publishJSON({
+        url: publishUrl,
+        body,
+        method: "POST",
+        deduplicationId,
+        retries: 5,
+        label: "admin-notification-scheduled",
+      })) as { messageId?: string };
+    } else {
+      res = (await client.publishJSON({
+        url: publishUrl,
+        body,
+        method: "POST",
+        notBefore: Math.floor(scheduledAt.getTime() / 1000),
+        deduplicationId,
+        retries: 5,
+        label: "admin-notification-scheduled",
+      })) as { messageId?: string };
+    }
+    console.log("[qstash] scheduled admin notification", {
+      campaignId,
+      messageId: res.messageId,
+      publishUrl,
+      notBefore:
+        msUntil > 0
+          ? new Date(scheduledAt.getTime()).toISOString()
+          : "immediate",
+    });
+    return {
+      messageId: res.messageId,
+      publishUrl,
+    };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error(
+      "[qstash] scheduleAdminNotificationCampaign failed:",
+      message,
+      { campaignId, publishUrl },
+    );
+    return { error: message, publishUrl };
+  }
+}
+
+/** Cancel a pending QStash message when an admin cancels a scheduled campaign. */
+export async function cancelAdminNotificationQStashSchedule(
+  messageId: string,
+): Promise<{ ok: boolean; error?: string }> {
+  const client = getQStashClient();
+  if (!client) {
+    return { ok: false, error: "QStash not configured" };
+  }
+  try {
+    await client.messages.delete(messageId);
+    return { ok: true };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.warn("[qstash] cancelAdminNotificationQStashSchedule:", message);
+    return { ok: false, error: message };
+  }
 }
