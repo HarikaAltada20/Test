@@ -18,15 +18,14 @@ CREATE POLICY "Users insert own support threads"
   ON public.support_threads
   FOR INSERT
   TO authenticated
-  WITH CHECK (auth.uid() = user_id);
+  WITH CHECK (
+    auth.uid() = user_id
+    AND COALESCE(status, 'open') <> 'closed'
+  );
 
+-- No direct customer UPDATE policy on support_threads.
+-- Thread status/metadata changes should flow through server-side APIs or RPCs.
 DROP POLICY IF EXISTS "Users update own support threads" ON public.support_threads;
-CREATE POLICY "Users update own support threads"
-  ON public.support_threads
-  FOR UPDATE
-  TO authenticated
-  USING (auth.uid() = user_id)
-  WITH CHECK (auth.uid() = user_id);
 
 -- ---------- support_threads: admins ----------
 
@@ -63,6 +62,7 @@ CREATE POLICY "Users insert messages on own threads"
   WITH CHECK (
     thread_id IS NOT NULL
     AND user_id = auth.uid()
+    AND COALESCE(user_type, '') <> 'admin'
     AND EXISTS (
       SELECT 1
       FROM public.support_threads st
@@ -104,3 +104,7 @@ CREATE POLICY "Users update own notifications"
 GRANT SELECT, INSERT, UPDATE ON public.support_threads TO authenticated;
 GRANT SELECT, INSERT, UPDATE ON public.queries TO authenticated;
 GRANT SELECT, UPDATE ON public.user_notifications TO authenticated;
+
+-- Restrict direct table privileges for authenticated users to match API boundaries.
+REVOKE UPDATE ON public.support_threads FROM authenticated;
+REVOKE UPDATE ON public.queries FROM authenticated;

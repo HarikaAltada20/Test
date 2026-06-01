@@ -19,7 +19,12 @@ export async function POST(req: NextRequest, context: RouteContext) {
   }
 
   const { threadId } = await context.params;
-  const payload = await req.json();
+  let payload: { body?: unknown; close?: unknown } = {};
+  try {
+    payload = (await req.json()) as { body?: unknown; close?: unknown };
+  } catch {
+    return NextResponse.json({ error: "Invalid JSON payload" }, { status: 400 });
+  }
   const body = normalizeSupportBody(payload?.body);
   const closeThread = payload?.close === true;
   if (!body) {
