@@ -73,8 +73,8 @@ async function bustLeaderboardCache(contestId: string) {
 //   - 48 hours: SUBMISSION_WINDOW_VALUE = 48, SUBMISSION_WINDOW_UNIT = 'hour'
 //   - 1 week: SUBMISSION_WINDOW_VALUE = 1, SUBMISSION_WINDOW_UNIT = 'week'
 // Adjust the submission window value
-const SUBMISSION_WINDOW_VALUE: number = 6;
-const SUBMISSION_WINDOW_UNIT: dayjs.ManipulateType = "days";
+const SUBMISSION_WINDOW_VALUE: number = 2;
+const SUBMISSION_WINDOW_UNIT: dayjs.ManipulateType = "day";
 
 // Auto-generate display text and handle singular/plural forms
 const IS_SUBMISSION_WINDOW_SINGULAR: boolean = SUBMISSION_WINDOW_VALUE === 1;
