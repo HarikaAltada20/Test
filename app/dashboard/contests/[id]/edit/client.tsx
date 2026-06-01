@@ -104,6 +104,7 @@ import {
   isCpmContestType,
   isMilestoneContestType,
 } from "@/lib/contest-type";
+import { isVideoContestFormat } from "@/lib/trust-score";
 
 // Dynamically import the Novel editor
 const NovelEditor = dynamic(() => import("@/components/novel-editor"), {
@@ -3256,7 +3257,7 @@ export default function EditContestPage({
         ? maxSubmissionsPerCreator
         : 1;
       updatePayload.trust_score =
-        contest?.contest_format === "video" &&
+        isVideoContestFormat(contest?.contest_format) &&
         trustScoreEnabled &&
         contestTrustScore !== ""
           ? Number(contestTrustScore)
@@ -5286,7 +5287,7 @@ export default function EditContestPage({
             ? maxSubmissionsPerCreator
             : 1,
           trust_score:
-            contest?.contest_format === "video" &&
+            isVideoContestFormat(contest?.contest_format) &&
             trustScoreEnabled &&
             contestTrustScore !== ""
               ? Number(contestTrustScore)
@@ -5930,7 +5931,7 @@ export default function EditContestPage({
             ? maxSubmissionsPerCreator
             : 1,
           trust_score:
-            contest?.contest_format === "video" &&
+            isVideoContestFormat(contest?.contest_format) &&
             trustScoreEnabled &&
             contestTrustScore !== ""
               ? Number(contestTrustScore)
@@ -7532,7 +7533,7 @@ export default function EditContestPage({
         ? maxSubmissionsPerCreator
         : 1;
       updatePayload.trust_score =
-        contest?.contest_format === "video" &&
+        isVideoContestFormat(contest?.contest_format) &&
         trustScoreEnabled &&
         contestTrustScore !== ""
           ? Number(contestTrustScore)
@@ -12444,7 +12445,7 @@ export default function EditContestPage({
                 </p>
               </div> */}
 
-              {contest?.contest_format === "video" && (
+              {isVideoContestFormat(contest?.contest_format) && (
               <div
                 className={cn(
                   "space-y-3 rounded-lg border p-4",

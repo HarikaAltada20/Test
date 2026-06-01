@@ -59,6 +59,21 @@ export async function GET(req: NextRequest) {
     query = query.lte("last_message_at", to);
   }
 
+  if (search) {
+    const pattern = `%${search}%`;
+    const { data: matchingUsers } = await supabase
+      .from("users")
+      .select("id")
+      .or(`email.ilike.${pattern},username.ilike.${pattern}`);
+
+    const userIds = (matchingUsers ?? []).map((u) => u.id);
+    if (userIds.length > 0) {
+      query = query.or(`user_id.in.(${userIds.join(",")}),subject.ilike.${pattern}`);
+    } else {
+      query = query.ilike("subject", pattern);
+    }
+  }
+
   const fromIdx = (page - 1) * pageSize;
   const toIdx = fromIdx + pageSize - 1;
   const { data, error, count } = await query.range(fromIdx, toIdx);
@@ -67,20 +82,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  let threads = data ?? [];
-
-  if (search) {
-    const q = search.toLowerCase();
-    threads = threads.filter((t: Record<string, unknown>) => {
-      const u = t.users as { email?: string; username?: string } | null;
-      const subject = String(t.subject || "").toLowerCase();
-      return (
-        u?.email?.toLowerCase().includes(q) ||
-        u?.username?.toLowerCase().includes(q) ||
-        subject.includes(q)
-      );
-    });
-  }
+  const threads = data ?? [];
 
   const threadIds = threads.map((t: { id: string }) => t.id);
   let lastMessages: Record<string, string> = {};
@@ -107,7 +109,7 @@ export async function GET(req: NextRequest) {
 
   return NextResponse.json({
     threads: enriched,
-    total: count ?? enriched.length,
+    total: count ?? 0,
     page,
     pageSize,
   });

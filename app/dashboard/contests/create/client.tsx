@@ -50,6 +50,7 @@ import {
   isCpmContestType,
   isMilestoneContestType,
 } from "@/lib/contest-type";
+import { isVideoContestFormat } from "@/lib/trust-score";
 import { formatCurrencyFromCents } from "@/lib/currency-utils";
 import { toast } from "@/hooks/use-toast"; // Added import
 import dynamic from "next/dynamic";
@@ -3496,7 +3497,7 @@ export default function CreateContestPage({
           ? maxSubmissionsPerCreator
           : 1,
         trust_score:
-          contestFormat === "video" &&
+          isVideoContestFormat(contestFormat) &&
           trustScoreEnabled &&
           contestTrustScore !== ""
             ? Number(contestTrustScore)
@@ -10213,7 +10214,7 @@ export default function CreateContestPage({
                 </p>
               </div>
 
-              {contestFormat === "video" && (
+              {isVideoContestFormat(contestFormat) && (
                 <div
                   className={cn(
                     "space-y-4 p-4 border rounded-lg",

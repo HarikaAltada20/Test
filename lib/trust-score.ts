@@ -290,25 +290,11 @@ export function getTrustSubmissionBlockedMessage(input: {
   return `Trust score too low to submit. Your trust score is ${input.creatorScore}. This campaign requires at least ${input.minScore}. You can still view this campaign and your existing submissions. Submit new content after your score reaches ${input.minScore} or higher.`;
 }
 
-export async function getCreatorTrustScoreForUser(
+/** Live metrics from all submissions (matches DB enforce_submission_trust_score). */
+export async function getCreatorTrustMetricsLive(
   supabase: any,
   creatorId: string,
-): Promise<number> {
-  const { data: profile } = await supabase
-    .from("creator_profiles")
-    .select("trust_score_metrics")
-    .eq("id", creatorId)
-    .maybeSingle();
-
-  const stored = parseStoredCreatorTrustMetrics(profile?.trust_score_metrics);
-  if (
-    stored?.trust_score !== null &&
-    stored?.trust_score !== undefined &&
-    Number.isFinite(stored.trust_score)
-  ) {
-    return stored.trust_score;
-  }
-
+): Promise<TrustScoreMetrics> {
   const { data: rows, error } = await supabase
     .from("submissions")
     .select("status")
@@ -320,7 +306,14 @@ export async function getCreatorTrustScoreForUser(
 
   return getTrustMetricsFromStatuses(
     (rows || []).map((row: { status: SubmissionStatus }) => row.status),
-  ).trust_score;
+  );
+}
+
+export async function getCreatorTrustScoreForUser(
+  supabase: any,
+  creatorId: string,
+): Promise<number> {
+  return (await getCreatorTrustMetricsLive(supabase, creatorId)).trust_score;
 }
 
 export async function assertCreatorMeetsContestTrustRequirement(
@@ -369,15 +362,17 @@ export async function recomputeTrustForCreatorIds(
   creatorIds: string[],
 ): Promise<void> {
   const uniqueIds = [...new Set(creatorIds.filter(Boolean))];
-  for (const creatorId of uniqueIds) {
-    const result = await recomputeCreatorTrustMetrics(supabase, creatorId);
-    if (!result.ok) {
-      console.error(
-        `[trust-score] Failed to recompute trust for creator ${creatorId}:`,
-        result.error,
-      );
-    }
-  }
+  await Promise.all(
+    uniqueIds.map(async (creatorId) => {
+      const result = await recomputeCreatorTrustMetrics(supabase, creatorId);
+      if (!result.ok) {
+        console.error(
+          `[trust-score] Failed to recompute trust for creator ${creatorId}:`,
+          result.error,
+        );
+      }
+    }),
+  );
 }
 
 export async function recomputeCreatorTrustMetrics(
