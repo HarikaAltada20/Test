@@ -328,7 +328,7 @@ export async function POST(
       .eq("id", tweetId)
       .eq("contest_id", contestId)
       .select("id")
-      .limit(1);
+      .maybeSingle();
 
     if (tweetBonusUpdateErr || !updatedRows?.length) {
       console.error(

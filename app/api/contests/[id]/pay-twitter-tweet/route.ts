@@ -372,7 +372,7 @@ export async function POST(
       .eq("contest_id", contestId)
       .neq("moderation_status", "paid")
       .select("id")
-      .limit(1);
+      .maybeSingle();
 
     if (updateTweetErr || !updatedTweetRows?.length) {
       console.error(
