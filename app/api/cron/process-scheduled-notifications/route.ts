@@ -7,11 +7,25 @@ import { authorizeProcessScheduledNotifications } from "@/lib/qstash";
 
 export const dynamic = "force-dynamic";
 
+function getBaseUrlFromRequest(request: Request): string {
+  try {
+    const xfHost = request.headers.get("x-forwarded-host")?.split(",")[0]?.trim();
+    const xfProto = request.headers.get("x-forwarded-proto")?.split(",")[0]?.trim();
+    if (xfHost && xfProto) return `${xfProto}://${xfHost}`;
+    const u = new URL(request.url);
+    return u.origin;
+  } catch {
+    const url = process.env.NEXT_PUBLIC_APP_URL?.trim() || "http://localhost:3000";
+    return url.replace(/\/$/, "");
+  }
+}
+
 async function handleProcess(
   campaignId?: string,
+  baseUrl?: string,
 ): Promise<NextResponse> {
   if (campaignId) {
-    const result = await processScheduledCampaignById(campaignId);
+    const result = await processScheduledCampaignById(campaignId, { baseUrl });
     const retryable =
       result.reason === "not_due" || result.reason === "lock_failed";
     return NextResponse.json(
@@ -25,7 +39,7 @@ async function handleProcess(
     );
   }
 
-  const processed = await processDueScheduledCampaigns(50);
+  const processed = await processDueScheduledCampaigns(50, baseUrl);
   return NextResponse.json({ ok: true, mode: "sweep", processed });
 }
 
@@ -34,7 +48,7 @@ export async function GET(request: NextRequest) {
   if (!authorized) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-  return handleProcess();
+  return handleProcess(undefined, getBaseUrlFromRequest(request));
 }
 
 export async function POST(request: NextRequest) {
@@ -64,5 +78,5 @@ export async function POST(request: NextRequest) {
     }
   }
 
-  return handleProcess(campaignId);
+  return handleProcess(campaignId, getBaseUrlFromRequest(request));
 }

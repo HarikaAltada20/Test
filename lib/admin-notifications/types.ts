@@ -24,5 +24,6 @@ export type RecipientUserRow = {
 };
 
 export const MAX_RECIPIENTS = 10_000;
-export const SYNC_DELIVERY_LIMIT = 500;
+/** Recipients delivered per queue worker invocation (Vercel-safe). */
+export const DELIVERY_BATCH_SIZE = 50;
 export const PUBLIC_ANNOUNCEMENT_TITLE = "Announcement";

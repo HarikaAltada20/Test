@@ -69,6 +69,7 @@ import {
 } from "@/lib/subscription-utils-client";
 import REGIONS_AND_COUNTRIES_DATA from "@/data/regions-and-countries.json";
 import { getCreatorTrustScoreFromMetrics } from "@/lib/trust-score";
+import { SupportChatToggle } from "@/components/admin/SupportChatToggle";
 
 const UsersMap = dynamic(
   () => import("./UsersMap").then((m) => ({ default: m.UsersMap })),
@@ -120,6 +121,7 @@ type User = {
   // Basic user type and status
   user_type: string;
   is_active: boolean;
+  support_chat_enabled?: boolean | null;
   coins: number;
   created_at: string;
   updated_at: string;
@@ -325,6 +327,9 @@ const ALL_COUNTRIES: string[] = Array.from(
   ),
 ).sort((a, b) => a.localeCompare(b));
 
+const isTableFilterColumn = (column: { id: string }) =>
+  column.id !== "profile" && column.id !== "support_chat";
+
 // Column definitions for each tab
 const allColumns = {
   all: [
@@ -332,6 +337,7 @@ const allColumns = {
     { id: "full_name", label: "Full Name" },
     { id: "profile", label: "Profile" },
     { id: "email", label: "Email" },
+    { id: "support_chat", label: "Support Chat" },
     { id: "user_type", label: "User Type" },
     { id: "referral_code", label: "Referral Code" },
     { id: "referred_by", label: "Referred By" },
@@ -353,6 +359,7 @@ const allColumns = {
     { id: "full_name", label: "Full Name" },
     { id: "profile", label: "Profile" },
     { id: "email", label: "Email" },
+    { id: "support_chat", label: "Support Chat" },
     { id: "username", label: "Username" },
     { id: "company_name", label: "Company Name" },
     { id: "website_url", label: "Website URL" },
@@ -369,6 +376,7 @@ const allColumns = {
     { id: "full_name", label: "Full Name" },
     { id: "profile", label: "Profile" },
     { id: "email", label: "Email" },
+    { id: "support_chat", label: "Support Chat" },
     { id: "username", label: "Username" },
     { id: "youtube_account", label: "YouTube Account" },
     { id: "instagram_account", label: "Instagram Account" },
@@ -609,6 +617,14 @@ export default function AdminUsersPage() {
     }
   };
 
+  const syncSupportChatEnabled = (userId: string, enabled: boolean) => {
+    setRows((prev) =>
+      prev.map((u) =>
+        u.id === userId ? { ...u, support_chat_enabled: enabled } : u,
+      ),
+    );
+  };
+
   const userToRecipientRow = (u: User): RecipientUserRow => ({
     id: u.id,
     email: u.email,
@@ -737,6 +753,8 @@ export default function AdminUsersPage() {
         return row.username;
       case "user_type":
         return row.user_type;
+      case "support_chat":
+        return row.support_chat_enabled !== false;
       case "country": {
         return getGeoField(row, "country");
       }
@@ -1188,6 +1206,10 @@ export default function AdminUsersPage() {
             case "user_type":
               aValue = a.user_type?.toLowerCase() || "";
               bValue = b.user_type?.toLowerCase() || "";
+              break;
+            case "support_chat":
+              aValue = a.support_chat_enabled !== false ? 1 : 0;
+              bValue = b.support_chat_enabled !== false ? 1 : 0;
               break;
             case "referral_code": {
               const aMeta = getReferralSortMeta(a.referral_code || null);
@@ -2555,7 +2577,7 @@ export default function AdminUsersPage() {
                   if (filters.length === 0) {
                     const availableColumns = allColumns[
                       activeTab as keyof typeof allColumns
-                    ].filter((column) => column.id !== "profile");
+                    ].filter(isTableFilterColumn);
                     setFilters([
                       {
                         id: `filter-${Date.now()}-${Math.random()}`,
@@ -2725,6 +2747,16 @@ export default function AdminUsersPage() {
                     )}
                     {isColumnVisible("email") && (
                       <SortableHeader columnId="email" label="Email" />
+                    )}
+                    {isColumnVisible("support_chat") && (
+                      <TableHead
+                        className={cn(
+                          "whitespace-nowrap border-r",
+                          isDark ? "bg-[#391A6A]" : "bg-[#F9FAFB]",
+                        )}
+                      >
+                        Support Chat
+                      </TableHead>
                     )}
                     {activeTab === "advertisers" && (
                       <>
@@ -3971,6 +4003,18 @@ export default function AdminUsersPage() {
                               {r.email}
                             </TableCell>
                           )}
+                          {isColumnVisible("support_chat") && (
+                            <TableCell className="whitespace-nowrap border-r">
+                              <SupportChatToggle
+                                key={`${r.id}-${r.support_chat_enabled}`}
+                                userId={r.id}
+                                enabled={r.support_chat_enabled !== false}
+                                onUpdated={(enabled) =>
+                                  syncSupportChatEnabled(r.id, enabled)
+                                }
+                              />
+                            </TableCell>
+                          )}
                           {activeTab === "advertisers" ? (
                             <>
                               {isColumnVisible("username") && (
@@ -4921,6 +4965,11 @@ export default function AdminUsersPage() {
               title: "Notification scheduled",
               description: `Scheduled for ${new Date(result.scheduledAt).toLocaleString()} (your local time).${qstashNote}`,
             });
+          } else if (result.status === "processing") {
+            toast({
+              title: "Delivery in progress",
+              description: `Sending to ${result.recipientCount} user(s). Watch progress on the Notifications tab.`,
+            });
           } else if (result.failureCount && result.failureCount > 0) {
             toast({
               title: "Partially sent",
@@ -5072,7 +5121,7 @@ export default function AdminUsersPage() {
                     value={
                       emptyFilterColumn ||
                       allColumns[activeTab as keyof typeof allColumns].filter(
-                        (column) => column.id !== "profile",
+                        isTableFilterColumn,
                       )[0]?.id ||
                       ""
                     }
@@ -5095,7 +5144,7 @@ export default function AdminUsersPage() {
                     </SelectTrigger>
                     <SelectContent isDark={isDark}>
                       {allColumns[activeTab as keyof typeof allColumns]
-                        .filter((column) => column.id !== "profile")
+                        .filter(isTableFilterColumn)
                         .map((column) => (
                           <SelectItem
                             key={column.id}
@@ -5113,7 +5162,7 @@ export default function AdminUsersPage() {
                     const selectedColumnId =
                       emptyFilterColumn ||
                       allColumns[activeTab as keyof typeof allColumns].filter(
-                        (column) => column.id !== "profile",
+                        isTableFilterColumn,
                       )[0]?.id ||
                       "";
                     const isUserType = selectedColumnId === "user_type";
@@ -5166,7 +5215,7 @@ export default function AdminUsersPage() {
                       const selectedColumn =
                         emptyFilterColumn ||
                         allColumns[activeTab as keyof typeof allColumns].filter(
-                          (column) => column.id !== "profile",
+                          isTableFilterColumn,
                         )[0]?.id ||
                         "";
                       if (selectedColumn && value) {
@@ -5322,7 +5371,7 @@ export default function AdminUsersPage() {
                                     allColumns[
                                       activeTab as keyof typeof allColumns
                                     ].filter(
-                                      (column) => column.id !== "profile",
+                                      isTableFilterColumn,
                                     )[0]?.id ||
                                     "";
                                   if (selectedColumn && value) {
@@ -5360,7 +5409,7 @@ export default function AdminUsersPage() {
                                   allColumns[
                                     activeTab as keyof typeof allColumns
                                   ].filter(
-                                    (column) => column.id !== "profile",
+                                    isTableFilterColumn,
                                   )[0]?.id ||
                                   "";
                                 if (selectedColumn && value) {
@@ -5397,7 +5446,7 @@ export default function AdminUsersPage() {
                                   allColumns[
                                     activeTab as keyof typeof allColumns
                                   ].filter(
-                                    (column) => column.id !== "profile",
+                                    isTableFilterColumn,
                                   )[0]?.id ||
                                   "";
                                 if (selectedColumn && value) {
@@ -5438,7 +5487,7 @@ export default function AdminUsersPage() {
                             emptyFilterColumn ||
                             allColumns[
                               activeTab as keyof typeof allColumns
-                            ].filter((column) => column.id !== "profile")[0]
+                            ].filter(isTableFilterColumn)[0]
                               ?.id ||
                             "";
                           if (selectedColumn && value) {
@@ -5513,7 +5562,7 @@ export default function AdminUsersPage() {
                       </SelectTrigger>
                       <SelectContent isDark={isDark}>
                         {allColumns[activeTab as keyof typeof allColumns]
-                          .filter((column) => column.id !== "profile")
+                          .filter(isTableFilterColumn)
                           .map((column) => (
                             <SelectItem
                               key={column.id}
@@ -5974,7 +6023,7 @@ export default function AdminUsersPage() {
               onClick={() => {
                 const availableColumns = allColumns[
                   activeTab as keyof typeof allColumns
-                ].filter((column) => column.id !== "profile");
+                ].filter(isTableFilterColumn);
                 setFilters([
                   ...filters,
                   {

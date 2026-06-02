@@ -7,14 +7,14 @@ import {
   resolveRecipientUsers,
 } from "@/lib/admin-notifications/recipients";
 import {
-  runCampaignDelivery,
-  shouldDeliverSynchronously,
+  processScheduledCampaignById,
+  startQueuedCampaignDelivery,
 } from "@/lib/admin-notifications/delivery";
 import {
   getQStashPublishBaseUrl,
   scheduleAdminNotificationCampaign,
 } from "@/lib/qstash";
-import { processScheduledCampaignById } from "@/lib/admin-notifications/delivery";
+import { campaignRecipientInsertTimestamps } from "@/lib/admin-notifications/recipient-timestamps";
 import type {
   AdminNotificationRecipientMode,
   SendTiming,
@@ -173,11 +173,13 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  const recipientInsertedAt = new Date().toISOString();
   const recipientRows = users.map((u) => ({
     campaign_id: campaign.id,
     user_id: u.id,
     user_type_at_send: u.user_type,
     delivery_status: "pending" as const,
+    ...campaignRecipientInsertTimestamps(recipientInsertedAt),
   }));
 
   const CHUNK = 500;
@@ -194,9 +196,10 @@ export async function POST(req: NextRequest) {
     }
   }
 
+  const qstashBaseUrl = getQStashPublishBaseUrl(req);
+
   if (sendTiming === "scheduled") {
     const scheduledDate = new Date(scheduledAt!);
-    const qstashBaseUrl = getQStashPublishBaseUrl(req);
     const scheduleResult = await scheduleAdminNotificationCampaign(
       campaign.id,
       scheduledDate,
@@ -218,7 +221,9 @@ export async function POST(req: NextRequest) {
 
     const msUntil = scheduledDate.getTime() - Date.now();
     if (!scheduleResult.messageId && msUntil <= 0) {
-      await processScheduledCampaignById(campaign.id);
+      await processScheduledCampaignById(campaign.id, {
+        baseUrl: qstashBaseUrl,
+      });
     }
 
     const SERVER_WAIT_MAX_MS = 24 * 60 * 60 * 1000;
@@ -227,7 +232,9 @@ export async function POST(req: NextRequest) {
       after(async () => {
         await new Promise((resolve) => setTimeout(resolve, msUntil));
         try {
-          await processScheduledCampaignById(campaignId);
+          await processScheduledCampaignById(campaignId, {
+            baseUrl: qstashBaseUrl,
+          });
         } catch (err) {
           console.error(
             "[admin-notifications] server scheduled delivery failed:",
@@ -251,22 +258,21 @@ export async function POST(req: NextRequest) {
     });
   }
 
-  if (shouldDeliverSynchronously(users.length)) {
-    const result = await runCampaignDelivery(campaign.id, users);
-    return NextResponse.json({
-      campaignId: campaign.id,
-      recipientCount: users.length,
-      successCount: result.successCount,
-      failureCount: result.failureCount,
-      status: result.status,
-      scheduledAt: null,
-      recipientCountByType: countRecipientsByType(users),
-    });
+  const started = await startQueuedCampaignDelivery(
+    campaign.id,
+    qstashBaseUrl,
+  );
+  if (!started.started) {
+    return NextResponse.json(
+      {
+        error:
+          started.reason === "enqueue_failed"
+            ? "Delivery queue unavailable; check Redis configuration."
+            : "Failed to start delivery",
+      },
+      { status: 500 },
+    );
   }
-
-  void runCampaignDelivery(campaign.id, users).catch((err) => {
-    console.error("Async campaign delivery failed:", err);
-  });
 
   return NextResponse.json({
     campaignId: campaign.id,

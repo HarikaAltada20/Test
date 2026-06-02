@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   useAdminScheduledNotificationDelivery,
   useSyncScheduledCampaignTimers,
@@ -18,8 +18,14 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { EnhancedTabs } from "@/components/ui/enhancedTabs";
+import { PaginationControls } from "@/components/ui/pagination-controls";
 import { cn } from "@/lib/utils";
 import { ArrowLeft, Loader2, X } from "lucide-react";
+import {
+  CampaignDeliveryProgressBar,
+  type DeliveryProgressData,
+} from "./CampaignDeliveryProgressBar";
+import { CampaignNotificationStats } from "./CampaignNotificationStats";
 
 type CampaignListItem = {
   id: string;
@@ -31,6 +37,7 @@ type CampaignListItem = {
   createdAt: string;
   readCount: number;
   readPercent: number | null;
+  deliveryProgress?: DeliveryProgressData | null;
 };
 
 type RecipientRow = {
@@ -111,10 +118,15 @@ export function AdminNotificationsView({
   const [campaignMeta, setCampaignMeta] = useState<{
     messageTemplate: string;
     status: string;
+    recipientCount: number;
   } | null>(null);
+  const [detailProgress, setDetailProgress] =
+    useState<DeliveryProgressData | null>(null);
+  const [recipientPage, setRecipientPage] = useState(1);
+  const [recipientLimit, setRecipientLimit] = useState(25);
 
-  const loadCampaigns = useCallback(async () => {
-    setLoading(true);
+  const loadCampaigns = useCallback(async (options?: { silent?: boolean }) => {
+    if (!options?.silent) setLoading(true);
     try {
       const res = await fetch("/api/admin/notifications/campaigns?limit=50");
       const data = await res.json();
@@ -122,7 +134,7 @@ export function AdminNotificationsView({
         setCampaigns(data.campaigns ?? []);
       }
     } finally {
-      setLoading(false);
+      if (!options?.silent) setLoading(false);
     }
   }, []);
 
@@ -138,6 +150,18 @@ export function AdminNotificationsView({
   }, [loadCampaigns]);
 
   useSyncScheduledCampaignTimers(campaigns, true);
+
+  const hasActiveDelivery = campaigns.some(
+    (c) => c.status === "processing" || c.status === "pending",
+  );
+
+  useEffect(() => {
+    if (!hasActiveDelivery) return;
+    const interval = setInterval(() => {
+      void loadCampaigns({ silent: true });
+    }, 2000);
+    return () => clearInterval(interval);
+  }, [hasActiveDelivery, loadCampaigns]);
 
   useEffect(() => {
     if (highlightCampaignId) {
@@ -164,7 +188,9 @@ export function AdminNotificationsView({
           setCampaignMeta({
             messageTemplate: data.campaign.messageTemplate,
             status: data.campaign.status,
+            recipientCount: data.campaign.recipientCount ?? 0,
           });
+          setDetailProgress(data.deliveryProgress ?? null);
         }
       } finally {
         setDetailLoading(false);
@@ -173,11 +199,70 @@ export function AdminNotificationsView({
     [],
   );
 
+  const pollDetailProgress = useCallback(async (campaignId: string) => {
+    try {
+      const res = await fetch(
+        `/api/admin/notifications/campaigns/${campaignId}/progress`,
+      );
+      const data = await res.json();
+      if (!res.ok) return;
+      setDetailProgress({
+        deliveredCount: data.deliveredCount,
+        failedCount: data.failedCount,
+        pendingCount: data.pendingCount,
+        processedCount: data.processedCount,
+        recipientCount: data.recipientCount,
+        percentComplete: data.percentComplete,
+      });
+      if (data.status !== "processing" && data.status !== "pending") {
+        setCampaignMeta((prev) =>
+          prev ? { ...prev, status: data.status } : prev,
+        );
+        void loadCampaigns();
+        void loadDetail(campaignId, detailTab);
+      }
+    } catch {
+      /* ignore poll errors */
+    }
+  }, [detailTab, loadCampaigns, loadDetail]);
+
+  useEffect(() => {
+    if (!selectedId || campaignMeta?.status !== "processing") {
+      return;
+    }
+    void pollDetailProgress(selectedId);
+    const interval = setInterval(() => {
+      void pollDetailProgress(selectedId);
+    }, 2000);
+    return () => clearInterval(interval);
+  }, [selectedId, campaignMeta?.status, pollDetailProgress]);
+
   useEffect(() => {
     if (selectedId) {
       loadDetail(selectedId, detailTab);
     }
   }, [selectedId, detailTab, loadDetail]);
+
+  useEffect(() => {
+    setRecipientPage(1);
+  }, [selectedId, detailTab]);
+
+  const recipientTotal = recipients.length;
+  const recipientTotalPages = Math.max(
+    1,
+    Math.ceil(recipientTotal / recipientLimit),
+  );
+
+  useEffect(() => {
+    if (recipientPage > recipientTotalPages) {
+      setRecipientPage(recipientTotalPages);
+    }
+  }, [recipientPage, recipientTotalPages]);
+
+  const paginatedRecipients = useMemo(() => {
+    const start = (recipientPage - 1) * recipientLimit;
+    return recipients.slice(start, start + recipientLimit);
+  }, [recipients, recipientPage, recipientLimit]);
 
   const handleCancel = async (campaignId: string) => {
     const res = await fetch(
@@ -246,6 +331,7 @@ export function AdminNotificationsView({
             onClick={() => {
               setSelectedId(null);
               setDetailTab("all");
+              setRecipientPage(1);
             }}
           >
             <ArrowLeft className="h-4 w-4" />
@@ -258,35 +344,12 @@ export function AdminNotificationsView({
             </p>
           )}
 
+          {campaignMeta?.status === "processing" && detailProgress && (
+            <CampaignDeliveryProgressBar progress={detailProgress} />
+          )}
+
           {summary && (
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-              <div className="rounded-lg border p-3 text-center">
-                <p className="text-2xl font-semibold">{summary.sent}</p>
-                <p className="text-xs text-muted-foreground">Sent</p>
-              </div>
-              <div className="rounded-lg border p-3 text-center">
-                <p className="text-2xl font-semibold">
-                  {summary.read} ({summary.readPercent}%)
-                </p>
-                <p className="text-xs text-muted-foreground">Read</p>
-              </div>
-              {summary.byType.creator?.sent > 0 && (
-                <div className="rounded-lg border p-3 text-center">
-                  <p className="text-sm font-semibold">
-                    Creators: {summary.byType.creator.read}/
-                    {summary.byType.creator.sent} read
-                  </p>
-                </div>
-              )}
-              {summary.byType.advertiser?.sent > 0 && (
-                <div className="rounded-lg border p-3 text-center">
-                  <p className="text-sm font-semibold">
-                    Brands: {summary.byType.advertiser.read}/
-                    {summary.byType.advertiser.sent} read
-                  </p>
-                </div>
-              )}
-            </div>
+            <CampaignNotificationStats summary={summary} isDark={isDark} />
           )}
 
           <EnhancedTabs
@@ -297,7 +360,10 @@ export function AdminNotificationsView({
               { id: "unread", label: "Unread only" },
             ]}
             activeTab={detailTab}
-            onTabChange={setDetailTab}
+            onTabChange={(tab) => {
+              setDetailTab(tab);
+              setRecipientPage(1);
+            }}
             isDark={isDark}
           />
 
@@ -306,51 +372,78 @@ export function AdminNotificationsView({
               <Loader2 className="h-8 w-8 animate-spin text-purple-500" />
             </div>
           ) : (
-            <div className="overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Name</TableHead>
-                    <TableHead>Email</TableHead>
-                    <TableHead>Type</TableHead>
-                    <TableHead>Delivered</TableHead>
-                    <TableHead>Read status</TableHead>
-                    <TableHead>Read at</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {recipients.length === 0 ? (
+            <div className="space-y-4">
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
                     <TableRow>
-                      <TableCell colSpan={6} className="text-center text-sm">
-                        No recipients match this filter.
-                      </TableCell>
+                      <TableHead>Name</TableHead>
+                      <TableHead>Email</TableHead>
+                      <TableHead>Type</TableHead>
+                      <TableHead>Delivered</TableHead>
+                      <TableHead>Read status</TableHead>
+                      <TableHead>Read at</TableHead>
                     </TableRow>
-                  ) : (
-                    recipients.map((r) => (
-                      <TableRow key={r.userId}>
-                        <TableCell>{r.fullName || "—"}</TableCell>
-                        <TableCell className="text-sm">{r.email}</TableCell>
-                        <TableCell className="capitalize">
-                          {r.userTypeAtSend === "advertiser"
-                            ? "Brand"
-                            : r.userTypeAtSend}
-                        </TableCell>
-                        <TableCell>
-                          {r.deliveryStatus === "delivered"
-                            ? "✓ Delivered"
-                            : r.deliveryStatus}
-                        </TableCell>
-                        <TableCell>{readStatusBadge(r)}</TableCell>
-                        <TableCell className="text-sm">
-                          {r.readAt
-                            ? formatWhen(r.readAt, null, "completed", timezone)
-                            : "—"}
+                  </TableHeader>
+                  <TableBody>
+                    {recipientTotal === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={6} className="text-center text-sm">
+                          No recipients match this filter.
                         </TableCell>
                       </TableRow>
-                    ))
-                  )}
-                </TableBody>
-              </Table>
+                    ) : (
+                      paginatedRecipients.map((r) => (
+                        <TableRow key={r.userId}>
+                          <TableCell>{r.fullName || "—"}</TableCell>
+                          <TableCell className="text-sm">{r.email}</TableCell>
+                          <TableCell className="capitalize">
+                            {r.userTypeAtSend === "advertiser"
+                              ? "Brand"
+                              : r.userTypeAtSend}
+                          </TableCell>
+                          <TableCell>
+                            {r.deliveryStatus === "delivered"
+                              ? "✓ Delivered"
+                              : r.deliveryStatus}
+                          </TableCell>
+                          <TableCell>{readStatusBadge(r)}</TableCell>
+                          <TableCell className="text-sm">
+                            {r.readAt
+                              ? formatWhen(
+                                  r.readAt,
+                                  null,
+                                  "completed",
+                                  timezone,
+                                )
+                              : "—"}
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
+
+              {recipientTotal > 0 && (
+                <PaginationControls
+                  page={recipientPage}
+                  limit={recipientLimit}
+                  total={recipientTotal}
+                  totalPages={recipientTotalPages}
+                  hasNextPage={recipientPage < recipientTotalPages}
+                  hasPreviousPage={recipientPage > 1}
+                  onPageChange={setRecipientPage}
+                  onLimitChange={(limit) => {
+                    setRecipientLimit(limit);
+                    setRecipientPage(1);
+                  }}
+                  loading={detailLoading}
+                  isDark={isDark}
+                  pageSizeOptions={[10, 25, 50, 100]}
+                  hide200Option
+                />
+              )}
             </div>
           )}
         </CardContent>
@@ -379,7 +472,7 @@ export function AdminNotificationsView({
                 <TableRow>
                   <TableHead>When</TableHead>
                   <TableHead>Message</TableHead>
-                  <TableHead>Audience</TableHead>
+                  <TableHead>Users</TableHead>
                   <TableHead>Read</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead />
@@ -404,10 +497,19 @@ export function AdminNotificationsView({
                       {c.messageTemplate}
                     </TableCell>
                     <TableCell className="text-sm">
-                      {c.recipientCount} users
+                      {c.status === "processing" && c.deliveryProgress ? (
+                        <div className="min-w-[140px] max-w-[220px]">
+                          <CampaignDeliveryProgressBar
+                            progress={c.deliveryProgress}
+                            compact
+                          />
+                        </div>
+                      ) : (
+                        `${c.recipientCount} users`
+                      )}
                     </TableCell>
                     <TableCell className="text-sm">
-                      {c.status === "scheduled"
+                      {c.status === "scheduled" || c.status === "processing"
                         ? "—"
                         : `${c.readCount}/${c.successCount || c.recipientCount}`}
                     </TableCell>

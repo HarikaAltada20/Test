@@ -1,10 +1,21 @@
 import { createAdminClient } from "@/utils/supabase/admin";
 import {
+  enqueueAdminNotificationDeliveryJob,
+  isAdminNotificationDeliveryQueueEnabled,
+} from "@/lib/queue/admin-notification-delivery-queue";
+import {
+  isQStashEnabled,
+  triggerProcessAdminNotificationDeliveryQueue,
+} from "@/lib/qstash";
+import {
   resolveNotificationTemplate,
   type ContestTemplateContext,
 } from "./template";
 import type { RecipientUserRow } from "./types";
-import { PUBLIC_ANNOUNCEMENT_TITLE, SYNC_DELIVERY_LIMIT } from "./types";
+import { DELIVERY_BATCH_SIZE, PUBLIC_ANNOUNCEMENT_TITLE } from "./types";
+import {
+  campaignRecipientDeliveryStatusPatch,
+} from "@/lib/admin-notifications/recipient-timestamps";
 import {
   userNotificationInsertTimestamps,
   userNotificationNow,
@@ -27,14 +38,67 @@ async function loadContestTemplateContext(
   };
 }
 
-export async function deliverCampaignNotifications(
+/** Next pending recipient user IDs for one delivery batch. */
+export async function loadNextPendingRecipientUserIds(
   campaignId: string,
-  recipients: RecipientUserRow[],
-): Promise<{
-  successCount: number;
-  failureCount: number;
-  failedUserIds: string[];
-}> {
+  limit = DELIVERY_BATCH_SIZE,
+): Promise<string[]> {
+  const db = createAdminClient();
+  const { data, error } = await db
+    .from("admin_notification_campaign_recipients")
+    .select("user_id")
+    .eq("campaign_id", campaignId)
+    .eq("delivery_status", "pending")
+    .order("user_id", { ascending: true })
+    .limit(limit);
+
+  if (error || !data?.length) return [];
+  return data.map((r) => r.user_id);
+}
+
+export async function countPendingCampaignRecipients(
+  campaignId: string,
+): Promise<number> {
+  const db = createAdminClient();
+  const { count, error } = await db
+    .from("admin_notification_campaign_recipients")
+    .select("user_id", { count: "exact", head: true })
+    .eq("campaign_id", campaignId)
+    .eq("delivery_status", "pending");
+
+  if (error) return 0;
+  return count ?? 0;
+}
+
+async function loadUsersByIds(userIds: string[]): Promise<RecipientUserRow[]> {
+  if (userIds.length === 0) return [];
+  const db = createAdminClient();
+  const users: RecipientUserRow[] = [];
+  const CHUNK = 500;
+
+  for (let i = 0; i < userIds.length; i += CHUNK) {
+    const chunk = userIds.slice(i, i + CHUNK);
+    const { data } = await db
+      .from("users")
+      .select(
+        "id, email, full_name, username, user_type, coins, referral_code, created_at, is_active",
+      )
+      .in("id", chunk);
+    users.push(...((data ?? []) as RecipientUserRow[]));
+  }
+
+  return users;
+}
+
+/** Deliver one batch; only rows still `pending` are updated. */
+export async function deliverCampaignBatch(
+  campaignId: string,
+  userIds: string[],
+): Promise<{ successCount: number; failureCount: number }> {
+  if (userIds.length === 0) {
+    return { successCount: 0, failureCount: 0 };
+  }
+
   const db = createAdminClient();
 
   const { data: campaign, error: campaignError } = await db
@@ -49,14 +113,41 @@ export async function deliverCampaignNotifications(
     throw new Error(campaignError?.message ?? "Campaign not found");
   }
 
+  const { data: stillPending } = await db
+    .from("admin_notification_campaign_recipients")
+    .select("user_id")
+    .eq("campaign_id", campaignId)
+    .eq("delivery_status", "pending")
+    .in("user_id", userIds);
+
+  const pendingSet = new Set((stillPending ?? []).map((r) => r.user_id));
+  const idsToDeliver = userIds.filter((id) => pendingSet.has(id));
+  if (idsToDeliver.length === 0) {
+    return { successCount: 0, failureCount: 0 };
+  }
+
+  const users = await loadUsersByIds(idsToDeliver);
+  const userById = new Map(users.map((u) => [u.id, u]));
+
   const contest = await loadContestTemplateContext(campaign.contest_id);
-  const tz =
-    campaign.timezone_label === "local" ? "local" : ("UTC" as const);
+  const tz = campaign.timezone_label === "local" ? "local" : ("UTC" as const);
+
   let successCount = 0;
   let failureCount = 0;
-  const failedUserIds: string[] = [];
 
-  for (const user of recipients) {
+  for (const userId of idsToDeliver) {
+    const user = userById.get(userId);
+    if (!user) {
+      failureCount += 1;
+      await db
+        .from("admin_notification_campaign_recipients")
+        .update(campaignRecipientDeliveryStatusPatch("failed"))
+        .eq("campaign_id", campaignId)
+        .eq("user_id", userId)
+        .eq("delivery_status", "pending");
+      continue;
+    }
+
     const messageResolved = resolveNotificationTemplate(
       campaign.message_template,
       user,
@@ -78,48 +169,53 @@ export async function deliverCampaignNotifications(
 
     if (notifError) {
       failureCount += 1;
-      failedUserIds.push(user.id);
       await db
         .from("admin_notification_campaign_recipients")
-        .update({ delivery_status: "failed" })
+        .update(campaignRecipientDeliveryStatusPatch("failed", deliveredAt))
         .eq("campaign_id", campaignId)
-        .eq("user_id", user.id);
+        .eq("user_id", user.id)
+        .eq("delivery_status", "pending");
       continue;
     }
 
     successCount += 1;
     await db
       .from("admin_notification_campaign_recipients")
-      .update({ delivery_status: "delivered" })
+      .update(campaignRecipientDeliveryStatusPatch("delivered", deliveredAt))
       .eq("campaign_id", campaignId)
-      .eq("user_id", user.id);
+      .eq("user_id", user.id)
+      .eq("delivery_status", "pending");
   }
 
-  return { successCount, failureCount, failedUserIds };
+  return { successCount, failureCount };
 }
 
-export async function runCampaignDelivery(
-  campaignId: string,
-  recipients: RecipientUserRow[],
-): Promise<{
+export async function finalizeCampaignDelivery(campaignId: string): Promise<{
   successCount: number;
   failureCount: number;
   status: "completed" | "partial" | "failed";
 }> {
   const db = createAdminClient();
 
-  await db
-    .from("admin_notification_campaigns")
-    .update({ status: "processing" })
-    .eq("id", campaignId);
+  const { data: rows, error } = await db
+    .from("admin_notification_campaign_recipients")
+    .select("delivery_status")
+    .eq("campaign_id", campaignId);
 
-  const { successCount, failureCount } = await deliverCampaignNotifications(
-    campaignId,
-    recipients,
-  );
+  if (error) {
+    throw new Error(error.message);
+  }
 
+  let successCount = 0;
+  let failureCount = 0;
+  for (const row of rows ?? []) {
+    if (row.delivery_status === "delivered") successCount += 1;
+    else if (row.delivery_status === "failed") failureCount += 1;
+  }
+
+  const recipientCount = rows?.length ?? 0;
   const status =
-    failureCount === 0
+    failureCount === 0 && successCount > 0
       ? "completed"
       : successCount === 0
         ? "failed"
@@ -131,7 +227,7 @@ export async function runCampaignDelivery(
       status,
       success_count: successCount,
       failure_count: failureCount,
-      recipient_count: recipients.length,
+      recipient_count: recipientCount,
       completed_at: new Date().toISOString(),
     })
     .eq("id", campaignId);
@@ -139,8 +235,149 @@ export async function runCampaignDelivery(
   return { successCount, failureCount, status };
 }
 
-export function shouldDeliverSynchronously(recipientCount: number): boolean {
-  return recipientCount <= SYNC_DELIVERY_LIMIT;
+async function triggerDeliveryProcessor(
+  baseUrl?: string,
+  campaignId?: string,
+): Promise<void> {
+  const cronSecret = process.env.CRON_SECRET;
+  const url = `${(baseUrl ?? process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000").replace(/\/$/, "")}/api/cron/process-admin-notification-delivery-queue`;
+  const body = campaignId ? JSON.stringify({ campaignId }) : "{}";
+
+  const doFetch = () =>
+    fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...(cronSecret ? { Authorization: `Bearer ${cronSecret}` } : {}),
+      },
+      body,
+    }).catch((e) =>
+      console.warn(
+        "[admin-notifications] trigger delivery processor failed:",
+        e,
+      ),
+    );
+
+  if (isQStashEnabled()) {
+    const res = await triggerProcessAdminNotificationDeliveryQueue(
+      baseUrl,
+      campaignId,
+    );
+    if (res?.error) await doFetch();
+  } else {
+    await doFetch();
+  }
+}
+
+/**
+ * Start queued fan-out for a campaign (immediate or after schedule lock).
+ * Sets status to processing and enqueues the first worker job.
+ */
+export async function startQueuedCampaignDelivery(
+  campaignId: string,
+  baseUrl?: string,
+): Promise<{ started: boolean; reason?: string }> {
+  const db = createAdminClient();
+
+  const pending = await countPendingCampaignRecipients(campaignId);
+  if (pending === 0) {
+    await db
+      .from("admin_notification_campaigns")
+      .update({
+        status: "failed",
+        completed_at: new Date().toISOString(),
+      })
+      .eq("id", campaignId);
+    return { started: false, reason: "no_recipients" };
+  }
+
+  await db
+    .from("admin_notification_campaigns")
+    .update({ status: "processing" })
+    .eq("id", campaignId);
+
+  if (isAdminNotificationDeliveryQueueEnabled()) {
+    const { error } = await enqueueAdminNotificationDeliveryJob({ campaignId });
+    if (error) {
+      console.error(
+        "[admin-notifications] enqueue failed; falling back to HTTP chain:",
+        error,
+      );
+      await triggerDeliveryProcessor(baseUrl, campaignId);
+      return { started: true };
+    }
+    await triggerDeliveryProcessor(baseUrl, campaignId);
+    return { started: true };
+  }
+
+  // No Redis: drive the processor directly via HTTP (chains per batch).
+  console.warn(
+    "[admin-notifications] Redis queue not configured; using HTTP processor chain",
+  );
+  await triggerDeliveryProcessor(baseUrl, campaignId);
+  return { started: true };
+}
+
+/**
+ * Process one queue job (or direct HTTP invocation) for a campaign batch.
+ */
+export async function processCampaignDeliveryJob(
+  campaignId: string,
+  baseUrl?: string,
+): Promise<{
+  batchDelivered: number;
+  hasMore: boolean;
+  finalized: boolean;
+}> {
+  const userIds = await loadNextPendingRecipientUserIds(campaignId);
+  if (userIds.length === 0) {
+    await finalizeCampaignDelivery(campaignId);
+    return {
+      batchDelivered: 0,
+      hasMore: false,
+      finalized: true,
+    };
+  }
+
+  const db = createAdminClient();
+  const { data: campaign } = await db
+    .from("admin_notification_campaigns")
+    .select("status")
+    .eq("id", campaignId)
+    .maybeSingle();
+
+  if (
+    campaign?.status === "cancelled" ||
+    campaign?.status === "completed" ||
+    campaign?.status === "failed"
+  ) {
+    return { batchDelivered: 0, hasMore: false, finalized: false };
+  }
+
+  if (campaign?.status !== "processing") {
+    await db
+      .from("admin_notification_campaigns")
+      .update({ status: "processing" })
+      .eq("id", campaignId);
+  }
+
+  const { successCount, failureCount } = await deliverCampaignBatch(
+    campaignId,
+    userIds,
+  );
+  const batchDelivered = successCount + failureCount;
+
+  const stillPending = await countPendingCampaignRecipients(campaignId);
+  if (stillPending > 0) {
+    if (isAdminNotificationDeliveryQueueEnabled()) {
+      await enqueueAdminNotificationDeliveryJob({ campaignId });
+    }
+    await triggerDeliveryProcessor(baseUrl, campaignId);
+    return { batchDelivered, hasMore: true, finalized: false };
+  }
+
+  await finalizeCampaignDelivery(campaignId);
+  return { batchDelivered, hasMore: false, finalized: true };
 }
 
 export async function loadCampaignRecipients(
@@ -158,34 +395,18 @@ export async function loadCampaignRecipients(
     return [];
   }
 
-  const userIds = recipientRows.map((r) => r.user_id);
-  const users: RecipientUserRow[] = [];
-  const CHUNK = 500;
-
-  for (let i = 0; i < userIds.length; i += CHUNK) {
-    const chunk = userIds.slice(i, i + CHUNK);
-    const { data } = await db
-      .from("users")
-      .select(
-        "id, email, full_name, username, user_type, coins, referral_code, created_at, is_active",
-      )
-      .in("id", chunk);
-    users.push(...((data ?? []) as RecipientUserRow[]));
-  }
-
-  return users;
+  return loadUsersByIds(recipientRows.map((r) => r.user_id));
 }
 
 /** Allow delivery up to 2 minutes before scheduled_at (clock / QStash skew). */
 const SCHEDULE_DELIVERY_GRACE_MS = 2 * 60 * 1000;
 
-/** Deliver one scheduled campaign (QStash) or no-op if cancelled / not due. */
+/** Start queued delivery for one scheduled campaign when due. */
 export async function processScheduledCampaignById(
   campaignId: string,
-  options?: { force?: boolean },
+  options?: { force?: boolean; baseUrl?: string },
 ): Promise<{ processed: boolean; reason?: string }> {
   const db = createAdminClient();
-  const now = new Date().toISOString();
   const nowMs = Date.now();
 
   const { data: campaign, error } = await db
@@ -219,23 +440,51 @@ export async function processScheduledCampaignById(
     return { processed: false, reason: "lock_failed" };
   }
 
-  const recipients = await loadCampaignRecipients(campaignId);
-  if (recipients.length === 0) {
-    await db
-      .from("admin_notification_campaigns")
-      .update({
-        status: "failed",
-        completed_at: now,
-      })
-      .eq("id", campaignId);
-    return { processed: false, reason: "no_recipients" };
+  const started = await startQueuedCampaignDelivery(
+    campaignId,
+    options?.baseUrl,
+  );
+  if (!started.started) {
+    return { processed: false, reason: started.reason ?? "start_failed" };
   }
-
-  await runCampaignDelivery(campaignId, recipients);
   return { processed: true };
 }
 
-export async function processDueScheduledCampaigns(limit = 50): Promise<number> {
+/** Re-enqueue delivery for campaigns stuck in `processing` with pending recipients. */
+export async function resumeStuckCampaignDeliveries(
+  limit = 10,
+  baseUrl?: string,
+): Promise<number> {
+  const db = createAdminClient();
+  const { data: campaigns, error } = await db
+    .from("admin_notification_campaigns")
+    .select("id")
+    .eq("status", "processing")
+    .order("created_at", { ascending: true })
+    .limit(limit);
+
+  if (error || !campaigns?.length) return 0;
+
+  let resumed = 0;
+  for (const row of campaigns) {
+    const pending = await countPendingCampaignRecipients(row.id);
+    if (pending === 0) {
+      await finalizeCampaignDelivery(row.id);
+      continue;
+    }
+    if (isAdminNotificationDeliveryQueueEnabled()) {
+      await enqueueAdminNotificationDeliveryJob({ campaignId: row.id });
+    }
+    await triggerDeliveryProcessor(baseUrl, row.id);
+    resumed += 1;
+  }
+  return resumed;
+}
+
+export async function processDueScheduledCampaigns(
+  limit = 50,
+  baseUrl?: string,
+): Promise<number> {
   const db = createAdminClient();
   const now = new Date().toISOString();
 
@@ -253,30 +502,8 @@ export async function processDueScheduledCampaigns(limit = 50): Promise<number> 
 
   let processed = 0;
   for (const row of due) {
-    const { data: locked } = await db
-      .from("admin_notification_campaigns")
-      .update({ status: "processing" })
-      .eq("id", row.id)
-      .eq("status", "scheduled")
-      .select("id")
-      .maybeSingle();
-
-    if (!locked) continue;
-
-    const recipients = await loadCampaignRecipients(row.id);
-    if (recipients.length === 0) {
-      await db
-        .from("admin_notification_campaigns")
-        .update({
-          status: "failed",
-          completed_at: now,
-        })
-        .eq("id", row.id);
-      continue;
-    }
-
-    await runCampaignDelivery(row.id, recipients);
-    processed += 1;
+    const result = await processScheduledCampaignById(row.id, { baseUrl });
+    if (result.processed) processed += 1;
   }
 
   return processed;

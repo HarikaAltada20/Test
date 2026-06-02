@@ -15,6 +15,18 @@ BEGIN
   END IF;
 END $$;
 
+-- Notification type for admin alerts when a user sends a support message.
+-- Notifications are created by app code (lib/support/admin-notifications.ts), not a DB trigger.
+DO $$
+BEGIN
+  BEGIN
+    ALTER TYPE public.admin_notification_type_enum
+      ADD VALUE IF NOT EXISTS 'support_user_message';
+  EXCEPTION
+    WHEN duplicate_object THEN NULL;
+  END;
+END $$;
+
 CREATE TABLE IF NOT EXISTS public.admin_notification_campaigns (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
   created_by uuid NOT NULL REFERENCES public.users (id),
@@ -62,10 +74,34 @@ CREATE TABLE IF NOT EXISTS public.admin_notification_campaign_recipients (
   user_id uuid NOT NULL REFERENCES public.users (id) ON DELETE CASCADE,
   user_type_at_send text NOT NULL,
   delivery_status text NOT NULL DEFAULT 'pending',
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now(),
   CONSTRAINT admin_notification_campaign_recipients_pkey PRIMARY KEY (campaign_id, user_id),
   CONSTRAINT admin_notification_campaign_recipients_delivery_status_check
     CHECK (delivery_status IN ('pending', 'delivered', 'failed'))
 );
+
+ALTER TABLE public.admin_notification_campaign_recipients
+  ADD COLUMN IF NOT EXISTS created_at timestamptz NOT NULL DEFAULT now(),
+  ADD COLUMN IF NOT EXISTS updated_at timestamptz NOT NULL DEFAULT now();
+
+CREATE OR REPLACE FUNCTION public.handle_updated_at()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $$
+BEGIN
+  NEW.updated_at = NOW();
+  RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS set_admin_notification_campaign_recipients_updated_at
+  ON public.admin_notification_campaign_recipients;
+
+CREATE TRIGGER set_admin_notification_campaign_recipients_updated_at
+  BEFORE UPDATE ON public.admin_notification_campaign_recipients
+  FOR EACH ROW
+  EXECUTE FUNCTION public.handle_updated_at();
 
 CREATE INDEX IF NOT EXISTS idx_admin_notification_campaign_recipients_campaign
   ON public.admin_notification_campaign_recipients (campaign_id);

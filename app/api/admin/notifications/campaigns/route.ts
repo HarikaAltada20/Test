@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { verifyAdminAccess } from "@/utils/admin-auth";
 import { createAdminClient } from "@/utils/supabase/admin";
 import { processDueScheduledCampaigns } from "@/lib/admin-notifications/delivery";
+import { getCampaignDeliveryProgress } from "@/lib/admin-notifications/delivery-progress";
 
 export const dynamic = "force-dynamic";
 
@@ -54,6 +55,14 @@ export async function GET(req: NextRequest) {
         .eq("is_read", true);
 
       const delivered = c.success_count ?? 0;
+      const deliveryProgress =
+        c.status === "processing" || c.status === "pending"
+          ? await getCampaignDeliveryProgress(
+              c.id,
+              c.recipient_count ?? undefined,
+            )
+          : null;
+
       return {
         id: c.id,
         messageTemplate: c.message_template,
@@ -71,6 +80,7 @@ export async function GET(req: NextRequest) {
           delivered > 0
             ? Math.round(((readCount ?? 0) / delivered) * 1000) / 10
             : null,
+        deliveryProgress,
       };
     }),
   );
