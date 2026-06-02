@@ -125,6 +125,26 @@ BEGIN
   END IF;
 END $$;
 
+-- Ensure campaign sends are idempotent even under concurrent workers.
+WITH ranked AS (
+  SELECT
+    ctid,
+    ROW_NUMBER() OVER (
+      PARTITION BY campaign_id, user_id
+      ORDER BY created_at ASC, ctid ASC
+    ) AS row_num
+  FROM public.user_notifications
+  WHERE campaign_id IS NOT NULL
+)
+DELETE FROM public.user_notifications un
+USING ranked r
+WHERE un.ctid = r.ctid
+  AND r.row_num > 1;
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_user_notifications_campaign_user_unique
+  ON public.user_notifications (campaign_id, user_id)
+  WHERE campaign_id IS NOT NULL;
+
 ALTER TABLE public.admin_notification_campaigns ENABLE ROW LEVEL SECURITY;
 
 DROP POLICY IF EXISTS admin_notification_campaigns_admin_select ON public.admin_notification_campaigns;

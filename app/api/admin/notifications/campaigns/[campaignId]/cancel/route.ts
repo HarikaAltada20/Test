@@ -42,7 +42,17 @@ export async function PATCH(_req: Request, context: RouteContext) {
   }
 
   if (campaign.qstash_message_id) {
-    await cancelAdminNotificationQStashSchedule(campaign.qstash_message_id);
+    const cancelResult = await cancelAdminNotificationQStashSchedule(
+      campaign.qstash_message_id,
+    );
+    if (!cancelResult.ok) {
+      return NextResponse.json(
+        {
+          error: `Failed to cancel scheduled QStash delivery: ${cancelResult.error ?? "unknown error"}`,
+        },
+        { status: 502 },
+      );
+    }
   }
 
   const { data: updatedCampaign, error: updateError } = await db

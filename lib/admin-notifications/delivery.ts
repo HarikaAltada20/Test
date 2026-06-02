@@ -90,6 +90,8 @@ async function loadUsersByIds(userIds: string[]): Promise<RecipientUserRow[]> {
   return users;
 }
 
+const USER_NOTIFICATION_CAMPAIGN_USER_CONFLICT_TARGET = "campaign_id,user_id";
+
 /** Deliver one batch; only rows still `pending` are updated. */
 export async function deliverCampaignBatch(
   campaignId: string,
@@ -136,12 +138,14 @@ export async function deliverCampaignBatch(
   let failureCount = 0;
 
   for (const userId of idsToDeliver) {
+    const deliveredAt = userNotificationNow();
+
     const user = userById.get(userId);
     if (!user) {
       failureCount += 1;
       await db
         .from("admin_notification_campaign_recipients")
-        .update(campaignRecipientDeliveryStatusPatch("failed"))
+        .update(campaignRecipientDeliveryStatusPatch("failed", deliveredAt))
         .eq("campaign_id", campaignId)
         .eq("user_id", userId)
         .eq("delivery_status", "pending");
@@ -155,17 +159,44 @@ export async function deliverCampaignBatch(
       contest,
     );
 
-    const deliveredAt = userNotificationNow();
-    const { error: notifError } = await db.from("user_notifications").insert({
-      user_id: user.id,
-      campaign_id: campaignId,
-      contest_id: contest?.id ?? null,
-      notification_type: campaign.notification_type,
-      title: PUBLIC_ANNOUNCEMENT_TITLE,
-      message_template: campaign.message_template,
-      message_resolved: messageResolved,
-      ...userNotificationInsertTimestamps(deliveredAt),
-    });
+    const { data: updatedRecipient, error: markDeliveredError } = await db
+      .from("admin_notification_campaign_recipients")
+      .update(campaignRecipientDeliveryStatusPatch("delivered", deliveredAt))
+      .eq("campaign_id", campaignId)
+      .eq("user_id", user.id)
+      .eq("delivery_status", "pending")
+      .select("user_id")
+      .maybeSingle();
+
+    // Another worker has already processed this recipient.
+    if (!updatedRecipient) {
+      if (markDeliveredError) {
+        console.warn(
+          "[admin-notifications] failed to claim recipient:",
+          campaignId,
+          user.id,
+          markDeliveredError.message,
+        );
+      }
+      continue;
+    }
+
+    const { error: notifError } = await db.from("user_notifications").upsert(
+      {
+        user_id: user.id,
+        campaign_id: campaignId,
+        contest_id: contest?.id ?? null,
+        notification_type: campaign.notification_type,
+        title: PUBLIC_ANNOUNCEMENT_TITLE,
+        message_template: campaign.message_template,
+        message_resolved: messageResolved,
+        ...userNotificationInsertTimestamps(deliveredAt),
+      },
+      {
+        onConflict: USER_NOTIFICATION_CAMPAIGN_USER_CONFLICT_TARGET,
+        ignoreDuplicates: true,
+      },
+    );
 
     if (notifError) {
       failureCount += 1;
@@ -179,12 +210,6 @@ export async function deliverCampaignBatch(
     }
 
     successCount += 1;
-    await db
-      .from("admin_notification_campaign_recipients")
-      .update(campaignRecipientDeliveryStatusPatch("delivered", deliveredAt))
-      .eq("campaign_id", campaignId)
-      .eq("user_id", user.id)
-      .eq("delivery_status", "pending");
   }
 
   return { successCount, failureCount };
@@ -238,35 +263,53 @@ export async function finalizeCampaignDelivery(campaignId: string): Promise<{
 async function triggerDeliveryProcessor(
   baseUrl?: string,
   campaignId?: string,
-): Promise<void> {
+): Promise<{ triggered: boolean; error?: string }> {
   const cronSecret = process.env.CRON_SECRET;
   const url = `${(baseUrl ?? process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000").replace(/\/$/, "")}/api/cron/process-admin-notification-delivery-queue`;
   const body = campaignId ? JSON.stringify({ campaignId }) : "{}";
 
-  const doFetch = () =>
-    fetch(url, {
+  const doFetch = async (): Promise<{ triggered: boolean; error?: string }> => {
+    try {
+      const res = await fetch(url, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         ...(cronSecret ? { Authorization: `Bearer ${cronSecret}` } : {}),
       },
       body,
-    }).catch((e) =>
+      });
+      if (!res.ok) {
+        const message = `HTTP ${res.status} from delivery processor`;
+        console.warn("[admin-notifications] trigger delivery processor failed:", message);
+        return { triggered: false, error: message };
+      }
+      return { triggered: true };
+    } catch (e) {
+      const message = e instanceof Error ? e.message : String(e);
       console.warn(
         "[admin-notifications] trigger delivery processor failed:",
-        e,
-      ),
-    );
+        message,
+      );
+      return { triggered: false, error: message };
+    }
+  };
 
   if (isQStashEnabled()) {
     const res = await triggerProcessAdminNotificationDeliveryQueue(
       baseUrl,
       campaignId,
     );
-    if (res?.error) await doFetch();
-  } else {
-    await doFetch();
+    if (!res?.error) {
+      return { triggered: true };
+    }
+    const fallback = await doFetch();
+    if (fallback.triggered) return fallback;
+    return {
+      triggered: false,
+      error: `QStash trigger failed: ${res.error}; fallback failed: ${fallback.error ?? "unknown"}`,
+    };
   }
+  return doFetch();
 }
 
 /**
@@ -303,10 +346,16 @@ export async function startQueuedCampaignDelivery(
         "[admin-notifications] enqueue failed; falling back to HTTP chain:",
         error,
       );
-      await triggerDeliveryProcessor(baseUrl, campaignId);
+      const triggered = await triggerDeliveryProcessor(baseUrl, campaignId);
+      if (!triggered.triggered) {
+        return { started: false, reason: "processor_trigger_failed" };
+      }
       return { started: true };
     }
-    await triggerDeliveryProcessor(baseUrl, campaignId);
+    const triggered = await triggerDeliveryProcessor(baseUrl, campaignId);
+    if (!triggered.triggered) {
+      return { started: false, reason: "processor_trigger_failed" };
+    }
     return { started: true };
   }
 
@@ -314,7 +363,10 @@ export async function startQueuedCampaignDelivery(
   console.warn(
     "[admin-notifications] Redis queue not configured; using HTTP processor chain",
   );
-  await triggerDeliveryProcessor(baseUrl, campaignId);
+  const triggered = await triggerDeliveryProcessor(baseUrl, campaignId);
+  if (!triggered.triggered) {
+    return { started: false, reason: "processor_trigger_failed" };
+  }
   return { started: true };
 }
 
@@ -372,7 +424,14 @@ export async function processCampaignDeliveryJob(
     if (isAdminNotificationDeliveryQueueEnabled()) {
       await enqueueAdminNotificationDeliveryJob({ campaignId });
     }
-    await triggerDeliveryProcessor(baseUrl, campaignId);
+    const triggered = await triggerDeliveryProcessor(baseUrl, campaignId);
+    if (!triggered.triggered) {
+      console.error(
+        "[admin-notifications] failed to chain next delivery batch:",
+        campaignId,
+        triggered.error ?? "unknown error",
+      );
+    }
     return { batchDelivered, hasMore: true, finalized: false };
   }
 
@@ -475,7 +534,15 @@ export async function resumeStuckCampaignDeliveries(
     if (isAdminNotificationDeliveryQueueEnabled()) {
       await enqueueAdminNotificationDeliveryJob({ campaignId: row.id });
     }
-    await triggerDeliveryProcessor(baseUrl, row.id);
+    const triggered = await triggerDeliveryProcessor(baseUrl, row.id);
+    if (!triggered.triggered) {
+      console.error(
+        "[admin-notifications] failed to resume stuck campaign delivery:",
+        row.id,
+        triggered.error ?? "unknown error",
+      );
+      continue;
+    }
     resumed += 1;
   }
   return resumed;
