@@ -90,8 +90,6 @@ async function loadUsersByIds(userIds: string[]): Promise<RecipientUserRow[]> {
   return users;
 }
 
-const USER_NOTIFICATION_CAMPAIGN_USER_CONFLICT_TARGET = "campaign_id,user_id";
-
 /** Deliver one batch; only rows still `pending` are updated. */
 export async function deliverCampaignBatch(
   campaignId: string,
@@ -159,8 +157,17 @@ export async function deliverCampaignBatch(
       contest,
     );
 
-    const { error: notifError } = await db.from("user_notifications").upsert(
-      {
+    const { data: existingNotification } = await db
+      .from("user_notifications")
+      .select("id")
+      .eq("campaign_id", campaignId)
+      .eq("user_id", user.id)
+      .limit(1)
+      .maybeSingle();
+
+    let notifError: { code?: string; message: string } | null = null;
+    if (!existingNotification) {
+      const insertResult = await db.from("user_notifications").insert({
         user_id: user.id,
         campaign_id: campaignId,
         contest_id: contest?.id ?? null,
@@ -169,14 +176,26 @@ export async function deliverCampaignBatch(
         message_template: campaign.message_template,
         message_resolved: messageResolved,
         ...userNotificationInsertTimestamps(deliveredAt),
-      },
-      {
-        onConflict: USER_NOTIFICATION_CAMPAIGN_USER_CONFLICT_TARGET,
-        ignoreDuplicates: true,
-      },
-    );
+      });
+      notifError = insertResult.error;
+    }
 
     if (notifError) {
+      // Parallel workers can still race and one can hit duplicate key; treat as delivered.
+      if (notifError.code === "23505") {
+        const { data: markedDuplicateDelivered } = await db
+          .from("admin_notification_campaign_recipients")
+          .update(campaignRecipientDeliveryStatusPatch("delivered", deliveredAt))
+          .eq("campaign_id", campaignId)
+          .eq("user_id", user.id)
+          .eq("delivery_status", "pending")
+          .select("user_id")
+          .maybeSingle();
+        if (markedDuplicateDelivered) {
+          successCount += 1;
+        }
+        continue;
+      }
       failureCount += 1;
       await db
         .from("admin_notification_campaign_recipients")

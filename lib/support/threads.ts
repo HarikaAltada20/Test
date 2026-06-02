@@ -86,14 +86,20 @@ export async function deleteThreads(
 ): Promise<number> {
   if (threadIds.length === 0) return 0;
 
-  const { data, error } = await supabase
+  const { count: toDeleteCount, error: countError } = await supabase
+    .from("support_threads")
+    .select("id", { count: "exact", head: true })
+    .in("id", threadIds);
+
+  if (countError) throw countError;
+
+  const { error } = await supabase
     .from("support_threads")
     .delete()
-    .in("id", threadIds)
-    .select("id");
+    .in("id", threadIds);
 
   if (error) throw error;
-  return data?.length ?? 0;
+  return toDeleteCount ?? 0;
 }
 
 export async function countThreadsBeforeDate(
@@ -112,12 +118,18 @@ export async function deleteThreadsBeforeDate(
   supabase: SupabaseClient,
   before: Date,
 ): Promise<number> {
-  const { data, error } = await supabase
+  const { count: toDeleteCount, error: countError } = await supabase
+    .from("support_threads")
+    .select("id", { count: "exact", head: true })
+    .lt("last_message_at", before.toISOString());
+
+  if (countError) throw countError;
+
+  const { error } = await supabase
     .from("support_threads")
     .delete()
-    .lt("last_message_at", before.toISOString())
-    .select("id");
+    .lt("last_message_at", before.toISOString());
 
   if (error) throw error;
-  return data?.length ?? 0;
+  return toDeleteCount ?? 0;
 }
