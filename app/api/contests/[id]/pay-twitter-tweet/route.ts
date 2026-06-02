@@ -374,7 +374,8 @@ export async function POST(
       .select("id")
       .maybeSingle();
 
-    if (updateTweetErr || !updatedTweetRows?.length) {
+    // maybeSingle() returns an object or null (not an array)
+    if (updateTweetErr || !updatedTweetRows) {
       console.error(
         "[pay-twitter-tweet] Error updating tweet:",
         updateTweetErr

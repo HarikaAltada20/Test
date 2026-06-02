@@ -545,7 +545,8 @@ export async function POST(
         .neq("moderation_status", "paid")
         .select("id")
         .maybeSingle();
-      if (upErr || !updatedTweetRows?.length) {
+      // maybeSingle() returns an object or null (not an array)
+      if (upErr || !updatedTweetRows) {
         console.error("[bulk-pay-twitter-cpm] Tweet update failed:", tid, upErr);
 
         for (const rid of cpmTweetIdsUpdated) {
@@ -672,7 +673,8 @@ export async function POST(
         .select("id")
         .maybeSingle();
 
-      if (bonusUpErr || !updatedBonusRows?.length) {
+      // maybeSingle() returns an object or null (not an array)
+      if (bonusUpErr || !updatedBonusRows) {
         console.error(
           "[bulk-pay-twitter-cpm] Bonus update failed:",
           tid,

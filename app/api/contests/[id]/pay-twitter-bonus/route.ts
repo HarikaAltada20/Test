@@ -330,7 +330,8 @@ export async function POST(
       .select("id")
       .maybeSingle();
 
-    if (tweetBonusUpdateErr || !updatedRows?.length) {
+    // maybeSingle() returns an object or null (not an array)
+    if (tweetBonusUpdateErr || !updatedRows) {
       console.error(
         "[pay-twitter-bonus] CRITICAL: Wallet credited but tweet bonus columns not updated:",
         tweetBonusUpdateErr,
