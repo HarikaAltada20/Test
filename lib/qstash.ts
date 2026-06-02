@@ -445,7 +445,7 @@ export async function authorizeProcessAdminNotificationDeliveryQueue(
   const cronSecret = process.env.CRON_SECRET;
   const auth = request.headers.get("Authorization");
   if (cronSecret) return auth === `Bearer ${cronSecret}`;
-  return true;
+  return process.env.NODE_ENV === "development";
 }
 
 /**

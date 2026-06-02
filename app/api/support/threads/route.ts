@@ -105,6 +105,8 @@ export async function POST(req: NextRequest) {
     .single();
 
   if (msgError || !messageRow) {
+    // Best-effort cleanup so we do not leave an empty/orphaned thread behind.
+    await supabase.from("support_threads").delete().eq("id", thread.id);
     return NextResponse.json({ error: msgError?.message || "Failed to create message" }, { status: 500 });
   }
 

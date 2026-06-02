@@ -93,7 +93,7 @@ export async function POST(req: NextRequest, context: RouteContext) {
 
   const message = mapQueryRowToMessage(messageRow);
 
-  await supabase
+  const { error: threadUpdateError } = await supabase
     .from("support_threads")
     .update({
       status: "open",
@@ -101,6 +101,9 @@ export async function POST(req: NextRequest, context: RouteContext) {
       updated_at: new Date().toISOString(),
     })
     .eq("id", threadId);
+  if (threadUpdateError) {
+    return NextResponse.json({ error: threadUpdateError.message }, { status: 500 });
+  }
 
   await notifyAdminsOfUserSupportMessage({
     messageId: message.id,

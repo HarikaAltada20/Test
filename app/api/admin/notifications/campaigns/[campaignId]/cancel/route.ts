@@ -45,14 +45,25 @@ export async function PATCH(_req: Request, context: RouteContext) {
     await cancelAdminNotificationQStashSchedule(campaign.qstash_message_id);
   }
 
-  const { error: updateError } = await db
+  const { data: updatedCampaign, error: updateError } = await db
     .from("admin_notification_campaigns")
     .update({ status: "cancelled", qstash_message_id: null })
     .eq("id", campaignId)
-    .eq("status", "scheduled");
+    .eq("status", "scheduled")
+    .select("id, status")
+    .maybeSingle();
 
   if (updateError) {
     return NextResponse.json({ error: updateError.message }, { status: 500 });
+  }
+  if (!updatedCampaign) {
+    return NextResponse.json(
+      {
+        error:
+          "Campaign could not be cancelled because its status changed. Refresh and try again.",
+      },
+      { status: 409 },
+    );
   }
 
   return NextResponse.json({ success: true, status: "cancelled" });

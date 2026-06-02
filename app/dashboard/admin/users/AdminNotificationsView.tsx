@@ -379,7 +379,7 @@ export function AdminNotificationsView({
                     <TableRow>
                       <TableHead>Name</TableHead>
                       <TableHead>Email</TableHead>
-                      <TableHead>Type</TableHead>
+                      <TableHead>User Type</TableHead>
                       <TableHead>Delivered</TableHead>
                       <TableHead>Read status</TableHead>
                       <TableHead>Read at</TableHead>
