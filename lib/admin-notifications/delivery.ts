@@ -334,11 +334,6 @@ export async function startQueuedCampaignDelivery(
     return { started: false, reason: "no_recipients" };
   }
 
-  await db
-    .from("admin_notification_campaigns")
-    .update({ status: "processing" })
-    .eq("id", campaignId);
-
   if (isAdminNotificationDeliveryQueueEnabled()) {
     const { error } = await enqueueAdminNotificationDeliveryJob({ campaignId });
     if (error) {
@@ -352,9 +347,18 @@ export async function startQueuedCampaignDelivery(
       }
       return { started: true };
     }
+    await db
+      .from("admin_notification_campaigns")
+      .update({ status: "processing" })
+      .eq("id", campaignId);
+
     const triggered = await triggerDeliveryProcessor(baseUrl, campaignId);
     if (!triggered.triggered) {
-      return { started: false, reason: "processor_trigger_failed" };
+      console.warn(
+        "[admin-notifications] processor trigger failed after enqueue; will rely on queue/cron retry:",
+        campaignId,
+        triggered.error ?? "unknown error",
+      );
     }
     return { started: true };
   }
@@ -363,6 +367,10 @@ export async function startQueuedCampaignDelivery(
   console.warn(
     "[admin-notifications] Redis queue not configured; using HTTP processor chain",
   );
+  await db
+    .from("admin_notification_campaigns")
+    .update({ status: "processing" })
+    .eq("id", campaignId);
   const triggered = await triggerDeliveryProcessor(baseUrl, campaignId);
   if (!triggered.triggered) {
     return { started: false, reason: "processor_trigger_failed" };

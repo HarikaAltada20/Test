@@ -263,6 +263,14 @@ export async function POST(req: NextRequest) {
     qstashBaseUrl,
   );
   if (!started.started) {
+    await db
+      .from("admin_notification_campaigns")
+      .update({
+        status: "failed",
+        completed_at: new Date().toISOString(),
+      })
+      .eq("id", campaign.id);
+
     return NextResponse.json(
       {
         error:

@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { verifyAdminAccess } from "@/utils/admin-auth";
 import { createAdminClient } from "@/utils/supabase/admin";
-import { processDueScheduledCampaigns } from "@/lib/admin-notifications/delivery";
 import { getCampaignDeliveryProgress } from "@/lib/admin-notifications/delivery-progress";
 
 export const dynamic = "force-dynamic";
@@ -23,12 +22,6 @@ export async function GET(req: NextRequest, context: RouteContext) {
   const readFilter = url.searchParams.get("readFilter");
 
   const db = createAdminClient();
-
-  try {
-    await processDueScheduledCampaigns(50);
-  } catch (err) {
-    console.error("Failed to process due scheduled campaigns:", err);
-  }
 
   const { data: campaign, error: campaignError } = await db
     .from("admin_notification_campaigns")

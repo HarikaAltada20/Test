@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { verifyAdminAccess } from "@/utils/admin-auth";
 import { createAdminClient } from "@/utils/supabase/admin";
-import { processDueScheduledCampaigns } from "@/lib/admin-notifications/delivery";
 import { getCampaignDeliveryProgress } from "@/lib/admin-notifications/delivery-progress";
 
 export const dynamic = "force-dynamic";
@@ -27,12 +26,6 @@ export async function GET(req: NextRequest) {
 
   const db = createAdminClient();
 
-  try {
-    await processDueScheduledCampaigns(50);
-  } catch (err) {
-    console.error("Failed to process due scheduled campaigns:", err);
-  }
-
   const { data, error: listError, count } = await db
     .from("admin_notification_campaigns")
     .select(
@@ -46,13 +39,27 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: listError.message }, { status: 500 });
   }
 
+  const campaignIds = (data ?? []).map((c) => c.id);
+  const readCountByCampaign = new Map<string, number>();
+  if (campaignIds.length > 0) {
+    const { data: readRows } = await db
+      .from("user_notifications")
+      .select("campaign_id")
+      .in("campaign_id", campaignIds)
+      .eq("is_read", true);
+    for (const row of readRows ?? []) {
+      const campaignId = row.campaign_id;
+      if (!campaignId) continue;
+      readCountByCampaign.set(
+        campaignId,
+        (readCountByCampaign.get(campaignId) ?? 0) + 1,
+      );
+    }
+  }
+
   const campaigns = await Promise.all(
     (data ?? []).map(async (c) => {
-      const { count: readCount } = await db
-        .from("user_notifications")
-        .select("id", { count: "exact", head: true })
-        .eq("campaign_id", c.id)
-        .eq("is_read", true);
+      const readCount = readCountByCampaign.get(c.id) ?? 0;
 
       const delivered = c.success_count ?? 0;
       const deliveryProgress =
@@ -75,10 +82,10 @@ export async function GET(req: NextRequest) {
         createdAt: c.created_at,
         completedAt: c.completed_at,
         recipientMode: c.recipient_mode,
-        readCount: readCount ?? 0,
+        readCount,
         readPercent:
           delivered > 0
-            ? Math.round(((readCount ?? 0) / delivered) * 1000) / 10
+            ? Math.round((readCount / delivered) * 1000) / 10
             : null,
         deliveryProgress,
       };
