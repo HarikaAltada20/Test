@@ -372,9 +372,10 @@ export async function POST(
       .eq("contest_id", contestId)
       .neq("moderation_status", "paid")
       .select("id")
-      .limit(1);
+      .maybeSingle();
 
-    if (updateTweetErr || !updatedTweetRows?.length) {
+    // maybeSingle() returns an object or null (not an array)
+    if (updateTweetErr || !updatedTweetRows) {
       console.error(
         "[pay-twitter-tweet] Error updating tweet:",
         updateTweetErr
