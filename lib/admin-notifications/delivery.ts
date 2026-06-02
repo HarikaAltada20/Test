@@ -159,28 +159,6 @@ export async function deliverCampaignBatch(
       contest,
     );
 
-    const { data: updatedRecipient, error: markDeliveredError } = await db
-      .from("admin_notification_campaign_recipients")
-      .update(campaignRecipientDeliveryStatusPatch("delivered", deliveredAt))
-      .eq("campaign_id", campaignId)
-      .eq("user_id", user.id)
-      .eq("delivery_status", "pending")
-      .select("user_id")
-      .maybeSingle();
-
-    // Another worker has already processed this recipient.
-    if (!updatedRecipient) {
-      if (markDeliveredError) {
-        console.warn(
-          "[admin-notifications] failed to claim recipient:",
-          campaignId,
-          user.id,
-          markDeliveredError.message,
-        );
-      }
-      continue;
-    }
-
     const { error: notifError } = await db.from("user_notifications").upsert(
       {
         user_id: user.id,
@@ -206,6 +184,28 @@ export async function deliverCampaignBatch(
         .eq("campaign_id", campaignId)
         .eq("user_id", user.id)
         .eq("delivery_status", "pending");
+      continue;
+    }
+
+    const { data: markedDelivered, error: markDeliveredError } = await db
+      .from("admin_notification_campaign_recipients")
+      .update(campaignRecipientDeliveryStatusPatch("delivered", deliveredAt))
+      .eq("campaign_id", campaignId)
+      .eq("user_id", user.id)
+      .eq("delivery_status", "pending")
+      .select("user_id")
+      .maybeSingle();
+
+    // Another worker already handled this recipient state transition.
+    if (!markedDelivered) {
+      if (markDeliveredError) {
+        console.warn(
+          "[admin-notifications] failed to mark recipient delivered:",
+          campaignId,
+          user.id,
+          markDeliveredError.message,
+        );
+      }
       continue;
     }
 
