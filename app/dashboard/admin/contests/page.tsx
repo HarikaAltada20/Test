@@ -62,10 +62,10 @@ export default async function AdminContestsPage() {
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-3xl font-bold tracking-tight">
-              All Contests (Admin)
+              All Campaigns (Admin)
             </h1>
             <p className="text-sm text-muted-foreground mt-1">
-              Admin view - showing all contests from all brands on the platform
+              Admin view - showing all campaigns from all brands on the platform
             </p>
           </div>
         </div>

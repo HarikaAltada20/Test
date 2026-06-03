@@ -106,9 +106,9 @@ export function Nav({
         : "/dashboard/profile";
   const quickLinkLabel =
     userType === "advertiser"
-      ? "Contests"
+      ? "Campaigns"
       : userType === "creator"
-        ? "Opportunities"
+        ? "Campaigns"
         : "Profile";
   const marketingHomeHref = user ? MARKETING_HOME_AS_GUEST : "/";
   const QuickLinkIcon =

@@ -7871,7 +7871,7 @@ export default function EditContestPage({
           >
             {error.includes("live or has ended")
               ? "Return to Contest"
-              : "Back to Contests"}
+              : "Back to Campaigns"}
           </Button>
         </div>
       </div>
@@ -7900,7 +7900,7 @@ export default function EditContestPage({
             onClick={() => router.push("/dashboard/contests")}
             className="bg-rose-600 hover:bg-rose-700 text-white"
           >
-            Back to Contests
+            Back to Campaigns
           </Button>
         </div>
       </div>

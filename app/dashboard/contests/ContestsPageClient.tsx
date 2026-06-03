@@ -270,7 +270,7 @@ export function ContestsPageClient({
       >
         <div className="min-w-0 space-y-0.5">
           <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-balance">
-            My Contests
+            My Campaigns
           </h1>
           <p
             className={cn(

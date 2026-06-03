@@ -138,17 +138,33 @@ const getTabs = (platform?: string | null): TabConfig[] => {
 };
 
 // Section navigation configuration
-const sections = [
+type SectionConfig = {
+  id: string;
+  label: string;
+  conditional?: "leaderboard" | "inspiration-links" | "tracking-links";
+};
+
+const BASE_SECTIONS: SectionConfig[] = [
   { id: "earning-opportunities", label: "Earning Opportunities" },
   {
     id: "prize-structure",
     label: "Prize Structure",
     conditional: "leaderboard",
-  }, // Only for leaderboard contests
+  },
   { id: "contest-details", label: "Contest Details" },
   { id: "content-requirements", label: "Content Requirements" },
   { id: "participation-guidelines", label: "Participation Guidelines" },
   { id: "resources-tools", label: "Resources & Tools" },
+  {
+    id: "inspiration-links",
+    label: "Inspiration Links",
+    conditional: "inspiration-links",
+  },
+  {
+    id: "tracking-links",
+    label: "Tracking Links",
+    conditional: "tracking-links",
+  },
 ];
 // LeaderboardEntry type reflects combined data from API
 type LeaderboardEntry = {
@@ -676,6 +692,40 @@ export function ContestClientPage({
   // Scroll spy state and functionality
   const [activeSection, setActiveSection] = useState("earning-opportunities");
   const sectionRefs = useRef<{ [key: string]: HTMLElement | null }>({});
+
+  const hasInspirationLinks = useMemo(() => {
+    const links = Array.isArray(contest?.inspiration_links)
+      ? contest.inspiration_links
+      : [];
+    return links.some(
+      (link: { url?: string }) => typeof link?.url === "string" && link.url.trim() !== "",
+    );
+  }, [contest?.inspiration_links]);
+
+  const hasTrackingLinks = useMemo(() => {
+    const links = Array.isArray(contest?.tracking_links)
+      ? contest.tracking_links
+      : [];
+    return links.some(
+      (link: { url?: string }) => typeof link?.url === "string" && link.url.trim() !== "",
+    );
+  }, [contest?.tracking_links]);
+
+  const visibleSections = useMemo(() => {
+    return BASE_SECTIONS.filter((section) => {
+      if (!section.conditional) return true;
+      if (section.conditional === "leaderboard") {
+        return contest?.contest_type === "leaderboard";
+      }
+      if (section.conditional === "inspiration-links") {
+        return hasInspirationLinks;
+      }
+      if (section.conditional === "tracking-links") {
+        return hasTrackingLinks;
+      }
+      return true;
+    });
+  }, [contest?.contest_type, hasInspirationLinks, hasTrackingLinks]);
 
   // Read mode from data attribute
   useEffect(() => {
@@ -2057,7 +2107,7 @@ export function ContestClientPage({
       },
     );
 
-    sections.forEach((section) => {
+    visibleSections.forEach((section) => {
       const element = sectionRefs.current[section.id];
       if (element) {
         observer.observe(element);
@@ -2065,14 +2115,14 @@ export function ContestClientPage({
     });
 
     return () => {
-      sections.forEach((section) => {
+      visibleSections.forEach((section) => {
         const element = sectionRefs.current[section.id];
         if (element) {
           observer.unobserve(element);
         }
       });
     };
-  }, []);
+  }, [visibleSections]);
 
   useEffect(() => {
     isMounted = true;
@@ -2626,7 +2676,7 @@ export function ContestClientPage({
             className="mt-4"
             onClick={() => router.push("/dashboard/opportunities")}
           >
-            Back to Opportunities
+            Back to Campaigns
           </Button>
         </div>
       </div>
@@ -2707,7 +2757,7 @@ export function ContestClientPage({
                   isDark ? "text-slate-300" : "text-slate-600",
                 )}
               >
-                Back to Opportunities
+                Back to Campaigns
               </span>
             </Button>
             <Button
@@ -2827,9 +2877,9 @@ export function ContestClientPage({
                   )}
                 </div>
 
-                {/* Enhanced Prize Pool Card */}
-                <div className="flex-shrink-0 lg:text-right">
-                  <div className="bg-white/20 backdrop-blur-xl rounded-3xl p-8 border border-white/30 shadow-2xl hover:shadow-3xl transition-all duration-300 hover:scale-105">
+                {/* Enhanced Prize Pool Card + Submit CTA */}
+                <div className="flex-shrink-0 flex flex-col items-stretch lg:items-end gap-4 w-full lg:w-auto">
+                  <div className="bg-white/20 backdrop-blur-xl rounded-3xl p-8 border border-white/30 shadow-2xl hover:shadow-3xl transition-all duration-300 hover:scale-105 lg:text-right">
                     <div className="text-white/90 text-sm font-bold mb-3 uppercase tracking-wider">
                       {contest.contest_type === "cpm" ||
                       contest.contest_type === "milestone" ||
@@ -2898,6 +2948,82 @@ export function ContestClientPage({
                         </div>
                       )}
                   </div>
+
+                  <Button
+                    size="lg"
+                    onClick={
+                      isTwitterTextImageContest && !hasJoinedTwitterCampaign
+                        ? handleJoinTwitterCampaign
+                        : handleSubmitContent
+                    }
+                    disabled={
+                      contest.status?.toLowerCase() !== "active" ||
+                      isTrustScoreBlocked ||
+                      joinCampaignLoading ||
+                      (hasSubmitted &&
+                        !(
+                          submissionCount > 0 &&
+                          contest?.multiple_submissions_enabled &&
+                          submissionCount < maxSubmissions
+                        )) ||
+                      (isTwitterTextImageContest &&
+                        hasJoinedTwitterCampaign) ||
+                      (!!user &&
+                        isTwitterTextImageContest &&
+                        !hasJoinedTwitterCampaign &&
+                        (twitterConnectStatus === "disconnected" ||
+                          twitterConnectStatus === "loading"))
+                    }
+                    className={cn(
+                      "w-full lg:min-w-[220px] text-base font-bold py-4 px-8 h-auto rounded-2xl shadow-xl transition-all duration-300",
+                      contest.status?.toLowerCase() === "active" &&
+                        !isTrustScoreBlocked &&
+                        !joinCampaignLoading &&
+                        !(
+                          hasSubmitted &&
+                          !(
+                            submissionCount > 0 &&
+                            contest?.multiple_submissions_enabled &&
+                            submissionCount < maxSubmissions
+                          )
+                        ) &&
+                        !(
+                          isTwitterTextImageContest && hasJoinedTwitterCampaign
+                        )
+                        ? "bg-white text-[#4A00BE] border-0 hover:bg-white/90 hover:shadow-2xl hover:scale-105"
+                        : "bg-white/30 text-white/70 cursor-not-allowed",
+                    )}
+                  >
+                    <span className="flex items-center justify-center gap-2">
+                      <PlayCircle className="h-5 w-5 shrink-0" />
+                      {contest.status?.toLowerCase() === "upcoming"
+                        ? "Contest Not Started"
+                        : contest.status?.toLowerCase() === "ended" ||
+                            contest.status?.toLowerCase() === "completed"
+                          ? "Contest Ended"
+                          : isTrustScoreBlocked
+                            ? "Trust Score Too Low"
+                            : hasSubmitted &&
+                                submissionCount > 0 &&
+                                contest?.multiple_submissions_enabled &&
+                                submissionCount < maxSubmissions
+                              ? `Submit More (${
+                                  maxSubmissions - submissionCount
+                                } left)`
+                              : hasSubmitted
+                                ? "Submitted"
+                                : isTwitterTextImageContest
+                                  ? hasJoinedTwitterCampaign
+                                    ? "Joined"
+                                    : joinCampaignLoading
+                                      ? "Joining..."
+                                      : user &&
+                                          twitterConnectStatus === "loading"
+                                        ? "Checking…"
+                                        : "Join Twitter Campaign"
+                                  : "Submit Your Entry"}
+                    </span>
+                  </Button>
                 </div>
               </div>
             </div>
@@ -3963,13 +4089,7 @@ export function ContestClientPage({
                         display: none;
                       }
                     `}</style>
-                    {sections
-                      .filter(
-                        (section: any) =>
-                          !section.conditional ||
-                          section.conditional === contest.contest_type,
-                      )
-                      .map((section) => (
+                    {visibleSections.map((section) => (
                         <button
                           key={section.id}
                           onClick={() => scrollToSection(section.id)}
@@ -6927,7 +7047,13 @@ export function ContestClientPage({
                   return links.length > 0 ? (
                     <>
                       <Separator className="my-8" />
-                      <div className="space-y-6">
+                      <div
+                        id="inspiration-links"
+                        ref={(el) => {
+                          sectionRefs.current["inspiration-links"] = el;
+                        }}
+                        className="space-y-6 scroll-mt-48"
+                      >
                         <div className="flex items-center gap-3">
                           {/* <div className="p-2 bg-purple-100 dark:bg-purple-900/30 rounded-lg">
                             <ExternalLink className="h-5 w-5 text-purple-600 dark:text-purple-400" />
@@ -7020,7 +7146,15 @@ export function ContestClientPage({
                     ? contest.tracking_links
                     : [];
                   return trackingLinks.length > 0 ? (
-                    <div className="space-y-4">
+                    <>
+                      {hasInspirationLinks && <Separator className="my-8" />}
+                      <div
+                        id="tracking-links"
+                        ref={(el) => {
+                          sectionRefs.current["tracking-links"] = el;
+                        }}
+                        className="space-y-4 scroll-mt-48"
+                      >
                       <h4
                         className={cn(
                           "text-xl font-semibold flex items-center gap-2",
@@ -7159,6 +7293,7 @@ export function ContestClientPage({
                         )}
                       </div>
                     </div>
+                    </>
                   ) : null;
                 })()}
               </CardContent>

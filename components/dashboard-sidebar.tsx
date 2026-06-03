@@ -115,7 +115,7 @@ export function DashboardSidebar({
       description: "How it works",
     },
     {
-      name: "Contests",
+      name: "Campaigns",
       href: "/dashboard/contests",
       icon: Trophy,
       description: "Manage your contests",
@@ -160,7 +160,7 @@ export function DashboardSidebar({
       description: "Manage all users",
     },
     {
-      name: "All Contests",
+      name: "All Campaigns",
       href: "/dashboard/admin/contests",
       icon: Trophy,
       description: "Manage all contests",
@@ -232,7 +232,7 @@ export function DashboardSidebar({
       description: "How it works",
     },
     {
-      name: "Opportunities",
+      name: "Campaigns",
       href: "/dashboard/opportunities",
       icon: Trophy,
       description: "Available contests",

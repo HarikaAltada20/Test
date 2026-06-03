@@ -821,12 +821,12 @@ function DashboardContent({
   // Function to get page title from pathname
   const getPageTitle = (path: string) => {
     if (path === "/dashboard") return "Overview";
-    if (path.includes("/contests")) return "Contests";
+    if (path.includes("/contests")) return "Campaigns";
     if (path.includes("/analytics")) return "Analytics";
     if (path.includes("/billing")) return "Billing";
     if (path.includes("/settings")) return "Settings";
     if (path.includes("/submissions")) return "Submissions";
-    if (path.includes("/opportunities")) return "Opportunities";
+    if (path.includes("/opportunities")) return "Campaigns";
     if (path.includes("/daily-challenge")) return "Daily Challenge";
     if (path.includes("/earnings")) return "Earnings";
     if (path.includes("/admin")) return "Admin";

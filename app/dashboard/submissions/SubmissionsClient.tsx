@@ -2024,7 +2024,7 @@ export default function SubmissionsClient({
                 {opportunitiesLoading ? (
                   <ButtonLoadingSpinner />
                 ) : null}
-                <span className="ml-2">Find Opportunities</span>
+                <span className="ml-2">Find Campaigns</span>
               </button>
             </Button>
           </div>

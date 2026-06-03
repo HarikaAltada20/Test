@@ -100,6 +100,9 @@ import {
 } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import CreatorGuidelinesModal from "@/components/dashboard/CreatorGuidelinesModal";
+import CreatorParticipationOnboardingModal, {
+  type CampaignContestTypeFilter,
+} from "@/components/dashboard/CreatorParticipationOnboardingModal";
 import { PageLoadingSpinner } from "@/components/loading/LoadingSpinner";
 import Link from "next/link";
 import { PaginationControls } from "@/components/ui/pagination-controls";
@@ -211,6 +214,11 @@ export default function OpportunitiesPage({
   const [availableContests, setAvailableContests] = useState<any[]>([]);
   const [isFetchingData, setIsFetchingData] = useState(true);
   const [showGuidelines, setShowGuidelines] = useState(false);
+  const [showParticipationOnboarding, setShowParticipationOnboarding] =
+    useState(false);
+  const [pendingContestId, setPendingContestId] = useState<string | null>(
+    null,
+  );
   const [profile, setProfile] = useState<any>(null);
   const [hasCheckedGuidelines, setHasCheckedGuidelines] = useState(false);
   const [userCountry, setUserCountry] = useState<string | null>(null);
@@ -476,9 +484,13 @@ export default function OpportunitiesPage({
     if (user) {
       const guidelinesCacheKey = `guidelines_${user.id}`;
       const guidelinesTimestampKey = `guidelines_timestamp_${user.id}`;
+      const onboardingCacheKey = `campaign_onboarding_${user.id}`;
+      const onboardingTimestampKey = `campaign_onboarding_timestamp_${user.id}`;
       // Clear any existing cache when user changes
       localStorage.removeItem(guidelinesCacheKey);
       localStorage.removeItem(guidelinesTimestampKey);
+      localStorage.removeItem(onboardingCacheKey);
+      localStorage.removeItem(onboardingTimestampKey);
     }
   }, [user?.id]);
 
@@ -516,7 +528,7 @@ export default function OpportunitiesPage({
         supabase
           .from("creator_profiles")
           .select(
-            "country, has_seen_guidelines, categories, subcategories, interests",
+            "country, has_seen_guidelines, has_seen_campaign_onboarding, categories, subcategories, interests",
           )
           .eq("id", user.id)
           .maybeSingle(),
@@ -610,34 +622,65 @@ export default function OpportunitiesPage({
 
       const guidelinesCacheKey = `guidelines_${user.id}`;
       const guidelinesTimestampKey = `guidelines_timestamp_${user.id}`;
+      const onboardingCacheKey = `campaign_onboarding_${user.id}`;
+      const onboardingTimestampKey = `campaign_onboarding_timestamp_${user.id}`;
       const cachedGuidelines = localStorage.getItem(guidelinesCacheKey);
+      const cachedOnboarding = localStorage.getItem(onboardingCacheKey);
       const cachedTimestamp = localStorage.getItem(guidelinesTimestampKey);
+      const cachedOnboardingTimestamp = localStorage.getItem(
+        onboardingTimestampKey,
+      );
 
       const isCacheValid =
         cachedTimestamp &&
         Date.now() - parseInt(cachedTimestamp, 10) < 24 * 60 * 60 * 1000;
+      const isOnboardingCacheValid =
+        cachedOnboardingTimestamp &&
+        Date.now() - parseInt(cachedOnboardingTimestamp, 10) <
+          24 * 60 * 60 * 1000;
 
-      if (cachedGuidelines === "true" && isCacheValid) {
-        setProfile({ has_seen_guidelines: true });
-        setHasCheckedGuidelines(true);
-      } else if (cachedGuidelines === "false" && isCacheValid) {
-        setProfile({ has_seen_guidelines: false });
-        setShowGuidelines(true);
-        setHasCheckedGuidelines(true);
-      } else if (!creatorRow) {
-        console.error("No creator profile row for guidelines state");
-        setProfile({ has_seen_guidelines: false });
-        setShowGuidelines(true);
+      const resolveOnboardingSeen = (row: {
+        has_seen_campaign_onboarding?: boolean | null;
+      } | null) => {
+        if (cachedOnboarding === "true" && isOnboardingCacheValid) return true;
+        if (cachedOnboarding === "false" && isOnboardingCacheValid)
+          return false;
+        return row?.has_seen_campaign_onboarding === true;
+      };
+
+      const resolveGuidelinesSeen = (row: {
+        has_seen_guidelines?: boolean | null;
+      } | null) => {
+        if (cachedGuidelines === "true" && isCacheValid) return true;
+        if (cachedGuidelines === "false" && isCacheValid) return false;
+        return row?.has_seen_guidelines === true;
+      };
+
+      if (!creatorRow) {
+        console.error("No creator profile row for onboarding/guidelines state");
+        setProfile({
+          has_seen_guidelines: false,
+          has_seen_campaign_onboarding: false,
+        });
+        setShowParticipationOnboarding(true);
         setHasCheckedGuidelines(true);
       } else {
-        setProfile(creatorRow);
-        localStorage.setItem(
-          guidelinesCacheKey,
-          String(creatorRow.has_seen_guidelines),
-        );
+        const hasSeenGuidelines = resolveGuidelinesSeen(creatorRow);
+        const hasSeenOnboarding = resolveOnboardingSeen(creatorRow);
+
+        setProfile({
+          ...creatorRow,
+          has_seen_guidelines: hasSeenGuidelines,
+          has_seen_campaign_onboarding: hasSeenOnboarding,
+        });
+
+        localStorage.setItem(guidelinesCacheKey, String(hasSeenGuidelines));
         localStorage.setItem(guidelinesTimestampKey, Date.now().toString());
-        if (creatorRow.has_seen_guidelines === false) {
-          setShowGuidelines(true);
+        localStorage.setItem(onboardingCacheKey, String(hasSeenOnboarding));
+        localStorage.setItem(onboardingTimestampKey, Date.now().toString());
+
+        if (!hasSeenOnboarding) {
+          setShowParticipationOnboarding(true);
         }
         setHasCheckedGuidelines(true);
       }
@@ -1477,7 +1520,64 @@ export default function OpportunitiesPage({
     page * limit,
   );
 
+  const completeGuidelines = async () => {
+    const userId = user?.id;
+    if (!userId) return;
+    setShowGuidelines(false);
+    await supabase
+      .from("creator_profiles")
+      .update({ has_seen_guidelines: true })
+      .eq("id", userId);
+    setProfile((prev: any) =>
+      prev
+        ? { ...prev, has_seen_guidelines: true }
+        : { has_seen_guidelines: true },
+    );
+    const guidelinesCacheKey = `guidelines_${userId}`;
+    const guidelinesTimestampKey = `guidelines_timestamp_${userId}`;
+    localStorage.setItem(guidelinesCacheKey, "true");
+    localStorage.setItem(guidelinesTimestampKey, Date.now().toString());
+  };
+
+  const completeParticipationOnboarding = async () => {
+    const userId = user?.id;
+    if (!userId) return;
+    setShowParticipationOnboarding(false);
+    await supabase
+      .from("creator_profiles")
+      .update({ has_seen_campaign_onboarding: true })
+      .eq("id", userId);
+    setProfile((prev: any) =>
+      prev
+        ? { ...prev, has_seen_campaign_onboarding: true }
+        : { has_seen_campaign_onboarding: true },
+    );
+    const onboardingCacheKey = `campaign_onboarding_${userId}`;
+    const onboardingTimestampKey = `campaign_onboarding_timestamp_${userId}`;
+    localStorage.setItem(onboardingCacheKey, "true");
+    localStorage.setItem(onboardingTimestampKey, Date.now().toString());
+  };
+
+  const applyContestTypeFilterFromOnboarding = async (
+    type: CampaignContestTypeFilter,
+  ) => {
+    setTypeFilter(type);
+    setPage(1);
+    await completeParticipationOnboarding();
+    requestAnimationFrame(() => {
+      opportunitiesResultsRef.current?.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+    });
+  };
+
   const handleViewDetails = (id: string) => {
+    if (profile?.has_seen_guidelines === false) {
+      setPendingContestId(id);
+      setShowGuidelines(true);
+      return;
+    }
     setButtonLoading(id, "view", true);
     router.push(`/dashboard/opportunities/${id}`);
   };
@@ -2183,44 +2283,19 @@ export default function OpportunitiesPage({
     );
   }
 
-  // Block opportunities if guidelines not seen
-  if (profile && profile.has_seen_guidelines === false) {
-    return (
-      <>
-        <CreatorGuidelinesModal
-          open={showGuidelines}
-          onComplete={async () => {
-            setShowGuidelines(false);
-            // Update in DB
-            await supabase
-              .from("creator_profiles")
-              .update({ has_seen_guidelines: true })
-              .eq("id", user.id);
-            setProfile({ ...profile, has_seen_guidelines: true });
-
-            // Update cache
-            const guidelinesCacheKey = `guidelines_${user.id}`;
-            const guidelinesTimestampKey = `guidelines_timestamp_${user.id}`;
-            localStorage.setItem(guidelinesCacheKey, "true");
-            localStorage.setItem(guidelinesTimestampKey, Date.now().toString());
-          }}
-        />
-        {/* Optionally, a blur or overlay can be added here to block interaction */}
-      </>
-    );
-  }
   const isDark = mode === "dark";
   const displayViewMode: "grid" | "list" = layoutAllowsListView
     ? viewMode
     : "grid";
 
   return (
-    <div className="w-full no-theme-transition">
+    <>
+      <div className="w-full no-theme-transition">
       <div className="mb-6">
         {/* Heading Row - Heading on left, buttons on right */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
           <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-balance min-w-0">
-            Opportunities
+            Campaigns
           </h1>
           <div className="flex flex-wrap items-center gap-2">
             <a
@@ -2558,7 +2633,7 @@ export default function OpportunitiesPage({
           </SelectTrigger>
           <SelectContent isDark={isDark}>
             <SelectItem value="all" isDark={isDark}>
-              All Contest Types
+              All Campaign Types
             </SelectItem>
             <SelectItem value="leaderboard" isDark={isDark}>
               Leaderboard
@@ -3610,5 +3685,23 @@ export default function OpportunitiesPage({
         )}
       </div>
     </div>
+      <CreatorParticipationOnboardingModal
+        open={showParticipationOnboarding}
+        onComplete={completeParticipationOnboarding}
+        onApplyContestTypeFilter={applyContestTypeFilterFromOnboarding}
+      />
+      <CreatorGuidelinesModal
+        open={showGuidelines}
+        onComplete={async () => {
+          const contestId = pendingContestId;
+          setPendingContestId(null);
+          await completeGuidelines();
+          if (contestId) {
+            setButtonLoading(contestId, "view", true);
+            router.push(`/dashboard/opportunities/${contestId}`);
+          }
+        }}
+      />
+    </>
   );
 }

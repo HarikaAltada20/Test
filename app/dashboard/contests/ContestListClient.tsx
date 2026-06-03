@@ -4094,7 +4094,7 @@ export function ContestListClient({
                         transition: "none",
                       }}
                     >
-                      No Contests Found
+                      No Campaigns Found
                     </h3>
                     <p
                       className="mt-2"
@@ -4128,7 +4128,7 @@ export function ContestListClient({
                         transition: "none",
                       }}
                     >
-                      No Contests Found
+                      No Campaigns Found
                     </h3>
                     <p
                       className="mt-2"

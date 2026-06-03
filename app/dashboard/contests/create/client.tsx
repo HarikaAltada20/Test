@@ -9472,7 +9472,7 @@ export default function CreateContestPage({
             onClick={handleBackToContests}
           >
             <ArrowLeft className="h-4 w-4" />
-            <span className="font-medium">Back to Contests</span>
+            <span className="font-medium">Back to Campaigns</span>
           </Button>
         </div>
         <div className="text-center">

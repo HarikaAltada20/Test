@@ -396,8 +396,8 @@ export default function GettingStartedClient({
                   {[
                     {
                       step: "1",
-                      title: "Create Contest",
-                      desc: "Set your brief, budget, and contest type (Leaderboard or CPM)",
+                      title: "Create Campaign",
+                      desc: "Set your brief, budget, and campaign type (Leaderboard or CPM)",
                       image: "/images/equity-1.png",
                     },
                     {
@@ -1575,8 +1575,8 @@ export default function GettingStartedClient({
                   {[
                     {
                       step: "1",
-                      title: "Browse Contests",
-                      desc: "Find contests that match your content style and audience",
+                      title: "Browse Campaigns",
+                      desc: "Find campaigns that match your content style and audience",
                       image: "/images/play (1).png",
                     },
                     {
@@ -1710,7 +1710,7 @@ export default function GettingStartedClient({
                     ) : (
                       <Video className="w-4 h-4" />
                     )}
-                    Browse Contests
+                    Browse Campaigns
                   </Button>
                 </div>
               </div>
@@ -2568,7 +2568,7 @@ export default function GettingStartedClient({
                 ) : (
                   <Video className="w-6 h-6" />
                 )}
-                Create Contest
+                Create Campaign
               </Button>
             </div>
           </CardContent>
@@ -2624,7 +2624,7 @@ export default function GettingStartedClient({
                   ) : (
                     <Video className="w-5 h-5" />
                   )}
-                  Browse Contests
+                  Browse Campaigns
                 </Button>
               </div>
               <a
