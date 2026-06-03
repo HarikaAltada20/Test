@@ -3047,10 +3047,17 @@ export function ContestClientPage({
                   </Button>
                   {trustScoreMessage && (
                     <Alert
-                      variant="destructive"
-                      className="mt-4 max-w-xl mx-auto text-left"
+                      variant="default"
+                      className="mt-4 max-w-xl mx-auto text-left rounded-2xl border border-[#7F39EC] bg-[#D9C0FF26] shadow-sm"
                     >
-                      <AlertDescription>{trustScoreMessage}</AlertDescription>
+                      <AlertDescription
+                        className={cn(
+                          "text-md leading-relaxed",
+                          isDark ? "text-gray-200" : "text-[#4A00BE]",
+                        )}
+                      >
+                        {trustScoreMessage}
+                      </AlertDescription>
                     </Alert>
                   )}
                 </div>
@@ -3184,10 +3191,17 @@ export function ContestClientPage({
                   </Button>
                   {trustScoreMessage && (
                     <Alert
-                      variant="destructive"
-                      className="mt-4 max-w-xl mx-auto text-left"
+                      variant="default"
+                      className="mt-4 max-w-xl mx-auto text-left rounded-2xl border border-[#7F39EC] bg-[#D9C0FF26] shadow-sm"
                     >
-                      <AlertDescription>{trustScoreMessage}</AlertDescription>
+                      <AlertDescription
+                        className={cn(
+                          "text-sm leading-relaxed",
+                          isDark ? "text-gray-200" : "text-[#4A00BE]",
+                        )}
+                      >
+                        {trustScoreMessage}
+                      </AlertDescription>
                     </Alert>
                   )}
 

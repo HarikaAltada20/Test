@@ -3144,8 +3144,18 @@ export default function SubmitContentPage({
             </Alert>
           )}
           {trustScoreWarning && (
-            <Alert variant="destructive" className="mb-4">
-              <AlertDescription>{trustScoreWarning}</AlertDescription>
+            <Alert
+              variant="default"
+              className="mb-4 rounded-xl border border-[#7F39EC] bg-[#D9C0FF26]"
+            >
+              <AlertDescription
+                className={cn(
+                  "text-sm leading-relaxed",
+                  isDark ? "text-gray-200" : "text-[#4A00BE]",
+                )}
+              >
+                {trustScoreWarning}
+              </AlertDescription>
             </Alert>
           )}
 
