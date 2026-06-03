@@ -35,6 +35,7 @@ import {
 } from "lucide-react";
 import { UserResponse } from "@supabase/supabase-js";
 import { formatLocalDateTime } from "@/lib/utils";
+import { trackViewDetailsClick } from "@/lib/gtag";
 import { formatCurrencyFromCents as formatMoney } from "@/lib/currency-utils";
 import { createClient } from "@/utils/supabase/client";
 import {
@@ -1572,7 +1573,8 @@ export default function OpportunitiesPage({
     });
   };
 
-  const handleViewDetails = (id: string) => {
+  const handleViewDetails = async (id: string) => {
+    await trackViewDetailsClick(id);
     if (profile?.has_seen_guidelines === false) {
       setPendingContestId(id);
       setShowGuidelines(true);

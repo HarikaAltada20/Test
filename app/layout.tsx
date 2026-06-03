@@ -101,7 +101,7 @@ export default async function RootLayout({
     if (userError) {
       console.error(
         "Error fetching user profile data in layout:",
-        userError.message
+        userError.message,
       );
     }
 
@@ -126,7 +126,7 @@ export default async function RootLayout({
       if (advertiserError && advertiserError.code !== "PGRST116") {
         console.error(
           "Error fetching advertiser profile in layout:",
-          advertiserError.message
+          advertiserError.message,
         );
       }
 
@@ -156,8 +156,8 @@ export default async function RootLayout({
   const initialMode: "light" | "dark" = presetCookie
     ? presetToMode[presetCookie] || "light"
     : modeCookie === "dark" || modeCookie === "light"
-    ? modeCookie
-    : "light";
+      ? modeCookie
+      : "light";
 
   return (
     <html lang="en" data-theme={initialMode} suppressHydrationWarning>
@@ -169,8 +169,8 @@ export default async function RootLayout({
               html{background:${
                 initialMode === "dark" ? "#07031E" : "#ffffff"
               };color:${
-              initialMode === "dark" ? "rgb(248, 250, 252)" : "#111827"
-            }}
+                initialMode === "dark" ? "rgb(248, 250, 252)" : "#111827"
+              }}
               body{background:inherit;color:inherit}
             `,
           }}
@@ -232,7 +232,7 @@ export default async function RootLayout({
             `}
           </Script>
         ) : null}
-        <Script
+      <Script
           src="https://www.googletagmanager.com/gtag/js?id=G-8J6VZKVWLF"
           strategy="afterInteractive"
         />
@@ -248,10 +248,7 @@ export default async function RootLayout({
         </Script>
         {/* Mobile Auth Bridge - Enables native authentication from Flutter app */}
         <MobileAuthBridge />
-        <Script
-          src="/mobile-auth-bridge.js"
-          strategy="afterInteractive"
-        />
+        <Script src="/mobile-auth-bridge.js" strategy="afterInteractive" />
       </body>
     </html>
   );

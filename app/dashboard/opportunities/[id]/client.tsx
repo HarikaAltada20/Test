@@ -99,6 +99,7 @@ import { TwitterFeed } from "@/components/twitter-feed";
 import { getTwitterSubmissionActionKind } from "@/lib/twitter/analytics-twitter-submission-kind";
 import { buildMilestoneMostVerifiedBonusByCreatorMap } from "@/lib/milestone-contest-expected-spend";
 import { parsePayoutAdjustment } from "@/lib/payout-rules";
+import { trackSubmitEntryClick } from "@/lib/gtag";
 // --- START DUMMY DATA CONFIGURATION ---
 const USE_DUMMY_DATA_FOR_LEADERBOARD = false; // SWITCHED OFF FOR PRODUCTION
 const DUMMY_ENTRIES_COUNT = 250; // Total number of dummy entries to generate
@@ -2575,8 +2576,9 @@ export function ContestClientPage({
         })
       : null;
 
-  const handleSubmitContent = () => {
+  const handleSubmitContent = async () => {
     if (isTrustScoreBlocked) return;
+    await trackSubmitEntryClick(contestId);
     router.push(`/dashboard/opportunities/${contestId}/submit`);
   };
 
