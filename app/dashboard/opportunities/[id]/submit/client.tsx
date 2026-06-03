@@ -46,6 +46,10 @@ import { useToast } from "@/hooks/use-toast";
 import { PageLoadingSpinner } from "@/components/loading/LoadingSpinner";
 import { cn } from "@/lib/utils";
 import {
+  getContestSubmitReturnPath,
+  getSettingsUrlWithReturnTo,
+} from "@/lib/oauth-return-to";
+import {
   getContestMinTrustScoreForGate,
   getTrustSubmissionBlockedMessage,
   isCreatorTrustSubmissionBlocked,
@@ -310,6 +314,9 @@ export default function SubmitContentPage({
   ] = useState<string | null>(null);
 
   const [contestPlatform, setContestPlatform] = useState<string | null>(null);
+  const settingsConnectHref = getSettingsUrlWithReturnTo(
+    getContestSubmitReturnPath(contestId, contestPlatform),
+  );
   const [isLoadingContest, setIsLoadingContest] = useState(true);
   const [instagramMediaPreview, setInstagramMediaPreview] =
     useState<InstagramReel | null>(null);
@@ -1105,12 +1112,9 @@ export default function SubmitContentPage({
 
   // Handle YouTube reconnection
   const handleReconnectYouTube = () => {
+    const returnPath = getContestSubmitReturnPath(contestId, contestPlatform);
     router.push(
-      "/api/youtube/auth?returnTo=" +
-      encodeURIComponent(
-        `/dashboard/opportunities/${contestId}/submit?platform=${contestPlatform || ""
-        }`,
-      ), // pass platform back
+      `/api/youtube/auth?returnTo=${encodeURIComponent(returnPath)}`,
     );
   };
 
@@ -3265,7 +3269,7 @@ export default function SubmitContentPage({
                   <AlertDescription className="text-md">
                     Connect your YouTube account to submit content.
                   </AlertDescription>
-                  <Link href="/dashboard/settings">
+                  <Link href={settingsConnectHref}>
                     <Button variant="link" className="mt-1 text-[#7F39EC]">
                       Connect YouTube in Settings
                     </Button>
@@ -4021,7 +4025,7 @@ export default function SubmitContentPage({
                         </>
                       )}
                     </Button>
-                    <Link href="/dashboard/settings">
+                    <Link href={settingsConnectHref}>
                       <Button
                         variant="link"
                         className="text-destructive dark:text-red-400"
@@ -4040,7 +4044,7 @@ export default function SubmitContentPage({
                   <AlertDescription className="text-md">
                     Connect your Instagram account to submit content.
                   </AlertDescription>
-                  <Link href="/dashboard/settings">
+                  <Link href={settingsConnectHref}>
                     <Button variant="link" className="mt-1 text-[#7F39EC]">
                       Connect Instagram in Settings
                     </Button>
@@ -4636,7 +4640,7 @@ export default function SubmitContentPage({
                     Your TikTok connection has expired.
                   </AlertDescription>
                   <div className="flex flex-col sm:flex-row gap-2 justify-center mt-2">
-                    <Link href="/dashboard/settings">
+                    <Link href={settingsConnectHref}>
                       <Button
                         variant="link"
                         className="text-destructive dark:text-red-400"
@@ -4655,7 +4659,7 @@ export default function SubmitContentPage({
                   <AlertDescription className="text-md">
                     Connect your TikTok account to submit content.
                   </AlertDescription>
-                  <Link href="/dashboard/settings">
+                  <Link href={settingsConnectHref}>
                     <Button variant="link" className="mt-1 text-[#7F39EC]">
                       Connect TikTok in Settings
                     </Button>
