@@ -3109,7 +3109,7 @@ export default function AdminUsersPage() {
                         {isColumnVisible("contests_won") && (
                           <TableHead className="whitespace-nowrap border-r">
                             <div className="flex items-center gap-2">
-                              <span>Contests Won</span>
+                              <span>Campaigns Won</span>
                               <DropdownMenu>
                                 <DropdownMenuTrigger asChild>
                                   <Button

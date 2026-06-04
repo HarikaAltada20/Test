@@ -2303,7 +2303,7 @@ export default function ProfilePage({
                 Personal Information
               </CardTitle>
               <CardDescription className="mt-2 text-md">
-                Complete your profile to get contests matched to your country,
+                Complete your profile to get campaigns matched to your country,
                 categories, subcategories, and interests. Click "Save Changes"
                 to save all updates and receive a $0.50 bonus.
               </CardDescription>
@@ -3823,7 +3823,7 @@ export default function ProfilePage({
                       : "bg-white text-gray-500"
                   )}
                 >
-                  Contests Participated
+                  Campaigns Participated
                 </label>
                 <div
                   className={cn(
@@ -3863,7 +3863,7 @@ export default function ProfilePage({
                       : "bg-white text-gray-500"
                   )}
                 >
-                  Contests Won
+                  Campaigns Won
                 </label>
                 <div
                   className={cn(
