@@ -307,7 +307,7 @@ export default function PricingClient() {
     {
       question: "How many creators are on Game Of Creators?",
       answer:
-        "We have a fast-growing network of 5,000+ active creators across various niches. When you launch a contest, it goes live to all eligible creators through our dashboard and email system—ensuring visibility and participation.",
+        "We have a fast-growing network of 5,000+ active creators across various niches. When you launch a campaign, it goes live to all eligible creators through our dashboard and email system—ensuring visibility and participation.",
     },
     {
       question: "How much should I run a contest for?",

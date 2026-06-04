@@ -24,14 +24,14 @@ const steps = [
     id: "welcome",
     title: "Welcome to Game of Creators!",
     description:
-      "Connect with creators, launch contests, and get viral content!",
+      "Connect with creators, launch campaigns, and get viral content!",
     isWelcome: true,
   },
   {
     id: "create-contests",
-    title: "Create Contests",
+    title: "Create Campaigns",
     description:
-      "Set your brief, budget, and contest type (Leaderboard of CPM)",
+      "Set your brief, budget, and campaign type (Leaderboard or CPM)",
     image: "./images/b53b923aa25a75703cc4c019bed51f44c0bdf9c7.avif",
   },
   {
@@ -416,7 +416,7 @@ export default function GettingStartedModal({
               isDark ? "text-white" : "text-gray-900",
             )}
           >
-            Choose Your Contest Type
+            Choose Your Campaign Type
           </h2>
         </div>
 
@@ -442,7 +442,7 @@ export default function GettingStartedModal({
                 >
                   <Trophy className="w-6 h-6" />
                 </div>
-                <h3 className="font-bold text-lg">Leaderboard Contests</h3>
+                <h3 className="font-bold text-lg">Leaderboard Campaigns</h3>
 
                 <Badge
                   variant="outline"
@@ -590,7 +590,7 @@ export default function GettingStartedModal({
                     ) : (
                       <Trophy className="w-4 h-4" />
                     )}
-                    Create Leaderboard Contest
+                    Create Leaderboard Campaign
                   </Button>
                 </Link>
               </div>
@@ -617,7 +617,7 @@ export default function GettingStartedModal({
                   <DollarSign className="w-6 h-6" />
                 </div>
                 <h3 className="font-bold text-lg flex items-center">
-                  CPM Contests
+                  CPM Campaigns
                   {/* Info Icon with hover tooltip */}
                   {/* <div className="ml-2 relative group">
                           <Info className="w-4 h-4 text-black cursor-pointer" />
@@ -785,7 +785,7 @@ export default function GettingStartedModal({
                     ) : (
                       <DollarSign className="w-4 h-4" />
                     )}
-                    Create CPM Contest
+                    Create CPM Campaign
                   </Button>
                 </Link>
               </div>
@@ -811,7 +811,7 @@ export default function GettingStartedModal({
                 >
                   <Target className="w-6 h-6" />
                 </div>
-                <h3 className="font-bold text-lg">Milestone Contests</h3>
+                <h3 className="font-bold text-lg">Milestone Campaigns</h3>
 
                 <Badge
                   variant="outline"
@@ -970,7 +970,7 @@ export default function GettingStartedModal({
                     ) : (
                       <Award className="w-4 h-4" />
                     )}
-                    Create Milestone Contest
+                    Create Milestone Campaign
                   </Button>
                 </Link>
               </div>
@@ -996,7 +996,7 @@ export default function GettingStartedModal({
                 >
                   <Award className="w-6 h-6" />
                 </div>
-                <h3 className="font-bold text-lg">Dual Rewards Contests</h3>
+                <h3 className="font-bold text-lg">Dual Rewards Campaigns</h3>
 
                 <Badge
                   variant="outline"
@@ -1029,7 +1029,7 @@ export default function GettingStartedModal({
                 )}
               >
                 Combine performance-based CPM payouts with milestone bonuses in
-                one contest.
+                one campaign.
               </p>
 
               {/* Visual Process */}
@@ -1158,7 +1158,7 @@ export default function GettingStartedModal({
                     ) : (
                       <Award className="w-4 h-4" />
                     )}
-                    Create Dual Rewards Contest
+                    Create Dual Rewards Campaign
                   </Button>
                 </Link>
               </div>
@@ -1250,7 +1250,7 @@ export default function GettingStartedModal({
                 isDark ? "text-gray-300" : "text-gray-600",
               )}
             >
-              Start creating contests and campaigns
+              Start creating campaigns
             </p>
           </div>
 
@@ -1269,7 +1269,7 @@ export default function GettingStartedModal({
                 ) : (
                   <Video className="w-6 h-6" />
                 )}
-                Create Contest
+                Create Campaign
               </Button>
             </Link>
           </div>

@@ -4,7 +4,7 @@
       "path": "/api/cron/update-youtube-metrics",
       "schedule": "0 1 * * *"
     },
-     {
+    {
       "path": "/api/cron/trigger-instagram-refresh",
       "schedule": "0 2 * * *"
     },
@@ -27,6 +27,14 @@
     {
       "path": "/api/cron/snapshot-monthly-challenge-winners",
       "schedule": "0 21 28-31 * *"
+    },
+    {
+      "path": "/api/cron/process-scheduled-notifications",
+      "schedule": "0 4 * * *"
+    },
+    {
+      "path": "/api/cron/process-admin-notification-delivery-queue",
+      "schedule": "0 5 * * *"
     }
   ]
 }

@@ -648,7 +648,7 @@ export default function ContestModerationClient({
               <div className="flex items-center gap-1">
                 <Users className="h-3 w-3 flex-shrink-0" />
                 <span className="min-w-0">
-                  Contest Type:{" "}
+                  Campaign Type:{" "}
                   <span className="font-medium">
                     {contest.contest_type === "cpm"
                       ? "CPM Based"

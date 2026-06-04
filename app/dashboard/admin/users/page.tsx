@@ -33,7 +33,20 @@ import {
   Clock,
   Map,
   List,
+  Bell,
+  Send,
 } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
+import {
+  scheduleClientDelivery,
+  useAdminScheduledNotificationDelivery,
+} from "@/hooks/useAdminScheduledNotificationDelivery";
+import {
+  SendNotificationModal,
+  type NotificationSelectionState,
+} from "./SendNotificationModal";
+import { AdminNotificationsView } from "./AdminNotificationsView";
+import type { RecipientUserRow } from "@/lib/admin-notifications/types";
 import { cn } from "@/lib/utils";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -55,6 +68,8 @@ import {
   getSubscriptionPlanById,
 } from "@/lib/subscription-utils-client";
 import REGIONS_AND_COUNTRIES_DATA from "@/data/regions-and-countries.json";
+import { getCreatorTrustScoreFromMetrics } from "@/lib/trust-score";
+import { SupportChatToggle } from "@/components/admin/SupportChatToggle";
 
 const UsersMap = dynamic(
   () => import("./UsersMap").then((m) => ({ default: m.UsersMap })),
@@ -95,6 +110,7 @@ type CreatorProfile = {
   categories?: any | null;
   subcategories?: any | null;
   interests?: string[] | any | null;
+  trust_score_metrics?: unknown | null;
 };
 
 type User = {
@@ -105,6 +121,7 @@ type User = {
   // Basic user type and status
   user_type: string;
   is_active: boolean;
+  support_chat_enabled?: boolean | null;
   coins: number;
   created_at: string;
   updated_at: string;
@@ -161,6 +178,20 @@ function getGeoField(
   if (typeof value !== "string") return null;
   const trimmed = value.trim();
   return trimmed || null;
+}
+
+function getCreatorProfileFromRow(user: User): CreatorProfile | null {
+  if (!user.creator_profiles) return null;
+  return Array.isArray(user.creator_profiles)
+    ? user.creator_profiles.length > 0
+      ? user.creator_profiles[0]
+      : null
+    : user.creator_profiles;
+}
+
+function getCreatorTrustScoreForRow(user: User): number {
+  const profile = getCreatorProfileFromRow(user);
+  return getCreatorTrustScoreFromMetrics(profile, user.id) ?? 100;
 }
 
 function SubcategoriesCell({
@@ -296,6 +327,9 @@ const ALL_COUNTRIES: string[] = Array.from(
   ),
 ).sort((a, b) => a.localeCompare(b));
 
+const isTableFilterColumn = (column: { id: string }) =>
+  column.id !== "profile" && column.id !== "support_chat";
+
 // Column definitions for each tab
 const allColumns = {
   all: [
@@ -303,6 +337,7 @@ const allColumns = {
     { id: "full_name", label: "Full Name" },
     { id: "profile", label: "Profile" },
     { id: "email", label: "Email" },
+    { id: "support_chat", label: "Support Chat" },
     { id: "user_type", label: "User Type" },
     { id: "referral_code", label: "Referral Code" },
     { id: "referred_by", label: "Referred By" },
@@ -324,6 +359,7 @@ const allColumns = {
     { id: "full_name", label: "Full Name" },
     { id: "profile", label: "Profile" },
     { id: "email", label: "Email" },
+    { id: "support_chat", label: "Support Chat" },
     { id: "username", label: "Username" },
     { id: "company_name", label: "Company Name" },
     { id: "website_url", label: "Website URL" },
@@ -340,6 +376,7 @@ const allColumns = {
     { id: "full_name", label: "Full Name" },
     { id: "profile", label: "Profile" },
     { id: "email", label: "Email" },
+    { id: "support_chat", label: "Support Chat" },
     { id: "username", label: "Username" },
     { id: "youtube_account", label: "YouTube Account" },
     { id: "instagram_account", label: "Instagram Account" },
@@ -352,6 +389,7 @@ const allColumns = {
     { id: "withdrawable_balance", label: "Withdrawable Balance" },
     { id: "total_submissions_made", label: "Total Submissions Made" },
     { id: "total_submissions_won", label: "Total Submissions Won" },
+    { id: "trust_score", label: "Trust Score" },
     { id: "date_of_birth", label: "Date of Birth" },
     { id: "gender", label: "Gender" },
     { id: "country", label: "Country" },
@@ -368,6 +406,8 @@ const allColumns = {
 };
 
 export default function AdminUsersPage() {
+  useAdminScheduledNotificationDelivery(true);
+
   // Operator mapping for dropdown display
   const operatorMap: Record<string, { label: string; symbol: string }> = {
     "=": { label: "Equals", symbol: "=" },
@@ -549,7 +589,54 @@ export default function AdminUsersPage() {
   });
   const [showColumnSettings, setShowColumnSettings] = useState(false);
   const [stickyHeader, setStickyHeader] = useState(true);
-  const [viewMode, setViewMode] = useState<"table" | "map">("table");
+  const [viewMode, setViewMode] = useState<"table" | "map" | "notifications">(
+    () => {
+      if (typeof window !== "undefined") {
+        const saved = localStorage.getItem("users-management-view-mode");
+        if (saved === "table" || saved === "map" || saved === "notifications") {
+          return saved;
+        }
+      }
+      return "table";
+    },
+  );
+  const { toast } = useToast();
+  const [selectedUserIds, setSelectedUserIds] = useState<Set<string>>(
+    () => new Set(),
+  );
+  const [selectAllFiltered, setSelectAllFiltered] = useState(false);
+  const [sendModalOpen, setSendModalOpen] = useState(false);
+  const [highlightCampaignId, setHighlightCampaignId] = useState<string | null>(
+    null,
+  );
+
+  const setViewModePersisted = (mode: "table" | "map" | "notifications") => {
+    setViewMode(mode);
+    if (typeof window !== "undefined") {
+      localStorage.setItem("users-management-view-mode", mode);
+    }
+  };
+
+  const syncSupportChatEnabled = (userId: string, enabled: boolean) => {
+    setRows((prev) =>
+      prev.map((u) =>
+        u.id === userId ? { ...u, support_chat_enabled: enabled } : u,
+      ),
+    );
+  };
+
+  const userToRecipientRow = (u: User): RecipientUserRow => ({
+    id: u.id,
+    email: u.email,
+    full_name: u.full_name,
+    username: u.username ?? null,
+    user_type: u.user_type,
+    coins: u.coins,
+    referral_code: u.referral_code ?? null,
+    created_at: u.created_at,
+    is_active: u.is_active,
+  });
+
   const [mapGroupBy, setMapGroupBy] = useState<
     "region" | "state" | "country" | "city"
   >("country");
@@ -666,6 +753,8 @@ export default function AdminUsersPage() {
         return row.username;
       case "user_type":
         return row.user_type;
+      case "support_chat":
+        return row.support_chat_enabled !== false;
       case "country": {
         return getGeoField(row, "country");
       }
@@ -802,6 +891,8 @@ export default function AdminUsersPage() {
           return profiles[0]?.total_submissions_won;
         }
         return null;
+      case "trust_score":
+        return getCreatorTrustScoreForRow(row);
       case "date_of_birth":
         if (row.creator_profiles) {
           const profiles = Array.isArray(row.creator_profiles)
@@ -1115,6 +1206,10 @@ export default function AdminUsersPage() {
             case "user_type":
               aValue = a.user_type?.toLowerCase() || "";
               bValue = b.user_type?.toLowerCase() || "";
+              break;
+            case "support_chat":
+              aValue = a.support_chat_enabled !== false ? 1 : 0;
+              bValue = b.support_chat_enabled !== false ? 1 : 0;
               break;
             case "referral_code": {
               const aMeta = getReferralSortMeta(a.referral_code || null);
@@ -1623,7 +1718,8 @@ export default function AdminUsersPage() {
                 if (!tt) return "";
                 try {
                   const account = typeof tt === "string" ? JSON.parse(tt) : tt;
-                  const rawName = account?.display_name || account?.username || "";
+                  const rawName =
+                    account?.display_name || account?.username || "";
                   return normalizeForAlphabetSort(rawName);
                 } catch {
                   return "";
@@ -1708,6 +1804,10 @@ export default function AdminUsersPage() {
             case "total_submissions_won":
               aValue = aProfile?.total_submissions_won || 0;
               bValue = bProfile?.total_submissions_won || 0;
+              break;
+            case "trust_score":
+              aValue = getCreatorTrustScoreForRow(a);
+              bValue = getCreatorTrustScoreForRow(b);
               break;
             case "date_of_birth":
               // Convert dates to timestamps for proper chronological sorting
@@ -1892,6 +1992,7 @@ export default function AdminUsersPage() {
           "total_views",
           "total_submissions_made",
           "total_submissions_won",
+          "trust_score",
           // Add "rankings" here when the field is available
         ];
 
@@ -1907,6 +2008,7 @@ export default function AdminUsersPage() {
           "total_views",
           "total_submissions_made",
           "total_submissions_won",
+          "trust_score",
           // Add "rankings" here when the field is available
         ];
 
@@ -2138,6 +2240,93 @@ export default function AdminUsersPage() {
   const hasNextPage = page < totalPages;
   const hasPreviousPage = page > 1;
 
+  const notificationSelection =
+    useMemo((): NotificationSelectionState | null => {
+      if (selectAllFiltered && tabFiltered.length > 0) {
+        const users = tabFiltered.map(userToRecipientRow);
+        return {
+          mode: "select_all_filtered",
+          userIds: users.map((u) => u.id),
+          users,
+          filterSnapshot: {
+            activeTab: activeTab as "all" | "advertisers" | "creators",
+            isActive: true,
+            filters: filters
+              .filter((f) => f.value.trim())
+              .map((f) => ({
+                column: f.column,
+                value: f.value,
+                operator: f.operator,
+              })),
+          },
+          label: `All users matching current filters (${tabFiltered.length})`,
+        };
+      }
+      if (selectedUserIds.size === 0) return null;
+      const usersFromTab = tabFiltered
+        .filter((u) => selectedUserIds.has(u.id))
+        .map(userToRecipientRow);
+      const allSelected = rows
+        .filter((u) => selectedUserIds.has(u.id))
+        .map(userToRecipientRow);
+      const mergedUsers =
+        usersFromTab.length >= selectedUserIds.size
+          ? usersFromTab
+          : allSelected.length > 0
+            ? allSelected
+            : usersFromTab;
+      const ids = [...selectedUserIds];
+      return {
+        mode: "selected_user_ids",
+        userIds: ids,
+        users: mergedUsers,
+        filterSnapshot: { isActive: true },
+        label: "Hand-picked selection",
+      };
+    }, [
+      selectAllFiltered,
+      tabFiltered,
+      selectedUserIds,
+      activeTab,
+      filters,
+      rows,
+    ]);
+
+  const hasNotificationSelection =
+    selectAllFiltered || selectedUserIds.size > 0;
+
+  const toggleUserSelection = (userId: string, checked: boolean) => {
+    setSelectAllFiltered(false);
+    setSelectedUserIds((prev) => {
+      const next = new Set(prev);
+      if (checked) next.add(userId);
+      else next.delete(userId);
+      return next;
+    });
+  };
+
+  const toggleSelectAllFiltered = (checked: boolean) => {
+    setSelectAllFiltered(checked);
+    if (checked) setSelectedUserIds(new Set());
+  };
+
+  const headerSelectChecked: boolean | "indeterminate" = selectAllFiltered
+    ? true
+    : selectedUserIds.size > 0
+      ? "indeterminate"
+      : false;
+
+  const selectedCount = selectAllFiltered
+    ? tabFiltered.length
+    : selectedUserIds.size;
+
+  const selectionCheckboxClass = cn(
+    "relative z-10 shrink-0",
+    isDark
+      ? "border-gray-500 bg-[#170337] data-[state=checked]:bg-purple-600 data-[state=checked]:text-white"
+      : "border-gray-300 bg-white data-[state=checked]:bg-purple-600",
+  );
+
   // Markers for map view (users in current tab with lat/lon)
   const mapMarkers = useMemo(() => {
     return tabFiltered
@@ -2358,7 +2547,7 @@ export default function AdminUsersPage() {
                   variant={viewMode === "table" ? "secondary" : "ghost"}
                   size="sm"
                   className="rounded-none h-8 px-2 sm:px-3 gap-1.5"
-                  onClick={() => setViewMode("table")}
+                  onClick={() => setViewModePersisted("table")}
                 >
                   <List className="w-4 h-4" />
                   <span className="hidden sm:inline">Table</span>
@@ -2367,10 +2556,19 @@ export default function AdminUsersPage() {
                   variant={viewMode === "map" ? "secondary" : "ghost"}
                   size="sm"
                   className="rounded-none h-8 px-2 sm:px-3 gap-1.5"
-                  onClick={() => setViewMode("map")}
+                  onClick={() => setViewModePersisted("map")}
                 >
                   <Map className="w-4 h-4" />
                   <span className="hidden sm:inline">Map</span>
+                </Button>
+                <Button
+                  variant={viewMode === "notifications" ? "secondary" : "ghost"}
+                  size="sm"
+                  className="rounded-none h-8 px-2 sm:px-3 gap-1.5"
+                  onClick={() => setViewModePersisted("notifications")}
+                >
+                  <Bell className="w-4 h-4" />
+                  <span className="hidden sm:inline">Notifications</span>
                 </Button>
               </div>
               <Button
@@ -2379,7 +2577,7 @@ export default function AdminUsersPage() {
                   if (filters.length === 0) {
                     const availableColumns = allColumns[
                       activeTab as keyof typeof allColumns
-                    ].filter((column) => column.id !== "profile");
+                    ].filter(isTableFilterColumn);
                     setFilters([
                       {
                         id: `filter-${Date.now()}-${Math.random()}`,
@@ -2413,6 +2611,25 @@ export default function AdminUsersPage() {
                 <Settings className="w-4 h-4" />
                 <span className="hidden sm:inline">Customize Tiles</span>
               </Button>
+              {viewMode === "table" && (
+                <Button
+                  size="sm"
+                  className="gap-1.5 px-2 sm:px-3"
+                  disabled={!hasNotificationSelection}
+                  onClick={() => setSendModalOpen(true)}
+                >
+                  <Send className="w-4 h-4" />
+                  <span className="hidden sm:inline">Send notification</span>
+                  {selectedCount > 0 && (
+                    <Badge
+                      variant="secondary"
+                      className="h-5 min-w-5 rounded-full px-1.5 text-xs bg-white/20 text-inherit"
+                    >
+                      {selectedCount}
+                    </Badge>
+                  )}
+                </Button>
+              )}
               <Button
                 variant="outline"
                 onClick={() => {
@@ -2437,19 +2654,24 @@ export default function AdminUsersPage() {
             </div>
           </div>
         </CardHeader>
-        <CardContent className="py-2 px-6">
-          <EnhancedTabs
-            tabs={[
-              { id: "all", label: `Users (${allUsersCount})` },
-              { id: "advertisers", label: `Advertisers (${advertisersCount})` },
-              { id: "creators", label: `Creators (${creatorsCount})` },
-            ]}
-            activeTab={activeTab}
-            onTabChange={setActiveTab}
-            className="w-full"
-            isDark={isDark}
-          />
-        </CardContent>
+        {viewMode !== "notifications" && (
+          <CardContent className="py-2 px-6">
+            <EnhancedTabs
+              tabs={[
+                { id: "all", label: `Users (${allUsersCount})` },
+                {
+                  id: "advertisers",
+                  label: `Advertisers (${advertisersCount})`,
+                },
+                { id: "creators", label: `Creators (${creatorsCount})` },
+              ]}
+              activeTab={activeTab}
+              onTabChange={setActiveTab}
+              className="w-full"
+              isDark={isDark}
+            />
+          </CardContent>
+        )}
       </Card>
 
       {viewMode === "table" && (
@@ -2482,6 +2704,31 @@ export default function AdminUsersPage() {
                         : "bg-[#F9FAFB] border-b border-slate-200 text-gray-500",
                     )}
                   >
+                    <TableHead
+                      className={cn(
+                        "w-10 border-r px-2",
+                        isDark ? "bg-[#391A6A]" : "bg-[#F9FAFB]",
+                      )}
+                    >
+                      <div
+                        className={cn(
+                          "flex min-h-12 items-center justify-center",
+                          isDark ? "bg-[#391A6A]" : "bg-[#F9FAFB]",
+                        )}
+                      >
+                        <Checkbox
+                          aria-label={`Select all matching filters (${tabFiltered.length})`}
+                          checked={headerSelectChecked}
+                          onCheckedChange={(c) =>
+                            toggleSelectAllFiltered(!!c)
+                          }
+                          className={cn(
+                            selectionCheckboxClass,
+                            isDark ? "bg-[#391A6A]" : "bg-[#F9FAFB]",
+                          )}
+                        />
+                      </div>
+                    </TableHead>
                     {isColumnVisible("id") && (
                       <SortableHeader columnId="id" label="ID" />
                     )}
@@ -2500,6 +2747,16 @@ export default function AdminUsersPage() {
                     )}
                     {isColumnVisible("email") && (
                       <SortableHeader columnId="email" label="Email" />
+                    )}
+                    {isColumnVisible("support_chat") && (
+                      <TableHead
+                        className={cn(
+                          "whitespace-nowrap border-r",
+                          isDark ? "bg-[#391A6A]" : "bg-[#F9FAFB]",
+                        )}
+                      >
+                        Support Chat
+                      </TableHead>
                     )}
                     {activeTab === "advertisers" && (
                       <>
@@ -2578,7 +2835,7 @@ export default function AdminUsersPage() {
                         {isColumnVisible("total_contests_run") && (
                           <TableHead className="whitespace-nowrap border-r">
                             <div className="flex items-center gap-2">
-                              <span>Total Contests Run</span>
+                              <span>Total Campaigns Run</span>
                               <DropdownMenu>
                                 <DropdownMenuTrigger asChild>
                                   <Button
@@ -2852,7 +3109,7 @@ export default function AdminUsersPage() {
                         {isColumnVisible("contests_won") && (
                           <TableHead className="whitespace-nowrap border-r">
                             <div className="flex items-center gap-2">
-                              <span>Contests Won</span>
+                              <span>Campaigns Won</span>
                               <DropdownMenu>
                                 <DropdownMenuTrigger asChild>
                                   <Button
@@ -3172,6 +3429,12 @@ export default function AdminUsersPage() {
                               </DropdownMenu>
                             </div>
                           </TableHead>
+                        )}
+                        {isColumnVisible("trust_score") && (
+                          <SortableHeader
+                            columnId="trust_score"
+                            label="Trust Score"
+                          />
                         )}
                         {isColumnVisible("date_of_birth") && (
                           <SortableHeader
@@ -3622,6 +3885,19 @@ export default function AdminUsersPage() {
                     <>
                       {Array.from({ length: limit }).map((_, index) => (
                         <TableRow key={`skeleton-${index}`}>
+                          <TableCell
+                            className={cn(
+                              "w-10 border-r px-2",
+                              isDark ? "bg-[#170337]" : "bg-white",
+                            )}
+                          >
+                            <div
+                              className={cn(
+                                "h-4 w-4 rounded animate-pulse",
+                                isDark ? "bg-[#391A6A]/50" : "bg-gray-200",
+                              )}
+                            />
+                          </TableCell>
                           {Array.from({
                             length: getVisibleColumnsCount(),
                           }).map((_, colIndex) => (
@@ -3646,7 +3922,7 @@ export default function AdminUsersPage() {
                   ) : tabFiltered.length === 0 ? (
                     <TableRow>
                       <TableCell
-                        colSpan={getVisibleColumnsCount()}
+                        colSpan={getVisibleColumnsCount() + 1}
                         className="text-center text-sm text-muted-foreground"
                       >
                         No users found.
@@ -3669,8 +3945,32 @@ export default function AdminUsersPage() {
                           ? r.creator_profiles[0]
                           : null
                         : r.creator_profiles || null;
+                      const isSelected =
+                        selectAllFiltered || selectedUserIds.has(r.id);
                       return (
                         <TableRow key={r.id}>
+                          <TableCell
+                            className={cn(
+                              "w-10 border-r p-0",
+                              isDark ? "bg-[#170337]" : "bg-white",
+                            )}
+                          >
+                            <div
+                              className={cn(
+                                "flex min-h-12 items-center justify-center px-2",
+                                isDark ? "bg-[#170337]" : "bg-white",
+                              )}
+                            >
+                              <Checkbox
+                                checked={isSelected}
+                                disabled={selectAllFiltered}
+                                onCheckedChange={(c) =>
+                                  toggleUserSelection(r.id, !!c)
+                                }
+                                className={selectionCheckboxClass}
+                              />
+                            </div>
+                          </TableCell>
                           {isColumnVisible("id") && (
                             <TableCell className="font-mono text-xs whitespace-nowrap border-r">
                               {r.id}
@@ -3701,6 +4001,18 @@ export default function AdminUsersPage() {
                           {isColumnVisible("email") && (
                             <TableCell className="whitespace-nowrap border-r">
                               {r.email}
+                            </TableCell>
+                          )}
+                          {isColumnVisible("support_chat") && (
+                            <TableCell className="whitespace-nowrap border-r">
+                              <SupportChatToggle
+                                key={`${r.id}-${r.support_chat_enabled}`}
+                                userId={r.id}
+                                enabled={r.support_chat_enabled !== false}
+                                onUpdated={(enabled) =>
+                                  syncSupportChatEnabled(r.id, enabled)
+                                }
+                              />
                             </TableCell>
                           )}
                           {activeTab === "advertisers" ? (
@@ -4064,8 +4376,7 @@ export default function AdminUsersPage() {
                                                   viewBox="0 0 24 24"
                                                   xmlns="http://www.w3.org/2000/svg"
                                                 >
-                                                  <path d="M12.525.02c1.31-.02 2.61-.01 3.91-.02.08 1.53.63 3.09 1.75 4.17 1.12 1.11 2.7 1.62 4.24 1.79v4.03c-1.44-.05-2.89-.35-4.2-.97-.57-.26-1.1-.59-1.62-.93-.01 2.92.01 5.84-.02 8.75-.08 2.22-1.15 4.39-2.91 5.74-1.76 1.34-4.11 1.83-6.26 1.37-2.14-.45-4.01-1.83-5.02-3.79-1-1.95-1.07-4.32-.2-6.32.88-1.99 2.65-3.5 4.75-4.04 1.15-.3 2.37-.33 3.54-.15V13.4c-1.29-.16-2.65-.05-3.83.6-1.18.66-2.07 1.82-2.3 3.16-.23 1.32.13 2.74 1.05 3.65.91.9 2.31 1.25 3.55.93 1.24-.31 2.19-1.32 2.47-2.55.28-1.21.05-5.91.05-7.14V.02zm-3.14 0"
-                                                  />
+                                                  <path d="M12.525.02c1.31-.02 2.61-.01 3.91-.02.08 1.53.63 3.09 1.75 4.17 1.12 1.11 2.7 1.62 4.24 1.79v4.03c-1.44-.05-2.89-.35-4.2-.97-.57-.26-1.1-.59-1.62-.93-.01 2.92.01 5.84-.02 8.75-.08 2.22-1.15 4.39-2.91 5.74-1.76 1.34-4.11 1.83-6.26 1.37-2.14-.45-4.01-1.83-5.02-3.79-1-1.95-1.07-4.32-.2-6.32.88-1.99 2.65-3.5 4.75-4.04 1.15-.3 2.37-.33 3.54-.15V13.4c-1.29-.16-2.65-.05-3.83.6-1.18.66-2.07 1.82-2.3 3.16-.23 1.32.13 2.74 1.05 3.65.91.9 2.31 1.25 3.55.93 1.24-.31 2.19-1.32 2.47-2.55.28-1.21.05-5.91.05-7.14V.02zm-3.14 0" />
                                                 </svg>
                                               </a>
                                             )}
@@ -4217,6 +4528,11 @@ export default function AdminUsersPage() {
                               {isColumnVisible("total_submissions_won") && (
                                 <TableCell className="whitespace-nowrap border-r">
                                   {creatorProfile?.total_submissions_won || 0}
+                                </TableCell>
+                              )}
+                              {isColumnVisible("trust_score") && (
+                                <TableCell className="whitespace-nowrap border-r">
+                                  {getCreatorTrustScoreForRow(r)}
                                 </TableCell>
                               )}
                               {isColumnVisible("date_of_birth") && (
@@ -4621,6 +4937,56 @@ export default function AdminUsersPage() {
         </Card>
       )}
 
+      {viewMode === "notifications" && (
+        <AdminNotificationsView
+          isDark={isDark}
+          timezone={timezone}
+          highlightCampaignId={highlightCampaignId}
+          onHighlightConsumed={() => setHighlightCampaignId(null)}
+        />
+      )}
+
+      <SendNotificationModal
+        open={sendModalOpen}
+        onOpenChange={setSendModalOpen}
+        selection={notificationSelection}
+        timezone={timezone}
+        isDark={isDark}
+        onSuccess={(result) => {
+          setSelectedUserIds(new Set());
+          setSelectAllFiltered(false);
+          if (result.status === "scheduled" && result.scheduledAt) {
+            scheduleClientDelivery(result.campaignId, result.scheduledAt);
+            const qstashNote =
+              "qstashScheduled" in result && result.qstashScheduled
+                ? ""
+                : "";
+            toast({
+              title: "Notification scheduled",
+              description: `Scheduled for ${new Date(result.scheduledAt).toLocaleString()} (your local time).${qstashNote}`,
+            });
+          } else if (result.status === "processing") {
+            toast({
+              title: "Delivery in progress",
+              description: `Sending to ${result.recipientCount} user(s). Watch progress on the Notifications tab.`,
+            });
+          } else if (result.failureCount && result.failureCount > 0) {
+            toast({
+              title: "Partially sent",
+              description: `${result.successCount ?? 0} sent, ${result.failureCount} failed`,
+              variant: "destructive",
+            });
+          } else {
+            toast({
+              title: "Notification sent",
+              description: `Notification sent to ${result.recipientCount} user(s)`,
+            });
+          }
+          setHighlightCampaignId(result.campaignId);
+          setViewModePersisted("notifications");
+        }}
+      />
+
       {/* Column Customization Dialog */}
       <Dialog
         open={showColumnSettings}
@@ -4755,7 +5121,7 @@ export default function AdminUsersPage() {
                     value={
                       emptyFilterColumn ||
                       allColumns[activeTab as keyof typeof allColumns].filter(
-                        (column) => column.id !== "profile",
+                        isTableFilterColumn,
                       )[0]?.id ||
                       ""
                     }
@@ -4778,7 +5144,7 @@ export default function AdminUsersPage() {
                     </SelectTrigger>
                     <SelectContent isDark={isDark}>
                       {allColumns[activeTab as keyof typeof allColumns]
-                        .filter((column) => column.id !== "profile")
+                        .filter(isTableFilterColumn)
                         .map((column) => (
                           <SelectItem
                             key={column.id}
@@ -4796,7 +5162,7 @@ export default function AdminUsersPage() {
                     const selectedColumnId =
                       emptyFilterColumn ||
                       allColumns[activeTab as keyof typeof allColumns].filter(
-                        (column) => column.id !== "profile",
+                        isTableFilterColumn,
                       )[0]?.id ||
                       "";
                     const isUserType = selectedColumnId === "user_type";
@@ -4825,6 +5191,7 @@ export default function AdminUsersPage() {
                       "total_views",
                       "total_submissions_made",
                       "total_submissions_won",
+                      "trust_score",
                     ];
                     const dateFields = [
                       "created_at",
@@ -4848,7 +5215,7 @@ export default function AdminUsersPage() {
                       const selectedColumn =
                         emptyFilterColumn ||
                         allColumns[activeTab as keyof typeof allColumns].filter(
-                          (column) => column.id !== "profile",
+                          isTableFilterColumn,
                         )[0]?.id ||
                         "";
                       if (selectedColumn && value) {
@@ -5004,7 +5371,7 @@ export default function AdminUsersPage() {
                                     allColumns[
                                       activeTab as keyof typeof allColumns
                                     ].filter(
-                                      (column) => column.id !== "profile",
+                                      isTableFilterColumn,
                                     )[0]?.id ||
                                     "";
                                   if (selectedColumn && value) {
@@ -5042,7 +5409,7 @@ export default function AdminUsersPage() {
                                   allColumns[
                                     activeTab as keyof typeof allColumns
                                   ].filter(
-                                    (column) => column.id !== "profile",
+                                    isTableFilterColumn,
                                   )[0]?.id ||
                                   "";
                                 if (selectedColumn && value) {
@@ -5079,7 +5446,7 @@ export default function AdminUsersPage() {
                                   allColumns[
                                     activeTab as keyof typeof allColumns
                                   ].filter(
-                                    (column) => column.id !== "profile",
+                                    isTableFilterColumn,
                                   )[0]?.id ||
                                   "";
                                 if (selectedColumn && value) {
@@ -5120,7 +5487,7 @@ export default function AdminUsersPage() {
                             emptyFilterColumn ||
                             allColumns[
                               activeTab as keyof typeof allColumns
-                            ].filter((column) => column.id !== "profile")[0]
+                            ].filter(isTableFilterColumn)[0]
                               ?.id ||
                             "";
                           if (selectedColumn && value) {
@@ -5195,7 +5562,7 @@ export default function AdminUsersPage() {
                       </SelectTrigger>
                       <SelectContent isDark={isDark}>
                         {allColumns[activeTab as keyof typeof allColumns]
-                          .filter((column) => column.id !== "profile")
+                          .filter(isTableFilterColumn)
                           .map((column) => (
                             <SelectItem
                               key={column.id}
@@ -5327,6 +5694,7 @@ export default function AdminUsersPage() {
                           "total_views",
                           "total_submissions_made",
                           "total_submissions_won",
+                          "trust_score",
                         ];
                         const moneyFields = [
                           "total_money_spent",
@@ -5655,7 +6023,7 @@ export default function AdminUsersPage() {
               onClick={() => {
                 const availableColumns = allColumns[
                   activeTab as keyof typeof allColumns
-                ].filter((column) => column.id !== "profile");
+                ].filter(isTableFilterColumn);
                 setFilters([
                   ...filters,
                   {

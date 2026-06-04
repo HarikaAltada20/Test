@@ -106,9 +106,9 @@ export function Nav({
         : "/dashboard/profile";
   const quickLinkLabel =
     userType === "advertiser"
-      ? "Contests"
+      ? "Campaigns"
       : userType === "creator"
-        ? "Opportunities"
+        ? "Campaigns"
         : "Profile";
   const marketingHomeHref = user ? MARKETING_HOME_AS_GUEST : "/";
   const QuickLinkIcon =
@@ -119,16 +119,20 @@ export function Nav({
         : User;
   const [open, setOpen] = useState(false);
   const [isNavigating, setIsNavigating] = useState(false);
+  const [isSigningIn, setIsSigningIn] = useState(false);
 
-  const handleNavigation = (e: React.MouseEvent) => {
+  const handleNavigation = () => {
     setIsNavigating(true);
   };
 
-
+  const handleSignInNavigation = () => {
+    setIsSigningIn(true);
+  };
 
   useEffect(() => {
     setOpen(false);
     setIsNavigating(false);
+    setIsSigningIn(false);
   }, [pathname]);
   // Hide nav on all /auth/* pages, /choose-username, and /dashboard/* pages
   if (
@@ -422,34 +426,41 @@ export function Nav({
               ) : (
                 <>
                   {/* Enhanced Sign In Button */}
-                  <Link href="/auth/signin" className="hidden sm:block">
+                  <Link
+                    href="/auth/signin"
+                    className="hidden sm:block"
+                    onClick={handleSignInNavigation}
+                  >
                     <Button
                       variant="outline"
                       aria-label="Sign in"
+                      disabled={isSigningIn || isNavigating}
                       className={cn(
-                        "hidden md:flex px-6 py-2.5 text-md rounded-full backdrop-blur-sm transition-all duration-300 min-h-[44px]",
+                        "hidden md:flex items-center gap-2 px-6 py-2.5 text-md rounded-full backdrop-blur-sm transition-all duration-300 min-h-[44px]",
                         pathname === "/creators"
                           ? "bg-slate-900/50 border border-[#FF652D] text-orange-500 hover:bg-orange-500 hover:text-white"
-                          : "bg-slate-900/50 border border-[#BC83FA] text-[#BC83FA] hover:bg-[#BC83FA] hover:text-white"
+                          : "bg-slate-900/50 border border-[#BC83FA] text-[#BC83FA] hover:bg-[#BC83FA] hover:text-white",
+                        (isSigningIn || isNavigating) && "opacity-70 cursor-not-allowed"
                       )}
                     >
+                      {isSigningIn ? <ButtonLoadingSpinner /> : null}
                       Sign In
                     </Button>
                   </Link>
 
                   <Link href="/auth/signup" onClick={handleNavigation}>
                     <Button
+                      disabled={isNavigating || isSigningIn}
                       className={cn(
-                        "hidden md:flex px-6 py-2.5 text-md rounded-full transition-all duration-300 relative overflow-hidden min-h-[44px]",
+                        "hidden md:flex items-center gap-2 px-6 py-2.5 text-md rounded-full transition-all duration-300 relative overflow-hidden min-h-[44px]",
                         pathname === "/creators"
                           ? "bg-gradient-to-r from-orange-500 to-orange-700 text-white hover:opacity-90"
-                          : "bg-[linear-gradient(90deg,#4C238D_0%,#7F39EC_50%,#4C238D_100%)] text-white hover:opacity-90"
+                          : "bg-[linear-gradient(90deg,#4C238D_0%,#7F39EC_50%,#4C238D_100%)] text-white hover:opacity-90",
+                        (isNavigating || isSigningIn) && "opacity-70 cursor-not-allowed"
                       )}
                     >
                       <div className="scan-line"></div>
-                      {isNavigating ? (
-                        <ButtonLoadingSpinner />
-                      ) : null}
+                      {isNavigating ? <ButtonLoadingSpinner /> : null}
                       <span className="relative z-10">Get Started</span>
                     </Button>
                   </Link>
@@ -608,22 +619,32 @@ export function Nav({
                           </div>
                         ) : (
                           <div className="space-y-4 border-t border-violet-400/20 pt-6">
-                            <Link href="/auth/signin">
+                            <Link href="/auth/signin" onClick={handleSignInNavigation}>
                               <Button
                                 variant="outline"
-                                className="w-full bg-slate-900/50 border-violet-400/20 text-slate-300 hover:text-white hover:bg-violet-600/10"
+                                disabled={isSigningIn || isNavigating}
+                                className={cn(
+                                  "w-full flex items-center justify-center gap-2 bg-slate-900/50 border-violet-400/20 text-slate-300 hover:text-white hover:bg-violet-600/10",
+                                  (isSigningIn || isNavigating) && "opacity-70 cursor-not-allowed"
+                                )}
                               >
+                                {isSigningIn ? <ButtonLoadingSpinner /> : null}
                                 Sign In
                               </Button>
                             </Link>
 
-                            <Button className="w-full bg-gradient-to-r from-violet-600 to-purple-600 hover:from-violet-500 hover:to-purple-500 text-white font-semibold shadow-xl shadow-violet-500/25">
-                              <Link href="/auth/signup" onClick={handleNavigation}>
+                            <Link href="/auth/signup" onClick={handleNavigation}>
+                              <Button
+                                disabled={isNavigating || isSigningIn}
+                                className={cn(
+                                  "w-full flex items-center justify-center gap-2 bg-gradient-to-r from-violet-600 to-purple-600 hover:from-violet-500 hover:to-purple-500 text-white font-semibold shadow-xl shadow-violet-500/25",
+                                  (isNavigating || isSigningIn) && "opacity-70 cursor-not-allowed"
+                                )}
+                              >
                                 {isNavigating ? <ButtonLoadingSpinner /> : null}
-                                {/* <Zap className="mr-2 h-4 w-4" /> */}
                                 Get Started
-                              </Link>
-                            </Button>
+                              </Button>
+                            </Link>
                           </div>
                         )}
                       </div>

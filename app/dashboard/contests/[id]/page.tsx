@@ -12,6 +12,12 @@ import {
   isCpmContestType,
   isMilestoneContestType,
 } from "@/lib/contest-type";
+import {
+  fetchLiveTrustMetricsByCreatorIds,
+  getCreatorTrustScoreFromMetrics,
+  isVideoContestFormat,
+  resolveCreatorTrustMetrics,
+} from "@/lib/trust-score";
 
 /** Load all matching twitter_campaign_tweets in chunks (SSR). Default 50-row cap hid tweets from UI. */
 async function fetchTwitterTweetsAllPages(
@@ -114,23 +120,28 @@ export default async function ContestDetailPage({
     redirect("/dashboard/contests");
   }
 
-  // Payout adjustment lives on contests table; contests_with_status view may not include it
-  let payoutAdjustment: {
+  const isVideoContest = isVideoContestFormat(contestData.contest_format);
+
+  // Contest settings live on contests table; contests_with_status view may not include them
+  let contestSettings: {
     payout_adjustment_percentage: number | null;
     payout_adjustment_mode: string | null;
+    trust_score: number | null;
   } = {
     payout_adjustment_percentage: null,
     payout_adjustment_mode: null,
+    trust_score: null,
   };
   const { data: payoutRow } = await supabase
     .from("contests")
-    .select("payout_adjustment_percentage, payout_adjustment_mode")
+    .select("payout_adjustment_percentage, payout_adjustment_mode, trust_score")
     .eq("id", contestId)
     .maybeSingle();
   if (payoutRow) {
-    payoutAdjustment = {
+    contestSettings = {
       payout_adjustment_percentage: payoutRow.payout_adjustment_percentage ?? null,
       payout_adjustment_mode: payoutRow.payout_adjustment_mode ?? null,
+      trust_score: payoutRow.trust_score ?? null,
     };
   }
 
@@ -398,6 +409,7 @@ export default async function ContestDetailPage({
   // Fetch creator profiles and user data for the submissions and Twitter tweets
   let creatorProfilesData: any[] = [];
   let usersData: any[] = [];
+  let liveGlobalTrustMetricsByCreatorId: Record<string, any> = {};
 
   // Combine creator IDs from both submissions and Twitter tweets
   const allCreatorIds = new Set<string>();
@@ -427,7 +439,8 @@ export default async function ContestDetailPage({
           youtube_account,
           instagram_account,
           instagram_archive,
-          twitter_account
+          twitter_account,
+          trust_score_metrics
         `
         )
         .in("id", creatorIds);
@@ -459,8 +472,38 @@ export default async function ContestDetailPage({
       } else {
         usersData = userData || [];
       }
+
+      if (isVideoContest) {
+        const supabaseAdmin = createAdminClient();
+        liveGlobalTrustMetricsByCreatorId =
+          await fetchLiveTrustMetricsByCreatorIds(supabaseAdmin, creatorIds);
+      }
     }
   }
+
+  const getCreatorTrustMetrics = (
+    creatorProfile: any,
+    creatorId?: string | null,
+  ) =>
+    isVideoContest
+      ? resolveCreatorTrustMetrics(
+          creatorProfile,
+          creatorId,
+          liveGlobalTrustMetricsByCreatorId,
+        )
+      : null;
+
+  const getCreatorTrustScore = (
+    creatorProfile: any,
+    creatorId?: string | null,
+  ): number | null =>
+    isVideoContest
+      ? getCreatorTrustScoreFromMetrics(
+          creatorProfile,
+          creatorId,
+          liveGlobalTrustMetricsByCreatorId,
+        )
+      : null;
 
   const isLive = contestData.status === "active";
 
@@ -527,8 +570,9 @@ export default async function ContestDetailPage({
     // Twitter-specific fields (all stored in contest_based_details.twitter_campaign)
     contest_format: contestData.contest_format,
     // Payout adjustment (admin) – from contests table so they survive refresh
-    payout_adjustment_percentage: payoutAdjustment.payout_adjustment_percentage,
-    payout_adjustment_mode: payoutAdjustment.payout_adjustment_mode,
+    payout_adjustment_percentage: contestSettings.payout_adjustment_percentage,
+    payout_adjustment_mode: contestSettings.payout_adjustment_mode,
+    trust_score: isVideoContest ? contestSettings.trust_score : null,
   };
 
   // For Twitter campaigns: fetch bonus-paid status from money_transactions so Bonus Granted column is correct
@@ -894,6 +938,11 @@ export default async function ContestDetailPage({
         user_username: user?.username || null,
         creator_avatar_url: creatorAvatarUrl,
         creator_id: actualCreatorProfileId,
+        trust_score: getCreatorTrustScore(creatorProfile, actualCreatorProfileId),
+        trust_score_metrics: getCreatorTrustMetrics(
+          creatorProfile,
+          actualCreatorProfileId
+        ),
         // Mark as Twitter tweet for UI handling
         is_twitter_tweet: true,
         tweet_id: tweet.tweet_id,
@@ -910,6 +959,11 @@ export default async function ContestDetailPage({
           username: creatorUsername,
           profile_picture_url: creatorAvatarUrl,
           full_name: creatorDisplayName,
+          trust_score: getCreatorTrustScore(creatorProfile, actualCreatorProfileId),
+          trust_score_metrics: getCreatorTrustMetrics(
+            creatorProfile,
+            actualCreatorProfileId
+          ),
         },
       };
     })
@@ -1012,6 +1066,11 @@ export default async function ContestDetailPage({
         user_username: user?.username || null,
         creator_avatar_url: creatorAvatarUrl,
         creator_id: actualCreatorProfileId,
+        trust_score: getCreatorTrustScore(creatorProfile, actualCreatorProfileId),
+        trust_score_metrics: getCreatorTrustMetrics(
+          creatorProfile,
+          actualCreatorProfileId
+        ),
         // Add nested creator object for creator-wise grouping compatibility
         creator: {
           id: actualCreatorProfileId,
@@ -1019,6 +1078,11 @@ export default async function ContestDetailPage({
           profile_picture_url: creatorAvatarUrl,
           full_name: creatorDisplayName,
           instagram_archive: creatorProfile?.instagram_archive ?? null,
+          trust_score: getCreatorTrustScore(creatorProfile, actualCreatorProfileId),
+          trust_score_metrics: getCreatorTrustMetrics(
+            creatorProfile,
+            actualCreatorProfileId
+          ),
         },
         creator_instagram_archive: creatorProfile?.instagram_archive ?? null,
         metadata: sub.metadata ?? null,

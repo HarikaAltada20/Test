@@ -1,9 +1,11 @@
 import { createOAuthClient, getAuthUrl } from '@/lib/youtube-api';
+import { setOAuthReturnToCookie } from '@/lib/oauth-return-to';
 import { NextRequest, NextResponse } from 'next/server';
 import crypto from 'crypto'; // Import crypto for generating random state
 
 export async function GET(request: NextRequest) {
   try {
+    const returnTo = request.nextUrl.searchParams.get('returnTo');
     const origin = new URL(request.url).origin;
     // Always use the same redirect URI for both web and mobile (like Instagram)
     // The mobile callback route will handle redirecting to the API callback
@@ -32,6 +34,8 @@ export async function GET(request: NextRequest) {
       sameSite: 'lax',    // Recommended for OAuth flows
       maxAge: 60 * 15     // Expire after 15 minutes
     });
+
+    setOAuthReturnToCookie(response, returnTo);
 
     return response; // Return the response with the cookie set
 

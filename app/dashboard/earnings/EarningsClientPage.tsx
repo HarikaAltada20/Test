@@ -1174,11 +1174,11 @@ export default function EarningsClientPage({
                     isDark ? "text-white" : "text-black"
                   )}
                 >
-                  <p className="text-lg font-medium">Cash Contests Won</p>
+                  <p className="text-lg font-medium">Cash Campaigns Won</p>
                   <p className="text-xl font-bold">
                     {profile.total_contests_won}
                   </p>
-                  <p className="text-md">Total cash contest victories</p>
+                  <p className="text-md">Total cash campaign victories</p>
                 </div>
                 <div
                   className={cn(

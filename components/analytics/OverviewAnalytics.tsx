@@ -176,7 +176,7 @@ export default function OverviewAnalytics({
                 isDark ? "text-white" : "text-gray-900",
               )}
             >
-              Total Contests
+              Total Campaigns
             </CardTitle>
             <BarChart3
               className={cn(
@@ -411,7 +411,7 @@ export default function OverviewAnalytics({
                 isDark ? "text-white" : "text-gray-900",
               )}
             >
-              Average Submissions Per Contest
+              Average Submissions Per Campaign
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -439,7 +439,7 @@ export default function OverviewAnalytics({
             <CardTitle
               className={cn("text-lg", isDark ? "text-white" : "text-gray-900")}
             >
-              Top Performing Contest
+              Top Performing Campaign
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -516,7 +516,7 @@ export default function OverviewAnalytics({
                         {platform}
                       </p>
                       <p className="text-sm text-muted-foreground">
-                        {stats.contests} contests • {stats.submissions}{" "}
+                        {stats.contests} campaigns • {stats.submissions}{" "}
                         submissions
                       </p>
                     </div>
@@ -545,7 +545,7 @@ export default function OverviewAnalytics({
             <CardTitle
               className={cn("text-lg", isDark ? "text-white" : "text-gray-900")}
             >
-              Contest Type Performance
+              Campaign Type Performance
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -565,7 +565,7 @@ export default function OverviewAnalytics({
                       {type.replace("_", " ")}
                     </p>
                     <p className="text-sm text-muted-foreground">
-                      {stats.count} contests • {stats.submissions} submissions
+                      {stats.count} campaigns • {stats.submissions} submissions
                     </p>
                   </div>
                   <div className="text-left sm:text-right w-full sm:w-auto">
@@ -637,7 +637,7 @@ export default function OverviewAnalytics({
                       >
                         {monthData.contests}
                       </p>
-                      <p className="text-muted-foreground">Contests</p>
+                      <p className="text-muted-foreground">Campaigns</p>
                     </div>
                     <div className="text-center">
                       <p

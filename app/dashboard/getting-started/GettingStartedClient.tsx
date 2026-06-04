@@ -173,7 +173,7 @@ export default function GettingStartedClient({
         <p className={cn("text-lg", isDark ? "text-white" : "text-gray-900")}>
           {userType === "advertiser"
             ? "Learn how to create engaging content campaigns"
-            : "Learn how to participate and earn from contests"}
+            : "Learn how to participate and earn from campaigns"}
         </p>
       </div>
 
@@ -243,7 +243,7 @@ export default function GettingStartedClient({
                     )}
                   >
                     <strong>Game Of Creators</strong> connects brands with
-                    talented content creators through engaging video contests.
+                    talented content creators through engaging video campaigns.
                   </p>
                   <p
                     className={cn(
@@ -358,9 +358,9 @@ export default function GettingStartedClient({
                                     <div className="w-12 h-12 bg-[#D8C3FF] rounded-full flex items-center justify-center mx-auto mb-3">
                                         <span className="text-[#4A00BE] font-bold">1</span>
                                     </div>
-                                    <h3 className="font-semibold text-xl mb-2">Create Contest</h3>
+                                    <h3 className="font-semibold text-xl mb-2">Create Campaign</h3>
                                     <p className="text-md text-gray-600 dark:text-gray-300">
-                                        Set your brief, budget, and contest type (Leaderboard or CPM)
+                                        Set your brief, budget, and campaign type (Leaderboard or CPM)
                                     </p>
                                 </div>
                                 <div className="text-center p-4 p-6 rounded-2xl shadow-[0px_5px_20px_0px_#0000000D]">
@@ -396,8 +396,8 @@ export default function GettingStartedClient({
                   {[
                     {
                       step: "1",
-                      title: "Create Contest",
-                      desc: "Set your brief, budget, and contest type (Leaderboard or CPM)",
+                      title: "Create Campaign",
+                      desc: "Set your brief, budget, and campaign type (Leaderboard or CPM)",
                       image: "/images/equity-1.png",
                     },
                     {
@@ -484,7 +484,7 @@ export default function GettingStartedClient({
                       <ButtonLoadingSpinner />
                     ) : null}
                     {/* <Play className="w-4 h-4 mr-2" /> */}
-                    Create Your First Contest
+                    Create Your First Campaign
                   </Button>
                 </div>
               </CardContent>
@@ -499,7 +499,7 @@ export default function GettingStartedClient({
                     isDark ? "text-white" : "text-gray-900",
                   )}
                 >
-                  Choose Your Contest Type
+                  Choose Your Campaign Type
                 </h2>
                 <p
                   className={cn(
@@ -528,7 +528,7 @@ export default function GettingStartedClient({
                     </div>
                     <div>
                       <h3 className="font-bold text-base leading-tight">
-                        Leaderboard Contest
+                        Leaderboard Campaign
                       </h3>
                       <Badge
                         variant="outline"
@@ -630,7 +630,7 @@ export default function GettingStartedClient({
                     ) : (
                       <Trophy className="w-4 h-4" />
                     )}
-                    Create Leaderboard Contest
+                    Create Leaderboard Campaign
                   </Button>
                 </div>
 
@@ -651,7 +651,7 @@ export default function GettingStartedClient({
                       </div>
                       <div>
                         <h3 className="font-bold text-base leading-tight">
-                          CPM Contest
+                          CPM Campaign
                         </h3>
                         <Badge
                           variant="outline"
@@ -760,7 +760,7 @@ export default function GettingStartedClient({
                     ) : (
                       <DollarSign className="w-4 h-4" />
                     )}
-                    Create CPM Contest
+                    Create CPM Campaign
                   </Button>
                 </div>
 
@@ -781,7 +781,7 @@ export default function GettingStartedClient({
                       </div>
                       <div>
                         <h3 className="font-bold text-base leading-tight">
-                          Milestone Contest
+                          Milestone Campaign
                         </h3>
                         <Badge
                           variant="outline"
@@ -890,7 +890,7 @@ export default function GettingStartedClient({
                     ) : (
                       <Award className="w-4 h-4" />
                     )}
-                    Create Milestone Contest
+                    Create Milestone Campaign
                   </Button>
                 </div>
 
@@ -911,7 +911,7 @@ export default function GettingStartedClient({
                       </div>
                       <div>
                         <h3 className="font-bold text-base leading-tight">
-                          Dual Rewards Contest
+                          Dual Rewards Campaign
                         </h3>
                         <Badge
                           variant="outline"
@@ -945,8 +945,8 @@ export default function GettingStartedClient({
                       isDark ? "text-[#D8C7F5]" : "text-gray-600",
                     )}
                   >
-                    Combine CPM payouts and milestone targets in one contest for
-                    balanced growth and outcomes.
+                    Combine CPM payouts and milestone targets in one campaign
+                    for balanced growth and outcomes.
                   </p>
 
                   {/* Example */}
@@ -972,8 +972,8 @@ export default function GettingStartedClient({
                       )}
                     >
                       Per submission: CPM at $0.20 per 1K views and a $120
-                      milestone at 50K views. If a submission reaches 50K
-                      views, total payout is $130 ($10 CPM + $120 milestone).
+                      milestone at 50K views. If a submission reaches 50K views,
+                      total payout is $130 ($10 CPM + $120 milestone).
                     </span>
                   </div>
 
@@ -983,7 +983,7 @@ export default function GettingStartedClient({
                       "Blend steady CPM payouts with milestone-based rewards",
                       "Great for scaling while motivating top performance",
                       "Automatic milestone payouts when targets are reached",
-                      "Run one contest instead of splitting payout models",
+                      "Run one campaign instead of splitting payout models",
                     ].map((point) => (
                       <li key={point} className="flex items-start gap-2">
                         <Check
@@ -1026,7 +1026,7 @@ export default function GettingStartedClient({
                     ) : (
                       <Award className="w-4 h-4" />
                     )}
-                    Create Dual Rewards Contest
+                    Create Dual Rewards Campaign
                   </Button>
                 </div>
               </div>
@@ -1106,7 +1106,7 @@ export default function GettingStartedClient({
                       isDark ? "text-gray-400" : "text-gray-400",
                     )}
                   >
-                    CPM Contest · 19 days
+                    CPM Campaign · 19 days
                   </span>
                 </div>
 
@@ -1152,7 +1152,7 @@ export default function GettingStartedClient({
                           isDark ? "text-[#C4AEED]" : "text-gray-500",
                         )}
                       >
-                        One CPM contest. Real creators. 100% organic.
+                        One CPM campaign. Real creators. 100% organic.
                       </p>
                     </div>
 
@@ -1432,7 +1432,7 @@ export default function GettingStartedClient({
                     )}
                   >
                     <strong>Game Of Creators</strong> connects content creators
-                    with brands through video contests.
+                    with brands through video campaigns.
                   </p>
                   <p
                     className={cn(
@@ -1465,7 +1465,7 @@ export default function GettingStartedClient({
                         isDark ? "text-gray-300" : "text-gray-600",
                       )}
                     >
-                      Get paid for your creativity through contests and
+                      Get paid for your creativity through campaigns and
                       CPM-based earnings
                     </p>
                   </div>
@@ -1475,7 +1475,7 @@ export default function GettingStartedClient({
                   </div>
                   <h3 className="font-semibold mb-2">Earn Money</h3>
                   <p className="text-sm text-gray-600 dark:text-gray-300">
-                    Get paid for your creativity through contests and CPM-based
+                    Get paid for your creativity through campaigns and CPM-based
                     earnings
                   </p>
                 </div> */}
@@ -1534,7 +1534,7 @@ export default function GettingStartedClient({
                       )}
                     >
                       Reach new audiences through brand collaborations and
-                      contests
+                      campaigns
                     </p>
                   </div>
                   {/* <div className="text-center p-4 bg-purple-50 dark:bg-purple-950 rounded-lg">
@@ -1544,7 +1544,7 @@ export default function GettingStartedClient({
                   <h3 className="font-semibold mb-2">Grow Audience</h3>
                   <p className="text-sm text-gray-600 dark:text-gray-300">
                     Reach new audiences through brand collaborations and
-                    contests
+                    campaigns
                   </p>
                 </div> */}
                 </div>
@@ -1575,14 +1575,14 @@ export default function GettingStartedClient({
                   {[
                     {
                       step: "1",
-                      title: "Browse Contests",
-                      desc: "Find contests that match your content style and audience",
+                      title: "Browse Campaigns",
+                      desc: "Find campaigns that match your content style and audience",
                       image: "/images/play (1).png",
                     },
                     {
                       step: "2",
                       title: "Create & Submit",
-                      desc: "Make your video following the contest brief, rules and submit",
+                      desc: "Make your video following the campaign brief, rules and submit",
                       image: "/images/uploading.png",
                     },
                     {
@@ -1651,9 +1651,9 @@ export default function GettingStartedClient({
                       1
                     </span>
                   </div>
-                  <h3 className="font-semibold mb-2">Browse Contests</h3>
+                  <h3 className="font-semibold mb-2">Browse Campaigns</h3>
                   <p className="text-sm text-gray-600 dark:text-gray-300">
-                    Find contests that match your content style and audience
+                    Find campaigns that match your content style and audience
                   </p>
                 </div> */}
                   {/* <div className="text-center">
@@ -1664,7 +1664,7 @@ export default function GettingStartedClient({
                   </div>
                   <h3 className="font-semibold mb-2">Create & Submit</h3>
                   <p className="text-sm text-gray-600 dark:text-gray-300">
-                    Make your video following the contest brief, rules and
+                    Make your video following the campaign brief, rules and
                     submit
                   </p>
                 </div> */}
@@ -1710,7 +1710,7 @@ export default function GettingStartedClient({
                     ) : (
                       <Video className="w-4 h-4" />
                     )}
-                    Browse Contests
+                    Browse Campaigns
                   </Button>
                 </div>
               </div>
@@ -1725,7 +1725,7 @@ export default function GettingStartedClient({
                     isDark ? "text-white" : "text-gray-900",
                   )}
                 >
-                  Contest Types
+                  Campaign Types
                 </h2>
               </CardHeader>
 
@@ -1746,7 +1746,7 @@ export default function GettingStartedClient({
                           <Trophy className="w-6 h-6 text-purple-600 dark:text-purple-400" />
                         </div>
                         <h3 className="font-bold text-lg">
-                          Leaderboard Contests
+                          Leaderboard Campaigns
                         </h3>
                       </div>
                       <p
@@ -1866,7 +1866,7 @@ export default function GettingStartedClient({
                       <div className="p-2.5 bg-[#D8C3FF] rounded-full">
                         <DollarSign className="w-6 h-6 text-purple-600" />
                       </div>
-                      <h3 className="font-bold text-lg">CPM Contests</h3>
+                      <h3 className="font-bold text-lg">CPM Campaigns</h3>
                     </div>
                     <p
                       className={cn(
@@ -2000,7 +2000,7 @@ export default function GettingStartedClient({
                           <Target className="w-6 h-6 text-purple-600" />
                         </div>
                         <h3 className="font-bold text-lg">
-                          Milestone Contests
+                          Milestone Campaigns
                         </h3>
                       </div>
                       <p
@@ -2117,7 +2117,7 @@ export default function GettingStartedClient({
                           <Award className="w-6 h-6 text-purple-600" />
                         </div>
                         <h3 className="font-bold text-lg">
-                          Dual Rewards Contests
+                          Dual Rewards Campaigns
                         </h3>
                       </div>
                       <p
@@ -2126,29 +2126,31 @@ export default function GettingStartedClient({
                           isDark ? "text-gray-300" : "text-black",
                         )}
                       >
-                        Earn from both CPM and milestones in the same contest.
+                        Earn from both CPM and milestones in the same campaign.
                         CPM pays per 1K views, and milestones pay when your
                         submission reaches each target.
                       </p>
 
                       <div className="text-center mb-4">
-                      <div
-                        className={cn(
-                          "inline-block px-4 py-2 rounded-xl",
-                          isDark
-                            ? "border border-[#7F39EC] bg-[#D9C0FF26]"
-                            : "bg-[#4A00BE]",
-                        )}
-                      >
-                        <div className="text-xl font-bold text-white">
-                          $5.00
+                        <div
+                          className={cn(
+                            "inline-block px-4 py-2 rounded-xl",
+                            isDark
+                              ? "border border-[#7F39EC] bg-[#D9C0FF26]"
+                              : "bg-[#4A00BE]",
+                          )}
+                        >
+                          <div className="text-xl font-bold text-white">
+                            $5.00
+                          </div>
+                          <div className="text-sm text-white">
+                            per 1,000 views
+                          </div>
+                          <div className="text-sm text-white">
+                            $20 at 50k views, $50 at 100k views
+                          </div>
                         </div>
-                        <div className="text-sm text-white">
-                          per 1,000 views
-                        </div>
-                        <div className="text-sm text-white">$20 at 50k views, $50 at 100k views</div>
                       </div>
-                    </div>
 
                       {/* Visual Dual Rewards Display */}
                       <div className="space-y-4 mt-8">
@@ -2203,7 +2205,7 @@ export default function GettingStartedClient({
                                 isDark ? "text-gray-200" : "text-[#2D1B4E]",
                               )}
                             >
-                             $150
+                              $150
                             </span>
                           </div>
                           <p
@@ -2298,7 +2300,7 @@ export default function GettingStartedClient({
                         <Check className="w-5 h-5 text-purple-500 mt-0.5 flex-shrink-0" />
                         <span>
                           {" "}
-                          Content follows contest brief, rules and guidelines
+                          Content follows campaign brief, rules and guidelines
                         </span>
                       </li>
                       <li className="flex items-start space-x-2">
@@ -2319,7 +2321,7 @@ export default function GettingStartedClient({
                       <li className="flex items-start space-x-2">
                         <CheckCircle className="w-4 h-4 text-green-500 mt-0.5 flex-shrink-0" />
                         <span>
-                          Content follows contest brief, rules and guidelines
+                          Content follows campaign brief, rules and guidelines
                         </span>
                       </li>
                       <li className="flex items-start space-x-2">
@@ -2365,12 +2367,12 @@ export default function GettingStartedClient({
                       <li className="flex items-start space-x-2">
                         <Check className="w-5 h-5 text-purple-500 mt-0.5 flex-shrink-0" />
                         <span>
-                          Performance tracking continues for contest rankings
+                          Performance tracking continues for campaign rankings
                         </span>
                       </li>
                       <li className="flex items-start space-x-2">
                         <Check className="w-5 h-5 text-purple-500 mt-0.5 flex-shrink-0" />
-                        <span>If you win the contest you will get paid</span>
+                        <span>If you win the campaign you will get paid</span>
                       </li>
                     </ul>
                   </div>
@@ -2390,12 +2392,12 @@ export default function GettingStartedClient({
                       <li className="flex items-start space-x-2">
                         <CheckCircle className="w-4 h-4 text-green-500 mt-0.5 flex-shrink-0" />
                         <span>
-                          Performance tracking continues for contest rankings
+                          Performance tracking continues for campaign rankings
                         </span>
                       </li>
                       <li className="flex items-start space-x-2">
                         <CheckCircle className="w-4 h-4 text-green-500 mt-0.5 flex-shrink-0" />
-                        <span>If you win the contest you will get paid</span>
+                        <span>If you win the campaign you will get paid</span>
                       </li>
                     </ul>
                   </div> */}
@@ -2424,7 +2426,7 @@ export default function GettingStartedClient({
                     >
                       <li className="flex items-start space-x-2">
                         <Check className="w-5 h-5 text-purple-500 mt-0.5 flex-shrink-0" />
-                        <span>You will not qualify for that contest</span>
+                        <span>You will not qualify for that campaign</span>
                       </li>
                       <li className="flex items-start space-x-2">
                         <Check className="w-5 h-5 text-purple-500 mt-0.5 flex-shrink-0" />
@@ -2442,7 +2444,7 @@ export default function GettingStartedClient({
                         <span>
                           {" "}
                           You will not be eligible for any winnings for that
-                          contest
+                          campaign
                         </span>
                       </li>
                     </ul>
@@ -2455,7 +2457,7 @@ export default function GettingStartedClient({
                     <ul className="space-y-2 text-sm text-gray-700 dark:text-gray-300">
                       <li className="flex items-start space-x-2">
                         <CheckCircle className="w-4 h-4 text-red-500 mt-0.5 flex-shrink-0" />
-                        <span>You will not qualify for that contest</span>
+                        <span>You will not qualify for that campaign</span>
                       </li>
                       <li className="flex items-start space-x-2">
                         <CheckCircle className="w-4 h-4 text-red-500 mt-0.5 flex-shrink-0" />
@@ -2473,7 +2475,7 @@ export default function GettingStartedClient({
                         <CheckCircle className="w-4 h-4 text-red-500 mt-0.5 flex-shrink-0" />
                         <span>
                           You will not be eligible for any winnings for that
-                          contest
+                          campaign
                         </span>
                       </li>
                     </ul>
@@ -2508,7 +2510,7 @@ export default function GettingStartedClient({
                         )}
                       >
                         <strong>
-                          Follow the contest brief and guidelines carefully.
+                          Follow the campaign brief and guidelines carefully.
                         </strong>{" "}
                         This ensures faster verification and better performance.
                         Quality content = more money!
@@ -2547,7 +2549,7 @@ export default function GettingStartedClient({
                 Ready to Start?
               </h3>
               <p className={cn(isDark ? "text-gray-300" : "text-gray-600")}>
-                Start creating contests and campaigns
+                Start creating campaigns
               </p>
             </div>
 
@@ -2568,7 +2570,7 @@ export default function GettingStartedClient({
                 ) : (
                   <Video className="w-6 h-6" />
                 )}
-                Create Contest
+                Create Campaign
               </Button>
             </div>
           </CardContent>
@@ -2602,7 +2604,7 @@ export default function GettingStartedClient({
                   isDark ? "text-gray-300" : "text-gray-600",
                 )}
               >
-                Start participating in contests and earning money
+                Start participating in campaigns and earning money
               </p>
             </div>
 
@@ -2624,7 +2626,7 @@ export default function GettingStartedClient({
                   ) : (
                     <Video className="w-5 h-5" />
                   )}
-                  Browse Contests
+                  Browse Campaigns
                 </Button>
               </div>
               <a

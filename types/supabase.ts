@@ -185,6 +185,7 @@ export interface Database {
           interests: Json | null;
           has_claimed_profile_reward: boolean;
           profile_reward_claimed_at: string | null;
+          trust_score_metrics: Json;
         };
         Insert: {
           id: string;
@@ -205,6 +206,7 @@ export interface Database {
           interests?: Json | null;
           has_claimed_profile_reward?: boolean;
           profile_reward_claimed_at?: string | null;
+          trust_score_metrics?: Json;
         };
         Update: {
           id?: string;
@@ -225,6 +227,7 @@ export interface Database {
           interests?: Json | null;
           has_claimed_profile_reward?: boolean;
           profile_reward_claimed_at?: string | null;
+          trust_score_metrics?: Json;
         };
       };
       subscriptions: {
@@ -328,6 +331,7 @@ export interface Database {
           max_earnings_per_creator: number | null; // Per-contest cap (in cents), NOT platform-wide
           payout_adjustment_percentage: number | null;
           payout_adjustment_mode: string | null;
+          trust_score: number | null;
           // Note: flat_fee_bonus is stored in contest_based_details JSONB (in cents)
         };
         Insert: {
@@ -387,6 +391,7 @@ export interface Database {
           max_earnings_per_creator?: number | null;
           payout_adjustment_percentage?: number | null;
           payout_adjustment_mode?: string | null;
+          trust_score?: number | null;
         };
         Update: {
           id?: string;
@@ -444,6 +449,7 @@ export interface Database {
           max_earnings_per_creator?: number | null;
           payout_adjustment_percentage?: number | null;
           payout_adjustment_mode?: string | null;
+          trust_score?: number | null;
         };
       };
       submissions: {
@@ -934,6 +940,7 @@ export interface Database {
           content_type: "ugc" | "clipping" | "other" | null;
           bonus_details: Json | null;
           max_earnings_per_creator: number | null;
+          trust_score: number | null;
         };
       };
     };

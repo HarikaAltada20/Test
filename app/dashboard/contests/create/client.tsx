@@ -50,6 +50,7 @@ import {
   isCpmContestType,
   isMilestoneContestType,
 } from "@/lib/contest-type";
+import { isVideoContestFormat } from "@/lib/trust-score";
 import { formatCurrencyFromCents } from "@/lib/currency-utils";
 import { toast } from "@/hooks/use-toast"; // Added import
 import dynamic from "next/dynamic";
@@ -334,7 +335,7 @@ export default function CreateContestPage({
   const [showPayment, setShowPayment] = useState(false);
   const [paymentCompleted, setPaymentCompleted] = useState(false);
 
-  // Contest Type and CPM-specific state
+  // Campaign Type and CPM-specific state
   const [contestType, setContestType] = useState<
     "leaderboard" | "cpm" | "milestone" | "dual_rewards"
   >("leaderboard");
@@ -411,9 +412,11 @@ export default function CreateContestPage({
     useState<number | "">("");
   const [milestoneBonusTopReelsPayout, setMilestoneBonusTopReelsPayout] =
     useState<string>("");
-  // End Contest Type and CPM-specific state
+  // End Campaign Type and CPM-specific state
 
   // New features state (2025-10-01)
+  const [trustScoreEnabled, setTrustScoreEnabled] = useState(false);
+  const [contestTrustScore, setContestTrustScore] = useState<number | "">("");
   const [multipleSubmissionsEnabled, setMultipleSubmissionsEnabled] =
     useState(false);
   const [maxSubmissionsPerCreator, setMaxSubmissionsPerCreator] =
@@ -443,7 +446,7 @@ export default function CreateContestPage({
     impressionsWeight: "",
   });
   const [flatFeeBonus, setFlatFeeBonus] = useState<number | string>(""); // In dollars
-  const [flatFeeBonusCap, setFlatFeeBonusCap] = useState<number | string>(""); // In dollars - for CPM contests only
+  const [flatFeeBonusCap, setFlatFeeBonusCap] = useState<number | string>(""); // In dollars - for CPM campaigns only
 
   // Checkboxes to show/hide engagement multiplier sections
   const [showCommentMultipliers, setShowCommentMultipliers] = useState(false);
@@ -1195,6 +1198,7 @@ export default function CreateContestPage({
           // New features (2025-10-01)
           multiple_submissions_enabled: false,
           max_submissions_per_creator: 1,
+          trust_score: null,
           content_type: null,
           bonus_details: null,
           max_earnings_per_creator: null,
@@ -1214,7 +1218,7 @@ export default function CreateContestPage({
     }
   };
 
-  // Helper function to instantly update contest in DB
+  // Helper function to instantly update campaign in DB
   const updateContestInDB = async (
     updateObj: Partial<{
       resources: ResourceItem[];
@@ -1320,7 +1324,7 @@ export default function CreateContestPage({
             currentContestId = newContestId;
           }
         }
-        // Remove any existing thumbnail for this contest (all extensions)
+        // Remove any existing thumbnail for this campaign (all extensions)
         const { data: existingFiles } = await supabase.storage
           .from("contest-assets")
           .list("contest_thumbnails");
@@ -1598,7 +1602,7 @@ export default function CreateContestPage({
   };
 
   /**
-   * Comprehensive validation function that checks ALL contest requirements
+   * Comprehensive validation function that checks ALL campaign requirements
    * before allowing payment. This prevents users from paying and then
    * getting validation errors.
    */
@@ -1609,24 +1613,24 @@ export default function CreateContestPage({
     try {
       // 1. Basic field validation
       if (!title.trim()) {
-        return { isValid: false, error: "Contest title is required" };
+        return { isValid: false, error: "Campaign title is required" };
       }
 
       if (!thumbnail && !thumbnailPreview) {
-        return { isValid: false, error: "Contest thumbnail is required" };
+        return { isValid: false, error: "Campaign thumbnail is required" };
       }
 
       // 2. Brief and rules validation
       const currentBrief = captureBriefContent();
       const briefToValidate = currentBrief || briefHtml;
       if (!briefToValidate || isQuillEmpty(briefToValidate)) {
-        return { isValid: false, error: "Contest brief is required" };
+        return { isValid: false, error: "Campaign brief is required" };
       }
 
       const currentRulesHtml = captureRulesContent();
       const rulesToValidate = currentRulesHtml || rulesHtml;
       if (!rulesToValidate || isQuillEmpty(rulesToValidate)) {
-        return { isValid: false, error: "Contest rules are required" };
+        return { isValid: false, error: "Campaign rules are required" };
       }
 
       // Capture bonus content if enabled
@@ -1650,7 +1654,7 @@ export default function CreateContestPage({
       if (!startDate || !startTime || !endDate || !endTime) {
         return {
           isValid: false,
-          error: "Contest start and end dates/times are required",
+          error: "Campaign start and end dates/times are required",
         };
       }
 
@@ -1689,7 +1693,7 @@ export default function CreateContestPage({
         if (daysUntilStart < MIN_DAYS_UNTIL_START) {
           return {
             isValid: false,
-            error: `Contest must start at least ${MIN_DAYS_UNTIL_START} days from today (${
+            error: `Campaign must start at least ${MIN_DAYS_UNTIL_START} days from today (${
               MIN_DAYS_UNTIL_START - 1
             } day gap required)`,
           };
@@ -1698,7 +1702,7 @@ export default function CreateContestPage({
         if (endDateTime <= startDateTime) {
           return {
             isValid: false,
-            error: "Contest end time must be after the start time",
+            error: "Campaign end time must be after the start time",
           };
         }
 
@@ -1709,14 +1713,14 @@ export default function CreateContestPage({
         if (durationDays < MIN_CONTEST_DURATION_DAYS) {
           return {
             isValid: false,
-            error: `Contest duration must be at least ${MIN_CONTEST_DURATION_DAYS} days`,
+            error: `Campaign duration must be at least ${MIN_CONTEST_DURATION_DAYS} days`,
           };
         }
 
         if (durationDays > MAX_CONTEST_DURATION_DAYS) {
           return {
             isValid: false,
-            error: `Contest duration cannot exceed ${MAX_CONTEST_DURATION_DAYS} days`,
+            error: `Campaign duration cannot exceed ${MAX_CONTEST_DURATION_DAYS} days`,
           };
         }
       } catch (error) {
@@ -1802,7 +1806,7 @@ export default function CreateContestPage({
         if (contestFormat !== "video") {
           return {
             isValid: false,
-            error: "Milestone contests are only available for video contests.",
+            error: "Milestone campaigns are only available for video campaigns.",
           };
         }
 
@@ -1827,7 +1831,7 @@ export default function CreateContestPage({
         ) {
           return {
             isValid: false,
-            error: "Total contest budget is required for milestone contests.",
+            error: "Total campaign budget is required for milestone campaigns.",
           };
         }
 
@@ -1837,7 +1841,7 @@ export default function CreateContestPage({
         if (budgetCents < planFeatures.minContestBudget) {
           return {
             isValid: false,
-            error: `The minimum contest budget for your plan is ${formatCurrencyFromCents(
+            error: `The minimum campaign budget for your plan is ${formatCurrencyFromCents(
               planFeatures.minContestBudget,
             )}. Please increase your total budget.`,
           };
@@ -2001,14 +2005,14 @@ export default function CreateContestPage({
         if (!totalBudget || parseFloat(totalBudget.toString()) <= 0) {
           return {
             isValid: false,
-            error: "Total Budget must be a positive number for CPM contests.",
+            error: "Total Budget must be a positive number for CPM campaigns.",
           };
         }
 
         if (!termsConditions) {
           return {
             isValid: false,
-            error: "Terms & Conditions are required for CPM contests.",
+            error: "Terms & Conditions are required for CPM campaigns.",
           };
         }
 
@@ -2033,7 +2037,7 @@ export default function CreateContestPage({
               return {
                 isValid: false,
                 error:
-                  "For Twitter CPM raid contests, please enable at least one metric (comments/replies, retweets, or quote reposts) to count towards points and payout.",
+                  "For Twitter CPM raid campaigns, please enable at least one metric (comments/replies, retweets, or quote reposts) to count towards points and payout.",
               };
             }
           } else {
@@ -2126,7 +2130,7 @@ export default function CreateContestPage({
               return {
                 isValid: false,
                 error:
-                  "For Twitter CPM contests, please enable at least one metric (likes, comments/replies, retweets, quote reposts, or views) to count towards points and payout.",
+                  "For Twitter CPM campaigns, please enable at least one metric (likes, comments/replies, retweets, quote reposts, or views) to count towards points and payout.",
               };
             }
           }
@@ -2157,17 +2161,17 @@ export default function CreateContestPage({
         if (budgetInCents < planFeatures.minContestBudget) {
           return {
             isValid: false,
-            error: `The minimum contest budget for your plan is ${formatCurrencyFromCents(
+            error: `The minimum campaign budget for your plan is ${formatCurrencyFromCents(
               planFeatures.minContestBudget,
             )}. Please increase your total budget.`,
           };
         }
 
-        // Validate: Total Budget is mandatory for CPM contests
+        // Validate: Total Budget is mandatory for CPM campaigns
         if (!totalBudget || parseFloat(totalBudget.toString()) <= 0) {
           return {
             isValid: false,
-            error: "Total Budget is mandatory for CPM contests.",
+            error: "Total Budget is mandatory for CPM campaigns.",
           };
         }
 
@@ -2189,7 +2193,7 @@ export default function CreateContestPage({
             return {
               isValid: false,
               error:
-                "Flat Fee Bonus Cap is required when Flat Fee Bonus is enabled for CPM contests.",
+                "Flat Fee Bonus Cap is required when Flat Fee Bonus is enabled for CPM campaigns.",
             };
           }
         }
@@ -2223,7 +2227,7 @@ export default function CreateContestPage({
           }
         }
 
-        // Validate: Prevent contest creation if total money a single creator can earn > total budget
+        // Validate: Prevent campaign creation if total money a single creator can earn > total budget
         if (totalBudget) {
           const totalBudgetDollars = parseFloat(totalBudget.toString());
           const totalBudgetCents = totalBudgetDollars * 100;
@@ -2274,12 +2278,12 @@ export default function CreateContestPage({
           return {
             isValid: false,
             error:
-              "CPM and Milestone contests are only available with paid plans. Please upgrade your subscription or change to a Leaderboard contest.",
+              "CPM and Milestone campaigns are only available with paid plans. Please upgrade your subscription or change to a Leaderboard campaign.",
           };
         }
       }
 
-      // 7. Active contest limit validation
+      // 7. Active campaign limit validation
       try {
         const response = await fetch("/api/contests/validate-limit", {
           method: "POST",
@@ -2292,7 +2296,7 @@ export default function CreateContestPage({
         });
 
         if (!response.ok) {
-          throw new Error("Failed to validate contest limit");
+          throw new Error("Failed to validate campaign limit");
         }
 
         const activeCheck = await response.json();
@@ -2302,14 +2306,14 @@ export default function CreateContestPage({
             isValid: false,
             error:
               activeCheck.error ||
-              `You have reached your plan's limit of ${planFeatures.maxActiveContests} active contests. Please upgrade your plan or wait for existing contests to end.`,
+              `You have reached your plan's limit of ${planFeatures.maxActiveContests} active campaigns. Please upgrade your plan or wait for existing campaigns to end.`,
           };
         }
       } catch (error: any) {
-        console.error("Error checking active contest limit:", error);
+        console.error("Error checking active campaign limit:", error);
         return {
           isValid: false,
-          error: "Unable to validate contest limits. Please try again.",
+          error: "Unable to validate campaign limits. Please try again.",
         };
       }
 
@@ -2529,7 +2533,7 @@ export default function CreateContestPage({
         if (!isDraft) {
           if (contestFormat !== "video") {
             setFormFeedback(
-              "Milestone contests require the Video contest format.",
+              "Milestone campaigns require the Video campaign format.",
             );
             setFormFeedbackType("error");
             setIsLoading(false);
@@ -2581,7 +2585,7 @@ export default function CreateContestPage({
             parseFloat(milestoneBudgetForSubmit.toString()) <= 0
           ) {
             setFormFeedback(
-              "Total contest budget is required for milestone contests.",
+              "Total campaign budget is required for milestone campaigns.",
             );
             setFormFeedbackType("error");
             setIsLoading(false);
@@ -2743,7 +2747,7 @@ export default function CreateContestPage({
 
           if (!totalBudget || parseFloat(totalBudget.toString()) <= 0) {
             setFormFeedback(
-              "Total Budget must be a positive number for CPM contests.",
+              "Total Budget must be a positive number for CPM campaigns.",
             ); // Footer feedback
             setFormFeedbackType("error");
             setIsLoading(false);
@@ -2752,7 +2756,7 @@ export default function CreateContestPage({
           }
           if (!termsConditions) {
             setFormFeedback(
-              "Terms & Conditions are required for CPM contests.",
+              "Terms & Conditions are required for CPM campaigns.",
             ); // Footer feedback
             setFormFeedbackType("error");
             setIsLoading(false);
@@ -2820,7 +2824,7 @@ export default function CreateContestPage({
           // tiered_payouts: [] // Future use
         };
 
-        // Only include min_views and max_views for non-Twitter CPM contests
+        // Only include min_views and max_views for non-Twitter CPM campaigns
         if (!isTwitterCpmContest) {
           cpmContestDetails.min_views =
             minViews && minViews.toString().trim() !== ""
@@ -3079,11 +3083,11 @@ export default function CreateContestPage({
 
       // Only run old validation logic if we're submitting for approval (after the new comprehensive validation passed)
       if (!isDraft) {
-        setUploadProgress("Preparing contest...");
+        setUploadProgress("Preparing campaign...");
         prepTimeoutId = setTimeout(() => {
-          if (isLoading && uploadProgress === "Preparing contest...") {
+          if (isLoading && uploadProgress === "Preparing campaign...") {
             console.log("Contest creation taking longer than expected...");
-            setUploadProgress("Validating contest details...");
+            setUploadProgress("Validating campaign details...");
           }
         }, 5000);
 
@@ -3091,7 +3095,7 @@ export default function CreateContestPage({
         // but keeping them for backwards compatibility during transition
         const planFeatures = getPlanFeatures(userPlan);
 
-        // Validate contest type access
+        // Validate campaign type access
         if (
           contestType === "cpm" ||
           contestType === "milestone" ||
@@ -3102,7 +3106,7 @@ export default function CreateContestPage({
             planFeatures.contestTypes.includes("cpm");
           if (!hasCpmAccess) {
             setFormFeedback(
-              "CPM and Milestone contests are only available with paid plans. Please upgrade your subscription or change to a Leaderboard contest.",
+              "CPM and Milestone campaigns are only available with paid plans. Please upgrade your subscription or change to a Leaderboard campaign.",
             );
             setFormFeedbackType("error");
             setIsLoading(false);
@@ -3146,7 +3150,7 @@ export default function CreateContestPage({
             poolsToCheck.some((c) => c > 0 && c < planFeatures.minContestBudget)
           ) {
             setFormFeedback(
-              `The minimum contest budget for your plan is ${formatCurrencyFromCents(
+              `The minimum campaign budget for your plan is ${formatCurrencyFromCents(
                 planFeatures.minContestBudget,
               )}. Please increase your total budget.`,
             );
@@ -3158,7 +3162,7 @@ export default function CreateContestPage({
         }
 
         if (!thumbnail && !thumbnailPreview) {
-          setFormFeedback("Contest thumbnail is required for submission");
+          setFormFeedback("Campaign thumbnail is required for submission");
           setFormFeedbackType("error");
           setIsLoading(false);
           setUploadProgress(null);
@@ -3170,7 +3174,7 @@ export default function CreateContestPage({
         const briefToValidate = currentBrief || briefHtml;
 
         if (!briefToValidate || isQuillEmpty(briefToValidate)) {
-          setFormFeedback("Contest brief is required for submission");
+          setFormFeedback("Campaign brief is required for submission");
           setFormFeedbackType("error");
           setIsLoading(false);
           setUploadProgress(null);
@@ -3187,7 +3191,7 @@ export default function CreateContestPage({
         const rulesToValidate = currentRulesHtml || rulesHtml;
 
         if (!rulesToValidate || isQuillEmpty(rulesToValidate)) {
-          setFormFeedback("Contest rules are required for submission");
+          setFormFeedback("Campaign rules are required for submission");
           setFormFeedbackType("error");
           setIsLoading(false);
           setUploadProgress(null);
@@ -3210,7 +3214,7 @@ export default function CreateContestPage({
 
         if (!startDate || !startTime || !endDate || !endTime) {
           setFormFeedback(
-            "Contest start and end dates/times are required for submission",
+            "Campaign start and end dates/times are required for submission",
           );
           setFormFeedbackType("error");
           setIsLoading(false);
@@ -3237,13 +3241,13 @@ export default function CreateContestPage({
           // const daysUntilStart = Math.floor((startDateTime.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
           // if (daysUntilStart < MIN_DAYS_UNTIL_START) {
           //   console.log("daysUntilStart", daysUntilStart, MIN_DAYS_UNTIL_START)
-          //   setFormFeedback(`Contest must start at least ${MIN_DAYS_UNTIL_START} days from today (${MIN_DAYS_UNTIL_START - 1} day gap required)`);
+          //   setFormFeedback(`Campaign must start at least ${MIN_DAYS_UNTIL_START} days from today (${MIN_DAYS_UNTIL_START - 1} day gap required)`);
           //   setFormFeedbackType("error");
           //   setIsLoading(false); setUploadProgress(null); return;
           // }
 
           if (endDateTime <= startDateTime) {
-            setFormFeedback("Contest end time must be after the start time");
+            setFormFeedback("Campaign end time must be after the start time");
             setFormFeedbackType("error");
             setIsLoading(false);
             setUploadProgress(null);
@@ -3256,7 +3260,7 @@ export default function CreateContestPage({
 
           if (durationDays < MIN_CONTEST_DURATION_DAYS) {
             setFormFeedback(
-              `Contest duration must be at least ${MIN_CONTEST_DURATION_DAYS} days`,
+              `Campaign duration must be at least ${MIN_CONTEST_DURATION_DAYS} days`,
             );
             setFormFeedbackType("error");
             setIsLoading(false);
@@ -3266,7 +3270,7 @@ export default function CreateContestPage({
 
           if (durationDays > MAX_CONTEST_DURATION_DAYS) {
             setFormFeedback(
-              `Contest duration cannot exceed ${MAX_CONTEST_DURATION_DAYS} days`,
+              `Campaign duration cannot exceed ${MAX_CONTEST_DURATION_DAYS} days`,
             );
             setFormFeedbackType("error");
             setIsLoading(false);
@@ -3300,7 +3304,7 @@ export default function CreateContestPage({
               toast({
                 title: "Storage Error",
                 description:
-                  "Unable to upload thumbnail due to storage configuration. Contest will be created without a thumbnail.",
+                  "Unable to upload thumbnail due to storage configuration. Campaign will be created without a thumbnail.",
                 variant: "destructive",
               });
             } else {
@@ -3394,8 +3398,8 @@ export default function CreateContestPage({
         isDraft
           ? "Finalizing draft..."
           : contestId
-            ? "Updating contest..."
-            : "Creating contest...",
+            ? "Updating campaign..."
+            : "Creating campaign...",
       );
 
       // Helper function to process and group subcategories by category
@@ -3492,6 +3496,12 @@ export default function CreateContestPage({
         max_submissions_per_creator: multipleSubmissionsEnabled
           ? maxSubmissionsPerCreator
           : 1,
+        trust_score:
+          isVideoContestFormat(contestFormat) &&
+          trustScoreEnabled &&
+          contestTrustScore !== ""
+            ? Number(contestTrustScore)
+            : null,
         content_type: contentType || null,
         bonus_details:
           bonusEnabled && bonusHtml
@@ -3530,7 +3540,7 @@ export default function CreateContestPage({
         console.log("Update response:", responseData);
       } else {
         console.log(
-          "Creating new contest (no existing contestId or draftId found)",
+          "Creating new campaign (no existing contestId or draftId found)",
         );
         const response = await supabase
           .from("contests")
@@ -3543,7 +3553,7 @@ export default function CreateContestPage({
 
       if (responseError) throw responseError;
 
-      // Set contestId and draftId for both draft and non-draft contests to ensure we have the contest ID
+      // Set contestId and draftId for both draft and non-draft contests to ensure we have the campaign ID
       if (responseData && responseData.length > 0) {
         const newContestId = responseData[0].id;
         console.log("=== Setting state after database operation ===");
@@ -3586,7 +3596,7 @@ export default function CreateContestPage({
         setUploadProgress(null);
         toast({
           title: "Draft Saved",
-          description: "Your contest draft has been saved successfully!",
+          description: "Your campaign draft has been saved successfully!",
         });
         // Redirect to contests list page to see the draft among all contests
         router.push("/dashboard/contests");
@@ -3606,7 +3616,7 @@ export default function CreateContestPage({
         toast({
           title: "Error",
           description: `Failed to ${
-            isDraft ? "save draft" : "create contest"
+            isDraft ? "save draft" : "create campaign"
           }: ${err.message || "Unknown error"}`,
           variant: "destructive",
         });
@@ -3624,7 +3634,7 @@ export default function CreateContestPage({
     toast({
       title: "Payment Successful!",
       description:
-        "Contest payment processed. We are now submitting your contest for review...",
+        "Campaign payment processed. We are now submitting your campaign for review...",
     });
 
     const contestId = draftId || paymentDetails?.contestId;
@@ -3632,7 +3642,7 @@ export default function CreateContestPage({
       toast({
         title: "Submission Error",
         description:
-          "Could not find Contest ID after payment. Please refresh and visit the contest page to submit manually.",
+          "Could not find Campaign ID after payment. Please refresh and visit the campaign page to submit manually.",
         variant: "destructive",
       });
       return;
@@ -3641,7 +3651,7 @@ export default function CreateContestPage({
     const submitForApproval = async (retries = 3, delay = 2000) => {
       try {
         console.log(
-          `Attempting to submit contest for approval. Retries left: ${retries}`,
+          `Attempting to submit campaign for approval. Retries left: ${retries}`,
         );
         const response = await fetch(`/api/contests/${contestId}/moderation`, {
           method: "POST",
@@ -3671,26 +3681,26 @@ export default function CreateContestPage({
           }
           // For other errors, throw immediately.
           throw new Error(
-            result.error || "Failed to submit contest for approval",
+            result.error || "Failed to submit campaign for approval",
           );
         }
 
         // Success!
-        console.log("Contest submitted for approval successfully!");
+        console.log("Campaign submitted for approval successfully!");
         toast({
-          title: "Contest Submitted!",
-          description: "Your contest is now pending for admin review.",
+          title: "Campaign Submitted!",
+          description: "Your campaign is now pending for admin review.",
         });
         router.push(`/dashboard/contests/${contestId}`);
       } catch (error: any) {
         console.error("Fatal error submitting contest for approval:", error);
         toast({
           title: "Submission Error",
-          description: `Payment was successful but we failed to automatically submit your contest. Please go to the contest page and click 'Submit for Approval'. Error: ${error.message}`,
+          description: `Payment was successful but we failed to automatically submit your campaign. Please go to the campaign page and click 'Submit for Approval'. Error: ${error.message}`,
           variant: "destructive",
           duration: TOAST_DURATION_LONG,
         });
-        // Still redirect to contest page so user can retry submission manually
+        // Still redirect to campaign page so user can retry submission manually
         router.push(`/dashboard/contests/${contestId}`);
         setIsLoading(false);
       }
@@ -3703,7 +3713,7 @@ export default function CreateContestPage({
   const handlePaymentError = (error: string) => {
     toast({
       title: "Payment Failed",
-      description: `Contest creation failed: ${error}`,
+      description: `Campaign creation failed: ${error}`,
       variant: "destructive",
     });
     setShowPayment(false);
@@ -3918,7 +3928,7 @@ export default function CreateContestPage({
         title: "Plan Limit",
         description: `Your ${userPlan || "current"} plan is limited to ${
           planFeatures.maxWinnersPerContest
-        } winners per contest. Upgrade your plan for more.`,
+        } winners per campaign. Upgrade your plan for more.`,
         variant: "destructive",
       });
       return;
@@ -4295,7 +4305,7 @@ export default function CreateContestPage({
 
   // Save CPM points config as draft when checkboxes are toggled
   const saveCpmAsDraft = async () => {
-    // Ensure we have a contest ID first
+    // Ensure we have a campaign ID first
     let currentContestId = contestId;
     if (!currentContestId) {
       // If no contest ID, try to save basics first to create one
@@ -4304,7 +4314,7 @@ export default function CreateContestPage({
       if (newContestId) {
         currentContestId = newContestId;
       } else {
-        return; // Failed to create contest
+        return; // Failed to create campaign
       }
     }
 
@@ -4552,7 +4562,7 @@ export default function CreateContestPage({
         const missingFields: string[] = [];
 
         if (!title || !title.trim()) {
-          missingFields.push("Contest Title");
+          missingFields.push("Campaign Title");
         }
         if (!platform || platform.trim() === "") {
           missingFields.push("Platform");
@@ -4564,7 +4574,7 @@ export default function CreateContestPage({
           missingFields.push("Thumbnail");
         }
 
-        // Validate contest type access
+        // Validate campaign type access
         if (
           contestType === "cpm" ||
           contestType === "milestone" ||
@@ -4577,7 +4587,7 @@ export default function CreateContestPage({
 
           if (!hasCpmAccess) {
             setToastError(
-              "CPM and Milestone contests are only available with paid plans. Please upgrade your subscription or select Leaderboard contest type.",
+              "CPM and Milestone campaigns are only available with paid plans. Please upgrade your subscription or select Leaderboard campaign type.",
             );
             setIsLoading(false);
             return;
@@ -4628,12 +4638,12 @@ export default function CreateContestPage({
         );
 
         if (isQuillEmpty(briefToCheck)) {
-          setError("Please enter a brief description for your contest");
+          setError("Please enter a brief description for your campaign");
           setIsLoading(false);
           return;
         }
         if (isQuillEmpty(rulesToCheck)) {
-          setError("Please provide rules for your contest");
+          setError("Please provide rules for your campaign");
           setIsLoading(false);
           return;
         }
@@ -4820,7 +4830,7 @@ export default function CreateContestPage({
 
       const userId = authData.user.id;
 
-      // Allow pre-selecting contest type from URL.
+      // Allow pre-selecting campaign type from URL.
       const urlParams = new URLSearchParams(window.location.search);
       const selectedTypeParam = (
         urlParams.get("contestType") ||
@@ -4933,7 +4943,7 @@ export default function CreateContestPage({
 
     setCategory(draft.category || "technology");
 
-    // Set contest format - important for showing Keywords/Mentions sections
+    // Set campaign format - important for showing Keywords/Mentions sections
     const draftFormat = draft.contest_format || "video";
     console.log("Setting contestFormat to:", draftFormat);
     setContestFormat(draftFormat);
@@ -5112,7 +5122,7 @@ export default function CreateContestPage({
     // Contest-based details (leaderboard & CPM specific data)
     const contestDetails = draft.contest_based_details || {};
 
-    // Leaderboard contest details (winners, prizes, flat fee bonus, bonus budget)
+    // Leaderboard campaign details (winners, prizes, flat fee bonus, bonus budget)
     if (
       contestDetails.leaderboard_contest &&
       draft.contest_type === "leaderboard"
@@ -5219,7 +5229,7 @@ export default function CreateContestPage({
       }
     }
 
-    // CPM contest details (rate, views, total budget, terms, flat fee bonus & cap)
+    // CPM campaign details (rate, views, total budget, terms, flat fee bonus & cap)
     if (
       contestDetails.cpm_contest &&
       (draft.contest_type === "cpm" ||
@@ -5600,7 +5610,7 @@ export default function CreateContestPage({
 
     let startMessage = "";
     if (daysUntilStart > 0) {
-      startMessage = `Your contest will be live in ${daysUntilStart} day${
+      startMessage = `Your campaign will be live in ${daysUntilStart} day${
         daysUntilStart !== 1 ? "s" : ""
       }`;
       if (hoursUntilStart > 0)
@@ -5608,11 +5618,11 @@ export default function CreateContestPage({
           hoursUntilStart !== 1 ? "s" : ""
         }`;
     } else if (hoursUntilStart > 0) {
-      startMessage = `Your contest will be live in ${hoursUntilStart} hour${
+      startMessage = `Your campaign will be live in ${hoursUntilStart} hour${
         hoursUntilStart !== 1 ? "s" : ""
       }`;
     } else {
-      startMessage = "Your contest will be live soon";
+      startMessage = "Your campaign will be live soon";
     }
 
     const durationMessage = `and will run for ${durationDays} day${
@@ -5760,7 +5770,7 @@ export default function CreateContestPage({
 
     return `For example, if today is ${formatDateWithOrdinal(
       startOfToday,
-    )}, you can create contests starting from ${formatDateWithOrdinal(
+    )}, you can create campaigns starting from ${formatDateWithOrdinal(
       minStartDate,
     )} (00:00 onwards). ${disallowedText} ${
       disallowed.length > 1 ? "are" : "is"
@@ -5928,7 +5938,7 @@ export default function CreateContestPage({
                           </>
                         ) : (
                           <>
-                            Your plan determines contest limits, commission
+                            Your plan determines campaign limits, commission
                             rates, and available features. Higher plans offer
                             better rates and more flexibility for your marketing
                             campaigns.
@@ -6069,7 +6079,7 @@ export default function CreateContestPage({
                       )}
                     >
                       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                        {/* Max Winners Feature - Only show for Leaderboard contests */}
+                        {/* Max Winners Feature - Only show for Leaderboard campaigns */}
                         {contestType === "leaderboard" && (
                           <div
                             className={cn(
@@ -6188,7 +6198,7 @@ export default function CreateContestPage({
                                     isDark ? "text-white" : "text-gray-600",
                                   )}
                                 >
-                                  In CPM contests, there's no limit on winners.
+                                  In CPM campaigns, there's no limit on winners.
                                   All participating creators get paid based on
                                   their content's performance (views) &
                                   eligibility.
@@ -6233,7 +6243,7 @@ export default function CreateContestPage({
                                 )}
                               >
                                 Define view thresholds and payouts. You set an
-                                overall contest budget upfront; optional caps
+                                overall campaign budget upfront; optional caps
                                 per tier limit how many creators can earn each
                                 reward.
                               </p>
@@ -6245,7 +6255,7 @@ export default function CreateContestPage({
                                     : "bg-[#F0E7FD] border-purple-500 text-purple-600",
                                 )}
                               >
-                                Video contests only — rewards are based on
+                                Video campaigns only — rewards are based on
                                 verified views
                               </div>
                             </div>
@@ -6317,7 +6327,7 @@ export default function CreateContestPage({
                                 )}
                               >
                                 The minimum total prize pool required to create
-                                a contest. Lower minimums give you more
+                                a campaign. Lower minimums give you more
                                 flexibility for smaller campaigns.
                               </p>
                               <div
@@ -6343,7 +6353,7 @@ export default function CreateContestPage({
                           </div>
                         </div>
 
-                        {/* Active Contests Feature */}
+                        {/* Active Campaigns Feature */}
                         <div
                           className={cn(
                             "backdrop-blur-sm border rounded-2xl p-6 transition-all duration-300",
@@ -6380,7 +6390,7 @@ export default function CreateContestPage({
                                     isDark ? "text-white" : "text-gray-900",
                                   )}
                                 >
-                                  Active Contests
+                                  Active Campaigns
                                 </h5>
                                 <div className="flex items-center gap-2">
                                   <span
@@ -6415,7 +6425,7 @@ export default function CreateContestPage({
                                   isDark ? "text-white" : "text-gray-900",
                                 )}
                               >
-                                How many contests you can run simultaneously.
+                                How many campaigns you can run simultaneously.
                                 Run multiple campaigns to maximize your brand's
                                 exposure across different audiences.
                               </p>
@@ -6435,7 +6445,7 @@ export default function CreateContestPage({
                                 // }`}
                               >
                                 {planFeatures.maxActiveContests <= 1
-                                  ? "Only 1 contest allowed - upgrade now!"
+                                  ? "Only 1 campaign allowed - upgrade now!"
                                   : planFeatures.maxActiveContests <= 5
                                     ? "Upgrade for more simultaneous campaigns!"
                                     : "Tip: Run parallel campaigns for different products"}
@@ -6535,7 +6545,7 @@ export default function CreateContestPage({
                                 // }`}
                               >
                                 {planFeatures.maxActiveContests <= 1
-                                  ? "Only 1 contest allowed - upgrade now!"
+                                  ? "Only 1 campaign allowed - upgrade now!"
                                   : planFeatures.maxActiveContests <= 5
                                     ? "Upgrade for more simultaneous campaigns!"
                                     : "Tip: Run parallel campaigns for different products"}
@@ -6615,7 +6625,7 @@ export default function CreateContestPage({
                           </div>
                         </div>
 
-                        {/* Only show winner limit for leaderboard contests */}
+                        {/* Only show winner limit for leaderboard campaigns */}
                         {contestType === "leaderboard" && (
                           <div className="flex items-start gap-3 group">
                             <div className="w-3 h-3  mt-2 flex-shrink-0 group-hover:scale-110 transition-transform"></div>
@@ -6634,7 +6644,7 @@ export default function CreateContestPage({
                           </div>
                         )}
 
-                        {/* Show CPM info for CPM contests */}
+                        {/* Show CPM info for CPM campaigns */}
                         {(contestType === "cpm" ||
                           contestType === "dual_rewards") && (
                           <div className="flex items-start gap-3 group">
@@ -6733,7 +6743,7 @@ export default function CreateContestPage({
                     No Active Subscription Plan
                   </h4>
                   <p className="text-gray-600 mb-6 max-w-md mx-auto leading-relaxed">
-                    You need an active subscription plan to create contests and
+                    You need an active subscription plan to create campaigns and
                     start your marketing campaigns. Choose a plan that fits your
                     marketing needs and budget.
                   </p>
@@ -6748,7 +6758,7 @@ export default function CreateContestPage({
             </div>
           </div>
 
-          {/* Contest Duration */}
+          {/* Campaign Duration */}
 
           <div
             className={cn(
@@ -6756,7 +6766,7 @@ export default function CreateContestPage({
               isDark ? "bg-[#180438] text-white" : "bg-white text-black",
             )}
           >
-            <h3 className="text-xl font-semibold">Contest Duration</h3>
+            <h3 className="text-xl font-semibold">Campaign Duration</h3>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="start-date">Start Date</Label>
@@ -6852,11 +6862,11 @@ export default function CreateContestPage({
                 isDark ? "text-white" : "text-gray-600",
               )}
             >
-              <strong>Start Date Rule:</strong> Contest must start at least{" "}
+              <strong>Start Date Rule:</strong> Campaign must start at least{" "}
               {MIN_DAYS_UNTIL_START} days from today.{" "}
               {getStartDateRuleExample()}
               <br />
-              <strong>Duration:</strong> Contest must run between{" "}
+              <strong>Duration:</strong> Campaign must run between{" "}
               {MIN_CONTEST_DURATION_DAYS} and {MAX_CONTEST_DURATION_DAYS} days.
               The end date will automatically adjust to maintain minimum
               duration.
@@ -7009,7 +7019,7 @@ export default function CreateContestPage({
               <>
                 <div className="space-y-6 py-4 px-1">
                   <h3 className="text-lg font-medium">
-                    Milestone contest configuration
+                    Milestone campaign configuration
                   </h3>
                   <Alert
                     className={cn(
@@ -7191,7 +7201,7 @@ export default function CreateContestPage({
                   {contestType !== "dual_rewards" && (
                     <div className="space-y-2">
                       <Label htmlFor="milestoneTotalBudget">
-                        Total contest budget (USD){" "}
+                        Total campaign budget (USD){" "}
                         <span className="text-red-500">*</span>
                       </Label>
                       <Input
@@ -7206,7 +7216,7 @@ export default function CreateContestPage({
                             ? "bg-[#180438] border border-gray-600 text-white"
                             : "bg-white",
                         )}
-                        placeholder="Maximum amount reserved for this contest"
+                        placeholder="Maximum amount reserved for this campaign"
                       />
                       <p className="text-xs text-muted-foreground">
                         This is the pool you fund upfront (similar to a CPM
@@ -7253,7 +7263,7 @@ export default function CreateContestPage({
                         Set a maximum earning cap per creator for{" "}
                         <strong>THIS CONTEST ONLY</strong>. Once reached, they
                         can still submit but won't earn more from this campaign.
-                        This does NOT affect their earnings from other contests on
+                        This does NOT affect their earnings from other campaigns on
                         the platform. Helps ensure fair reward distribution within
                         this campaign.
                       </p>
@@ -7278,7 +7288,7 @@ export default function CreateContestPage({
                                   maxEarningsPerCreator.toString(),
                                 ).toFixed(2)}
                               </strong>{" "}
-                              from this contest.
+                              from this campaign.
                             </AlertDescription>
                           </Alert>
                         )}
@@ -7463,7 +7473,7 @@ export default function CreateContestPage({
                       )}
                     >
                       <AlertDescription>
-                        The minimum contest budget for your{" "}
+                        The minimum campaign budget for your{" "}
                         {currentPlan?.name || "current"} plan is{" "}
                         {formatCurrencyFromCents(planFeatures.minContestBudget)}
                         . Please increase your total budget.
@@ -7477,7 +7487,7 @@ export default function CreateContestPage({
               <>
                 <div className="space-y-6 py-4 px-1">
                   <h3 className="text-lg font-medium">
-                    CPM Contest Configuration
+                    CPM Campaign Configuration
                   </h3>
                   <div className="space-y-2">
                     <Label htmlFor="cpmRatePrize">
@@ -8172,7 +8182,7 @@ export default function CreateContestPage({
                       )}
                     >
                       <AlertDescription>
-                        Twitter CPM contests use the{" "}
+                        Twitter CPM campaigns use the{" "}
                         <strong>Points Model</strong>. Payout is calculated
                         based on total points earned and the CPM rate per 1,000
                         points.
@@ -8280,7 +8290,7 @@ export default function CreateContestPage({
                   <div className="space-y-2">
                     <Label htmlFor="totalBudgetPrize">
                      
-                        Total Contest Budget (USD)
+                        Total Campaign Budget (USD)
                       <span className="text-red-500">*</span>
                     </Label>
                     <Input
@@ -8303,7 +8313,7 @@ export default function CreateContestPage({
                     <p className="text-xs text-muted-foreground">
                       {contestType === "dual_rewards"
                         ? "One funded amount: the same budget backs both per-view (CPM) payouts and milestone payouts."
-                        : "Required: The maximum total amount to be paid out for this contest. This is the effective prize pool."}
+                        : "Required: The maximum total amount to be paid out for this campaign. This is the effective prize pool."}
                     </p>
                   </div>
                   <div className="space-y-2">
@@ -8319,7 +8329,7 @@ export default function CreateContestPage({
                           ? "bg-[#180438] border border-gray-600 text-white"
                           : "bg-white",
                       )}
-                      placeholder="Enter or paste your contest terms and conditions for CPM participants. This will be shown to them before they can submit."
+                      placeholder="Enter or paste your campaign terms and conditions for CPM participants. This will be shown to them before they can submit."
                       rows={6}
                     />
                     <p className="text-xs text-muted-foreground">
@@ -8341,7 +8351,7 @@ export default function CreateContestPage({
                       )}
                     >
                       <AlertDescription>
-                        The minimum contest budget for your{" "}
+                        The minimum campaign budget for your{" "}
                         {currentPlan?.name || "current"} plan is{" "}
                         {formatCurrencyFromCents(planFeatures.minContestBudget)}
                         . Please increase your total budget.
@@ -8408,7 +8418,7 @@ export default function CreateContestPage({
                       <p className="text-sm text-muted-foreground">
                         Optional: Give creators a guaranteed payment for each
                         verified submission, regardless of views or ranking. This
-                        bonus is paid after the contest ends. Great for encouraging
+                        bonus is paid after the campaign ends. Great for encouraging
                         participation!
                       </p>
                       {flatFeeBonus &&
@@ -8433,7 +8443,7 @@ export default function CreateContestPage({
                     </div>
                   )}
 
-              {/* Flat Fee Bonus Cap (Only for CPM contests with flat fee bonus) */}
+              {/* Flat Fee Bonus Cap (Only for CPM campaigns with flat fee bonus) */}
               {isCpmContestType(contestType) &&
                 contestType !== "dual_rewards" &&
                 flatFeeBonus &&
@@ -8502,7 +8512,7 @@ export default function CreateContestPage({
                   </div>
                 )}
 
-              {/* Total Budget for Bonuses (Only for Leaderboard contests with flat fee bonus) */}
+              {/* Total Budget for Bonuses (Only for Leaderboard campaigns with flat fee bonus) */}
               {contestType === "leaderboard" &&
                 flatFeeBonus &&
                 parseFloat(flatFeeBonus.toString()) > 0 && (
@@ -8641,7 +8651,7 @@ export default function CreateContestPage({
                                   maxEarningsPerCreator.toString(),
                                 ).toFixed(2)}
                               </strong>{" "}
-                              from this contest.
+                              from this campaign.
                             </AlertDescription>
                           </Alert>
                         )}
@@ -8882,7 +8892,7 @@ export default function CreateContestPage({
       } catch (err) {
         console.error("Error deleting resource files:", err);
       }
-      // Delete all thumbnails for this contest (all extensions)
+      // Delete all thumbnails for this campaign (all extensions)
       try {
         const { data: thumbnailFiles, error: thumbnailError } =
           await supabase.storage
@@ -8907,7 +8917,7 @@ export default function CreateContestPage({
         console.error("Error deleting thumbnail files:", err);
       }
     } catch (error) {
-      console.error("Error cleaning up contest assets:", error);
+      console.error("Error cleaning up campaign assets:", error);
     }
   };
 
@@ -9105,7 +9115,7 @@ export default function CreateContestPage({
     }
   };
 
-  // Handler for Back to Contests button
+  // Handler for Back to Campaigns button
   // const handleBackToContests = (e?: React.MouseEvent) => {
   //   if (e) e.preventDefault();
   //   setShowBackModal(true);
@@ -9161,7 +9171,7 @@ export default function CreateContestPage({
       // Delete contest from DB
       await supabase.from("contests").delete().eq("id", contestId);
     } catch (err) {
-      console.error("Error deleting contest and assets:", err);
+      console.error("Error deleting campaign and assets:", err);
     } finally {
       setIsDeleting(false);
       router.push("/dashboard/contests");
@@ -9227,9 +9237,9 @@ export default function CreateContestPage({
           isDark ? "bg-[#06021D]  border border-gray-800" : "bg-white",
         )}
       >
-        <h2 className="text-xl font-bold mb-4">Leave Contest Creation?</h2>
+        <h2 className="text-xl font-bold mb-4">Leave Campaign Creation?</h2>
         <p className="mb-6">
-          Do you want to save this contest as a draft or delete it? All progress
+          Do you want to save this campaign as a draft or delete it? All progress
           will be lost if you delete.
         </p>
 
@@ -9286,7 +9296,7 @@ export default function CreateContestPage({
           <h2 className="text-xl font-bold">Upgrade Your Plan</h2>
         </div>
         <p className="mb-6">
-          You have unsaved contest data. Would you like to save your progress
+          You have unsaved campaign data. Would you like to save your progress
           before upgrading your plan?
         </p>
         <div className="space-y-4">
@@ -9462,15 +9472,15 @@ export default function CreateContestPage({
             onClick={handleBackToContests}
           >
             <ArrowLeft className="h-4 w-4" />
-            <span className="font-medium">Back to Contests</span>
+            <span className="font-medium">Back to Campaigns</span>
           </Button>
         </div>
         <div className="text-center">
           <h1 className="text-3xl md:text-4xl font-bold text-foreground mb-2">
-            Create New Contest
+            Create New Campaign
           </h1>
           <p className="text-muted-foreground text-lg">
-            Build your contest in 4 simple steps
+            Build your campaign in 4 simple steps
           </p>
         </div>
       </div>
@@ -9725,9 +9735,9 @@ export default function CreateContestPage({
             >
               {/* Removed general validationError Alert from CardContent */}
 
-              {/* Contest Format Toggle */}
+              {/* Campaign Format Toggle */}
               <div className="space-y-2 ">
-                <Label className="text-xl font-semibold">Contest Format</Label>
+                <Label className="text-xl font-semibold">Campaign Format</Label>
                 <div className="flex flex-col sm:flex-row gap-2 pt-2">
                   <Button
                     type="button"
@@ -9741,7 +9751,7 @@ export default function CreateContestPage({
                     )}
                     onClick={() => {
                       setContestFormat("text_image");
-                      // Text/Image contests default to Twitter platform
+                      // Text/Image campaigns default to Twitter platform
                       if (platform !== "twitter") {
                         setPlatform("twitter");
                       }
@@ -9749,7 +9759,7 @@ export default function CreateContestPage({
                       updateContestInDB({ contest_format: "text_image" });
                     }}
                   >
-                    Text / Image Contest
+                    Text / Image Campaign
                   </Button>
                   <Button
                     type="button"
@@ -9768,14 +9778,14 @@ export default function CreateContestPage({
                       updateContestInDB({ contest_format: "video" });
                     }}
                   >
-                    Video Contest
+                    Video Campaign
                   </Button>
                 </div>
               </div>
 
-              {/* Contest Type Selection */}
+              {/* Campaign Type Selection */}
               <div className="space-y-2 ">
-                <Label className="text-xl font-semibold">Contest Type</Label>
+                <Label className="text-xl font-semibold">Campaign Type</Label>
                 <RadioGroup
                   value={contestType}
                   onValueChange={(
@@ -9820,7 +9830,7 @@ export default function CreateContestPage({
                     <RadioGroupItem value="leaderboard" id="leaderboard" />
                     <Label htmlFor="leaderboard" className="cursor-pointer">
                       <span className="font-semibold text-lg">
-                        Leaderboard Contest
+                        Leaderboard Campaign
                       </span>
                       <p className="text-[14px] leading-tight mt-[2px] text-muted-foreground">
                         Creators compete for top spots based on performance.
@@ -9839,7 +9849,7 @@ export default function CreateContestPage({
                     const isFreePlan = !currentPlan || currentPlan.price === 0;
 
                     // CPM is allowed for:
-                    // - Video contests (YouTube/Instagram)
+                    // - Video campaigns (YouTube/Instagram)
                     // - Twitter text/image contests
                     const isDisabledForFormat = false;
                     const isDisabled = !hasCpmAccess || isDisabledForFormat;
@@ -9873,7 +9883,7 @@ export default function CreateContestPage({
                           }
                         >
                           <span className="font-semibold text-lg">
-                            CPM Based Contest
+                            CPM Based Campaign
                           </span>
                           <p className="text-[14px] leading-tight mt-[2px] text-muted-foreground">
                             Creators are paid based on the number of views their
@@ -9895,7 +9905,7 @@ export default function CreateContestPage({
                                   isDark ? "text-white" : "text-black",
                                 )}
                               >
-                                Not available for text/image contests
+                                Not available for text/image campaigns
                               </p>
                             </div>
                           )}
@@ -9976,7 +9986,7 @@ export default function CreateContestPage({
                             }
                           >
                             <span className="font-semibold text-lg">
-                              Milestone Based Contest
+                              Milestone Campaign
                             </span>
                             <p className="text-[14px] leading-tight mt-[2px] text-muted-foreground">
                           Creators will be rewarded upon reaching milestone based on views, according to the defined view targets and payout for each milestone.
@@ -10051,12 +10061,12 @@ export default function CreateContestPage({
                             }
                           >
                             <span className="font-semibold text-lg">
-                              Dual Rewards Contest
+                              Dual Rewards Campaign
                             </span>
                             <p className="text-[14px] leading-tight mt-[2px] text-muted-foreground">
                               Earn per view at your CPM rate plus unlock
                               milestone rewards as creators hit view targets
-                              (video contests).
+                              (video campaigns).
                             </p>
                             {!hasCpmAccess && (
                               <div className="mt-2 flex items-center gap-2">
@@ -10091,7 +10101,7 @@ export default function CreateContestPage({
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="title">Add contest title</Label>
+                <Label htmlFor="title">Add campaign title</Label>
                 <Input
                   id="title"
                   value={title}
@@ -10131,7 +10141,7 @@ export default function CreateContestPage({
                         : "bg-white",
                     )}
                   >
-                    <SelectValue placeholder="Select contest platform" />
+                    <SelectValue placeholder="Select campaign platform" />
                   </SelectTrigger>
                   <SelectContent isDark={isDark}>
                     {contestFormat === "text_image" ? (
@@ -10204,6 +10214,86 @@ export default function CreateContestPage({
                 </p>
               </div>
 
+              {isVideoContestFormat(contestFormat) && (
+                <div
+                  className={cn(
+                    "space-y-4 p-4 border rounded-lg",
+                    isDark
+                      ? "bg-[#C9A7FF26] border border-[#C9A7FF]"
+                      : "bg-gray-50",
+                  )}
+                >
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <Label
+                        htmlFor="trustScoreRequirement"
+                        className="text-base font-semibold"
+                      >
+                        Trust Score
+                      </Label>
+                      <p
+                        className={cn(
+                          "text-sm mt-1",
+                          isDark ? "text-gray-300" : "text-gray-600",
+                        )}
+                      >
+                        Enable trust score requirements to allow only reliable creators to participate.
+    Trust scores may decrease for rejected, low-quality, or policy-violating
+    submissions. Creators below the required score cannot submit to this campaign.
+                      </p>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <Checkbox
+                        id="trustScoreRequirement"
+                        checked={trustScoreEnabled}
+                        onCheckedChange={(checked: any) => {
+                          setTrustScoreEnabled(Boolean(checked));
+                          if (!checked) {
+                            setContestTrustScore("");
+                          } else if (contestTrustScore === "") {
+                            setContestTrustScore(70);
+                          }
+                        }}
+                        className={cn(
+                          "border h-5 w-5",
+                          isDark ? "border-gray-300" : "border-gray-500",
+                        )}
+                      />
+                    </div>
+                  </div>
+
+                  {trustScoreEnabled && (
+                    <div className="space-y-2 pt-2 border-t">
+                      <Label htmlFor="trustScoreInput">Trust Score</Label>
+                      <Input
+                        id="trustScoreInput"
+                        type="number"
+                        min="0"
+                        max="100"
+                        value={contestTrustScore}
+                        onChange={(e) => {
+                          const raw = e.target.value;
+                          if (raw === "") {
+                            setContestTrustScore("");
+                            return;
+                          }
+                          const value = parseInt(raw, 10);
+                          if (!Number.isNaN(value) && value >= 0 && value <= 100) {
+                            setContestTrustScore(value);
+                          }
+                        }}
+                        className={cn(
+                          isDark
+                            ? "bg-[#C9A7FF26] border border-gray-400 text-white"
+                            : "bg-white text-black",
+                        )}
+                        placeholder="Enter trust score between 0-100"
+                      />
+                    </div>
+                  )}
+                </div>
+              )}
+
               {/* Multiple Submissions Configuration */}
               <div
                 className={cn(
@@ -10227,7 +10317,7 @@ export default function CreateContestPage({
                         isDark ? "text-gray-300" : "text-gray-600",
                       )}
                     >
-                      Allow creators to submit multiple entries to this contest
+                      Allow creators to submit multiple entries to this campaign
                     </p>
                   </div>
                   <div className="flex items-center space-x-2">
@@ -10395,7 +10485,7 @@ export default function CreateContestPage({
                   >
                     Target specific creators by selecting categories,
                     subcategories, interests, or regions. Only matching creators
-                    will see this contest.
+                    will see this campaign.
                   </label>
                 </div>
               </div>
@@ -11747,7 +11837,7 @@ export default function CreateContestPage({
                   )}
                 >
                   Define clear rules and guidelines for participants to follow
-                  when creating content for your contest.
+                  when creating content for your campaign.
                 </p>
 
                 {showRulesPreview ? (
@@ -11926,7 +12016,7 @@ export default function CreateContestPage({
                   </CardTitle>
                   <CardDescription className="text-[13px]">
                     Provide at least one resource to help participants
-                    understand your brand and contest requirements. You can
+                    understand your brand and campaign requirements. You can
                     upload assets (logos, guidelines, examples) <b>or</b> add
                     external links (website, social media, portfolio).
                   </CardDescription>
@@ -13097,15 +13187,15 @@ export default function CreateContestPage({
           >
             <div className="p-6">
               <div className="mb-6">
-                <h2 className="text-2xl font-bold mb-2">Contest Payment</h2>
-                <p>Complete payment to submit your contest for review</p>
+                <h2 className="text-2xl font-bold mb-2">Campaign Payment</h2>
+                <p>Complete payment to submit your campaign for review</p>
               </div>
 
               <ContestPaymentSelection
                 contestAmount={
                   contestType === "leaderboard"
                     ? (() => {
-                        // For leaderboard contests, charge prize pool + total budget (if flat fee bonus is enabled)
+                        // For leaderboard campaigns, charge prize pool + total budget (if flat fee bonus is enabled)
                         const prizePoolDollars = totalPrizePool / 100;
                         const flatFeeBonusEnabled =
                           flatFeeBonus &&
@@ -13141,7 +13231,7 @@ export default function CreateContestPage({
                       })()
                     : undefined
                 }
-                contestTitle={title || "Untitled Contest"}
+                contestTitle={title || "Untitled Campaign"}
                 contestId={draftId || undefined}
                 commissionPercentage={
                   getPlanFeatures(userPlan).commissionPercentage

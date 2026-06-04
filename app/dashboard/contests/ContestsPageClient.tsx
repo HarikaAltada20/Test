@@ -170,10 +170,10 @@ export function ContestsPageClient({
       return {
         kind: "needs_creator_account" as const,
         headline:
-          "You are currently signed up as a brand — you need to sign up as a creator to see this contest.",
+          "You are currently signed up as a brand — you need to sign up as a creator to see this campaign.",
         detail: contestTitle ? (
           <span className="block mt-2 text-sm text-muted-foreground">
-            Contest: {contestTitle}
+            Campaign: {contestTitle}
           </span>
         ) : null,
       };
@@ -270,7 +270,7 @@ export function ContestsPageClient({
       >
         <div className="min-w-0 space-y-0.5">
           <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-balance">
-            My Contests
+            My Campaigns
           </h1>
           <p
             className={cn(
@@ -314,11 +314,11 @@ export function ContestsPageClient({
             ) : (
               <Plus className="h-4 w-4 shrink-0" />
             )}
-            Create Contest
+            Create Campaign
           </button>
         </div>
       </header>
-      <Suspense fallback={<div>Loading contests...</div>}>
+      <Suspense fallback={<div>Loading campaigns...</div>}>
         <ContestListClient
           initialContests={initialContests}
           isAdminView={false}

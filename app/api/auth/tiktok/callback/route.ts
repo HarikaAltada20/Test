@@ -1,5 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
+import { cookies } from "next/headers";
 import { duplicateSocialAccountLinkedMessage } from "@/lib/duplicate-social-account-message";
+import {
+  buildPostOAuthRedirectUrl,
+  clearOAuthReturnToCookie,
+  readOAuthReturnToCookie,
+} from "@/lib/oauth-return-to";
 import { TikTokProvider } from "@/lib/tiktok/provider/TikTokProvider";
 import { createClient } from "@/utils/supabase/server";
 
@@ -13,7 +19,21 @@ export async function GET(req: NextRequest) {
     const provider = new TikTokProvider();
     const customRedirectUri = provider.getRedirectUri();
     const origin = new URL(req.url).origin;
-    const settingsUrl = `${origin}/dashboard/settings`;
+    const cookieStore = await cookies();
+    const oauthReturnTo = readOAuthReturnToCookie(cookieStore);
+
+    const redirectToSettings = (params: {
+      success?: string;
+      error?: string;
+      message?: string;
+      platform?: string;
+    }) => {
+      const response = NextResponse.redirect(
+        buildPostOAuthRedirectUrl(origin, oauthReturnTo, params),
+      );
+      clearOAuthReturnToCookie(response);
+      return response;
+    };
 
     console.log("[TikTok Auth Callback] Received callback", {
       hasCode: !!code,
@@ -26,16 +46,12 @@ export async function GET(req: NextRequest) {
         "[TikTok Auth Callback] User denied access or error:",
         error,
       );
-      return NextResponse.redirect(
-        `${settingsUrl}?error=${encodeURIComponent(error)}`,
-      );
+      return redirectToSettings({ error });
     }
 
     if (!code || !state) {
       console.error("[TikTok Auth Callback] Missing code or state");
-      return NextResponse.redirect(
-        `${settingsUrl}?error=invalid_tiktok_callback`,
-      );
+      return redirectToSettings({ error: "invalid_tiktok_callback" });
     }
 
     // 1. Verify CSRF state token
@@ -49,7 +65,7 @@ export async function GET(req: NextRequest) {
 
     if (!storedState || state !== storedState) {
       console.error("[TikTok Auth Callback] CSRF token mismatch or expired");
-      return NextResponse.redirect(`${settingsUrl}?error=csrf_token_mismatch`);
+      return redirectToSettings({ error: "csrf_token_mismatch" });
     }
 
     // 2. Clear state cookies - we'll create the final response at the end
@@ -73,9 +89,7 @@ export async function GET(req: NextRequest) {
         "[TikTok Auth Callback] Token exchange failed:",
         tokenError,
       );
-      return NextResponse.redirect(
-        `${settingsUrl}?error=tiktok_token_exchange_failed`,
-      );
+      return redirectToSettings({ error: "tiktok_token_exchange_failed" });
     }
 
     console.log("[TikTok Auth Callback] Code exchanged successfully", {
@@ -193,16 +207,13 @@ export async function GET(req: NextRequest) {
               console.warn('[TikTok Auth Callback] Failed to log blocked connection attempt:', logErr);
           }
 
-          const dupUrl = new URL(settingsUrl);
-          dupUrl.searchParams.set("error", "duplicate_account");
-          dupUrl.searchParams.set(
-            "message",
-            await duplicateSocialAccountLinkedMessage(
+          return redirectToSettings({
+            error: "duplicate_account",
+            message: await duplicateSocialAccountLinkedMessage(
               duplicateAccount.id,
               "TikTok",
             ),
-          );
-          return NextResponse.redirect(dupUrl);
+          });
       }
     }
     // --- END REFINED ---
@@ -252,16 +263,16 @@ export async function GET(req: NextRequest) {
         "[TikTok Auth Callback] Database error updating creator_profiles:",
         dbError,
       );
-      return NextResponse.redirect(
-        `${settingsUrl}?error=tiktok_db_error`,
-      );
+      return redirectToSettings({ error: "tiktok_db_error" });
     }
 
     console.log("[TikTok Auth Callback] Connection stored successfully!");
 
-    const finalRedirectUrl = `${settingsUrl}?success=true&platform=tiktok`;
-    const finalResponse = NextResponse.redirect(finalRedirectUrl);
-    
+    const finalResponse = redirectToSettings({
+      success: "true",
+      platform: "tiktok",
+    });
+
     // Apply cookie deletions
     tiktokCookiesToRemove.forEach(cookieName => {
       finalResponse.cookies.delete(cookieName);
@@ -273,8 +284,14 @@ export async function GET(req: NextRequest) {
     console.error("[TikTok Auth Callback] Error stack:", error.stack);
 
     const origin = new URL(req.url).origin;
-    return NextResponse.redirect(
-      `${origin}/dashboard/settings?error=tiktok_oauth_failed`,
+    const cookieStore = await cookies();
+    const oauthReturnTo = readOAuthReturnToCookie(cookieStore);
+    const response = NextResponse.redirect(
+      buildPostOAuthRedirectUrl(origin, oauthReturnTo, {
+        error: "tiktok_oauth_failed",
+      }),
     );
+    clearOAuthReturnToCookie(response);
+    return response;
   }
 }

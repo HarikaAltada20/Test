@@ -103,14 +103,14 @@ export default function ContestAnalytics({
       const qs = params.toString();
       const url = `/api/analytics/contests${qs ? `?${qs}` : ""}`;
       const res = await fetch(url);
-      if (!res.ok) throw new Error("Failed to fetch contests");
+      if (!res.ok) throw new Error("Failed to fetch campaigns");
       const json = await res.json();
       const list = json.contests || [];
       setContests(list);
       setFilteredContests(list);
     } catch (err) {
       console.error("Error fetching contests:", err);
-      setError("Failed to fetch contests");
+      setError("Failed to fetch campaigns");
       setContests([]);
       setFilteredContests([]);
     } finally {
@@ -245,7 +245,7 @@ export default function ContestAnalytics({
             isDark ? "text-gray-300" : "text-gray-500",
           )}
         >
-          {filteredContests.length} contest
+          {filteredContests.length} campaign
           {filteredContests.length !== 1 ? "s" : ""} found
         </div>
       </div>
@@ -254,7 +254,7 @@ export default function ContestAnalytics({
       {filteredContests.length === 0 ? (
         <div className="text-center py-12">
           <p className={cn("text-lg", isDark ? "text-white" : "text-gray-500")}>
-            No contests found for the selected filter.
+            No campaigns found for the selected filter.
           </p>
           <p
             className={cn(
@@ -262,7 +262,7 @@ export default function ContestAnalytics({
               isDark ? "text-gray-400" : "text-gray-500",
             )}
           >
-            Create your first contest to get started!
+            Create your first campaign to get started!
           </p>
         </div>
       ) : (

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { verifyAdminAccess } from "@/utils/admin-auth";
 import { createAdminClient } from "@/utils/supabase/admin";
 import { syncContestToMetrics } from "@/lib/twitter-metrics-sync";
+import { isVideoContestFormat } from "@/lib/trust-score";
 
 export async function POST(
   request: Request,
@@ -53,6 +54,7 @@ export async function POST(
       "max_earnings_per_creator",
       "payout_adjustment_percentage",
       "payout_adjustment_mode",
+      "trust_score",
     ]);
 
     const updateData: Record<string, any> = {};
@@ -103,7 +105,38 @@ export async function POST(
       }
     }
 
+    if (updateData.trust_score !== undefined && updateData.trust_score != null) {
+      const trustNum =
+        typeof updateData.trust_score === "number"
+          ? updateData.trust_score
+          : parseInt(String(updateData.trust_score), 10);
+      if (Number.isNaN(trustNum) || trustNum < 0 || trustNum > 100) {
+        return NextResponse.json(
+          { error: "trust_score must be between 0 and 100, or null" },
+          { status: 400 },
+        );
+      }
+    }
+
     const admin = createAdminClient();
+
+    if (updateData.trust_score !== undefined && updateData.trust_score != null) {
+      const { data: contestRow } = await admin
+        .from("contests")
+        .select("contest_format")
+        .eq("id", contestId)
+        .maybeSingle();
+
+      if (!isVideoContestFormat(contestRow?.contest_format)) {
+        return NextResponse.json(
+          {
+            error:
+              "trust_score is only supported for video campaigns (contest_format video)",
+          },
+          { status: 400 },
+        );
+      }
+    }
     if (
       updateData.payout_adjustment_mode === "cpm_only" &&
       updateData.contest_type === "milestone"

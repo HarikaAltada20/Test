@@ -1,6 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { cookies } from 'next/headers';
 import { createClient } from '@/utils/supabase/server'; // Ensure this points to server client
 import dayjs from 'dayjs';
+import {
+    buildPostOAuthRedirectUrl,
+    clearOAuthReturnToCookie,
+    readOAuthReturnToCookie,
+} from '@/lib/oauth-return-to';
 import {
     computeSinceUntilForPreset,
     fetchUserAccountInsights,
@@ -21,19 +27,33 @@ export async function GET(request: NextRequest) {
     const errorParam = searchParams.get('error');
     const errorDescription = searchParams.get('error_description');
 
-    const baseRedirectUrl = new URL('/dashboard/settings', request.url);
+    const origin = new URL(request.url).origin;
+    const cookieStore = await cookies();
+    const oauthReturnTo = readOAuthReturnToCookie(cookieStore);
+
+    const redirectAfterOAuth = (params: {
+        success?: string;
+        error?: string;
+        message?: string;
+    }) => {
+        const response = NextResponse.redirect(
+            buildPostOAuthRedirectUrl(origin, oauthReturnTo, params),
+        );
+        clearOAuthReturnToCookie(response);
+        return response;
+    };
 
     if (errorParam) {
         console.error(`Instagram authentication failed: ${errorDescription || errorParam}`);
-        baseRedirectUrl.searchParams.set('error', 'instagram_auth_failed');
-        baseRedirectUrl.searchParams.set('message', errorDescription || errorParam);
-        return NextResponse.redirect(baseRedirectUrl);
+        return redirectAfterOAuth({
+            error: 'instagram_auth_failed',
+            message: errorDescription || errorParam,
+        });
     }
 
     if (!code) {
         console.error('No authorization code found from Instagram.');
-        baseRedirectUrl.searchParams.set('error', 'instagram_no_code');
-        return NextResponse.redirect(baseRedirectUrl);
+        return redirectAfterOAuth({ error: 'instagram_no_code' });
     }
 
     const supabase = await createClient(); // Uses server-side client
@@ -44,8 +64,6 @@ export async function GET(request: NextRequest) {
 
         if (userError || !user) {
             console.error('Supabase user not authenticated during Instagram callback:', userError?.message);
-            baseRedirectUrl.searchParams.set('error', 'supabase_user_not_found');
-            baseRedirectUrl.searchParams.set('message', 'User session not found. Please sign in again.');
             // It might be better to redirect to sign-in if no user
             return NextResponse.redirect(new URL('/auth/signin?error=instagram_callback_no_user', request.url));
         }
@@ -166,12 +184,10 @@ export async function GET(request: NextRequest) {
                 console.warn('Failed to log blocked connection attempt:', logErr);
             }
 
-            baseRedirectUrl.searchParams.set('error', 'duplicate_account');
-            baseRedirectUrl.searchParams.set(
-                'message',
-                await duplicateSocialAccountLinkedMessage(duplicateAccount.id, 'Instagram'),
-            );
-            return NextResponse.redirect(baseRedirectUrl);
+            return redirectAfterOAuth({
+                error: 'duplicate_account',
+                message: await duplicateSocialAccountLinkedMessage(duplicateAccount.id, 'Instagram'),
+            });
         }
         // --- END REFINED ---
 
@@ -250,13 +266,13 @@ export async function GET(request: NextRequest) {
         }
 
         console.log('Instagram account connected successfully for user:', user.id);
-        baseRedirectUrl.searchParams.set('success', 'instagram_connected');
-        return NextResponse.redirect(baseRedirectUrl);
+        return redirectAfterOAuth({ success: 'instagram_connected' });
 
     } catch (err: any) {
         console.error('Error during Instagram server-side callback processing:', err);
-        baseRedirectUrl.searchParams.set('error', 'instagram_processing_failed');
-        baseRedirectUrl.searchParams.set('message', err.message || 'An unexpected error occurred.');
-        return NextResponse.redirect(baseRedirectUrl);
+        return redirectAfterOAuth({
+            error: 'instagram_processing_failed',
+            message: err.message || 'An unexpected error occurred.',
+        });
     }
 } 

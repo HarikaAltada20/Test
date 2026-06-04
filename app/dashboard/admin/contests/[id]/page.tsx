@@ -10,6 +10,12 @@ import {
   fetchContestSubmissionsAllPages,
   formatSubmissionFetchError,
 } from "@/lib/fetch-contest-submissions";
+import {
+  fetchLiveTrustMetricsByCreatorIds,
+  getCreatorTrustScoreFromMetrics,
+  isVideoContestFormat,
+  resolveCreatorTrustMetrics,
+} from "@/lib/trust-score";
 
 async function fetchTwitterTweetsAllPages(
   supabase: any,
@@ -101,23 +107,28 @@ export default async function AdminContestDetailPage({
       redirect("/dashboard/admin/contests");
     }
 
-    // Payout adjustment lives on contests table; contests_with_status view may not include it
-    let payoutAdjustment: {
+    const isVideoContest = isVideoContestFormat(contestData.contest_format);
+
+    // Contest settings live on contests table; contests_with_status view may not include them
+    let contestSettings: {
       payout_adjustment_percentage: number | null;
       payout_adjustment_mode: string | null;
+      trust_score: number | null;
     } = {
       payout_adjustment_percentage: null,
       payout_adjustment_mode: null,
+      trust_score: null,
     };
     const { data: payoutRow } = await supabase
       .from("contests")
-      .select("payout_adjustment_percentage, payout_adjustment_mode")
+      .select("payout_adjustment_percentage, payout_adjustment_mode, trust_score")
       .eq("id", contestId)
       .maybeSingle();
     if (payoutRow) {
-      payoutAdjustment = {
+      contestSettings = {
         payout_adjustment_percentage: payoutRow.payout_adjustment_percentage ?? null,
         payout_adjustment_mode: payoutRow.payout_adjustment_mode ?? null,
+        trust_score: payoutRow.trust_score ?? null,
       };
     }
 
@@ -439,6 +450,7 @@ export default async function AdminContestDetailPage({
     // Fetch creator profiles and user data for the submissions and Twitter tweets
     let creatorProfilesData: any[] = [];
     let usersData: any[] = [];
+    let liveGlobalTrustMetricsByCreatorId: Record<string, any> = {};
 
     // Combine creator IDs from both submissions and Twitter tweets
     const allCreatorIds = new Set<string>();
@@ -466,7 +478,8 @@ export default async function AdminContestDetailPage({
             youtube_account,
             instagram_account,
             instagram_archive,
-            twitter_account
+            twitter_account,
+            trust_score_metrics
           `
           )
           .in("id", creatorIds);
@@ -478,6 +491,12 @@ export default async function AdminContestDetailPage({
           );
         } else {
           creatorProfilesData = profilesData || [];
+        }
+
+        if (isVideoContest) {
+          const supabaseAdmin = createAdminClient();
+          liveGlobalTrustMetricsByCreatorId =
+            await fetchLiveTrustMetricsByCreatorIds(supabaseAdmin, creatorIds);
         }
 
         // Fetch users for additional fallbacks
@@ -500,6 +519,30 @@ export default async function AdminContestDetailPage({
         }
       }
     }
+
+    const getCreatorTrustMetrics = (
+      creatorProfile: any,
+      creatorId?: string | null,
+    ) =>
+      isVideoContest
+        ? resolveCreatorTrustMetrics(
+            creatorProfile,
+            creatorId,
+            liveGlobalTrustMetricsByCreatorId,
+          )
+        : null;
+
+    const getCreatorTrustScore = (
+      creatorProfile: any,
+      creatorId?: string | null,
+    ): number | null =>
+      isVideoContest
+        ? getCreatorTrustScoreFromMetrics(
+            creatorProfile,
+            creatorId,
+            liveGlobalTrustMetricsByCreatorId,
+          )
+        : null;
 
     const calculateDurationDays = (
       start: string | null,
@@ -561,8 +604,9 @@ export default async function AdminContestDetailPage({
       // Twitter-specific fields (all stored in contest_based_details.twitter_campaign)
       contest_format: contestData.contest_format,
       // Payout adjustment (admin) – from contests table so they fill on refresh
-      payout_adjustment_percentage: payoutAdjustment.payout_adjustment_percentage,
-      payout_adjustment_mode: payoutAdjustment.payout_adjustment_mode,
+      payout_adjustment_percentage: contestSettings.payout_adjustment_percentage,
+      payout_adjustment_mode: contestSettings.payout_adjustment_mode,
+      trust_score: isVideoContest ? contestSettings.trust_score : null,
     };
 
     // Transform Twitter tweets into submission-like format for display
@@ -692,6 +736,14 @@ export default async function AdminContestDetailPage({
           creator_username: creatorUsername,
           creator_avatar_url: creatorAvatarUrl,
           creator_id: actualCreatorProfileId,
+          trust_score: getCreatorTrustScore(
+            creatorProfile,
+            actualCreatorProfileId,
+          ),
+          trust_score_metrics: getCreatorTrustMetrics(
+            creatorProfile,
+            actualCreatorProfileId,
+          ),
           // Explicit username from users table for creator-wise view (main line); creator_username = platform handle (second line)
           user_username: user?.username || null,
           // Mark as Twitter tweet for UI handling
@@ -710,6 +762,14 @@ export default async function AdminContestDetailPage({
             username: creatorUsername,
             profile_picture_url: creatorAvatarUrl,
             full_name: creatorDisplayName,
+            trust_score: getCreatorTrustScore(
+              creatorProfile,
+              actualCreatorProfileId,
+            ),
+            trust_score_metrics: getCreatorTrustMetrics(
+              creatorProfile,
+              actualCreatorProfileId,
+            ),
           },
         };
       })
@@ -806,6 +866,14 @@ export default async function AdminContestDetailPage({
           creator_username: creatorUsername,
           creator_avatar_url: creatorAvatarUrl,
           creator_id: actualCreatorProfileId,
+          trust_score: getCreatorTrustScore(
+            creatorProfile,
+            actualCreatorProfileId,
+          ),
+          trust_score_metrics: getCreatorTrustMetrics(
+            creatorProfile,
+            actualCreatorProfileId,
+          ),
           // Explicit username from users table for creator-wise view (main line); creator_username = platform handle (second line)
           user_username: user?.username || null,
           paid: sub.paid,
@@ -821,6 +889,14 @@ export default async function AdminContestDetailPage({
             profile_picture_url: creatorAvatarUrl,
             full_name: creatorDisplayName,
             instagram_archive: creatorProfile?.instagram_archive ?? null,
+            trust_score: getCreatorTrustScore(
+              creatorProfile,
+              actualCreatorProfileId,
+            ),
+            trust_score_metrics: getCreatorTrustMetrics(
+              creatorProfile,
+              actualCreatorProfileId,
+            ),
           },
           creator_instagram_archive: creatorProfile?.instagram_archive ?? null,
         };

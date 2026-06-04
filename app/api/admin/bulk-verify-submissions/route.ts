@@ -4,6 +4,7 @@ import { createAdminClient } from "@/utils/supabase/admin";
 import { createClient } from "@/utils/supabase/server";
 import { verifyAdminAccess } from "@/utils/admin-auth";
 import { applyBulkDualRewardsWalletReversals } from "@/lib/dual-rewards-bulk-reversal";
+import { recomputeTrustForCreatorIds } from "@/lib/trust-score";
 
 const PAYMENT_BULK_ACTIONS = new Set([
   "paid",
@@ -296,6 +297,25 @@ export async function POST(request: Request) {
           });
         }
       });
+    }
+
+    const TRUST_RECOMPUTE_ACTIONS = new Set([
+      "verified",
+      "rejected",
+      "approve",
+      "reject",
+    ]);
+    if (results.length > 0 && TRUST_RECOMPUTE_ACTIONS.has(action)) {
+      const supabaseAdmin = createAdminClient();
+      const processedIds = results.map((r) => r.id);
+      const { data: submissionRows } = await supabaseAdmin
+        .from("submissions")
+        .select("creator_id")
+        .in("id", processedIds);
+      const creatorIds = (submissionRows || [])
+        .map((row) => row.creator_id)
+        .filter((id): id is string => typeof id === "string" && id.length > 0);
+      await recomputeTrustForCreatorIds(supabaseAdmin, creatorIds);
     }
 
     return NextResponse.json({

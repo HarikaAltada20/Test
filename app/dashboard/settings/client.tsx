@@ -72,6 +72,7 @@ import { PageLoadingSpinner } from "@/components/loading/LoadingSpinner";
 
 import { hasSubmitted } from "@/lib/form-submissions";
 import { cn } from "@/lib/utils";
+import { getSafeReturnTo } from "@/lib/oauth-return-to";
 import { buildReferralLinks, getReferralCode } from "@/lib/referral-links";
 import { useClientAuth } from "@/hooks/use-client-auth";
 import Link from "next/link";
@@ -133,6 +134,29 @@ export default function SettingsPage({
   const router = useRouter();
   const searchParams = useSearchParams();
   const pathname = usePathname();
+
+  const getPreservedReturnTo = () =>
+    getSafeReturnTo(searchParams.get("returnTo"));
+
+  const replaceSettingsUrlPreservingReturnTo = () => {
+    const returnTo = getPreservedReturnTo();
+    if (returnTo) {
+      router.replace(
+        `/dashboard/settings?returnTo=${encodeURIComponent(returnTo)}`,
+      );
+    } else {
+      router.replace(pathname);
+    }
+  };
+
+  const redirectToReturnToAfterConnect = () => {
+    const returnTo = getPreservedReturnTo();
+    if (returnTo) {
+      router.replace(returnTo);
+      return true;
+    }
+    return false;
+  };
 
   // State declarations
   const [profile, setProfile] = useState<
@@ -400,6 +424,8 @@ export default function SettingsPage({
         duration: 5000,
       });
 
+      if (redirectToReturnToAfterConnect()) return;
+
       const newUrl = new URL(window.location.href);
       newUrl.searchParams.delete("success");
       newUrl.searchParams.delete("platform");
@@ -425,6 +451,8 @@ export default function SettingsPage({
         variant: "default",
         duration: 5000,
       });
+
+      if (redirectToReturnToAfterConnect()) return;
 
       const newUrl = new URL(window.location.href);
       newUrl.searchParams.delete("success");
@@ -855,7 +883,11 @@ export default function SettingsPage({
         });
       }, API_TIMEOUT_LONG);
 
-      window.location.href = "/api/youtube/auth";
+      const returnTo = getPreservedReturnTo();
+      const authUrl = returnTo
+        ? `/api/youtube/auth?returnTo=${encodeURIComponent(returnTo)}`
+        : "/api/youtube/auth";
+      window.location.href = authUrl;
     } catch (err: any) {
       setIsLoadingYouTube(false);
       toast({
@@ -867,46 +899,12 @@ export default function SettingsPage({
   };
 
   const handleInstagramConnect = () => {
-    const instagramClientId = process.env.NEXT_PUBLIC_INSTAGRAM_CLIENT_ID;
-    // Strip trailing slash so redirect_uri matches App Dashboard; avoid double slashes
-    const appBaseUrl = (process.env.NEXT_PUBLIC_APP_URL || "").replace(
-      /\/$/,
-      "",
-    );
-
-    if (!instagramClientId) {
-      toast({
-        title: "Error",
-        description:
-          "Instagram Client ID is not configured. Please contact support.",
-        variant: "destructive",
-      });
-      return;
-    }
-    if (!appBaseUrl) {
-      toast({
-        title: "Error",
-        description:
-          "Application Base URL is not configured. Please contact support.",
-        variant: "destructive",
-      });
-      return;
-    }
-
     setIsLoading(true);
     try {
-      // Must exactly match one of the Valid OAuth Redirect URIs in App Dashboard
-      const instagramRedirectUri = `${appBaseUrl}/api/instagram/callback`;
-
-      const scopes = [
-        "instagram_business_basic",
-        "instagram_business_manage_insights",
-      ].join(",");
-
-      // Business login: www.instagram.com/oauth/authorize per official docs; force_reauth=true
-      const authUrl = `https://www.instagram.com/oauth/authorize?client_id=${instagramClientId}&redirect_uri=${encodeURIComponent(
-        instagramRedirectUri,
-      )}&response_type=code&scope=${encodeURIComponent(scopes)}&force_reauth=true`;
+      const returnTo = getPreservedReturnTo();
+      const authUrl = returnTo
+        ? `/api/instagram/auth?returnTo=${encodeURIComponent(returnTo)}`
+        : "/api/instagram/auth";
 
       // Set a timeout to reset loading state if redirect doesn't happen
       const timeoutId = setTimeout(() => {
@@ -997,6 +995,10 @@ export default function SettingsPage({
       const queryParams = new URLSearchParams({
         tz: userTimeZone,
       });
+      const returnTo = getPreservedReturnTo();
+      if (returnTo) {
+        queryParams.set("returnTo", returnTo);
+      }
 
       const redirectUrl = `/api/auth/tiktok/authorize?${queryParams.toString()}`;
 

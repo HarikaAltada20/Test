@@ -251,7 +251,7 @@ export default function CtcBanner() {
             ? "Join Game Of Creators"
             : isCreators
               ? "Start Earning"
-              : "Launch a Contest"}
+              : "Launch a Campaign"}
           <ArrowRight className="h-5 w-5" />
         </button>
       </div>

@@ -1,9 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import crypto from "crypto";
 import { TikTokProvider } from "@/lib/tiktok/provider/TikTokProvider";
+import {
+  buildPostOAuthRedirectUrl,
+  setOAuthReturnToCookie,
+} from "@/lib/oauth-return-to";
 
 export async function GET(req: NextRequest) {
   const searchParams = req.nextUrl.searchParams;
+  const returnTo = searchParams.get("returnTo");
   const country = searchParams.get("country") || "";
   const tz = searchParams.get("tz") || "";
 
@@ -15,7 +20,9 @@ export async function GET(req: NextRequest) {
 
   if (isFromIndia) {
     return NextResponse.redirect(
-      `${origin}/dashboard/settings?error=tiktok_not_allowed_india`,
+      buildPostOAuthRedirectUrl(origin, searchParams.get("returnTo"), {
+        error: "tiktok_not_allowed_india",
+      }),
     );
   }
 
@@ -59,6 +66,8 @@ export async function GET(req: NextRequest) {
     path: "/",
     maxAge: 600,
   });
+
+  setOAuthReturnToCookie(response, returnTo);
 
   return response;
 }

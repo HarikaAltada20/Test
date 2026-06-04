@@ -1,4 +1,9 @@
 import { duplicateSocialAccountLinkedMessage } from '@/lib/duplicate-social-account-message';
+import {
+  buildPostOAuthRedirectUrl,
+  clearOAuthReturnToCookie,
+  readOAuthReturnToCookie,
+} from '@/lib/oauth-return-to';
 import { createOAuthClient, getChannelInfo } from '@/lib/youtube-api';
 import { createClient } from '@/utils/supabase/server';
 import { cookies } from 'next/headers';
@@ -10,6 +15,8 @@ export async function GET(request: NextRequest) {
   const code = request.nextUrl.searchParams.get('code');
   const state = request.nextUrl.searchParams.get('state');
   const cookieStore = await cookies();
+  const oauthReturnTo = readOAuthReturnToCookie(cookieStore);
+  const origin = new URL(request.url).origin;
   const storedStateCookie = cookieStore.get('youtube_oauth_state');
   const storedState = storedStateCookie?.value;
 
@@ -19,14 +26,16 @@ export async function GET(request: NextRequest) {
 
   if (!state || !storedState || state !== storedState) {
     console.error('State mismatch or missing state cookie.');
-    const errorUrl = new URL('/dashboard/settings?error=state_mismatch', request.url);
-    const response = NextResponse.redirect(errorUrl);
+    const response = NextResponse.redirect(
+      buildPostOAuthRedirectUrl(origin, oauthReturnTo, { error: 'state_mismatch' }),
+    );
     response.cookies.set({
       name: 'youtube_oauth_state',
       value: '',
       maxAge: 0,
       path: '/'
     });
+    clearOAuthReturnToCookie(response);
     return response;
   }
 
@@ -56,14 +65,16 @@ export async function GET(request: NextRequest) {
 
     if (!code) {
       console.log('No code found, redirecting');
-      response = NextResponse.redirect(new URL('/dashboard/settings?error=no_code', request.url));
+      response = NextResponse.redirect(
+        buildPostOAuthRedirectUrl(origin, oauthReturnTo, { error: 'no_code' }),
+      );
       response.cookies.set({ name: 'youtube_oauth_state', value: '', maxAge: 0, path: '/' });
+      clearOAuthReturnToCookie(response);
       return response;
     }
 
     // Use the same redirect URI that was used in the auth request
     // This must match exactly what Google expects
-    const origin = new URL(request.url).origin;
     const redirectUri = `${origin}/api/youtube/callback`;
     const oauth2Client = await createOAuthClient(redirectUri);
     
@@ -148,14 +159,14 @@ export async function GET(request: NextRequest) {
             console.warn('Failed to log blocked connection attempt:', logErr);
         }
 
-        const errorUrl = new URL('/dashboard/settings', request.url);
-        errorUrl.searchParams.set('error', 'duplicate_account');
-        errorUrl.searchParams.set(
-            'message',
-            await duplicateSocialAccountLinkedMessage(duplicateAccount.id, 'YouTube'),
+        response = NextResponse.redirect(
+          buildPostOAuthRedirectUrl(origin, oauthReturnTo, {
+            error: 'duplicate_account',
+            message: await duplicateSocialAccountLinkedMessage(duplicateAccount.id, 'YouTube'),
+          }),
         );
-        response = NextResponse.redirect(errorUrl);
         response.cookies.set({ name: 'youtube_oauth_state', value: '', maxAge: 0, path: '/' });
+        clearOAuthReturnToCookie(response);
         return response;
     }
     // --- END REFINED ---
@@ -175,20 +186,26 @@ export async function GET(request: NextRequest) {
 
     console.log('Creator profile updated successfully');
 
-    const redirectUrl = '/dashboard/settings?success=youtube_connected';
+    const redirectUrl = buildPostOAuthRedirectUrl(origin, oauthReturnTo, {
+      success: 'youtube_connected',
+    });
     console.log('Redirecting to:', redirectUrl);
-    response = NextResponse.redirect(new URL(redirectUrl, request.url));
+    response = NextResponse.redirect(redirectUrl);
 
     response.cookies.set({ name: 'youtube_oauth_state', value: '', maxAge: 0, path: '/' });
+    clearOAuthReturnToCookie(response);
 
     return response;
 
   } catch (error) {
     console.error('YouTube OAuth error:', error);
-    const errorUrl = new URL('/dashboard/settings', request.url);
-    errorUrl.searchParams.set('error', 'youtube_connection_failed');
-    response = NextResponse.redirect(errorUrl);
+    response = NextResponse.redirect(
+      buildPostOAuthRedirectUrl(origin, oauthReturnTo, {
+        error: 'youtube_connection_failed',
+      }),
+    );
     response.cookies.set({ name: 'youtube_oauth_state', value: '', maxAge: 0, path: '/' });
+    clearOAuthReturnToCookie(response);
     return response;
   }
 } 

@@ -266,6 +266,90 @@ const YT_CORE_COLUMN_IDS = [
 // Column ids that require "Show Traffic Sources" (hidden in customize modal when brand doesn't have access)
 const YT_TRAFFIC_COLUMN_IDS = ["top_traffic_source"];
 
+function formatTrustScore(score: number): string {
+  const rounded = Math.round(score * 10) / 10;
+  return Number.isInteger(rounded)
+    ? String(Math.round(rounded))
+    : rounded.toFixed(1);
+}
+
+function formatTrustScoreWithMax(score: number, max = 100): string {
+  // Non-breaking spaces keep "100 / 100" on one line in narrow table cells.
+  return `${formatTrustScore(score)}\u00A0/\u00A0${max}`;
+}
+
+function parseTrustMetricsValue(raw: unknown): Record<string, unknown> | null {
+  if (raw && typeof raw === "object") {
+    return raw as Record<string, unknown>;
+  }
+  if (typeof raw === "string") {
+    try {
+      const parsed = JSON.parse(raw);
+      return parsed && typeof parsed === "object" ? parsed : null;
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}
+
+function pickCreatorTrustDataFromSubmissions(submissions: any[]): {
+  trust_score: number | null;
+  trust_score_metrics: Record<string, unknown> | null;
+} {
+  for (const submission of submissions) {
+    const trustScoreMetrics =
+      parseTrustMetricsValue((submission as any)?.trust_score_metrics) ??
+      parseTrustMetricsValue(submission?.creator?.trust_score_metrics);
+    const rawTrustScore =
+      (submission as any)?.trust_score ?? submission?.creator?.trust_score;
+    const hasTrustScore =
+      rawTrustScore !== null &&
+      rawTrustScore !== undefined &&
+      rawTrustScore !== "";
+
+    if (trustScoreMetrics || hasTrustScore) {
+      const parsedScore = hasTrustScore ? Number(rawTrustScore) : NaN;
+      return {
+        trust_score: Number.isFinite(parsedScore)
+          ? parsedScore
+          : trustScoreMetrics?.trust_score !== null &&
+              trustScoreMetrics?.trust_score !== undefined
+            ? Number(trustScoreMetrics.trust_score)
+            : null,
+        trust_score_metrics: trustScoreMetrics,
+      };
+    }
+  }
+
+  return { trust_score: null, trust_score_metrics: null };
+}
+
+function resolveTrustScoreForDisplay(
+  trustMetrics: Record<string, unknown> | null,
+  fallbackCounts: {
+    total: number;
+    verified: number;
+    rejected: number;
+    pending: number;
+  },
+): number {
+  const storedScore = trustMetrics?.trust_score;
+  if (storedScore !== null && storedScore !== undefined && storedScore !== "") {
+    const parsed = Number(storedScore);
+    if (Number.isFinite(parsed)) return parsed;
+  }
+
+  if (fallbackCounts.total === 0) return 100;
+
+  return Math.max(
+    0,
+    Math.round(
+      100 - (fallbackCounts.rejected / fallbackCounts.total) * 100,
+    ),
+  );
+}
+
 // --- Local Type Definitions ---
 interface Contest {
   id: string;
@@ -279,7 +363,7 @@ interface Contest {
     | "rejected";
   // Contest lifecycle status (only for published contests)
   status: "upcoming" | "active" | "ended" | "incomplete" | "unknown" | null;
-  // Post-contest status for ended contests
+  // Post-contest status for ended campaigns
   post_contest_status?:
     | "pending_review"
     | "in_review"
@@ -325,6 +409,8 @@ interface Contest {
   rejection_reason?: string | null;
   payout_adjustment_percentage?: number | null;
   payout_adjustment_mode?: string | null;
+  /** Optional campaign minimum creator trust score (0–100). NULL = no requirement. */
+  trust_score?: number | null;
 }
 
 interface Submission {
@@ -1104,6 +1190,27 @@ export default function ContestDetailClient({
     () => getFlatFeeBonusCentsFromContest(currentContest) > 0,
     [currentContest],
   );
+
+  const isVideoContestFormat =
+    currentContest?.contest_format !== "text_image";
+
+  /** Campaign minimum trust score (video campaigns only). */
+  const contestMinTrustScore = useMemo(() => {
+    if (!isVideoContestFormat) return null;
+    const raw = currentContest.trust_score;
+    if (raw === null || raw === undefined) return null;
+    const value = Number(raw);
+    if (!Number.isFinite(value) || value <= 0) return null;
+    return value;
+  }, [currentContest.trust_score, isVideoContestFormat]);
+
+  /** Contest minimum trust score card on overview; shown when brand set a threshold. */
+  const showContestTrustScoreRequiredCard =
+    isVideoContestFormat && contestMinTrustScore !== null;
+
+  /** Per-creator trust score in creator-wise table — admin only, video campaigns with a trust requirement. */
+  const showCreatorWiseTrustScoreColumn =
+    isAdminView && isVideoContestFormat && contestMinTrustScore !== null;
 
   // Contest-level payout adjustment for dual_rewards granted display
   const contestPayoutAdjPct =
@@ -2577,6 +2684,42 @@ export default function ContestDetailClient({
           },
         ).length;
 
+        const firstSubmissionWithTrustScore = creatorSubmissions.find(
+          (s: any) =>
+            (s as any)?.trust_score !== null &&
+            (s as any)?.trust_score !== undefined &&
+            (s as any)?.trust_score !== "",
+        ) as any;
+        const firstCreatorWithTrustScore = creatorSubmissions.find(
+          (s: any) =>
+            (s as any)?.creator?.trust_score !== null &&
+            (s as any)?.creator?.trust_score !== undefined &&
+            (s as any)?.creator?.trust_score !== "",
+        ) as any;
+        const pickedTrustData =
+          pickCreatorTrustDataFromSubmissions(creatorSubmissions);
+        const creatorTrustScore =
+          pickedTrustData.trust_score ??
+          firstSubmissionWithTrustScore?.trust_score ??
+          firstCreatorWithTrustScore?.creator?.trust_score ??
+          null;
+        const creatorTrustMetrics =
+          pickedTrustData.trust_score_metrics ??
+          parseTrustMetricsValue(
+            (firstSubmissionWithTrustScore as any)?.trust_score_metrics,
+          ) ??
+          parseTrustMetricsValue(
+            (firstSubmissionWithTrustScore as any)?.creator
+              ?.trust_score_metrics,
+          ) ??
+          parseTrustMetricsValue(
+            (firstCreatorWithTrustScore as any)?.trust_score_metrics,
+          ) ??
+          parseTrustMetricsValue(
+            (firstCreatorWithTrustScore as any)?.creator?.trust_score_metrics,
+          ) ??
+          null;
+
         grouped[creatorId] = {
           creator: {
             id: creatorId,
@@ -2584,6 +2727,8 @@ export default function ContestDetailClient({
             profile_picture_url:
               firstSubmission?.creator?.profile_picture_url || null,
             full_name: firstSubmission?.creator?.full_name || null,
+            trust_score: creatorTrustScore,
+            trust_score_metrics: creatorTrustMetrics,
           },
           submissions: creatorSubmissions,
           totalCount:
@@ -2594,9 +2739,14 @@ export default function ContestDetailClient({
               const status =
                 (s.is_twitter_tweet && (s as any).moderation_status) ||
                 s.status;
-              return status === "verified";
+              return status === "verified" && !s.paid;
             }).length,
-            paid: creatorSubmissions.filter((s: any) => s.paid).length,
+            paid: creatorSubmissions.filter((s: any) => {
+              const status =
+                (s.is_twitter_tweet && (s as any).moderation_status) ||
+                s.status;
+              return s.paid || status === "paid";
+            }).length,
             pending: creatorSubmissions.filter(
               (s: any) =>
                 (s.is_twitter_tweet &&
@@ -2832,6 +2982,9 @@ export default function ContestDetailClient({
         // Get creator-level moderation data if available
         const creatorModeration = creatorModerationData[creatorId] || {};
         const creatorManualAdjustment = getCreatorManualAdjustment(creatorId);
+        const initialTrustData = pickCreatorTrustDataFromSubmissions([
+          submission,
+        ]);
         acc[creatorId] = {
           creator: {
             id: creatorId,
@@ -2839,6 +2992,16 @@ export default function ContestDetailClient({
             profile_picture_url:
               submission.creator?.profile_picture_url || null,
             full_name: submission.creator?.full_name || null,
+            trust_score:
+              initialTrustData.trust_score ??
+              submission.trust_score ??
+              submission.creator?.trust_score ??
+              null,
+            trust_score_metrics:
+              initialTrustData.trust_score_metrics ??
+              parseTrustMetricsValue((submission as any).trust_score_metrics) ??
+              parseTrustMetricsValue(submission.creator?.trust_score_metrics) ??
+              null,
           },
           instagram_archive:
             submission.creator_instagram_archive ??
@@ -2899,6 +3062,35 @@ export default function ContestDetailClient({
       }
 
       const group = acc[creatorId];
+      if (
+        (group.creator?.trust_score === null ||
+          group.creator?.trust_score === undefined ||
+          group.creator?.trust_score === "") &&
+        submission.trust_score !== null &&
+        submission.trust_score !== undefined &&
+        submission.trust_score !== ""
+      ) {
+        group.creator.trust_score = submission.trust_score;
+      } else if (
+        (group.creator?.trust_score === null ||
+          group.creator?.trust_score === undefined ||
+          group.creator?.trust_score === "") &&
+        submission.creator?.trust_score !== null &&
+        submission.creator?.trust_score !== undefined &&
+        submission.creator?.trust_score !== ""
+      ) {
+        group.creator.trust_score = submission.creator?.trust_score;
+      }
+      if (
+        !group.creator?.trust_score_metrics &&
+        ((submission as any).trust_score_metrics ||
+          submission.creator?.trust_score_metrics)
+      ) {
+        group.creator.trust_score_metrics =
+          parseTrustMetricsValue((submission as any).trust_score_metrics) ??
+          parseTrustMetricsValue(submission.creator?.trust_score_metrics) ??
+          null;
+      }
       group.submissions.push(submission);
       group.totalCount++;
 
@@ -2936,14 +3128,18 @@ export default function ContestDetailClient({
         group.paid = true;
       }
 
+      const isPaidSubmission =
+        status === "paid" || Boolean((submission as any).paid);
+
       if (
         normalizedStatus === "verified" ||
         normalizedStatus === "approved" ||
         normalizedStatus === "paid"
       ) {
         if (
-          normalizedStatus === "verified" ||
-          normalizedStatus === "approved"
+          (normalizedStatus === "verified" ||
+            normalizedStatus === "approved") &&
+          !isPaidSubmission
         ) {
           group.statusCounts.verified++;
         }
@@ -2969,7 +3165,7 @@ export default function ContestDetailClient({
             : (currentContest?.contest_based_details as any)
                 ?.leaderboard_contest?.total_budget || 0;
 
-          // For CPM contests, check flat_fee_bonus_cap if configured
+          // For CPM campaigns, check flat_fee_bonus_cap if configured
           const bonusBudget = isCpmContestType(currentContest?.contest_type)
             ? (currentContest?.contest_based_details as any)?.cpm_contest
                 ?.flat_fee_bonus_cap || totalBudget
@@ -3031,7 +3227,7 @@ export default function ContestDetailClient({
           submission.other_stats?.quote_reposts || 0;
         group.metrics.impressions += submission.other_stats?.impressions || 0;
 
-        // For Twitter CPM contests, accumulate points and base_points
+        // For Twitter CPM campaigns, accumulate points and base_points
         const submissionBasePoints = submission.other_stats?.base_points || 0;
         const submissionManualPoints = Number(
           (submission as any).manual_points_adjustment ??
@@ -3251,7 +3447,7 @@ export default function ContestDetailClient({
       });
     }
 
-    // For Twitter leaderboard contests, calculate expected earnings based on creator rank
+    // For Twitter leaderboard campaigns, calculate expected earnings based on creator rank
     // Note: isTwitterLeaderboard was already checked above, but we need to check again for non-leaderboard path
     const isTwitterLeaderboardForEarnings =
       (currentContest?.platform?.toLowerCase() === "twitter" ||
@@ -3296,7 +3492,7 @@ export default function ContestDetailClient({
       });
     }
 
-    // Calculate earnings for Twitter CPM contests based on CPM rate and points
+    // Calculate earnings for Twitter CPM campaigns based on CPM rate and points
     const isTwitterCpmContest =
       (currentContest?.platform?.toLowerCase() === "twitter" ||
         currentContest?.platform?.toLowerCase() === "x") &&
@@ -3369,7 +3565,7 @@ export default function ContestDetailClient({
       }
     }
 
-    // Calculate bonus for Twitter CPM contests based on flat_fee_bonus (not used for dual rewards)
+    // Calculate bonus for Twitter CPM campaigns based on flat_fee_bonus (not used for dual rewards)
     if (
       isTwitterCpmContest &&
       !isDualRewardsContestType(currentContest?.contest_type)
@@ -3392,7 +3588,7 @@ export default function ContestDetailClient({
 
         // Assign bonus to verified creators only
         Object.values(grouped).forEach((group: any) => {
-          // For Twitter CPM contests, check if creator has verified/paid submissions
+          // For Twitter CPM campaigns, check if creator has verified/paid submissions
           // so Bonus Expected is shown even after bonus is granted
           const hasVerifiedSubmissions = group.statusCounts.verified > 0;
           const hasPaidSubmissions = group.statusCounts.paid > 0;
@@ -3434,7 +3630,7 @@ export default function ContestDetailClient({
       }
     }
 
-    // For non-Twitter leaderboard contests (e.g. Instagram / YouTube),
+    // For non-Twitter leaderboard campaigns (e.g. Instagram / YouTube),
     // assign expected reward at CREATOR level based on leaderboard prizes
     // so creator-wise view matches the leaderboard expectations.
     const isNonTwitterLeaderboard =
@@ -3532,7 +3728,7 @@ export default function ContestDetailClient({
       }
     }
 
-    // Apply earnings cap per creator for expected earnings display (for non-CPM contests)
+    // Apply earnings cap per creator for expected earnings display (for non-CPM campaigns)
     const maxEarnings =
       currentContest?.max_earnings_per_creator ??
       (currentContest?.contest_based_details as any)?.cpm_contest
@@ -3645,9 +3841,9 @@ export default function ContestDetailClient({
     );
   }, [selectedCreatorForModal, currentSubmissions]);
 
-  // Creator ranking for Twitter leaderboard contests (based on total points per creator)
+  // Creator ranking for Twitter leaderboard campaigns (based on total points per creator)
   const creatorRankingMap = useMemo(() => {
-    // Only calculate for Twitter leaderboard contests
+    // Only calculate for Twitter leaderboard campaigns
     const isTwitterLeaderboard =
       (currentContest?.platform?.toLowerCase() === "twitter" ||
         currentContest?.platform?.toLowerCase() === "x") &&
@@ -6360,13 +6556,13 @@ export default function ContestDetailClient({
           case "pending_review":
             return {
               title: "📋 Status: Pending Review",
-              description: "Contest is now pending review phase",
+              description: "Campaign is now pending review phase",
               variant: "pending" as const,
             };
           case "in_review":
             return {
               title: "🔍 Status: In Review",
-              description: "Contest is currently under review",
+              description: "Campaign is currently under review",
               variant: "pending" as const,
             };
           case "verification_complete":
@@ -6400,7 +6596,7 @@ export default function ContestDetailClient({
       console.error("Error updating contest status:", error);
       toast({
         title: "Error",
-        description: error.message || "Failed to update contest status",
+        description: error.message || "Failed to update campaign status",
         variant: "destructive",
       });
     } finally {
@@ -6422,7 +6618,7 @@ export default function ContestDetailClient({
       {
         value: "pending_review",
         label: "Pending Review",
-        description: "Contest submissions are under initial review",
+        description: "Campaign submissions are under initial review",
       },
       {
         value: "in_review",
@@ -7306,7 +7502,7 @@ export default function ContestDetailClient({
       disabledReason =
         "A refresh run is already in progress. Please wait up to 5 minutes.";
     } else if (isLocked) {
-      disabledReason = "Metrics are locked after contest review begins";
+      disabledReason = "Metrics are locked after campaign review begins";
     } else if (!cooldownInfo.canRefresh) {
       disabledReason = `Please wait ${
         cooldownInfo.remainingMinutes
@@ -7681,7 +7877,7 @@ export default function ContestDetailClient({
         : null;
 
       return {
-        contestTitle: currentContest?.title || "Contest",
+        contestTitle: currentContest?.title || "Campaign",
         contestType: currentContest?.contest_type,
         postContestStatus: currentContest?.post_contest_status,
         durationDays,
@@ -8014,9 +8210,9 @@ export default function ContestDetailClient({
   const handleShare = async () => {
     if (contest.status === "ended") {
       toast({
-        title: "Contest Completed",
+        title: "Campaign Completed",
         description:
-          "This contest has ended. You can still share it to showcase the results and winners.",
+          "This campaign has ended. You can still share it to showcase the results and winners.",
         variant: "default",
       });
       // Allow sharing to proceed for completed contests
@@ -8050,7 +8246,7 @@ export default function ContestDetailClient({
           title: "Link Copied",
           description:
             contest.status === "ended"
-              ? "Contest link copied to clipboard!"
+              ? "Campaign link copied to clipboard!"
               : "Opportunity link copied to clipboard!",
           variant: "default",
         });
@@ -8759,8 +8955,8 @@ export default function ContestDetailClient({
   };
 
   const isContestEditable =
-    currentContest?.status !== "ended" && // Never allow editing ended contests
-    (isAdminView || // Admins can edit non-ended contests
+    currentContest?.status !== "ended" && // Never allow editing ended campaigns
+    (isAdminView || // Admins can edit non-ended campaigns
       currentContest?.moderation_status === "draft" ||
       currentContest?.moderation_status === "rejected" ||
       currentContest?.moderation_status === "pending_approval" ||
@@ -8772,7 +8968,7 @@ export default function ContestDetailClient({
     currentContest?.moderation_status === "pending_approval";
 
   if (!currentContest) {
-    return <p>Loading contest details or contest not found...</p>;
+    return <p>Loading campaign details or campaign not found...</p>;
   }
 
   const contestStatusBadgeInfo = getStatusBadgeProps(currentContest, isDark);
@@ -8783,7 +8979,7 @@ export default function ContestDetailClient({
         <Alert variant="destructive" className="mb-6">
           <AlertTriangle className="h-4 w-4" />
           <AlertDescription>
-            Could not load submissions for this contest ({submissionsFetchError}
+            Could not load submissions for this campaign ({submissionsFetchError}
             ). Counts and moderation data may be incomplete — refresh the page or
             contact support if this persists.
           </AlertDescription>
@@ -8881,7 +9077,7 @@ export default function ContestDetailClient({
                     <DialogTitle
                       className={cn(isDark ? "text-white" : "text-gray-900")}
                     >
-                      Update Contest Status
+                      Update Campaign Status
                     </DialogTitle>
                     <DialogDescription>
                       Change the post-contest status to reflect the current
@@ -9003,10 +9199,10 @@ export default function ContestDetailClient({
                       window.location.reload();
                     } else {
                       const error = await response.json();
-                      alert(error.error || "Failed to publish contest");
+                      alert(error.error || "Failed to publish campaign");
                     }
                   } catch (error) {
-                    alert("Failed to publish contest");
+                    alert("Failed to publish campaign");
                   }
                 }}
               >
@@ -9060,7 +9256,7 @@ export default function ContestDetailClient({
             {isContestDeletable && (
               <DeleteContestButton
                 contestId={contestId}
-                contestTitle={currentContest.title || "this contest"}
+                contestTitle={currentContest.title || "this campaign"}
                 isDeletable={isContestDeletable}
                 isdark={isDark}
               />
@@ -10039,7 +10235,7 @@ export default function ContestDetailClient({
             </div>
           )}
 
-        {/* Budget Progress Tracker - For Milestone contests (not dual — dual uses CPM tracker above) */}
+        {/* Budget Progress Tracker - For Milestone campaigns (not dual — dual uses CPM tracker above) */}
         {isMilestoneContestType(currentContest.contest_type) &&
           !isDualRewardsContestType(currentContest.contest_type) &&
           currentContest.contest_based_details?.milestone_contest
@@ -10176,7 +10372,7 @@ export default function ContestDetailClient({
             >
               <h1 className="text-xl flex items-center gap-2">
                 {/* <FileText className="h-5 w-5 text-blue-500" /> */}
-                Contest Details
+                Campaign Details
               </h1>
             </div>
             <div
@@ -10224,7 +10420,14 @@ export default function ContestDetailClient({
                 </div>
 
                 {/* Contest Info Cards */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div
+                  className={cn(
+                    "grid grid-cols-1 gap-4",
+                    showContestTrustScoreRequiredCard
+                      ? "md:grid-cols-3"
+                      : "md:grid-cols-2",
+                  )}
+                >
                   {/* Platform Card */}
                   <div
                     className={cn(
@@ -10306,6 +10509,38 @@ export default function ContestDetailClient({
                       </div>
                     </CardContent>
                   </div>
+
+                  {showContestTrustScoreRequiredCard && (
+                    <div
+                      className={cn(
+                        "border rounded-xl transition-all duration-300",
+                        isDark ? "border-gray-600" : "border-gray-300",
+                      )}
+                    >
+                      <CardContent className="p-4">
+                        <div className="flex items-center gap-3">
+                          <div
+                            className={cn(
+                              "w-10 h-10 flex items-center justify-center rounded-full ",
+                              isDark
+                                ? "bg-[#FFFFFF42] text-white"
+                                : "bg-purple-100 text-[#4A00BE]",
+                            )}
+                          >
+                            <CheckCheck className="h-5 w-5" />
+                          </div>
+                          <div className="flex-1">
+                            <p className="text-sm font-medium tracking-wide">
+                              Trust Score 
+                            </p>
+                            <p className="text-lg font-bold">
+                              {formatTrustScoreWithMax(contestMinTrustScore!)}
+                            </p>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </div>
+                  )}
                 </div>
 
                 {/* Date & Time Cards */}
@@ -11771,7 +12006,7 @@ export default function ContestDetailClient({
                           </div>
                         )}
 
-                        {/* CPM Contest Points Config */}
+                        {/* CPM Campaign Points Config */}
                         {cpmPointsConfig && (
                           <div className="space-y-3">
                             <h4 className="text-sm font-medium text-foreground/80">
@@ -13180,9 +13415,9 @@ export default function ContestDetailClient({
                         >
                           🎁 Each creator earns this guaranteed amount for EVERY
                           verified submission, regardless of views or ranking!
-                          Paid after the contest ends along with other earnings.
+                          Paid after the campaign ends along with other earnings.
                         </p>
-                        {/* Flat Fee Bonus Cap (for CPM contests) */}
+                        {/* Flat Fee Bonus Cap (for CPM campaigns) */}
                         {isCpmContestType(currentContest.contest_type) &&
                           (
                             currentContest.contest_based_details
@@ -13254,7 +13489,7 @@ export default function ContestDetailClient({
                       >
                         Creators can submit up to{" "}
                         {(currentContest as any).max_submissions_per_creator}{" "}
-                        entries for this contest!
+                        entries for this campaign!
                       </p>
                       <p
                         className={cn(
@@ -13299,7 +13534,7 @@ export default function ContestDetailClient({
                               )}
                             >
                               Creators can still submit after reaching this cap,
-                              but won't earn more from THIS specific contest.
+                              but won't earn more from THIS specific campaign.
                               This cap doesn't affect their earnings from other
                               contests!
                             </p>
@@ -13636,7 +13871,7 @@ export default function ContestDetailClient({
                         >
                           Tracking Links
                         </h3>
-                        <div
+                        {/* <div
                           className={cn(
                             "rounded-md border p-3 text-sm",
                             isDark
@@ -13647,7 +13882,7 @@ export default function ContestDetailClient({
                           <span className="font-medium">Note:</span> change the
                           sub1 and sub2 ... according to your submission number
                           if you are doing multiple submissions ..
-                        </div>
+                        </div> */}
                       </div>
 
                       <div className="grid gap-4">
@@ -14336,7 +14571,7 @@ export default function ContestDetailClient({
                             ytPostContestLocked ||
                             cooldownDisabled;
                           const detailedRefreshTitle = ytPostContestLocked
-                            ? "Locked after contest review begins"
+                            ? "Locked after campaign review begins"
                             : postRefreshReloadPending
                               ? "Reloading with fresh metrics..."
                               : cooldownDisabled
@@ -14423,7 +14658,7 @@ export default function ContestDetailClient({
                                       )}
                                       title={
                                         ytPostContestLocked
-                                          ? "Metrics are locked after contest review begins"
+                                          ? "Metrics are locked after campaign review begins"
                                           : cooldownDisabled
                                             ? disabledReason
                                             : "Refresh basic metrics, core analytics, traffic sources, and demographics for all submissions"
@@ -16414,7 +16649,7 @@ export default function ContestDetailClient({
                                     )}
                                 </>
                               )}
-                              {/* Dynamic headers based on contest platform */}
+                              {/* Dynamic headers based on campaign platform */}
                               {currentContest.platform
                                 ?.toLowerCase()
                                 .includes("tiktok") && (
@@ -16542,7 +16777,7 @@ export default function ContestDetailClient({
                                     )}
                                 </>
                               )}
-                              {/* Show reward columns for leaderboard and CPM contests, hide for Twitter CPM campaigns */}
+                              {/* Show reward columns for leaderboard and CPM campaigns, hide for Twitter CPM campaigns */}
                               {!(
                                 (currentContest.platform?.toLowerCase() ===
                                   "twitter" ||
@@ -16793,7 +17028,7 @@ export default function ContestDetailClient({
                                     contestDetails?.prizes &&
                                     Array.isArray(contestDetails.prizes)
                                   ) {
-                                    // For Twitter leaderboard contests, use creator rank instead of submission rank
+                                    // For Twitter leaderboard campaigns, use creator rank instead of submission rank
                                     let currentRank: number;
                                     const isTwitterLeaderboard =
                                       isTwitterTweet &&
@@ -17360,7 +17595,7 @@ export default function ContestDetailClient({
                                   };
                                 }
 
-                                // For Twitter leaderboard contests, use creator's prize amount
+                                // For Twitter leaderboard campaigns, use creator's prize amount
                                 const isTwitterLeaderboard =
                                   isTwitterTweet &&
                                   currentContest.contest_type ===
@@ -18177,7 +18412,7 @@ export default function ContestDetailClient({
                                         )}
                                     </>
                                   )}
-                                  {/* Dynamic data cells based on contest platform */}
+                                  {/* Dynamic data cells based on campaign platform */}
                                   {currentContest.platform
                                     ?.toLowerCase()
                                     .includes("tiktok") && (
@@ -18830,7 +19065,7 @@ export default function ContestDetailClient({
                                         )}
                                     </>
                                   )}
-                                  {/* Show reward cells for leaderboard and CPM contests, hide for Twitter CPM campaigns */}
+                                  {/* Show reward cells for leaderboard and CPM campaigns, hide for Twitter CPM campaigns */}
                                   {!(
                                     (currentContest.platform?.toLowerCase() ===
                                       "twitter" ||
@@ -20249,6 +20484,11 @@ export default function ContestDetailClient({
                                 >
                                   <TableHead className="w-12">#</TableHead>
                                   <TableHead>Creator</TableHead>
+                                  {showCreatorWiseTrustScoreColumn && (
+                                    <TableHead className="text-center whitespace-nowrap min-w-[6.5rem]">
+                                      Trust Score
+                                    </TableHead>
+                                  )}
                                   <TableHead className="text-center">
                                     Total Submissions
                                   </TableHead>
@@ -20399,7 +20639,7 @@ export default function ContestDetailClient({
                                       )}
                                     </>
                                   )}
-                                  {/* Show reward columns for leaderboard and CPM contests */}
+                                  {/* Show reward columns for leaderboard and CPM campaigns */}
                                   {!(
                                     (currentContest.platform?.toLowerCase() ===
                                       "twitter" ||
@@ -20626,7 +20866,10 @@ export default function ContestDetailClient({
                                   <TableRow>
                                     <TableCell
                                       colSpan={
-                                        12 +
+                                        13 +
+                                        (showCreatorWiseTrustScoreColumn
+                                          ? 0
+                                          : -1) +
                                         (isMilestoneContestType(
                                           currentContest.contest_type,
                                         )
@@ -20698,6 +20941,87 @@ export default function ContestDetailClient({
                                       const platformUsername =
                                         primarySubmission?.creator_username ||
                                         null;
+                                      // Prefer global creator trust metrics (all contests).
+                                      // Fallback to current contest status counts if missing.
+                                      const rawTrustMetrics =
+                                        parseTrustMetricsValue(
+                                          (group.creator as any)
+                                            ?.trust_score_metrics,
+                                        ) ??
+                                        parseTrustMetricsValue(
+                                          (primarySubmission as any)
+                                            ?.trust_score_metrics,
+                                        ) ??
+                                        parseTrustMetricsValue(
+                                          (primarySubmission as any)?.creator
+                                            ?.trust_score_metrics,
+                                        ) ??
+                                        pickCreatorTrustDataFromSubmissions(
+                                          group.submissions || [],
+                                        ).trust_score_metrics;
+                                      const trustMetrics = rawTrustMetrics;
+                                      const totalReelsForTrust =
+                                        trustMetrics?.total_reels !== null &&
+                                        trustMetrics?.total_reels !== undefined
+                                          ? Number(trustMetrics.total_reels)
+                                          : Number(group.statusCounts?.all || 0);
+                                      const rejectedReelsForTrust =
+                                        trustMetrics?.rejected_reels !== null &&
+                                        trustMetrics?.rejected_reels !==
+                                          undefined
+                                          ? Number(trustMetrics.rejected_reels)
+                                          : Number(
+                                              group.statusCounts?.rejected || 0,
+                                            );
+                                      const verifiedReelsForTrust =
+                                        trustMetrics?.verified_reels !== null &&
+                                        trustMetrics?.verified_reels !==
+                                          undefined
+                                          ? Number(trustMetrics.verified_reels)
+                                          : Number(
+                                              group.statusCounts?.verified || 0,
+                                            );
+                                      const pendingReelsForTrust =
+                                        trustMetrics?.pending_reels !== null &&
+                                        trustMetrics?.pending_reels !==
+                                          undefined
+                                          ? Number(trustMetrics.pending_reels)
+                                          : Number(
+                                              group.statusCounts?.pending || 0,
+                                            );
+                                      const trustScoreComputed =
+                                        resolveTrustScoreForDisplay(
+                                          trustMetrics,
+                                          {
+                                            total: totalReelsForTrust,
+                                            verified: verifiedReelsForTrust,
+                                            rejected: rejectedReelsForTrust,
+                                            pending: pendingReelsForTrust,
+                                          },
+                                        );
+                                      const trustScoreDisplay =
+                                        formatTrustScoreWithMax(
+                                          trustScoreComputed,
+                                        );
+                                      const trustScoreDisplayShort =
+                                        formatTrustScore(trustScoreComputed);
+                                      const requiredTrustScore =
+                                        contestMinTrustScore;
+                                      const hasTrustThreshold =
+                                        requiredTrustScore !== null;
+                                      const trustScoreBelowThreshold =
+                                        hasTrustThreshold &&
+                                        trustScoreComputed < requiredTrustScore;
+                                      const inferredPaidReelsForTrust = Math.max(
+                                        0,
+                                        totalReelsForTrust -
+                                          verifiedReelsForTrust -
+                                          rejectedReelsForTrust -
+                                          pendingReelsForTrust,
+                                      );
+                                      const verifiedIncludingPaidForTrust =
+                                        verifiedReelsForTrust +
+                                        inferredPaidReelsForTrust;
                                       return (
                                         <TableRow key={group.creator.id}>
                                           <TableCell className="font-medium">
@@ -20743,6 +21067,69 @@ export default function ContestDetailClient({
                                               </div>
                                             </div>
                                           </TableCell>
+                                          {showCreatorWiseTrustScoreColumn && (
+                                            <TableCell className="text-center whitespace-nowrap">
+                                              <div className="flex justify-center">
+                                                <Tooltip>
+                                                  <TooltipTrigger asChild>
+                                                    <Badge
+                                                      className={cn(
+                                                        "font-semibold text-sm border whitespace-nowrap shrink-0",
+                                                        trustScoreBelowThreshold
+                                                          ? "bg-red-100 text-red-700 border-red-200"
+                                                          : "bg-green-100 text-green-700 border-green-200",
+                                                      )}
+                                                    >
+                                                      {trustScoreDisplay}
+                                                    </Badge>
+                                                  </TooltipTrigger>
+                                                  <TooltipContent>
+                                                    <div className="space-y-1 text-xs">
+                                                      {trustScoreBelowThreshold ? (
+                                                        <p>
+                                                          Below required trust
+                                                          score (
+                                                          {formatTrustScore(
+                                                            requiredTrustScore as number,
+                                                          )}
+                                                          ). Creator:{" "}
+                                                          {trustScoreDisplayShort}
+                                                        </p>
+                                                      ) : (
+                                                        <p>
+                                                          Meets required trust
+                                                          score (
+                                                          {formatTrustScore(
+                                                            requiredTrustScore as number,
+                                                          )}
+                                                          ). Creator:{" "}
+                                                          {trustScoreDisplayShort}
+                                                        </p>
+                                                      )}
+                                                      <p>
+                                                        Total reels:{" "}
+                                                        {totalReelsForTrust}
+                                                      </p>
+                                                      <p>
+                                                        Verified reels:{" "}
+                                                        {
+                                                          verifiedIncludingPaidForTrust
+                                                        }
+                                                      </p>
+                                                      <p>
+                                                        Pending reels:{" "}
+                                                        {pendingReelsForTrust}
+                                                      </p>
+                                                      <p>
+                                                        Rejected reels:{" "}
+                                                        {rejectedReelsForTrust}
+                                                      </p>
+                                                    </div>
+                                                  </TooltipContent>
+                                                </Tooltip>
+                                              </div>
+                                            </TableCell>
+                                          )}
                                           <TableCell className="text-center font-semibold">
                                             {group.totalCount}
                                           </TableCell>
@@ -21337,7 +21724,7 @@ export default function ContestDetailClient({
                                               )}
                                             </>
                                           )}
-                                          {/* Show reward columns for leaderboard, CPM, and milestone contests */}
+                                          {/* Show reward columns for leaderboard, CPM, and milestone campaigns */}
                                           {(currentContest.contest_type ===
                                             "leaderboard" ||
                                             isCpmContestType(
@@ -22905,7 +23292,7 @@ export default function ContestDetailClient({
                         : "text-slate-600 dark:text-slate-400",
                     )}
                   >
-                    When creators submit entries for this contest, they will
+                    When creators submit entries for this campaign, they will
                     appear here with detailed metrics and status information.
                   </p>
                 </CardContent>
@@ -22918,7 +23305,7 @@ export default function ContestDetailClient({
               <div className="w-full min-w-0 px-3 py-4 sm:px-4 sm:py-5 md:p-6 overflow-x-hidden">
                 <TwitterFeed
                   contestId={contestId}
-                  contestTitle={currentContest?.title || "Contest"}
+                  contestTitle={currentContest?.title || "Campaign"}
                   isDark={isDark}
                   showHeader={true}
                   showRefreshButton={false}
@@ -22944,7 +23331,7 @@ export default function ContestDetailClient({
             >
               <CardHeader>
                 <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-                  <CardTitle className="shrink-0">Contest Analytics</CardTitle>
+                  <CardTitle className="shrink-0">Campaign Analytics</CardTitle>
                   <Button
                     variant="outline"
                     size="sm"
@@ -22963,7 +23350,7 @@ export default function ContestDetailClient({
                   <ContestAnalyticsExportDialog
                     open={analyticsExportDialogOpen}
                     onOpenChange={setAnalyticsExportDialogOpen}
-                    contestTitle={currentContest?.title || "Contest"}
+                    contestTitle={currentContest?.title || "Campaign"}
                     tabCounts={analyticsTabCounts}
                     getSnapshotsForTabs={getAnalyticsSnapshotsForTabs}
                     isDark={isDark}
@@ -23100,7 +23487,7 @@ export default function ContestDetailClient({
                         total_points: 0,
                       };
 
-                      // Determine if this contest uses points-based payouts (leaderboard or CPM)
+                      // Determine if this campaign uses points-based payouts (leaderboard or CPM)
                       const isTwitterPointsContest =
                         (currentContest?.platform?.toLowerCase() ===
                           "twitter" ||
@@ -24141,7 +24528,7 @@ export default function ContestDetailClient({
                                             )}
                                           >
                                             {twitterMetrics.targets_reached
-                                              ? "All target metrics have been achieved. Contest will end when targets are reached."
+                                              ? "All target metrics have been achieved. Campaign will end when targets are reached."
                                               : "Keep engaging with the target tweet to reach the goals!"}
                                           </p>
                                         </div>
@@ -24437,7 +24824,7 @@ export default function ContestDetailClient({
                           isDark ? "text-white" : "text-black",
                         )}
                       >
-                        <p className="text-lg font-medium">Contest Duration</p>
+                        <p className="text-lg font-medium">Campaign Duration</p>
                         <p className="text-xl font-bold">
                           {" "}
                           {durationDays ? `${durationDays} days` : "N/A"}
@@ -24459,7 +24846,7 @@ export default function ContestDetailClient({
                   {/* <div className="border rounded-lg p-4">
                     <div className="flex items-center gap-2 mb-2">
                       <Calendar className="h-4 w-4 text-muted-foreground" />
-                      <h3 className="font-medium">Contest Duration</h3>
+                      <h3 className="font-medium">Campaign Duration</h3>
                     </div>
                     <p className="text-2xl font-bold">
                       {durationDays ? `${durationDays} days` : "N/A"}
@@ -25608,7 +25995,7 @@ export default function ContestDetailClient({
                                   isDark ? "text-white/70" : "text-gray-600",
                                 )}
                               >
-                                Contest Type
+                                Campaign Type
                               </p>
                               <p
                                 className={cn(

@@ -40,6 +40,7 @@ import {
   buildDualRewardsPayoutPersistValue,
   splitDualReversalRefundFromPayout,
 } from "@/lib/dual-rewards-payout";
+import { recomputeCreatorTrustMetrics } from "@/lib/trust-score";
 import {
   checkDualRewardsPoolBudgetForPayment,
   computeDualRewardsSubmissionReversalDue,
@@ -1909,6 +1910,17 @@ export async function POST(request: Request) {
       )
       .eq("id", submissionId)
       .single();
+
+    const trustRecompute = await recomputeCreatorTrustMetrics(
+      supabaseAdmin,
+      submissionFull.creator_id,
+    );
+    if (!trustRecompute.ok) {
+      console.error(
+        "[verify-submission] Failed to recompute trust metrics:",
+        trustRecompute.error,
+      );
+    }
 
     let message = `Submission ${action} successfully${
       action === "rejected" ? ` with reason: ${reason}` : ""

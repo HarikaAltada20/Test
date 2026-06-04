@@ -45,6 +45,32 @@ import dayjs from "dayjs";
 import { useToast } from "@/hooks/use-toast";
 import { PageLoadingSpinner } from "@/components/loading/LoadingSpinner";
 import { cn } from "@/lib/utils";
+import {
+  getContestSubmitReturnPath,
+  getSettingsUrlWithReturnTo,
+} from "@/lib/oauth-return-to";
+import {
+  getContestMinTrustScoreForGate,
+  getTrustSubmissionBlockedMessage,
+  isCreatorTrustSubmissionBlocked,
+} from "@/lib/trust-score";
+
+function formatSubmissionInsertError(error: { message?: string }): string {
+  const msg = error?.message || "";
+  if (msg.includes("trust_score_too_low")) {
+    return "Trust score too low to submit to this campaign.";
+  }
+  return msg || "Failed to submit content";
+}
+
+/** Refresh persisted creator_profiles.trust_score_metrics after a new submission. */
+async function refreshTrustMetricsAfterSubmit() {
+  try {
+    await fetch("/api/creators/trust-score", { method: "PATCH" });
+  } catch (error) {
+    console.warn("Failed to refresh trust metrics after submit:", error);
+  }
+}
 
 /** Bust server leaderboard cache so rankings update immediately after a new submission */
 async function bustLeaderboardCache(contestId: string) {
@@ -288,12 +314,18 @@ export default function SubmitContentPage({
   ] = useState<string | null>(null);
 
   const [contestPlatform, setContestPlatform] = useState<string | null>(null);
+  const settingsConnectHref = getSettingsUrlWithReturnTo(
+    getContestSubmitReturnPath(contestId, contestPlatform),
+  );
   const [isLoadingContest, setIsLoadingContest] = useState(true);
   const [instagramMediaPreview, setInstagramMediaPreview] =
     useState<InstagramReel | null>(null);
   const [isFetchingInstagramMedia, setIsFetchingInstagramMedia] =
     useState(false);
   const [contest, setContest] = useState<any>(null); // Store full contest data including contest_type
+  const [creatorTrustScore, setCreatorTrustScore] = useState<number | null>(null);
+  const [creatorTrustScoreLoaded, setCreatorTrustScoreLoaded] = useState(false);
+  const [creatorTrustScoreLoading, setCreatorTrustScoreLoading] = useState(false);
 
   const { toast } = useToast();
 
@@ -317,6 +349,26 @@ export default function SubmitContentPage({
     tiktokCurrentPage * ITEMS_PER_PAGE,
   );
   const totalTiktokPages = Math.ceil(userTiktokVideos.length / ITEMS_PER_PAGE);
+
+  const contestMinTrustScore = contest
+    ? getContestMinTrustScoreForGate(contest)
+    : null;
+  const isTrustGateEnabled = contestMinTrustScore !== null;
+  const isTrustScoreBlocked = isCreatorTrustSubmissionBlocked({
+    minScore: contestMinTrustScore,
+    creatorScore: creatorTrustScore,
+    scoreLoaded: creatorTrustScoreLoaded,
+    scoreLoading: creatorTrustScoreLoading,
+  });
+  const trustScoreWarning =
+    isTrustScoreBlocked && contestMinTrustScore !== null
+      ? getTrustSubmissionBlockedMessage({
+          minScore: contestMinTrustScore,
+          creatorScore: creatorTrustScore,
+          scoreLoading: creatorTrustScoreLoading,
+          scoreLoaded: creatorTrustScoreLoaded,
+        })
+      : null;
 
   // Helper function for 2-hour validation
   const isContentTooOld = (publishedAt: string): boolean => {
@@ -1060,12 +1112,9 @@ export default function SubmitContentPage({
 
   // Handle YouTube reconnection
   const handleReconnectYouTube = () => {
+    const returnPath = getContestSubmitReturnPath(contestId, contestPlatform);
     router.push(
-      "/api/youtube/auth?returnTo=" +
-      encodeURIComponent(
-        `/dashboard/opportunities/${contestId}/submit?platform=${contestPlatform || ""
-        }`,
-      ), // pass platform back
+      `/api/youtube/auth?returnTo=${encodeURIComponent(returnPath)}`,
     );
   };
 
@@ -1101,7 +1150,7 @@ export default function SubmitContentPage({
       const { data: contestData, error: contestError } = await supabase
         .from("contests")
         .select(
-          "id, title, platform, contest_type, multiple_submissions_enabled, max_submissions_per_creator, content_type, bonus_details, contest_based_details",
+          "id, title, platform, contest_type, contest_format, multiple_submissions_enabled, max_submissions_per_creator, content_type, bonus_details, contest_based_details, trust_score",
         ) // Include new feature fields
         .eq("id", contestId)
         .single();
@@ -1121,6 +1170,37 @@ export default function SubmitContentPage({
 
       // Store full contest data
       setContest(contestData);
+
+      const minTrustScore = getContestMinTrustScoreForGate(contestData);
+      if (minTrustScore === null) {
+        setCreatorTrustScore(null);
+        setCreatorTrustScoreLoaded(true);
+        setCreatorTrustScoreLoading(false);
+      } else {
+        setCreatorTrustScoreLoading(true);
+        setCreatorTrustScoreLoaded(false);
+        try {
+          const trustRes = await fetch("/api/creators/trust-score");
+          if (trustRes.ok) {
+            const trustData = await trustRes.json();
+            setCreatorTrustScore(
+              typeof trustData?.trust_score === "number"
+                ? trustData.trust_score
+                : null,
+            );
+            setCreatorTrustScoreLoaded(true);
+          } else {
+            setCreatorTrustScore(null);
+            setCreatorTrustScoreLoaded(false);
+          }
+        } catch (trustError) {
+          console.warn("Failed to fetch trust score:", trustError);
+          setCreatorTrustScore(null);
+          setCreatorTrustScoreLoaded(false);
+        } finally {
+          setCreatorTrustScoreLoading(false);
+        }
+      }
 
       // Fetch existing submissions for progress tracking
       const { data: existingSubmissions, error: existingSubsErr } =
@@ -2096,7 +2176,7 @@ export default function SubmitContentPage({
       .select();
 
     if (submissionError) {
-      throw submissionError;
+      throw new Error(formatSubmissionInsertError(submissionError));
     }
     await bustLeaderboardCache(contestId);
   };
@@ -2184,7 +2264,7 @@ export default function SubmitContentPage({
       .select();
 
     if (submissionError) {
-      throw submissionError;
+      throw new Error(formatSubmissionInsertError(submissionError));
     }
     await bustLeaderboardCache(contestId);
   };
@@ -2384,7 +2464,7 @@ export default function SubmitContentPage({
       .select();
 
     if (submissionError) {
-      throw submissionError;
+      throw new Error(formatSubmissionInsertError(submissionError));
     }
     await bustLeaderboardCache(contestId);
   };
@@ -2537,6 +2617,50 @@ export default function SubmitContentPage({
       return;
     }
 
+    if (isTrustScoreBlocked) {
+      setError(trustScoreWarning || "Trust score too low to submit.");
+      toast({
+        title: "Trust score too low to submit",
+        description: trustScoreWarning || "Trust score too low to submit.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (isTrustGateEnabled) {
+      try {
+        const trustCheckRes = await fetch("/api/creators/trust-score", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ contestId }),
+        });
+        if (!trustCheckRes.ok) {
+          const trustCheckBody = await trustCheckRes.json().catch(() => ({}));
+          const msg =
+            (trustCheckBody as { error?: string })?.error ||
+            "Trust score requirement not met.";
+          setError(msg);
+          toast({
+            title: "Cannot submit",
+            description: msg,
+            variant: "destructive",
+          });
+          return;
+        }
+      } catch {
+        const msg =
+          trustScoreWarning ||
+          "Unable to verify trust score. Please try again.";
+        setError(msg);
+        toast({
+          title: "Cannot submit",
+          description: msg,
+          variant: "destructive",
+        });
+        return;
+      }
+    }
+
     setIsLoading(true);
     setError(null);
     setMessage(null);
@@ -2582,6 +2706,8 @@ export default function SubmitContentPage({
           body: JSON.stringify({ contestId }),
         });
       } catch { }
+
+      await refreshTrustMetricsAfterSubmit();
 
       // Success - This toast will be overridden by the specific messages in handleMultipleSubmissions
       // For single submissions, show this message
@@ -3029,6 +3155,21 @@ export default function SubmitContentPage({
               <AlertDescription>{message}</AlertDescription>
             </Alert>
           )}
+          {trustScoreWarning && (
+            <Alert
+              variant="default"
+              className="mb-4 rounded-xl border border-[#7F39EC] bg-[#D9C0FF26]"
+            >
+              <AlertDescription
+                className={cn(
+                  "text-sm leading-relaxed",
+                  isDark ? "text-gray-200" : "text-[#4A00BE]",
+                )}
+              >
+                {trustScoreWarning}
+              </AlertDescription>
+            </Alert>
+          )}
 
           {/* Submit and Cancel Buttons - Moved to top */}
           <div className="flex flex-col gap-4 sm:flex-row items-center justify-between py-6 mb-6">
@@ -3058,6 +3199,7 @@ export default function SubmitContentPage({
                 type="button"
                 onClick={handleSubmit}
                 disabled={
+                  isTrustScoreBlocked ||
                   isLoading ||
                   isFetchingVideo ||
                   isFetchingInstagramMedia ||
@@ -3084,7 +3226,7 @@ export default function SubmitContentPage({
                 {isLoading ? (
                   <RefreshCw className="animate-spin mr-2 h-4 w-4" />
                 ) : null}
-                Submit Content
+                {isTrustScoreBlocked ? "Trust Score Too Low" : "Submit Content"}
               </Button>
             </div>
           </div>
@@ -3135,7 +3277,7 @@ export default function SubmitContentPage({
                   <AlertDescription className="text-md">
                     Connect your YouTube account to submit content.
                   </AlertDescription>
-                  <Link href="/dashboard/settings">
+                  <Link href={settingsConnectHref}>
                     <Button variant="link" className="mt-1 text-[#7F39EC]">
                       Connect YouTube in Settings
                     </Button>
@@ -3891,7 +4033,7 @@ export default function SubmitContentPage({
                         </>
                       )}
                     </Button>
-                    <Link href="/dashboard/settings">
+                    <Link href={settingsConnectHref}>
                       <Button
                         variant="link"
                         className="text-destructive dark:text-red-400"
@@ -3910,7 +4052,7 @@ export default function SubmitContentPage({
                   <AlertDescription className="text-md">
                     Connect your Instagram account to submit content.
                   </AlertDescription>
-                  <Link href="/dashboard/settings">
+                  <Link href={settingsConnectHref}>
                     <Button variant="link" className="mt-1 text-[#7F39EC]">
                       Connect Instagram in Settings
                     </Button>
@@ -4506,7 +4648,7 @@ export default function SubmitContentPage({
                     Your TikTok connection has expired.
                   </AlertDescription>
                   <div className="flex flex-col sm:flex-row gap-2 justify-center mt-2">
-                    <Link href="/dashboard/settings">
+                    <Link href={settingsConnectHref}>
                       <Button
                         variant="link"
                         className="text-destructive dark:text-red-400"
@@ -4525,7 +4667,7 @@ export default function SubmitContentPage({
                   <AlertDescription className="text-md">
                     Connect your TikTok account to submit content.
                   </AlertDescription>
-                  <Link href="/dashboard/settings">
+                  <Link href={settingsConnectHref}>
                     <Button variant="link" className="mt-1 text-[#7F39EC]">
                       Connect TikTok in Settings
                     </Button>

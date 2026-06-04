@@ -105,16 +105,16 @@ const creatorsteps = [
     number: "1",
     title: "Sign Up & Connect Social Media",
     description:
-      "Simply sign up as a creator and connect your social media accounts (Instagram, YouTube, etc.) from which you want to participate in contests.",
+      "Simply sign up as a creator and connect your social media accounts (Instagram, YouTube, etc.) from which you want to participate in campaigns.",
     icon: <Users className="h-8 w-8" />,
     gradient: "from-violet-600 to-purple-600",
     color: "bg-[#7F39EC87] border-4 border-[#7F39EC]",
   },
   {
     number: "2",
-    title: "Browse & Choose Contests",
+    title: "Browse & Choose Campaigns",
     description:
-      "Explore available contests from brands looking for creators. Filter opportunities based on prize pool, competition, end date, platform, and contest type to find the best match for you.",
+      "Explore available campaigns from brands looking for creators. Filter opportunities based on prize pool, competition, end date, platform, and campaign type to find the best match for you.",
     icon: <Target className="h-8 w-8" />,
     gradient: "from-blue-600 to-indigo-600",
     color: "bg-[#444DE787] border-4 border-[#454DE5]",
@@ -123,7 +123,7 @@ const creatorsteps = [
     number: "3",
     title: "Create & Submit Content",
     description:
-      "Once you've found the right contest, create content that aligns with the brand's brief and follows the contest rules. Post it on your social media, then submit the link through our platform.",
+      "Once you've found the right campaign, create content that aligns with the brand's brief and follows the campaign rules. Post it on your social media, then submit the link through our platform.",
     icon: <Camera className="h-8 w-8" />,
     gradient: "from-amber-600 to-orange-600",
     color: "bg-[#E75D0D8F] border-4 border-[#E65D09]",
@@ -132,7 +132,7 @@ const creatorsteps = [
     number: "4",
     title: "Get Paid Based on Performance",
     description:
-      "Earn money based on how your content performs. For Leaderboard contests, you get paid based on your rank (determined by views). For CPM contests, you get paid purely based on the views your content generates.",
+      "Earn money based on how your content performs. For Leaderboard campaigns, you get paid based on your rank (determined by views). For CPM campaigns, you get paid purely based on the views your content generates.",
     icon: <Trophy className="h-8 w-8" />,
     gradient: "from-emerald-600 to-teal-600",
     color: "bg-[#0C94825C] border-4 border-[#08947E]",
@@ -1001,7 +1001,7 @@ export default function CreatorsClient({
                 {
                   title: "Earn Money",
                   description:
-                    "Get paid for creating content for brands you love through contests and collaborations.",
+                    "Get paid for creating content for brands you love through campaigns and collaborations.",
                   number: "1",
                   image:
                     "/images/c89a26089c94c4806f6c5d35d5a13d7b9b4abe4d.avif", // first card image
