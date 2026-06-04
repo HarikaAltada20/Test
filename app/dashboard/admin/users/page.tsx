@@ -2835,7 +2835,7 @@ export default function AdminUsersPage() {
                         {isColumnVisible("total_contests_run") && (
                           <TableHead className="whitespace-nowrap border-r">
                             <div className="flex items-center gap-2">
-                              <span>Total Contests Run</span>
+                              <span>Total Campaigns Run</span>
                               <DropdownMenu>
                                 <DropdownMenuTrigger asChild>
                                   <Button

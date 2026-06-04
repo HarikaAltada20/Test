@@ -7175,7 +7175,7 @@ export function ContestClientPage({
                               : "bg-gradient-to-r from-amber-50 to-orange-50 border-amber-200",
                           )}
                         >
-                          <p
+                          {/* <p
                             className={cn(
                               "text-sm flex items-start gap-2",
                               isDark ? "text-white" : "text-yellow-800",
@@ -7188,7 +7188,7 @@ export function ContestClientPage({
                               your submission number if you are doing multiple
                               submissions.
                             </span>
-                          </p>
+                          </p> */}
                         </div>
                       )}
 
@@ -12791,7 +12791,7 @@ export function ContestClientPage({
                             )}
                           >
                             <p className="text-lg font-medium">
-                              Contest Duration
+                              Campaign Duration
                             </p>
                             <p className="text-xl font-bold">
                               {contest?.start_date && contest?.end_date

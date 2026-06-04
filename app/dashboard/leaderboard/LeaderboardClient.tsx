@@ -175,7 +175,7 @@ export default function LeaderboardClient({
     },
     {
       value: "contests_won",
-      label: "Contests Won",
+      label: "Campaigns Won",
       icon: <Award className="w-4 h-4" />,
     },
     {
@@ -586,7 +586,7 @@ export default function LeaderboardClient({
                   isDark ? "text-amber-300" : "text-amber-800",
                 )}
               >
-                Total Contests Won
+                Total Campaigns Won
               </CardTitle>
               <div
                 className={cn(
@@ -1192,7 +1192,7 @@ export default function LeaderboardClient({
                                     : "text-emerald-600",
                                 )}
                               >
-                                contests
+                                campaigns
                               </span>
                               <span
                                 className={cn(
@@ -1276,7 +1276,7 @@ export default function LeaderboardClient({
                                   isDark ? "text-blue-300" : "text-blue-600",
                                 )}
                               >
-                                contests
+                                campaigns
                               </span>
                             </div>
                           </div>
@@ -1364,7 +1364,7 @@ export default function LeaderboardClient({
                                     : "text-emerald-600",
                                 )}
                               >
-                                contests
+                                campaigns
                               </span>
                               <span
                                 className={cn(

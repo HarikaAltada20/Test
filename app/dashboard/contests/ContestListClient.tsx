@@ -78,7 +78,7 @@ import {
   writeStoredCampaignListTab,
 } from "@/lib/campaign-list-tab-storage";
 
-// Define the type for a contest
+// Define the type for a campaign
 type Contest = {
   id: string;
   title: string | null;
@@ -87,7 +87,7 @@ type Contest = {
   created_at: string;
   moderation_status: string; // Using moderation_status instead of is_draft
   status: string | null; // Contest lifecycle status (only for published contests)
-  post_contest_status: string | null; // Post-contest review status (pending_review, in_review, verification_complete, payouts_processed)
+  post_contest_status: string | null; // Post-campaign review status (pending_review, in_review, verification_complete, payouts_processed)
   start_date: string | null;
   end_date: string | null;
   live_submission_count: number | null;
@@ -143,7 +143,7 @@ type Contest = {
   max_submissions_per_creator?: number;
   content_type?: string;
   bonus_details?: any;
-  // Text/image vs video contest format (for display filtering)
+  // Text/image vs video campaign format (for display filtering)
   contest_format?: string | null;
   // Twitter participants data (should be populated from twitter_campaign_metrics)
   twitter_participants_count?: number | null;
@@ -179,7 +179,7 @@ const moderationStatusConfig = {
     label: "Draft",
     color: "bg-gray-500",
     icon: FileText,
-    description: "Contest is being created",
+    description: "Campaign is being created",
   },
   pending_approval: {
     label: "Pending Approval",
@@ -511,8 +511,8 @@ export function ContestListClient({
   }, [selectedTab]);
 
   const [platformFilter, setPlatformFilter] = useState<string>("all");
-  const [contestTypeFilter, setContestTypeFilter] = useState<string>("all"); // New contest type filter
-  // New: contest format filter (all / text-image / video)
+  const [contestTypeFilter, setContestTypeFilter] = useState<string>("all"); // New campaign type filter
+  // New: campaign format filter (all / text-image / video)
   const [contestFormatFilter, setContestFormatFilter] = useState<
     "all" | "text_image" | "video"
   >("all");
@@ -523,7 +523,7 @@ export function ContestListClient({
   const [isCheckingCpmAccess, setIsCheckingCpmAccess] = useState(false);
   const [showCpmUpgradeModal, setShowCpmUpgradeModal] = useState(false);
   const [upgradeFeatureName, setUpgradeFeatureName] =
-    useState<string>("CPM Contest");
+    useState<string>("CPM Campaign");
   const [page, setPage] = useState<number>(1);
   // Default to 9 campaigns per page with options: 9, 15, 21, 30
   const [limit, setLimit] = useState<number>(9);
@@ -603,10 +603,10 @@ export function ContestListClient({
       // Log budget spent values for debugging
       // payload.contests.forEach((contest: any, index: number) => {
       //   if (contest.contest_type === "cpm") {
-      //     console.log(`[ContestListClient] CPM Contest ${index + 1} (${contest.id}): budget_spent =`,
+      //     console.log(`[ContestListClient] CPM Campaign ${index + 1} (${contest.id}): budget_spent =`,
       //       contest.contest_based_details?.cpm_contest?.budget_spent);
       //   } else if (contest.contest_type === "leaderboard") {
-      //     console.log(`[ContestListClient] Leaderboard Contest ${index + 1} (${contest.id}): budget_spent =`,
+      //     console.log(`[ContestListClient] Leaderboard Campaign ${index + 1} (${contest.id}): budget_spent =`,
       //       contest.contest_based_details?.leaderboard_contest?.budget_spent);
       //   }
       // });
@@ -927,7 +927,7 @@ export function ContestListClient({
         label: row(
           "All phases",
           endedTotal,
-          "All ended contests — any payout step",
+          "All ended campaigns — any payout step",
         ),
       },
       {
@@ -935,7 +935,7 @@ export function ContestListClient({
         label: row(
           "Pending review",
           postPhaseCounts.post_pending_review,
-          "Ended contests awaiting initial review",
+          "Ended campaigns awaiting initial review",
         ),
       },
       {
@@ -1007,7 +1007,7 @@ export function ContestListClient({
       );
     }
 
-    // Apply contest type filter
+    // Apply campaign type filter
     if (contestTypeFilter !== "all") {
       contestsToDisplay = contestsToDisplay.filter(
         (contest) => contest.contest_type === contestTypeFilter,
@@ -1154,7 +1154,7 @@ export function ContestListClient({
             {contest.thumbnail_url ? (
               <img
                 src={contest.thumbnail_url || "/placeholder.svg"}
-                alt={contest.title || "Contest thumbnail"}
+                alt={contest.title || "Campaign thumbnail"}
                 className="w-full h-full object-cover transition-transform duration-300 ease-in-out group-hover:scale-105"
               />
             ) : (
@@ -1193,7 +1193,7 @@ export function ContestListClient({
                 transition: "none",
               }}
             >
-              {contest.title || "Untitled Contest"}
+              {contest.title || "Untitled Campaign"}
             </CardTitle>
             {/* New Features Indicators */}
             <div className="flex flex-wrap items-center gap-2 mt-3">
@@ -1418,7 +1418,7 @@ export function ContestListClient({
               <div className="flex items-center">
                 <Info className="h-4 w-4 mr-2 flex-shrink-0" />
                 <span>
-                  Contest Type:{" "}
+                  Campaign Type:{" "}
                   <span className="font-medium">
                     {getContestTypeLabel(contest.contest_type)}
                   </span>
@@ -1581,7 +1581,7 @@ export function ContestListClient({
                 );
               })()}
 
-            {/* Bonus Budget Tracker for Leaderboard contests */}
+            {/* Bonus Budget Tracker for Leaderboard campaigns */}
             {contest.contest_type === "leaderboard" &&
               contest.contest_based_details?.leaderboard_contest
                 ?.total_budget != null &&
@@ -1640,7 +1640,7 @@ export function ContestListClient({
                   </div>
                 );
               })()}
-            {/* Budget Tracker for Milestone contests — budget_spent is enriched server-side
+            {/* Budget Tracker for Milestone campaigns — budget_spent is enriched server-side
                 (per-submission milestone model + verified-only ladder + creator bonus expected),
                 same basis as contest detail / opportunities. */}
             {contest.contest_type === "milestone" &&
@@ -1749,7 +1749,7 @@ export function ContestListClient({
             {contest.thumbnail_url ? (
               <img
                 src={contest.thumbnail_url || "/placeholder.svg"}
-                alt={contest.title || "Contest thumbnail"}
+                alt={contest.title || "Campaign thumbnail"}
                 className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
               />
             ) : (
@@ -1773,7 +1773,7 @@ export function ContestListClient({
                   transition: "none",
                 }}
               >
-                {contest.title || "Untitled Contest"}
+                {contest.title || "Untitled Campaign"}
               </h3>
             </div>
 
@@ -1888,10 +1888,10 @@ export function ContestListClient({
                           window.location.reload();
                         } else {
                           const error = await response.json();
-                          alert(error.error || "Failed to publish contest");
+                          alert(error.error || "Failed to publish campaign");
                         }
                       } catch (error) {
-                        alert("Failed to publish contest");
+                        alert("Failed to publish campaign");
                       }
                     }}
                   >
@@ -1925,7 +1925,7 @@ export function ContestListClient({
                   </Button>
                 </>
               ) : contest.moderation_status !== "published" ? (
-                // Non-published contests: Show Edit Contest button
+                // Non-published contests: Show Edit Campaign button
                 <button
                   className={cn(
                     "flex w-full items-center justify-center gap-2  px-3 py-3 rounded-full",
@@ -1948,7 +1948,7 @@ export function ContestListClient({
                   ) : (
                     <Edit className="h-4 w-4" />
                   )}
-                  <span>Edit Contest</span>
+                  <span>Edit Campaign</span>
                 </button>
               ) : (
                 <button
@@ -1973,7 +1973,7 @@ export function ContestListClient({
               {contest.moderation_status !== "published" && (
                 <DeleteContestButton
                   contestId={contest.id}
-                  contestTitle={contest.title || "this contest"}
+                  contestTitle={contest.title || "this campaign"}
                   isDeletable={true}
                   className="flex items-center gap-2"
                 />
@@ -2031,7 +2031,7 @@ export function ContestListClient({
             {contest.thumbnail_url ? (
               <img
                 src={contest.thumbnail_url || "/placeholder.svg"}
-                alt={contest.title || "Contest thumbnail"}
+                alt={contest.title || "Campaign thumbnail"}
                 className="w-full h-full object-contain transition-transform duration-300 ease-in-out group-hover:scale-105"
               />
             ) : (
@@ -2049,7 +2049,7 @@ export function ContestListClient({
                   transition: "none",
                 }}
               >
-                {contest.title || "Untitled Contest"}
+                {contest.title || "Untitled Campaign"}
               </CardTitle>
               {/* Badges */}
               <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
@@ -2303,7 +2303,7 @@ export function ContestListClient({
                       transition: "none",
                     }}
                   >
-                    Contest Type:{" "}
+                    Campaign Type:{" "}
                     <span className="font-medium">
                       {getContestTypeLabel(contest.contest_type)}
                     </span>
@@ -2468,7 +2468,7 @@ export function ContestListClient({
                   );
                 })()}
 
-              {/* Bonus Budget Tracker for Leaderboard contests */}
+              {/* Bonus Budget Tracker for Leaderboard campaigns */}
               {contest.contest_type === "leaderboard" &&
                 contest.contest_based_details?.leaderboard_contest
                   ?.total_budget != null &&
@@ -2635,7 +2635,7 @@ export function ContestListClient({
           {contest.thumbnail_url ? (
             <img
               src={contest.thumbnail_url || "/placeholder.svg"}
-              alt={contest.title || "Contest thumbnail"}
+              alt={contest.title || "Campaign thumbnail"}
               className="w-full h-full object-contain transition-transform duration-300 group-hover:scale-105"
             />
           ) : (
@@ -2656,7 +2656,7 @@ export function ContestListClient({
                 transition: "none",
               }}
             >
-              {contest.title || "Untitled Contest"}
+              {contest.title || "Untitled Campaign"}
             </h3>
           </div>
 
@@ -2780,10 +2780,10 @@ export function ContestListClient({
                       window.location.reload();
                     } else {
                       const error = await response.json();
-                      alert(error.error || "Failed to publish contest");
+                      alert(error.error || "Failed to publish campaign");
                     }
                   } catch (error) {
-                    alert("Failed to publish contest");
+                    alert("Failed to publish campaign");
                   }
                 }}
               >
@@ -2817,7 +2817,7 @@ export function ContestListClient({
               </Button>
               <DeleteContestButton
                 contestId={contest.id}
-                contestTitle={contest.title || "this contest"}
+                contestTitle={contest.title || "this campaign"}
                 isDeletable={true}
                 className="flex items-center gap-2 justify-center"
               />
@@ -2846,11 +2846,11 @@ export function ContestListClient({
                 ) : (
                   <Edit className="h-4 w-4" />
                 )}
-                <span>Edit Contest</span>
+                <span>Edit Campaign</span>
               </button>
               <DeleteContestButton
                 contestId={contest.id}
-                contestTitle={contest.title || "this contest"}
+                contestTitle={contest.title || "this campaign"}
                 isDeletable={true}
                 className="flex items-center gap-2 justify-center"
               />
@@ -3072,7 +3072,7 @@ export function ContestListClient({
       );
 
       if (!canCreateCpm) {
-        setUpgradeFeatureName("CPM Contest");
+        setUpgradeFeatureName("CPM Campaign");
         setShowCpmUpgradeModal(true);
         return;
       }
@@ -3110,7 +3110,7 @@ export function ContestListClient({
       );
 
       if (!canCreatePaidContest) {
-        setUpgradeFeatureName("Milestone Contest");
+        setUpgradeFeatureName("Milestone Campaign");
         setShowCpmUpgradeModal(true);
         return;
       }
@@ -3148,7 +3148,7 @@ export function ContestListClient({
       );
 
       if (!canCreatePaidContest) {
-        setUpgradeFeatureName("Dual Rewards Contest");
+        setUpgradeFeatureName("Dual Rewards Campaign");
         setShowCpmUpgradeModal(true);
         return;
       }
@@ -3184,7 +3184,7 @@ export function ContestListClient({
         >
           <img
             src="/images/leaderboard.avif"
-            alt="Leaderboard contest preview"
+            alt="Leaderboard campaign preview"
             className="w-full h-full object-cover transition-transform duration-300 ease-in-out group-hover:scale-105"
           />
         </div>
@@ -3192,7 +3192,7 @@ export function ContestListClient({
           <div className="flex items-center gap-3">
             <div className="flex-1">
               <CardTitle className={cn("text-base", isDark ? "text-white" : "text-gray-900")}>
-                Leaderboard Contest
+                Leaderboard Campaign
               </CardTitle>
             </div>
           </div>
@@ -3201,7 +3201,7 @@ export function ContestListClient({
           <div className={cn("space-y-4 text-md leading-6", isDark ? "text-slate-300" : "text-slate-700")}>
             <div>
               <p className="mt-2">
-                A Leaderboard Contest is a performance-based campaign where
+                A Leaderboard Campaign is a performance-based campaign where
                 creators compete to deliver the highest number of{" "}
                 <strong>organic views</strong> for your brand&apos;s content.
                 Creators are ranked on a live leaderboard, and top performers win
@@ -3253,7 +3253,7 @@ export function ContestListClient({
                     Creators Participate
                   </p>
                   <p className={cn("mt-1", isDark ? "text-slate-300" : "text-slate-600")}>
-                    Creators produce original content based on the campaign requirements and publish it on the selected social media platforms within the contest duration.
+                    Creators produce original content based on the campaign requirements and publish it on the selected social media platforms within the campaign duration.
                   </p>
                 </div>
               </div>
@@ -3277,7 +3277,7 @@ export function ContestListClient({
                     Reward Top Performers
                   </p>
                   <p className={cn("mt-1", isDark ? "text-slate-300" : "text-slate-600")}>
-                    Once the contest ends, rankings are finalized and payouts are
+                    Once the campaign ends, rankings are finalized and payouts are
                     made to creators based on their leaderboard position.
                   </p>
                 </div>
@@ -3292,7 +3292,7 @@ export function ContestListClient({
                 )
               }
             >
-              Create Leaderboard Contest
+              Create Leaderboard Campaign
             </button>
             <a
               href="https://calendly.com/guptavishesh2/30min"
@@ -3326,14 +3326,14 @@ export function ContestListClient({
         >
           <img
             src="/images/cpm-contest.avif"
-            alt="CPM contest preview"
+            alt="CPM campaign preview"
             className="w-full h-full object-cover transition-transform duration-300 ease-in-out group-hover:scale-105"
           />
         </div>
         <CardHeader className="pb-3">
           <div className="flex items-center gap-3">
             <div className="flex-1">
-              <CardTitle className={cn("text-base", isDark ? "text-white" : "text-gray-900")}>CPM Contest</CardTitle>
+              <CardTitle className={cn("text-base", isDark ? "text-white" : "text-gray-900")}>CPM Campaign</CardTitle>
             </div>
           </div>
         </CardHeader>
@@ -3341,7 +3341,7 @@ export function ContestListClient({
           <div className={cn("space-y-4 text-md leading-6", isDark ? "text-slate-300" : "text-slate-800")}>
             <div className="rounded-lg">
               <p className="mt-2">
-                CPM-based contests pay creators purely based on the number of views they generate, at a fixed rate per 1,000 views. This gives you predictable, performance-based costs and allows you to scale content efficiently.
+                CPM-based campaigns pay creators purely based on the number of views they generate, at a fixed rate per 1,000 views. This gives you predictable, performance-based costs and allows you to scale content efficiently.
               </p>
             </div>
 
@@ -3391,7 +3391,7 @@ export function ContestListClient({
                     Creators Participate
                   </p>
                   <p className={cn("mt-1", isDark ? "text-slate-300" : "text-slate-600")}>
-                    Creators produce original content based on the campaign requirements and publish it on the selected social media platforms within the contest duration.
+                    Creators produce original content based on the campaign requirements and publish it on the selected social media platforms within the campaign duration.
                   </p>
                 </div>
               </div>
@@ -3427,7 +3427,7 @@ export function ContestListClient({
               onClick={handleCreateCpmContest}
               disabled={isCheckingCpmAccess}
             >
-              Create CPM Contest
+              Create CPM Campaign
             </button>
             <a
               href="https://calendly.com/guptavishesh2/30min"
@@ -3461,14 +3461,14 @@ export function ContestListClient({
         >
           <img
             src="/images/Milestones.avif"
-            alt="Milestone contest preview"
+            alt="Milestone campaign preview"
             className="w-full h-full object-cover transition-transform duration-300 ease-in-out group-hover:scale-105"
           />
         </div>
         <CardHeader className="pb-3">
           <div className="flex items-center gap-3">
             <div className="flex-1">
-              <CardTitle className={cn("text-base", isDark ? "text-white" : "text-gray-900")}>Milestone Contest</CardTitle>
+              <CardTitle className={cn("text-base", isDark ? "text-white" : "text-gray-900")}>Milestone Campaign</CardTitle>
             </div>
           </div>
         </CardHeader>
@@ -3476,7 +3476,7 @@ export function ContestListClient({
           <div className={cn("space-y-4 text-md leading-6", isDark ? "text-slate-300" : "text-slate-800")}>
             <div className="rounded-lg">
               <p className="mt-2">
-                Milestone contests reward creators as they reach specific view targets. This provides guaranteed payouts for creators and guaranteed results for your brand, with full control over the maximum budget.
+                Milestone campaigns reward creators as they reach specific view targets. This provides guaranteed payouts for creators and guaranteed results for your brand, with full control over the maximum budget.
               </p>
             </div>
 
@@ -3559,7 +3559,7 @@ export function ContestListClient({
               onClick={handleCreateMilestoneContest}
               disabled={isCheckingCpmAccess}
             >
-              Create Milestone Contest
+              Create Milestone Campaign
             </button>
             <a
               href="https://calendly.com/guptavishesh2/30min"
@@ -3593,14 +3593,14 @@ export function ContestListClient({
         >
           <img
             src="/images/dual-rewards.avif"
-            alt="Dual rewards contest preview"
+            alt="Dual rewards campaign preview"
             className="w-full h-full object-cover transition-transform duration-300 ease-in-out group-hover:scale-105"
           />
         </div>
         <CardHeader className="pb-3">
           <div className="flex items-center gap-3">
             <div className="flex-1">
-              <CardTitle className={cn("text-base", isDark ? "text-white" : "text-gray-900")}>Dual Rewards Contest</CardTitle>
+              <CardTitle className={cn("text-base", isDark ? "text-white" : "text-gray-900")}>Dual Rewards Campaign</CardTitle>
             </div>
           </div>
         </CardHeader>
@@ -3698,7 +3698,7 @@ export function ContestListClient({
               onClick={handleCreateDualRewardsContest}
               disabled={isCheckingCpmAccess}
             >
-              Create Dual Rewards Contest
+              Create Dual Rewards Campaign
             </button>
             <a
               href="https://calendly.com/guptavishesh2/30min"
@@ -3815,7 +3815,7 @@ export function ContestListClient({
                   <button
                     type="button"
                     onClick={() => setContestFormatFilter("all")}
-                    title="All contests"
+                    title="All campaigns"
                     className={cn(
                       "flex-1 sm:flex-initial flex items-center justify-center gap-2 px-3 sm:px-4 py-2.5 rounded-lg text-sm font-semibold whitespace-nowrap min-h-[2.5rem] transition-colors",
                       contestFormatFilter === "all"
@@ -3831,7 +3831,7 @@ export function ContestListClient({
                   <button
                     type="button"
                     onClick={() => setContestFormatFilter("text_image")}
-                    title="Text and image contests"
+                    title="Text and image campaigns"
                     className={cn(
                       "flex-1 sm:flex-initial flex items-center justify-center gap-2 px-3 sm:px-4 py-2.5 rounded-lg text-sm font-semibold whitespace-nowrap min-h-[2.5rem] transition-colors",
                       contestFormatFilter === "text_image"
@@ -3847,7 +3847,7 @@ export function ContestListClient({
                   <button
                     type="button"
                     onClick={() => setContestFormatFilter("video")}
-                    title="Video contests"
+                    title="Video campaigns"
                     className={cn(
                       "flex-1 sm:flex-initial flex items-center justify-center gap-2 px-3 sm:px-4 py-2.5 rounded-lg text-sm font-semibold whitespace-nowrap min-h-[2.5rem] transition-colors",
                       contestFormatFilter === "video"
@@ -3971,13 +3971,13 @@ export function ContestListClient({
                 </SelectContent>
               </Select>
 
-              {/* Contest Type Filter */}
+              {/* Campaign Type Filter */}
               <Select
                 value={contestTypeFilter}
                 onValueChange={setContestTypeFilter}
               >
                 <SelectTrigger className="w-full min-w-0 border border-gray-400 rounded-xl">
-                  <SelectValue placeholder="Contest Type" />
+                  <SelectValue placeholder="Campaign Type" />
                 </SelectTrigger>
                 <SelectContent isDark={isDark}>
                   <SelectItem isDark={isDark} value="all">
@@ -4050,7 +4050,7 @@ export function ContestListClient({
                         contests in this list.
                       </>
                     ) : (
-                      <>your ended contests.</>
+                      <>your ended campaigns.</>
                     )}
                   </p>
                 </div>

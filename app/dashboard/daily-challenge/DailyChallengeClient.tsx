@@ -954,7 +954,7 @@ export default function DailyChallengeClient({
               </div>
               <div className={cn("rounded-xl px-3.5 py-3 border", isDark ? "border-amber-500/25 bg-amber-500/10" : "border-amber-200/90 bg-amber-50/80")}>
                 <p className="text-[11px] uppercase tracking-wider text-muted-foreground font-semibold">
-                  Contest duration
+                  Campaign duration
                 </p>
                 <p className="text-[10px] text-muted-foreground mt-1">All times in India Standard Time (IST).</p>
                 {typeof payload?.effectiveRange?.start === "string" &&

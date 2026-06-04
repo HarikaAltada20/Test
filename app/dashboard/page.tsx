@@ -439,7 +439,7 @@ function DashboardPage() {
               ) : (
                 <Plus className="h-4 w-4" />
               )}
-              Create Contest
+              Create Campaign
             </button>
           )}
         </div>
@@ -467,7 +467,7 @@ function DashboardPage() {
                     <p className="text-xl font-bold ">
                       {formatCurrencyFromCents(profile?.total_money_spent || 0)}
                     </p>
-                    <p className="text-md mt-0.5">Money spent on contests</p>
+                    <p className="text-md mt-0.5">Money spent on campaigns</p>
                   </div>
                   <div
                     className={cn(
@@ -498,11 +498,11 @@ function DashboardPage() {
                       isDark ? "text-white" : "text-black",
                     )}
                   >
-                    <p className="text-lg font-medium">Total Contests</p>
+                    <p className="text-lg font-medium">Total Campaigns</p>
                     <p className="text-xl font-bold">
                       {profile?.total_contests_run || 0}
                     </p>
-                    <p className="text-md mt-0.5">Contests created</p>
+                    <p className="text-md mt-0.5">Campaigns created</p>
                   </div>
                   <div
                     className={cn(
@@ -539,7 +539,7 @@ function DashboardPage() {
                       {formatCurrencyFromCents(profile?.total_money_won || 0)}
                     </p>
                     <p className="text-md  mt-0.5">
-                      Money earned from contests
+                      Money earned from campaigns
                     </p>
                   </div>
                   <div
@@ -569,7 +569,7 @@ function DashboardPage() {
                       {formatCurrencyFromCents(profile?.total_money_won || 0)}
                     </p>
                     <p className="text-xs text-green-700 dark:text-green-400 mt-0.5">
-                      Money earned from contests
+                      Money earned from campaigns
                     </p>
                   </div>
                 </div>
@@ -592,7 +592,7 @@ function DashboardPage() {
                       isDark ? "text-white" : "text-black",
                     )}
                   >
-                    <p className="text-lg font-medium">Contests Won</p>
+                    <p className="text-lg font-medium">Campaigns Won</p>
                     <p className="text-xl font-bold">
                       {profile?.total_contests_won || 0}
                     </p>
@@ -622,7 +622,7 @@ function DashboardPage() {
                   </div>
                   <div className="flex-1">
                     <p className="text-xs font-medium text-yellow-800 dark:text-yellow-300 uppercase tracking-wide">
-                      Contests Won
+                      Campaigns Won
                     </p>
                     <p className="text-lg font-bold text-yellow-900 dark:text-yellow-100">
                       {profile?.total_contests_won || 0}
@@ -659,7 +659,7 @@ function DashboardPage() {
                 </p>
                 <p className="text-md  mt-0.5">
                   {isAdvertiser
-                    ? "Views on contest content"
+                    ? "Views on campaign content"
                     : "Views on your content"}
                 </p>
               </div>
@@ -752,8 +752,8 @@ function DashboardPage() {
                           : "text-gray-600 dark:text-gray-300",
                       )}
                     >
-                      Learn about our two contest types: Leaderboard and CPM
-                      contests
+                      Learn about our two campaign types: Leaderboard and CPM
+                      campaigns
                     </p>
                   </div>
                 </div>
@@ -812,8 +812,8 @@ function DashboardPage() {
               )}
             >
               {isAdvertiser
-                ? "Your recent contests"
-                : "Contests you've participated in recently"}
+                ? "Your recent campaigns"
+                : "Campaigns you've participated in recently"}
             </CardDescription>
           </CardHeader>
           <div className="flex-1 overflow-y-auto px-4 sm:px-6 pb-4">
@@ -893,8 +893,8 @@ function DashboardPage() {
               <div className="flex items-center justify-center h-full">
                 <p className="text-md text-muted-foreground text-center">
                   {isAdvertiser
-                    ? "No contests created yet"
-                    : "No contest activity yet"}
+                    ? "No campaigns created yet"
+                    : "No campaign activity yet"}
                 </p>
               </div>
             )}
@@ -918,7 +918,7 @@ function DashboardPage() {
                 className={cn(isDark ? "text-gray-300" : "text-slate-600")}
               >
                 Performance insights for your{" "}
-                {isAdvertiser ? "contests" : "content"}
+                {isAdvertiser ? "campaigns" : "content"}
               </CardDescription>
             </CardHeader>
             <CardContent>

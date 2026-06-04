@@ -272,7 +272,7 @@ function NotificationCard({
                   : "text-purple-600 group-hover:text-purple-700",
               )}
             >
-              View contest
+              View campaign
               <ChevronRight className="h-3.5 w-3.5 transition-transform group-hover:translate-x-0.5" />
             </p>
           )}
@@ -514,7 +514,7 @@ export function UserNotificationsBell({
                   router.push(getContestDashboardPath(contestId, userType));
                 }}
               >
-                View contest
+                View campaign
               </Button>
             )}
             <Button

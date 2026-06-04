@@ -1170,11 +1170,11 @@ export default function BillingClientPage({
             >
               <CardContent className="p-4 flex justify-between">
                 <div className="flex-1 space-y-3">
-                  <p className="text-lg font-medium">Contests Run</p>
+                  <p className="text-lg font-medium">Campaigns Run</p>
                   <p className="text-xl font-bold">
                     {profile.total_contests_run}
                   </p>
-                  <p className="text-md">Total contests created</p>
+                  <p className="text-md">Total campaigns created</p>
                 </div>
                 <div
                   className={cn(

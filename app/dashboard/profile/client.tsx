@@ -4336,7 +4336,7 @@ export default function ProfilePage({
                       : "bg-white text-gray-500"
                   )}
                 >
-                  Contests Run
+                  Campaigns Run
                 </label>
                 <div
                   className={cn(

@@ -13,7 +13,7 @@ import {
 import { cn } from "@/lib/utils";
 
 const LABELS: Record<string, string> = {
-  all: "All Contest Types",
+  all: "All Campaign Types",
   leaderboard: "Leaderboard",
   cpm: "CPM",
   milestone: "Milestone",
@@ -115,7 +115,7 @@ export default function ContestTypeFilter({
             </span>
           )}
           {value !== "all" && <span className="w-4" />}
-          All Contest Types
+          All Campaign Types
         </DropdownMenuItem>
         <DropdownMenuItem
           className={cn(

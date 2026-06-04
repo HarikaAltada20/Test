@@ -277,7 +277,7 @@ export default function BrandsClient({ totalViews }: BrandsClientProps) {
                 >
                   Launch strategic{" "}
                   <span className="bg-gradient-to-r from-violet-400 to-purple-400 bg-clip-text text-transparent font-semibold">
-                    creator contests
+                    creator campaigns
                   </span>{" "}
                   and drive organic viral marketing with{" "}
                   <span className="bg-gradient-to-r from-amber-400 to-orange-400 bg-clip-text text-transparent font-semibold">
@@ -561,7 +561,7 @@ export default function BrandsClient({ totalViews }: BrandsClientProps) {
               {[
                 {
                   id: "1",
-                  title: "Create a Contest",
+                  title: "Create a Campaign",
                   description:
                     "Set your brief, budget, duration, and payout model (Leaderboard or CPM or Milestone or Dual Rewards). Choose platforms like Instagram, YouTube, or Twitter (X).",
                   image: "/images/GoC How It Works - 1.png",
@@ -587,7 +587,7 @@ export default function BrandsClient({ totalViews }: BrandsClientProps) {
                   id: "4",
                   title: "Pay Only for Performance",
                   description:
-                    "Leaderboard: Top creators get paid. CPM: Pay per 1K views (Instagram, YouTube, TikTok) or engagement points (Twitter). Milestone: Pay at view targets. Dual Rewards: CPM + milestones in one contest.",
+                    "Leaderboard: Top creators get paid. CPM: Pay per 1K views (Instagram, YouTube, TikTok) or engagement points (Twitter). Milestone: Pay at view targets. Dual Rewards: CPM + milestones in one campaign.",
                   image: "/images/GoC How It Works - 4.png",
                   number: "4",
                 },
@@ -708,7 +708,7 @@ export default function BrandsClient({ totalViews }: BrandsClientProps) {
                 {
                   stars: 4,
                   quote:
-                    "The contest feature is fantastic for discovering new talent. We've found some hidden gems who are now regular contributors to our brand.",
+                    "The campaign feature is fantastic for discovering new talent. We've found some hidden gems who are now regular contributors to our brand.",
                   name: "David Miller",
                   title: "Head of Content, Food & Beverage Co.",
                 },
@@ -836,7 +836,7 @@ export default function BrandsClient({ totalViews }: BrandsClientProps) {
               </h2>
 
               <p className="text-xl text-slate-300 mb-12 leading-relaxed">
-                Launch your first contest today and witness the power of
+                Launch your first campaign today and witness the power of
                 creator-generated content.
               </p>
 

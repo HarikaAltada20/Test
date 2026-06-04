@@ -2034,7 +2034,7 @@ export default function SubmissionsClient({
       {/* Quick Stats Summary — wider cards, consistent height and alignment */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-6 gap-3 md:gap-4 items-stretch">
         {[
-          { label: "Submitted to", value: stats.contests, sub: "Contests", icon: Trophy, color: "text-blue-500" },
+          { label: "Submitted to", value: stats.contests, sub: "Campaigns", icon: Trophy, color: "text-blue-500" },
           { label: "Total Views", value: stats.views.toLocaleString(), sub: "", icon: TrendingUp, color: "text-indigo-500" },
           { label: "Cash Earned", value: `$${centsToDollars(stats.earnings).toFixed(2)}`, sub: "USD", icon: DollarSign, color: "text-green-500" },
           { label: "Bonus Earned", value: `$${centsToDollars(stats.bonus).toFixed(2)}`, sub: "USD", icon: Coins, color: "text-purple-500" },
@@ -2089,7 +2089,7 @@ export default function SubmissionsClient({
                   const endedStatuses = ["pending_review", "in_review", "verification_complete", "payouts_processed"];
                   const allEndedSelected = endedStatuses.every(s => contestStatusFilter.includes(s));
 
-                  if (contestStatusFilter.length === 5) return "All Contest Status";
+                  if (contestStatusFilter.length === 5) return "All Campaign Status";
                   if (contestStatusFilter.length === 0) return "No Status Selected";
 
                   const parts: string[] = [];

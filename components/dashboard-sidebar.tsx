@@ -166,10 +166,10 @@ export function DashboardSidebar({
       description: "Manage all contests",
     },
     {
-      name: "Contest Moderation",
+      name: "Campaign Moderation",
       href: "/dashboard/admin/contest-moderation",
       icon: Shield,
-      description: "Review & approve contests",
+      description: "Review & approve campaigns",
     },
     {
       name: "Leaderboard",

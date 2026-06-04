@@ -303,7 +303,7 @@ type ContestData = {
   max_submissions_per_creator?: number;
   trust_score?: number | null;
   content_type?: "ugc" | "clipping" | "other" | null;
-  contest_format?: string | null; // Text/image vs video contest format
+  contest_format?: string | null; // Text/image vs video campaign format
   bonus_details?: { description_html?: string; description_json?: any } | null;
   max_earnings_per_creator?: number | null; // Per-contest cap (in cents)
   // Categories, subcategories, and interests
@@ -481,7 +481,7 @@ export default function EditContestPage({
   const richTextEditorRef = useRef<any>(null);
   const rulesRichTextEditorRef = useRef<any>(null);
   const [mode, setMode] = useState<"light" | "dark">("light");
-  // Contest Type and Specific Details
+  // Campaign Type and Specific Details
   const [contestType, setContestType] = useState<
     "leaderboard" | "cpm" | "milestone" | "dual_rewards" | null
   >(null);
@@ -571,7 +571,7 @@ export default function EditContestPage({
   >("other");
   const [category, setCategory] = useState<string>("technology");
   const [flatFeeBonus, setFlatFeeBonus] = useState<number | string>(""); // In dollars
-  const [flatFeeBonusCap, setFlatFeeBonusCap] = useState<number | string>(""); // In dollars - for CPM contests only
+  const [flatFeeBonusCap, setFlatFeeBonusCap] = useState<number | string>(""); // In dollars - for CPM campaigns only
 
   // Checkboxes to show/hide engagement multiplier sections
   const [showCommentMultipliers, setShowCommentMultipliers] = useState(false);
@@ -892,7 +892,7 @@ export default function EditContestPage({
     if (!user) return;
     setIsUserPlanLoading(true);
     try {
-      // If we have contest subscription info, use it (this is the plan at contest creation time)
+      // If we have contest subscription info, use it (this is the plan at campaign creation time)
       if (contestSubscriptionInfo?.product_id) {
         setUserPlan(contestSubscriptionInfo.product_id);
         setIsUserPlanLoading(false);
@@ -966,7 +966,7 @@ export default function EditContestPage({
 
       if (!user) {
         setIsLoading(false); // Stop loading if no user
-        setError("Please log in to edit contests.");
+        setError("Please log in to edit campaigns.");
         return;
       }
 
@@ -983,7 +983,7 @@ export default function EditContestPage({
           if (contestError.code === "PGRST116") {
             // 'PGRST116': Row not found
             setError(
-              "Contest not found or you do not have permission to edit it.",
+              "Campaign not found or you do not have permission to edit it.",
             );
           } else {
             throw contestError;
@@ -993,13 +993,13 @@ export default function EditContestPage({
         }
 
         if (!isAdmin && data && data.advertiser_id !== user.id) {
-          setError("You do not have permission to edit this contest.");
+          setError("You do not have permission to edit this campaign.");
           setIsLoading(false);
           return;
         }
 
         if (data) {
-          // Fetch the correct plan - use the subscription info captured at contest creation time
+          // Fetch the correct plan - use the subscription info captured at campaign creation time
           await getUserPlan(data.subscription_info_of_user);
           // Extract commission rate from contest payment details
           if (data.payment_details) {
@@ -1019,13 +1019,13 @@ export default function EditContestPage({
           // Note: Current plan commission rate will be set in a separate useEffect
           // after both userPlan and contest data are loaded
 
-          // Simplified logic: Check if contest has ended (no one can edit ended contests)
+          // Simplified logic: Check if contest has ended (no one can edit ended campaigns)
           let canEdit = true;
           const now = new Date();
           const contestEndDate = data.end_date ? new Date(data.end_date) : null;
           const isEnded = contestEndDate && contestEndDate <= now;
 
-          // Block editing for ended contests (even for admins)
+          // Block editing for ended campaigns (even for admins)
           if (isEnded || data.status === "ended") {
             canEdit = false;
           } else if (data.moderation_status === "published" && !isAdmin) {
@@ -1041,15 +1041,15 @@ export default function EditContestPage({
             canEdit = !isLive;
           }
           // If moderation_status is not 'published', always allow editing regardless of dates
-          // Admins can edit live contests but NOT ended contests
+          // Admins can edit live contests but NOT ended campaigns
 
           if (!canEdit) {
             if (isEnded || data.status === "ended") {
               setError(
-                "This contest has ended and cannot be edited. Contest integrity must be maintained after completion.",
+                "This campaign has ended and cannot be edited. Campaign integrity must be maintained after completion.",
               );
             } else {
-              setError("This contest is already live and cannot be edited.");
+              setError("This campaign is already live and cannot be edited.");
             }
             setContest(data as ContestData); // Still set contest to allow viewing some info if needed
           } else {
@@ -1781,13 +1781,13 @@ export default function EditContestPage({
           }
         } else {
           setError(
-            "Contest not found or you don't have permission to edit it.",
+            "Campaign not found or you don't have permission to edit it.",
           );
         }
       } catch (error: any) {
-        console.error("Error fetching contest data:", error);
+        console.error("Error fetching campaign data:", error);
         if (error.code === "PGRST116") {
-          setError("Contest not found.");
+          setError("Campaign not found.");
         } else {
           setError(`Failed to load contest: ${error.message}`);
         }
@@ -1800,7 +1800,7 @@ export default function EditContestPage({
     fetchInitialData();
   }, [contestId, user, supabase]); // Rerun if user or contestId changes
 
-  // Re-check budget changes when original budget is set or contest type changes
+  // Re-check budget changes when original budget is set or campaign type changes
   useEffect(() => {
     if (originalBudget > 0) {
       checkBudgetChange();
@@ -1827,7 +1827,7 @@ export default function EditContestPage({
         .single();
 
       if (contestError) {
-        console.error("Error refreshing contest data:", contestError);
+        console.error("Error refreshing campaign data:", contestError);
         return;
       }
 
@@ -1919,7 +1919,7 @@ export default function EditContestPage({
         }
       }
     } catch (error) {
-      console.error("Error refreshing contest data:", error);
+      console.error("Error refreshing campaign data:", error);
     }
   };
 
@@ -1962,7 +1962,7 @@ export default function EditContestPage({
     }
   };
 
-  // Helper function to instantly update contest resources in DB
+  // Helper function to instantly update campaign resources in DB
   const updateContestResourcesInDB = async (newResources: ResourceItem[]) => {
     if (!user?.id || !contestId) return;
 
@@ -2095,7 +2095,7 @@ export default function EditContestPage({
 
     let startMessage = "";
     if (daysUntilStart > 0) {
-      startMessage = `Your contest will be live in ${daysUntilStart} day${
+      startMessage = `Your campaign will be live in ${daysUntilStart} day${
         daysUntilStart !== 1 ? "s" : ""
       }`;
       if (hoursUntilStart > 0)
@@ -2103,11 +2103,11 @@ export default function EditContestPage({
           hoursUntilStart !== 1 ? "s" : ""
         }`;
     } else if (hoursUntilStart > 0) {
-      startMessage = `Your contest will be live in ${hoursUntilStart} hour${
+      startMessage = `Your campaign will be live in ${hoursUntilStart} hour${
         hoursUntilStart !== 1 ? "s" : ""
       }`;
     } else {
-      startMessage = "Your contest will be live soon";
+      startMessage = "Your campaign will be live soon";
     }
 
     const durationMessage = `and will run for ${durationDays} day${
@@ -2173,7 +2173,7 @@ export default function EditContestPage({
 
     return `For example, if today is ${formatDateWithOrdinal(
       startOfToday,
-    )}, you can create contests starting from ${formatDateWithOrdinal(
+    )}, you can create campaigns starting from ${formatDateWithOrdinal(
       minStartDate,
     )} (00:00 onwards). ${disallowedText} ${
       disallowed.length > 1 ? "are" : "is"
@@ -2318,7 +2318,7 @@ export default function EditContestPage({
     if (!user) {
       toast({
         title: "Authentication Error",
-        description: "You must be logged in to update a contest",
+        description: "You must be logged in to update a campaign",
         variant: "destructive",
       });
       setIsSubmitting(false);
@@ -2328,8 +2328,8 @@ export default function EditContestPage({
 
     if (!contest) {
       toast({
-        title: "Contest Error",
-        description: "Contest data not loaded. Cannot save changes.",
+        title: "Campaign Error",
+        description: "Campaign data not loaded. Cannot save changes.",
         variant: "destructive",
       });
       setIsSubmitting(false);
@@ -2340,7 +2340,7 @@ export default function EditContestPage({
     // Validate mandatory fields - skip content validation for datesOnly mode
     if (!datesOnly) {
       if (!title || title.trim() === "") {
-        showError("Contest title is required.");
+        showError("Campaign title is required.");
         setIsSubmitting(false);
         if (submitTimeoutId) clearTimeout(submitTimeoutId);
         return;
@@ -2354,7 +2354,7 @@ export default function EditContestPage({
       }
 
       if (!rulesHtml || isRichTextEditorEmpty(rulesRichTextEditorRef)) {
-        showError("Contest rules are required.");
+        showError("Campaign rules are required.");
         setIsSubmitting(false);
         if (submitTimeoutId) clearTimeout(submitTimeoutId);
         return;
@@ -2390,7 +2390,7 @@ export default function EditContestPage({
       ? { ...contest.contest_based_details }
       : {};
     if (!datesOnly) {
-      // Prevent stale config bleed when contest type changes.
+      // Prevent stale config bleed when campaign type changes.
       if (contestType !== "leaderboard") {
         delete contestBasedDetails.leaderboard_contest;
       }
@@ -2492,7 +2492,7 @@ export default function EditContestPage({
         const isNewContest = !originalStartDate || originalStartDate > now;
         const isLiveContest = originalStartDate && originalStartDate <= now;
 
-        // Allow admins to edit contests without date restrictions (for both live and upcoming)
+        // Allow admins to edit campaigns without date restrictions (for both live and upcoming)
         if (!isAdmin) {
           if (isNewContest) {
             // For approved contests, only check that start time is in the future
@@ -2503,7 +2503,7 @@ export default function EditContestPage({
             ) {
               toast({
                 title: "Invalid Start Date",
-                description: `Contest must start at least ${MIN_DAYS_UNTIL_START} days from today (${
+                description: `Campaign must start at least ${MIN_DAYS_UNTIL_START} days from today (${
                   MIN_DAYS_UNTIL_START - 1
                 } day gap required).`,
                 variant: "destructive",
@@ -2515,7 +2515,7 @@ export default function EditContestPage({
           } else if (startDateTime < now) {
             toast({
               title: "Invalid Start Time",
-              description: "Contest start time must be in the future.",
+              description: "Campaign start time must be in the future.",
               variant: "destructive",
             });
             setIsSubmitting(false);
@@ -2527,7 +2527,7 @@ export default function EditContestPage({
         if (endDateTime <= startDateTime) {
           toast({
             title: "Invalid End Time",
-            description: "Contest end time must be after the start time.",
+            description: "Campaign end time must be after the start time.",
             variant: "destructive",
           });
           setIsSubmitting(false);
@@ -2542,7 +2542,7 @@ export default function EditContestPage({
         if (durationDays < MIN_CONTEST_DURATION_DAYS) {
           toast({
             title: "Invalid Duration",
-            description: `Contest duration must be at least ${MIN_CONTEST_DURATION_DAYS} days.`,
+            description: `Campaign duration must be at least ${MIN_CONTEST_DURATION_DAYS} days.`,
             variant: "destructive",
           });
           setIsSubmitting(false);
@@ -2553,7 +2553,7 @@ export default function EditContestPage({
         if (durationDays > MAX_CONTEST_DURATION_DAYS) {
           toast({
             title: "Invalid Duration",
-            description: `Contest duration cannot exceed ${MAX_CONTEST_DURATION_DAYS} days.`,
+            description: `Campaign duration cannot exceed ${MAX_CONTEST_DURATION_DAYS} days.`,
             variant: "destructive",
           });
           setIsSubmitting(false);
@@ -2577,7 +2577,7 @@ export default function EditContestPage({
     } else {
       toast({
         title: "Missing Dates",
-        description: "Contest start and end dates/times are required.",
+        description: "Campaign start and end dates/times are required.",
         variant: "destructive",
       });
       setIsSubmitting(false);
@@ -2585,7 +2585,7 @@ export default function EditContestPage({
       return;
     }
 
-    // Skip contest type validation for datesOnly mode
+    // Skip campaign type validation for datesOnly mode
     if (!datesOnly && contestType === "leaderboard") {
       const currentTotalPrizePool = winnerAmounts.reduce(
         (sum, amount) => sum + (amount || 0),
@@ -2648,7 +2648,7 @@ export default function EditContestPage({
           amount: amount || 0,
         }));
 
-      // Build leaderboard contest details
+      // Build leaderboard campaign details
       const leaderboardDetails: any = {
         prizes: prizesArray,
         total_prize: currentTotalPrizePool,
@@ -2688,9 +2688,9 @@ export default function EditContestPage({
       if (contestType === "milestone" || contestType === "dual_rewards") {
         if (contest?.contest_format !== "video") {
           toast({
-            title: "Invalid Contest Format",
+            title: "Invalid Campaign Format",
             description:
-              "Milestone and dual-rewards contests require the Video contest format.",
+              "Milestone and dual-rewards campaigns require the Video campaign format.",
             variant: "destructive",
           });
           setIsSubmitting(false);
@@ -2821,8 +2821,8 @@ export default function EditContestPage({
             title: "Invalid Budget",
             description:
               contestType === "dual_rewards"
-                ? "Total contest budget is required for dual-rewards contests."
-                : "Total contest budget is required for milestone contests.",
+                ? "Total campaign budget is required for dual-rewards campaigns."
+                : "Total campaign budget is required for milestone campaigns.",
             variant: "destructive",
           });
           setIsSubmitting(false);
@@ -2938,14 +2938,14 @@ export default function EditContestPage({
         if (!termsConditions || termsConditions.trim() === "") {
           toast({
             title: "Missing Terms & Conditions",
-            description: "Terms & Conditions are required for CPM contests.",
+            description: "Terms & Conditions are required for CPM campaigns.",
             variant: "destructive",
           });
           setIsSubmitting(false);
           if (submitTimeoutId) clearTimeout(submitTimeoutId);
           return;
         }
-        // Build CPM contest details
+        // Build CPM campaign details
         // Check if this is a Twitter CPM contest - exclude min_views and max_views for Twitter
         const isTwitterCpmContest =
           (contest?.platform?.toLowerCase() === "twitter" ||
@@ -2964,7 +2964,7 @@ export default function EditContestPage({
             contest?.contest_based_details?.cpm_contest?.budget_spent || 0,
         };
 
-        // Only include min_views and max_views for non-Twitter CPM contests
+        // Only include min_views and max_views for non-Twitter CPM campaigns
         if (!isTwitterCpmContest) {
           cpmDetails.min_views = numMinViews;
           cpmDetails.max_views = numMaxViews;
@@ -2988,9 +2988,9 @@ export default function EditContestPage({
       }
     } else if (!datesOnly) {
       toast({
-        title: "Invalid Contest Type",
+        title: "Invalid Campaign Type",
         description:
-          "Invalid contest type selected. Please refresh and try again.",
+          "Invalid campaign type selected. Please refresh and try again.",
         variant: "destructive",
       });
       setIsSubmitting(false);
@@ -3246,7 +3246,7 @@ export default function EditContestPage({
       contestBasedDetails.twitter_campaign = twitterCampaign;
     }
 
-    // Only update contest type and details if not in datesOnly mode
+    // Only update campaign type and details if not in datesOnly mode
     if (!datesOnly) {
       updatePayload.contest_type = contestType;
       updatePayload.contest_based_details = contestBasedDetails;
@@ -3402,10 +3402,10 @@ export default function EditContestPage({
 
       // Show success toast
       toast({
-        title: datesOnly ? "Contest Dates Updated" : "Contest Updated",
+        title: datesOnly ? "Campaign Dates Updated" : "Campaign Updated",
         description: datesOnly
-          ? "Contest dates have been successfully updated."
-          : "Your contest has been successfully updated.",
+          ? "Campaign dates have been successfully updated."
+          : "Your campaign has been successfully updated.",
         variant: "default",
       });
 
@@ -3414,7 +3414,7 @@ export default function EditContestPage({
       console.error("❌ Update failed with error:", err);
       toast({
         title: "Update Failed",
-        description: err.message || "Failed to update contest",
+        description: err.message || "Failed to update campaign",
         variant: "destructive",
       });
     } finally {
@@ -3466,7 +3466,7 @@ export default function EditContestPage({
           });
           return;
         }
-        // Remove any existing thumbnail for this contest (all extensions)
+        // Remove any existing thumbnail for this campaign (all extensions)
         const { data: existingFiles } = await supabase.storage
           .from("contest-assets")
           .list("contest_thumbnails");
@@ -3766,7 +3766,7 @@ export default function EditContestPage({
           uploadError.message.toLowerCase().includes("resource already exists")
         ) {
           userMessage =
-            "A file with this name already exists for this contest. Please rename your file or remove the existing one before uploading.";
+            "A file with this name already exists for this campaign. Please rename your file or remove the existing one before uploading.";
         }
         setAssetUploadError(userMessage);
         toast({
@@ -4075,7 +4075,7 @@ export default function EditContestPage({
         body: JSON.stringify({
           contestId,
           refundAmount: refundDetails.totalRefund,
-          reason: "Contest budget decreased",
+          reason: "Campaign budget decreased",
         }),
       });
 
@@ -4135,7 +4135,7 @@ export default function EditContestPage({
     }
   };
 
-  // Update contest details after refund
+  // Update campaign details after refund
   const updateContestDetailsAfterRefund = async () => {
     if (!refundDetails) return;
 
@@ -4243,20 +4243,20 @@ export default function EditContestPage({
 
       if (updateError) {
         console.error(
-          "Error updating contest details after refund:",
+          "Error updating campaign details after refund:",
           updateError,
         );
-        throw new Error("Failed to update contest details");
+        throw new Error("Failed to update campaign details");
       }
 
       console.log("✅ Contest details updated after refund");
     } catch (error) {
-      console.error("❌ Error updating contest details after refund:", error);
+      console.error("❌ Error updating campaign details after refund:", error);
       throw error;
     }
   };
 
-  // Helper function to submit contest for approval with retries
+  // Helper function to submit campaign for approval with retries
   const submitForApproval = async (retries = 3, delay = 2000) => {
     for (let attempt = 1; attempt <= retries; attempt++) {
       try {
@@ -4279,7 +4279,7 @@ export default function EditContestPage({
         if (response.ok && result.success) {
           toast({
             title: "Success",
-            description: "Contest submitted for approval successfully!",
+            description: "Campaign submitted for approval successfully!",
             variant: "default",
           });
           router.push(`/dashboard/contests/${contestId}`);
@@ -4293,7 +4293,7 @@ export default function EditContestPage({
         if (attempt === retries) {
           toast({
             title: "Submission Failed",
-            description: `Failed to submit contest for approval: ${error.message}`,
+            description: `Failed to submit campaign for approval: ${error.message}`,
             variant: "destructive",
           });
           return;
@@ -4309,7 +4309,7 @@ export default function EditContestPage({
   // Helper function to validate form for submission
   const validateFormForSubmission = (): string | null => {
     if (!title || title.trim() === "") {
-      return "Contest title is required.";
+      return "Campaign title is required.";
     }
 
     if (!briefHtml || isRichTextEditorEmpty(richTextEditorRef)) {
@@ -4318,12 +4318,12 @@ export default function EditContestPage({
     console.log("Rules", rulesHtml);
 
     if (!rulesHtml || isRichTextEditorEmpty(rulesRichTextEditorRef)) {
-      return "Contest rules are required.";
+      return "Campaign rules are required.";
     }
 
     // Validate thumbnail - either uploaded file or existing preview
     if (!thumbnail && !thumbnailPreview) {
-      return "Contest thumbnail is required.";
+      return "Campaign thumbnail is required.";
     }
 
     // Skip inspiration links validation for raid campaign type
@@ -4344,7 +4344,7 @@ export default function EditContestPage({
     }
 
     if (!startDate || !startTime || !endDate || !endTime) {
-      return "Contest start and end dates/times are required.";
+      return "Campaign start and end dates/times are required.";
     }
 
     // Validate dates
@@ -4384,16 +4384,16 @@ export default function EditContestPage({
       if (isNewContest) {
         // CRITICAL: Use exact same logic as getMinDateTime for consistency
         if (daysUntilStart < MIN_DAYS_UNTIL_START) {
-          return `Contest must start at least ${MIN_DAYS_UNTIL_START} days from today (${
+          return `Campaign must start at least ${MIN_DAYS_UNTIL_START} days from today (${
             MIN_DAYS_UNTIL_START - 1
           } day gap required).`;
         }
       } else if (startDateTime < now) {
-        return "Contest start time must be in the future.";
+        return "Campaign start time must be in the future.";
       }
 
       if (endDateTime <= startDateTime) {
-        return "Contest end time must be after the start time.";
+        return "Campaign end time must be after the start time.";
       }
 
       // Check contest duration limits
@@ -4401,17 +4401,17 @@ export default function EditContestPage({
       const durationDays = Math.floor(durationMs / (1000 * 60 * 60 * 24));
 
       if (durationDays < MIN_CONTEST_DURATION_DAYS) {
-        return `Contest duration must be at least ${MIN_CONTEST_DURATION_DAYS} days.`;
+        return `Campaign duration must be at least ${MIN_CONTEST_DURATION_DAYS} days.`;
       }
 
       if (durationDays > MAX_CONTEST_DURATION_DAYS) {
-        return `Contest duration cannot exceed ${MAX_CONTEST_DURATION_DAYS} days.`;
+        return `Campaign duration cannot exceed ${MAX_CONTEST_DURATION_DAYS} days.`;
       }
     } catch (error) {
       return "There was an error with the date/time format. Please check your entries.";
     }
 
-    // Validate contest type specific fields
+    // Validate campaign type specific fields
     if (contestType === "leaderboard") {
       const planFeatures = getPlanFeatures(userPlan);
       const currentTotalPrizePool = winnerAmounts.reduce(
@@ -4442,7 +4442,7 @@ export default function EditContestPage({
         }
       }
 
-      // Validate flat fee bonus and total budget for leaderboard contests
+      // Validate flat fee bonus and total budget for leaderboard campaigns
       const flatFeeBonusValue =
         flatFeeBonus && parseFloat(flatFeeBonus.toString()) > 0;
       if (flatFeeBonusValue) {
@@ -4463,7 +4463,7 @@ export default function EditContestPage({
       const parsedTotalBudget =
         typeof totalBudget === "string" ? parseFloat(totalBudget) : totalBudget;
       if (!parsedTotalBudget || parsedTotalBudget <= 0) {
-        return "Total contest budget is required for milestone contests.";
+        return "Total campaign budget is required for milestone campaigns.";
       }
 
       const effectiveMilestoneRows = milestoneRows.filter(
@@ -4585,12 +4585,12 @@ export default function EditContestPage({
       }
 
       if (!termsConditions || termsConditions.trim() === "") {
-        return "Terms and conditions are required for CPM contests.";
+        return "Terms and conditions are required for CPM campaigns.";
       }
 
-      // Validate: Total Budget is mandatory for CPM contests
+      // Validate: Total Budget is mandatory for CPM campaigns
       if (!parsedTotalBudget || parsedTotalBudget <= 0) {
-        return "Total Budget is mandatory for CPM contests.";
+        return "Total Budget is mandatory for CPM campaigns.";
       }
 
       // Twitter CPM (Points Model): require at least one metric weight > 0
@@ -4614,7 +4614,7 @@ export default function EditContestPage({
             retweetsWeight <= 0 &&
             quoteRepostsWeight <= 0
           ) {
-            return "For Twitter CPM raid contests, please enable at least one metric (comments/replies, retweets, or quote reposts) to count towards points and payout.";
+            return "For Twitter CPM raid campaigns, please enable at least one metric (comments/replies, retweets, or quote reposts) to count towards points and payout.";
           }
         } else {
           // For non-raid campaigns, check all metrics including likes and impressions
@@ -4636,7 +4636,7 @@ export default function EditContestPage({
             quoteRepostsWeight <= 0 &&
             impressionsWeight <= 0
           ) {
-            return "For Twitter CPM contests, please enable at least one metric (likes, comments/replies, retweets, quote reposts, or views) to count towards points and payout.";
+            return "For Twitter CPM campaigns, please enable at least one metric (likes, comments/replies, retweets, quote reposts, or views) to count towards points and payout.";
           }
 
           // Validate engagement multipliers when checkboxes are checked
@@ -4728,7 +4728,7 @@ export default function EditContestPage({
         }
       }
 
-      // Validate flat fee bonus and cap for CPM contests
+      // Validate flat fee bonus and cap for CPM campaigns
       const flatFeeBonusValue =
         flatFeeBonus && parseFloat(flatFeeBonus.toString()) > 0;
       if (flatFeeBonusValue) {
@@ -4738,7 +4738,7 @@ export default function EditContestPage({
 
         // Validate: Flat Fee Bonus Cap is required when flat fee bonus is enabled (CPM)
         if (!flatFeeBonusCap || parseFloat(flatFeeBonusCap.toString()) <= 0) {
-          return "Flat Fee Bonus Cap is required when Flat Fee Bonus is enabled for CPM contests.";
+          return "Flat Fee Bonus Cap is required when Flat Fee Bonus is enabled for CPM campaigns.";
         }
 
         const bonusDollars = parseFloat(flatFeeBonus.toString());
@@ -4755,7 +4755,7 @@ export default function EditContestPage({
         }
       }
 
-      // Validate: Prevent contest creation if total money a single creator can earn > total budget
+      // Validate: Prevent campaign creation if total money a single creator can earn > total budget
       if (parsedTotalBudget) {
         const totalBudgetCents = parsedTotalBudget * 100;
         let maxCreatorEarnings = 0;
@@ -4921,7 +4921,7 @@ export default function EditContestPage({
                     terms_conditions: termsConditions,
                   };
 
-                  // Only include min_views and max_views for non-Twitter CPM contests
+                  // Only include min_views and max_views for non-Twitter CPM campaigns
                   if (!isTwitterCpmForPayment) {
                     cpmContestDetails.min_views = minViews
                       ? parseInt(minViews.toString())
@@ -5313,7 +5313,7 @@ export default function EditContestPage({
             "❌ Failed to update complete contest data:",
             updateError,
           );
-          throw new Error(`Failed to update contest: ${updateError.message}`);
+          throw new Error(`Failed to update campaign: ${updateError.message}`);
         }
 
         console.log(
@@ -5436,7 +5436,7 @@ export default function EditContestPage({
                     terms_conditions: termsConditions,
                   };
 
-                  // Only include min_views and max_views for non-Twitter CPM contests
+                  // Only include min_views and max_views for non-Twitter CPM campaigns
                   if (!isTwitterCpmForDraft) {
                     cpmContestDetails.min_views = minViews
                       ? parseInt(minViews.toString())
@@ -5446,7 +5446,7 @@ export default function EditContestPage({
                       : null;
                   }
 
-                  // Add CPM Points Configuration (for Twitter CPM contests only)
+                  // Add CPM Points Configuration (for Twitter CPM campaigns only)
                   if (
                     contestType === "cpm" &&
                     platform?.toLowerCase() === "twitter"
@@ -5949,8 +5949,8 @@ export default function EditContestPage({
           .single();
 
         if (updateError) {
-          console.error("❌ Failed to save contest as draft:", updateError);
-          throw new Error(`Failed to save contest: ${updateError.message}`);
+          console.error("❌ Failed to save campaign as draft:", updateError);
+          throw new Error(`Failed to save campaign: ${updateError.message}`);
         }
 
         console.log(
@@ -5962,8 +5962,8 @@ export default function EditContestPage({
         title: "Payment Successful",
         description:
           budgetChanged && budgetDifference > 0
-            ? "Additional payment processed, contest saved as draft. Submitting for approval..."
-            : "Payment completed, contest saved as draft. Submitting for approval...",
+            ? "Additional payment processed, campaign saved as draft. Submitting for approval..."
+            : "Payment completed, campaign saved as draft. Submitting for approval...",
         variant: "default",
       });
 
@@ -6014,7 +6014,7 @@ export default function EditContestPage({
       console.error("❌ Error in payment success handler:", error);
       toast({
         title: "Update Failed",
-        description: `Payment succeeded but failed to update contest: ${error.message}`,
+        description: `Payment succeeded but failed to update campaign: ${error.message}`,
         variant: "destructive",
       });
       setIsSubmitting(false);
@@ -6096,7 +6096,7 @@ export default function EditContestPage({
       setIsSubmitting(false);
       return { isValid: false, error };
     }
-    // 2. Plan and contest type checks
+    // 2. Plan and campaign type checks
     if (isCpmContestType(contestType)) {
       const hasCpmAccess =
         planFeatures.contestTypes && planFeatures.contestTypes.includes("cpm");
@@ -6105,11 +6105,11 @@ export default function EditContestPage({
         return {
           isValid: false,
           error:
-            "CPM-based contests are only available with paid plans. Please upgrade your subscription or change to a Leaderboard contest.",
+            "CPM-based campaigns are only available with paid plans. Please upgrade your subscription or change to a Leaderboard campaign.",
         };
       }
     }
-    // 3. Active contest limit (only if submitting for approval, not draft)
+    // 3. Active campaign limit (only if submitting for approval, not draft)
     try {
       const response = await fetch("/api/contests/validate-limit", {
         method: "POST",
@@ -6123,7 +6123,7 @@ export default function EditContestPage({
       });
 
       if (!response.ok) {
-        throw new Error("Failed to validate contest limit");
+        throw new Error("Failed to validate campaign limit");
       }
 
       const activeCheck = await response.json();
@@ -6134,14 +6134,14 @@ export default function EditContestPage({
           isValid: false,
           error:
             activeCheck.error ||
-            `You have reached your plan limit of ${planFeatures.maxActiveContests} active contests. Please upgrade your plan or wait for existing contests to end.`,
+            `You have reached your plan limit of ${planFeatures.maxActiveContests} active campaigns. Please upgrade your plan or wait for existing campaigns to end.`,
         };
       }
     } catch (err) {
       setIsSubmitting(false);
       return {
         isValid: false,
-        error: "Unable to validate contest limits. Please try again.",
+        error: "Unable to validate campaign limits. Please try again.",
       };
     }
     return { isValid: true };
@@ -6152,7 +6152,7 @@ export default function EditContestPage({
     if (!user) {
       toast({
         title: "Authentication Error",
-        description: "You must be logged in to update a contest",
+        description: "You must be logged in to update a campaign",
         variant: "destructive",
       });
       return;
@@ -6195,7 +6195,7 @@ export default function EditContestPage({
       ? { ...contest.contest_based_details }
       : {};
     if (!datesOnly) {
-      // Prevent stale config bleed when contest type changes.
+      // Prevent stale config bleed when campaign type changes.
       if (contestType !== "leaderboard") {
         delete contestBasedDetails.leaderboard_contest;
       }
@@ -6339,11 +6339,11 @@ export default function EditContestPage({
         setShowPayment(true);
         setIsPaymentRequired(true);
       } catch (error) {
-        console.error("Error saving contest before payment:", error);
+        console.error("Error saving campaign before payment:", error);
         toast({
           title: "Error",
           description:
-            "Failed to save contest data before payment. Please try again.",
+            "Failed to save campaign data before payment. Please try again.",
           variant: "destructive",
         });
       }
@@ -6383,7 +6383,7 @@ export default function EditContestPage({
         title: "Submission Failed",
         description:
           error.message ||
-          "Failed to submit contest for approval. Please try again.",
+          "Failed to submit campaign for approval. Please try again.",
         variant: "destructive",
       });
       setIsSubmitting(false);
@@ -6424,7 +6424,7 @@ export default function EditContestPage({
     if (!user) {
       toast({
         title: "Authentication Error",
-        description: "You must be logged in to update a contest",
+        description: "You must be logged in to update a campaign",
         variant: "destructive",
       });
       setIsSubmitting(false);
@@ -6434,8 +6434,8 @@ export default function EditContestPage({
 
     if (!contest) {
       toast({
-        title: "Contest Error",
-        description: "Contest data not loaded. Cannot save changes.",
+        title: "Campaign Error",
+        description: "Campaign data not loaded. Cannot save changes.",
         variant: "destructive",
       });
       setIsSubmitting(false);
@@ -6449,7 +6449,7 @@ export default function EditContestPage({
 
     if (!datesOnly && !isDraftMode) {
       if (!title || title.trim() === "") {
-        showError("Contest title is required.");
+        showError("Campaign title is required.");
         setIsSubmitting(false);
         if (submitTimeoutId) clearTimeout(submitTimeoutId);
         return;
@@ -6463,7 +6463,7 @@ export default function EditContestPage({
       }
 
       if (!rulesHtml || isRichTextEditorEmpty(rulesRichTextEditorRef)) {
-        showError("Contest rules are required.");
+        showError("Campaign rules are required.");
         setIsSubmitting(false);
         if (submitTimeoutId) clearTimeout(submitTimeoutId);
         return;
@@ -6599,7 +6599,7 @@ export default function EditContestPage({
         const isNewContest = !originalStartDate || originalStartDate > now;
         const isLiveContest = originalStartDate && originalStartDate <= now;
 
-        // Allow admins to edit contests without date restrictions (for both live and upcoming)
+        // Allow admins to edit campaigns without date restrictions (for both live and upcoming)
         if (!isAdmin) {
           if (isNewContest) {
             // For approved contests, only check that start time is in the future
@@ -6610,7 +6610,7 @@ export default function EditContestPage({
             ) {
               toast({
                 title: "Invalid Start Date",
-                description: `Contest must start at least ${MIN_DAYS_UNTIL_START} days from today (${
+                description: `Campaign must start at least ${MIN_DAYS_UNTIL_START} days from today (${
                   MIN_DAYS_UNTIL_START - 1
                 } day gap required).`,
                 variant: "destructive",
@@ -6622,7 +6622,7 @@ export default function EditContestPage({
           } else if (startDateTime < now) {
             toast({
               title: "Invalid Start Time",
-              description: "Contest start time must be in the future.",
+              description: "Campaign start time must be in the future.",
               variant: "destructive",
             });
             setIsSubmitting(false);
@@ -6634,7 +6634,7 @@ export default function EditContestPage({
         if (endDateTime <= startDateTime) {
           toast({
             title: "Invalid End Time",
-            description: "Contest end time must be after the start time.",
+            description: "Campaign end time must be after the start time.",
             variant: "destructive",
           });
           setIsSubmitting(false);
@@ -6649,7 +6649,7 @@ export default function EditContestPage({
         if (durationDays < MIN_CONTEST_DURATION_DAYS) {
           toast({
             title: "Invalid Duration",
-            description: `Contest duration must be at least ${MIN_CONTEST_DURATION_DAYS} days.`,
+            description: `Campaign duration must be at least ${MIN_CONTEST_DURATION_DAYS} days.`,
             variant: "destructive",
           });
           setIsSubmitting(false);
@@ -6660,7 +6660,7 @@ export default function EditContestPage({
         if (durationDays > MAX_CONTEST_DURATION_DAYS) {
           toast({
             title: "Invalid Duration",
-            description: `Contest duration cannot exceed ${MAX_CONTEST_DURATION_DAYS} days.`,
+            description: `Campaign duration cannot exceed ${MAX_CONTEST_DURATION_DAYS} days.`,
             variant: "destructive",
           });
           setIsSubmitting(false);
@@ -6684,7 +6684,7 @@ export default function EditContestPage({
     } else {
       toast({
         title: "Missing Dates",
-        description: "Contest start and end dates/times are required.",
+        description: "Campaign start and end dates/times are required.",
         variant: "destructive",
       });
       setIsSubmitting(false);
@@ -6692,7 +6692,7 @@ export default function EditContestPage({
       return;
     }
 
-    // Skip contest type validation for datesOnly mode
+    // Skip campaign type validation for datesOnly mode
     if (!datesOnly && contestType === "leaderboard") {
       const currentTotalPrizePool = winnerAmounts.reduce(
         (sum, amount) => sum + (amount || 0),
@@ -6780,7 +6780,7 @@ export default function EditContestPage({
         }
       }
 
-      // Always build contest details (for both draft and non-draft)
+      // Always build campaign details (for both draft and non-draft)
       const leaderboardDetails: any = {
         prizes: winnerAmounts.slice(0, winnerCount).map((amount, index) => ({
           position: index + 1,
@@ -6820,7 +6820,7 @@ export default function EditContestPage({
       if (contestType === "milestone" || contestType === "dual_rewards") {
         if (contest?.contest_format !== "video") {
           showError(
-            "Milestone and dual-rewards contests require the Video contest format.",
+            "Milestone and dual-rewards campaigns require the Video campaign format.",
           );
           setIsSubmitting(false);
           if (submitTimeoutId) clearTimeout(submitTimeoutId);
@@ -6938,8 +6938,8 @@ export default function EditContestPage({
         if (!isDraftMode && totalBudgetCentsMilestone <= 0) {
           showError(
             contestType === "dual_rewards"
-              ? "Total contest budget is required for dual-rewards contests."
-              : "Total contest budget is required for milestone contests.",
+              ? "Total campaign budget is required for dual-rewards campaigns."
+              : "Total campaign budget is required for milestone campaigns.",
           );
           setIsSubmitting(false);
           if (submitTimeoutId) clearTimeout(submitTimeoutId);
@@ -7050,7 +7050,7 @@ export default function EditContestPage({
             toast({
               title: "Missing Terms & Conditions",
               description:
-                "Terms and conditions are required for CPM contests.",
+                "Terms and conditions are required for CPM campaigns.",
               variant: "destructive",
             });
             setIsSubmitting(false);
@@ -7058,11 +7058,11 @@ export default function EditContestPage({
             return;
           }
 
-          // Validate: Total Budget is mandatory for CPM contests
+          // Validate: Total Budget is mandatory for CPM campaigns
           if (!parsedTotalBudget || parsedTotalBudget <= 0) {
             toast({
               title: "Total Budget Required",
-              description: "Total Budget is mandatory for CPM contests.",
+              description: "Total Budget is mandatory for CPM campaigns.",
               variant: "destructive",
             });
             setIsSubmitting(false);
@@ -7096,7 +7096,7 @@ export default function EditContestPage({
               toast({
                 title: "Flat Fee Bonus Cap Required",
                 description:
-                  "Flat Fee Bonus Cap is required when Flat Fee Bonus is enabled for CPM contests.",
+                  "Flat Fee Bonus Cap is required when Flat Fee Bonus is enabled for CPM campaigns.",
                 variant: "destructive",
               });
               setIsSubmitting(false);
@@ -7141,7 +7141,7 @@ export default function EditContestPage({
             }
           }
 
-          // Validate: Prevent contest creation if total money a single creator can earn > total budget
+          // Validate: Prevent campaign creation if total money a single creator can earn > total budget
           if (parsedTotalBudget) {
             const totalBudgetCents = parsedTotalBudget * 100;
             let maxCreatorEarnings = 0;
@@ -7202,7 +7202,7 @@ export default function EditContestPage({
           terms_conditions: (termsConditions || "").trim(),
         };
 
-        // Only include min_views and max_views for non-Twitter CPM contests
+        // Only include min_views and max_views for non-Twitter CPM campaigns
         if (!isTwitterCpmContest) {
           cpmDetails.min_views = parsedMinViews;
           cpmDetails.max_views = parsedMaxViews;
@@ -7222,7 +7222,7 @@ export default function EditContestPage({
         // Note: CPM Points Configuration multipliers are saved in twitter_campaign.points_config
         // (not in cpm_contest.points_config)
 
-        // Add flat fee bonus cap if specified (stored in cents) - required for CPM contests with flat fee bonus
+        // Add flat fee bonus cap if specified (stored in cents) - required for CPM campaigns with flat fee bonus
         if (
           contestType !== "dual_rewards" &&
           flatFeeBonusCap &&
@@ -7525,7 +7525,7 @@ export default function EditContestPage({
       updatePayload.contest_based_details = contestBasedDetails;
     }
 
-    // Only update contest type and details if not in datesOnly mode
+    // Only update campaign type and details if not in datesOnly mode
     if (!datesOnly) {
       // Add new features (2025-10-01)
       updatePayload.multiple_submissions_enabled = multipleSubmissionsEnabled;
@@ -7675,7 +7675,7 @@ export default function EditContestPage({
     } catch (err: any) {
       toast({
         title: "Update Failed",
-        description: err.message || "Failed to update contest",
+        description: err.message || "Failed to update campaign",
         variant: "destructive",
       });
       setIsSubmitting(false);
@@ -7715,7 +7715,7 @@ export default function EditContestPage({
       }
       // Immediately upload to Supabase with new naming and cleanup
       try {
-        // Remove any existing thumbnail for this contest (all extensions)
+        // Remove any existing thumbnail for this campaign (all extensions)
         const { data: existingFiles } = await supabase.storage
           .from("contest-assets")
           .list("contest_thumbnails");
@@ -7828,7 +7828,7 @@ export default function EditContestPage({
     // Check all loading states
     return (
       // <div className="flex items-center justify-center h-full">
-      //   <p>Loading contest data...</p>
+      //   <p>Loading campaign data...</p>
       // </div>
       <div className="flex items-center justify-center h-[76vh]">
         <PageLoadingSpinner mode="light" />
@@ -7853,7 +7853,7 @@ export default function EditContestPage({
               <ArrowLeft className="h-5 w-5" />
             </Link>
           </Button>
-          <h1 className="text-2xl font-bold">Edit Contest</h1>
+          <h1 className="text-2xl font-bold">Edit Campaign</h1>
         </div>
         <Alert variant="destructive" className="mb-6">
           <AlertDescription>{error}</AlertDescription>
@@ -7870,7 +7870,7 @@ export default function EditContestPage({
             className="bg-rose-600 hover:bg-rose-700 text-white"
           >
             {error.includes("live or has ended")
-              ? "Return to Contest"
+              ? "Return to Campaign"
               : "Back to Campaigns"}
           </Button>
         </div>
@@ -7888,7 +7888,7 @@ export default function EditContestPage({
               <ArrowLeft className="h-5 w-5" />
             </Link>
           </Button>
-          <h1 className="text-2xl font-bold">Edit Contest</h1>
+          <h1 className="text-2xl font-bold">Edit Campaign</h1>
         </div>
         <Alert variant="destructive" className="mb-6">
           <AlertDescription>
@@ -7930,7 +7930,7 @@ export default function EditContestPage({
           </Link>
         </Button>
         <h1 className="text-2xl font-bold">
-          {datesOnly ? "Edit Contest Dates" : "Edit Contest"}
+          {datesOnly ? "Edit Campaign Dates" : "Edit Campaign"}
         </h1>
         {isAdmin && (
           <span className="ml-3 px-3 py-1 text-xs font-semibold bg-amber-100 text-amber-800 rounded-full border border-amber-300">
@@ -8042,7 +8042,7 @@ export default function EditContestPage({
               <br />
               <span className="text-sm text-gray-600">
                 If you want to use your new plan's commission rate, you'll need
-                to create a new contest.
+                to create a new campaign.
               </span>
             </AlertDescription>
           </Alert>
@@ -8066,15 +8066,15 @@ export default function EditContestPage({
               isDark ? "text-white" : "text-purple-500",
             )}
           >
-            Edit Contest Details
+            Edit Campaign Details
           </CardTitle>
         </div>
         <div className="px-4 md:px-6 md:p-6 space-y-6">
           {!datesOnly && (
             <>
-              {/* Contest Format Selection */}
+              {/* Campaign Format Selection */}
               <div className="space-y-2">
-                <Label className="text-xl font-semibold">Contest Format</Label>
+                <Label className="text-xl font-semibold">Campaign Format</Label>
                 <div className="flex flex-col sm:flex-row gap-2 pt-2">
                   {contestType !== "dual_rewards" && (
                   <Button
@@ -8107,7 +8107,7 @@ export default function EditContestPage({
                         updates.platform = defaultPlatform;
                         setPlatform(defaultPlatform);
                       }
-                      // Update contest format (and platform if changed) in database
+                      // Update campaign format (and platform if changed) in database
                       await supabase
                         .from("contests")
                         .update(updates)
@@ -8117,7 +8117,7 @@ export default function EditContestPage({
                       refreshContestData();
                     }}
                   >
-                    Text/Image Contest
+                    Text/Image Campaign
                   </Button>
                   )}
                   <Button
@@ -8154,7 +8154,7 @@ export default function EditContestPage({
                         updates.platform = defaultPlatform;
                         setPlatform(defaultPlatform);
                       }
-                      // Update contest format (and platform if changed) in database
+                      // Update campaign format (and platform if changed) in database
                       await supabase
                         .from("contests")
                         .update(updates)
@@ -8164,13 +8164,13 @@ export default function EditContestPage({
                       refreshContestData();
                     }}
                   >
-                    Video Contest
+                    Video Campaign
                   </Button>
                 </div>
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="title">Contest title</Label>
+                <Label htmlFor="title">Campaign title</Label>
                 <Input
                   id="title"
                   value={title}
@@ -8206,7 +8206,7 @@ export default function EditContestPage({
                         : "bg-white",
                     )}
                   >
-                    <SelectValue placeholder="Select contest platform" />
+                    <SelectValue placeholder="Select campaign platform" />
                   </SelectTrigger>
                   <SelectContent isDark={isDark}>
                     {contest?.contest_format === "text_image"
@@ -8376,7 +8376,7 @@ export default function EditContestPage({
                   >
                     Target specific creators by selecting categories,
                     subcategories, interests, or regions. Only matching creators
-                    will see this contest.
+                    will see this campaign.
                   </label>
                 </div>
               </div>
@@ -8964,7 +8964,7 @@ export default function EditContestPage({
                           )}
                         >
                           Select regions and countries where creators can see
-                          and participate in this contest. Only creators from
+                          and participate in this campaign. Only creators from
                           selected regions will see this opportunity in their
                           dashboard.
                         </p> */}
@@ -9613,7 +9613,7 @@ export default function EditContestPage({
                 </CardTitle>
                 <CardDescription className="text-sm md:text-[13px]">
                   Provide at least one resource to help participants understand
-                  your brand and contest requirements. You can upload assets
+                  your brand and campaign requirements. You can upload assets
                   (logos, guidelines, examples) <b>or</b> add external links
                   (website, social media, portfolio).
                 </CardDescription>
@@ -10691,10 +10691,10 @@ export default function EditContestPage({
 
           {/* <Separator /> */}
 
-          {/* Contest Type Display (Read-Only) */}
+          {/* Campaign Type Display (Read-Only) */}
           {!datesOnly && (
             <div className="space-y-2">
-              <Label htmlFor="contest-type">Contest Type</Label>
+              <Label htmlFor="contest-type">Campaign Type</Label>
               <Input
                 id="contest-type"
                 value={
@@ -10717,9 +10717,9 @@ export default function EditContestPage({
             </div>
           )}
 
-          {/* Contest Duration */}
+          {/* Campaign Duration */}
           <div className="space-y-4">
-            <h3 className="text-lg font-medium">Contest Duration</h3>
+            <h3 className="text-lg font-medium">Campaign Duration</h3>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="start-date">Start Date</Label>
@@ -10806,11 +10806,11 @@ export default function EditContestPage({
                 isDark ? "text-white" : "text-gray-600",
               )}
             >
-              <strong>Start Date Rule:</strong> Contest must start at least{" "}
+              <strong>Start Date Rule:</strong> Campaign must start at least{" "}
               {MIN_DAYS_UNTIL_START} days from today.{" "}
               {getStartDateRuleExample()}
               <br />
-              <strong>Duration:</strong> Contest must run between{" "}
+              <strong>Duration:</strong> Campaign must run between{" "}
               {MIN_CONTEST_DURATION_DAYS} and {MAX_CONTEST_DURATION_DAYS} days.
               The end date will automatically adjust to maintain minimum
               duration.
@@ -11067,7 +11067,7 @@ export default function EditContestPage({
             (contestType === "milestone" || contestType === "dual_rewards") && (
               <div className="space-y-6 py-4 px-1">
                 <h3 className="text-lg font-medium">
-                  Milestone contest configuration
+                  Milestone campaign configuration
                 </h3>
                 <Alert
                   className={cn(
@@ -11256,7 +11256,7 @@ export default function EditContestPage({
                 {contestType !== "dual_rewards" && (
                   <div className="space-y-2">
                     <Label htmlFor="milestoneTotalBudget">
-                      Total contest budget (USD){" "}
+                      Total campaign budget (USD){" "}
                       <span className="text-red-500">*</span>
                     </Label>
                     <Input
@@ -11274,7 +11274,7 @@ export default function EditContestPage({
                           ? "bg-[#180438] border border-gray-600 text-white"
                           : "bg-white",
                       )}
-                      placeholder="Maximum amount reserved for this contest"
+                      placeholder="Maximum amount reserved for this campaign"
                     />
                     <p className="text-xs text-muted-foreground">
                       This is the pool you fund upfront (similar to a CPM budget).
@@ -11456,7 +11456,7 @@ export default function EditContestPage({
                       )}
                     >
                       <AlertDescription>
-                        The minimum contest budget for your{" "}
+                        The minimum campaign budget for your{" "}
                         {subscriptionPlans.find((p) => p.id === userPlan)
                           ?.name || "current"}{" "}
                         plan is{" "}
@@ -11474,7 +11474,7 @@ export default function EditContestPage({
               {/* <Separator /> */}
               <div className="space-y-6 py-4 px-1">
                 <h3 className="text-lg font-medium">
-                  CPM Contest Configuration
+                  CPM Campaign Configuration
                 </h3>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -11543,7 +11543,7 @@ export default function EditContestPage({
                   <div className="space-y-2">
                     <Label htmlFor="totalBudget">
                       {contestType === "dual_rewards"
-                        ? "Total contest budget (USD)"
+                        ? "Total campaign budget (USD)"
                         : "Total Budget (USD)"}{" "}
                       <span className="text-red-500">*</span>
                     </Label>
@@ -11567,7 +11567,7 @@ export default function EditContestPage({
                     <p className="text-xs text-muted-foreground">
                       {contestType === "dual_rewards"
                         ? "One funded amount: the same budget backs both per-view (CPM) payouts and milestone payouts."
-                        : "Required: The maximum total amount to be paid out for CPM earnings in this contest."}
+                        : "Required: The maximum total amount to be paid out for CPM earnings in this campaign."}
                     </p>
                   </div>
                 </div>
@@ -12201,7 +12201,7 @@ export default function EditContestPage({
                     )}
                   >
                     <AlertDescription>
-                      Twitter CPM contests use the <strong>Points Model</strong>
+                      Twitter CPM campaigns use the <strong>Points Model</strong>
                       . Payout is calculated based on total points earned and
                       the CPM rate per 1,000 points.
                     </AlertDescription>
@@ -12366,7 +12366,7 @@ export default function EditContestPage({
                         : "bg-white",
                     )}
                     onChange={(e) => setTermsConditions(e.target.value)}
-                    placeholder="Outline the specific terms and conditions for creators participating in this CPM contest..."
+                    placeholder="Outline the specific terms and conditions for creators participating in this CPM campaign..."
                     rows={6}
                   />
                   <p className="text-xs text-muted-foreground">
@@ -12386,14 +12386,14 @@ export default function EditContestPage({
                       )}
                     >
                       <AlertDescription>
-                        The minimum contest budget for your{" "}
+                        The minimum campaign budget for your{" "}
                         {subscriptionPlans.find((p) => p.id === userPlan)
                           ?.name || "current"}{" "}
                         plan is{" "}
                         {formatCurrencyFromCents(planFeatures.minContestBudget)}
                         . Please increase your{" "}
                         {contestType === "dual_rewards"
-                          ? "total contest budget."
+                          ? "total campaign budget."
                           : "CPM pool budget."}
                       </AlertDescription>
                     </Alert>
@@ -12402,7 +12402,7 @@ export default function EditContestPage({
             </div>
           )}
 
-          {/* New Features Section (2025-10-01) - Common for both contest types */}
+          {/* New Features Section (2025-10-01) - Common for both campaign types */}
           {!datesOnly && (
             <div className="space-y-6 pt-4">
               <Separator />
@@ -12472,8 +12472,8 @@ export default function EditContestPage({
                       )}
                     >
                      Enable trust score requirements to allow only reliable creators to participate.
-  Trust scores may decrease for rejected for not meeting contest requirements, low-quality content,
-  spam, or policy violations.Creators below the required score cannot submit to this contest.
+  Trust scores may decrease for rejected for not meeting campaign requirements, low-quality content,
+  spam, or policy violations.Creators below the required score cannot submit to this campaign.
                     </p>
                   </div>
                   <Checkbox
@@ -12626,7 +12626,7 @@ export default function EditContestPage({
                       <p className="text-xs text-muted-foreground">
                         💡 Per-contest cap (not platform-wide). Creators can
                         still submit after reaching this cap but won't earn more
-                        from THIS specific contest. Leave empty for no cap.
+                        from THIS specific campaign. Leave empty for no cap.
                       </p>
                     </div>
                   </div>
@@ -12665,7 +12665,7 @@ export default function EditContestPage({
                               after contest ends. Great motivator for creators!
                             </p>
                           </div>
-                          {/* Flat Fee Bonus Cap (Only for CPM contests) */}
+                          {/* Flat Fee Bonus Cap (Only for CPM campaigns) */}
                           {contestType === "cpm" &&
                             flatFeeBonus &&
                             parseFloat(flatFeeBonus.toString()) > 0 && (
@@ -12702,7 +12702,7 @@ export default function EditContestPage({
                         </>
                       )}
 
-                      {/* Total Budget for Bonuses (Only for Leaderboard contests with flat fee bonus) */}
+                      {/* Total Budget for Bonuses (Only for Leaderboard campaigns with flat fee bonus) */}
                       {contestType === "leaderboard" &&
                         flatFeeBonus &&
                         parseFloat(flatFeeBonus.toString()) > 0 && (
@@ -12887,7 +12887,7 @@ export default function EditContestPage({
               </div>
             )}
 
-          {/* Modern Error Display exactly like create contest page */}
+          {/* Modern Error Display exactly like create campaign page */}
           {formFeedback && formFeedbackType === "error" && (
             <div className="mr-auto">
               <div className="bg-gradient-to-r from-red-50 to-red-100 dark:from-red-950/50 dark:to-red-900/50 border border-red-200 dark:border-red-800 rounded-lg p-3">
@@ -13119,7 +13119,7 @@ export default function EditContestPage({
                         isContestPaid() &&
                         budgetChanged &&
                         budgetDifference < 0 ? (
-                        "Update Contest"
+                        "Update Campaign"
                       ) : (
                         "Submit & Pay"
                       )}
@@ -13348,8 +13348,8 @@ export default function EditContestPage({
           >
             <div className="p-6">
               <div className="mb-6">
-                <h2 className="text-2xl font-bold mb-2">Contest Payment</h2>
-                <p>Complete payment to submit your contest for review</p>
+                <h2 className="text-2xl font-bold mb-2">Campaign Payment</h2>
+                <p>Complete payment to submit your campaign for review</p>
               </div>
 
               {/* Plan Commission Rate Information */}
@@ -13366,7 +13366,7 @@ export default function EditContestPage({
                       <br />
                       <span className="text-sm">
                         If you want to use your new plan's commission rate,
-                        you'll need to create a new contest.
+                        you'll need to create a new campaign.
                       </span>
                     </AlertDescription>
                   </Alert>
@@ -13405,7 +13405,7 @@ export default function EditContestPage({
                     ? budgetDifference / 100 // Prize pool increase amount in dollars
                     : contestType === "leaderboard"
                       ? (() => {
-                          // For leaderboard contests, charge prize pool + total budget (if flat fee bonus is enabled)
+                          // For leaderboard campaigns, charge prize pool + total budget (if flat fee bonus is enabled)
                           const prizePoolDollars =
                             winnerAmounts.reduce(
                               (sum, amount) => sum + (amount || 0),
@@ -13452,7 +13452,7 @@ export default function EditContestPage({
                         })()
                       : undefined
                 }
-                contestTitle={title || "Untitled Contest"}
+                contestTitle={title || "Untitled Campaign"}
                 contestId={contestId}
                 commissionPercentage={
                   contestCommissionRate !== null

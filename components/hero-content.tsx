@@ -34,7 +34,7 @@ import NumbersSection from "./NumberSection";
 const steps = [
   {
     step: 1,
-    title: "Brands Create a Contest",
+    title: "Brands Create a Campaign",
     description:
       "Share your vision. Describe your product, set the rules, and offer a prize. Decide how you want creators to promote your brand or product.",
     image: "/images/da37f744f2ba86471c20ded62e5befaccbcabd69.avif",
@@ -44,7 +44,7 @@ const steps = [
     step: 2,
     title: "Open to Everyone",
     description:
-      "Your follower count doesn't matter. Whether you have zero followers or millions, you can join any contest that inspires you. Pick a challenge, showcase your talent, and stand out! ",
+      "Your follower count doesn't matter. Whether you have zero followers or millions, you can join any campaign that inspires you. Pick a challenge, showcase your talent, and stand out! ",
 
     image: "/images/4cb24974041cac85c7df83d9aaf0e54514c37f92.avif",
     icon: <Users className="w-6 h-6 text-white" />,

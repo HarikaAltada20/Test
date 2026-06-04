@@ -444,7 +444,7 @@ export default function CreatorAnalytics({
           )}
         >
           <CardHeader>
-            <CardTitle className="text-lg">Contest Type Preferences</CardTitle>
+            <CardTitle className="text-lg">Campaign Type Preferences</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="space-y-3">
@@ -720,7 +720,7 @@ export default function CreatorAnalytics({
                     @{leaderboards.topByViews[0].creator.username}
                   </h3>
                   <p className="text-muted-foreground">
-                    Top performer across all contests
+                    Top performer across all campaigns
                   </p>
                   <div className="flex flex-wrap items-center gap-3 sm:gap-4 mt-2 text-sm">
                     <span className="flex items-center gap-1">

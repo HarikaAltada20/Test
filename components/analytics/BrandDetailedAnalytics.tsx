@@ -206,7 +206,7 @@ export default function BrandDetailedAnalytics({
 
       {/* Contest Type Filter */}
       {/* <div className="flex items-center justify-between">
-        <h2 className="text-lg font-semibold">Contest Overview</h2>
+        <h2 className="text-lg font-semibold">Campaign Overview</h2>
         <ContestTypeFilter
           value={contestTypeFilter as any}
           onChange={(value) =>
@@ -219,7 +219,7 @@ export default function BrandDetailedAnalytics({
 
       {/* Contest Status Overview */}
       <div className="flex items-center justify-between">
-        <h2 className="text-lg font-semibold">Contest Status Overview</h2>
+        <h2 className="text-lg font-semibold">Campaign Status Overview</h2>
       </div>
 
       <div className="grid gap-3 sm:gap-3 grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-9">
@@ -245,7 +245,7 @@ export default function BrandDetailedAnalytics({
                   isDark ? "text-white" : "text-gray-900",
                 )}
               >
-                Draft Contests
+                Draft Campaigns
               </CardTitle>
               <TooltipProvider delayDuration={0}>
                 <Tooltip>
@@ -253,7 +253,7 @@ export default function BrandDetailedAnalytics({
                     <Info className="h-3 w-3 sm:h-4 sm:w-4 text-muted-foreground" />
                   </TooltipTrigger>
                   <TooltipContent>
-                    Contests currently in draft (not submitted for approval)
+                    Campaigns currently in draft (not submitted for approval)
                   </TooltipContent>
                 </Tooltip>
               </TooltipProvider>
@@ -274,7 +274,7 @@ export default function BrandDetailedAnalytics({
                 isDark ? "text-gray-300" : "text-gray-700",
               )}
             >
-              Draft contests
+              Draft campaigns
             </p>
           </div>
         </div>
@@ -309,7 +309,7 @@ export default function BrandDetailedAnalytics({
                     <Info className="h-3 w-3 sm:h-3.5 sm:w-3.5 text-muted-foreground" />
                   </TooltipTrigger>
                   <TooltipContent>
-                    Contests submitted for approval
+                    Campaigns submitted for approval
                   </TooltipContent>
                 </Tooltip>
               </TooltipProvider>
@@ -365,7 +365,7 @@ export default function BrandDetailedAnalytics({
                     <Info className="h-3 w-3 sm:h-4 sm:w-4 text-muted-foreground" />
                   </TooltipTrigger>
                   <TooltipContent>
-                    Contests approved and ready to publish
+                    Campaigns approved and ready to publish
                   </TooltipContent>
                 </Tooltip>
               </TooltipProvider>
@@ -386,7 +386,7 @@ export default function BrandDetailedAnalytics({
                 isDark ? "text-gray-300" : "text-gray-700",
               )}
             >
-              Approved contests
+              Approved campaigns
             </p>
           </div>
         </div>
@@ -421,7 +421,7 @@ export default function BrandDetailedAnalytics({
                     <Info className="h-3 w-3 sm:h-4 sm:w-4 text-muted-foreground" />
                   </TooltipTrigger>
                   <TooltipContent>
-                    Contests with moderation status set to "published"
+                    Campaigns with moderation status set to "published"
                   </TooltipContent>
                 </Tooltip>
               </TooltipProvider>
@@ -442,7 +442,7 @@ export default function BrandDetailedAnalytics({
                 isDark ? "text-gray-300" : "text-gray-700",
               )}
             >
-              Published contests
+              Published campaigns
             </p>
           </div>
         </div>
@@ -477,7 +477,7 @@ export default function BrandDetailedAnalytics({
                     <Info className="h-3 w-3 sm:h-4 sm:w-4 text-muted-foreground" />
                   </TooltipTrigger>
                   <TooltipContent>
-                    Published contests currently live
+                    Published campaigns currently live
                   </TooltipContent>
                 </Tooltip>
               </TooltipProvider>
@@ -533,7 +533,7 @@ export default function BrandDetailedAnalytics({
                     <Info className="h-3 w-3 sm:h-4 sm:w-4 text-muted-foreground" />
                   </TooltipTrigger>
                   <TooltipContent>
-                    Ended contests where payouts are processed
+                    Ended campaigns where payouts are processed
                     (post_contest_status = payouts_processed)
                   </TooltipContent>
                 </Tooltip>
@@ -590,7 +590,7 @@ export default function BrandDetailedAnalytics({
                     <Info className="h-3 w-3 sm:h-4 sm:w-4 text-muted-foreground" />
                   </TooltipTrigger>
                   <TooltipContent>
-                    Contests that were rejected and need changes
+                    Campaigns that were rejected and need changes
                   </TooltipContent>
                 </Tooltip>
               </TooltipProvider>
@@ -611,7 +611,7 @@ export default function BrandDetailedAnalytics({
                 isDark ? "text-gray-300" : "text-gray-700",
               )}
             >
-              Rejected contests
+              Rejected campaigns
             </p>
           </div>
         </div>
@@ -646,7 +646,7 @@ export default function BrandDetailedAnalytics({
                     <Info className="h-3 w-3 sm:h-4 sm:w-4 text-muted-foreground" />
                   </TooltipTrigger>
                   <TooltipContent>
-                    Published contests with lifecycle status = upcoming
+                    Published campaigns with lifecycle status = upcoming
                   </TooltipContent>
                 </Tooltip>
               </TooltipProvider>
@@ -667,7 +667,7 @@ export default function BrandDetailedAnalytics({
                 isDark ? "text-gray-300" : "text-muted-foreground",
               )}
             >
-              Scheduled contests
+              Scheduled campaigns
             </p>
           </div>
         </div>
@@ -702,7 +702,7 @@ export default function BrandDetailedAnalytics({
                     <Info className="h-3 w-3 sm:h-4 sm:w-4 text-muted-foreground" />
                   </TooltipTrigger>
                   <TooltipContent>
-                    Published contests that have ended but payouts are not yet
+                    Published campaigns that have ended but payouts are not yet
                     processed
                   </TooltipContent>
                 </Tooltip>
@@ -993,7 +993,7 @@ export default function BrandDetailedAnalytics({
                     <Info className="h-4 w-4 text-muted-foreground" />
                   </TooltipTrigger>
                   <TooltipContent>
-                    Sum of completed payments for contests that are published
+                    Sum of completed payments for campaigns that are published
                   </TooltipContent>
                 </Tooltip>
               </TooltipProvider>
@@ -1014,7 +1014,7 @@ export default function BrandDetailedAnalytics({
               {formatCurrencyFromCents(safeOverview.totalMoneyPaid)}
             </div>
             <p className="text-xs text-muted-foreground">
-              Completed payments for published contests
+              Completed payments for published campaigns
             </p>
           </CardContent>
         </Card>
@@ -1037,7 +1037,7 @@ export default function BrandDetailedAnalytics({
                     <Info className="h-4 w-4 text-muted-foreground" />
                   </TooltipTrigger>
                   <TooltipContent>
-                    Completed payments for contests not yet published
+                    Completed payments for campaigns not yet published
                     (draft/approved)
                   </TooltipContent>
                 </Tooltip>
@@ -1082,7 +1082,7 @@ export default function BrandDetailedAnalytics({
                     <Info className="h-4 w-4 text-muted-foreground" />
                   </TooltipTrigger>
                   <TooltipContent>
-                    Sum of completed payments across all contests (published and
+                    Sum of completed payments across all campaigns (published and
                     unpublished)
                   </TooltipContent>
                 </Tooltip>
@@ -1106,7 +1106,7 @@ export default function BrandDetailedAnalytics({
               )}
             </div>
             <p className="text-xs text-muted-foreground">
-              All contests with completed payment
+              All campaigns with completed payment
             </p>
           </CardContent>
         </Card>
@@ -1343,7 +1343,7 @@ export default function BrandDetailedAnalytics({
               )}
             </div>
             <p className="text-xs text-muted-foreground">
-              Includes payments made + budgets set on not-yet-paid contests
+              Includes payments made + budgets set on not-yet-paid campaigns
             </p>
           </CardContent>
         </Card>
@@ -1366,7 +1366,7 @@ export default function BrandDetailedAnalytics({
                     <Info className="h-4 w-4 text-muted-foreground" />
                   </TooltipTrigger>
                   <TooltipContent>
-                    Budgets/prize pools on contests still in draft and not yet
+                    Budgets/prize pools on campaigns still in draft and not yet
                     paid
                   </TooltipContent>
                 </Tooltip>
@@ -1388,7 +1388,7 @@ export default function BrandDetailedAnalytics({
               {formatCurrencyFromCents(safeOverview.moneyInDraftNotPaid)}
             </div>
             <p className="text-xs text-muted-foreground">
-              Draft contests only (unpaid)
+              Draft campaigns only (unpaid)
             </p>
           </CardContent>
         </Card>

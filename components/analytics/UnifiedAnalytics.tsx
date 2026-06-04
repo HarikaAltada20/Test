@@ -75,21 +75,21 @@ const defaultMetricTiles: MetricTile[] = [
   // Contest Metrics
   {
     id: "total_contests",
-    label: "Total Contests",
+    label: "Total Campaigns",
     icon: BarChart3,
     enabled: true,
     category: "contests",
   },
   {
     id: "published_contests",
-    label: "Published Contests",
+    label: "Published Campaigns",
     icon: CheckCircle,
     enabled: false,
     category: "contests",
   },
   {
     id: "draft_contests",
-    label: "Draft Contests",
+    label: "Draft Campaigns",
     icon: FileText,
     enabled: false,
     category: "contests",
@@ -251,7 +251,7 @@ export default function UnifiedAnalytics({ userId }: UnifiedAnalyticsProps) {
     () => [
       { id: "overview", label: "Overview" },
       { id: "detailed", label: isMobile ? "Analytics" : "Detailed Analytics" },
-      { id: "contests", label: "Contests" },
+      { id: "contests", label: "Campaigns" },
       { id: "creators", label: "Creators" },
     ],
     [isMobile],
@@ -463,6 +463,12 @@ export default function UnifiedAnalytics({ userId }: UnifiedAnalyticsProps) {
 
   const enabledTiles = metricTiles.filter((tile) => tile.enabled);
   const categories = ["contests", "submissions", "engagement", "financial"];
+  const categoryMetricLabels: Record<string, string> = {
+    contests: "Campaign",
+    submissions: "Submission",
+    engagement: "Engagement",
+    financial: "Financial",
+  };
 
   return (
     <div className="space-y-6">
@@ -921,7 +927,7 @@ export default function UnifiedAnalytics({ userId }: UnifiedAnalyticsProps) {
                       isDark ? "text-white" : "text-gray-900",
                     )}
                   >
-                    {category} Metrics
+                    {categoryMetricLabels[category] ?? category} Metrics
                   </h3>
                   <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
                     {metricTiles
@@ -1010,7 +1016,7 @@ export default function UnifiedAnalytics({ userId }: UnifiedAnalyticsProps) {
                       isDark ? "text-white" : "text-gray-900",
                     )}
                   >
-                    Top Performing Contest
+                    Top Performing Campaign
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
@@ -1108,7 +1114,7 @@ export default function UnifiedAnalytics({ userId }: UnifiedAnalyticsProps) {
                                   isDark ? "text-gray-400" : "text-gray-500",
                                 )}
                               >
-                                {stats.contests} contests •{" "}
+                                {stats.contests} campaigns •{" "}
                                 {stats.submissions?.toLocaleString() ?? 0}{" "}
                                 submissions
                               </p>
@@ -1152,7 +1158,7 @@ export default function UnifiedAnalytics({ userId }: UnifiedAnalyticsProps) {
                       isDark ? "text-white" : "text-gray-900",
                     )}
                   >
-                    Contest Type Performance
+                    Campaign Type Performance
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
@@ -1178,7 +1184,7 @@ export default function UnifiedAnalytics({ userId }: UnifiedAnalyticsProps) {
                                 isDark ? "text-gray-400" : "text-gray-500",
                               )}
                             >
-                              {stats.count} contests • {stats.submissions}{" "}
+                              {stats.count} campaigns • {stats.submissions}{" "}
                               submissions
                             </p>
                           </div>

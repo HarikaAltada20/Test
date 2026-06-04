@@ -306,7 +306,7 @@ export default function AdminDashboardClient({
                   isDark ? "text-white" : "text-gray-900"
                 }`}
               >
-                Total Contests
+                Total Campaigns
               </h1>
               <TooltipProvider delayDuration={0}>
                 <Tooltip>
@@ -320,7 +320,7 @@ export default function AdminDashboardClient({
                     />
                   </TooltipTrigger>
                   <TooltipContent>
-                    Includes all contests (draft + published)
+                    Includes all campaigns (draft + published)
                   </TooltipContent>
                 </Tooltip>
               </TooltipProvider>
@@ -342,7 +342,7 @@ export default function AdminDashboardClient({
                 isDark ? "text-gray-300" : "text-gray-600"
               }`}
             >
-              All contests on platform
+              All campaigns on platform
             </p>
           </CardContent>
         </div>
@@ -773,7 +773,7 @@ export default function AdminDashboardClient({
             isDark ? "text-white" : "text-gray-900"
           }`}
         >
-          Contest Overview
+          Campaign Overview
         </h2>
         <ContestTypeFilter value={contestTypeFilter as any} />
       </div>
@@ -807,7 +807,7 @@ export default function AdminDashboardClient({
                     />
                   </TooltipTrigger>
                   <TooltipContent>
-                    Contests currently in draft (not submitted for approval)
+                    Campaigns currently in draft (not submitted for approval)
                   </TooltipContent>
                 </Tooltip>
               </TooltipProvider>
@@ -829,7 +829,7 @@ export default function AdminDashboardClient({
                 isDark ? "text-gray-300" : "text-gray-600"
               }`}
             >
-              Draft contests
+              Draft campaigns
             </p>
           </CardContent>
         </div>
@@ -861,7 +861,7 @@ export default function AdminDashboardClient({
                     />
                   </TooltipTrigger>
                   <TooltipContent>
-                    Contests submitted for approval
+                    Campaigns submitted for approval
                   </TooltipContent>
                 </Tooltip>
               </TooltipProvider>
@@ -915,7 +915,7 @@ export default function AdminDashboardClient({
                     />
                   </TooltipTrigger>
                   <TooltipContent>
-                    Contests approved and ready to publish
+                    Campaigns approved and ready to publish
                   </TooltipContent>
                 </Tooltip>
               </TooltipProvider>
@@ -937,7 +937,7 @@ export default function AdminDashboardClient({
                 isDark ? "text-gray-300" : "text-gray-600"
               }`}
             >
-              Approved contests
+              Approved campaigns
             </p>
           </CardContent>
         </div>
@@ -969,7 +969,7 @@ export default function AdminDashboardClient({
                     />
                   </TooltipTrigger>
                   <TooltipContent>
-                    Contests that were rejected and need changes
+                    Campaigns that were rejected and need changes
                   </TooltipContent>
                 </Tooltip>
               </TooltipProvider>
@@ -991,7 +991,7 @@ export default function AdminDashboardClient({
                 isDark ? "text-gray-300" : "text-gray-600"
               }`}
             >
-              Rejected contests
+              Rejected campaigns
             </p>
           </CardContent>
         </div>
@@ -1022,7 +1022,7 @@ export default function AdminDashboardClient({
                     />
                   </TooltipTrigger>
                   <TooltipContent>
-                    Contests with moderation status set to "published"
+                    Campaigns with moderation status set to "published"
                   </TooltipContent>
                 </Tooltip>
               </TooltipProvider>
@@ -1044,7 +1044,7 @@ export default function AdminDashboardClient({
                 isDark ? "text-gray-300" : "text-gray-600"
               }`}
             >
-              Published contests
+              Published campaigns
             </p>
           </CardContent>
         </div>
@@ -1076,7 +1076,7 @@ export default function AdminDashboardClient({
                     />
                   </TooltipTrigger>
                   <TooltipContent>
-                    Published contests with lifecycle status = upcoming
+                    Published campaigns with lifecycle status = upcoming
                   </TooltipContent>
                 </Tooltip>
               </TooltipProvider>
@@ -1098,7 +1098,7 @@ export default function AdminDashboardClient({
                 isDark ? "text-gray-300" : "text-gray-600"
               }`}
             >
-              Scheduled contests
+              Scheduled campaigns
             </p>
           </CardContent>
         </div>
@@ -1130,7 +1130,7 @@ export default function AdminDashboardClient({
                     />
                   </TooltipTrigger>
                   <TooltipContent>
-                    Published contests currently live
+                    Published campaigns currently live
                   </TooltipContent>
                 </Tooltip>
               </TooltipProvider>
@@ -1183,7 +1183,7 @@ export default function AdminDashboardClient({
                     />
                   </TooltipTrigger>
                   <TooltipContent>
-                    Published contests with lifecycle status = ended
+                    Published campaigns with lifecycle status = ended
                   </TooltipContent>
                 </Tooltip>
               </TooltipProvider>
@@ -1236,7 +1236,7 @@ export default function AdminDashboardClient({
                     />
                   </TooltipTrigger>
                   <TooltipContent>
-                    Ended contests where payouts are processed
+                    Ended campaigns where payouts are processed
                     (post_contest_status = payouts_processed)
                   </TooltipContent>
                 </Tooltip>
@@ -1859,7 +1859,7 @@ export default function AdminDashboardClient({
                     />
                   </TooltipTrigger>
                   <TooltipContent>
-                    Sum of completed payments for contests that are published
+                    Sum of completed payments for campaigns that are published
                   </TooltipContent>
                 </Tooltip>
               </TooltipProvider>
@@ -1883,7 +1883,7 @@ export default function AdminDashboardClient({
                 isDark ? "text-gray-300" : "text-gray-600"
               }`}
             >
-              Completed payments for published contests
+              Completed payments for published campaigns
             </p>
           </CardContent>
         </div>
@@ -1914,7 +1914,7 @@ export default function AdminDashboardClient({
                     />
                   </TooltipTrigger>
                   <TooltipContent>
-                    Completed payments for contests not yet published
+                    Completed payments for campaigns not yet published
                     (draft/approved)
                   </TooltipContent>
                 </Tooltip>
@@ -1970,7 +1970,7 @@ export default function AdminDashboardClient({
                     />
                   </TooltipTrigger>
                   <TooltipContent>
-                    Sum of completed payments across all contests (published and
+                    Sum of completed payments across all campaigns (published and
                     unpublished)
                   </TooltipContent>
                 </Tooltip>
@@ -1995,7 +1995,7 @@ export default function AdminDashboardClient({
                 isDark ? "text-gray-300" : "text-gray-600"
               }`}
             >
-              All contests with completed payment
+              All campaigns with completed payment
             </p>
           </CardContent>
         </div>
@@ -2296,7 +2296,7 @@ export default function AdminDashboardClient({
                 isDark ? "text-gray-300" : "text-gray-600"
               }`}
             >
-              Includes payments made + budgets set on not-yet-paid contests
+              Includes payments made + budgets set on not-yet-paid campaigns
             </p>
           </CardContent>
         </div>
@@ -2327,7 +2327,7 @@ export default function AdminDashboardClient({
                     />
                   </TooltipTrigger>
                   <TooltipContent>
-                    Budgets/prize pools on contests still in draft and not yet
+                    Budgets/prize pools on campaigns still in draft and not yet
                     paid
                   </TooltipContent>
                 </Tooltip>
@@ -2352,7 +2352,7 @@ export default function AdminDashboardClient({
                 isDark ? "text-gray-300" : "text-gray-600"
               }`}
             >
-              Draft contests only (unpaid)
+              Draft campaigns only (unpaid)
             </p>
           </CardContent>
         </div>
