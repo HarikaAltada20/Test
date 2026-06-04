@@ -328,9 +328,10 @@ export async function POST(
       .eq("id", tweetId)
       .eq("contest_id", contestId)
       .select("id")
-      .limit(1);
+      .maybeSingle();
 
-    if (tweetBonusUpdateErr || !updatedRows?.length) {
+    // maybeSingle() returns an object or null (not an array)
+    if (tweetBonusUpdateErr || !updatedRows) {
       console.error(
         "[pay-twitter-bonus] CRITICAL: Wallet credited but tweet bonus columns not updated:",
         tweetBonusUpdateErr,

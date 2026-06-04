@@ -777,7 +777,7 @@ export async function POST(request: NextRequest) {
 
       const { data: updatedRows, error: updateError } = await updateQuery
         .select("id")
-        .limit(1);
+        .maybeSingle();
 
       if (updateError) {
         console.error(`Failed to update submission ${update.id}:`, updateError);
