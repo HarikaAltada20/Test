@@ -331,10 +331,11 @@ export default function ChooseUsernamePage() {
           description: "Your username is already set. Redirecting...",
           duration: 3000,
         });
-        // Only show Discord onboarding for creators
-        const welcomeFlag =
-          profileData.user_type === "creator" ? "?welcome=1" : "";
-        router.push(`/dashboard/getting-started${welcomeFlag}`);
+        const postSetupPath =
+          profileData.user_type === "creator"
+            ? "/dashboard/opportunities"
+            : "/dashboard/getting-started";
+        router.push(postSetupPath);
         router.refresh();
         return;
       }
@@ -856,9 +857,11 @@ export default function ChooseUsernamePage() {
       // Set redirecting state to prevent button re-enabling
       setIsRedirecting(true);
 
-      // Redirect new users to getting-started page with welcome flag for creators
-      const welcomeFlag = userType === "creator" ? "?welcome=1" : "";
-      router.push(`/dashboard/getting-started${welcomeFlag}`);
+      const postSetupPath =
+        userType === "creator"
+          ? "/dashboard/opportunities"
+          : "/dashboard/getting-started";
+      router.push(postSetupPath);
       router.refresh();
     } catch (err: any) {
       setError(err.message || "Failed to set up your account.");

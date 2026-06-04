@@ -91,7 +91,7 @@ export default function ContestTypeFilter({
               : "bg-white hover:bg-gray-50 text-gray-700 border-gray-400",
           )}
         >
-          <span className="truncate">{LABELS[value] ?? "Contest Type"}</span>
+          <span className="truncate">{LABELS[value] ?? "Campaign Type"}</span>
           <ChevronDown className="w-4 h-4 shrink-0 opacity-70" />
         </Button>
       </DropdownMenuTrigger>

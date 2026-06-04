@@ -30,6 +30,10 @@ import {
   parseLegacySupportMessageResolved,
 } from "@/lib/user-notifications/support-sender-display";
 import { cn } from "@/lib/utils";
+import {
+  NOTIFICATIONS_CHANGED_EVENT,
+  dispatchNotificationsChanged,
+} from "@/lib/user-notifications/events";
 
 type NotificationRow = {
   id: string;
@@ -309,8 +313,8 @@ export function UserNotificationsBell({
   const [detailNotification, setDetailNotification] =
     useState<NotificationRow | null>(null);
 
-  const fetchNotifications = useCallback(async () => {
-    setLoading(true);
+  const fetchNotifications = useCallback(async (options?: { silent?: boolean }) => {
+    if (!options?.silent) setLoading(true);
     try {
       const res = await fetch("/api/notifications?limit=30");
       const data = await res.json();
@@ -319,20 +323,24 @@ export function UserNotificationsBell({
         setUnreadCount(data.unread_count ?? 0);
       }
     } finally {
-      setLoading(false);
+      if (!options?.silent) setLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    fetchNotifications();
-    const interval = setInterval(fetchNotifications, 60_000);
-    return () => clearInterval(interval);
+    void fetchNotifications({ silent: true });
   }, [fetchNotifications]);
 
   useEffect(() => {
-    if (open) {
-      fetchNotifications();
-    }
+    const onChanged = () => void fetchNotifications({ silent: true });
+    window.addEventListener(NOTIFICATIONS_CHANGED_EVENT, onChanged);
+    return () =>
+      window.removeEventListener(NOTIFICATIONS_CHANGED_EVENT, onChanged);
+  }, [fetchNotifications]);
+
+  useEffect(() => {
+    if (!open) return;
+    void fetchNotifications();
   }, [open, fetchNotifications]);
 
   const markRead = async (ids: string[]) => {
@@ -341,7 +349,7 @@ export function UserNotificationsBell({
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ notification_ids: ids }),
     });
-    await fetchNotifications();
+    dispatchNotificationsChanged();
   };
 
   const markThreadRead = async (threadId: string) => {
@@ -350,7 +358,7 @@ export function UserNotificationsBell({
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ support_thread_id: threadId }),
     });
-    await fetchNotifications();
+    dispatchNotificationsChanged();
   };
 
   const handleClick = async (n: NotificationRow) => {

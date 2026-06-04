@@ -1170,28 +1170,36 @@ export default function SubmitContentPage({
 
       // Store full contest data
       setContest(contestData);
-      setCreatorTrustScoreLoading(true);
-      setCreatorTrustScoreLoaded(false);
-      try {
-        const trustRes = await fetch("/api/creators/trust-score");
-        if (trustRes.ok) {
-          const trustData = await trustRes.json();
-          setCreatorTrustScore(
-            typeof trustData?.trust_score === "number"
-              ? trustData.trust_score
-              : null,
-          );
-          setCreatorTrustScoreLoaded(true);
-        } else {
+
+      const minTrustScore = getContestMinTrustScoreForGate(contestData);
+      if (minTrustScore === null) {
+        setCreatorTrustScore(null);
+        setCreatorTrustScoreLoaded(true);
+        setCreatorTrustScoreLoading(false);
+      } else {
+        setCreatorTrustScoreLoading(true);
+        setCreatorTrustScoreLoaded(false);
+        try {
+          const trustRes = await fetch("/api/creators/trust-score");
+          if (trustRes.ok) {
+            const trustData = await trustRes.json();
+            setCreatorTrustScore(
+              typeof trustData?.trust_score === "number"
+                ? trustData.trust_score
+                : null,
+            );
+            setCreatorTrustScoreLoaded(true);
+          } else {
+            setCreatorTrustScore(null);
+            setCreatorTrustScoreLoaded(false);
+          }
+        } catch (trustError) {
+          console.warn("Failed to fetch trust score:", trustError);
           setCreatorTrustScore(null);
           setCreatorTrustScoreLoaded(false);
+        } finally {
+          setCreatorTrustScoreLoading(false);
         }
-      } catch (trustError) {
-        console.warn("Failed to fetch trust score:", trustError);
-        setCreatorTrustScore(null);
-        setCreatorTrustScoreLoaded(false);
-      } finally {
-        setCreatorTrustScoreLoading(false);
       }
 
       // Fetch existing submissions for progress tracking

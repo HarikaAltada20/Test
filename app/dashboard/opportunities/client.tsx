@@ -1944,7 +1944,7 @@ export default function OpportunitiesPage({
                     transition: "none",
                   }}
                 >
-                  Contest Type:{" "}
+                  Campaign Type:{" "}
                   <span className="font-medium">
                     {contest.contest_type === "cpm"
                       ? "CPM Based"
@@ -3078,7 +3078,7 @@ export default function OpportunitiesPage({
                       <div className="flex items-center">
                         <Info className="h-4 w-4 mr-2 flex-shrink-0" />
                         <span>
-                          Contest Type:{" "}
+                          Campaign Type:{" "}
                           <span
                             className={cn(
                               "font-medium",

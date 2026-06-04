@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo, useRef, useCallback } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import Image from "next/image";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -99,7 +99,10 @@ import { TwitterFeed } from "@/components/twitter-feed";
 import { getTwitterSubmissionActionKind } from "@/lib/twitter/analytics-twitter-submission-kind";
 import { buildMilestoneMostVerifiedBonusByCreatorMap } from "@/lib/milestone-contest-expected-spend";
 import { parsePayoutAdjustment } from "@/lib/payout-rules";
-import { trackSubmitEntryClick } from "@/lib/gtag";
+import {
+  trackSubmitEntryClick,
+  type SubmitEntryButton,
+} from "@/lib/gtag";
 // --- START DUMMY DATA CONFIGURATION ---
 const USE_DUMMY_DATA_FOR_LEADERBOARD = false; // SWITCHED OFF FOR PRODUCTION
 const DUMMY_ENTRIES_COUNT = 250; // Total number of dummy entries to generate
@@ -274,6 +277,7 @@ export function ContestClientPage({
   const [loadingLeaderboard, setLoadingLeaderboard] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const router = useRouter();
+  const pathname = usePathname();
   const searchParams = useSearchParams();
   const supabase = createClient();
   const [mode, setMode] = useState<"light" | "dark">("light");
@@ -284,6 +288,7 @@ export function ContestClientPage({
   const [creatorTrustScore, setCreatorTrustScore] = useState<number | null>(null);
   const [creatorTrustScoreLoaded, setCreatorTrustScoreLoaded] = useState(false);
   const [creatorTrustScoreLoading, setCreatorTrustScoreLoading] = useState(false);
+  const isMountedRef = useRef(true);
   const [hasJoinedTwitterCampaign, setHasJoinedTwitterCampaign] =
     useState(false);
   const [twitterConnectStatus, setTwitterConnectStatus] = useState<
@@ -1473,7 +1478,7 @@ export function ContestClientPage({
     groupByCreator: boolean = false,
     silent: boolean = false,
   ) => {
-    if (!isMounted) return;
+    if (!isMountedRef.current) return;
     if (!silent) setLoadingLeaderboard(true);
 
     if (USE_DUMMY_DATA_FOR_LEADERBOARD) {
@@ -1486,7 +1491,7 @@ export function ContestClientPage({
       const paginatedEntries = allEntries.slice(startIndex, endIndex);
 
       setTimeout(() => {
-        if (isMounted) {
+        if (isMountedRef.current) {
           setLeaderboard(paginatedEntries);
           setLastUpdated(new Date().toISOString());
           setLeaderboardCurrentPage(pageToFetch);
@@ -1528,7 +1533,7 @@ export function ContestClientPage({
         leaderboardFetchError = data.error || "Failed to fetch leaderboard";
         throw new Error(leaderboardFetchError);
       }
-      if (isMounted) {
+      if (isMountedRef.current) {
         if (groupByCreator) {
           const rows = data.leaderboard || [];
           setCreatorWiseLeaderboard(
@@ -1573,13 +1578,18 @@ export function ContestClientPage({
       }
     } catch (err: any) {
       console.error("Error fetching leaderboard:", err);
-      if (isMounted && !error) setError(leaderboardFetchError || err.message);
+      if (isMountedRef.current && !error) setError(leaderboardFetchError || err.message);
     } finally {
-      if (isMounted && !silent) setLoadingLeaderboard(false);
+      if (isMountedRef.current && !silent) setLoadingLeaderboard(false);
     }
   };
 
-  let isMounted = true; // Flag to track component mount status
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
 
   // Helper function to render verification badges
   const renderVerificationBadges = (status: string) => {
@@ -1654,7 +1664,7 @@ export function ContestClientPage({
   };
 
   const fetchMySubmissionData = async () => {
-    if (!isMounted) return;
+    if (!isMountedRef.current) return;
 
     setLoadingMySubmission(true);
 
@@ -1666,7 +1676,7 @@ export function ContestClientPage({
       );
 
       setTimeout(() => {
-        if (isMounted) {
+        if (isMountedRef.current) {
           if (myEntryData && myRank !== null) {
             // Add dummy verified status for testing
             setMyLeaderboardEntry({
@@ -1685,7 +1695,7 @@ export function ContestClientPage({
 
     // Real API Call
     if (!user || !contestId) {
-      if (isMounted) setLoadingMySubmission(false);
+      if (isMountedRef.current) setLoadingMySubmission(false);
       return;
     }
     try {
@@ -1698,14 +1708,14 @@ export function ContestClientPage({
           "Failed to fetch user submission data:",
           data.error || "Unknown error",
         );
-        if (isMounted) {
+        if (isMountedRef.current) {
           setMyLeaderboardEntry(null);
           setMySubmissionsListFromApi([]);
           setMyCreatorWiseStats(null);
         }
         return;
       }
-      if (isMounted) {
+      if (isMountedRef.current) {
         const subs = Array.isArray(data.submissions) ? data.submissions : [];
         setMySubmissionsListFromApi(
           subs.map(
@@ -1773,7 +1783,7 @@ export function ContestClientPage({
       }
     } catch (err: any) {
       console.error("Error fetching user's submission data:", err);
-      if (isMounted) {
+      if (isMountedRef.current) {
         setMyLeaderboardEntry(null);
         setMySubmissionsListFromApi([]);
         setMyCreatorWiseStats(null);
@@ -1783,7 +1793,7 @@ export function ContestClientPage({
         myRankFetchedRef.current = contestKey;
       }
     } finally {
-      if (isMounted) setLoadingMySubmission(false);
+      if (isMountedRef.current) setLoadingMySubmission(false);
     }
   };
 
@@ -1791,7 +1801,7 @@ export function ContestClientPage({
   const fetchTwitterLeaderboard = async (
     contestTypeOverride?: string | null,
   ) => {
-    if (!isMounted || !contestId) return;
+    if (!isMountedRef.current || !contestId) return;
 
     setLoadingLeaderboard(true);
 
@@ -1805,7 +1815,7 @@ export function ContestClientPage({
         throw new Error(data.error || "Failed to fetch Twitter leaderboard");
       }
 
-      if (isMounted) {
+      if (isMountedRef.current) {
         // twitter_campaign_leaderboard rows already contain aggregated stats per creator.
         // We reuse the existing leaderboard state structure where possible.
         setLeaderboard(data.leaderboard || []);
@@ -1835,17 +1845,17 @@ export function ContestClientPage({
       }
     } catch (err: any) {
       console.error("Error fetching Twitter leaderboard:", err);
-      if (isMounted && !error) {
+      if (isMountedRef.current && !error) {
         setError(err.message || "Failed to fetch Twitter leaderboard");
       }
     } finally {
-      if (isMounted) setLoadingLeaderboard(false);
+      if (isMountedRef.current) setLoadingLeaderboard(false);
     }
   };
 
   // Fetch current creator's rank/entry from twitter_campaign_leaderboard
   const fetchMyTwitterRank = async () => {
-    if (!isMounted || !contestId) return;
+    if (!isMountedRef.current || !contestId) return;
 
     setLoadingMySubmission(true);
 
@@ -1860,11 +1870,11 @@ export function ContestClientPage({
           "Failed to fetch Twitter my-rank data:",
           data.error || "Unknown error",
         );
-        if (isMounted) setMyLeaderboardEntry(null);
+        if (isMountedRef.current) setMyLeaderboardEntry(null);
         return;
       }
 
-      if (isMounted) {
+      if (isMountedRef.current) {
         if (data.entry) {
           // entry already contains current_rank and aggregated stats
           setMyLeaderboardEntry({
@@ -1881,7 +1891,7 @@ export function ContestClientPage({
       }
     } catch (err: any) {
       console.error("Error fetching Twitter my-rank data:", err);
-      if (isMounted) {
+      if (isMountedRef.current) {
         setMyLeaderboardEntry(null);
         // Mark as fetched even on error to prevent infinite retries
         const platform = contest?.platform || "twitter";
@@ -1889,13 +1899,13 @@ export function ContestClientPage({
         myRankFetchedRef.current = contestKey;
       }
     } finally {
-      if (isMounted) setLoadingMySubmission(false);
+      if (isMountedRef.current) setLoadingMySubmission(false);
     }
   };
 
   // Fetch Twitter campaign metrics
   const fetchTwitterMetrics = async () => {
-    if (!isMounted || !contestId) return;
+    if (!isMountedRef.current || !contestId) return;
 
     setLoadingMetrics(true);
 
@@ -1909,21 +1919,21 @@ export function ContestClientPage({
         throw new Error(data.error || "Failed to fetch Twitter metrics");
       }
 
-      if (isMounted) {
+      if (isMountedRef.current) {
         setTwitterMetrics(data.metrics || null);
       }
     } catch (err: any) {
       console.error("Error fetching Twitter metrics:", err);
-      if (isMounted) setTwitterMetrics(null);
+      if (isMountedRef.current) setTwitterMetrics(null);
     } finally {
-      if (isMounted) setLoadingMetrics(false);
+      if (isMountedRef.current) setLoadingMetrics(false);
     }
   };
 
   // Fetch Twitter tweets for analytics (all tweets, not just eligible ones)
   const fetchAnalyticsTweets = async () => {
     if (
-      !isMounted ||
+      !isMountedRef.current ||
       !contestId ||
       contest?.platform?.toLowerCase() !== "twitter"
     )
@@ -1967,7 +1977,7 @@ export function ContestClientPage({
         );
       }
 
-      if (isMounted) {
+      if (isMountedRef.current) {
         // Transform tweets to submission-like format for analytics
         const transformedTweets = (tweetsData || []).map((tweet: any) => ({
           id: tweet.id,
@@ -2027,14 +2037,14 @@ export function ContestClientPage({
       }
     } catch (err: any) {
       console.error("Error fetching analytics tweets:", err);
-      if (isMounted) setAnalyticsTweets([]);
+      if (isMountedRef.current) setAnalyticsTweets([]);
     } finally {
-      if (isMounted) setLoadingAnalyticsTweets(false);
+      if (isMountedRef.current) setLoadingAnalyticsTweets(false);
     }
   };
 
   const fetchPostContestStatus = async () => {
-    if (!isMounted || !contestId) return;
+    if (!isMountedRef.current || !contestId) return;
 
     try {
       const { data: contestData, error } = await supabase
@@ -2048,7 +2058,7 @@ export function ContestClientPage({
         return;
       }
 
-      if (isMounted) {
+      if (isMountedRef.current) {
         setPostContestStatus(contestData?.post_contest_status || null);
       }
     } catch (error) {
@@ -2066,7 +2076,7 @@ export function ContestClientPage({
       activeTab === "analytics" &&
       contest?.platform?.toLowerCase() === "twitter" &&
       contestId &&
-      isMounted
+      isMountedRef.current
     ) {
       fetchAnalyticsTweets();
       // Also fetch Twitter metrics for target metrics display (especially for raid campaigns)
@@ -2126,8 +2136,6 @@ export function ContestClientPage({
   }, [visibleSections]);
 
   useEffect(() => {
-    isMounted = true;
-
     // If NOT using dummy data for leaderboard, and user is not available, show loading.
     if (!USE_DUMMY_DATA_FOR_LEADERBOARD && !user) {
       setLoading(true);
@@ -2135,7 +2143,7 @@ export function ContestClientPage({
     }
 
     async function fetchData() {
-      if (!isMounted) return;
+      if (!isMountedRef.current) return;
       setLoading(true); // Start with loading true for both paths initially
       setError(null);
 
@@ -2163,35 +2171,9 @@ export function ContestClientPage({
         if (contestData.status === "incomplete") {
           throw new Error("This contest has incomplete information.");
         }
-        if (isMounted) {
+        if (isMountedRef.current) {
           setContest(contestData);
           setContestType(contestData.contest_type ?? null);
-          if (user?.id) {
-            setCreatorTrustScoreLoading(true);
-            setCreatorTrustScoreLoaded(false);
-            try {
-              const trustRes = await fetch("/api/creators/trust-score");
-              if (trustRes.ok) {
-                const trustData = await trustRes.json();
-                setCreatorTrustScore(
-                  typeof trustData?.trust_score === "number"
-                    ? trustData.trust_score
-                    : null,
-                );
-                setCreatorTrustScoreLoaded(true);
-              } else {
-                setCreatorTrustScore(null);
-                setCreatorTrustScoreLoaded(false);
-              }
-            } catch (trustError) {
-              console.warn("Failed to load creator trust score:", trustError);
-              setCreatorTrustScore(null);
-              setCreatorTrustScoreLoaded(false);
-            } finally {
-              setCreatorTrustScoreLoading(false);
-            }
-          }
-
           // No need to set separate lastMetricsUpdate state - it's part of contest state
         }
 
@@ -2208,7 +2190,7 @@ export function ContestClientPage({
                 data &&
                 data.submissions &&
                 data.submissions.length > 0 &&
-                isMounted
+                isMountedRef.current
               ) {
                 const maxSubmissions =
                   contestData.max_submissions_per_creator || 1;
@@ -2234,10 +2216,10 @@ export function ContestClientPage({
         }
       } catch (err: any) {
         console.error("Error fetching initial page data:", err);
-        if (isMounted) setError(err.message || "Failed to load page data");
+        if (isMountedRef.current) setError(err.message || "Failed to load page data");
       } finally {
         // Call leaderboard fetches after initial contest/user data attempt
-        if (isMounted && contestData) {
+        if (isMountedRef.current && contestData) {
           // Fetch leaderboard based on platform type
           const isTwitterContest =
             contestData?.platform?.toLowerCase() === "twitter" ||
@@ -2268,7 +2250,7 @@ export function ContestClientPage({
     // Auto-refresh for leaderboard (only if NOT using dummy data)
     const intervalId = setInterval(() => {
       if (
-        isMounted &&
+        isMountedRef.current &&
         lastUpdated &&
         !loadingLeaderboard &&
         !USE_DUMMY_DATA_FOR_LEADERBOARD
@@ -2289,16 +2271,15 @@ export function ContestClientPage({
     if (typeof window !== "undefined") {
       const hash = window.location.hash;
       if (hash === "#leaderboard") {
-        if (isMounted) setActiveTab("leaderboard");
+        if (isMountedRef.current) setActiveTab("leaderboard");
       }
     }
 
     return () => {
-      isMounted = false;
       clearInterval(intervalId);
     };
     // Added leaderboardItemsPerPage to dependencies as it affects dummy data pagination
-  }, [contestId, user, router, supabase, leaderboardItemsPerPage]);
+  }, [contestId, user?.id, leaderboardItemsPerPage]);
 
   // Track if leaderboard has been loaded for current contest to avoid refetching on tab switch
   const leaderboardLoadedRef = useRef<string | null>(null);
@@ -2327,7 +2308,7 @@ export function ContestClientPage({
   // - For other contests, use the existing generic leaderboard APIs
   // Only fetch once per contest/tab combination to avoid infinite loops
   useEffect(() => {
-    if (!isMounted || !contestId || !contest) return;
+    if (!contestId || !contest) return;
 
     if (activeTab !== "leaderboard") return;
 
@@ -2526,6 +2507,58 @@ export function ContestClientPage({
     loadTwitterCampaignState();
   }, [contestId, isTwitterTextImageContest, user]);
 
+  const contestTrustGateMinScore = contest
+    ? getContestMinTrustScoreForGate(contest)
+    : null;
+  const isOnContestDetailPage =
+    pathname === `/dashboard/opportunities/${contestId}`;
+
+  useEffect(() => {
+    if (!isOnContestDetailPage || !user?.id || !contest) return;
+
+    if (contestTrustGateMinScore === null) {
+      setCreatorTrustScore(null);
+      setCreatorTrustScoreLoaded(true);
+      setCreatorTrustScoreLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+
+    const loadCreatorTrustScore = async () => {
+      setCreatorTrustScoreLoading(true);
+      setCreatorTrustScoreLoaded(false);
+      try {
+        const trustRes = await fetch("/api/creators/trust-score");
+        if (cancelled) return;
+        if (trustRes.ok) {
+          const trustData = await trustRes.json();
+          setCreatorTrustScore(
+            typeof trustData?.trust_score === "number"
+              ? trustData.trust_score
+              : null,
+          );
+          setCreatorTrustScoreLoaded(true);
+        } else {
+          setCreatorTrustScore(null);
+          setCreatorTrustScoreLoaded(false);
+        }
+      } catch (trustError) {
+        if (cancelled) return;
+        console.warn("Failed to load creator trust score:", trustError);
+        setCreatorTrustScore(null);
+        setCreatorTrustScoreLoaded(false);
+      } finally {
+        if (!cancelled) setCreatorTrustScoreLoading(false);
+      }
+    };
+
+    void loadCreatorTrustScore();
+    return () => {
+      cancelled = true;
+    };
+  }, [contestId, user?.id, contestTrustGateMinScore, isOnContestDetailPage]);
+
   useEffect(() => {
     if (!justSubmitted || !user?.id) return;
 
@@ -2554,31 +2587,28 @@ export function ContestClientPage({
     void refreshTrustAfterSubmit();
   }, [justSubmitted, user?.id]);
 
-  const contestMinTrustScore = contest
-    ? getContestMinTrustScoreForGate(contest)
-    : null;
-  const isTrustGateEnabled = contestMinTrustScore !== null;
+  const isTrustGateEnabled = contestTrustGateMinScore !== null;
   const isTrustScoreBlocked =
     !!user &&
     isCreatorTrustSubmissionBlocked({
-      minScore: contestMinTrustScore,
+      minScore: contestTrustGateMinScore,
       creatorScore: creatorTrustScore,
       scoreLoaded: creatorTrustScoreLoaded,
       scoreLoading: creatorTrustScoreLoading,
     });
   const trustScoreMessage =
-    isTrustScoreBlocked && contestMinTrustScore !== null
+    isTrustScoreBlocked && contestTrustGateMinScore !== null
       ? getTrustSubmissionBlockedMessage({
-          minScore: contestMinTrustScore,
+          minScore: contestTrustGateMinScore,
           creatorScore: creatorTrustScore,
           scoreLoading: creatorTrustScoreLoading,
           scoreLoaded: creatorTrustScoreLoaded,
         })
       : null;
 
-  const handleSubmitContent = async () => {
+  const handleSubmitContent = async (button: SubmitEntryButton) => {
     if (isTrustScoreBlocked) return;
-    await trackSubmitEntryClick(contestId);
+    await trackSubmitEntryClick(contestId, button);
     router.push(`/dashboard/opportunities/${contestId}/submit`);
   };
 
@@ -2956,7 +2986,7 @@ export function ContestClientPage({
                     onClick={
                       isTwitterTextImageContest && !hasJoinedTwitterCampaign
                         ? handleJoinTwitterCampaign
-                        : handleSubmitContent
+                        : () => handleSubmitContent("1")
                     }
                     disabled={
                       contest.status?.toLowerCase() !== "active" ||
@@ -3149,7 +3179,7 @@ export function ContestClientPage({
                   {/* Submit Button for Partial Submissions */}
                   <Button
                     size="lg"
-                    onClick={handleSubmitContent}
+                    onClick={() => handleSubmitContent("2")}
                     disabled={
                       contest.status?.toLowerCase() !== "active" ||
                       isTrustScoreBlocked
@@ -3258,7 +3288,7 @@ export function ContestClientPage({
                     onClick={
                       isTwitterTextImageContest && !hasJoinedTwitterCampaign
                         ? handleJoinTwitterCampaign
-                        : handleSubmitContent
+                        : () => handleSubmitContent("2")
                     }
                     disabled={
                       contest.status?.toLowerCase() !== "active" ||
@@ -5728,7 +5758,7 @@ export function ContestClientPage({
                                 isDark ? "text-slate-100" : "text-slate-900",
                               )}
                             >
-                              {contestMinTrustScore} / 100
+                              {contestTrustGateMinScore} / 100
                             </p>
                             {/* <p
                               className={cn(
@@ -7166,7 +7196,7 @@ export function ContestClientPage({
                         <Copy className="h-5 w-5 text-green-600 dark:text-green-400" />
                         Tracking Links
                       </h4>
-                      {contest.multiple_submissions_enabled && (
+                      {/* {contest.multiple_submissions_enabled && (
                         <div
                           className={cn(
                             "rounded-lg border p-4",
@@ -7175,7 +7205,7 @@ export function ContestClientPage({
                               : "bg-gradient-to-r from-amber-50 to-orange-50 border-amber-200",
                           )}
                         >
-                          {/* <p
+                          <p
                             className={cn(
                               "text-sm flex items-start gap-2",
                               isDark ? "text-white" : "text-yellow-800",
@@ -7188,9 +7218,9 @@ export function ContestClientPage({
                               your submission number if you are doing multiple
                               submissions.
                             </span>
-                          </p> */}
+                          </p>
                         </div>
-                      )}
+                      )} */}
 
                       <div className="grid gap-4">
                         {trackingLinks.map(

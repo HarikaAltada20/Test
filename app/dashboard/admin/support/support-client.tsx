@@ -32,6 +32,7 @@ import {
 } from "@/components/ui/sheet";
 import { SupportChatToggle } from "@/components/admin/SupportChatToggle";
 import { useToast } from "@/hooks/use-toast";
+import { dispatchNotificationsChanged } from "@/lib/user-notifications/events";
 import { cn } from "@/lib/utils";
 import { SUPPORT_RETENTION_DAYS } from "@/lib/constants/support";
 import {
@@ -289,6 +290,7 @@ export default function SupportClient({
       setReplyBody("");
       await loadDetail(detailId);
       await fetchThreads();
+      dispatchNotificationsChanged();
       toast({
         title: "Reply sent",
         description: "User has been notified in-app.",

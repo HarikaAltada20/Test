@@ -17,6 +17,7 @@ import {
   formatSenderRoleLabel,
   isCustomerSupportMessage,
 } from "@/lib/support/sender-role";
+import { dispatchNotificationsChanged } from "@/lib/user-notifications/events";
 
 type View = "compose" | "inbox" | "thread";
 
@@ -150,6 +151,20 @@ const ChatSupport: React.FC<ChatProps> = ({
     }
   }, [view, selectedThreadId, supportChatEnabled, loadThreadDetail]);
 
+  // Refresh thread + notification badge while chat is open (no global polling).
+  useEffect(() => {
+    if (view !== "thread" || !selectedThreadId || !supportChatEnabled) return;
+
+    const refresh = () => {
+      void loadThreadDetail(selectedThreadId).then(() =>
+        dispatchNotificationsChanged(),
+      );
+    };
+
+    const interval = setInterval(refresh, 25_000);
+    return () => clearInterval(interval);
+  }, [view, selectedThreadId, supportChatEnabled, loadThreadDetail]);
+
   // Brand/advertiser should never see inbox list mode.
   useEffect(() => {
     if (userType === "advertiser" && view === "inbox") {
@@ -202,6 +217,12 @@ const ChatSupport: React.FC<ChatProps> = ({
 
       if (canReplyInThread && selectedThreadId) {
         await loadThreadDetail(selectedThreadId);
+        void fetch("/api/notifications", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ support_thread_id: selectedThreadId }),
+        });
+        dispatchNotificationsChanged();
         toast({
           title: "Sent",
           description: "Your message was sent to support.",
@@ -212,6 +233,7 @@ const ChatSupport: React.FC<ChatProps> = ({
         setActiveThread(null);
         setMessages([]);
         await loadThreads();
+        dispatchNotificationsChanged();
         toast({
           title: "Success",
           description: "Your new query has been submitted successfully!",

@@ -72,10 +72,16 @@ export function trackViewDetailsClick(contestId: string): Promise<void> {
   });
 }
 
-export function trackSubmitEntryClick(contestId: string): Promise<void> {
-  return trackGtagEvent("submit_entry", {
+export type SubmitEntryButton = "1" | "2";
+
+export function trackSubmitEntryClick(
+  contestId: string,
+  button: SubmitEntryButton,
+): Promise<void> {
+  return trackGtagEvent(`submit_entry_${button}`, {
     contest_id: contestId,
     source: "opportunities",
+    button_location: button === "1" ? "hero" : "cta",
     page_path: window.location.pathname,
     page_location: window.location.href,
   });
