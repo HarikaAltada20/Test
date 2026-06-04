@@ -12,13 +12,13 @@ const howItWorksData = [
   {
     title: "For Brands",
     description:
-      "Launch a contest with clear guidelines, set prize pools, and watch as creators submit their best content featuring your products or services.",
+      "Launch a campaign with clear guidelines, set prize pools, and watch as creators submit their best content featuring your products or services.",
     image: "/images/rafiki.avif",
   },
   {
     title: "For Creators",
     description:
-      "Browse available contests, create content for brands you're passionate about, and earn rewards when your content performs well.",
+      "Browse available campaigns, create content for brands you're passionate about, and earn rewards when your content performs well.",
     image: "/images/rafiki-2.avif",
   },
   {
@@ -190,7 +190,7 @@ export default function AboutPage() {
               className="text-lg md:text-xl text-slate-300 max-w-4xl mx-auto mb-10 leading-relaxed drop-shadow-lg slide-left"
               style={{ animationDelay: "2s" }}
             >
-              Game Of Creators connects brands with creators through contests,
+              Game Of Creators connects brands with creators through campaigns,
               allowing brands to generate genuine content while creators earn
               and grow.
             </p>
@@ -223,7 +223,7 @@ export default function AboutPage() {
                   </span>{" "}
                   addresses a key challenge: brands often struggle to produce
                   engaging content, while creators seek meaningful
-                  collaborations. Our platform serves as a contest marketplace,
+                  collaborations. Our platform serves as a campaign marketplace,
                   enabling brands to host content creation contests and allowing
                   creators to showcase their talents for prizes and recognition.
                 </p>
