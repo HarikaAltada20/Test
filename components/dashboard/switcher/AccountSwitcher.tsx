@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
+import { touchAccountSwitchSessionIfNeeded } from "@/lib/account-switch-session-touch";
 import {
   Users,
   Plus,
@@ -221,9 +222,7 @@ export function AccountSwitcher({
 
   useEffect(() => {
     if (userType !== "creator") return;
-    void fetch("/api/account-switch/sessions/touch", { method: "POST" }).catch(
-      () => {},
-    );
+    touchAccountSwitchSessionIfNeeded();
   }, [userType, currentUserId]);
 
   const handleSwitch = async (targetUserId: string) => {

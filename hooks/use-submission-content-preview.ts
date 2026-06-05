@@ -34,6 +34,51 @@ export type SubmissionContentPreviewInput = {
   enabled?: boolean;
 };
 
+const PREVIEW_CACHE_TTL_MS = 10 * 60 * 1000;
+const previewCache = new Map<
+  string,
+  { data: SubmissionContentPreview; expiresAt: number }
+>();
+const previewInFlight = new Map<string, Promise<SubmissionContentPreview>>();
+
+async function fetchContentPreviewCached(
+  submissionId: string,
+): Promise<SubmissionContentPreview> {
+  const now = Date.now();
+  const cached = previewCache.get(submissionId);
+  if (cached && cached.expiresAt > now) {
+    return cached.data;
+  }
+
+  const existing = previewInFlight.get(submissionId);
+  if (existing) return existing;
+
+  const promise = fetch(
+    `/api/submissions/${submissionId}/content-preview`,
+    { cache: "no-store" },
+  )
+    .then(async (res) => {
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to load preview");
+      }
+      return data as SubmissionContentPreview;
+    })
+    .then((data) => {
+      previewCache.set(submissionId, {
+        data,
+        expiresAt: Date.now() + PREVIEW_CACHE_TTL_MS,
+      });
+      return data;
+    })
+    .finally(() => {
+      previewInFlight.delete(submissionId);
+    });
+
+  previewInFlight.set(submissionId, promise);
+  return promise;
+}
+
 function buildInstantPreview(
   contentLink: string | null | undefined,
   platform?: string | null,
@@ -115,14 +160,7 @@ export function useSubmissionContentPreview({
     let cancelled = false;
     setPlayerLoading(true);
 
-    fetch(`/api/submissions/${submissionId}/content-preview`, { cache: "no-store" })
-      .then(async (res) => {
-        const data = await res.json().catch(() => ({}));
-        if (!res.ok) {
-          throw new Error(data.error || "Failed to load preview");
-        }
-        return data as SubmissionContentPreview;
-      })
+    void fetchContentPreviewCached(submissionId)
       .then((data) => {
         if (cancelled) return;
         setPreview(data);

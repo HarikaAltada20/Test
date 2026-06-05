@@ -241,23 +241,26 @@ export async function finalizeCampaignDelivery(campaignId: string): Promise<{
 }> {
   const db = createAdminClient();
 
-  const { data: rows, error } = await db
-    .from("admin_notification_campaign_recipients")
-    .select("delivery_status")
-    .eq("campaign_id", campaignId);
+  const countFor = async (status?: string) => {
+    let query = db
+      .from("admin_notification_campaign_recipients")
+      .select("user_id", { count: "exact", head: true })
+      .eq("campaign_id", campaignId);
+    if (status) {
+      query = query.eq("delivery_status", status);
+    }
+    const { count, error } = await query;
+    if (error) {
+      throw new Error(error.message);
+    }
+    return count ?? 0;
+  };
 
-  if (error) {
-    throw new Error(error.message);
-  }
-
-  let successCount = 0;
-  let failureCount = 0;
-  for (const row of rows ?? []) {
-    if (row.delivery_status === "delivered") successCount += 1;
-    else if (row.delivery_status === "failed") failureCount += 1;
-  }
-
-  const recipientCount = rows?.length ?? 0;
+  const [successCount, failureCount, recipientCount] = await Promise.all([
+    countFor("delivered"),
+    countFor("failed"),
+    countFor(),
+  ]);
   const status =
     failureCount === 0 && successCount > 0
       ? "completed"

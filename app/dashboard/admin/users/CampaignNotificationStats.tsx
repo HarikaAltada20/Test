@@ -1,7 +1,7 @@
 "use client";
 
 import { cn } from "@/lib/utils";
-import { Briefcase, Eye, Send, Users } from "lucide-react";
+import { Briefcase, Eye, Send, Shield, Users } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
 type AudienceBreakdown = {
@@ -90,6 +90,7 @@ export function CampaignNotificationStats({ summary, isDark }: Props) {
   const { sent, read, byType } = summary;
   const creator = byType.creator;
   const advertiser = byType.advertiser;
+  const admin = byType.admin;
 
   const audienceCards: Array<{
     key: string;
@@ -109,9 +110,17 @@ export function CampaignNotificationStats({ summary, isDark }: Props) {
   if (advertiser?.sent > 0) {
     audienceCards.push({
       key: "advertiser",
-      title: "Brands",
+      title: "Advertisers",
       data: advertiser,
       icon: Briefcase,
+    });
+  }
+  if (admin?.sent > 0) {
+    audienceCards.push({
+      key: "admin",
+      title: "Admin",
+      data: admin,
+      icon: Shield,
     });
   }
 
