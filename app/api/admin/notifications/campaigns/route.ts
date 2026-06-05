@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { verifyAdminAccess } from "@/utils/admin-auth";
 import { createAdminClient } from "@/utils/supabase/admin";
-import { getCampaignDeliveryProgress } from "@/lib/admin-notifications/delivery-progress";
+import {
+  countCampaignStatsByIds,
+  getCampaignDeliveryProgress,
+} from "@/lib/admin-notifications/delivery-progress";
 
 export const dynamic = "force-dynamic";
 
@@ -40,43 +43,76 @@ export async function GET(req: NextRequest) {
   }
 
   const campaignIds = (data ?? []).map((c) => c.id);
-  const readCountByCampaign = new Map<string, number>();
-  if (campaignIds.length > 0) {
-    const { data: readRows } = await db
-      .from("user_notifications")
-      .select("campaign_id")
-      .in("campaign_id", campaignIds)
-      .eq("is_read", true);
-    for (const row of readRows ?? []) {
-      const campaignId = row.campaign_id;
-      if (!campaignId) continue;
-      readCountByCampaign.set(
-        campaignId,
-        (readCountByCampaign.get(campaignId) ?? 0) + 1,
-      );
-    }
+  const statsByCampaign = await countCampaignStatsByIds(db, campaignIds);
+  const countPatches = (data ?? [])
+    .map((campaign) => {
+      const stats = statsByCampaign.get(campaign.id);
+      if (!stats) return null;
+
+      const nextRecipientCount = stats.recipientCount;
+      const nextSuccessCount = stats.deliveredCount;
+      const nextFailureCount = stats.failureCount;
+
+      const hasMismatch =
+        (campaign.recipient_count ?? 0) !== nextRecipientCount ||
+        (campaign.success_count ?? 0) !== nextSuccessCount ||
+        (campaign.failure_count ?? 0) !== nextFailureCount;
+
+      if (!hasMismatch) return null;
+
+      return {
+        campaignId: campaign.id,
+        patch: {
+          recipient_count: nextRecipientCount,
+          success_count: nextSuccessCount,
+          failure_count: nextFailureCount,
+        },
+      };
+    })
+    .filter(
+      (
+        item,
+      ): item is {
+        campaignId: string;
+        patch: {
+          recipient_count: number;
+          success_count: number;
+          failure_count: number;
+        };
+      } => Boolean(item),
+    );
+
+  if (countPatches.length > 0) {
+    await Promise.all(
+      countPatches.map(({ campaignId, patch }) =>
+        db
+          .from("admin_notification_campaigns")
+          .update(patch)
+          .eq("id", campaignId),
+      ),
+    );
   }
 
   const campaigns = await Promise.all(
     (data ?? []).map(async (c) => {
-      const readCount = readCountByCampaign.get(c.id) ?? 0;
+      const stats = statsByCampaign.get(c.id);
+      const recipientCount = stats?.recipientCount ?? c.recipient_count ?? 0;
+      const deliveredCount = stats?.deliveredCount ?? c.success_count ?? 0;
+      const failureCount = stats?.failureCount ?? c.failure_count ?? 0;
+      const readCount = stats?.readCount ?? 0;
 
-      const delivered = c.success_count ?? 0;
       const deliveryProgress =
         c.status === "processing" || c.status === "pending"
-          ? await getCampaignDeliveryProgress(
-              c.id,
-              c.recipient_count ?? undefined,
-            )
+          ? await getCampaignDeliveryProgress(c.id, recipientCount)
           : null;
 
       return {
         id: c.id,
         messageTemplate: c.message_template,
         notificationType: c.notification_type,
-        recipientCount: c.recipient_count,
-        successCount: c.success_count,
-        failureCount: c.failure_count,
+        recipientCount,
+        successCount: deliveredCount,
+        failureCount,
         status: c.status,
         scheduledAt: c.scheduled_at,
         createdAt: c.created_at,
@@ -84,8 +120,8 @@ export async function GET(req: NextRequest) {
         recipientMode: c.recipient_mode,
         readCount,
         readPercent:
-          delivered > 0
-            ? Math.round((readCount / delivered) * 1000) / 10
+          deliveredCount > 0
+            ? Math.round((readCount / deliveredCount) * 1000) / 10
             : null,
         deliveryProgress,
       };
