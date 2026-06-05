@@ -588,6 +588,11 @@ export function ContestClientPage({
   // Rehydrate loader/progress if a run is already active (e.g. tab switch).
   useEffect(() => {
     if (!contest?.id) return;
+    const platformLower = contest.platform?.toLowerCase() ?? "";
+    const isTwitterContest =
+      platformLower === "twitter" || platformLower === "x";
+    if (!isTwitterContest) return;
+
     let cancelled = false;
 
     (async () => {
@@ -658,6 +663,7 @@ export function ContestClientPage({
     };
   }, [
     contest?.id,
+    contest?.platform,
     clearTwitterMetricsRunIntervals,
     startTrackingTwitterMetricsRun,
     twitterMetricsRunStorageKey,

@@ -332,10 +332,19 @@ export function UserNotificationsBell({
   }, [fetchNotifications]);
 
   useEffect(() => {
-    const onChanged = () => void fetchNotifications({ silent: true });
+    let debounceTimer: ReturnType<typeof setTimeout> | null = null;
+    const onChanged = () => {
+      if (debounceTimer) clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(() => {
+        debounceTimer = null;
+        void fetchNotifications({ silent: true });
+      }, 300);
+    };
     window.addEventListener(NOTIFICATIONS_CHANGED_EVENT, onChanged);
-    return () =>
+    return () => {
+      if (debounceTimer) clearTimeout(debounceTimer);
       window.removeEventListener(NOTIFICATIONS_CHANGED_EVENT, onChanged);
+    };
   }, [fetchNotifications]);
 
   useEffect(() => {

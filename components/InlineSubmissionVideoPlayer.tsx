@@ -12,6 +12,8 @@ type InlineSubmissionVideoPlayerProps = {
   videoThumbnailUrl?: string | null;
   isDark?: boolean;
   className?: string;
+  /** When false, skips content-preview API fetch (e.g. until row is visible). */
+  enabled?: boolean;
 };
 
 export function InlineSubmissionVideoPlayer({
@@ -22,6 +24,7 @@ export function InlineSubmissionVideoPlayer({
   videoThumbnailUrl,
   isDark = false,
   className,
+  enabled = true,
 }: InlineSubmissionVideoPlayerProps) {
   const {
     playerLoading,
@@ -38,7 +41,7 @@ export function InlineSubmissionVideoPlayer({
     platform,
     videoId,
     videoThumbnailUrl,
-    enabled: true,
+    enabled,
   });
 
   return (

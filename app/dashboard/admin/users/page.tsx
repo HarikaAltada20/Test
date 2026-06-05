@@ -39,7 +39,6 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import {
   scheduleClientDelivery,
-  useAdminScheduledNotificationDelivery,
 } from "@/hooks/useAdminScheduledNotificationDelivery";
 import {
   SendNotificationModal,
@@ -406,7 +405,7 @@ const allColumns = {
 };
 
 export default function AdminUsersPage() {
-  useAdminScheduledNotificationDelivery(true);
+  // Scheduled notification poller is registered in AdminNotificationsView.
 
   // Operator mapping for dropdown display
   const operatorMap: Record<string, { label: string; symbol: string }> = {

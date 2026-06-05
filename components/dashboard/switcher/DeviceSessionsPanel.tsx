@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
+import { touchAccountSwitchSessionIfNeeded } from "@/lib/account-switch-session-touch";
 import { Loader2, MonitorSmartphone, RefreshCw } from "lucide-react";
 
 type SessionRow = {
@@ -34,10 +35,14 @@ export function DeviceSessionsPanel({ isDark }: { isDark: boolean }) {
   const [busy, setBusy] = useState<null | "others" | "all">(null);
   const { toast } = useToast();
 
-  const refresh = useCallback(async () => {
+  const refresh = useCallback(async (forceTouch = false) => {
     setLoading(true);
     try {
-      await fetch("/api/account-switch/sessions/touch", { method: "POST" });
+      if (forceTouch) {
+        await fetch("/api/account-switch/sessions/touch", { method: "POST" });
+      } else {
+        touchAccountSwitchSessionIfNeeded();
+      }
       const r = await fetch("/api/account-switch/sessions");
       const d = await r.json();
       setRows((d.sessions as SessionRow[]) || []);
@@ -66,7 +71,7 @@ export function DeviceSessionsPanel({ isDark }: { isDark: boolean }) {
         title: "Other sessions signed out",
         description: "Other browsers were signed out. This session stays active.",
       });
-      await refresh();
+      await refresh(true);
     } catch (e: unknown) {
       toast({
         title: "Could not sign out others",
@@ -136,7 +141,7 @@ export function DeviceSessionsPanel({ isDark }: { isDark: boolean }) {
           variant="outline"
           size="sm"
           className="shrink-0 rounded-lg"
-          onClick={() => void refresh()}
+          onClick={() => void refresh(true)}
           disabled={loading}
         >
           {loading ? (

@@ -14,6 +14,13 @@ import {
   getMetricsRefreshCooldownInfoAdmin,
   formatRemainingTime,
 } from "@/lib/constants";
+import {
+  isActiveMetricsRun,
+  isTerminalMetricsRunStatus,
+  resolveMetricsRefreshPlatform,
+  startMetricsRunPolling,
+  type MetricsRefreshPlatform,
+} from "@/lib/metrics-refresh-polling";
 
 // Removed global type imports, defining them locally below
 // import { type Contest } from "@/types/contest";
@@ -118,7 +125,7 @@ import {
 import { adjustBonusCents, parsePayoutAdjustment } from "@/lib/payout-rules";
 import { YouTubeAnalyticsPanel } from "@/components/youtube/YouTubeAnalyticsPanel";
 import { SubmissionLeaderboardExportDialog } from "@/components/submissions/SubmissionLeaderboardExportDialog";
-import { InlineSubmissionVideoPlayer } from "@/components/InlineSubmissionVideoPlayer";
+import { LazyInlineSubmissionVideoPlayer } from "@/components/LazyInlineSubmissionVideoPlayer";
 import { ContestAnalyticsExportDialog } from "@/components/contests/ContestAnalyticsExportDialog";
 import {
   getAnalyticsTabCounts,
@@ -1117,6 +1124,7 @@ export default function ContestDetailClient({
   const previousYoutubeRunRef = useRef<{ id: string; status: string } | null>(
     null,
   );
+  const metricsRefreshManualPollStopRef = useRef<(() => void) | null>(null);
   const REFRESH_RELOAD_DELAY_MS = 1500;
   const isTerminalRefreshStatus = (status: string | null | undefined) =>
     status === "completed" || status === "failed" || status === "cancelled";
@@ -1424,207 +1432,124 @@ export default function ContestDetailClient({
     youtubeRun?.finished_at,
   ]);
 
-  // Rehydrate YouTube refresh run status on page load / tab revisit.
-  // This ensures the running popup survives full page refreshes.
-  useEffect(() => {
-    const isYoutubePlatform =
-      currentContest.platform?.toLowerCase().includes("youtube") ?? false;
-    if (!isYoutubePlatform || activeTab !== "submissions") return;
+  const applyHydratedMetricsRun = useCallback(
+    (
+      metricsPlatform: MetricsRefreshPlatform,
+      run: {
+        id: string;
+        status: string;
+      } | null,
+    ) => {
+      if (!run) return;
 
-    let cancelled = false;
-    let timer: ReturnType<typeof setInterval> | null = null;
-    const fetchStatus = async () => {
-      try {
-        const res = await fetch(
-          `/api/contests/${contestId}/youtube-metrics-refresh/status`,
-        );
-        if (!res.ok || cancelled) return;
-        const data = await res.json();
-        const run = data?.run as YouTubeMetricsRefreshRunSummary | null;
-
-        if (!run) return;
-
-        setYoutubeRun(run);
-        const shouldReloadWhenComplete = shouldReloadAfterHydratedRun(
-          previousYoutubeRunRef.current,
-          run,
-        );
-        previousYoutubeRunRef.current = { id: run.id, status: run.status };
-
-        if (run.status === "pending" || run.status === "running") {
-          setYoutubeRunCompleted(false);
-          setShowYoutubeRunPopup(true);
-          return;
+      const shouldReloadWhenComplete = (() => {
+        switch (metricsPlatform) {
+          case "instagram":
+            return shouldReloadAfterHydratedRun(
+              previousInstagramRunRef.current,
+              run,
+            );
+          case "twitter":
+            return shouldReloadAfterHydratedRun(
+              previousTwitterRunRef.current,
+              run,
+            );
+          case "tiktok":
+            return shouldReloadAfterHydratedRun(
+              previousTiktokRunRef.current,
+              run,
+            );
+          case "youtube":
+            return shouldReloadAfterHydratedRun(
+              previousYoutubeRunRef.current,
+              run,
+            );
         }
+      })();
 
-        if (
-          run.status === "completed" ||
-          run.status === "failed" ||
-          run.status === "cancelled"
-        ) {
-          setYoutubeRunCompleted(true);
-          setShowYoutubeRunPopup(false);
-          if (shouldReloadWhenComplete) {
-            schedulePostRefreshReload();
-          }
-          if (timer) {
-            clearInterval(timer);
-            timer = null;
-          }
-        }
-      } catch {
-        // noop: status hydration should never block the page
-      }
-    };
-
-    void fetchStatus();
-    timer = setInterval(fetchStatus, 3000);
-
-    return () => {
-      cancelled = true;
-      if (timer) clearInterval(timer);
-    };
-  }, [currentContest.platform, contestId, activeTab, currentContest.id]);
-
-  // Rehydrate Instagram/Twitter/TikTok refresh run status on page load / tab revisit.
-  // This keeps the 5-minute disable gate accurate after reload.
-  useEffect(() => {
-    const platform = currentContest.platform?.toLowerCase() ?? "";
-    const isEligiblePlatform =
-      platform.includes("instagram") ||
-      platform.includes("twitter") ||
-      platform.includes("x") ||
-      platform.includes("tiktok");
-    if (activeTab !== "submissions" || !isEligiblePlatform) {
-      return;
-    }
-
-    let cancelled = false;
-    let timer: ReturnType<typeof setInterval> | null = null;
-    const fetchStatus = async () => {
-      try {
-        if (platform.includes("instagram")) {
-          const res = await fetch(
-            `/api/contests/${contestId}/instagram-insights-refresh/status`,
-          );
-          if (!res.ok || cancelled) return;
-          const data = await res.json();
-          const run = data?.run as InstagramInsightsRefreshRunSummary | null;
-          if (!run) return;
-          setInstagramRun(run);
-          const shouldReloadWhenComplete = shouldReloadAfterHydratedRun(
-            previousInstagramRunRef.current,
-            run,
-          );
+      switch (metricsPlatform) {
+        case "instagram":
+          setInstagramRun(run as InstagramInsightsRefreshRunSummary);
           previousInstagramRunRef.current = { id: run.id, status: run.status };
-          if (run.status === "pending" || run.status === "running") {
+          if (isActiveMetricsRun(run)) {
             setInstagramRunCompleted(false);
             setShowInstagramRunPopup(true);
-            return;
-          }
-          if (
-            run.status === "completed" ||
-            run.status === "failed" ||
-            run.status === "cancelled"
-          ) {
+          } else if (isTerminalMetricsRunStatus(run.status)) {
             setInstagramRunCompleted(true);
             setShowInstagramRunPopup(false);
-            if (shouldReloadWhenComplete) {
-              schedulePostRefreshReload();
-            }
-            if (timer) {
-              clearInterval(timer);
-              timer = null;
-            }
+            if (shouldReloadWhenComplete) schedulePostRefreshReload();
           }
-          return;
-        }
-
-        if (platform.includes("twitter") || platform.includes("x")) {
-          const res = await fetch(
-            `/api/contests/${contestId}/twitter-metrics-refresh/status`,
-          );
-          if (!res.ok || cancelled) return;
-          const data = await res.json();
-          const run = data?.run as TwitterMetricsRefreshRunSummary | null;
-          if (!run) return;
-          setTwitterRun(run);
-          const shouldReloadWhenComplete = shouldReloadAfterHydratedRun(
-            previousTwitterRunRef.current,
-            run,
-          );
+          break;
+        case "twitter":
+          setTwitterRun(run as TwitterMetricsRefreshRunSummary);
           previousTwitterRunRef.current = { id: run.id, status: run.status };
-          if (run.status === "pending" || run.status === "running") {
+          if (isActiveMetricsRun(run)) {
             setTwitterRunCompleted(false);
             setShowTwitterRunPopup(true);
-            return;
-          }
-          if (
-            run.status === "completed" ||
-            run.status === "failed" ||
-            run.status === "cancelled"
-          ) {
+          } else if (isTerminalMetricsRunStatus(run.status)) {
             setTwitterRunCompleted(true);
             setShowTwitterRunPopup(false);
-            if (shouldReloadWhenComplete) {
-              schedulePostRefreshReload();
-            }
-            if (timer) {
-              clearInterval(timer);
-              timer = null;
-            }
+            if (shouldReloadWhenComplete) schedulePostRefreshReload();
           }
-          return;
-        }
-
-        if (platform.includes("tiktok")) {
-          const res = await fetch(
-            `/api/contests/${contestId}/tiktok-metrics-refresh/status`,
-          );
-          if (!res.ok || cancelled) return;
-          const data = await res.json();
-          const run = data?.run as TikTokMetricsRefreshRunSummary | null;
-          if (!run) return;
-          setTiktokRun(run);
-          const shouldReloadWhenComplete = shouldReloadAfterHydratedRun(
-            previousTiktokRunRef.current,
-            run,
-          );
+          break;
+        case "tiktok":
+          setTiktokRun(run as TikTokMetricsRefreshRunSummary);
           previousTiktokRunRef.current = { id: run.id, status: run.status };
-          if (run.status === "pending" || run.status === "running") {
+          if (isActiveMetricsRun(run)) {
             setTiktokRunCompleted(false);
             setShowTiktokRunPopup(true);
-            return;
-          }
-          if (
-            run.status === "completed" ||
-            run.status === "failed" ||
-            run.status === "cancelled"
-          ) {
+          } else if (isTerminalMetricsRunStatus(run.status)) {
             setTiktokRunCompleted(true);
             setShowTiktokRunPopup(false);
-            if (shouldReloadWhenComplete) {
-              schedulePostRefreshReload();
-            }
-            if (timer) {
-              clearInterval(timer);
-              timer = null;
-            }
+            if (shouldReloadWhenComplete) schedulePostRefreshReload();
           }
-        }
-      } catch {
-        // noop: status hydration should never block the page
+          break;
+        case "youtube":
+          setYoutubeRun(run as YouTubeMetricsRefreshRunSummary);
+          previousYoutubeRunRef.current = { id: run.id, status: run.status };
+          if (isActiveMetricsRun(run)) {
+            setYoutubeRunCompleted(false);
+            setShowYoutubeRunPopup(true);
+          } else if (isTerminalMetricsRunStatus(run.status)) {
+            setYoutubeRunCompleted(true);
+            setShowYoutubeRunPopup(false);
+            if (shouldReloadWhenComplete) schedulePostRefreshReload();
+          }
+          break;
       }
-    };
+    },
+    [schedulePostRefreshReload],
+  );
 
-    void fetchStatus();
-    timer = setInterval(fetchStatus, 3000);
+  // Rehydrate metrics refresh run on submissions tab; poll only while run is active.
+  useEffect(() => {
+    const metricsPlatform = resolveMetricsRefreshPlatform(
+      currentContest.platform,
+    );
+    if (activeTab !== "submissions" || !metricsPlatform) return;
 
+    const stop = startMetricsRunPolling({
+      contestId,
+      platform: metricsPlatform,
+      onRun: (run) => applyHydratedMetricsRun(metricsPlatform, run),
+      onTerminal: (run) => applyHydratedMetricsRun(metricsPlatform, run),
+    });
+
+    return stop;
+  }, [
+    activeTab,
+    applyHydratedMetricsRun,
+    contestId,
+    currentContest.id,
+    currentContest.platform,
+  ]);
+
+  useEffect(() => {
     return () => {
-      cancelled = true;
-      if (timer) clearInterval(timer);
+      metricsRefreshManualPollStopRef.current?.();
+      metricsRefreshManualPollStopRef.current = null;
     };
-  }, [currentContest.platform, contestId, activeTab, currentContest.id]);
+  }, []);
 
   // Refresh metrics state
   const [isRefreshingMetrics, setIsRefreshingMetrics] = useState(false);
@@ -6722,210 +6647,173 @@ export default function ContestDetailClient({
       }
 
       if (result?.queued) {
-        // Poll until refresh completes; use run status for supported platforms.
-        const isInstagram =
-          currentContest.platform?.toLowerCase() === "instagram";
-        const platformLower = currentContest.platform?.toLowerCase() ?? "";
-        const isTwitterPlatform =
-          platformLower === "twitter" || platformLower === "x";
-        const isYoutubePlatform =
-          currentContest.platform?.toLowerCase().includes("youtube") ?? false;
+        const metricsPlatform = resolveMetricsRefreshPlatform(
+          currentContest.platform,
+        );
         const previousUpdated = currentContest.last_metrics_updated ?? null;
-        const pollIntervalMs = 3000;
-        const pollMaxMs =
-          isInstagram || isTwitterPlatform || isYoutubePlatform
-            ? 600000
-            : 120000;
-        const startedAt = Date.now();
-        const pollTimer = setInterval(async () => {
-          if (Date.now() - startedAt > pollMaxMs) {
-            clearInterval(pollTimer);
-            setIsRefreshingMetrics(false);
+        const pollMaxMs = metricsPlatform ? 600000 : 120000;
+
+        metricsRefreshManualPollStopRef.current?.();
+
+        const finishManualRefreshPoll = () => {
+          metricsRefreshManualPollStopRef.current?.();
+          metricsRefreshManualPollStopRef.current = null;
+        };
+
+        const handleManualRefreshRunUpdate = (
+          platform: MetricsRefreshPlatform,
+          run: { id: string; status: string } | null,
+        ) => {
+          if (!run) return;
+          const active = isActiveMetricsRun(run);
+          switch (platform) {
+            case "instagram":
+              setInstagramRun(run as InstagramInsightsRefreshRunSummary);
+              setShowInstagramRunPopup(active);
+              break;
+            case "twitter":
+              setTwitterRun(run as TwitterMetricsRefreshRunSummary);
+              setShowTwitterRunPopup(active);
+              break;
+            case "tiktok":
+              setTiktokRun(run as TikTokMetricsRefreshRunSummary);
+              setShowTiktokRunPopup(active);
+              break;
+            case "youtube":
+              setYoutubeRun(run as YouTubeMetricsRefreshRunSummary);
+              setShowYoutubeRunPopup(active);
+              break;
+          }
+        };
+
+        const handleManualRefreshTerminal = (
+          platform: MetricsRefreshPlatform,
+          run: { id: string; status: string } | null,
+        ) => {
+          finishManualRefreshPoll();
+          setIsRefreshingMetrics(false);
+          if (!run) {
+            window.location.reload();
             return;
           }
-          try {
-            if (isInstagram) {
-              const res = await fetch(
-                `/api/contests/${contestId}/instagram-insights-refresh/status`,
-              );
-              if (!res.ok) return;
-              const data = await res.json();
-              const run =
-                data?.run as InstagramInsightsRefreshRunSummary | null;
-              if (run) {
-                setInstagramRun(run);
-                setShowInstagramRunPopup(
-                  run.status === "pending" || run.status === "running",
-                );
+
+          const status = run.status;
+          switch (platform) {
+            case "instagram": {
+              const igRun = run as InstagramInsightsRefreshRunSummary;
+              setInstagramRun(igRun);
+              setInstagramRunCompleted(true);
+              setShowInstagramRunPopup(false);
+              if (status === "completed") {
+                toast({
+                  title: "Instagram insights refresh completed",
+                  description: `Reviewed ${igRun.reviewed_count ?? 0}, Processed ${igRun.processed_submissions ?? 0}. Success: ${igRun.success_count ?? 0}, Permanent failure: ${igRun.permanent_failure_count ?? 0}, Temporary failure: ${igRun.temporary_failure_count ?? 0}, Skipped: ${igRun.skipped_recent_count ?? 0}.`,
+                  duration: 10000,
+                  variant: "success",
+                });
               }
-              const status = run?.status;
+              schedulePostRefreshReload();
+              break;
+            }
+            case "twitter": {
+              const twRun = run as TwitterMetricsRefreshRunSummary;
+              setTwitterRun(twRun);
+              setTwitterRunCompleted(true);
+              setShowTwitterRunPopup(false);
+              if (status === "completed") {
+                toast({
+                  title: "Twitter metrics refresh completed",
+                  description: `${twRun.is_raid ? "Raid" : "Awareness"} · Participants ${twRun.processed_participants ?? 0}/${twRun.total_participants ?? 0} · Rows touched ${twRun.tweets_upserted ?? 0}`,
+                  duration: 10000,
+                  variant: "success",
+                });
+              } else if (status === "failed") {
+                toast({
+                  title: "Twitter metrics refresh failed",
+                  description:
+                    twRun.error_message?.slice(0, 500) ??
+                    "The refresh run ended with an error.",
+                  duration: 12000,
+                  variant: "destructive",
+                });
+              }
+              schedulePostRefreshReload();
+              break;
+            }
+            case "tiktok": {
+              const ttRun = run as TikTokMetricsRefreshRunSummary;
+              setTiktokRun(ttRun);
+              setTiktokRunCompleted(true);
+              setShowTiktokRunPopup(false);
+              if (status === "completed") {
+                toast({
+                  title: "TikTok metrics refresh completed",
+                  description: `Processed ${ttRun.processed_submissions ?? 0} submissions. Success: ${ttRun.success_count ?? 0}, Permanent failure: ${ttRun.permanent_failure_count ?? 0}, Temporary failure: ${ttRun.temporary_failure_count ?? 0}.`,
+                  duration: 10000,
+                  variant: "success",
+                });
+              }
+              schedulePostRefreshReload();
+              break;
+            }
+            case "youtube": {
+              const ytRun = run as YouTubeMetricsRefreshRunSummary;
+              setYoutubeRun(ytRun);
+              setYoutubeRunCompleted(true);
+              setShowYoutubeRunPopup(false);
               if (
-                status === "completed" ||
-                status === "failed" ||
-                status === "cancelled"
+                ytRun.id &&
+                !notifiedYoutubeRunIds.current.has(ytRun.id)
               ) {
-                clearInterval(pollTimer);
-                setIsRefreshingMetrics(false);
-                if (run) {
-                  setInstagramRun(run);
-                  setInstagramRunCompleted(true);
-                  if (status === "completed") {
-                    toast({
-                      title: "Instagram insights refresh completed",
-                      description: `Reviewed ${run.reviewed_count ?? 0}, Processed ${run.processed_submissions ?? 0}. Success: ${run.success_count ?? 0}, Permanent failure: ${run.permanent_failure_count ?? 0}, Temporary failure: ${run.temporary_failure_count ?? 0}, Skipped: ${run.skipped_recent_count ?? 0}.`,
-                      duration: 10000,
-                      variant: "success",
-                    });
-                  }
-                  // Hide the popup and reload shortly so the cooldown timestamp is fresh.
-                  setShowInstagramRunPopup(false);
-                  schedulePostRefreshReload();
-                } else {
-                  window.location.reload();
+                notifiedYoutubeRunIds.current.add(ytRun.id);
+                if (status === "completed") {
+                  toast({
+                    title: "YouTube refresh completed",
+                    description: `Scope: ${ytRun.scope} · Success ${ytRun.success_count ?? 0} · Temporary Failure ${ytRun.temporary_failure_count ?? 0} · Permanent Failure ${ytRun.permanent_failure_count ?? 0} · Skipped ${ytRun.skipped_recent_count ?? 0}`,
+                    duration: 10000,
+                    variant: "success",
+                  });
+                } else if (status === "failed") {
+                  toast({
+                    title: "YouTube refresh failed",
+                    description:
+                      ytRun.error_message?.slice(0, 500) ??
+                      "The refresh run ended with an error.",
+                    duration: 12000,
+                    variant: "destructive",
+                  });
                 }
-                return;
               }
-            } else if (isTwitterPlatform) {
-              const res = await fetch(
-                `/api/contests/${contestId}/twitter-metrics-refresh/status`,
-              );
-              if (!res.ok) return;
-              const data = await res.json();
-              const run = data?.run as TwitterMetricsRefreshRunSummary | null;
-              if (run) {
-                setTwitterRun(run);
-                setShowTwitterRunPopup(
-                  run.status === "pending" || run.status === "running",
-                );
-              }
-              const status = run?.status;
-              if (
-                status === "completed" ||
-                status === "failed" ||
-                status === "cancelled"
-              ) {
-                clearInterval(pollTimer);
-                setIsRefreshingMetrics(false);
-                if (run) {
-                  setTwitterRun(run);
-                  setTwitterRunCompleted(true);
-                  if (status === "completed") {
-                    toast({
-                      title: "Twitter metrics refresh completed",
-                      description: `${run.is_raid ? "Raid" : "Awareness"} · Participants ${run.processed_participants ?? 0}/${run.total_participants ?? 0} · Rows touched ${run.tweets_upserted ?? 0}`,
-                      duration: 10000,
-                      variant: "success",
-                    });
-                  } else if (status === "failed") {
-                    toast({
-                      title: "Twitter metrics refresh failed",
-                      description:
-                        run.error_message?.slice(0, 500) ??
-                        "The refresh run ended with an error.",
-                      duration: 12000,
-                      variant: "destructive",
-                    });
-                  }
-                  setShowTwitterRunPopup(false);
-                  schedulePostRefreshReload();
-                } else {
-                  window.location.reload();
-                }
-                return;
-              }
-            } else if (
-              currentContest.platform?.toLowerCase().includes("tiktok")
-            ) {
-              const res = await fetch(
-                `/api/contests/${contestId}/tiktok-metrics-refresh/status`,
-              );
-              if (!res.ok) return;
-              const data = await res.json();
-              const run = data?.run as TikTokMetricsRefreshRunSummary | null;
-              if (run) {
-                setTiktokRun(run);
-                setShowTiktokRunPopup(
-                  run.status === "pending" || run.status === "running",
-                );
-              }
-              const status = run?.status;
-              if (
-                status === "completed" ||
-                status === "failed" ||
-                status === "cancelled"
-              ) {
-                clearInterval(pollTimer);
-                setIsRefreshingMetrics(false);
-                if (run) {
-                  setTiktokRun(run);
-                  setTiktokRunCompleted(true);
-                  if (status === "completed") {
-                    toast({
-                      title: "TikTok metrics refresh completed",
-                      description: `Processed ${run.processed_submissions ?? 0} submissions. Success: ${run.success_count ?? 0}, Permanent failure: ${run.permanent_failure_count ?? 0}, Temporary failure: ${run.temporary_failure_count ?? 0}.`,
-                      duration: 10000,
-                      variant: "success",
-                    });
-                  }
-                  setShowTiktokRunPopup(false);
-                  schedulePostRefreshReload();
-                } else {
-                  window.location.reload();
-                }
-                return;
-              }
-            } else if (isYoutubePlatform) {
-              const res = await fetch(
-                `/api/contests/${contestId}/youtube-metrics-refresh/status`,
-              );
-              if (!res.ok) return;
-              const data = await res.json();
-              const run = data?.run as YouTubeMetricsRefreshRunSummary | null;
-              if (run) {
-                setYoutubeRun(run);
-                setShowYoutubeRunPopup(
-                  run.status === "pending" || run.status === "running",
-                );
-              }
-              const status = run?.status;
-              if (
-                status === "completed" ||
-                status === "failed" ||
-                status === "cancelled"
-              ) {
-                clearInterval(pollTimer);
-                setIsRefreshingMetrics(false);
-                if (run) {
-                  setYoutubeRun(run);
-                  setYoutubeRunCompleted(true);
-                  if (run.id && !notifiedYoutubeRunIds.current.has(run.id)) {
-                    notifiedYoutubeRunIds.current.add(run.id);
-                    if (status === "completed") {
-                      toast({
-                        title: "YouTube refresh completed",
-                        description: `Scope: ${run.scope} · Success ${run.success_count ?? 0} · Temporary Failure ${run.temporary_failure_count ?? 0} · Permanent Failure ${run.permanent_failure_count ?? 0} · Skipped ${run.skipped_recent_count ?? 0}`,
-                        duration: 10000,
-                        variant: "success",
-                      });
-                    } else if (status === "failed") {
-                      toast({
-                        title: "YouTube refresh failed",
-                        description:
-                          run.error_message?.slice(0, 500) ??
-                          "The refresh run ended with an error.",
-                        duration: 12000,
-                        variant: "destructive",
-                      });
-                    }
-                  }
-                  setShowYoutubeRunPopup(false);
-                  schedulePostRefreshReload();
-                } else {
-                  window.location.reload();
-                }
-                return;
-              }
-            } else {
+              schedulePostRefreshReload();
+              break;
+            }
+          }
+        };
+
+        if (metricsPlatform) {
+          metricsRefreshManualPollStopRef.current = startMetricsRunPolling({
+            contestId,
+            platform: metricsPlatform,
+            maxMs: pollMaxMs,
+            onRun: (run) =>
+              handleManualRefreshRunUpdate(metricsPlatform, run),
+            onTerminal: (run) =>
+              handleManualRefreshTerminal(metricsPlatform, run),
+            onTimeout: () => {
+              finishManualRefreshPoll();
+              setIsRefreshingMetrics(false);
+            },
+          });
+        } else {
+          const startedAt = Date.now();
+          const pollTimer = setInterval(async () => {
+            if (Date.now() - startedAt > pollMaxMs) {
+              clearInterval(pollTimer);
+              finishManualRefreshPoll();
+              setIsRefreshingMetrics(false);
+              return;
+            }
+            try {
               const res = await fetch(
                 `/api/contests/${contestId}/last-metrics-updated`,
               );
@@ -6934,15 +6822,18 @@ export default function ContestDetailClient({
               const newUpdated = data.last_metrics_updated ?? null;
               if (newUpdated && newUpdated !== previousUpdated) {
                 clearInterval(pollTimer);
+                finishManualRefreshPoll();
                 setIsRefreshingMetrics(false);
                 window.location.reload();
-                return;
               }
+            } catch {
+              // ignore
             }
-          } catch {
-            // ignore
-          }
-        }, pollIntervalMs);
+          }, 3000);
+          metricsRefreshManualPollStopRef.current = () => {
+            clearInterval(pollTimer);
+          };
+        }
       } else {
         toast({
           title: "Success! 🎉",
@@ -17752,7 +17643,7 @@ export default function ContestDetailClient({
                                   </TableCell>
                                   {useInlineContentPlayer && (
                                     <TableCell className="align-top p-4 w-[400px] min-w-[400px]">
-                                      <InlineSubmissionVideoPlayer
+                                      <LazyInlineSubmissionVideoPlayer
                                         submissionId={submission.id}
                                         contentLink={submission.content_link}
                                         platform={submission.platform}

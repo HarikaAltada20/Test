@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   useAdminScheduledNotificationDelivery,
   useSyncScheduledCampaignTimers,
@@ -124,6 +124,8 @@ export function AdminNotificationsView({
     useState<DeliveryProgressData | null>(null);
   const [recipientPage, setRecipientPage] = useState(1);
   const [recipientLimit, setRecipientLimit] = useState(25);
+  const campaignsRef = useRef(campaigns);
+  campaignsRef.current = campaigns;
 
   const loadCampaigns = useCallback(async (options?: { silent?: boolean }) => {
     if (!options?.silent) setLoading(true);
@@ -144,7 +146,15 @@ export function AdminNotificationsView({
 
   useEffect(() => {
     setScheduledDeliveryListener(() => {
-      void loadCampaigns();
+      const needsRefresh = campaignsRef.current.some(
+        (c) =>
+          c.status === "scheduled" ||
+          c.status === "processing" ||
+          c.status === "pending",
+      );
+      if (needsRefresh) {
+        void loadCampaigns({ silent: true });
+      }
     });
     return () => setScheduledDeliveryListener(null);
   }, [loadCampaigns]);

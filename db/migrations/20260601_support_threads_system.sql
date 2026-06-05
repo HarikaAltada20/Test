@@ -1,14 +1,23 @@
 -- In-built support system: threads, messages (queries table), notifications, user chat flag
 -- Messages live in public.queries: user_id = sender, user_type = sender role, query_text = body.
 
--- Notification type enum (includes support_reply)
+-- Notification type enum (support_reply, support_user_message for inbox + admin alerts)
 DO $$
 BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'admin_notification_type_enum') THEN
-    CREATE TYPE public.admin_notification_type_enum AS ENUM ('public', 'support_reply');
+    CREATE TYPE public.admin_notification_type_enum AS ENUM (
+      'public',
+      'support_reply',
+      'support_user_message'
+    );
   ELSE
     BEGIN
       ALTER TYPE public.admin_notification_type_enum ADD VALUE IF NOT EXISTS 'support_reply';
+    EXCEPTION
+      WHEN duplicate_object THEN NULL;
+    END;
+    BEGIN
+      ALTER TYPE public.admin_notification_type_enum ADD VALUE IF NOT EXISTS 'support_user_message';
     EXCEPTION
       WHEN duplicate_object THEN NULL;
     END;
