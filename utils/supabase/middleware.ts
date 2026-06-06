@@ -68,15 +68,8 @@ export async function updateSession(request: NextRequest): Promise<UpdateSession
 
     let user: User | null = null
     try {
-        const { data, error } = await supabase.auth.getUser()
-        if (error && isRefreshTokenError(error)) {
-            await supabase.auth.signOut({ scope: 'local' })
-            user = null
-        } else if (error) {
-            throw error
-        } else {
-            user = data.user ?? null
-        }
+        const { data } = await supabase.auth.getUser()
+        user = data.user
     } catch (err) {
         if (isRefreshTokenError(err)) {
             // Default signOut() is scope "global" and revokes every device — use local
