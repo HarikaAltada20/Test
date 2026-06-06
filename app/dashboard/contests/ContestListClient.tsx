@@ -544,7 +544,7 @@ export function ContestListClient({
 
   const [contests, setContests] = useState<Contest[]>(initialContests);
   const isMountedRef = useRef(true);
-  
+
   // Loading states for buttons
   const [loadingButtons, setLoadingButtons] = useState<{
     [key: string]: {
@@ -1060,12 +1060,12 @@ export function ContestListClient({
         case "cpm_rate_asc":
           const rateA =
             isCpmContestType(a.contest_type) &&
-            a.contest_based_details?.cpm_contest?.cpm_rate_usd
+              a.contest_based_details?.cpm_contest?.cpm_rate_usd
               ? a.contest_based_details.cpm_contest.cpm_rate_usd
               : -1;
           const rateB =
             isCpmContestType(b.contest_type) &&
-            b.contest_based_details?.cpm_contest?.cpm_rate_usd
+              b.contest_based_details?.cpm_contest?.cpm_rate_usd
               ? b.contest_based_details.cpm_contest.cpm_rate_usd
               : -1;
           if (rateA === -1 && rateB === -1) return 0;
@@ -1103,7 +1103,7 @@ export function ContestListClient({
   const getModerationStatusBadge = (moderationStatus: string) => {
     const config =
       moderationStatusConfig[
-        moderationStatus as keyof typeof moderationStatusConfig
+      moderationStatus as keyof typeof moderationStatusConfig
       ];
     if (!config) return null;
 
@@ -1165,11 +1165,11 @@ export function ContestListClient({
                 className={cn(
                   "text-sm px-3 py-1 font-medium border",
                   contest.status === "active" &&
-                    "capitalize bg-[#7F39EC] text-white border-[#7F39EC]",
+                  "capitalize bg-[#7F39EC] text-white border-[#7F39EC]",
                   contest.status === "upcoming" &&
-                    "capitalize bg-[#7F39EC] text-white border-[#7F39EC]",
+                  "capitalize bg-[#7F39EC] text-white border-[#7F39EC]",
                   contest.status === "ended" &&
-                    `normal-case ${getEndedOpportunityBadgeClassName(isDark, contest.post_contest_status)}`,
+                  `normal-case ${getEndedOpportunityBadgeClassName(isDark, contest.post_contest_status)}`,
                   !["active", "upcoming", "ended"].includes(
                     contest.status || "",
                   ) && "capitalize bg-[#7F39EC] text-white border-[#7F39EC]",
@@ -1253,26 +1253,26 @@ export function ContestListClient({
               {(contest.contest_based_details?.cpm_contest?.flat_fee_bonus ||
                 contest.contest_based_details?.leaderboard_contest
                   ?.flat_fee_bonus) && (
-                <Badge
-                  variant="outline"
-                  className={cn(
-                    "text-[12px]",
-                    isDark
-                      ? "bg-green-900/30 text-green-300 border-green-700/50"
-                      : "bg-green-50 text-green-700 border-green-200",
-                  )}
-                >
-                  <Gift className="h-3 w-3 mr-1" />
-                  {formatMoney(
-                    contest.contest_based_details?.cpm_contest
-                      ?.flat_fee_bonus ||
+                  <Badge
+                    variant="outline"
+                    className={cn(
+                      "text-[12px]",
+                      isDark
+                        ? "bg-green-900/30 text-green-300 border-green-700/50"
+                        : "bg-green-50 text-green-700 border-green-200",
+                    )}
+                  >
+                    <Gift className="h-3 w-3 mr-1" />
+                    {formatMoney(
+                      contest.contest_based_details?.cpm_contest
+                        ?.flat_fee_bonus ||
                       contest.contest_based_details?.leaderboard_contest
                         ?.flat_fee_bonus ||
                       0,
-                  )}
-                  /submission
-                </Badge>
-              )}
+                    )}
+                    /submission
+                  </Badge>
+                )}
               {/* Don't show content_type badge for Twitter text_image contests (we show campaign_type badge instead) */}
               {(() => {
                 const isTwitterTextImage =
@@ -1426,12 +1426,12 @@ export function ContestListClient({
               </div>
               {isCpmContestType(contest.contest_type) &&
                 contest.contest_based_details?.cpm_contest?.cpm_rate_usd !=
-                  null && (
+                null && (
                   <div className="flex items-center">
                     <DollarSign className="h-4 w-4 mr-2 flex-shrink-0" />
                     <span>
                       {contest.platform?.toLowerCase() === "twitter" ||
-                      contest.platform?.toLowerCase() === "x"
+                        contest.platform?.toLowerCase() === "x"
                         ? "Points Rate: "
                         : "CPM Rate: "}
                       <span className="font-medium">
@@ -1440,7 +1440,7 @@ export function ContestListClient({
                             .cpm_rate_usd * 100,
                         )}{" "}
                         {contest.platform?.toLowerCase() === "twitter" ||
-                        contest.platform?.toLowerCase() === "x"
+                          contest.platform?.toLowerCase() === "x"
                           ? "/ 1k points"
                           : "/ 1k views"}
                       </span>
@@ -1471,7 +1471,7 @@ export function ContestListClient({
                 contest.contest_based_details?.leaderboard_contest
                   ?.total_prize != null &&
                 contest.contest_based_details.leaderboard_contest.total_prize >
-                  0 && (
+                0 && (
                   <div className="flex items-center">
                     <DollarSign className="h-4 w-4 mr-2 flex-shrink-0" />
                     <span>
@@ -1489,7 +1489,7 @@ export function ContestListClient({
                 contest.contest_based_details?.leaderboard_contest
                   ?.total_budget != null &&
                 contest.contest_based_details.leaderboard_contest.total_budget >
-                  0 && (
+                0 && (
                   <div className="flex items-center">
                     <DollarSign className="h-4 w-4 mr-2 flex-shrink-0 text-green-600" />
                     <span>
@@ -1586,7 +1586,7 @@ export function ContestListClient({
               contest.contest_based_details?.leaderboard_contest
                 ?.total_budget != null &&
               contest.contest_based_details.leaderboard_contest.total_budget >
-                0 &&
+              0 &&
               (() => {
                 const totalBudget =
                   contest.contest_based_details.leaderboard_contest
@@ -1647,7 +1647,7 @@ export function ContestListClient({
               contest.contest_based_details?.milestone_contest
                 ?.total_budget_cents != null &&
               contest.contest_based_details.milestone_contest.total_budget_cents >
-                0 &&
+              0 &&
               (() => {
                 const totalBudget =
                   contest.contest_based_details.milestone_contest
@@ -1713,8 +1713,8 @@ export function ContestListClient({
                 goToContestDetail(contest.id);
               }}
               disabled={navigatingContestId === contest.id}
-              // size="sm"
-              // variant="outline"
+            // size="sm"
+            // variant="outline"
             >
               {navigatingContestId === contest.id ? (
                 <ButtonLoadingSpinner />
@@ -2004,28 +2004,28 @@ export function ContestListClient({
           {(contest.status === "active" ||
             contest.status === "upcoming" ||
             contest.status === "ended") && (
-            <div className="absolute top-3 right-3 z-10">
-              <Badge
-                className={cn(
-                  "text-sm px-3 py-1 font-medium border",
-                  contest.status === "active" &&
+              <div className="absolute top-3 right-3 z-10">
+                <Badge
+                  className={cn(
+                    "text-sm px-3 py-1 font-medium border",
+                    contest.status === "active" &&
                     "capitalize bg-[#7F39EC] text-white border-[#7F39EC]",
-                  contest.status === "upcoming" &&
+                    contest.status === "upcoming" &&
                     "capitalize bg-[#7F39EC] text-white border-[#7F39EC]",
-                  contest.status === "ended" &&
+                    contest.status === "ended" &&
                     `normal-case ${getEndedOpportunityBadgeClassName(isDark, contest.post_contest_status)}`,
-                )}
-              >
-                {contest.status === "active"
-                  ? "Live"
-                  : contest.status === "upcoming"
-                    ? "Upcoming"
-                    : contest.status === "ended"
-                      ? getEndedOpportunityPhaseLabel(contest.post_contest_status)
-                      : contest.status || "Unknown"}
-              </Badge>
-            </div>
-          )}
+                  )}
+                >
+                  {contest.status === "active"
+                    ? "Live"
+                    : contest.status === "upcoming"
+                      ? "Upcoming"
+                      : contest.status === "ended"
+                        ? getEndedOpportunityPhaseLabel(contest.post_contest_status)
+                        : contest.status || "Unknown"}
+                </Badge>
+              </div>
+            )}
           {/* Thumbnail */}
           <div className="w-full sm:w-64 md:w-80 lg:w-72 xl:w-96 sm:h-[200px] md:h-[220px] lg:h-[250px] min-h-[12rem] flex-shrink-0 flex items-center justify-center overflow-hidden relative">
             {contest.thumbnail_url ? (
@@ -2142,26 +2142,26 @@ export function ContestListClient({
                 {(contest.contest_based_details?.cpm_contest?.flat_fee_bonus ||
                   contest.contest_based_details?.leaderboard_contest
                     ?.flat_fee_bonus) && (
-                  <Badge
-                    variant="outline"
-                    className={cn(
-                      "text-sm px-3 py-1 font-medium",
-                      isDark
-                        ? "bg-green-900/30 text-green-300 border-green-700/50"
-                        : "bg-green-50 text-green-700 border-green-200",
-                    )}
-                  >
-                    <Gift className="h-3 w-3 mr-1" />
-                    {formatMoney(
-                      contest.contest_based_details?.cpm_contest
-                        ?.flat_fee_bonus ||
+                    <Badge
+                      variant="outline"
+                      className={cn(
+                        "text-sm px-3 py-1 font-medium",
+                        isDark
+                          ? "bg-green-900/30 text-green-300 border-green-700/50"
+                          : "bg-green-50 text-green-700 border-green-200",
+                      )}
+                    >
+                      <Gift className="h-3 w-3 mr-1" />
+                      {formatMoney(
+                        contest.contest_based_details?.cpm_contest
+                          ?.flat_fee_bonus ||
                         contest.contest_based_details?.leaderboard_contest
                           ?.flat_fee_bonus ||
                         0,
-                    )}
-                    /submission
-                  </Badge>
-                )}
+                      )}
+                      /submission
+                    </Badge>
+                  )}
                 {/* Bonus Available Badge */}
                 {contest.bonus_details?.description_html && (
                   <Badge
@@ -2311,7 +2311,7 @@ export function ContestListClient({
                 </div>
                 {isCpmContestType(contest.contest_type) &&
                   contest.contest_based_details?.cpm_contest?.cpm_rate_usd !=
-                    null && (
+                  null && (
                     <div className="flex items-center">
                       <DollarSign className="h-4 w-4 mr-2 flex-shrink-0" />
                       <span
@@ -2321,7 +2321,7 @@ export function ContestListClient({
                         }}
                       >
                         {contest.platform?.toLowerCase() === "twitter" ||
-                        contest.platform?.toLowerCase() === "x"
+                          contest.platform?.toLowerCase() === "x"
                           ? "Points Rate: "
                           : "CPM Rate: "}
                         <span className="font-medium">
@@ -2330,7 +2330,7 @@ export function ContestListClient({
                               .cpm_rate_usd * 100,
                           )}{" "}
                           {contest.platform?.toLowerCase() === "twitter" ||
-                          contest.platform?.toLowerCase() === "x"
+                            contest.platform?.toLowerCase() === "x"
                             ? "/ 1k points"
                             : "/ 1k views"}
                         </span>
@@ -2473,7 +2473,7 @@ export function ContestListClient({
                 contest.contest_based_details?.leaderboard_contest
                   ?.total_budget != null &&
                 contest.contest_based_details.leaderboard_contest.total_budget >
-                  0 &&
+                0 &&
                 (() => {
                   const totalBudget =
                     contest.contest_based_details.leaderboard_contest
@@ -2979,12 +2979,12 @@ export function ContestListClient({
         case "cpm_rate_asc":
           const rateSortA =
             isCpmContestType(a.contest_type) &&
-            a.contest_based_details?.cpm_contest?.cpm_rate_usd
+              a.contest_based_details?.cpm_contest?.cpm_rate_usd
               ? a.contest_based_details.cpm_contest.cpm_rate_usd
               : -1;
           const rateSortB =
             isCpmContestType(b.contest_type) &&
-            b.contest_based_details?.cpm_contest?.cpm_rate_usd
+              b.contest_based_details?.cpm_contest?.cpm_rate_usd
               ? b.contest_based_details.cpm_contest.cpm_rate_usd
               : -1;
           if (rateSortA === -1 && rateSortB === -1) return 0;
@@ -3046,7 +3046,7 @@ export function ContestListClient({
   );
   const hasCreatedContests = contests.length > 0;
   const hasPendingApprovalOrPublishedContest = contests.some((contest) =>
-    ["pending_approval", "approved", "published","rejected"].includes(
+    ["pending_approval", "approved", "published", "rejected"].includes(
       contest.moderation_status,
     ),
   );
@@ -3305,8 +3305,8 @@ export function ContestListClient({
                   : "border-gray-300 text-gray-600 hover:bg-gray-50",
               )}
             >
-              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 13a19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 3.55 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
-              Need Help? Book a Call
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 13a19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 3.55 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z" /></svg>
+              Need Help? Book a Call with Founder
             </a>
           </div>
         </CardContent>
@@ -3440,8 +3440,8 @@ export function ContestListClient({
                   : "border-gray-300 text-gray-600 hover:bg-gray-50",
               )}
             >
-              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 13a19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 3.55 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
-              Need Help? Book a Call
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 13a19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 3.55 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z" /></svg>
+              Need Help? Book a Call with Founder
             </a>
           </div>
         </CardContent>
@@ -3545,10 +3545,10 @@ export function ContestListClient({
                 </span>
                 <div>
                   <p className={cn("font-semibold", isDark ? "text-white" : "text-slate-900")}>
-                  Payouts Based on Achieved Milestones
+                    Payouts Based on Achieved Milestones
                   </p>
                   <p className={cn("mt-1", isDark ? "text-slate-300" : "text-slate-600")}>
-                  When a creator reaches a milestone, the payout is calculated and credited based only the milestone they have actually achieved for that submission.
+                    When a creator reaches a milestone, the payout is calculated and credited based only the milestone they have actually achieved for that submission.
                   </p>
                 </div>
               </div>
@@ -3572,8 +3572,8 @@ export function ContestListClient({
                   : "border-gray-300 text-gray-600 hover:bg-gray-50",
               )}
             >
-              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 13a19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 3.55 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
-              Need Help? Book a Call
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 13a19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 3.55 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z" /></svg>
+              Need Help? Book a Call with Founder
             </a>
           </div>
         </CardContent>
@@ -3711,8 +3711,8 @@ export function ContestListClient({
                   : "border-gray-300 text-gray-600 hover:bg-gray-50",
               )}
             >
-              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 13a19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 3.55 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
-              Need Help? Book a Call
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 13a19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 3.55 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z" /></svg>
+              Need Help? Book a Call with Founder
             </a>
           </div>
         </CardContent>
@@ -4104,9 +4104,9 @@ export function ContestListClient({
                       }}
                     >
                       {platformFilter !== "all" ||
-                      contestTypeFilter !== "all" ||
-                      searchQuery.trim() !== "" ||
-                      contestFormatFilter !== "all"
+                        contestTypeFilter !== "all" ||
+                        searchQuery.trim() !== "" ||
+                        contestFormatFilter !== "all"
                         ? `No contests match the current filters for ${brandListFilterPhrase(selectedTab, postContestPhaseFilter)}.`
                         : `No contests found for ${brandListFilterPhrase(selectedTab, postContestPhaseFilter)}.`}
                     </p>
@@ -4138,9 +4138,9 @@ export function ContestListClient({
                       }}
                     >
                       {platformFilter !== "all" ||
-                      contestTypeFilter !== "all" ||
-                      searchQuery.trim() !== "" ||
-                      contestFormatFilter !== "all"
+                        contestTypeFilter !== "all" ||
+                        searchQuery.trim() !== "" ||
+                        contestFormatFilter !== "all"
                         ? `No contests match the current filters for ${brandListFilterPhrase(selectedTab, postContestPhaseFilter)}.`
                         : `No contests found for ${brandListFilterPhrase(selectedTab, postContestPhaseFilter)}.`}
                     </p>
@@ -4195,7 +4195,7 @@ export function ContestListClient({
                         isDark={isDark}
                         className={cn(
                           isDark &&
-                            "border-gray-600 bg-[#07031D] text-white",
+                          "border-gray-600 bg-[#07031D] text-white",
                         )}
                       >
                         {[9, 15, 21, 30].map((size) => (
@@ -4205,7 +4205,7 @@ export function ContestListClient({
                             value={size.toString()}
                             className={cn(
                               isDark &&
-                                "bg-[#07031D] text-white focus:bg-slate-800 data-[state=checked]:bg-slate-700",
+                              "bg-[#07031D] text-white focus:bg-slate-800 data-[state=checked]:bg-slate-700",
                             )}
                           >
                             {size}

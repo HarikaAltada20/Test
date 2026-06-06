@@ -118,7 +118,7 @@ export function DashboardSidebar({
       name: "Campaigns",
       href: "/dashboard/contests",
       icon: Trophy,
-      description: "Manage your contests",
+      description: "Create/Manage Campaigns",
     },
     {
       name: "Dashboard",
@@ -824,6 +824,7 @@ export function DashboardSidebar({
                       href="https://calendly.com/guptavishesh2/30min"
                       target="_blank"
                       rel="noopener noreferrer"
+                      title="Book a free 30-min call with our founder"
                       className={cn(
                         "block w-full rounded-xl text-white py-2 text-center transition",
                         isDark
@@ -831,7 +832,7 @@ export function DashboardSidebar({
                           : "bg-black hover:bg-gray-800",
                       )}
                     >
-                      Book a Call
+                      Book a Call with the Founder
                     </a>
                   )}
 
@@ -884,6 +885,7 @@ export function DashboardSidebar({
                         href="https://calendly.com/guptavishesh2/30min"
                         target="_blank"
                         rel="noopener noreferrer"
+                        title="Book a Call with the Founder"
                       >
                         <Phone size={18} className="text-white" />
                       </a>

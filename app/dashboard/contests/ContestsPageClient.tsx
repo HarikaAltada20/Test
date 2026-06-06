@@ -32,14 +32,14 @@ const BOOK_A_CALL_URL = "https://calendly.com/guptavishesh2/30min";
 export type CreatorRouteNotice =
   | null
   | {
-      kind: "from_opportunity";
-      contestId: string;
-      contestTitle: string | null;
-    }
+    kind: "from_opportunity";
+    contestId: string;
+    contestTitle: string | null;
+  }
   | {
-      kind: "generic";
-      section?: "submissions" | "earnings" | "opportunities";
-    };
+    kind: "generic";
+    section?: "submissions" | "earnings" | "opportunities";
+  };
 
 interface ContestsPageClientProps {
   initialContests: any[];
@@ -295,7 +295,7 @@ export function ContestsPageClient({
               )}
             >
               <Phone className="h-4 w-4 shrink-0" />
-              Book a Call
+              Book a Call with Founder
             </a>
           )}
           <button
