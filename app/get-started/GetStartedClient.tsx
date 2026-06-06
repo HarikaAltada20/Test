@@ -13,13 +13,11 @@ import {
   Crown,
   Rocket,
   MessageSquare,
-  ExternalLink,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 
 const CALENDLY_URL = "https://calendly.com/guptavishesh2/30min";
-const FREE_TRIAL_FORM_URL = "https://docs.google.com/forms/d/e/1FAIpQLSf7C6hOBIr90e8pBDt9mMo4AzJaFM0Dlbud-EleVIPtuCC68A/viewform";
 
 export default function GetStartedClient() {
   const { toast } = useToast();
@@ -155,17 +153,14 @@ export default function GetStartedClient() {
               </div>
 
               <div className="shrink-0 flex flex-col items-stretch sm:items-end gap-2 min-w-[180px]">
-                <a
-                  href={FREE_TRIAL_FORM_URL}
-                  target="_blank"
-                  rel="noopener noreferrer"
+                <Link
+                  href="/get-started/apply"
                   className="flex items-center justify-center gap-2 px-8 py-4 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 text-white font-bold text-base hover:from-amber-400 hover:to-orange-400 transition-all duration-300 shadow-[0_0_24px_rgba(245,158,11,0.25)]"
                 >
                   <Rocket className="h-4 w-4" />
                   Apply Now
-                  <ExternalLink className="h-3.5 w-3.5 opacity-60" />
-                </a>
-                <p className="text-center text-xs text-slate-600">Takes 2 minutes · Google Form</p>
+                </Link>
+                <p className="text-center text-xs text-slate-600">Takes 2 minutes · Apply in-app</p>
               </div>
             </div>
 
