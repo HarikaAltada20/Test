@@ -26,6 +26,12 @@ import {
   writeStoredCampaignListTab,
   BRAND_CONTEST_TAB_IDS,
 } from "@/lib/campaign-list-tab-storage";
+import {
+  BRAND_CONTEST_LIST_FILTERS_KEY,
+  readStoredContestListFilters,
+  writeStoredContestListFilters,
+  type ViewModeOption,
+} from "@/lib/campaign-list-filters-storage";
 
 const BOOK_A_CALL_URL = "https://calendly.com/guptavishesh2/30min";
 
@@ -82,7 +88,25 @@ export function ContestsPageClient({
   }, []);
   const [loading, setLoading] = useState(false);
   const [mode, setMode] = useState<"light" | "dark">("light");
-  const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
+  const [viewMode, setViewModeState] = useState<"grid" | "list">("grid");
+  const [viewModeHydrated, setViewModeHydrated] = useState(false);
+
+  useEffect(() => {
+    const stored = readStoredContestListFilters(BRAND_CONTEST_LIST_FILTERS_KEY);
+    setViewModeState(stored.viewMode);
+    setViewModeHydrated(true);
+  }, []);
+
+  useEffect(() => {
+    if (!viewModeHydrated) return;
+    writeStoredContestListFilters(BRAND_CONTEST_LIST_FILTERS_KEY, {
+      viewMode: viewMode as ViewModeOption,
+    });
+  }, [viewMode, viewModeHydrated]);
+
+  const setViewMode = useCallback((mode: "grid" | "list") => {
+    setViewModeState(mode);
+  }, []);
   /** Keeps the notice after router.replace strips search params (RSC refetch). */
   const [lockedCreatorRouteNotice, setLockedCreatorRouteNotice] =
     useState<CreatorRouteNotice>(null);

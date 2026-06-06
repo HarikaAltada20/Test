@@ -36,6 +36,8 @@ import {
 import { UserResponse } from "@supabase/supabase-js";
 import { formatLocalDateTime } from "@/lib/utils";
 import { trackViewDetailsClick } from "@/lib/gtag";
+import { isModifiedLinkClick } from "@/lib/navigation-link-utils";
+import { compareContestBudgetRemaining } from "@/lib/contest-budget-remaining-sort";
 import { formatCurrencyFromCents as formatMoney } from "@/lib/currency-utils";
 import { createClient } from "@/utils/supabase/client";
 import {
@@ -124,6 +126,17 @@ import {
   readStoredCampaignListTab,
   writeStoredCampaignListTab,
 } from "@/lib/campaign-list-tab-storage";
+import {
+  OPPORTUNITIES_LIST_FILTERS_KEY,
+  readStoredOpportunitiesListFilters,
+  writeStoredOpportunitiesListFilters,
+  type ContestTypeFilterOption,
+  type OpportunitiesMediaTypeOption,
+  type OpportunitiesPlatformFilterOption,
+  type OpportunitiesSortOption,
+  type PageSizeOption,
+  type ViewModeOption,
+} from "@/lib/campaign-list-filters-storage";
 
 // Define types for filters and sorting
 type StatusFilterType = "all" | "live" | "upcoming" | "ended";
@@ -147,6 +160,8 @@ type SortOptionType =
   | "end_date_desc"
   | "value_desc"
   | "value_asc"
+  | "budget_remaining_desc"
+  | "budget_remaining_asc"
   | "cpm_rate_desc"
   | "cpm_rate_asc"
   | "submissions_desc"
@@ -317,6 +332,7 @@ export default function OpportunitiesPage({
   const setStatusFilter = useCallback((value: StatusFilterType) => {
     setStatusFilterState(value);
   }, []);
+
   const [platformFilter, setPlatformFilter] =
     useState<PlatformFilterType>("all");
   const [typeFilter, setTypeFilter] = useState<ContestTypeFilterType>("all");
@@ -328,8 +344,42 @@ export default function OpportunitiesPage({
   // Default to 9 campaigns per page with options: 9, 15, 21, 30
   const [limit, setLimit] = useState<number>(9);
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
+  const [filtersHydrated, setFiltersHydrated] = useState(false);
   /** List layout is only available at lg+ (1024px); below that we force grid. */
   const [layoutAllowsListView, setLayoutAllowsListView] = useState(false);
+
+  useEffect(() => {
+    const stored = readStoredOpportunitiesListFilters(
+      OPPORTUNITIES_LIST_FILTERS_KEY,
+    );
+    setMediaType(stored.mediaType);
+    setPlatformFilter(stored.platformFilter);
+    setTypeFilter(stored.typeFilter);
+    setSortOption(stored.sortOption);
+    setViewMode(stored.viewMode);
+    setLimit(stored.limit);
+    setFiltersHydrated(true);
+  }, []);
+
+  useEffect(() => {
+    if (!filtersHydrated) return;
+    writeStoredOpportunitiesListFilters(OPPORTUNITIES_LIST_FILTERS_KEY, {
+      mediaType: mediaType as OpportunitiesMediaTypeOption,
+      platformFilter: platformFilter as OpportunitiesPlatformFilterOption,
+      typeFilter: typeFilter as ContestTypeFilterOption,
+      sortOption: sortOption as OpportunitiesSortOption,
+      viewMode: viewMode as ViewModeOption,
+      limit: limit as PageSizeOption,
+    });
+  }, [
+    filtersHydrated,
+    mediaType,
+    platformFilter,
+    typeFilter,
+    sortOption,
+    viewMode,
+    limit,
+  ]);
   const opportunitiesResultsRef = useRef<HTMLDivElement>(null);
   const [loadingButtons, setLoadingButtons] = useState<{
     [key: string]: {
@@ -1461,6 +1511,9 @@ export default function OpportunitiesPage({
           } else {
             return valueA - valueB;
           }
+        case "budget_remaining_desc":
+        case "budget_remaining_asc":
+          return compareContestBudgetRemaining(a, b, sortOption);
         case "cpm_rate_desc":
         case "cpm_rate_asc":
           const rateA =
@@ -1573,17 +1626,68 @@ export default function OpportunitiesPage({
     });
   };
 
-  const handleViewDetails = async (id: string) => {
-    await trackViewDetailsClick(id);
+  const getOpportunityDetailHref = (id: string) =>
+    `/dashboard/opportunities/${id}`;
+
+  const handleOpportunityLinkClick = async (
+    contestId: string,
+    e: React.MouseEvent,
+  ) => {
+    if (isModifiedLinkClick(e)) {
+      void trackViewDetailsClick(contestId);
+      return;
+    }
+
+    e.preventDefault();
+    await trackViewDetailsClick(contestId);
     if (profile?.has_seen_guidelines === false) {
-      setPendingContestId(id);
+      setPendingContestId(contestId);
       setShowGuidelines(true);
       return;
     }
-    setButtonLoading(id, "view", true);
-    router.push(`/dashboard/opportunities/${id}`);
+    setButtonLoading(contestId, "view", true);
+    router.push(getOpportunityDetailHref(contestId));
   };
+
+  const renderOpportunityCardLink = (contest: { id: string; title?: string }) => (
+    <Link
+      href={getOpportunityDetailHref(contest.id)}
+      prefetch={false}
+      className="absolute inset-0 z-[1]"
+      aria-label={`View ${contest.title || "opportunity"} details`}
+      onClick={(e) => void handleOpportunityLinkClick(contest.id, e)}
+    />
+  );
+
+  const renderOpportunityViewDetailsLink = (
+    contest: { id: string },
+    className?: string,
+    options?: { fullWidth?: boolean; eyeClassName?: string; textClassName?: string },
+  ) => (
+    <Link
+      href={getOpportunityDetailHref(contest.id)}
+      prefetch={false}
+      className={cn(
+        "pointer-events-auto relative z-[2] flex items-center justify-center gap-2 rounded-full",
+        isDark ? "bg-[#7F39EC] text-white" : "bg-[#D9C0FF61] text-[#7F39EC]",
+        options?.fullWidth && "w-full",
+        className,
+      )}
+      onClick={(e) => {
+        e.stopPropagation();
+        void handleOpportunityLinkClick(contest.id, e);
+      }}
+    >
+      {loadingButtons[contest.id]?.view ? (
+        <ButtonLoadingSpinner />
+      ) : (
+        <Eye className={cn("h-4 w-4", options?.eyeClassName)} />
+      )}
+      <span className={options?.textClassName}>View Details</span>
+    </Link>
+  );
   const resetFilters = () => {
+    setMediaType("all");
     setPlatformFilter("all");
     setTypeFilter("all");
     setSortOption("relevance_desc");
@@ -1597,13 +1701,14 @@ export default function OpportunitiesPage({
       <Card
         key={contest.id}
         className={cn(
-          "overflow-hidden rounded-xl shadow-lg hover:shadow-2xl transition-all duration-300 ease-in-out border flex flex-col sm:flex-row group w-full cursor-pointer relative",
+          "relative overflow-hidden rounded-xl shadow-lg hover:shadow-2xl transition-all duration-300 ease-in-out border flex flex-col sm:flex-row group w-full cursor-pointer",
           isDark
             ? "bg-[#06021D] border-slate-700"
             : "bg-white border-slate-200",
         )}
-        onClick={() => handleViewDetails(contest.id)}
       >
+        {renderOpportunityCardLink(contest)}
+        <div className="pointer-events-none flex flex-col sm:flex-row flex-1 w-full">
         {/* Status Badge - Top Right Corner */}
         {(contest.status === "active" ||
           contest.status === "upcoming" ||
@@ -2239,26 +2344,10 @@ export default function OpportunitiesPage({
 
         {/* Third Column - View Details Button */}
         <div className="flex flex-col items-center justify-center gap-3 p-4 w-32 sm:w-40 flex-shrink-0">
-          <button
-            className={cn(
-              "flex items-center justify-center gap-2 px-4 py-3 rounded-full whitespace-nowrap",
-              isDark
-                ? "bg-[#7F39EC] text-white"
-                : "bg-[#D9C0FF61] text-[#7F39EC]",
-            )}
-            onClick={(e) => {
-              e.stopPropagation();
-              handleViewDetails(contest.id);
-            }}
-            disabled={loadingButtons[contest.id]?.view}
-          >
-            {loadingButtons[contest.id]?.view ? (
-              <ButtonLoadingSpinner />
-            ) : (
-              <Eye className="h-4 w-4" />
-            )}
-            <span className="text-sm font-medium">View Details</span>
-          </button>
+          {renderOpportunityViewDetailsLink(contest, "px-4 py-3 whitespace-nowrap", {
+            textClassName: "text-sm font-medium",
+          })}
+        </div>
         </div>
       </Card>
     );
@@ -2687,6 +2776,12 @@ export default function OpportunitiesPage({
             <SelectItem value="value_asc" isDark={isDark}>
               Prize/Budget: Low to High
             </SelectItem>
+            <SelectItem value="budget_remaining_desc" isDark={isDark}>
+              Budget Left: Most
+            </SelectItem>
+            <SelectItem value="budget_remaining_asc" isDark={isDark}>
+              Budget Left: Least
+            </SelectItem>
             <SelectItem value="cpm_rate_desc" isDark={isDark}>
               CPM Rate: High to Low
             </SelectItem>
@@ -2716,14 +2811,15 @@ export default function OpportunitiesPage({
                 return (
                 <Card
                   key={contest.id}
-                  onClick={() => handleViewDetails(contest.id)}
                   className={cn(
-                    "overflow-hidden rounded-xl shadow-lg hover:shadow-2xl transition-all duration-300 ease-in-out border flex flex-col group w-full cursor-pointer",
+                    "relative overflow-hidden rounded-xl shadow-lg hover:shadow-2xl transition-all duration-300 ease-in-out border flex flex-col group w-full cursor-pointer",
                     isDark
                       ? "bg-[#06021D] border-slate-700"
                       : "bg-white border-slate-200",
                   )}
                 >
+                  {renderOpportunityCardLink(contest)}
+                  <div className="pointer-events-none flex flex-col flex-grow">
                   <div className="aspect-[16/10] bg-slate-100 dark:bg-slate-800 flex items-center justify-center overflow-hidden relative">
                     {contest.thumbnail_url ? (
                       <img
@@ -3486,30 +3582,12 @@ export default function OpportunitiesPage({
                         );
                       })()}
 
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleViewDetails(contest.id);
-                      }}
-                      // size="sm"
-                      // variant="white"
-
-                      className="flex w-full items-center justify-center gap-2 px-3 py-3 rounded-full"
-                      style={{
-                        backgroundColor: isDark ? "#7F39EC" : "#D9C0FF61",
-                        color: isDark ? "white" : "#7F39EC",
-                        transition: "none",
-                      }}
-                      disabled={loadingButtons[contest.id]?.view}
-                    >
-                      {loadingButtons[contest.id]?.view ? (
-                        <ButtonLoadingSpinner />
-                      ) : (
-                        <Eye className="h-4 w-4 mr-1" />
-                      )}
-                      <span>View Details</span>
-                    </button>
+                    {renderOpportunityViewDetailsLink(contest, "px-3 py-3", {
+                      fullWidth: true,
+                      eyeClassName: "mr-1",
+                    })}
                   </CardContent>
+                  </div>
                 </Card>
                 );
               })
