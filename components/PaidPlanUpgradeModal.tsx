@@ -55,24 +55,24 @@ export function PaidPlanUpgradeModal({
   const normalizedFeature = featureName.toLowerCase();
   const benefits = normalizedFeature.includes("dual")
     ? [
-        "Access dual rewards contests with combined payout models",
-        "Reward creators through both milestone and CPM performance",
-        "Run blended campaigns under one controlled budget",
-        "Priority support & dedicated account management",
-      ]
+      "Access dual rewards contests with combined payout models",
+      "Reward creators through both milestone and CPM performance",
+      "Run blended campaigns under one controlled budget",
+      "Priority support & dedicated account management",
+    ]
     : normalizedFeature.includes("milestone")
       ? [
-          "Access milestone contests with target-based payouts",
-          "Set clear reward tiers tied to view milestones",
-          "Control campaign spend with structured payout ladders",
-          "Priority support & dedicated account management",
-        ]
+        "Access milestone contests with target-based payouts",
+        "Set clear reward tiers tied to view milestones",
+        "Control campaign spend with structured payout ladders",
+        "Priority support & dedicated account management",
+      ]
       : [
-          "Access CPM contests and pay per 1,000 views",
-          "Scale content campaigns with predictable performance costs",
-          "Unlock higher creator limits & lower commission",
-          "Priority support & dedicated account management",
-        ];
+        "Access CPM contests and pay per 1,000 views",
+        "Scale content campaigns with predictable performance costs",
+        "Unlock higher creator limits & lower commission",
+        "Priority support & dedicated account management",
+      ];
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose} isdark={isDark}>
@@ -180,7 +180,7 @@ export function PaidPlanUpgradeModal({
               )}
             >
               <Phone className="h-4 w-4" />
-              Book a Call — We&apos;ll Help You Get Started
+              Book a Call with Founder — We&apos;ll Help You Get Started
             </a>
           </div>
         </div>

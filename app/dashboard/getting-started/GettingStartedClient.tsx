@@ -1066,8 +1066,8 @@ export default function GettingStartedClient({
                   onClick={() => setCaseStudyImageOpen(false)}
                 >
                   <img
-                    src="/images/case-study-analytics.png"
-                    alt="Client analytics — 3.8M views in 19 days"
+                    src="/images/case-study-36m-campaigns.png"
+                    alt="36M+ views across 3 Instagram campaigns — ₹2.08 CPM proof"
                     className="max-w-full max-h-[90vh] rounded-xl shadow-2xl object-contain"
                     onClick={(e) => e.stopPropagation()}
                   />
@@ -1089,7 +1089,7 @@ export default function GettingStartedClient({
                 )}
               >
                 {/* Badge row */}
-                <div className="px-6 pt-5 pb-0 flex items-center gap-2">
+                <div className="px-6 pt-5 pb-0 flex items-center gap-2 flex-wrap">
                   <span
                     className={cn(
                       "text-xs font-semibold px-2.5 py-1 rounded-full border",
@@ -1106,103 +1106,119 @@ export default function GettingStartedClient({
                       isDark ? "text-gray-400" : "text-gray-400",
                     )}
                   >
-                    CPM Campaign · 19 days
+                    3 Instagram Campaigns · ₹2.08 CPM
                   </span>
                 </div>
 
-                {/* Body: image thumbnail + stats */}
-                <div className="flex flex-col sm:flex-row gap-6 p-6">
-                  {/* Clickable thumbnail */}
+                {/* Body: headline stats + full-width infographic */}
+                <div className="flex flex-col gap-6 p-6">
+                  <div>
+                    <h3
+                      className={cn(
+                        "text-lg font-bold leading-snug",
+                        isDark ? "text-white" : "text-gray-900",
+                      )}
+                    >
+                      36M+ views across our last 3 campaigns
+                    </h3>
+                    <p
+                      className={cn(
+                        "text-sm mt-1",
+                        isDark ? "text-[#C4AEED]" : "text-gray-500",
+                      )}
+                    >
+                      ₹2.08 CPM — consistent results. No ads. No influencers.
+                      Just creators & great content.
+                    </p>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    {[
+                      {
+                        icon: "👁️",
+                        value: "36M+",
+                        label: "Total views",
+                      },
+                      {
+                        icon: "💰",
+                        value: "₹2.08",
+                        label: "Cost per 1,000 views",
+                      },
+                      {
+                        icon: "🎬",
+                        value: "897",
+                        label: "Creator submissions",
+                      },
+                    ].map((stat) => (
+                      <div
+                        key={stat.label}
+                        className="flex items-center gap-3"
+                      >
+                        <span
+                          className={cn(
+                            "text-xl w-10 h-10 flex items-center justify-center rounded-xl shrink-0",
+                            isDark ? "bg-purple-900/40" : "bg-[#F0E8FF]",
+                          )}
+                        >
+                          {stat.icon}
+                        </span>
+                        <div>
+                          <div
+                            className={cn(
+                              "text-xl font-bold leading-tight",
+                              isDark ? "text-white" : "text-[#2D1B4E]",
+                            )}
+                          >
+                            {stat.value}
+                          </div>
+                          <div
+                            className={cn(
+                              "text-sm",
+                              isDark ? "text-[#C4AEED]" : "text-gray-500",
+                            )}
+                          >
+                            {stat.label}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
                   <button
                     type="button"
                     onClick={() => setCaseStudyImageOpen(true)}
-                    className="group relative sm:w-64 shrink-0 rounded-xl overflow-hidden border cursor-zoom-in focus:outline-none"
+                    className="group relative w-full rounded-xl overflow-hidden border cursor-zoom-in focus:outline-none"
                     style={{
                       borderColor: isDark ? "rgba(185,148,248,0.2)" : "#E9D8FF",
                     }}
                     title="Click to enlarge"
                   >
                     <img
-                      src="/images/case-study-analytics.png"
-                      alt="Client analytics screenshot"
-                      className="w-full h-44 sm:h-full object-cover object-top transition-transform duration-300 group-hover:scale-105"
+                      src="/images/case-study-36m-campaigns.png"
+                      alt="LinkedIn proof — 36M+ views and ₹2.08 CPM across 3 campaigns"
+                      className="w-full h-auto object-contain transition-transform duration-300 group-hover:scale-[1.01]"
                     />
-                    {/* Zoom hint overlay */}
-                    <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-colors duration-200 flex items-center justify-center">
+                    <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors duration-200 flex items-center justify-center">
                       <span className="opacity-0 group-hover:opacity-100 transition-opacity duration-200 bg-white/90 text-gray-800 text-xs font-semibold px-3 py-1.5 rounded-full shadow">
                         🔍 Click to zoom
                       </span>
                     </div>
                   </button>
 
-                  {/* Stats */}
-                  <div className="flex flex-col justify-center gap-5 flex-1">
-                    <div>
-                      <h3
-                        className={cn(
-                          "text-lg font-bold leading-snug",
-                          isDark ? "text-white" : "text-gray-900",
-                        )}
-                      >
-                        What we achieved for one brand in 19 days
-                      </h3>
-                      <p
-                        className={cn(
-                          "text-sm mt-1",
-                          isDark ? "text-[#C4AEED]" : "text-gray-500",
-                        )}
-                      >
-                        One CPM campaign. Real creators. 100% organic.
-                      </p>
-                    </div>
-
-                    <div className="space-y-4">
-                      {[
-                        {
-                          icon: "🎬",
-                          value: "200+",
-                          label: "Reels posted by creators",
-                        },
-                        {
-                          icon: "👁️",
-                          value: "3.8M+",
-                          label: "Views generated",
-                        },
-                        { icon: "💰", value: "$0.05", label: "Effective CPM" },
-                      ].map((stat) => (
-                        <div
-                          key={stat.label}
-                          className="flex items-center gap-3"
-                        >
-                          <span
-                            className={cn(
-                              "text-xl w-10 h-10 flex items-center justify-center rounded-xl shrink-0",
-                              isDark ? "bg-purple-900/40" : "bg-[#F0E8FF]",
-                            )}
-                          >
-                            {stat.icon}
-                          </span>
-                          <div>
-                            <div
-                              className={cn(
-                                "text-xl font-bold leading-tight",
-                                isDark ? "text-white" : "text-[#2D1B4E]",
-                              )}
-                            >
-                              {stat.value}
-                            </div>
-                            <div
-                              className={cn(
-                                "text-sm",
-                                isDark ? "text-[#C4AEED]" : "text-gray-500",
-                              )}
-                            >
-                              {stat.label}
-                            </div>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
+                  <div className="flex flex-col gap-3">
+                    <a
+                      href={SOCIAL_LINKS.linkedinCaseStudyPost}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className={cn(
+                        "text-xs w-fit transition-colors",
+                        isDark
+                          ? "text-gray-400 hover:text-[#C4AEED]"
+                          : "text-gray-500 hover:text-gray-700",
+                      )}
+                    >
+                      View original post on LinkedIn ↗
+                    </a>
 
                     <a
                       href="https://calendly.com/guptavishesh2/30min"
@@ -1215,7 +1231,7 @@ export default function GettingStartedClient({
                           : "text-[#6A30CC] hover:text-[#4A00BE]",
                       )}
                     >
-                      Want results like this? Book a free call →
+                      Want results like this? Book a call with the founder →
                     </a>
                   </div>
                 </div>
@@ -2553,7 +2569,7 @@ export default function GettingStartedClient({
               </p>
             </div>
 
-            <div className="text-center">
+            <div className="text-center flex flex-col gap-3">
               <Button
                 className={cn(
                   "w-full py-3 px-8 text-lg",
@@ -2572,6 +2588,20 @@ export default function GettingStartedClient({
                 )}
                 Create Campaign
               </Button>
+              <a
+                href="https://calendly.com/guptavishesh2/30min"
+                target="_blank"
+                rel="noopener noreferrer"
+                className={cn(
+                  "inline-flex items-center justify-center gap-2 w-full py-3 px-8 text-lg rounded-md font-medium transition text-white",
+                  isDark
+                    ? "bg-purple-700 hover:bg-purple-600"
+                    : "bg-black hover:bg-gray-800",
+                )}
+              >
+                <Phone className="w-5 h-5" />
+                Book a Call with the Founder
+              </a>
             </div>
           </CardContent>
         </div>

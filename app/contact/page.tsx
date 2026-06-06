@@ -123,7 +123,7 @@ export default function ContactPage() {
             <div className="rounded-2xl border border-purple-500/20 bg-gradient-to-b from-purple-900/20 to-transparent p-6">
               <h3 className="font-semibold text-white mb-1">Are you a brand?</h3>
               <p className="text-sm text-slate-400 mb-5">
-                Skip the form — book a free 30-min call and we&apos;ll build your campaign plan together.
+                Skip the form — book a free 30-min call with founder and we&apos;ll build your campaign plan together.
               </p>
               <a
                 href={CALENDLY_URL}

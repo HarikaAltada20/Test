@@ -190,7 +190,7 @@ export default function GetStartedClient() {
               <div className="h-10 w-10 rounded-xl bg-purple-600/20 border border-purple-500/30 flex items-center justify-center">
                 <Calendar className="h-5 w-5 text-purple-400" />
               </div>
-              <h2 className="text-lg font-bold text-white">Book a Call</h2>
+              <h2 className="text-lg font-bold text-white">Book a Call with Founder</h2>
             </div>
             <p className="text-slate-400 text-sm mb-6 leading-relaxed">
               Talk directly with our team — we&apos;ll understand your goals and
