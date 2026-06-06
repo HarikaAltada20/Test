@@ -51,6 +51,8 @@ import {
 } from "lucide-react";
 import { DeleteContestButton } from "@/components/delete-contest-button";
 import { formatLocalDateTime, cn } from "@/lib/utils";
+import { isModifiedLinkClick } from "@/lib/navigation-link-utils";
+import { compareContestBudgetRemaining } from "@/lib/contest-budget-remaining-sort";
 import {
   KNOWN_POST_CONTEST_STATUSES,
   getEndedOpportunityBadgeClassName,
@@ -77,6 +79,18 @@ import {
   readStoredCampaignListTab,
   writeStoredCampaignListTab,
 } from "@/lib/campaign-list-tab-storage";
+import {
+  ADMIN_CONTEST_LIST_FILTERS_KEY,
+  BRAND_CONTEST_LIST_FILTERS_KEY,
+  readStoredContestListFilters,
+  writeStoredContestListFilters,
+  type BrandPostPhaseFilterOption,
+  type ContestFormatFilterOption,
+  type ContestListSortOption,
+  type ContestTypeFilterOption,
+  type PageSizeOption,
+  type ViewModeOption,
+} from "@/lib/campaign-list-filters-storage";
 
 // Define the type for a campaign
 type Contest = {
@@ -168,6 +182,8 @@ type SortOptionType =
   | "end_date_desc"
   | "value_desc"
   | "value_asc"
+  | "budget_remaining_desc"
+  | "budget_remaining_asc"
   | "cpm_rate_desc"
   | "cpm_rate_asc"
   | "submissions_desc"
@@ -428,15 +444,58 @@ export function ContestListClient({
     setNavigatingContestId(null);
   }, [pathname]);
 
-  const goToContestDetail = useCallback(
-    (contestId: string) => {
-      setNavigatingContestId(contestId);
-      const href = isAdminView
+  const getContestDetailHref = useCallback(
+    (contestId: string) =>
+      isAdminView
         ? `/dashboard/admin/contests/${contestId}`
-        : `/dashboard/contests/${contestId}`;
-      router.push(href);
+        : `/dashboard/contests/${contestId}`,
+    [isAdminView],
+  );
+
+  const handleContestDetailLinkClick = useCallback(
+    (contestId: string, e: React.MouseEvent) => {
+      if (isModifiedLinkClick(e)) return;
+      setNavigatingContestId(contestId);
     },
-    [isAdminView, router],
+    [],
+  );
+
+  const renderContestCardLink = (contest: Contest) => (
+    <Link
+      href={getContestDetailHref(contest.id)}
+      prefetch={false}
+      className="absolute inset-0 z-[1]"
+      aria-label={`View ${contest.title || "campaign"} details`}
+      onClick={(e) => handleContestDetailLinkClick(contest.id, e)}
+    />
+  );
+
+  const renderViewDetailsLink = (
+    contest: Contest,
+    className?: string,
+    options?: { fullWidth?: boolean; eyeClassName?: string; textClassName?: string },
+  ) => (
+    <Link
+      href={getContestDetailHref(contest.id)}
+      prefetch={false}
+      className={cn(
+        "pointer-events-auto relative z-[2] flex items-center justify-center gap-2 rounded-full",
+        isDark ? "bg-[#7F39EC] text-white" : "bg-[#D9C0FF61] text-[#7F39EC]",
+        options?.fullWidth && "w-full",
+        className,
+      )}
+      onClick={(e) => {
+        e.stopPropagation();
+        handleContestDetailLinkClick(contest.id, e);
+      }}
+    >
+      {navigatingContestId === contest.id ? (
+        <ButtonLoadingSpinner />
+      ) : (
+        <Eye className={cn("h-4 w-4", options?.eyeClassName)} />
+      )}
+      <span className={options?.textClassName}>View Details</span>
+    </Link>
   );
   const { toast } = useToast();
   const [sortOption, setSortOption] =
@@ -444,9 +503,13 @@ export function ContestListClient({
   const [internalSelectedTab, setInternalSelectedTab] = useState(
     DEFAULT_CAMPAIGN_LIST_TAB,
   );
+  const [filtersHydrated, setFiltersHydrated] = useState(false);
   const contestListTabStorageKey = isAdminView
     ? ADMIN_CONTEST_LIST_TAB_KEY
     : null;
+  const contestListFiltersStorageKey = isAdminView
+    ? ADMIN_CONTEST_LIST_FILTERS_KEY
+    : BRAND_CONTEST_LIST_FILTERS_KEY;
 
   useEffect(() => {
     if (externalSelectedTab !== undefined || !contestListTabStorageKey) return;
@@ -541,6 +604,68 @@ export function ContestListClient({
   const displayViewMode: "grid" | "list" = layoutAllowsListView
     ? viewMode
     : "grid";
+
+  const postPhaseFilterRestoredRef = useRef(false);
+
+  useEffect(() => {
+    const stored = readStoredContestListFilters(contestListFiltersStorageKey);
+    setSortOption(stored.sortOption as SortOptionType);
+    setPlatformFilter(stored.platformFilter);
+    setContestTypeFilter(stored.contestTypeFilter);
+    setContestFormatFilter(stored.contestFormatFilter);
+    setLimit(stored.limit);
+    if (externalViewMode === undefined) {
+      setInternalViewMode(stored.viewMode);
+    }
+    setFiltersHydrated(true);
+  }, [contestListFiltersStorageKey, externalViewMode]);
+
+  useEffect(() => {
+    if (!filtersHydrated || postPhaseFilterRestoredRef.current) return;
+    if (selectedTab !== "all" && selectedTab !== "ended") return;
+
+    const stored = readStoredContestListFilters(contestListFiltersStorageKey);
+    setPostContestPhaseFilter(stored.postContestPhaseFilter);
+    postPhaseFilterRestoredRef.current = true;
+  }, [
+    filtersHydrated,
+    selectedTab,
+    contestListFiltersStorageKey,
+  ]);
+
+  useEffect(() => {
+    if (!filtersHydrated) return;
+
+    const existing = readStoredContestListFilters(contestListFiltersStorageKey);
+    const payload: Parameters<typeof writeStoredContestListFilters>[1] = {
+      sortOption: sortOption as ContestListSortOption,
+      platformFilter,
+      contestTypeFilter: contestTypeFilter as ContestTypeFilterOption,
+      contestFormatFilter: contestFormatFilter as ContestFormatFilterOption,
+      postContestPhaseFilter: showPostContestPipeline
+        ? (postContestPhaseFilter as BrandPostPhaseFilterOption)
+        : existing.postContestPhaseFilter,
+      limit: limit as PageSizeOption,
+    };
+
+    if (externalViewMode === undefined) {
+      payload.viewMode = internalViewMode as ViewModeOption;
+    }
+
+    writeStoredContestListFilters(contestListFiltersStorageKey, payload);
+  }, [
+    filtersHydrated,
+    contestListFiltersStorageKey,
+    sortOption,
+    platformFilter,
+    contestTypeFilter,
+    contestFormatFilter,
+    postContestPhaseFilter,
+    showPostContestPipeline,
+    limit,
+    internalViewMode,
+    externalViewMode,
+  ]);
 
   const [contests, setContests] = useState<Contest[]>(initialContests);
   const isMountedRef = useRef(true);
@@ -1056,6 +1181,9 @@ export function ContestListClient({
           return sortOption === "value_desc"
             ? valueB - valueA
             : valueA - valueB;
+        case "budget_remaining_desc":
+        case "budget_remaining_asc":
+          return compareContestBudgetRemaining(a, b, sortOption);
         case "cpm_rate_desc":
         case "cpm_rate_asc":
           const rateA =
@@ -1143,13 +1271,14 @@ export function ContestListClient({
         <Card
           key={contest.id}
           className={cn(
-            "overflow-hidden rounded-xl shadow-lg hover:shadow-2xl transition-all duration-300 ease-in-out border flex flex-col group w-full cursor-pointer",
+            "relative overflow-hidden rounded-xl shadow-lg hover:shadow-2xl transition-all duration-300 ease-in-out border flex flex-col group w-full cursor-pointer",
             isDark
               ? "bg-[#06021D] border-slate-700"
               : "bg-white border-slate-200",
           )}
-          onClick={() => goToContestDetail(contest.id)}
         >
+          {renderContestCardLink(contest)}
+          <div className="pointer-events-none flex flex-col flex-grow">
           <div className="aspect-[16/10] bg-slate-100 dark:bg-slate-800 flex items-center justify-center overflow-hidden relative">
             {contest.thumbnail_url ? (
               <img
@@ -1701,29 +1830,12 @@ export function ContestListClient({
                 );
               })()}
 
-            <button
-              className={cn(
-                "flex w-full items-center justify-center gap-2  px-3 py-3 rounded-full",
-                isDark
-                  ? "bg-[#7F39EC] text-white"
-                  : "bg-[#D9C0FF61] text-[#7F39EC]",
-              )}
-              onClick={(e) => {
-                e.stopPropagation();
-                goToContestDetail(contest.id);
-              }}
-              disabled={navigatingContestId === contest.id}
-            // size="sm"
-            // variant="outline"
-            >
-              {navigatingContestId === contest.id ? (
-                <ButtonLoadingSpinner />
-              ) : (
-                <Eye className="h-4 w-4 mr-1" />
-              )}
-              <span>View Details</span>
-            </button>
+            {renderViewDetailsLink(contest, "px-3 py-3", {
+              fullWidth: true,
+              eyeClassName: "mr-1",
+            })}
           </CardContent>
+          </div>
         </Card>
       );
     }
@@ -1732,19 +1844,14 @@ export function ContestListClient({
       <Card
         key={contest.id}
         className={cn(
-          "overflow-hidden rounded-xl shadow-lg hover:shadow-2xl transition-all duration-300 ease-in-out border flex flex-col group w-full cursor-pointer",
+          "relative overflow-hidden rounded-xl shadow-lg hover:shadow-2xl transition-all duration-300 ease-in-out border flex flex-col group w-full cursor-pointer",
           isDark
             ? "bg-[#06021D] border-slate-700"
             : "bg-white border-slate-200",
         )}
-        onClick={(e) => {
-          if ((e.target as HTMLElement).closest("button")) {
-            return;
-          }
-          goToContestDetail(contest.id);
-        }}
       >
-        <div className="flex flex-col flex-grow">
+        {renderContestCardLink(contest)}
+        <div className="pointer-events-none flex flex-col flex-grow">
           <div className="aspect-[16/10] bg-slate-100 dark:bg-slate-800 flex items-center justify-center overflow-hidden relative">
             {contest.thumbnail_url ? (
               <img
@@ -1865,7 +1972,7 @@ export function ContestListClient({
                 )}
             </div>
 
-            <div className="flex gap-2 items-center">
+            <div className="pointer-events-auto relative z-[2] flex gap-2 items-center">
               {contest.moderation_status === "approved" ? (
                 <>
                   <button
@@ -1951,23 +2058,7 @@ export function ContestListClient({
                   <span>Edit Campaign</span>
                 </button>
               ) : (
-                <button
-                  // variant="outline"
-                  // size="sm"
-                  className="flex w-full items-center justify-center gap-2 bg-[#D9C0FF61] px-3 py-3 text-[#7F39EC] rounded-full"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    goToContestDetail(contest.id);
-                  }}
-                  disabled={navigatingContestId === contest.id}
-                >
-                  {navigatingContestId === contest.id ? (
-                    <ButtonLoadingSpinner />
-                  ) : (
-                    <Eye className="h-4 w-4" />
-                  )}
-                  <span>View Details</span>
-                </button>
+                renderViewDetailsLink(contest, "px-3 py-3", { fullWidth: true })
               )}
 
               {contest.moderation_status !== "published" && (
@@ -1993,13 +2084,14 @@ export function ContestListClient({
         <Card
           key={contest.id}
           className={cn(
-            "overflow-hidden rounded-xl shadow-lg hover:shadow-2xl transition-all duration-300 ease-in-out border flex flex-col sm:flex-row group w-full cursor-pointer relative",
+            "relative overflow-hidden rounded-xl shadow-lg hover:shadow-2xl transition-all duration-300 ease-in-out border flex flex-col sm:flex-row group w-full cursor-pointer",
             isDark
               ? "bg-[#06021D] border-slate-700"
               : "bg-white border-slate-200",
           )}
-          onClick={() => goToContestDetail(contest.id)}
         >
+          {renderContestCardLink(contest)}
+          <div className="pointer-events-none flex flex-col sm:flex-row flex-1 w-full">
           {/* Status Badge - Top Right Corner */}
           {(contest.status === "active" ||
             contest.status === "upcoming" ||
@@ -2585,26 +2677,10 @@ export function ContestListClient({
 
           {/* Third Column - View Details Button */}
           <div className="flex flex-col items-center justify-center gap-3 p-4 w-32 sm:w-40 flex-shrink-0">
-            <button
-              className={cn(
-                "flex items-center justify-center gap-2 px-4 py-3 rounded-full whitespace-nowrap",
-                isDark
-                  ? "bg-[#7F39EC] text-white"
-                  : "bg-[#D9C0FF61] text-[#7F39EC]",
-              )}
-              onClick={(e) => {
-                e.stopPropagation();
-                goToContestDetail(contest.id);
-              }}
-              disabled={navigatingContestId === contest.id}
-            >
-              {navigatingContestId === contest.id ? (
-                <ButtonLoadingSpinner />
-              ) : (
-                <Eye className="h-4 w-4" />
-              )}
-              <span className="text-sm font-medium">View Details</span>
-            </button>
+            {renderViewDetailsLink(contest, "px-4 py-3 whitespace-nowrap", {
+              textClassName: "text-sm font-medium",
+            })}
+          </div>
           </div>
         </Card>
       );
@@ -2615,18 +2691,14 @@ export function ContestListClient({
       <Card
         key={contest.id}
         className={cn(
-          "overflow-hidden rounded-xl shadow-lg hover:shadow-2xl transition-all duration-300 ease-in-out border flex flex-col sm:flex-row group w-full cursor-pointer relative",
+          "relative overflow-hidden rounded-xl shadow-lg hover:shadow-2xl transition-all duration-300 ease-in-out border flex flex-col sm:flex-row group w-full cursor-pointer",
           isDark
             ? "bg-[#06021D] border-slate-700"
             : "bg-white border-slate-200",
         )}
-        onClick={(e) => {
-          if ((e.target as HTMLElement).closest("button")) {
-            return;
-          }
-          goToContestDetail(contest.id);
-        }}
       >
+        {renderContestCardLink(contest)}
+        <div className="pointer-events-none flex flex-col sm:flex-row flex-1 w-full">
         <div className="absolute top-4 right-3 z-10">
           {getModerationStatusBadge(contest.moderation_status)}
         </div>
@@ -2751,7 +2823,7 @@ export function ContestListClient({
         {/* Third Column - Action Buttons */}
         <div
           className={cn(
-            "flex items-center justify-center gap-2 p-4 flex-shrink-0",
+            "pointer-events-auto relative z-[2] flex items-center justify-center gap-2 p-4 flex-shrink-0",
             contest.moderation_status === "approved" ||
               contest.moderation_status !== "published"
               ? "flex-row w-auto sm:w-auto"
@@ -2856,22 +2928,11 @@ export function ContestListClient({
               />
             </>
           ) : (
-            <button
-              className="flex w-full items-center justify-center gap-2 bg-[#D9C0FF61] px-3 py-3 text-[#7F39EC] rounded-full text-sm font-medium"
-              onClick={(e) => {
-                e.stopPropagation();
-                goToContestDetail(contest.id);
-              }}
-              disabled={navigatingContestId === contest.id}
-            >
-              {navigatingContestId === contest.id ? (
-                <ButtonLoadingSpinner />
-              ) : (
-                <Eye className="h-4 w-4" />
-              )}
-              <span>View Details</span>
-            </button>
+            renderViewDetailsLink(contest, "px-3 py-3 text-sm font-medium", {
+              fullWidth: true,
+            })
           )}
+        </div>
         </div>
       </Card>
     );
@@ -2975,6 +3036,9 @@ export function ContestListClient({
           return sortOption === "value_desc"
             ? valueB - valueA
             : valueA - valueB;
+        case "budget_remaining_desc":
+        case "budget_remaining_asc":
+          return compareContestBudgetRemaining(a, b, sortOption);
         case "cpm_rate_desc":
         case "cpm_rate_asc":
           const rateSortA =
@@ -3942,6 +4006,12 @@ export function ContestListClient({
                   </SelectItem>
                   <SelectItem isDark={isDark} value="value_asc">
                     Prize/Budget: Low to High
+                  </SelectItem>
+                  <SelectItem isDark={isDark} value="budget_remaining_desc">
+                    Budget Left: Most
+                  </SelectItem>
+                  <SelectItem isDark={isDark} value="budget_remaining_asc">
+                    Budget Left: Least
                   </SelectItem>
                   <SelectItem isDark={isDark} value="cpm_rate_desc">
                     CPM Rate: High to Low
