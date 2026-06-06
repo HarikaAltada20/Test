@@ -419,7 +419,7 @@ export default function HeroContent() {
             aria-busy={heroNavPending === "brand"}
             onClick={() => setHeroNavPending("brand")}
             className={cn(
-              "rounded-3xl relative text-white font-bold px-8 py-3 text-lg overflow-hidden flex items-center gap-2 w-full sm:w-auto justify-center transition-[opacity,transform] active:scale-[0.98]",
+              "rounded-3xl relative text-white font-bold px-6 sm:px-8 py-3 text-base sm:text-lg overflow-hidden flex items-center gap-2 w-full sm:w-auto justify-center transition-[opacity,transform] active:scale-[0.98] sm:whitespace-nowrap",
               "focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white/40",
               heroNavPending === "brand" && "pointer-events-none opacity-85",
             )}
@@ -434,7 +434,7 @@ export default function HeroContent() {
             ) : (
               <Crown className="h-5 w-5 shrink-0" />
             )}
-            I'm a Brand
+            Launch your campaign
             <ArrowRight className="h-5 w-5 shrink-0" />
           </Link>
           <Link
@@ -443,7 +443,7 @@ export default function HeroContent() {
             aria-busy={heroNavPending === "creator"}
             onClick={() => setHeroNavPending("creator")}
             className={cn(
-              "rounded-3xl relative text-white font-bold px-8 py-3 text-lg overflow-hidden flex items-center gap-2 bg-gradient-to-r from-orange-500 to-orange-700 w-full sm:w-auto justify-center transition-[opacity,transform] active:scale-[0.98]",
+              "rounded-3xl relative text-white font-bold px-6 sm:px-8 py-3 text-base sm:text-lg overflow-hidden flex items-center gap-2 bg-gradient-to-r from-orange-500 to-orange-700 w-full sm:w-auto justify-center transition-[opacity,transform] active:scale-[0.98] sm:whitespace-nowrap",
               "focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white/40",
               heroNavPending === "creator" && "pointer-events-none opacity-85",
             )}
@@ -454,7 +454,7 @@ export default function HeroContent() {
             ) : (
               <Sparkles className="h-5 w-5 shrink-0" />
             )}
-            I'm a Creator
+            Start Earning
             <ArrowRight className="h-5 w-5 shrink-0" />
           </Link>
         </div>
@@ -494,7 +494,7 @@ export default function HeroContent() {
                   }`}
                 style={{ animationDelay: "0.3s" }}
               >
-                Join 1000+ Active Creators
+                Join 8,000+ Creators
               </span>
 
               {/* Avatar Stack */}
