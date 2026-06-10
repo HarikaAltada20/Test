@@ -46,6 +46,10 @@ import { createClient } from "@/utils/supabase/client";
 import { formatLocalDateTime } from "@/lib/utils";
 import { getPlatformIconWithFallback } from "@/lib/platform-icons";
 import { formatCurrencyFromCents as formatMoney } from "@/lib/currency-utils";
+import {
+  getPoolBudgetCentsFromDetails,
+  isCpmContestType,
+} from "@/lib/contest-type";
 import { cn } from "@/lib/utils";
 // Placeholder for social icons image - replace with actual path if different
 import socialPair from "@/public/images/social_pair.avif";
@@ -472,6 +476,37 @@ export default function CreatorsClient({
     return endedFiltered.slice(0, limit);
   };
 
+  // Budget/prize pool in cents for any contest type (cpm, dual_rewards, milestone, leaderboard)
+  const getContestBudgetCents = (contest: any): number => {
+    if (contest.contest_type === "leaderboard") {
+      return (
+        contest.contest_based_details?.leaderboard_contest?.total_prize || 0
+      );
+    }
+    return getPoolBudgetCentsFromDetails(
+      contest.contest_type,
+      contest.contest_based_details
+    );
+  };
+
+  // Spent budget in cents; dual rewards splits spend across CPM + milestone nested objects
+  const getContestBudgetSpentCents = (contest: any): number => {
+    const details = contest.contest_based_details;
+    if (contest.contest_type === "leaderboard") {
+      return details?.leaderboard_contest?.budget_spent || 0;
+    }
+    if (contest.contest_type === "milestone") {
+      return details?.milestone_contest?.budget_spent || 0;
+    }
+    if (contest.contest_type === "dual_rewards") {
+      return (
+        (details?.cpm_contest?.budget_spent || 0) +
+        (details?.milestone_contest?.budget_spent || 0)
+      );
+    }
+    return details?.cpm_contest?.budget_spent || 0;
+  };
+
   // STEP 1: Most Popular contests - MUST get 4 live (active only) contests (compulsory)
   // Ensure diversity: different platforms and contest types, prioritizing highest budgets
   const availableForMostPopular = contests.filter((c) => {
@@ -480,29 +515,15 @@ export default function CreatorsClient({
       return false;
     }
     // Only include contests with a valid budget/prize
-    const value =
-      c.contest_type === "cpm"
-        ? c.contest_based_details?.cpm_contest?.total_budget
-        : c.contest_based_details?.leaderboard_contest?.total_prize;
-    return value && value > 0;
+    return getContestBudgetCents(c) > 0;
   });
 
   const sortedForMostPopular = [...availableForMostPopular].sort((a, b) => {
-    // First: Get budget/prize value
-    const getBudget = (contest: any) => {
-      if (contest.contest_type === "cpm") {
-        return contest.contest_based_details?.cpm_contest?.total_budget || 0;
-      } else if (contest.contest_type === "leaderboard") {
-        return (
-          contest.contest_based_details?.leaderboard_contest?.total_prize || 0
-        );
-      }
-      return 0;
-    };
+    const getBudget = getContestBudgetCents;
 
-    // Second: Get CPM rate (only for CPM contests)
+    // Second: Get CPM rate (only for CPM-style contests, incl. dual rewards)
     const getCpmRate = (contest: any) => {
-      if (contest.contest_type === "cpm") {
+      if (isCpmContestType(contest.contest_type)) {
         return contest.contest_based_details?.cpm_contest?.cpm_rate_usd || 0;
       }
       return 0;
@@ -594,19 +615,10 @@ export default function CreatorsClient({
   );
 
   // Calculate total budget for all campaigns (live, upcoming, and ended)
-  const totalBudget = contests.reduce((sum, contest) => {
-    if (contest.contest_type === "cpm") {
-      return (
-        sum + (contest.contest_based_details?.cpm_contest?.total_budget || 0)
-      );
-    } else if (contest.contest_type === "leaderboard") {
-      return (
-        sum +
-        (contest.contest_based_details?.leaderboard_contest?.total_prize || 0)
-      );
-    }
-    return sum;
-  }, 0);
+  const totalBudget = contests.reduce(
+    (sum, contest) => sum + getContestBudgetCents(contest),
+    0
+  );
 
   // Calculate total contests published
   const totalContests = contests.length;
@@ -614,40 +626,30 @@ export default function CreatorsClient({
   const renderContestCard = (contest: any) => {
     // Calculate budget used percentage
     let budgetUsedPercent = 0;
-    let totalBudget = 0;
-    let budgetSpent = 0;
-    let cpmRate = null;
+    const totalBudget =
+      contest.contest_type === "leaderboard"
+        ? contest.contest_based_details?.leaderboard_contest?.total_budget || 0
+        : getContestBudgetCents(contest);
+    const budgetSpent = getContestBudgetSpentCents(contest);
+    const cpmRate = isCpmContestType(contest.contest_type)
+      ? contest.contest_based_details?.cpm_contest?.cpm_rate_usd
+      : null;
 
-    if (contest.contest_type === "cpm") {
-      totalBudget =
-        contest.contest_based_details?.cpm_contest?.total_budget || 0;
-      budgetSpent =
-        contest.contest_based_details?.cpm_contest?.budget_spent || 0;
-      cpmRate = contest.contest_based_details?.cpm_contest?.cpm_rate_usd;
-      if (totalBudget > 0) {
-        budgetUsedPercent = Math.min(
-          Math.round((budgetSpent / totalBudget) * 100),
-          100
-        );
-      }
-    } else if (contest.contest_type === "leaderboard") {
-      totalBudget =
-        contest.contest_based_details?.leaderboard_contest?.total_budget || 0;
-      budgetSpent =
-        contest.contest_based_details?.leaderboard_contest?.budget_spent || 0;
-      if (totalBudget > 0) {
-        budgetUsedPercent = Math.min(
-          Math.round((budgetSpent / totalBudget) * 100),
-          100
-        );
-      }
+    if (totalBudget > 0) {
+      budgetUsedPercent = Math.min(
+        Math.round((budgetSpent / totalBudget) * 100),
+        100
+      );
     }
 
     // Get budget/prize amount for display
-    const budgetAmount =
-      contest.contest_type === "cpm"
-        ? contest.contest_based_details?.cpm_contest?.total_budget
-        : contest.contest_based_details?.leaderboard_contest?.total_prize;
+    const budgetAmount = getContestBudgetCents(contest);
+
+    // Show budget-used progress for pool-based contests (CPM, dual rewards, milestone)
+    const showBudgetProgress =
+      (isCpmContestType(contest.contest_type) ||
+        contest.contest_type === "milestone") &&
+      totalBudget > 0;
 
     return (
       <div
@@ -714,16 +716,16 @@ export default function CreatorsClient({
             )}
           </div>
 
-          {/* Budget used text - only show for CPM contests */}
-          {contest.contest_type === "cpm" && totalBudget > 0 && (
+          {/* Budget used text - only show for pool-based contests */}
+          {showBudgetProgress && (
             <span className="mt-1 text-[9px] sm:text-[10px] text-slate-400">
               {budgetUsedPercent}% budget used
             </span>
           )}
         </div>
 
-        {/* Progress bar - only show for CPM contests */}
-        {contest.contest_type === "cpm" && totalBudget > 0 && (
+        {/* Progress bar - only show for pool-based contests */}
+        {showBudgetProgress && (
           <div className="absolute bottom-0 left-[5px] right-0 h-1">
             <div
               className="h-full rounded-tr-full bg-green-500 transition-all"
