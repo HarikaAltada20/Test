@@ -1,5 +1,6 @@
 import React, { Suspense } from "react";
 import { createClient } from "@/utils/supabase/server";
+import { createAdminClient } from "@/utils/supabase/admin";
 import { redirect } from "next/navigation";
 import { ContestListClient } from "../../contests/ContestListClient";
 import { getAllContestsWithCalculatedBudgets } from "@/lib/contest-service";
@@ -29,9 +30,100 @@ export type AdminContest = {
   } | null;
   thumbnail_url: string | null;
   advertiser_name: string; // Added for admin view
+  verified_submission_count: number;
+  pending_submission_count: number;
+  last_metrics_updated: string | null;
 };
 
 export const revalidate = 0;
+
+type SubmissionStatusCounts = { verified: number; pending: number };
+
+function applySubmissionStatusCount(
+  counts: Map<string, SubmissionStatusCounts>,
+  contestId: string | null | undefined,
+  rawStatus: string | null | undefined,
+) {
+  if (!contestId) return;
+
+  const status = (rawStatus || "pending").toLowerCase();
+  if (status === "rejected") return;
+
+  const entry = counts.get(contestId) || { verified: 0, pending: 0 };
+  if (status === "pending") {
+    entry.pending += 1;
+  } else if (status === "verified" || status === "paid") {
+    entry.verified += 1;
+  }
+  counts.set(contestId, entry);
+}
+
+/**
+ * Counts verified ('verified' + 'paid') and pending per contest from
+ * submissions and Twitter tweets (twitter_campaign_tweets).
+ */
+async function getSubmissionStatusCountsByContest(): Promise<
+  Map<string, SubmissionStatusCounts>
+> {
+  const counts = new Map<string, SubmissionStatusCounts>();
+  const supabaseAdmin = createAdminClient();
+  const CHUNK_SIZE = 1000;
+
+  const pageTable = async (
+    table: "submissions" | "twitter_campaign_tweets",
+    statusColumn: "status" | "moderation_status",
+    extraFilter?: (
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      query: any,
+    ) => any,
+  ) => {
+    let rangeFrom = 0;
+
+    for (;;) {
+      let query = supabaseAdmin
+        .from(table)
+        .select(`contest_id, ${statusColumn}`)
+        .order("id", { ascending: true })
+        .range(rangeFrom, rangeFrom + CHUNK_SIZE - 1);
+
+      if (extraFilter) {
+        query = extraFilter(query);
+      }
+
+      const { data, error } = await query;
+
+      if (error) {
+        console.error(
+          `Failed to load ${table} status counts:`,
+          error.message,
+        );
+        break;
+      }
+
+      for (const row of data || []) {
+        applySubmissionStatusCount(
+          counts,
+          row.contest_id,
+          row[statusColumn] as string | null | undefined,
+        );
+      }
+
+      if (!data || data.length < CHUNK_SIZE) break;
+      rangeFrom += CHUNK_SIZE;
+    }
+  };
+
+  await Promise.all([
+    pageTable("submissions", "status", (query) =>
+      query.in("status", ["pending", "verified", "paid"]),
+    ),
+    pageTable("twitter_campaign_tweets", "moderation_status", (query) =>
+      query.is("deleted_at", null),
+    ),
+  ]);
+
+  return counts;
+}
 
 export default async function AdminContestsPage() {
   // Verify admin access
@@ -46,15 +138,25 @@ export default async function AdminContestsPage() {
 
   try {
     // Admin users see all contests from all brands with calculated budgets
-    const contestsWithCalculatedBudgets =
-      await getAllContestsWithCalculatedBudgets(supabase);
+    const [contestsWithCalculatedBudgets, submissionStatusCounts] =
+      await Promise.all([
+        getAllContestsWithCalculatedBudgets(supabase),
+        getSubmissionStatusCountsByContest(),
+      ]);
 
     const typedContests = (contestsWithCalculatedBudgets || []).map(
-      (contest) => ({
-        ...contest,
-        advertiser_name:
-          (contest.advertiser_profiles as any)?.company_name || "Unknown Brand",
-      })
+      (contest) => {
+        const statusCounts = submissionStatusCounts.get(contest.id);
+        return {
+          ...contest,
+          advertiser_name:
+            (contest.advertiser_profiles as any)?.company_name ||
+            "Unknown Brand",
+          verified_submission_count: statusCounts?.verified ?? 0,
+          pending_submission_count: statusCounts?.pending ?? 0,
+          last_metrics_updated: contest.last_metrics_updated ?? null,
+        };
+      }
     ) as any[];
 
     return (

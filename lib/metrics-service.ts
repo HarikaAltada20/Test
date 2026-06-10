@@ -257,31 +257,17 @@ export const MetricsService = {
       creditedMap.set(row.submission_id as string, (row as any).credited_views || 0);
     }
 
-    // Aggregate deltas per creator
-    const creatorDelta = new Map<string, number>();
     const updatesForSnapshot: Array<{ submission_id: string; credited_views: number } > = [];
 
     for (const s of filtered) {
       const credited = creditedMap.get(s.id) || 0;
       const views = (s.views || 0) as number;
-      const delta = Math.max(0, views - credited);
-      if (delta > 0) {
-        creatorDelta.set(s.creator_id, (creatorDelta.get(s.creator_id) || 0) + delta);
+      if (views > credited) {
         updatesForSnapshot.push({ submission_id: s.id, credited_views: views });
       }
     }
 
-    // Apply creator deltas
-    for (const [creatorId, delta] of creatorDelta) {
-      const current = await this.getCreatorField(creatorId, 'total_views');
-      const { error: updErr } = await supabase
-        .from('creator_profiles')
-        .update({ total_views: current + delta })
-        .eq('id', creatorId);
-      if (updErr) throw new Error(`Failed to update total_views: ${updErr.message}`);
-    }
-
-    // Upsert snapshots
+    // Upsert snapshots (creator_profiles.total_views is maintained by DB trigger)
     if (updatesForSnapshot.length > 0) {
       const { error: upErr } = await supabase
         .from('submission_views_credited')

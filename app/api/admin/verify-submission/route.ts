@@ -420,41 +420,7 @@ export async function POST(request: Request) {
     ) {
       const currentViews = submissionFull.views || 0;
 
-      // Read prior credited snapshot (0 if none)
-      const { data: priorSnap, error: priorErr } = await supabaseAdmin
-        .from("submission_views_credited")
-        .select("credited_views")
-        .eq("submission_id", submissionId)
-        .maybeSingle();
-      if (priorErr) {
-        console.error("Failed to read prior credited snapshot:", priorErr);
-      }
-      const priorCredited = (priorSnap?.credited_views as number) || 0;
-      const delta = Math.max(0, currentViews - priorCredited);
-
-      // Credit creator total_views by delta
-      if (delta > 0) {
-        try {
-          const currentTotal = await MetricsService.getCreatorField(
-            submissionFull.creator_id,
-            "total_views",
-          );
-          const { error: updCreatorErr } = await supabaseAdmin
-            .from("creator_profiles")
-            .update({ total_views: currentTotal + delta })
-            .eq("id", submissionFull.creator_id);
-          if (updCreatorErr) {
-            console.error(
-              "Failed to update creator total_views:",
-              updCreatorErr,
-            );
-          }
-        } catch (e) {
-          console.error("Error while crediting creator total_views:", e);
-        }
-      }
-
-      // Upsert snapshot to current
+      // Upsert snapshot to current (creator_profiles.total_views is maintained by DB trigger)
       const { error: snapErr } = await supabaseAdmin
         .from("submission_views_credited")
         .upsert(

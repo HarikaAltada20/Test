@@ -48,6 +48,8 @@ import {
   List,
   Search,
   X,
+  RefreshCw,
+  Hourglass,
 } from "lucide-react";
 import { DeleteContestButton } from "@/components/delete-contest-button";
 import { formatLocalDateTime, cn } from "@/lib/utils";
@@ -150,6 +152,10 @@ type Contest = {
   } | null;
   thumbnail_url: string | null;
   advertiser_name?: string;
+  // Admin-only fields (populated on the admin contests page)
+  verified_submission_count?: number | null;
+  pending_submission_count?: number | null;
+  last_metrics_updated?: string | null;
   submitted_for_approval_at?: string | null;
   published_at?: string | null;
   rejection_reason?: string | null;
@@ -980,6 +986,75 @@ export function ContestListClient({
   }, [mode]);
   const isDark = mode === "dark";
 
+  // Admin-only badges: verified/pending submission counts (header row)
+  const renderAdminSubmissionBadges = (
+    contest: Contest,
+    size: "compact" | "default" = "compact",
+  ) => {
+    if (!isAdminView) return null;
+
+    const sizeClass =
+      size === "compact" ? "text-[12px]" : "text-sm px-3 py-1 font-medium";
+
+    return (
+      <>
+        <Badge
+          variant="outline"
+          className={cn(
+            sizeClass,
+            isDark
+              ? "bg-green-900/30 text-green-300 border-green-700/50"
+              : "bg-green-50 text-green-700 border-green-200",
+          )}
+        >
+          <CheckCircle className="h-3 w-3 mr-1" />
+          Verified: {contest.verified_submission_count ?? 0}
+        </Badge>
+        <Badge
+          variant="outline"
+          className={cn(
+            sizeClass,
+            isDark
+              ? "bg-amber-900/30 text-amber-300 border-amber-700/50"
+              : "bg-amber-50 text-amber-700 border-amber-200",
+          )}
+        >
+          <Hourglass className="h-3 w-3 mr-1" />
+          Pending: {contest.pending_submission_count ?? 0}
+        </Badge>
+      </>
+    );
+  };
+
+  // Admin-only row: last metrics refresh (card body)
+  const renderAdminMetricsUpdated = (contest: Contest) => {
+    if (!isAdminView) return null;
+
+    return (
+      <div className="flex items-center">
+        <RefreshCw className="h-4 w-4 mr-2 flex-shrink-0" />
+        <span
+          style={{
+            color: isDark ? "white" : "#475569",
+            transition: "none",
+          }}
+        >
+          Metrics Updated:{" "}
+          <span className="font-medium">
+            {contest.last_metrics_updated
+              ? formatLocalDateTime(contest.last_metrics_updated, {
+                  month: "short",
+                  day: "numeric",
+                  hour: "2-digit",
+                  minute: "2-digit",
+                })
+              : "Never"}
+          </span>
+        </span>
+      </div>
+    );
+  };
+
   const brandPipelineTabs = useMemo(() => {
     const countBadge = (n: number) => (
       <Badge
@@ -1445,6 +1520,7 @@ export function ContestListClient({
                   Bonus Available
                 </Badge>
               )}
+              {renderAdminSubmissionBadges(contest, "compact")}
             </div>
           </CardHeader>
           <CardContent className="p-4 pt-1 flex-grow flex flex-col justify-between">
@@ -1544,6 +1620,7 @@ export function ContestListClient({
                 }
                 return null;
               })()}
+              {renderAdminMetricsUpdated(contest)}
               <div className="flex items-center">
                 <Info className="h-4 w-4 mr-2 flex-shrink-0" />
                 <span>
@@ -2269,6 +2346,7 @@ export function ContestListClient({
                     Bonus Available
                   </Badge>
                 )}
+                {renderAdminSubmissionBadges(contest, "default")}
               </div>
             </CardHeader>
             <CardContent className="p-0 pt-2 flex-1">
@@ -2387,6 +2465,7 @@ export function ContestListClient({
                   }
                   return null;
                 })()}
+                {renderAdminMetricsUpdated(contest)}
                 <div className="flex items-center">
                   <Info className="h-4 w-4 mr-2 flex-shrink-0" />
                   <span
