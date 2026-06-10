@@ -30,6 +30,12 @@ import {
 import type { ContestAnalyticsTabSnapshot } from "@/lib/contest-analytics-snapshot";
 import type { LeaderboardExportFormat } from "@/lib/submission-leaderboard-export";
 import { toast } from "sonner";
+import type { BrandProfile } from "@/lib/report-export-branding";
+import {
+  buildReportExportBundle,
+  type ReportExportContestContext,
+} from "@/lib/report-export-context";
+import type { ContestAnalyticsExportSubmission } from "@/lib/contest-analytics-export";
 
 const FORMAT_LABELS: Record<LeaderboardExportFormat, string> = {
   xlsx: "Excel (.xlsx)",
@@ -46,6 +52,17 @@ export type ContestAnalyticsExportDialogProps = {
     tabs: ContestAnalyticsTabId[],
   ) => ContestAnalyticsTabSnapshot[];
   isDark?: boolean;
+  brandProfile?: BrandProfile | null;
+  reportContest?: ReportExportContestContext;
+  reportAllSubmissions?: ContestAnalyticsExportSubmission[];
+  reportSubmissions?: ContestAnalyticsExportSubmission[];
+  reportApprovedCount?: number;
+  getReportStatus?: (
+    submission: ContestAnalyticsExportSubmission,
+  ) => string;
+  getReportExpectedCents?: (
+    submission: ContestAnalyticsExportSubmission,
+  ) => number;
 };
 
 export function ContestAnalyticsExportDialog({
@@ -55,6 +72,13 @@ export function ContestAnalyticsExportDialog({
   tabCounts,
   getSnapshotsForTabs,
   isDark = false,
+  brandProfile,
+  reportContest,
+  reportAllSubmissions,
+  reportSubmissions,
+  reportApprovedCount,
+  getReportStatus,
+  getReportExpectedCents,
 }: ContestAnalyticsExportDialogProps) {
   const [selectedTabs, setSelectedTabs] = useState<
     Record<ContestAnalyticsTabId, boolean>
@@ -102,9 +126,40 @@ export function ContestAnalyticsExportDialog({
     setExporting(true);
     try {
       const snapshots = getSnapshotsForTabs(selectedTabIds);
-      await downloadContestAnalyticsReport(format, contestTitle, snapshots);
-      const tabNames = selectedTabIds.map(contestAnalyticsTabLabel).join(", ");
-      toast.success(`Analytics report downloaded (${tabNames})`);
+      const tabNames = selectedTabIds.map(contestAnalyticsTabLabel);
+
+      let exportOptions: Parameters<typeof downloadContestAnalyticsReport>[3];
+
+      if (
+        reportContest &&
+        (reportAllSubmissions ?? reportSubmissions) &&
+        getReportStatus &&
+        getReportExpectedCents
+      ) {
+        const bundle = buildReportExportBundle({
+          brandProfile,
+          contest: reportContest,
+          reportType: "analytics",
+          submissions: reportAllSubmissions ?? reportSubmissions ?? [],
+          getStatus: getReportStatus,
+          getSubmissionExpectedCents: getReportExpectedCents,
+          analyticsTabs: tabNames,
+          exportedAt: new Date(),
+        });
+        exportOptions = {
+          branding: bundle.branding,
+          metrics: bundle.metrics,
+          approvedCount: bundle.approvedCount,
+        };
+      }
+
+      await downloadContestAnalyticsReport(
+        format,
+        contestTitle,
+        snapshots,
+        exportOptions,
+      );
+      toast.success(`Analytics report downloaded (${tabNames.join(", ")})`);
       onOpenChange(false);
     } catch (err) {
       console.error("[ContestAnalyticsExport]", err);

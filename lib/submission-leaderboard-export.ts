@@ -16,8 +16,48 @@ import {
 } from "@/lib/instagram-analytics-export";
 import type { InstagramProfileSnapshot } from "@/lib/platform-social-archive";
 import { formatYouTubeAnalyticsForExport } from "@/lib/youtube-analytics-export";
+import type { ExportReportBranding } from "@/lib/report-export-branding";
+import type { ReportSubmissionFilter } from "@/lib/report-export-branding";
+import {
+  buildCreatorWiseSectionTitle,
+  buildSubmissionsWiseSectionTitle,
+} from "@/lib/report-export-branding";
+import {
+  buildCreatorProfileUrl,
+  resolveExportContentUrl,
+} from "@/lib/report-export-links";
+import type { ReportCoverMetrics } from "@/lib/report-export-metrics";
+import ExcelJS from "exceljs";
+import {
+  buildDataSheet,
+  buildSummarySheet,
+  downloadExcelBuffer,
+  writeExcelWorkbook,
+} from "@/lib/report-export-excel";
+import {
+  addPdfFooters,
+  createPortraitPdfDoc,
+  createPremiumPageTracker,
+  markPremiumPage,
+  renderPdfDataTable,
+  renderPdfSectionDividerPage,
+} from "@/lib/report-export-pdf";
 
 export type LeaderboardExportFormat = "csv" | "xlsx" | "pdf";
+
+export type LeaderboardExportOptions = {
+  contestTitle?: string;
+  exportedAt?: string;
+  branding?: ExportReportBranding;
+  metrics?: ReportCoverMetrics;
+  approvedCount?: number;
+  dataSheetName?: string;
+  submissionSortLabel?: string;
+  submissionFilter?: ReportSubmissionFilter;
+  cellLinks?: (string | null)[][];
+  platform?: string;
+  rewardContext?: RewardExportContext;
+};
 
 /** Placeholder for empty cells in Excel/PDF; omitted in CSV (Excel mojibake fix). */
 const EMPTY_CELL = "\u2014";
@@ -252,8 +292,14 @@ export function buildSubmissionExportCellValue(
           EMPTY_CELL,
       );
     }
-    case "content_link":
-      return String(submission.content_link || EMPTY_CELL);
+    case "content_link": {
+      const resolved = resolveExportContentUrl(
+        String(submission.content_link || ""),
+        ctx.platform,
+        submission.video_id as string | null | undefined,
+      );
+      return resolved ?? String(submission.content_link || EMPTY_CELL);
+    }
     case "video_title":
       return String(submission.video_title || EMPTY_CELL);
     case "tweet_excerpt": {
@@ -508,7 +554,7 @@ export function buildLeaderboardExportMatrix(
   columnIds: SubmissionExportColumnId[],
   getMetrics: (submission: Record<string, unknown>) => PlatformMetrics,
   rewardCtx: RewardExportContext,
-): { headers: string[]; rows: string[][] } {
+): { headers: string[]; rows: string[][]; cellLinks: (string | null)[][] } {
   const headers = columnIds.map((id) => {
     const base = SUBMISSION_EXPORT_COLUMN_LABELS[id];
     if (id === "instagram_insights" && rewardCtx.instagramInsightsSelection) {
@@ -523,7 +569,31 @@ export function buildLeaderboardExportMatrix(
       buildSubmissionExportCellValue(col, submission, rank, metrics, rewardCtx),
     );
   });
-  return { headers, rows };
+  const cellLinks = submissions.map((submission, index) => {
+    const rank = index + 1;
+    const metrics = getMetrics(submission);
+    return columnIds.map((col) => {
+      const display = buildSubmissionExportCellValue(
+        col,
+        submission,
+        rank,
+        metrics,
+        rewardCtx,
+      );
+      if (col === "content_link") {
+        return resolveExportContentUrl(
+          String(submission.content_link || ""),
+          rewardCtx.platform,
+          submission.video_id as string | null | undefined,
+        );
+      }
+      if (col === "creator_username") {
+        return buildCreatorProfileUrl(display, rewardCtx.platform);
+      }
+      return null;
+    });
+  });
+  return { headers, rows, cellLinks };
 }
 
 function downloadBlob(blob: Blob, filename: string) {
@@ -878,17 +948,28 @@ export async function downloadLeaderboardReport(
   filenameBase: string,
   headers: string[],
   rows: string[][],
-  meta?: { contestTitle?: string; exportedAt?: string },
+  options?: LeaderboardExportOptions,
 ): Promise<void> {
   const date = new Date().toISOString().slice(0, 10);
   const safeBase = filenameBase.replace(/[^\w\-]+/g, "_").slice(0, 80);
+  const meta = options;
+  const dataSheetName = options?.dataSheetName ?? "Data";
 
   if (format === "csv") {
-    const lines = [
-      headers.map(csvEscape).join(","),
-      ...rows.map((r) => r.map(csvEscape).join(",")),
-    ];
-    // UTF-8 BOM so Excel detects encoding; empty cells omit em dash (avoids â€" mojibake)
+    const lines: string[] = [];
+    if (options?.branding) {
+      lines.push(
+        options.branding.reportTitle,
+        `Prepared for,${csvEscape(options.branding.brandCompanyName)}`,
+        `Campaign,${csvEscape(options.branding.contestTitle)}`,
+        `Exported,${csvEscape(options.branding.exportedAt)}`,
+        "",
+      );
+    } else if (meta?.contestTitle) {
+      lines.push(meta.contestTitle, "");
+    }
+    lines.push(headers.map(csvEscape).join(","));
+    lines.push(...rows.map((r) => r.map(csvEscape).join(",")));
     const blob = new Blob(["\uFEFF", lines.join("\r\n")], {
       type: "text/csv;charset=utf-8",
     });
@@ -897,6 +978,20 @@ export async function downloadLeaderboardReport(
   }
 
   if (format === "xlsx") {
+    if (options?.branding && options?.metrics) {
+      const workbook = new ExcelJS.Workbook();
+      await buildSummarySheet(
+        workbook,
+        options.branding,
+        options.metrics,
+        options.approvedCount ?? 0,
+      );
+      buildDataSheet(workbook, dataSheetName, headers, rows);
+      const buffer = await writeExcelWorkbook(workbook);
+      downloadExcelBuffer(buffer, `${safeBase}-${date}.xlsx`);
+      return;
+    }
+
     const XLSX = await import("xlsx");
     const sheetData: string[][] = [];
     if (meta?.contestTitle) {
@@ -942,12 +1037,54 @@ export async function downloadLeaderboardReport(
       }
     }
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "Submissions");
+    XLSX.utils.book_append_sheet(wb, ws, dataSheetName.slice(0, 31));
     const out = XLSX.write(wb, { bookType: "xlsx", type: "array" });
     const blob = new Blob([out], {
       type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     });
     downloadBlob(blob, `${safeBase}-${date}.xlsx`);
+    return;
+  }
+
+  if (options?.branding && options?.metrics) {
+    const { doc, fonts } = await createPortraitPdfDoc();
+    const premiumPages = createPremiumPageTracker();
+
+    const submissionFilter = options.submissionFilter ?? "verified_or_paid";
+    const sectionTitle =
+      options.branding.reportType === "creator-wise"
+        ? buildCreatorWiseSectionTitle(submissionFilter)
+        : buildSubmissionsWiseSectionTitle(submissionFilter);
+    const summaryLines =
+      options.branding.reportType === "creator-wise"
+        ? [
+            `${rows.length.toLocaleString()} creators · aggregated metrics`,
+            `${headers.length} columns`,
+          ]
+        : [
+            `${rows.length.toLocaleString()} submissions · ${headers.length} columns`,
+            options.submissionSortLabel ?? "Sorted by Views · High → Low",
+          ];
+
+    markPremiumPage(premiumPages, 1);
+    await renderPdfSectionDividerPage(doc, 1, sectionTitle, summaryLines, fonts);
+
+    await renderPdfDataTable(doc, headers, rows, 36, fonts, sectionTitle, {
+      cellLinks: options?.cellLinks,
+      platform: options?.platform ?? options?.rewardContext?.platform,
+    });
+    addPdfFooters(doc, fonts, premiumPages, { leadingPageCount: 1 });
+
+    const bodyBytes = doc.output("arraybuffer") as ArrayBuffer;
+    const { downloadPdfWithReactPrefix } = await import(
+      "@/lib/report-export-pdf-cover-render"
+    );
+    await downloadPdfWithReactPrefix(
+      bodyBytes,
+      options.branding,
+      options.metrics,
+      `${safeBase}-${date}.pdf`,
+    );
     return;
   }
 

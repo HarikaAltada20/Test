@@ -906,7 +906,21 @@ export default async function AdminContestDetailPage({
     // Combine regular submissions and Twitter tweets
     const allSubmissions: any[] = [...submissions, ...twitterSubmissions];
 
-
+    let brandProfile: {
+      company_name: string | null;
+      website_url: string | null;
+    } = { company_name: null, website_url: null };
+    if (contestData.advertiser_id) {
+      const adminDb = createAdminClient();
+      const { data: advertiserProfile } = await adminDb
+        .from("advertiser_profiles")
+        .select("company_name, website_url")
+        .eq("id", contestData.advertiser_id)
+        .maybeSingle();
+      if (advertiserProfile) {
+        brandProfile = advertiserProfile;
+      }
+    }
 
     return (
       <TooltipProvider>
@@ -927,6 +941,7 @@ export default async function AdminContestDetailPage({
           creatorModerationData={creatorModerationData}
           milestoneBonusPaidByCreator={milestoneBonusPaidByCreator}
           submissionsFetchError={submissionsFetchError}
+          brandProfile={brandProfile}
         />
       </TooltipProvider>
     );

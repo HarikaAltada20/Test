@@ -1095,16 +1095,18 @@ export default async function ContestDetailPage({
   // Combine regular submissions and Twitter tweets
   const allSubmissions: any[] = [...submissions, ...twitterSubmissions];
 
-  // console.log(`[page.tsx] Mapped submissions for contest ${contestId}:`, {
-  //   regular: submissions.length,
-  //   twitter: twitterSubmissions.length,
-  //   total: allSubmissions.length,
-  //   isTwitterCampaign,
-  //   platform: contestData.platform,
-  //   contest_format: contestData.contest_format,
-  //   sampleTwitterSubmission:
-  //     twitterSubmissions.length > 0 ? twitterSubmissions[0] : null,
-  // });
+  let brandProfile: { company_name: string | null; website_url: string | null } =
+    { company_name: null, website_url: null };
+  if (contestData.advertiser_id) {
+    const { data: advertiserProfile } = await supabase
+      .from("advertiser_profiles")
+      .select("company_name, website_url")
+      .eq("id", contestData.advertiser_id)
+      .maybeSingle();
+    if (advertiserProfile) {
+      brandProfile = advertiserProfile;
+    }
+  }
 
   return (
     <TooltipProvider>
@@ -1118,6 +1120,7 @@ export default async function ContestDetailPage({
         creatorModerationData={creatorModerationData}
         milestoneBonusPaidByCreator={milestoneBonusPaidByCreator}
         submissionsFetchError={submissionsFetchError}
+        brandProfile={brandProfile}
       />
     </TooltipProvider>
   );
