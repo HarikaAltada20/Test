@@ -39,6 +39,22 @@ describe("buildDataSheet", () => {
     assert.equal(ws.getRow(2).getCell(2).value, 2623130);
     assert.equal(ws.getRow(2).getCell(3).value, 134972);
   });
+
+  it("keeps data rows at a fixed height without wrap text", async () => {
+    const workbook = new ExcelJS.Workbook();
+    const headers = ["Rank", "Video / Post Title"];
+    const longTitle = "A".repeat(500);
+    const rows = [["1", longTitle]];
+
+    buildDataSheet(workbook, "Submissions", headers, rows);
+
+    const ws = workbook.getWorksheet("Submissions");
+    assert.ok(ws);
+    assert.equal(ws.properties.defaultRowHeight, 18);
+    assert.equal(ws.getRow(2).height, 18);
+    assert.equal(ws.getRow(2).alignment?.wrapText, false);
+    assert.equal(ws.getRow(2).getCell(2).value, longTitle);
+  });
 });
 
 describe("coerceExcelNumericCell", () => {

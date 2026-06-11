@@ -14,6 +14,8 @@ const INDIGO = REPORT_THEME.indigo;
 const NAVY = REPORT_THEME.navyMid;
 const GOLD = REPORT_THEME.gold;
 const ROW_ALT = REPORT_THEME.rowAlt;
+const DATA_ROW_HEIGHT = 18;
+const HEADER_ROW_HEIGHT = 22;
 
 function estimateColumnWidth(header: string): number {
   if (
@@ -49,7 +51,7 @@ function applyHeaderRowStyle(row: ExcelJS.Row) {
   row.font = { bold: true, color: { argb: "FFFFFFFF" }, size: 11 };
   row.fill = headerFillStyle();
   row.alignment = { vertical: "middle", horizontal: "center", wrapText: true };
-  row.height = 22;
+  row.height = HEADER_ROW_HEIGHT;
 }
 
 function applyDataRowStyle(row: ExcelJS.Row, isAlt: boolean) {
@@ -60,7 +62,8 @@ function applyDataRowStyle(row: ExcelJS.Row, isAlt: boolean) {
       fgColor: { argb: `FF${ROW_ALT}` },
     };
   }
-  row.alignment = { vertical: "top", wrapText: true };
+  row.height = DATA_ROW_HEIGHT;
+  row.alignment = { vertical: "middle", wrapText: false };
 }
 
 const LOGO_HORIZONTAL_URL = "/images/gold_logo_horizontal.png";
@@ -370,6 +373,7 @@ export function buildDataSheet(
 ): ExcelJS.Worksheet {
   const safeName = sheetName.replace(/[\\/*?:\[\]]/g, "").slice(0, 31);
   const ws = workbook.addWorksheet(safeName);
+  ws.properties.defaultRowHeight = DATA_ROW_HEIGHT;
 
   ws.columns = headers.map((h) => ({ width: estimateColumnWidth(h) }));
 
@@ -399,8 +403,8 @@ export function buildDataSheet(
       if (isNumericHeader(header) || typeof cell.value === "number") {
         cell.alignment = {
           horizontal: "right",
-          vertical: "top",
-          wrapText: true,
+          vertical: "middle",
+          wrapText: false,
         };
       }
     });
@@ -430,6 +434,7 @@ export function buildAnalyticsSheet(
 ): ExcelJS.Worksheet {
   const safeName = sheetName.replace(/[\\/*?:\[\]]/g, "").slice(0, 31);
   const ws = workbook.addWorksheet(safeName);
+  ws.properties.defaultRowHeight = DATA_ROW_HEIGHT;
   ws.columns = [{ width: 36 }, { width: 28 }, { width: 18 }, { width: 18 }, { width: 18 }];
 
   let rowIdx = 1;
