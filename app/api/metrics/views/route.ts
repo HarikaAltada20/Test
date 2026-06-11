@@ -13,8 +13,8 @@ export async function POST(request: NextRequest) {
     if (!contestId) {
       return NextResponse.json({ error: 'contestId is required' }, { status: 400 });
     }
-    const result = await MetricsService.creditViewsForContest(contestId, batchSize || 10000);
-    return NextResponse.json({ success: true, processedAll: result.processedAll });
+    const result = await MetricsService.syncContestViewsToCreatorProfiles(contestId);
+    return NextResponse.json({ success: true, views_sync: result });
   } catch (error: any) {
     return NextResponse.json({ error: error?.message || 'Internal server error' }, { status: 500 });
   }

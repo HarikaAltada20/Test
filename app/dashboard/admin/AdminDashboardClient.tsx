@@ -14,6 +14,8 @@ import {
   Eye,
   Info,
   FileText,
+  RefreshCw,
+  Loader2,
 } from "lucide-react";
 import {
   Tooltip,
@@ -39,6 +41,17 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  AlertDialog,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
+import { toast } from "sonner";
 import {
   endOfMonth,
   endOfYear,
@@ -188,6 +201,50 @@ export default function AdminDashboardClient({
   });
   const [dateRangePresetLabel, setDateRangePresetLabel] =
     useState<string>("Last 30 Days");
+  const [isSyncingAllCreatorViews, setIsSyncingAllCreatorViews] =
+    useState(false);
+  const [syncAllViewsDialogOpen, setSyncAllViewsDialogOpen] = useState(false);
+
+  const handleSyncAllCreatorViews = async () => {
+    setIsSyncingAllCreatorViews(true);
+    try {
+      const response = await fetch("/api/admin/sync-all-creator-views", {
+        method: "POST",
+      });
+      const result = await response.json();
+      if (!response.ok) {
+        throw new Error(result.error || "Failed to sync creator profile views");
+      }
+
+      const sync = result?.views_sync ?? {};
+      const updated = Number(sync.upserted_or_updated) || 0;
+      const rejectedRemoved = Number(sync.deleted_rejected_credits) || 0;
+      const platformPass = Number(sync.platform_aware_submissions) || 0;
+
+      toast.success("Creator profile views synced", {
+        description: [
+          updated > 0
+            ? `${updated} credited snapshot${updated === 1 ? "" : "s"} updated`
+            : "Credited snapshots were already up to date",
+          rejectedRemoved > 0
+            ? `${rejectedRemoved} rejected credit${rejectedRemoved === 1 ? "" : "s"} removed`
+            : null,
+          `${platformPass} submission${platformPass === 1 ? "" : "s"} checked (platform-aware pass)`,
+        ]
+          .filter(Boolean)
+          .join(" · "),
+      });
+      setSyncAllViewsDialogOpen(false);
+    } catch (error: unknown) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Failed to sync creator profile views";
+      toast.error("Sync failed", { description: message });
+    } finally {
+      setIsSyncingAllCreatorViews(false);
+    }
+  };
 
   type GrowthPoint = {
     label: string;
@@ -272,7 +329,7 @@ export default function AdminDashboardClient({
   return (
     <div className="space-y-8 pb-8 w-full min-w-0 overflow-visible">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h2
             className={`text-3xl font-bold tracking-tight ${
@@ -289,6 +346,58 @@ export default function AdminDashboardClient({
             Platform-wide statistics and management
           </p>
         </div>
+        <AlertDialog
+          open={syncAllViewsDialogOpen}
+          onOpenChange={(open) => {
+            if (!isSyncingAllCreatorViews) setSyncAllViewsDialogOpen(open);
+          }}
+        >
+          <AlertDialogTrigger asChild>
+            <Button
+              variant="outline"
+              className={
+                isDark
+                  ? "border-emerald-400/60 text-emerald-300 hover:bg-white/5"
+                  : "border-emerald-500/50 text-emerald-700 hover:bg-emerald-50"
+              }
+            >
+              <RefreshCw className="mr-2 h-4 w-4" />
+              Sync All Creator Views
+            </Button>
+          </AlertDialogTrigger>
+          <AlertDialogContent className={isDark ? "bg-[#170337] text-white border-white/10" : ""}>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Sync all creator profile views?</AlertDialogTitle>
+              <AlertDialogDescription
+                className={isDark ? "text-gray-300" : undefined}
+              >
+                This recalculates creator leaderboard totals from all campaigns.
+                Pending, verified, and paid submissions will be credited;
+                rejected submissions will be excluded. Safe to run more than
+                once.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel disabled={isSyncingAllCreatorViews}>
+                Cancel
+              </AlertDialogCancel>
+              <Button
+                onClick={handleSyncAllCreatorViews}
+                disabled={isSyncingAllCreatorViews}
+                className="bg-emerald-600 hover:bg-emerald-700 text-white"
+              >
+                {isSyncingAllCreatorViews ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Syncing…
+                  </>
+                ) : (
+                  "Sync now"
+                )}
+              </Button>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </div>
 
       {/* Top Summary */}

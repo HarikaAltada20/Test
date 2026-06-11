@@ -10,6 +10,7 @@ import {
 } from "@/lib/payment-utils";
 import { MetricsService } from "@/lib/metrics-service";
 import { SUBMISSION_STATUS } from "@/lib/constants-status";
+import { getSubmissionViewsForCrediting } from "@/lib/submission-credited-views";
 import { verifyAdminAccess } from "@/utils/admin-auth";
 import {
   buildMilestoneSubmissionPayoutCentsMap,
@@ -418,43 +419,9 @@ export async function POST(request: Request) {
       action === SUBMISSION_STATUS.verified ||
       action === SUBMISSION_STATUS.paid
     ) {
-      const currentViews = submissionFull.views || 0;
+      const currentViews = getSubmissionViewsForCrediting(submissionFull);
 
-      // Read prior credited snapshot (0 if none)
-      const { data: priorSnap, error: priorErr } = await supabaseAdmin
-        .from("submission_views_credited")
-        .select("credited_views")
-        .eq("submission_id", submissionId)
-        .maybeSingle();
-      if (priorErr) {
-        console.error("Failed to read prior credited snapshot:", priorErr);
-      }
-      const priorCredited = (priorSnap?.credited_views as number) || 0;
-      const delta = Math.max(0, currentViews - priorCredited);
-
-      // Credit creator total_views by delta
-      if (delta > 0) {
-        try {
-          const currentTotal = await MetricsService.getCreatorField(
-            submissionFull.creator_id,
-            "total_views",
-          );
-          const { error: updCreatorErr } = await supabaseAdmin
-            .from("creator_profiles")
-            .update({ total_views: currentTotal + delta })
-            .eq("id", submissionFull.creator_id);
-          if (updCreatorErr) {
-            console.error(
-              "Failed to update creator total_views:",
-              updCreatorErr,
-            );
-          }
-        } catch (e) {
-          console.error("Error while crediting creator total_views:", e);
-        }
-      }
-
-      // Upsert snapshot to current
+      // Upsert snapshot to current (creator_profiles.total_views is maintained by DB trigger)
       const { error: snapErr } = await supabaseAdmin
         .from("submission_views_credited")
         .upsert(
@@ -483,6 +450,22 @@ export async function POST(request: Request) {
         }
       } catch (e) {
         console.warn("Skipping submission views_locked update due to error.");
+      }
+    }
+
+    const shouldUncreditViews =
+      action === SUBMISSION_STATUS.rejected ||
+      (action === SUBMISSION_STATUS.pending &&
+        (submissionFull.status === SUBMISSION_STATUS.verified ||
+          submissionFull.status === SUBMISSION_STATUS.paid));
+
+    if (shouldUncreditViews) {
+      const { error: uncreditErr } = await supabaseAdmin
+        .from("submission_views_credited")
+        .delete()
+        .eq("submission_id", submissionId);
+      if (uncreditErr) {
+        console.error("Failed to uncredit views for submission:", uncreditErr);
       }
     }
 

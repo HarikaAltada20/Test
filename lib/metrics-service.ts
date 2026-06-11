@@ -1,5 +1,18 @@
 import { createAdminClient } from '@/utils/supabase/admin';
 import { SUBMISSION_STATUS } from './constants-status';
+import { getSubmissionViewsForCrediting } from './submission-credited-views';
+
+export type ContestViewsSyncResult = {
+  contest_id: string;
+  deleted_rejected_credits: number;
+  upserted_or_updated: number;
+};
+
+export type AllCreatorViewsSyncResult = {
+  deleted_rejected_credits: number;
+  upserted_or_updated: number;
+  platform_aware_submissions: number;
+};
 
 export interface ParticipationKey {
   creatorId: string;
@@ -227,94 +240,156 @@ export const MetricsService = {
   },
 
 
-  // Credit views when contest moves into verification or payouts_processed.
-  // Uses submission_views_credited to apply only the delta.
-  async creditViewsForContest(contestId: string, batchSize: number = 10000): Promise<{ processedAll: boolean }> {
+  /** Platform-wide sync of credited views → creator_profiles (admin repair). */
+  async syncAllCreatorProfileViews(): Promise<AllCreatorViewsSyncResult> {
     const supabase = createAdminClient();
+    const { data, error } = await supabase.rpc(
+      'sync_all_submission_views_credited',
+    );
+    if (error) {
+      throw new Error(
+        `Failed to sync all creator profile views: ${error.message}`,
+      );
+    }
+    const row = (data || {}) as Omit<
+      AllCreatorViewsSyncResult,
+      'platform_aware_submissions'
+    >;
+    const platformAwareSubmissions =
+      await this.applyPlatformAwareViewCreditsAll();
+    return {
+      deleted_rejected_credits: Number(row.deleted_rejected_credits) || 0,
+      upserted_or_updated: Number(row.upserted_or_updated) || 0,
+      platform_aware_submissions: platformAwareSubmissions,
+    };
+  },
 
-    // Load submissions with credited snapshot
+  /** Paginated platform-aware credit pass for all eligible submissions. */
+  async applyPlatformAwareViewCreditsAll(): Promise<number> {
+    const supabase = createAdminClient();
+    const pageSize = 2000;
+    let offset = 0;
+    let processed = 0;
+
+    while (true) {
+      const { data: subs, error: subsErr } = await supabase
+        .from('submissions')
+        .select('id, views, status, platform, other_stats')
+        .in('status', [
+          SUBMISSION_STATUS.pending,
+          SUBMISSION_STATUS.verified,
+          SUBMISSION_STATUS.paid,
+        ])
+        .order('id', { ascending: true })
+        .range(offset, offset + pageSize - 1);
+
+      if (subsErr) {
+        throw new Error(
+          `Failed to load submissions for platform-aware view sync: ${subsErr.message}`,
+        );
+      }
+
+      const batch = subs || [];
+      if (batch.length === 0) break;
+
+      await this.creditSubmissionViews(
+        batch as Array<{
+          id: string;
+          views?: number | null;
+          platform?: string | null;
+          other_stats?: unknown;
+        }>,
+      );
+
+      processed += batch.length;
+      if (batch.length < pageSize) break;
+      offset += pageSize;
+    }
+
+    return processed;
+  },
+
+  /** Sync all pending/verified/paid submission views for a contest into creator_profiles (via DB RPC). */
+  async syncContestViewsToCreatorProfiles(
+    contestId: string,
+  ): Promise<ContestViewsSyncResult> {
+    const supabase = createAdminClient();
+    const { data, error } = await supabase.rpc(
+      'sync_contest_submission_views_credited',
+      { p_contest_id: contestId },
+    );
+    if (error) {
+      throw new Error(
+        `Failed to sync contest views to creator profiles: ${error.message}`,
+      );
+    }
+    const row = (data || {}) as ContestViewsSyncResult;
+    await this.applyPlatformAwareViewCreditsForContest(contestId);
+    return row;
+  },
+
+  /**
+   * Second pass: upsert credits using platform-aware view counts (Instagram/TikTok other_stats).
+   * DB RPC uses submissions.views; this aligns credited snapshots with contest UI metrics.
+   */
+  async applyPlatformAwareViewCreditsForContest(contestId: string): Promise<void> {
+    const supabase = createAdminClient();
     const { data: subs, error: subsErr } = await supabase
       .from('submissions')
-      .select('id, creator_id, views, status')
+      .select('id, views, status, platform, other_stats')
       .eq('contest_id', contestId)
-      .limit(batchSize);
-    if (subsErr) throw new Error(`Failed to load contest submissions: ${subsErr.message}`);
+      .in('status', [
+        SUBMISSION_STATUS.pending,
+        SUBMISSION_STATUS.verified,
+        SUBMISSION_STATUS.paid,
+      ]);
+    if (subsErr) {
+      throw new Error(
+        `Failed to load submissions for platform-aware view sync: ${subsErr.message}`,
+      );
+    }
+    await this.creditSubmissionViews((subs || []) as Array<{
+      id: string;
+      views?: number | null;
+      platform?: string | null;
+      other_stats?: unknown;
+    }>);
+  },
 
-    const filtered = (subs || []).filter(s => s.status !== SUBMISSION_STATUS.rejected);
+  /** Upsert submission_views_credited for specific submissions (bulk pay, verify). */
+  async creditSubmissionViews(
+    rows: Array<{
+      id: string;
+      views?: number | null;
+      platform?: string | null;
+      other_stats?: unknown;
+    }>,
+  ): Promise<void> {
+    if (rows.length === 0) return;
 
-    if (filtered.length === 0) return { processedAll: true };
+    const supabase = createAdminClient();
+    const now = new Date().toISOString();
+    const payload = rows.map((row) => ({
+      submission_id: row.id,
+      credited_views: getSubmissionViewsForCrediting(row),
+      credited_at: now,
+    }));
 
-    // Fetch credited snapshots
-    const submissionIds = filtered.map(s => s.id);
-    const { data: creditedRows, error: credErr } = await supabase
+    const { error } = await supabase
       .from('submission_views_credited')
-      .select('submission_id, credited_views')
-      .in('submission_id', submissionIds);
-    if (credErr) throw new Error(`Failed to load credited snapshots: ${credErr.message}`);
-
-    const creditedMap = new Map<string, number>();
-    for (const row of creditedRows || []) {
-      creditedMap.set(row.submission_id as string, (row as any).credited_views || 0);
+      .upsert(payload, { onConflict: 'submission_id' });
+    if (error) {
+      throw new Error(`Failed to credit submission views: ${error.message}`);
     }
+  },
 
-    // Aggregate deltas per creator
-    const creatorDelta = new Map<string, number>();
-    const updatesForSnapshot: Array<{ submission_id: string; credited_views: number } > = [];
-
-    for (const s of filtered) {
-      const credited = creditedMap.get(s.id) || 0;
-      const views = (s.views || 0) as number;
-      const delta = Math.max(0, views - credited);
-      if (delta > 0) {
-        creatorDelta.set(s.creator_id, (creatorDelta.get(s.creator_id) || 0) + delta);
-        updatesForSnapshot.push({ submission_id: s.id, credited_views: views });
-      }
-    }
-
-    // Apply creator deltas
-    for (const [creatorId, delta] of creatorDelta) {
-      const current = await this.getCreatorField(creatorId, 'total_views');
-      const { error: updErr } = await supabase
-        .from('creator_profiles')
-        .update({ total_views: current + delta })
-        .eq('id', creatorId);
-      if (updErr) throw new Error(`Failed to update total_views: ${updErr.message}`);
-    }
-
-    // Upsert snapshots
-    if (updatesForSnapshot.length > 0) {
-      const { error: upErr } = await supabase
-        .from('submission_views_credited')
-        .upsert(
-          updatesForSnapshot.map(u => ({ submission_id: u.submission_id, credited_views: u.credited_views, credited_at: new Date().toISOString() })),
-          { onConflict: 'submission_id' }
-        );
-      if (upErr) throw new Error(`Failed to upsert credited snapshots: ${upErr.message}`);
-    }
-
-    // Check if fully processed: no submission has views > credited
-    const { data: remaining, error: remErr } = await supabase
-      .from('submissions')
-      .select('id, views')
-      .eq('contest_id', contestId)
-      .limit(1);
-    if (remErr) throw new Error(`Failed to check remaining snapshots: ${remErr.message}`);
-
-    // Fetch credited for those few to be safe
-    let processedAll = true;
-    if ((remaining || []).length > 0) {
-      const remIds = (remaining || []).map(r => r.id);
-      const { data: remCred } = await supabase
-        .from('submission_views_credited')
-        .select('submission_id, credited_views')
-        .in('submission_id', remIds);
-      for (const r of remaining || []) {
-        const cv = (remCred || []).find(c => c.submission_id === r.id)?.credited_views || 0;
-        if ((r.views || 0) > cv) { processedAll = false; break; }
-      }
-    }
-
-    return { processedAll };
+  /** @deprecated Prefer syncContestViewsToCreatorProfiles */
+  async creditViewsForContest(
+    contestId: string,
+    _batchSize: number = 10000,
+  ): Promise<{ processedAll: boolean }> {
+    await this.syncContestViewsToCreatorProfiles(contestId);
+    return { processedAll: true };
   },
 
   // Advertiser accounting when contest is published: increment totals only.

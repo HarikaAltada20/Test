@@ -13,6 +13,12 @@ export const CONTEST_LIST_SORT_OPTIONS = [
   "value_asc",
   "budget_remaining_desc",
   "budget_remaining_asc",
+  "budget_used_desc",
+  "budget_used_asc",
+  "approval_rate_desc",
+  "approval_rate_asc",
+  "views_desc",
+  "views_asc",
   "cpm_rate_desc",
   "cpm_rate_asc",
   "submissions_desc",
@@ -29,10 +35,19 @@ export const OPPORTUNITIES_SORT_OPTIONS = [
   "value_asc",
   "budget_remaining_desc",
   "budget_remaining_asc",
+  "budget_used_desc",
+  "budget_used_asc",
   "cpm_rate_desc",
   "cpm_rate_asc",
   "submissions_desc",
   "submissions_asc",
+] as const;
+
+export const ADMIN_ONLY_CONTEST_LIST_SORT_OPTIONS = [
+  "approval_rate_desc",
+  "approval_rate_asc",
+  "views_desc",
+  "views_asc",
 ] as const;
 
 export const CONTEST_TYPE_FILTER_OPTIONS = [

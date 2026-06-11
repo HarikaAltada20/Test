@@ -48,11 +48,13 @@ import {
   List,
   Search,
   X,
+  RefreshCw,
+  Hourglass,
 } from "lucide-react";
 import { DeleteContestButton } from "@/components/delete-contest-button";
 import { formatLocalDateTime, cn } from "@/lib/utils";
 import { isModifiedLinkClick } from "@/lib/navigation-link-utils";
-import { compareContestBudgetRemaining } from "@/lib/contest-budget-remaining-sort";
+import { compareContestBudgetRemaining, compareContestBudgetUsed } from "@/lib/contest-budget-remaining-sort";
 import {
   KNOWN_POST_CONTEST_STATUSES,
   getEndedOpportunityBadgeClassName,
@@ -82,6 +84,7 @@ import {
 import {
   ADMIN_CONTEST_LIST_FILTERS_KEY,
   BRAND_CONTEST_LIST_FILTERS_KEY,
+  ADMIN_ONLY_CONTEST_LIST_SORT_OPTIONS,
   readStoredContestListFilters,
   writeStoredContestListFilters,
   type BrandPostPhaseFilterOption,
@@ -91,6 +94,12 @@ import {
   type PageSizeOption,
   type ViewModeOption,
 } from "@/lib/campaign-list-filters-storage";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 // Define the type for a campaign
 type Contest = {
@@ -150,6 +159,12 @@ type Contest = {
   } | null;
   thumbnail_url: string | null;
   advertiser_name?: string;
+  // Admin-only fields (populated on the admin contests page)
+  verified_submission_count?: number | null;
+  pending_submission_count?: number | null;
+  rejected_submission_count?: number | null;
+  not_rejected_views?: number | null;
+  last_metrics_updated?: string | null;
   submitted_for_approval_at?: string | null;
   published_at?: string | null;
   rejection_reason?: string | null;
@@ -163,6 +178,52 @@ type Contest = {
   twitter_participants_count?: number | null;
   twitter_max_participants?: number | null;
 };
+
+function formatCompactCount(value: number): string {
+  const n = Math.max(0, value);
+  if (n >= 1_000_000) {
+    const millions = n / 1_000_000;
+    return millions >= 10
+      ? `${Math.round(millions)}M`
+      : `${millions.toFixed(1).replace(/\.0$/, "")}M`;
+  }
+  if (n >= 1_000) {
+    const thousands = n / 1_000;
+    return thousands >= 10
+      ? `${Math.round(thousands)}K`
+      : `${thousands.toFixed(1).replace(/\.0$/, "")}K`;
+  }
+  return n.toLocaleString();
+}
+
+function getAdminSubmissionTotal(contest: Contest): number {
+  const verified = contest.verified_submission_count ?? 0;
+  const pending = contest.pending_submission_count ?? 0;
+  const rejected = contest.rejected_submission_count ?? 0;
+  const fromStatusCounts = verified + pending + rejected;
+
+  if (
+    contest.live_submission_count !== null &&
+    contest.live_submission_count !== undefined
+  ) {
+    return Math.max(contest.live_submission_count, fromStatusCounts);
+  }
+
+  return fromStatusCounts;
+}
+
+/** Live: (verified + paid) / total. Ended: non-rejected / total. */
+function getAdminApprovalPercent(contest: Contest): number | null {
+  const total = getAdminSubmissionTotal(contest);
+  if (total <= 0) return null;
+
+  const verified = contest.verified_submission_count ?? 0;
+  const pending = contest.pending_submission_count ?? 0;
+  const isEnded = contest.status === "ended";
+  const numerator = isEnded ? verified + pending : verified;
+
+  return Math.min(100, Math.round((numerator / total) * 100));
+}
 
 interface ContestListClientProps {
   initialContests: Contest[];
@@ -184,6 +245,12 @@ type SortOptionType =
   | "value_asc"
   | "budget_remaining_desc"
   | "budget_remaining_asc"
+  | "budget_used_desc"
+  | "budget_used_asc"
+  | "approval_rate_desc"
+  | "approval_rate_asc"
+  | "views_desc"
+  | "views_asc"
   | "cpm_rate_desc"
   | "cpm_rate_asc"
   | "submissions_desc"
@@ -621,6 +688,17 @@ export function ContestListClient({
   }, [contestListFiltersStorageKey, externalViewMode]);
 
   useEffect(() => {
+    if (
+      !isAdminView &&
+      (ADMIN_ONLY_CONTEST_LIST_SORT_OPTIONS as readonly string[]).includes(
+        sortOption,
+      )
+    ) {
+      setSortOption("created_at_desc");
+    }
+  }, [isAdminView, sortOption]);
+
+  useEffect(() => {
     if (!filtersHydrated || postPhaseFilterRestoredRef.current) return;
     if (selectedTab !== "all" && selectedTab !== "ended") return;
 
@@ -980,6 +1058,127 @@ export function ContestListClient({
   }, [mode]);
   const isDark = mode === "dark";
 
+  // Admin-only badges: verified/pending submission counts (header row)
+  const renderAdminSubmissionBadges = (
+    contest: Contest,
+    size: "compact" | "default" = "compact",
+  ) => {
+    if (!isAdminView) return null;
+
+    const sizeClass =
+      size === "compact" ? "text-[12px]" : "text-sm px-3 py-1 font-medium";
+
+    return (
+      <>
+        <Badge
+          variant="outline"
+          className={cn(
+            sizeClass,
+            isDark
+              ? "bg-green-900/30 text-green-300 border-green-700/50"
+              : "bg-green-50 text-green-700 border-green-200",
+          )}
+        >
+          <CheckCircle className="h-3 w-3 mr-1" />
+          Verified: {contest.verified_submission_count ?? 0}
+        </Badge>
+        <Badge
+          variant="outline"
+          className={cn(
+            sizeClass,
+            isDark
+              ? "bg-amber-900/30 text-amber-300 border-amber-700/50"
+              : "bg-amber-50 text-amber-700 border-amber-200",
+          )}
+        >
+          <Hourglass className="h-3 w-3 mr-1" />
+          Pending: {contest.pending_submission_count ?? 0}
+        </Badge>
+      </>
+    );
+  };
+
+  // Admin-only footer: approval %, views, submissions
+  const renderAdminStatsFooter = (contest: Contest) => {
+    if (!isAdminView) return null;
+
+    const total = getAdminSubmissionTotal(contest);
+    const approval = getAdminApprovalPercent(contest);
+    const views = contest.not_rejected_views ?? 0;
+    const isEnded = contest.status === "ended";
+    const isLive = contest.status === "active";
+    const approvalHint = isEnded
+      ? "Non-rejected ÷ total submissions"
+      : isLive
+        ? "Verified + paid ÷ total submissions"
+        : "Verified + paid ÷ total submissions (live formula)";
+
+    const labelClass = cn(
+      "text-[10px] uppercase tracking-wide font-medium",
+      isDark ? "text-slate-400" : "text-slate-500",
+    );
+    const valueClass = cn(
+      "text-sm font-semibold tabular-nums mt-0.5",
+      isDark ? "text-white" : "text-slate-900",
+    );
+
+    return (
+      <TooltipProvider delayDuration={0}>
+        <div
+          className={cn(
+            "mt-3 pt-3 border-t",
+            isDark ? "border-slate-700" : "border-slate-200",
+          )}
+        >
+          <div className="grid grid-cols-3 gap-2 text-center">
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <div className="cursor-help">
+                  <div className={labelClass}>Approval</div>
+                  <div className={valueClass}>
+                    {approval !== null ? `${approval}%` : "—"}
+                  </div>
+                </div>
+              </TooltipTrigger>
+              <TooltipContent side="top">{approvalHint}</TooltipContent>
+            </Tooltip>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <div className="cursor-help">
+                  <div className={labelClass}>Views</div>
+                  <div className={valueClass}>{formatCompactCount(views)}</div>
+                </div>
+              </TooltipTrigger>
+              <TooltipContent side="top">
+                {views.toLocaleString()} views (excludes rejected)
+              </TooltipContent>
+            </Tooltip>
+            <div>
+              <div className={labelClass}>Submissions</div>
+              <div className={valueClass}>{total.toLocaleString()}</div>
+            </div>
+          </div>
+          {contest.last_metrics_updated && (
+            <p
+              className={cn(
+                "text-[10px] text-center mt-2",
+                isDark ? "text-slate-500" : "text-slate-400",
+              )}
+            >
+              Metrics updated{" "}
+              {formatLocalDateTime(contest.last_metrics_updated, {
+                month: "short",
+                day: "numeric",
+                hour: "2-digit",
+                minute: "2-digit",
+              })}
+            </p>
+          )}
+        </div>
+      </TooltipProvider>
+    );
+  };
+
   const brandPipelineTabs = useMemo(() => {
     const countBadge = (n: number) => (
       <Badge
@@ -1184,6 +1383,35 @@ export function ContestListClient({
         case "budget_remaining_desc":
         case "budget_remaining_asc":
           return compareContestBudgetRemaining(a, b, sortOption);
+        case "budget_used_desc":
+        case "budget_used_asc":
+          return compareContestBudgetUsed(a, b, sortOption);
+        case "approval_rate_desc":
+        case "approval_rate_asc": {
+          const approvalA = getAdminApprovalPercent(a) ?? -1;
+          const approvalB = getAdminApprovalPercent(b) ?? -1;
+          if (approvalA === -1 && approvalB === -1) return 0;
+          if (approvalA === -1) return 1;
+          if (approvalB === -1) return -1;
+          return sortOption === "approval_rate_desc"
+            ? approvalB - approvalA
+            : approvalA - approvalB;
+        }
+        case "views_desc":
+        case "views_asc": {
+          const viewsA =
+            a.not_rejected_views !== null && a.not_rejected_views !== undefined
+              ? a.not_rejected_views
+              : -1;
+          const viewsB =
+            b.not_rejected_views !== null && b.not_rejected_views !== undefined
+              ? b.not_rejected_views
+              : -1;
+          if (viewsA === -1 && viewsB === -1) return 0;
+          if (viewsA === -1) return 1;
+          if (viewsB === -1) return -1;
+          return sortOption === "views_desc" ? viewsB - viewsA : viewsA - viewsB;
+        }
         case "cpm_rate_desc":
         case "cpm_rate_asc":
           const rateA =
@@ -1445,6 +1673,7 @@ export function ContestListClient({
                   Bonus Available
                 </Badge>
               )}
+              {renderAdminSubmissionBadges(contest, "compact")}
             </div>
           </CardHeader>
           <CardContent className="p-4 pt-1 flex-grow flex flex-col justify-between">
@@ -1498,8 +1727,8 @@ export function ContestListClient({
                   </span>
                 </div>
               )}
-              {/* For Twitter text_image contests, show participants instead of submissions */}
-              {(() => {
+              {!isAdminView &&
+                (() => {
                 const isTwitterTextImage =
                   (contest.platform?.toLowerCase() === "twitter" ||
                     contest.platform?.toLowerCase() === "x") &&
@@ -1829,6 +2058,8 @@ export function ContestListClient({
                   </div>
                 );
               })()}
+
+            {renderAdminStatsFooter(contest)}
 
             {renderViewDetailsLink(contest, "px-3 py-3", {
               fullWidth: true,
@@ -2269,6 +2500,7 @@ export function ContestListClient({
                     Bonus Available
                   </Badge>
                 )}
+                {renderAdminSubmissionBadges(contest, "default")}
               </div>
             </CardHeader>
             <CardContent className="p-0 pt-2 flex-1">
@@ -2331,8 +2563,8 @@ export function ContestListClient({
                     </span>
                   </div>
                 )}
-                {/* For Twitter text_image contests, show participants instead of submissions */}
-                {(() => {
+                {!isAdminView &&
+                  (() => {
                   const isTwitterTextImage =
                     (contest.platform?.toLowerCase() === "twitter" ||
                       contest.platform?.toLowerCase() === "x") &&
@@ -2672,6 +2904,7 @@ export function ContestListClient({
                     </div>
                   );
                 })()}
+            {renderAdminStatsFooter(contest)}
             </CardContent>
           </div>
 
@@ -3039,6 +3272,35 @@ export function ContestListClient({
         case "budget_remaining_desc":
         case "budget_remaining_asc":
           return compareContestBudgetRemaining(a, b, sortOption);
+        case "budget_used_desc":
+        case "budget_used_asc":
+          return compareContestBudgetUsed(a, b, sortOption);
+        case "approval_rate_desc":
+        case "approval_rate_asc": {
+          const approvalA = getAdminApprovalPercent(a) ?? -1;
+          const approvalB = getAdminApprovalPercent(b) ?? -1;
+          if (approvalA === -1 && approvalB === -1) return 0;
+          if (approvalA === -1) return 1;
+          if (approvalB === -1) return -1;
+          return sortOption === "approval_rate_desc"
+            ? approvalB - approvalA
+            : approvalA - approvalB;
+        }
+        case "views_desc":
+        case "views_asc": {
+          const viewsA =
+            a.not_rejected_views !== null && a.not_rejected_views !== undefined
+              ? a.not_rejected_views
+              : -1;
+          const viewsB =
+            b.not_rejected_views !== null && b.not_rejected_views !== undefined
+              ? b.not_rejected_views
+              : -1;
+          if (viewsA === -1 && viewsB === -1) return 0;
+          if (viewsA === -1) return 1;
+          if (viewsB === -1) return -1;
+          return sortOption === "views_desc" ? viewsB - viewsA : viewsA - viewsB;
+        }
         case "cpm_rate_desc":
         case "cpm_rate_asc":
           const rateSortA =
@@ -4013,6 +4275,28 @@ export function ContestListClient({
                   <SelectItem isDark={isDark} value="budget_remaining_asc">
                     Budget Left: Least
                   </SelectItem>
+                  <SelectItem isDark={isDark} value="budget_used_desc">
+                    Budget Used: Most
+                  </SelectItem>
+                  <SelectItem isDark={isDark} value="budget_used_asc">
+                    Budget Used: Least
+                  </SelectItem>
+                  {isAdminView && (
+                    <>
+                      <SelectItem isDark={isDark} value="approval_rate_desc">
+                        Approval Rate: High
+                      </SelectItem>
+                      <SelectItem isDark={isDark} value="approval_rate_asc">
+                        Approval Rate: Low
+                      </SelectItem>
+                      <SelectItem isDark={isDark} value="views_desc">
+                        Views: High
+                      </SelectItem>
+                      <SelectItem isDark={isDark} value="views_asc">
+                        Views: Low
+                      </SelectItem>
+                    </>
+                  )}
                   <SelectItem isDark={isDark} value="cpm_rate_desc">
                     CPM Rate: High to Low
                   </SelectItem>
