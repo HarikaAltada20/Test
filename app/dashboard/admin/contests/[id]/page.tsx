@@ -927,6 +927,20 @@ export default async function AdminContestDetailPage({
       if (advertiserProfile) {
         brandProfile = advertiserProfile;
       }
+      if (!brandProfile.company_name?.trim()) {
+        const { data: advertiserUser } = await adminDb
+          .from("users")
+          .select("full_name, username")
+          .eq("id", contestData.advertiser_id)
+          .maybeSingle();
+        const fallbackName =
+          advertiserUser?.full_name?.trim() ||
+          advertiserUser?.username?.trim() ||
+          null;
+        if (fallbackName) {
+          brandProfile = { ...brandProfile, company_name: fallbackName };
+        }
+      }
     }
 
     return (

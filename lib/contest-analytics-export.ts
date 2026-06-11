@@ -31,13 +31,13 @@ export type ContestAnalyticsTabId =
   | "not_rejected";
 
 export const CONTEST_ANALYTICS_TAB_IDS: ContestAnalyticsTabId[] = [
-  "all",
+  "verified_or_paid",
   "not_rejected",
+  "all",
   "verified",
   "paid",
   "pending",
   "rejected",
-  "verified_or_paid",
 ];
 
 const TAB_LABELS: Record<ContestAnalyticsTabId, string> = {

@@ -132,7 +132,6 @@ import { getCpmRateFromContest } from "@/lib/report-export-context";
 import type { BrandProfile, ReportSubmissionFilter } from "@/lib/report-export-branding";
 import {
   buildAllContestAnalyticsTabSnapshots,
-  buildContestAnalyticsTabSnapshot,
   buildTopSubmissionChartItems,
   buildTopCreatorChartItems,
   filteredSubmissionsViewsLabel,
@@ -7932,11 +7931,6 @@ export default function ContestDetailClient({
     [sortedSubmissions],
   );
 
-  const fullReportAnalyticsSnapshot = useMemo(
-    () => buildContestAnalyticsTabSnapshot("all", analyticsSnapshotContext),
-    [analyticsSnapshotContext],
-  );
-
   const reportExportDialogProps = useMemo(
     () => ({
       brandProfile,
@@ -14229,7 +14223,6 @@ export default function ContestDetailClient({
               creatorColumnOptions={creatorExportColumnOptions}
               submissionDefaultColumnIds={submissionExportDefaultColumnIds}
               creatorDefaultColumnIds={creatorExportDefaultColumnIds}
-              analyticsSnapshot={fullReportAnalyticsSnapshot}
               analyticsSnapshotContext={analyticsSnapshotContext}
               isTwitterTextImage={isTwitterTextImageContest}
               {...reportExportDialogProps}

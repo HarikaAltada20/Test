@@ -77,4 +77,20 @@ describe("buildReportExportBundle", () => {
       "Verified + Paid Submissions Data",
     );
   });
+
+  it("aligns cover metrics with a single analytics tab filter", () => {
+    const verifiedBundle = buildReportExportBundle({
+      contest,
+      reportType: "analytics",
+      submissions,
+      getStatus,
+      getSubmissionExpectedCents: () => 100,
+      submissionFilter: "verified",
+      exportedAt: new Date("2026-06-01T12:00:00Z"),
+    });
+
+    assert.equal(verifiedBundle.filteredSubmissions.length, 1);
+    assert.equal(verifiedBundle.metrics.totalViews, 1000);
+    assert.equal(verifiedBundle.branding.dataScopeLabel, "Verified Submissions Data");
+  });
 });

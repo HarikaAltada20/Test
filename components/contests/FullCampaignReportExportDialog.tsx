@@ -51,7 +51,7 @@ import type {
   ReportSubmissionFilter,
 } from "@/lib/report-export-branding";
 import { DEFAULT_REPORT_SUBMISSION_FILTER, formatSubmissionDataScopeLabel } from "@/lib/report-export-branding";
-import type { ContestAnalyticsTabSnapshot, ContestAnalyticsSnapshotContext } from "@/lib/contest-analytics-snapshot";
+import type { ContestAnalyticsSnapshotContext } from "@/lib/contest-analytics-snapshot";
 import { buildContestAnalyticsTabSnapshot } from "@/lib/contest-analytics-snapshot";
 import type { ContestAnalyticsExportSubmission } from "@/lib/contest-analytics-export";
 import { toast } from "sonner";
@@ -79,6 +79,8 @@ const SUBMISSION_FILTER_OPTIONS: ReportSubmissionFilter[] = [
   "all",
   "verified",
   "paid",
+  "pending",
+  "rejected",
 ];
 
 const SUBMISSION_FILTER_LABELS: Record<ReportSubmissionFilter, string> = {
@@ -104,7 +106,6 @@ export type FullCampaignReportExportDialogProps = {
   creatorColumnOptions: Parameters<typeof getCreatorExportColumns>[0];
   submissionDefaultColumnIds: string[];
   creatorDefaultColumnIds: string[];
-  analyticsSnapshot: ContestAnalyticsTabSnapshot;
   analyticsSnapshotContext: ContestAnalyticsSnapshotContext;
   brandProfile?: BrandProfile | null;
   reportContest: ReportExportContestContext;
@@ -129,7 +130,6 @@ export function FullCampaignReportExportDialog({
   creatorColumnOptions,
   submissionDefaultColumnIds,
   creatorDefaultColumnIds,
-  analyticsSnapshot,
   analyticsSnapshotContext,
   brandProfile,
   reportContest,

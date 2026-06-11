@@ -380,9 +380,12 @@ export function SubmissionLeaderboardExportDialog(
         let creatorGroupsForExport = props.creatorGroups;
         const exportFilter =
           props.submissionFilter ?? DEFAULT_REPORT_SUBMISSION_FILTER;
-        if (props.getReportStatus && props.reportAllSubmissions?.length) {
+        if (props.getReportStatus) {
+          const submissionSource = (props.reportAllSubmissions ??
+            props.reportSubmissions ??
+            props.submissions) as ContestAnalyticsExportSubmission[];
           const scopedSubmissions = filterSubmissionsForReportExport(
-            props.reportAllSubmissions,
+            submissionSource,
             exportFilter,
             props.getReportStatus,
           );
@@ -423,9 +426,12 @@ export function SubmissionLeaderboardExportDialog(
         const exportFilter =
           props.submissionFilter ?? DEFAULT_REPORT_SUBMISSION_FILTER;
         let submissionsForExport = props.submissions;
-        if (props.getReportStatus && props.reportAllSubmissions?.length) {
+        if (props.getReportStatus) {
+          const submissionSource = (props.reportAllSubmissions ??
+            props.reportSubmissions ??
+            props.submissions) as ContestAnalyticsExportSubmission[];
           submissionsForExport = filterSubmissionsForReportExport(
-            props.reportAllSubmissions,
+            submissionSource,
             exportFilter,
             props.getReportStatus,
           ) as unknown as Record<string, unknown>[];
@@ -456,16 +462,21 @@ export function SubmissionLeaderboardExportDialog(
           ? "creators-leaderboard"
           : "submissions-leaderboard";
 
+      const exportPlatform =
+        exportKind === "creator"
+          ? props.creatorExportContext.platform
+          : props.rewardContext.platform;
+
       const exportOptions: Parameters<typeof downloadLeaderboardReport>[4] = {
         contestTitle: `${contestTitle} (${viewLabel})`,
         exportedAt: new Date().toLocaleString(),
         dataSheetName:
           exportKind === "creator" ? "Creator-wise" : "Submissions",
         cellLinks,
-        platform:
-          props.creatorExportContext.platform ??
-          props.rewardContext.platform,
-        rewardContext: props.rewardContext,
+        platform: exportPlatform,
+        ...(exportKind === "submission"
+          ? { rewardContext: props.rewardContext }
+          : {}),
       };
 
       const exportFilter =
