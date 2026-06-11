@@ -10,6 +10,7 @@ import {
 } from "@/lib/payment-utils";
 import { MetricsService } from "@/lib/metrics-service";
 import { SUBMISSION_STATUS } from "@/lib/constants-status";
+import { getSubmissionViewsForCrediting } from "@/lib/submission-credited-views";
 import { verifyAdminAccess } from "@/utils/admin-auth";
 import {
   buildMilestoneSubmissionPayoutCentsMap,
@@ -418,7 +419,7 @@ export async function POST(request: Request) {
       action === SUBMISSION_STATUS.verified ||
       action === SUBMISSION_STATUS.paid
     ) {
-      const currentViews = submissionFull.views || 0;
+      const currentViews = getSubmissionViewsForCrediting(submissionFull);
 
       // Upsert snapshot to current (creator_profiles.total_views is maintained by DB trigger)
       const { error: snapErr } = await supabaseAdmin
@@ -449,6 +450,22 @@ export async function POST(request: Request) {
         }
       } catch (e) {
         console.warn("Skipping submission views_locked update due to error.");
+      }
+    }
+
+    const shouldUncreditViews =
+      action === SUBMISSION_STATUS.rejected ||
+      (action === SUBMISSION_STATUS.pending &&
+        (submissionFull.status === SUBMISSION_STATUS.verified ||
+          submissionFull.status === SUBMISSION_STATUS.paid));
+
+    if (shouldUncreditViews) {
+      const { error: uncreditErr } = await supabaseAdmin
+        .from("submission_views_credited")
+        .delete()
+        .eq("submission_id", submissionId);
+      if (uncreditErr) {
+        console.error("Failed to uncredit views for submission:", uncreditErr);
       }
     }
 

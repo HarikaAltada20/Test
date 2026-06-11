@@ -17,6 +17,7 @@ AS $$
     INNER JOIN public.submission_views_credited svc
       ON svc.submission_id = s.id
     WHERE s.creator_id = p_creator_id
+      AND s.status <> 'rejected'
   )
   UPDATE public.creator_profiles cp
   SET total_views = credited.total
@@ -106,6 +107,7 @@ FROM (
   FROM public.submissions s
   INNER JOIN public.submission_views_credited svc
     ON svc.submission_id = s.id
+  WHERE s.status <> 'rejected'
   GROUP BY s.creator_id
 ) src
 WHERE cp.id = src.creator_id
@@ -121,6 +123,7 @@ WHERE COALESCE(cp.total_views, 0) <> 0
     INNER JOIN public.submission_views_credited svc
       ON svc.submission_id = s.id
     WHERE s.creator_id = cp.id
+      AND s.status <> 'rejected'
       AND COALESCE(svc.credited_views, 0) > 0
   );
 

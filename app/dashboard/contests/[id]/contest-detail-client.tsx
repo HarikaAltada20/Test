@@ -1155,6 +1155,7 @@ export default function ContestDetailClient({
 
   // Status update states
   const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
+  const [isSyncingCreatorViews, setIsSyncingCreatorViews] = useState(false);
   const [statusUpdateDialog, setStatusUpdateDialog] = useState(false);
   const [selectedStatus, setSelectedStatus] = useState<string>("");
   const [statusUpdateReason, setStatusUpdateReason] = useState("");
@@ -6529,6 +6530,38 @@ export default function ContestDetailClient({
     }
   };
 
+  const handleSyncCreatorViews = async () => {
+    setIsSyncingCreatorViews(true);
+    try {
+      const response = await fetch(
+        `/api/contests/${contestId}/sync-creator-views`,
+        { method: "POST" },
+      );
+      const result = await response.json();
+      if (!response.ok) {
+        throw new Error(result.error || "Failed to sync creator views");
+      }
+      const updated = result?.views_sync?.upserted_or_updated ?? 0;
+      toast({
+        title: "Creator views synced",
+        description:
+          updated > 0
+            ? `Updated ${updated} credited view snapshot${updated === 1 ? "" : "s"} for this campaign.`
+            : "All creator profile views were already up to date for this campaign.",
+        variant: "success",
+      });
+    } catch (error: any) {
+      console.error("Error syncing creator views:", error);
+      toast({
+        title: "Sync failed",
+        description: error.message || "Failed to sync creator profile views",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSyncingCreatorViews(false);
+    }
+  };
+
   const canUpdateContestStatus = () => {
     return (
       currentContest.moderation_status === "published" &&
@@ -8941,6 +8974,27 @@ export default function ContestDetailClient({
           </div>
           {/* Quick Actions Bar */}
           <div className="flex flex-wrap gap-2 items-center lg:justify-end shrink-0 w-full lg:w-auto pl-0 sm:pl-12 lg:pl-0 lg:max-w-[min(100%,28rem)]">
+            {isAdminView && (
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={isSyncingCreatorViews}
+                onClick={handleSyncCreatorViews}
+                className={cn(
+                  "rounded-xl",
+                  isDark
+                    ? "border-emerald-400/60 text-emerald-300 hover:bg-white/5"
+                    : "border-emerald-500/50 text-emerald-700 hover:bg-emerald-50",
+                )}
+              >
+                {isSyncingCreatorViews ? (
+                  <Loader2 className="h-4 w-4 shrink-0 animate-spin" />
+                ) : (
+                  <RefreshCw className="h-4 w-4 shrink-0" />
+                )}
+                Sync Creator Views
+              </Button>
+            )}
             {/* Contest Status Update Button */}
             {canUpdateContestStatus() && (
               <Dialog
@@ -8976,6 +9030,21 @@ export default function ContestDetailClient({
                       <strong>
                         {currentContest.post_contest_status || "Not set"}
                       </strong>
+                      {(selectedStatus === "verification_complete" ||
+                        selectedStatus === "payouts_processed") && (
+                        <>
+                          {" "}
+                          <span className="block mt-2 text-amber-600 dark:text-amber-400">
+                            Setting{" "}
+                            {selectedStatus === "verification_complete"
+                              ? "Verification Complete"
+                              : "Payouts Processed"}{" "}
+                            will sync all pending, verified, and paid submission
+                            views to creator profiles before saving. If sync
+                            fails, the status will not change.
+                          </span>
+                        </>
+                      )}
                     </DialogDescription>
                   </DialogHeader>
                   <div className="grid gap-4 py-4">

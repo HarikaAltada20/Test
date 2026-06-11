@@ -32,12 +32,18 @@ export type AdminContest = {
   advertiser_name: string; // Added for admin view
   verified_submission_count: number;
   pending_submission_count: number;
+  rejected_submission_count: number;
+  not_rejected_views: number;
   last_metrics_updated: string | null;
 };
 
 export const revalidate = 0;
 
-type SubmissionStatusCounts = { verified: number; pending: number };
+type SubmissionStatusCounts = {
+  verified: number;
+  pending: number;
+  rejected: number;
+};
 
 function applySubmissionStatusCount(
   counts: Map<string, SubmissionStatusCounts>,
@@ -47,14 +53,16 @@ function applySubmissionStatusCount(
   if (!contestId) return;
 
   const status = (rawStatus || "pending").toLowerCase();
-  if (status === "rejected") return;
+  const entry = counts.get(contestId) || { verified: 0, pending: 0, rejected: 0 };
 
-  const entry = counts.get(contestId) || { verified: 0, pending: 0 };
-  if (status === "pending") {
+  if (status === "rejected") {
+    entry.rejected += 1;
+  } else if (status === "pending") {
     entry.pending += 1;
   } else if (status === "verified" || status === "paid") {
     entry.verified += 1;
   }
+
   counts.set(contestId, entry);
 }
 
@@ -125,6 +133,85 @@ async function getSubmissionStatusCountsByContest(): Promise<
   return counts;
 }
 
+/** Sum submission/tweet views excluding rejected rows, grouped by contest. */
+async function getNotRejectedViewsByContest(): Promise<Map<string, number>> {
+  const viewsByContest = new Map<string, number>();
+  const supabaseAdmin = createAdminClient();
+  const CHUNK_SIZE = 1000;
+
+  const addViews = (
+    contestId: string | null | undefined,
+    rawViews: number | null | undefined,
+  ) => {
+    if (!contestId) return;
+    const views = Number(rawViews) || 0;
+    if (views <= 0) return;
+    viewsByContest.set(contestId, (viewsByContest.get(contestId) || 0) + views);
+  };
+
+  const pageSubmissions = async () => {
+    let rangeFrom = 0;
+
+    for (;;) {
+      const { data, error } = await supabaseAdmin
+        .from("submissions")
+        .select("contest_id, views, status")
+        .in("status", ["pending", "verified", "paid"])
+        .order("id", { ascending: true })
+        .range(rangeFrom, rangeFrom + CHUNK_SIZE - 1);
+
+      if (error) {
+        console.error(
+          "Failed to load submission views for admin contest cards:",
+          error.message,
+        );
+        break;
+      }
+
+      for (const row of data || []) {
+        addViews(row.contest_id, row.views);
+      }
+
+      if (!data || data.length < CHUNK_SIZE) break;
+      rangeFrom += CHUNK_SIZE;
+    }
+  };
+
+  const pageTwitterTweets = async () => {
+    let rangeFrom = 0;
+
+    for (;;) {
+      const { data, error } = await supabaseAdmin
+        .from("twitter_campaign_tweets")
+        .select("contest_id, impressions, moderation_status")
+        .is("deleted_at", null)
+        .order("id", { ascending: true })
+        .range(rangeFrom, rangeFrom + CHUNK_SIZE - 1);
+
+      if (error) {
+        console.error(
+          "Failed to load Twitter tweet views for admin contest cards:",
+          error.message,
+        );
+        break;
+      }
+
+      for (const row of data || []) {
+        const status = (row.moderation_status || "pending").toLowerCase();
+        if (status === "rejected") continue;
+        addViews(row.contest_id, row.impressions);
+      }
+
+      if (!data || data.length < CHUNK_SIZE) break;
+      rangeFrom += CHUNK_SIZE;
+    }
+  };
+
+  await Promise.all([pageSubmissions(), pageTwitterTweets()]);
+
+  return viewsByContest;
+}
+
 export default async function AdminContestsPage() {
   // Verify admin access
   const { isAdmin, error } = await verifyAdminAccess();
@@ -138,10 +225,11 @@ export default async function AdminContestsPage() {
 
   try {
     // Admin users see all contests from all brands with calculated budgets
-    const [contestsWithCalculatedBudgets, submissionStatusCounts] =
+    const [contestsWithCalculatedBudgets, submissionStatusCounts, notRejectedViews] =
       await Promise.all([
         getAllContestsWithCalculatedBudgets(supabase),
         getSubmissionStatusCountsByContest(),
+        getNotRejectedViewsByContest(),
       ]);
 
     const typedContests = (contestsWithCalculatedBudgets || []).map(
@@ -154,6 +242,8 @@ export default async function AdminContestsPage() {
             "Unknown Brand",
           verified_submission_count: statusCounts?.verified ?? 0,
           pending_submission_count: statusCounts?.pending ?? 0,
+          rejected_submission_count: statusCounts?.rejected ?? 0,
+          not_rejected_views: notRejectedViews.get(contest.id) ?? 0,
           last_metrics_updated: contest.last_metrics_updated ?? null,
         };
       }
