@@ -37,7 +37,10 @@ import { UserResponse } from "@supabase/supabase-js";
 import { formatLocalDateTime } from "@/lib/utils";
 import { trackViewDetailsClick } from "@/lib/gtag";
 import { isModifiedLinkClick } from "@/lib/navigation-link-utils";
-import { compareContestBudgetRemaining } from "@/lib/contest-budget-remaining-sort";
+import {
+  compareContestBudgetRemaining,
+  compareContestBudgetUsed,
+} from "@/lib/contest-budget-remaining-sort";
 import { formatCurrencyFromCents as formatMoney } from "@/lib/currency-utils";
 import { createClient } from "@/utils/supabase/client";
 import {
@@ -162,6 +165,8 @@ type SortOptionType =
   | "value_asc"
   | "budget_remaining_desc"
   | "budget_remaining_asc"
+  | "budget_used_desc"
+  | "budget_used_asc"
   | "cpm_rate_desc"
   | "cpm_rate_asc"
   | "submissions_desc"
@@ -1514,6 +1519,9 @@ export default function OpportunitiesPage({
         case "budget_remaining_desc":
         case "budget_remaining_asc":
           return compareContestBudgetRemaining(a, b, sortOption);
+        case "budget_used_desc":
+        case "budget_used_asc":
+          return compareContestBudgetUsed(a, b, sortOption);
         case "cpm_rate_desc":
         case "cpm_rate_asc":
           const rateA =
@@ -2781,6 +2789,12 @@ export default function OpportunitiesPage({
             </SelectItem>
             <SelectItem value="budget_remaining_asc" isDark={isDark}>
               Budget Left: Least
+            </SelectItem>
+            <SelectItem value="budget_used_desc" isDark={isDark}>
+              Budget Used: Most
+            </SelectItem>
+            <SelectItem value="budget_used_asc" isDark={isDark}>
+              Budget Used: Least
             </SelectItem>
             <SelectItem value="cpm_rate_desc" isDark={isDark}>
               CPM Rate: High to Low

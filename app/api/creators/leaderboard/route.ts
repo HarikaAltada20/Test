@@ -1004,8 +1004,8 @@ export async function GET(request: NextRequest) {
       }
 
       const sortKey = sortBy as keyof typeof a.metrics;
-      const aVal = a.metrics[sortKey];
-      const bVal = b.metrics[sortKey];
+      const aVal = Number(a.metrics[sortKey]) || 0;
+      const bVal = Number(b.metrics[sortKey]) || 0;
       return bVal - aVal;
     });
 

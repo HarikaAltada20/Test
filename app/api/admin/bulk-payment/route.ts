@@ -17,6 +17,7 @@ import { buildMilestoneSubmissionPayoutCentsMap } from "@/lib/milestone-contest-
 import { countRefundsForCreatorContest } from "@/lib/contest-payout-idempotency";
 import { buildFlatFeeBonusExpectedCentsBySubmissionId } from "@/lib/twitter-cpm-bonus-expected";
 import { fetchContestSubmissionsAllPages } from "@/lib/fetch-contest-submissions";
+import { MetricsService } from "@/lib/metrics-service";
 
 export async function POST(request: NextRequest) {
   const supabaseAdmin = await createClient();
@@ -865,6 +866,29 @@ export async function POST(request: NextRequest) {
         },
         { status: 500 },
       );
+    }
+
+    const paidSubmissionIds = appliedUpdates.map((u) => String(u.id));
+    if (paidSubmissionIds.length > 0) {
+      const { data: paidRows, error: paidRowsErr } = await supabaseAdmin
+        .from("submissions")
+        .select("id, views, platform, other_stats")
+        .in("id", paidSubmissionIds);
+      if (paidRowsErr) {
+        console.error(
+          "[bulk-payment] Failed to load submissions for view credit:",
+          paidRowsErr,
+        );
+      } else {
+        try {
+          await MetricsService.creditSubmissionViews(paidRows || []);
+        } catch (creditErr) {
+          console.error(
+            "[bulk-payment] Failed to credit submission views after payout:",
+            creditErr,
+          );
+        }
+      }
     }
 
     return NextResponse.json({
