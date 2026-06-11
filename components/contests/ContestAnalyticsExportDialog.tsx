@@ -1,10 +1,10 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { Download, FileSpreadsheet, FileText, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import {
   Dialog,
   DialogContent,
@@ -30,6 +30,13 @@ import {
 import type { ContestAnalyticsTabSnapshot } from "@/lib/contest-analytics-snapshot";
 import type { LeaderboardExportFormat } from "@/lib/submission-leaderboard-export";
 import { toast } from "sonner";
+import type { BrandProfile, ReportSubmissionFilter } from "@/lib/report-export-branding";
+import {
+  buildReportExportBundle,
+  type ReportExportContestContext,
+} from "@/lib/report-export-context";
+import type { ContestAnalyticsExportSubmission } from "@/lib/contest-analytics-export";
+import { maybeWarnLargePdfExport } from "@/lib/report-export-guards";
 
 const FORMAT_LABELS: Record<LeaderboardExportFormat, string> = {
   xlsx: "Excel (.xlsx)",
@@ -46,6 +53,18 @@ export type ContestAnalyticsExportDialogProps = {
     tabs: ContestAnalyticsTabId[],
   ) => ContestAnalyticsTabSnapshot[];
   isDark?: boolean;
+  brandProfile?: BrandProfile | null;
+  reportContest?: ReportExportContestContext;
+  reportAllSubmissions?: ContestAnalyticsExportSubmission[];
+  reportSubmissions?: ContestAnalyticsExportSubmission[];
+  getReportStatus?: (
+    submission: ContestAnalyticsExportSubmission,
+  ) => string;
+  getReportExpectedCents?: (
+    submission: ContestAnalyticsExportSubmission,
+  ) => number;
+  /** Dashboard tab selected when opening the dialog; pre-selected for export. */
+  activeTab?: ContestAnalyticsTabId;
 };
 
 export function ContestAnalyticsExportDialog({
@@ -55,56 +74,79 @@ export function ContestAnalyticsExportDialog({
   tabCounts,
   getSnapshotsForTabs,
   isDark = false,
+  brandProfile,
+  reportContest,
+  reportAllSubmissions,
+  reportSubmissions,
+  getReportStatus,
+  getReportExpectedCents,
+  activeTab = "all",
 }: ContestAnalyticsExportDialogProps) {
-  const [selectedTabs, setSelectedTabs] = useState<
-    Record<ContestAnalyticsTabId, boolean>
-  >({} as Record<ContestAnalyticsTabId, boolean>);
+  const [selectedTab, setSelectedTab] = useState<ContestAnalyticsTabId | null>(
+    null,
+  );
   const [format, setFormat] = useState<LeaderboardExportFormat>("xlsx");
   const [exporting, setExporting] = useState(false);
 
   useEffect(() => {
     if (!open) return;
-    const next = {} as Record<ContestAnalyticsTabId, boolean>;
-    for (const tab of CONTEST_ANALYTICS_TAB_IDS) {
-      next[tab] = true;
-    }
-    setSelectedTabs(next);
+    setSelectedTab(activeTab);
     setFormat("xlsx");
-  }, [open]);
-
-  const selectedTabIds = useMemo(
-    () => CONTEST_ANALYTICS_TAB_IDS.filter((tab) => selectedTabs[tab]),
-    [selectedTabs],
-  );
-
-  const toggleTab = (tab: ContestAnalyticsTabId, checked: boolean) => {
-    setSelectedTabs((prev) => ({ ...prev, [tab]: checked }));
-  };
-
-  const selectAllTabs = () => {
-    const next = {} as Record<ContestAnalyticsTabId, boolean>;
-    for (const tab of CONTEST_ANALYTICS_TAB_IDS) next[tab] = true;
-    setSelectedTabs(next);
-  };
-
-  const clearTabs = () => {
-    const next = {} as Record<ContestAnalyticsTabId, boolean>;
-    for (const tab of CONTEST_ANALYTICS_TAB_IDS) next[tab] = false;
-    setSelectedTabs(next);
-  };
+  }, [open, activeTab]);
 
   const handleExport = async () => {
-    if (selectedTabIds.length === 0) {
-      toast.error("Select at least one tab to export");
+    if (!selectedTab) {
+      toast.error("Select a tab to export");
       return;
     }
 
+    maybeWarnLargePdfExport(
+      (reportAllSubmissions ?? reportSubmissions)?.length ?? 0,
+      format,
+    );
+
     setExporting(true);
     try {
-      const snapshots = getSnapshotsForTabs(selectedTabIds);
-      await downloadContestAnalyticsReport(format, contestTitle, snapshots);
-      const tabNames = selectedTabIds.map(contestAnalyticsTabLabel).join(", ");
-      toast.success(`Analytics report downloaded (${tabNames})`);
+      const tabLabel = contestAnalyticsTabLabel(selectedTab);
+      const snapshots = getSnapshotsForTabs([selectedTab]);
+
+      let exportOptions: Parameters<typeof downloadContestAnalyticsReport>[3];
+
+      const useBrandedCover =
+        reportContest &&
+        (reportAllSubmissions ?? reportSubmissions) &&
+        getReportStatus &&
+        getReportExpectedCents;
+
+      if (useBrandedCover) {
+        const coverFilter = selectedTab as ReportSubmissionFilter;
+        const bundle = buildReportExportBundle({
+          brandProfile,
+          contest: reportContest,
+          reportType: "analytics",
+          submissions: reportAllSubmissions ?? reportSubmissions ?? [],
+          getStatus: getReportStatus,
+          getSubmissionExpectedCents: getReportExpectedCents,
+          analyticsTabs: [tabLabel],
+          submissionFilter: coverFilter,
+          filtersApplied: tabLabel,
+          exportedAt: new Date(),
+        });
+        exportOptions = {
+          branding: bundle.branding,
+          metrics: bundle.metrics,
+          approvedCount: bundle.approvedCount,
+          submissionFilter: coverFilter,
+        };
+      }
+
+      await downloadContestAnalyticsReport(
+        format,
+        contestTitle,
+        snapshots,
+        exportOptions,
+      );
+      toast.success(`Analytics report downloaded (${tabLabel})`);
       onOpenChange(false);
     } catch (err) {
       console.error("[ContestAnalyticsExport]", err);
@@ -139,10 +181,11 @@ export function ContestAnalyticsExportDialog({
               isDark ? "text-slate-300" : "text-slate-600",
             )}
           >
-            Exports the dashboard metrics shown on screen for each selected tab
-            (overview, Twitter campaign metrics, points statistics when
-            applicable, views statistics, ROI analysis, performance summary, and
-            top 10 views distribution). 
+            Exports the dashboard metrics for one tab (overview, Twitter
+            campaign metrics, points statistics when applicable, views
+            statistics, ROI analysis, performance summary, and top 10 views
+            distribution) with a branded cover summary. Export again to download
+            a different tab.
           </DialogDescription>
         </DialogHeader>
 
@@ -155,43 +198,21 @@ export function ContestAnalyticsExportDialog({
                 : "border-slate-200 bg-slate-50",
             )}
           >
-            <div className="flex items-center justify-between gap-2 mb-3">
-              <Label
-                className={cn(
-                  "text-sm font-medium",
-                  isDark ? "text-slate-100" : "text-slate-800",
-                )}
-              >
-                Analytics tabs
-              </Label>
-              <div className="flex gap-2">
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className={cn(
-                    "h-7 text-xs",
-                    isDark ? "text-slate-300 hover:bg-white/10" : "",
-                  )}
-                  onClick={selectAllTabs}
-                >
-                  Select all
-                </Button>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className={cn(
-                    "h-7 text-xs",
-                    isDark ? "text-slate-300 hover:bg-white/10" : "",
-                  )}
-                  onClick={clearTabs}
-                >
-                  Clear
-                </Button>
-              </div>
-            </div>
-            <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
+            <Label
+              className={cn(
+                "text-sm font-medium mb-3 block",
+                isDark ? "text-slate-100" : "text-slate-800",
+              )}
+            >
+              Analytics tab
+            </Label>
+            <RadioGroup
+              value={selectedTab ?? undefined}
+              onValueChange={(value) =>
+                setSelectedTab(value as ContestAnalyticsTabId)
+              }
+              className="space-y-1 max-h-48 overflow-y-auto pr-1"
+            >
               {CONTEST_ANALYTICS_TAB_IDS.map((tab) => {
                 const count = tabCounts[tab] ?? 0;
                 const id = `analytics-export-tab-${tab}`;
@@ -203,15 +224,11 @@ export function ContestAnalyticsExportDialog({
                       isDark ? "hover:bg-white/5" : "hover:bg-slate-100",
                     )}
                   >
-                    <Checkbox
+                    <RadioGroupItem
                       id={id}
-                      checked={selectedTabs[tab] === true}
-                      onCheckedChange={(checked) =>
-                        toggleTab(tab, checked === true)
-                      }
+                      value={tab}
                       className={cn(
-                        isDark &&
-                          "border-gray-500 data-[state=checked]:bg-[#4A00BE]",
+                        isDark && "border-gray-500 text-[#4A00BE]",
                       )}
                     />
                     <Label
@@ -234,7 +251,7 @@ export function ContestAnalyticsExportDialog({
                   </div>
                 );
               })}
-            </div>
+            </RadioGroup>
           </div>
 
           <div
@@ -311,7 +328,7 @@ export function ContestAnalyticsExportDialog({
           <Button
             type="button"
             onClick={handleExport}
-            disabled={exporting || selectedTabIds.length === 0}
+            disabled={exporting || !selectedTab}
             className="gap-2 bg-[#4A00BE] hover:bg-[#4A00BE]/90 text-white"
           >
             {exporting ? (

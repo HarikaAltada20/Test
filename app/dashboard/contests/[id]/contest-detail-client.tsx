@@ -127,15 +127,22 @@ import { YouTubeAnalyticsPanel } from "@/components/youtube/YouTubeAnalyticsPane
 import { SubmissionLeaderboardExportDialog } from "@/components/submissions/SubmissionLeaderboardExportDialog";
 import { LazyInlineSubmissionVideoPlayer } from "@/components/LazyInlineSubmissionVideoPlayer";
 import { ContestAnalyticsExportDialog } from "@/components/contests/ContestAnalyticsExportDialog";
+import { FullCampaignReportExportDialog } from "@/components/contests/FullCampaignReportExportDialog";
+import { getCpmRateFromContest } from "@/lib/report-export-context";
+import type { BrandProfile, ReportSubmissionFilter } from "@/lib/report-export-branding";
+import {
+  buildAllContestAnalyticsTabSnapshots,
+  buildTopSubmissionChartItems,
+  buildTopCreatorChartItems,
+  filteredSubmissionsViewsLabel,
+  type ContestAnalyticsSnapshotContext,
+} from "@/lib/contest-analytics-snapshot";
+import { getPlatformCampaignMetricCards } from "@/lib/contest-analytics-campaign-metrics";
 import {
   getAnalyticsTabCounts,
   type ContestAnalyticsExportSubmission,
   type ContestAnalyticsTabId,
 } from "@/lib/contest-analytics-export";
-import {
-  buildAllContestAnalyticsTabSnapshots,
-  type ContestAnalyticsSnapshotContext,
-} from "@/lib/contest-analytics-snapshot";
 import type {
   RewardExportContext,
   SubmissionDualCents,
@@ -173,6 +180,8 @@ import {
   PlayCircle,
   ThumbsUp,
   ThumbsDown,
+  Heart,
+  Target,
   MessageCircle,
   Share2,
   Eye,
@@ -574,6 +583,7 @@ interface ContestDetailClientProps {
   milestoneBonusPaidByCreator?: MilestoneMostVerifiedBonusPaidByCreator;
   /** Set when SSR failed to load submissions (avoid silent empty/partial list). */
   submissionsFetchError?: string;
+  brandProfile?: BrandProfile | null;
 }
 
 const sanitizeTwitterList = (value: unknown): string[] => {
@@ -968,6 +978,7 @@ export default function ContestDetailClient({
   creatorModerationData = {},
   milestoneBonusPaidByCreator = {},
   submissionsFetchError,
+  brandProfile = null,
 }: ContestDetailClientProps) {
   const supabase = createClient();
   const { toast, toasts } = useToast();
@@ -1758,6 +1769,9 @@ export default function ContestDetailClient({
     | "verified_or_paid"
     | "not_rejected"
   >("all");
+  const [viewsDistributionMode, setViewsDistributionMode] = useState<
+    "submission" | "creator"
+  >("submission");
   // Eligibility filter for Twitter tweets
   const [activeEligibilityTab, setActiveEligibilityTab] = useState<
     "all" | "eligible" | "not_eligible"
@@ -1859,6 +1873,7 @@ export default function ContestDetailClient({
   ]);
   const [ytColumnsModalOpen, setYtColumnsModalOpen] = useState(false);
   const [exportDialogOpen, setExportDialogOpen] = useState(false);
+  const [fullReportDialogOpen, setFullReportDialogOpen] = useState(false);
   const [analyticsExportDialogOpen, setAnalyticsExportDialogOpen] =
     useState(false);
   // Submission-wise: modal to view rejection reason (from submission.metadata only; no rejection_reason on submissions for Instagram/YouTube)
@@ -2340,6 +2355,31 @@ export default function ContestDetailClient({
       }
       return status === activeAnalyticsTab;
     },
+  );
+
+  const analyticsTopSubmissionBars = useMemo(
+    () =>
+      buildTopSubmissionChartItems(
+        filteredAnalyticsSubmissions as ContestAnalyticsExportSubmission[],
+      ),
+    [filteredAnalyticsSubmissions],
+  );
+
+  const analyticsTopCreatorBars = useMemo(
+    () =>
+      buildTopCreatorChartItems(
+        filteredAnalyticsSubmissions as ContestAnalyticsExportSubmission[],
+      ),
+    [filteredAnalyticsSubmissions],
+  );
+
+  const analyticsCampaignMetricCards = useMemo(
+    () =>
+      getPlatformCampaignMetricCards(
+        filteredAnalyticsSubmissions as ContestAnalyticsExportSubmission[],
+        currentContest?.platform,
+      ),
+    [filteredAnalyticsSubmissions, currentContest?.platform],
   );
 
   const analyticsTabCounts = useMemo(
@@ -4326,6 +4366,7 @@ export default function ContestDetailClient({
 
   const creatorExportContext = useMemo<CreatorExportContext>(
     () => ({
+      platform: currentContest.platform ?? null,
       contestType: currentContest.contest_type,
       payoutAdjustmentPct: payoutAdjustmentPercentageForUi,
       showAdjustedReward: showAdjustedRewardColumn,
@@ -7853,6 +7894,64 @@ export default function ContestDetailClient({
     [analyticsSnapshotContext],
   );
 
+  const reportExportContest = useMemo(
+    () => ({
+      contestId: currentContest?.id,
+      contestTitle: currentContest?.title || "Campaign",
+      contestType: currentContest?.contest_type,
+      contestLifecycleStatus: currentContest?.status,
+      postContestStatus: currentContest?.post_contest_status,
+      cpmRateUsd: getCpmRateFromContest(currentContest?.contest_based_details),
+      durationDays,
+      contestStart: currentContest?.start_date,
+      contestEnd: currentContest?.end_date,
+      platform: currentContest?.platform,
+    }),
+    [
+      currentContest?.id,
+      currentContest?.title,
+      currentContest?.contest_type,
+      currentContest?.status,
+      currentContest?.post_contest_status,
+      currentContest?.contest_based_details,
+      currentContest?.start_date,
+      currentContest?.end_date,
+      currentContest?.platform,
+      durationDays,
+    ],
+  );
+
+  const reportAllSubmissions = useMemo(
+    () => currentSubmissions as unknown as ContestAnalyticsExportSubmission[],
+    [currentSubmissions],
+  );
+
+  const reportExportSubmissions = useMemo(
+    () => sortedSubmissions as unknown as ContestAnalyticsExportSubmission[],
+    [sortedSubmissions],
+  );
+
+  const reportExportDialogProps = useMemo(
+    () => ({
+      brandProfile,
+      reportContest: reportExportContest,
+      reportAllSubmissions,
+      reportSubmissions: reportExportSubmissions,
+      getReportStatus: (submission: ContestAnalyticsExportSubmission) =>
+        getStatus(submission as unknown as Submission),
+      getReportExpectedCents: (submission: ContestAnalyticsExportSubmission) =>
+        getSubmissionAnalyticsExpectedCents(submission as unknown as Submission),
+    }),
+    [
+      brandProfile,
+      reportExportContest,
+      reportAllSubmissions,
+      reportExportSubmissions,
+      getStatus,
+      getSubmissionAnalyticsExpectedCents,
+    ],
+  );
+
   function getDualPaidComponent(
     submission: Submission | any,
     hint?: DualPayoutScopeHint | null,
@@ -10100,7 +10199,7 @@ export default function ContestDetailClient({
                       currentContest.contest_based_details,
                     ),
                     contest_based_details: currentContest.contest_based_details,
-                    contest_type: currentContest.contest_type,
+                    contest_type: currentContest.contest_type ?? "",
                     max_earnings_per_creator:
                       currentContest.max_earnings_per_creator,
                   }}
@@ -10184,7 +10283,7 @@ export default function ContestDetailClient({
                       currentContest.contest_based_details.leaderboard_contest
                         .total_budget,
                     contest_based_details: currentContest.contest_based_details,
-                    contest_type: currentContest.contest_type,
+                    contest_type: currentContest.contest_type ?? "",
                     max_earnings_per_creator:
                       currentContest.max_earnings_per_creator,
                   }}
@@ -10251,7 +10350,7 @@ export default function ContestDetailClient({
                       currentContest.contest_based_details.milestone_contest
                         .total_budget_cents,
                     contest_based_details: currentContest.contest_based_details,
-                    contest_type: currentContest.contest_type,
+                    contest_type: currentContest.contest_type ?? "",
                     max_earnings_per_creator:
                       currentContest.max_earnings_per_creator,
                   }}
@@ -10324,16 +10423,30 @@ export default function ContestDetailClient({
           <TabPanel value="overview" activeTab={activeTab}>
             <div
               className={cn(
-                "px-4 pt-5 pb-4 border-b rounded-t-xl font-semibold shadow-xl",
+                "px-4 pt-5 pb-4 border-b rounded-t-xl font-semibold shadow-xl flex items-center justify-between gap-3",
                 isDark
                   ? "bg-[#170337] border-gray-600 text-white"
                   : "bg-white text-purple-500 ",
               )}
             >
               <h1 className="text-xl flex items-center gap-2">
-                {/* <FileText className="h-5 w-5 text-blue-500" /> */}
                 Campaign Details
               </h1>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={currentSubmissions.length === 0}
+                className={cn(
+                  "gap-2 shrink-0",
+                  isDark
+                    ? "border-slate-600 text-slate-300 hover:bg-slate-800"
+                    : "border-slate-300 text-slate-700 hover:bg-slate-50",
+                )}
+                onClick={() => setFullReportDialogOpen(true)}
+              >
+                <Download className="h-4 w-4" />
+                Download full report
+              </Button>
             </div>
             <div
               className={cn(
@@ -14092,6 +14205,28 @@ export default function ContestDetailClient({
                   )}
               </CardContent>
             </div>
+            <FullCampaignReportExportDialog
+              open={fullReportDialogOpen}
+              onOpenChange={setFullReportDialogOpen}
+              isDark={isDark}
+              contestTitle={currentContest?.title || "Campaign"}
+              creatorGroups={
+                (sortedCreatorGroups ?? []) as unknown as Record<
+                  string,
+                  unknown
+                >[]
+              }
+              getMetrics={getSubmissionExportMetrics}
+              rewardContext={submissionExportRewardContext}
+              creatorExportContext={creatorExportContext}
+              submissionColumnOptions={submissionExportColumnOptions}
+              creatorColumnOptions={creatorExportColumnOptions}
+              submissionDefaultColumnIds={submissionExportDefaultColumnIds}
+              creatorDefaultColumnIds={creatorExportDefaultColumnIds}
+              analyticsSnapshotContext={analyticsSnapshotContext}
+              isTwitterTextImage={isTwitterTextImageContest}
+              {...reportExportDialogProps}
+            />
           </TabPanel>
 
           <TabPanel value="submissions" activeTab={activeTab}>
@@ -16350,6 +16485,11 @@ export default function ContestDetailClient({
                               : "Normal View"
                           }
                           sortLabel={exportSortLabel}
+                          isTwitterTextImage={isTwitterTextImageContest}
+                          submissionFilter={
+                            activeStatusTab as ReportSubmissionFilter
+                          }
+                          {...reportExportDialogProps}
                         />
                       ) : (
                         <SubmissionLeaderboardExportDialog
@@ -16362,7 +16502,7 @@ export default function ContestDetailClient({
                           contestTitle={currentContest.title}
                           contestId={contestId}
                           creatorGroups={
-                            (filteredCreatorGroups ?? []) as unknown as Record<
+                            (sortedCreatorGroups ?? []) as unknown as Record<
                               string,
                               unknown
                             >[]
@@ -16374,6 +16514,12 @@ export default function ContestDetailClient({
                           }
                           viewLabel="Creator-wise"
                           sortLabel={exportSortLabel}
+                          isTwitterTextImage={isTwitterTextImageContest}
+                          getMetrics={getSubmissionExportMetrics}
+                          submissionFilter={
+                            activeStatusTab as ReportSubmissionFilter
+                          }
+                          {...reportExportDialogProps}
                         />
                       )}
                       {isTwitterTextImageContest && isSubmissionTableView && (
@@ -23314,6 +23460,8 @@ export default function ContestDetailClient({
                     tabCounts={analyticsTabCounts}
                     getSnapshotsForTabs={getAnalyticsSnapshotsForTabs}
                     isDark={isDark}
+                    activeTab={activeAnalyticsTab}
+                    {...reportExportDialogProps}
                   />
                 </div>
                 {/* Analytics Filter Tabs */}
@@ -24814,6 +24962,80 @@ export default function ContestDetailClient({
                   </div> */}
                 </div>
 
+                {currentContest?.platform?.toLowerCase() !== "twitter" &&
+                  currentContest?.platform?.toLowerCase() !== "x" &&
+                  analyticsCampaignMetricCards.length > 0 && (
+                    <div className="mb-6">
+                      <h3
+                        className={cn(
+                          "font-medium mb-4",
+                          isDark ? "text-white" : "text-gray-900",
+                        )}
+                      >
+                        Campaign Metrics
+                      </h3>
+                      <div className="flex flex-nowrap gap-2 sm:gap-3 overflow-x-auto pb-1">
+                        {analyticsCampaignMetricCards.map((metric) => {
+                          const Icon =
+                            metric.label === "Submissions"
+                              ? Users
+                              : metric.label === "Views"
+                                ? Eye
+                                : metric.label === "Likes"
+                                  ? Heart
+                                  : metric.label === "Comments"
+                                    ? MessageCircle
+                                    : metric.label === "Shares"
+                                      ? Share2
+                                      : metric.label === "Reach"
+                                        ? TrendingUp
+                                        : metric.label === "Saved"
+                                          ? Target
+                                          : BarChart3;
+
+                          return (
+                            <div
+                              key={metric.label}
+                              className={cn(
+                                "rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-2 sm:p-3 flex flex-col items-center text-center flex-1 min-w-[4.75rem] sm:min-w-[5.5rem]",
+                                isDark
+                                  ? "bg-[#170337] text-white border border-[#D1B7F9]"
+                                  : "bg-white text-black",
+                              )}
+                            >
+                              <div
+                                className={cn(
+                                  "w-6 h-6 sm:w-8 sm:h-8 flex items-center justify-center rounded-full mb-1 sm:mb-2",
+                                  isDark
+                                    ? "bg-[#FFFFFF36] text-white"
+                                    : "bg-[#D8C3FF] text-[#4A00BE]",
+                                )}
+                              >
+                                <Icon className="h-3 w-3 sm:h-4 sm:w-4" />
+                              </div>
+                              <span
+                                className={cn(
+                                  "text-[10px] sm:text-[12px] font-medium mb-1",
+                                  isDark ? "text-gray-300" : "text-gray-700",
+                                )}
+                              >
+                                {metric.label}
+                              </span>
+                              <span
+                                className={cn(
+                                  "text-sm sm:text-base font-bold tabular-nums",
+                                  isDark ? "text-white" : "text-gray-900",
+                                )}
+                              >
+                                {metric.value.toLocaleString()}
+                              </span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
                 {/* <Separator className="my-6" /> */}
 
                 <div className="space-y-6">
@@ -25766,7 +25988,9 @@ export default function ContestDetailClient({
                                                   : "text-gray-600",
                                               )}
                                             >
-                                              Selected Tab Views
+                                              {filteredSubmissionsViewsLabel(
+                                                activeAnalyticsTab,
+                                              )}
                                             </p>
                                             <p
                                               className={cn(
@@ -25978,113 +26202,207 @@ export default function ContestDetailClient({
                     </details>
                   </div>
 
-                  {/* Views Distribution Chart */}
-                  <div>
-                    <h3
-                      className={cn(
-                        "font-medium mb-4",
-                        isDark ? "text-white" : "text-gray-900",
-                      )}
-                    >
-                      Views Distribution
-                    </h3>
-                    <div
-                      className={cn(
-                        "rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-6",
-                        isDark
-                          ? "bg-[#180438] border border-white/20 backdrop-blur-2xl"
-                          : "bg-white",
-                      )}
-                    >
-                      {filteredAnalyticsSubmissions?.length > 0 ? (
-                        <div className="space-y-4">
-                          {/* Simple bar chart representation */}
-                          {filteredAnalyticsSubmissions
-                            .sort((a, b) => (b.views || 0) - (a.views || 0))
-                            .slice(0, 10) // Show top 10 submissions
-                            .map((submission, index) => {
-                              const maxViews = Math.max(
-                                ...filteredAnalyticsSubmissions.map(
-                                  (s) => s.views || 0,
-                                ),
-                              );
-                              const views = submission.views || 0;
-                              const percentage =
-                                maxViews > 0 ? (views / maxViews) * 100 : 0;
+                  {/* Views Distribution */}
+                  {(() => {
+                    const isSubmissionMode =
+                      viewsDistributionMode === "submission";
+                    const activeItems = isSubmissionMode
+                      ? analyticsTopSubmissionBars
+                      : analyticsTopCreatorBars;
+                    const combinedViews = activeItems.reduce(
+                      (sum, item) => sum + item.views,
+                      0,
+                    );
+                    const emptyLabel = isSubmissionMode
+                      ? "No submissions to display"
+                      : "No creators to display";
 
-                              return (
-                                <div
-                                  key={submission.id}
-                                  className="flex items-center space-x-4"
-                                >
-                                  <div
-                                    className={cn(
-                                      "w-8 text-sm font-medium",
-                                      isDark
-                                        ? "text-white/70"
-                                        : "text-gray-600",
-                                    )}
-                                  >
-                                    #{index + 1}
-                                  </div>
-                                  <div className="flex-1">
-                                    <div className="flex justify-between text-sm mb-1">
-                                      <span
-                                        className={cn(
-                                          isDark
-                                            ? "text-white/80"
-                                            : "text-gray-600",
-                                        )}
-                                      >
-                                        {submission.creator_username ||
-                                          submission.creator_display_name ||
-                                          "Unknown Creator"}
-                                      </span>
-                                      <span
-                                        className={cn(
-                                          "font-medium",
-                                          isDark
-                                            ? "text-white"
-                                            : "text-gray-900",
-                                        )}
-                                      >
-                                        {views.toLocaleString()} views
-                                      </span>
-                                    </div>
-                                    <div
-                                      className={cn(
-                                        "w-full rounded-full h-2",
-                                        isDark ? "bg-white/20" : "bg-gray-200",
-                                      )}
-                                    >
-                                      <div
-                                        className={cn(
-                                          "h-2 rounded-full transition-all duration-300",
-                                          isDark
-                                            ? "bg-gradient-to-r from-cyan-400 via-purple-400 to-pink-400 shadow-lg shadow-purple-400/50"
-                                            : "bg-gradient-to-r from-blue-500 to-purple-600",
-                                        )}
-                                        style={{ width: `${percentage}%` }}
-                                      />
-                                    </div>
-                                  </div>
-                                </div>
-                              );
-                            })}
-                        </div>
-                      ) : (
-                        <div className="h-40 flex items-center justify-center">
-                          <p
+                    return (
+                      <div>
+                        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-4">
+                          <div>
+                            <h3
+                              className={cn(
+                                "font-medium",
+                                isDark ? "text-white" : "text-gray-900",
+                              )}
+                            >
+                              {viewsDistributionMode === "creator"
+                                ? "Top 10 Creators by Views"
+                                : "Top 10 Submissions by Views"}
+                            </h3>
+                            {activeItems.length > 0 ? (
+                              <p
+                                className={cn(
+                                  "text-xs mt-1",
+                                  isDark ? "text-white/60" : "text-gray-500",
+                                )}
+                              >
+                                Top 10 combined:{" "}
+                                {combinedViews.toLocaleString()} views
+                              </p>
+                            ) : null}
+                          </div>
+                          <div
                             className={cn(
-                              isDark ? "text-white/60" : "text-gray-500",
+                              "inline-flex rounded-lg border p-1 self-start",
+                              isDark
+                                ? "border-white/20 bg-white/5"
+                                : "border-gray-200 bg-gray-50",
                             )}
                           >
-                            No submissions to display
-                          </p>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setViewsDistributionMode("submission")
+                              }
+                              className={cn(
+                                "px-3 py-1.5 text-xs sm:text-sm font-medium rounded-md transition-colors",
+                                viewsDistributionMode === "submission"
+                                  ? isDark
+                                    ? "bg-[#4A00BE] text-white"
+                                    : "bg-white text-[#4A00BE] shadow-sm"
+                                  : isDark
+                                    ? "text-white/70 hover:text-white"
+                                    : "text-gray-600 hover:text-gray-900",
+                              )}
+                            >
+                              Submission wise
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setViewsDistributionMode("creator")
+                              }
+                              className={cn(
+                                "px-3 py-1.5 text-xs sm:text-sm font-medium rounded-md transition-colors",
+                                viewsDistributionMode === "creator"
+                                  ? isDark
+                                    ? "bg-[#4A00BE] text-white"
+                                    : "bg-white text-[#4A00BE] shadow-sm"
+                                  : isDark
+                                    ? "text-white/70 hover:text-white"
+                                    : "text-gray-600 hover:text-gray-900",
+                              )}
+                            >
+                              Creator wise
+                            </button>
+                          </div>
                         </div>
-                      )}
-                    </div>
-                  </div>
+                        <div
+                          className={cn(
+                            "rounded-xl shadow-[0px_5px_20px_0px_#0000000D] p-6",
+                            isDark
+                              ? "bg-[#180438] border border-white/20 backdrop-blur-2xl"
+                              : "bg-white",
+                          )}
+                        >
+                          {activeItems.length > 0 ? (
+                            <div className="space-y-4">
+                              {activeItems.map((item) => {
+                                const percentage =
+                                  item.shareOfTop10Combined ?? 0;
+
+                                return (
+                                  <div
+                                    key={item.id}
+                                    className="flex items-center space-x-4"
+                                  >
+                                    <div
+                                      className={cn(
+                                        "w-8 text-sm font-medium",
+                                        isDark
+                                          ? "text-white/70"
+                                          : "text-gray-600",
+                                      )}
+                                    >
+                                      #{item.rank}
+                                    </div>
+                                    <div className="flex-1">
+                                      <div className="flex justify-between text-sm mb-1 gap-3">
+                                        <div className="min-w-0">
+                                          <span
+                                            className={cn(
+                                              "block truncate",
+                                              isDark
+                                                ? "text-white/80"
+                                                : "text-gray-600",
+                                            )}
+                                          >
+                                            {item.label}
+                                          </span>
+                                          {item.sublabel ? (
+                                            <span
+                                              className={cn(
+                                                "block truncate text-xs mt-0.5",
+                                                isDark
+                                                  ? "text-white/50"
+                                                  : "text-gray-500",
+                                              )}
+                                            >
+                                              {item.sublabel}
+                                            </span>
+                                          ) : null}
+                                        </div>
+                                        <span
+                                          className={cn(
+                                            "font-medium shrink-0 text-right",
+                                            isDark
+                                              ? "text-white"
+                                              : "text-gray-900",
+                                          )}
+                                        >
+                                          {item.views.toLocaleString()} views
+                                          <span
+                                            className={cn(
+                                              "block text-xs font-normal mt-0.5",
+                                              isDark
+                                                ? "text-white/60"
+                                                : "text-gray-500",
+                                            )}
+                                          >
+                                            {percentage.toFixed(1)}% of top 10
+                                          </span>
+                                        </span>
+                                      </div>
+                                      <div
+                                        className={cn(
+                                          "w-full rounded-full h-2",
+                                          isDark
+                                            ? "bg-white/20"
+                                            : "bg-gray-200",
+                                        )}
+                                      >
+                                        <div
+                                          className={cn(
+                                            "h-2 rounded-full transition-all duration-300",
+                                            isDark
+                                              ? "bg-gradient-to-r from-cyan-400 via-purple-400 to-pink-400 shadow-lg shadow-purple-400/50"
+                                              : "bg-gradient-to-r from-blue-500 to-purple-600",
+                                          )}
+                                          style={{ width: `${percentage}%` }}
+                                        />
+                                      </div>
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          ) : (
+                            <div className="h-40 flex items-center justify-center">
+                              <p
+                                className={cn(
+                                  isDark ? "text-white/60" : "text-gray-500",
+                                )}
+                              >
+                                {emptyLabel}
+                              </p>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })()}
                 </div>
               </CardContent>
             </div>

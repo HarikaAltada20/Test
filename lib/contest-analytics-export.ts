@@ -1,6 +1,25 @@
 import type { ContestAnalyticsTabSnapshot } from "@/lib/contest-analytics-snapshot";
-import type { LeaderboardExportFormat } from "@/lib/submission-leaderboard-export";
+import { buildTopTenCombinedSummaryRows } from "@/lib/contest-analytics-snapshot";
+import type {
+  LeaderboardExportFormat,
+  LeaderboardExportOptions,
+} from "@/lib/submission-leaderboard-export";
 import { formatLocalDateTime } from "@/lib/utils";
+import ExcelJS from "exceljs";
+import {
+  buildAnalyticsSheet,
+  buildSummarySheet,
+  downloadExcelBuffer,
+  writeExcelWorkbook,
+} from "@/lib/report-export-excel";
+import {
+  addPdfFooters,
+  createPortraitPdfDoc,
+  createPremiumPageTracker,
+  markPremiumPage,
+  renderPdfAnalyticsSections,
+  renderPdfSectionDividerPage,
+} from "@/lib/report-export-pdf";
 
 export type ContestAnalyticsTabId =
   | "all"
@@ -12,13 +31,13 @@ export type ContestAnalyticsTabId =
   | "not_rejected";
 
 export const CONTEST_ANALYTICS_TAB_IDS: ContestAnalyticsTabId[] = [
-  "all",
+  "verified_or_paid",
   "not_rejected",
+  "all",
   "verified",
   "paid",
   "pending",
   "rejected",
-  "verified_or_paid",
 ];
 
 const TAB_LABELS: Record<ContestAnalyticsTabId, string> = {
@@ -118,9 +137,22 @@ function snapshotToSheetRows(snapshot: ContestAnalyticsTabSnapshot): string[][] 
     rows.push(...section.rows);
     rows.push([]);
   }
-  rows.push(["Views Distribution"]);
-  rows.push(snapshot.viewsDistribution.headers);
-  rows.push(...snapshot.viewsDistribution.rows);
+  const topTenSummaryRows = buildTopTenCombinedSummaryRows(snapshot);
+  if (topTenSummaryRows.length > 0) {
+    for (const [label, value] of topTenSummaryRows) {
+      rows.push([label, value.toLocaleString()]);
+    }
+    rows.push([]);
+  }
+  for (const table of [
+    snapshot.viewsDistributionBySubmission,
+    snapshot.viewsDistributionByCreator,
+  ]) {
+    rows.push([table.title]);
+    rows.push(table.headers);
+    rows.push(...table.rows);
+    rows.push([]);
+  }
   return rows;
 }
 
@@ -128,6 +160,7 @@ export async function downloadContestAnalyticsReport(
   format: LeaderboardExportFormat,
   contestTitle: string,
   snapshots: ContestAnalyticsTabSnapshot[],
+  options?: LeaderboardExportOptions,
 ): Promise<void> {
   if (snapshots.length === 0) {
     throw new Error("Select at least one tab");
@@ -143,12 +176,23 @@ export async function downloadContestAnalyticsReport(
     .slice(0, 80);
 
   if (format === "csv") {
-    const lines: string[] = [
-      "Contest Analytics Report",
-      `Contest,${csvEscape(contestTitle)}`,
-      `Exported At,${csvEscape(formatLocalDateTime(new Date()))}`,
-      "",
-    ];
+    const lines: string[] = [];
+    if (options?.branding) {
+      lines.push(
+        options.branding.reportTitle,
+        `Prepared for,${csvEscape(options.branding.brandCompanyName)}`,
+        `Campaign,${csvEscape(contestTitle)}`,
+        `Exported At,${csvEscape(options.branding.exportedAt)}`,
+        "",
+      );
+    } else {
+      lines.push(
+        "Contest Analytics Report",
+        `Contest,${csvEscape(contestTitle)}`,
+        `Exported At,${csvEscape(formatLocalDateTime(new Date()))}`,
+        "",
+      );
+    }
 
     for (const snapshot of snapshots) {
       lines.push(`=== ${snapshot.tabLabel} ===`, "");
@@ -173,6 +217,33 @@ export async function downloadContestAnalyticsReport(
   }
 
   if (format === "xlsx") {
+    if (options?.branding && options?.metrics) {
+      const workbook = new ExcelJS.Workbook();
+      await buildSummarySheet(
+        workbook,
+        options.branding,
+        options.metrics,
+        options.approvedCount ?? 0,
+      );
+      const usedSheetNames = new Set<string>(["Summary"]);
+      for (const snapshot of snapshots) {
+        let name = sheetNameForTab(snapshot.tab);
+        let suffix = 1;
+        while (usedSheetNames.has(name)) {
+          suffix += 1;
+          name = `${sheetNameForTab(snapshot.tab).slice(0, 28)}_${suffix}`;
+        }
+        usedSheetNames.add(name);
+        buildAnalyticsSheet(workbook, snapshot, name, {
+          branding: options.branding,
+          metrics: options.metrics,
+        });
+      }
+      const buffer = await writeExcelWorkbook(workbook);
+      downloadExcelBuffer(buffer, `${safeBase}-${date}.xlsx`);
+      return;
+    }
+
     const XLSX = await import("xlsx");
     const wb = XLSX.utils.book_new();
     const usedSheetNames = new Set<string>();
@@ -203,6 +274,53 @@ export async function downloadContestAnalyticsReport(
       type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     });
     downloadBlob(blob, `${safeBase}-${date}.xlsx`);
+    return;
+  }
+
+  if (options?.branding && options?.metrics) {
+    const { doc, fonts } = await createPortraitPdfDoc();
+    const premiumPages = createPremiumPageTracker();
+
+    const tabLabels = snapshots.map((s) => s.tabLabel).join(" · ");
+    const sectionCount = snapshots.reduce((n, s) => n + s.sections.length, 0);
+    markPremiumPage(premiumPages, 1);
+    await renderPdfSectionDividerPage(doc, 1, "Analytics Overview", [
+      tabLabels || "Campaign analytics",
+      `${sectionCount} metric sections · Views distribution`,
+    ], fonts);
+
+    for (const snapshot of snapshots) {
+      doc.addPage("a4", "portrait");
+      const analyticsStartPage = doc.internal.getNumberOfPages();
+      await renderPdfAnalyticsSections(
+        doc,
+        snapshot,
+        36,
+        fonts,
+        "Analytics Overview",
+        { premium: true },
+      );
+      for (
+        let p = analyticsStartPage;
+        p <= doc.internal.getNumberOfPages();
+        p++
+      ) {
+        markPremiumPage(premiumPages, p);
+      }
+    }
+
+    addPdfFooters(doc, fonts, premiumPages, { leadingPageCount: 1 });
+
+    const bodyBytes = doc.output("arraybuffer") as ArrayBuffer;
+    const { downloadPdfWithReactPrefix } = await import(
+      "@/lib/report-export-pdf-cover-render"
+    );
+    await downloadPdfWithReactPrefix(
+      bodyBytes,
+      options.branding,
+      options.metrics,
+      `${safeBase}-${date}.pdf`,
+    );
     return;
   }
 
@@ -245,18 +363,39 @@ export async function downloadContestAnalyticsReport(
           .finalY + 14;
     }
 
-    doc.setFontSize(10);
-    doc.text("Views Distribution", marginX, startY);
-    startY += 8;
-    autoTable(doc, {
-      head: [snapshot.viewsDistribution.headers],
-      body: snapshot.viewsDistribution.rows,
-      startY,
-      theme: "striped",
-      styles: { fontSize: 8, cellPadding: 3 },
-      headStyles: { fillColor: [79, 70, 229] },
-      margin: { left: marginX, right: marginX },
-    });
+    const topTenSummaryRows = buildTopTenCombinedSummaryRows(snapshot);
+    for (const [label, value] of topTenSummaryRows) {
+      doc.setFontSize(9);
+      doc.setFont("helvetica", "bold");
+      doc.text(`${label}:`, marginX, startY);
+      doc.setFont("helvetica", "normal");
+      doc.text(value.toLocaleString(), marginX + 220, startY);
+      startY += 12;
+    }
+    if (topTenSummaryRows.length > 0) {
+      startY += 6;
+    }
+
+    for (const table of [
+      snapshot.viewsDistributionBySubmission,
+      snapshot.viewsDistributionByCreator,
+    ]) {
+      doc.setFontSize(10);
+      doc.text(table.title, marginX, startY);
+      startY += 8;
+      autoTable(doc, {
+        head: [table.headers],
+        body: table.rows,
+        startY,
+        theme: "striped",
+        styles: { fontSize: 8, cellPadding: 3 },
+        headStyles: { fillColor: [79, 70, 229] },
+        margin: { left: marginX, right: marginX },
+      });
+      startY =
+        (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable
+          .finalY + 14;
+    }
   });
 
   doc.save(`${safeBase}-${date}.pdf`);

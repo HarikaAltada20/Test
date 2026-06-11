@@ -15,6 +15,7 @@ import {
   type InstagramInsightsExportSelection,
 } from "@/lib/instagram-analytics-export";
 import type { InstagramProfileSnapshot } from "@/lib/platform-social-archive";
+import { buildCreatorProfileUrl } from "@/lib/report-export-links";
 
 const EMPTY_CELL = "\u2014";
 
@@ -91,6 +92,7 @@ export type CreatorDualCents = {
 };
 
 export type CreatorExportContext = {
+  platform?: string | null;
   contestType?: string | null;
   payoutAdjustmentPct: number;
   showAdjustedReward: boolean;
@@ -413,7 +415,7 @@ export function buildCreatorLeaderboardExportMatrix(
   groups: Record<string, unknown>[],
   columnIds: CreatorExportColumnId[],
   ctx: CreatorExportContext,
-): { headers: string[]; rows: string[][] } {
+): { headers: string[]; rows: string[][]; cellLinks: (string | null)[][] } {
   const headers = columnIds.map((id) => {
     const base = CREATOR_EXPORT_COLUMN_LABELS[id];
     if (id === "instagram_insights" && ctx.instagramInsightsSelection) {
@@ -426,5 +428,12 @@ export function buildCreatorLeaderboardExportMatrix(
       buildCreatorExportCellValue(col, group, index + 1, ctx),
     ),
   );
-  return { headers, rows };
+  const cellLinks = groups.map((group, index) =>
+    columnIds.map((col) => {
+      if (col !== "creator_username") return null;
+      const display = buildCreatorExportCellValue(col, group, index + 1, ctx);
+      return buildCreatorProfileUrl(display, ctx.platform);
+    }),
+  );
+  return { headers, rows, cellLinks };
 }

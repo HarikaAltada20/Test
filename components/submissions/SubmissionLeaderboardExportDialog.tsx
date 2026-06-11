@@ -49,23 +49,32 @@ import {
   type InstagramInsightsExportSelection,
 } from "@/lib/instagram-analytics-export";
 import type { InstagramProfileSnapshot } from "@/lib/platform-social-archive";
+import type { BrandProfile, ReportSubmissionFilter } from "@/lib/report-export-branding";
+import { DEFAULT_REPORT_SUBMISSION_FILTER } from "@/lib/report-export-branding";
+import {
+  buildReportExportBundle,
+  filterSubmissionsForReportExport,
+  type ReportExportContestContext,
+} from "@/lib/report-export-context";
+import { scopeCreatorGroupsForReportExport } from "@/lib/report-export-creator-scope";
+import type { ContestAnalyticsExportSubmission } from "@/lib/contest-analytics-export";
+import {
+  DEFAULT_REPORT_EXPORT_SORT,
+  getReportExportSortDividerLine,
+  getReportExportSortLabel,
+  getReportExportSortOptions,
+  sortCreatorGroupsForExport,
+  sortSubmissionsForExport,
+  type ReportExportSortOption,
+} from "@/lib/report-export-sort";
+import { omitCreatorNameForSpreadsheetFormats } from "@/lib/report-export-columns";
+import { maybeWarnLargePdfExport } from "@/lib/report-export-guards";
 
 const FORMAT_LABELS: Record<LeaderboardExportFormat, string> = {
   xlsx: "Excel (.xlsx)",
   csv: "CSV (.csv)",
   pdf: "PDF (.pdf)",
 };
-
-/** PDF/Excel use Username only; Creator (display name) stays available for CSV. */
-const CREATOR_NAME_COLUMN_ID = "creator_name";
-
-function omitCreatorNameForSpreadsheetFormats(
-  columns: { id: string; label: string }[],
-  format: LeaderboardExportFormat,
-) {
-  if (format === "csv") return columns;
-  return columns.filter((c) => c.id !== CREATOR_NAME_COLUMN_ID);
-}
 
 type SubmissionExportProps = {
   exportKind: "submission";
@@ -94,6 +103,19 @@ export type SubmissionLeaderboardExportDialogProps = {
   viewLabel?: string;
   sortLabel?: string;
   defaultSelectedColumnIds?: string[];
+  brandProfile?: BrandProfile | null;
+  reportContest?: ReportExportContestContext;
+  reportAllSubmissions?: ContestAnalyticsExportSubmission[];
+  reportSubmissions?: ContestAnalyticsExportSubmission[];
+  getReportStatus?: (
+    submission: ContestAnalyticsExportSubmission,
+  ) => string;
+  getReportExpectedCents?: (
+    submission: ContestAnalyticsExportSubmission,
+  ) => number;
+  submissionFilter?: ReportSubmissionFilter;
+  isTwitterTextImage?: boolean;
+  getMetrics?: (submission: Record<string, unknown>) => PlatformMetrics;
 } & (SubmissionExportProps | CreatorExportProps);
 
 async function fetchInstagramArchivesBatch(
@@ -170,6 +192,8 @@ export function SubmissionLeaderboardExportDialog(
 
   const [selected, setSelected] = useState<Record<string, boolean>>({});
   const [format, setFormat] = useState<LeaderboardExportFormat>("xlsx");
+  const [exportSortOption, setExportSortOption] =
+    useState<ReportExportSortOption>(DEFAULT_REPORT_EXPORT_SORT);
   const [exporting, setExporting] = useState(false);
   const [igInsightsPreset, setIgInsightsPreset] =
     useState<AccountInsightsPreset>("overall");
@@ -198,6 +222,21 @@ export function SubmissionLeaderboardExportDialog(
     }
     return selectableColumns.map((c) => c.id as string);
   }, [selectableColumns, defaultSelectedColumnIds]);
+
+  useEffect(() => {
+    if (!open) return;
+    setExportSortOption(DEFAULT_REPORT_EXPORT_SORT);
+  }, [open]);
+
+  const exportSortOptions = useMemo(
+    () => getReportExportSortOptions(props.isTwitterTextImage),
+    [props.isTwitterTextImage],
+  );
+
+  const exportSortLabel = useMemo(
+    () => getReportExportSortLabel(exportSortOption),
+    [exportSortOption],
+  );
 
   useEffect(() => {
     if (!open) return;
@@ -294,6 +333,8 @@ export function SubmissionLeaderboardExportDialog(
       return;
     }
 
+    maybeWarnLargePdfExport(rowCount, format);
+
     setExporting(true);
     try {
       let instagramArchiveByCreatorId: Record<string, unknown> | null = null;
@@ -333,10 +374,46 @@ export function SubmissionLeaderboardExportDialog(
 
       let headers: string[];
       let rows: string[][];
+      let cellLinks: (string | null)[][];
 
       if (exportKind === "creator") {
-        ({ headers, rows } = buildCreatorLeaderboardExportMatrix(
-          props.creatorGroups,
+        let creatorGroupsForExport = props.creatorGroups;
+        const exportFilter =
+          props.submissionFilter ?? DEFAULT_REPORT_SUBMISSION_FILTER;
+        if (props.getReportStatus) {
+          const submissionSource = (props.reportAllSubmissions ??
+            props.reportSubmissions ??
+            props.submissions) as ContestAnalyticsExportSubmission[];
+          const scopedSubmissions = filterSubmissionsForReportExport(
+            submissionSource,
+            exportFilter,
+            props.getReportStatus,
+          );
+          creatorGroupsForExport = scopeCreatorGroupsForReportExport(
+            props.creatorGroups,
+            scopedSubmissions as unknown as Record<string, unknown>[],
+            {
+              getStatus: (submission) =>
+                props.getReportStatus!(
+                  submission as ContestAnalyticsExportSubmission,
+                ),
+              getMetrics: props.getMetrics,
+              getExpectedCents: props.getReportExpectedCents
+                ? (submission) =>
+                    props.getReportExpectedCents!(
+                      submission as ContestAnalyticsExportSubmission,
+                    )
+                : undefined,
+            },
+          );
+        }
+
+        const sortedGroups = sortCreatorGroupsForExport(
+          creatorGroupsForExport,
+          exportSortOption,
+        );
+        ({ headers, rows, cellLinks } = buildCreatorLeaderboardExportMatrix(
+          sortedGroups,
           exportColumnIds as CreatorExportColumnId[],
           {
             ...props.creatorExportContext,
@@ -346,8 +423,29 @@ export function SubmissionLeaderboardExportDialog(
           },
         ));
       } else {
-        ({ headers, rows } = buildLeaderboardExportMatrix(
-          props.submissions,
+        const exportFilter =
+          props.submissionFilter ?? DEFAULT_REPORT_SUBMISSION_FILTER;
+        let submissionsForExport = props.submissions;
+        if (props.getReportStatus) {
+          const submissionSource = (props.reportAllSubmissions ??
+            props.reportSubmissions ??
+            props.submissions) as ContestAnalyticsExportSubmission[];
+          submissionsForExport = filterSubmissionsForReportExport(
+            submissionSource,
+            exportFilter,
+            props.getReportStatus,
+          ) as unknown as Record<string, unknown>[];
+        }
+        const sortedSubmissions = sortSubmissionsForExport(
+          submissionsForExport,
+          exportSortOption,
+          {
+            isTwitterTextImage: props.isTwitterTextImage,
+            getMetrics: props.getMetrics,
+          },
+        );
+        ({ headers, rows, cellLinks } = buildLeaderboardExportMatrix(
+          sortedSubmissions,
           exportColumnIds as SubmissionExportColumnId[],
           props.getMetrics,
           {
@@ -364,15 +462,61 @@ export function SubmissionLeaderboardExportDialog(
           ? "creators-leaderboard"
           : "submissions-leaderboard";
 
+      const exportPlatform =
+        exportKind === "creator"
+          ? props.creatorExportContext.platform
+          : props.rewardContext.platform;
+
+      const exportOptions: Parameters<typeof downloadLeaderboardReport>[4] = {
+        contestTitle: `${contestTitle} (${viewLabel})`,
+        exportedAt: new Date().toLocaleString(),
+        dataSheetName:
+          exportKind === "creator" ? "Creator-wise" : "Submissions",
+        cellLinks,
+        platform: exportPlatform,
+        ...(exportKind === "submission"
+          ? { rewardContext: props.rewardContext }
+          : {}),
+      };
+
+      const exportFilter =
+        props.submissionFilter ?? DEFAULT_REPORT_SUBMISSION_FILTER;
+
+      if (
+        props.reportContest &&
+        (props.reportAllSubmissions ?? props.reportSubmissions) &&
+        props.getReportStatus &&
+        props.getReportExpectedCents
+      ) {
+        const bundle = buildReportExportBundle({
+          brandProfile: props.brandProfile,
+          contest: props.reportContest,
+          reportType: exportKind === "creator" ? "creator-wise" : "submissions",
+          submissions:
+            props.reportAllSubmissions ?? props.reportSubmissions ?? [],
+          getStatus: props.getReportStatus,
+          getSubmissionExpectedCents: props.getReportExpectedCents,
+          viewLabel,
+          sortLabel: exportSortLabel,
+          submissionFilter: exportFilter,
+          exportedAt: new Date(),
+        });
+        exportOptions.branding = bundle.branding;
+        exportOptions.metrics = bundle.metrics;
+        exportOptions.approvedCount = bundle.approvedCount;
+        exportOptions.submissionFilter = exportFilter;
+        if (exportKind === "submission") {
+          exportOptions.submissionSortLabel =
+            getReportExportSortDividerLine(exportSortOption);
+        }
+      }
+
       await downloadLeaderboardReport(
         format,
         `${filePrefix}-${contestTitle}`,
         headers,
         rows,
-        {
-          contestTitle: `${contestTitle} (${viewLabel})`,
-          exportedAt: new Date().toLocaleString(),
-        },
+        exportOptions,
       );
       toast.success(
         `${format.toUpperCase()} download started (${rowCount} rows)`,
@@ -415,14 +559,57 @@ export function SubmissionLeaderboardExportDialog(
             )}
           >
             Export the {exportKind === "creator" ? "creator-wise" : "submissions"}{" "}
-            leaderboard with your chosen columns. Uses current filters and sort (
-            {viewLabel}
-            {sortLabel ? ` · ${sortLabel}` : ""}). All matching rows are included,
-            not only the current page.
+            leaderboard with your chosen columns. Uses current filters ({viewLabel}
+            ). All matching rows are included, not only the current page.
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4 py-2">
+          <div
+            className={cn(
+              "rounded-lg border p-3",
+              isDark
+                ? "border-gray-600 bg-[#170337]/60"
+                : "border-slate-200 bg-slate-50",
+            )}
+          >
+            <Label
+              className={cn(
+                "text-sm font-medium mb-2 block",
+                isDark ? "text-slate-100" : "text-slate-800",
+              )}
+            >
+              Sort order
+            </Label>
+            <Select
+              value={exportSortOption}
+              onValueChange={(value) =>
+                setExportSortOption(value as ReportExportSortOption)
+              }
+            >
+              <SelectTrigger
+                isDark={isDark}
+                className={cn(
+                  "h-10 text-sm font-medium",
+                  isDark
+                    ? "border-gray-500 bg-[#07031D] text-white"
+                    : "border-slate-300 bg-white text-slate-900",
+                )}
+              >
+                <SelectValue placeholder="Choose sort order">
+                  {exportSortLabel}
+                </SelectValue>
+              </SelectTrigger>
+              <SelectContent isDark={isDark}>
+                {exportSortOptions.map((option) => (
+                  <SelectItem key={option} value={option} isDark={isDark}>
+                    {getReportExportSortLabel(option)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
           <div
             className={cn(
               "rounded-lg border p-3",

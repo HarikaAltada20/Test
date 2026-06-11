@@ -8,6 +8,7 @@ import {
   isCpmContestType,
   isMilestoneContestType,
 } from "@/lib/contest-type";
+import { platformCampaignMetricsToRows } from "@/lib/contest-analytics-campaign-metrics";
 import {
   buildTwitterRaidExportRows,
   campaignMetricsToRows,
@@ -22,14 +23,50 @@ export type ContestAnalyticsSnapshotSection = {
   rows: [string, string][];
 };
 
+export type ViewsDistributionTable = {
+  title: string;
+  headers: string[];
+  rows: string[][];
+  combinedViews?: number;
+  combinedPosts?: number;
+};
+
+export type ViewsDistributionChartItem = {
+  id: string;
+  rank: number;
+  label: string;
+  sublabel?: string;
+  views: number;
+  posts?: number;
+  shareOfTop10Combined?: number;
+};
+
+/** Each row's % of the combined views across the displayed top 10. */
+export function attachTopTenCombinedShare(
+  items: ViewsDistributionChartItem[],
+): ViewsDistributionChartItem[] {
+  const combinedViews = items.reduce((sum, item) => sum + item.views, 0);
+  return items.map((item) => ({
+    ...item,
+    shareOfTop10Combined:
+      combinedViews > 0 ? (item.views / combinedViews) * 100 : 0,
+  }));
+}
+
+function formatTopTenSharePct(sharePct: number | undefined): string {
+  return `${(sharePct ?? 0).toFixed(1)}%`;
+}
+
+function topTenCombinedViews(items: ViewsDistributionChartItem[]): number {
+  return items.reduce((sum, item) => sum + item.views, 0);
+}
+
 export type ContestAnalyticsTabSnapshot = {
   tab: ContestAnalyticsTabId;
   tabLabel: string;
   sections: ContestAnalyticsSnapshotSection[];
-  viewsDistribution: {
-    headers: string[];
-    rows: string[][];
-  };
+  viewsDistributionBySubmission: ViewsDistributionTable;
+  viewsDistributionByCreator: ViewsDistributionTable;
 };
 
 export type ContestAnalyticsSnapshotContext = {
@@ -69,15 +106,10 @@ function filteredViewsLabel(tab: ContestAnalyticsTabId): string {
   return "Filtered Views";
 }
 
-function viewsGeneratedSubtitle(tab: ContestAnalyticsTabId): string {
-  if (tab === "all") return "All Submissions";
-  if (tab === "verified") return "Verified Only";
-  if (tab === "paid") return "Paid Only";
-  if (tab === "pending") return "Pending Only";
-  if (tab === "rejected") return "Rejected Only";
-  if (tab === "not_rejected") return "Not Rejected";
-  if (tab === "verified_or_paid") return "Verified/Paid";
-  return "Filtered";
+/** Label for paid-tab view totals in ROI (e.g. Verified/Paid submissions views). */
+export function filteredSubmissionsViewsLabel(tab: ContestAnalyticsTabId): string {
+  if (tab === "all") return "All submissions views";
+  return `${contestAnalyticsTabLabel(tab)} submissions views`;
 }
 
 function isPaidSubmission(
@@ -161,6 +193,161 @@ function computeTotalInvestment(
   };
 }
 
+function creatorLabel(submission: ContestAnalyticsExportSubmission): string {
+  return (
+    submission.creator_username ||
+    submission.creator_display_name ||
+    "Unknown Creator"
+  );
+}
+
+function creatorKey(submission: ContestAnalyticsExportSubmission): string {
+  return (
+    submission.creator_id ??
+    submission.creator_username ??
+    `submission:${submission.id}`
+  );
+}
+
+/** Top submissions by individual post views (within the active filter). */
+export function buildTopSubmissionChartItems(
+  subs: ContestAnalyticsExportSubmission[],
+): ViewsDistributionChartItem[] {
+  return attachTopTenCombinedShare(
+    [...subs]
+      .sort((a, b) => (b.views || 0) - (a.views || 0))
+      .slice(0, 10)
+      .map((sub, index) => ({
+        id: sub.id,
+        rank: index + 1,
+        label: creatorLabel(sub),
+        sublabel: sub.video_title
+          ? String(sub.video_title).slice(0, 56)
+          : undefined,
+        views: sub.views || 0,
+      })),
+  );
+}
+
+export function buildTopCreatorChartItems(
+  subs: ContestAnalyticsExportSubmission[],
+): ViewsDistributionChartItem[] {
+  const byCreator = new Map<
+    string,
+    { id: string; name: string; views: number; posts: number }
+  >();
+
+  for (const sub of subs) {
+    const key = creatorKey(sub);
+    const existing = byCreator.get(key);
+    if (existing) {
+      existing.views += sub.views || 0;
+      existing.posts += 1;
+    } else {
+      byCreator.set(key, {
+        id: key,
+        name: creatorLabel(sub),
+        views: sub.views || 0,
+        posts: 1,
+      });
+    }
+  }
+
+  return attachTopTenCombinedShare(
+    [...byCreator.values()]
+      .sort((a, b) => b.views - a.views)
+      .slice(0, 10)
+      .map((creator, index) => ({
+        id: creator.id,
+        rank: index + 1,
+        label: creator.name,
+        sublabel: `${creator.posts} post${creator.posts === 1 ? "" : "s"}`,
+        views: creator.views,
+        posts: creator.posts,
+      })),
+  );
+}
+
+/** Top submissions by individual post views (within the active filter). */
+export function buildTopSubmissionsViewsDistribution(
+  subs: ContestAnalyticsExportSubmission[],
+): ViewsDistributionTable {
+  const items = buildTopSubmissionChartItems(subs);
+  const combinedViews = topTenCombinedViews(items);
+
+  return {
+    title: "Top 10 Submissions by Views",
+    headers: ["Rank", "Creator", "Views", "% of Top 10 Combined"],
+    rows: items.map((item) => [
+      String(item.rank),
+      item.label,
+      item.views.toLocaleString(),
+      formatTopTenSharePct(item.shareOfTop10Combined),
+    ]),
+    combinedViews,
+    combinedPosts: items.length,
+  };
+}
+
+/** Top creators by combined views across all their posts (within the active filter). */
+export function buildTopCreatorsViewsDistribution(
+  subs: ContestAnalyticsExportSubmission[],
+): ViewsDistributionTable {
+  const items = buildTopCreatorChartItems(subs);
+  const combinedViews = topTenCombinedViews(items);
+  const combinedPosts = items.reduce((sum, item) => sum + (item.posts ?? 0), 0);
+
+  return {
+    title: "Top 10 Creators by Views",
+    headers: ["Rank", "Creator", "Total Views", "Posts", "% of Top 10 Combined"],
+    rows: items.map((item) => [
+      String(item.rank),
+      item.label,
+      item.views.toLocaleString(),
+      String(item.posts ?? 0),
+      formatTopTenSharePct(item.shareOfTop10Combined),
+    ]),
+    combinedViews,
+    combinedPosts,
+  };
+}
+
+export function buildViewsDistributionTables(
+  subs: ContestAnalyticsExportSubmission[],
+): {
+  bySubmission: ViewsDistributionTable;
+  byCreator: ViewsDistributionTable;
+} {
+  return {
+    bySubmission: buildTopSubmissionsViewsDistribution(subs),
+    byCreator: buildTopCreatorsViewsDistribution(subs),
+  };
+}
+
+export type TopTenCombinedSummaryRow = [label: string, value: number];
+
+/** Metadata rows for top-10 views/posts totals (submission vs creator breakdown). */
+export function buildTopTenCombinedSummaryRows(snapshot: {
+  viewsDistributionBySubmission: ViewsDistributionTable;
+  viewsDistributionByCreator: ViewsDistributionTable;
+}): TopTenCombinedSummaryRow[] {
+  const sub = snapshot.viewsDistributionBySubmission;
+  const creator = snapshot.viewsDistributionByCreator;
+  const rows: TopTenCombinedSummaryRow[] = [];
+
+  if (sub.combinedViews != null) {
+    rows.push(["Top 10 Submissions Combined Views", sub.combinedViews]);
+  }
+  if (creator.combinedViews != null) {
+    rows.push(["Top 10 Creators Combined Views", creator.combinedViews]);
+  }
+  if (creator.combinedPosts != null) {
+    rows.push(["Top 10 Creators Combined Posts", creator.combinedPosts]);
+  }
+
+  return rows;
+}
+
 export function buildContestAnalyticsTabSnapshot(
   tab: ContestAnalyticsTabId,
   ctx: ContestAnalyticsSnapshotContext,
@@ -223,6 +410,14 @@ export function buildContestAnalyticsTabSnapshot(
         });
       }
     }
+  } else {
+    const platformRows = platformCampaignMetricsToRows(subs, ctx.platform);
+    if (platformRows.length > 0) {
+      sections.push({
+        title: "Campaign Metrics",
+        rows: platformRows,
+      });
+    }
   }
 
   sections.push(viewsStatistics);
@@ -249,7 +444,6 @@ export function buildContestAnalyticsTabSnapshot(
     const roiRows: [string, string][] = [
       [investment.label, `${investment.value} (${investment.note})`],
       ["Views Generated", totalViews.toLocaleString()],
-      ["Views Generated (filter)", viewsGeneratedSubtitle(tab)],
     ];
 
     roiRows.push(["Expected Reward", ctx.formatMoney(expectedRewardCents)]);
@@ -259,12 +453,6 @@ export function buildContestAnalyticsTabSnapshot(
         ? "$0.00"
         : `$${((expectedRewardCents / 100 / totalViews) * 1000).toFixed(3)}`;
     roiRows.push(["Expected CPM", cpmValue]);
-    roiRows.push([
-      "Expected CPM (formula)",
-      tab === "paid"
-        ? "Paid amount ÷ paid views × 1000"
-        : "Expected reward ÷ views × 1000",
-    ]);
 
     if (isCpm && ctx.postContestStatus !== "payouts_processed") {
       const totalPaid = subs
@@ -295,7 +483,7 @@ export function buildContestAnalyticsTabSnapshot(
           : 0;
       roiRows.push(
         ["Total Amount Paid", ctx.formatMoney(paidStats.actualPaidCents)],
-        ["Selected Tab Views", paidStats.tabViews.toLocaleString()],
+        [filteredSubmissionsViewsLabel(tab), paidStats.tabViews.toLocaleString()],
         ["Effective CPM (Paid)", `$${paidCpm.toFixed(3)}`],
       );
     }
@@ -304,55 +492,16 @@ export function buildContestAnalyticsTabSnapshot(
       title: "ROI & Benefit Analysis",
       rows: roiRows,
     });
-
-    let totalCost = 0;
-    if (contestType === "leaderboard") {
-      totalCost = ctx.leaderboardTotalPrizeCents;
-    } else if (isCpmContestType(contestType) || isMilestoneContestType(contestType)) {
-      totalCost = subs
-        .filter((s) => isPaidSubmission(s, ctx.getStatus))
-        .reduce((sum, s) => sum + Number(s.earnings || 0), 0);
-    }
-    const efficiency =
-      totalCost === 0
-        ? "N/A"
-        : `${(totalViews / (totalCost / 100 / 100)).toFixed(0)} views per $100`;
-
-    sections.push({
-      title: "Performance Summary",
-      rows: [
-        ["Investment Efficiency", efficiency],
-        ["Contest Type", contestTypeDisplay(contestType)],
-      ],
-    });
   }
 
-  const sorted = [...subs].sort((a, b) => (b.views || 0) - (a.views || 0));
-  const top = sorted.slice(0, 10);
-  const maxForPct = maxViews;
+  const distributions = buildViewsDistributionTables(subs);
 
   return {
     tab,
     tabLabel: contestAnalyticsTabLabel(tab),
     sections,
-    viewsDistribution: {
-      headers: ["Rank", "Creator", "Views", "% of Highest"],
-      rows: top.map((sub, index) => {
-        const views = sub.views || 0;
-        const pct =
-          maxForPct > 0 ? ((views / maxForPct) * 100).toFixed(1) : "0";
-        const creator =
-          sub.creator_username ||
-          sub.creator_display_name ||
-          "Unknown Creator";
-        return [
-          String(index + 1),
-          creator,
-          views.toLocaleString(),
-          `${pct}%`,
-        ];
-      }),
-    },
+    viewsDistributionBySubmission: distributions.bySubmission,
+    viewsDistributionByCreator: distributions.byCreator,
   };
 }
 
