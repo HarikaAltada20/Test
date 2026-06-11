@@ -1,4 +1,5 @@
 import type { ContestAnalyticsTabSnapshot } from "@/lib/contest-analytics-snapshot";
+import { buildTopTenCombinedSummaryRows } from "@/lib/contest-analytics-snapshot";
 import type {
   LeaderboardExportFormat,
   LeaderboardExportOptions,
@@ -136,17 +137,18 @@ function snapshotToSheetRows(snapshot: ContestAnalyticsTabSnapshot): string[][] 
     rows.push(...section.rows);
     rows.push([]);
   }
+  const topTenSummaryRows = buildTopTenCombinedSummaryRows(snapshot);
+  if (topTenSummaryRows.length > 0) {
+    for (const [label, value] of topTenSummaryRows) {
+      rows.push([label, value.toLocaleString()]);
+    }
+    rows.push([]);
+  }
   for (const table of [
     snapshot.viewsDistributionBySubmission,
     snapshot.viewsDistributionByCreator,
   ]) {
     rows.push([table.title]);
-    if (table.combinedViews != null) {
-      rows.push([
-        "Top 10 Combined Views",
-        table.combinedViews.toLocaleString(),
-      ]);
-    }
     rows.push(table.headers);
     rows.push(...table.rows);
     rows.push([]);
@@ -232,7 +234,10 @@ export async function downloadContestAnalyticsReport(
           name = `${sheetNameForTab(snapshot.tab).slice(0, 28)}_${suffix}`;
         }
         usedSheetNames.add(name);
-        buildAnalyticsSheet(workbook, snapshot, name);
+        buildAnalyticsSheet(workbook, snapshot, name, {
+          branding: options.branding,
+          metrics: options.metrics,
+        });
       }
       const buffer = await writeExcelWorkbook(workbook);
       downloadExcelBuffer(buffer, `${safeBase}-${date}.xlsx`);
@@ -358,6 +363,19 @@ export async function downloadContestAnalyticsReport(
           .finalY + 14;
     }
 
+    const topTenSummaryRows = buildTopTenCombinedSummaryRows(snapshot);
+    for (const [label, value] of topTenSummaryRows) {
+      doc.setFontSize(9);
+      doc.setFont("helvetica", "bold");
+      doc.text(`${label}:`, marginX, startY);
+      doc.setFont("helvetica", "normal");
+      doc.text(value.toLocaleString(), marginX + 220, startY);
+      startY += 12;
+    }
+    if (topTenSummaryRows.length > 0) {
+      startY += 6;
+    }
+
     for (const table of [
       snapshot.viewsDistributionBySubmission,
       snapshot.viewsDistributionByCreator,
@@ -365,15 +383,6 @@ export async function downloadContestAnalyticsReport(
       doc.setFontSize(10);
       doc.text(table.title, marginX, startY);
       startY += 8;
-      if (table.combinedViews != null) {
-        doc.setFontSize(8);
-        doc.text(
-          `Top 10 combined: ${table.combinedViews.toLocaleString()} views`,
-          marginX,
-          startY,
-        );
-        startY += 10;
-      }
       autoTable(doc, {
         head: [table.headers],
         body: table.rows,

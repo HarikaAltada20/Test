@@ -7,6 +7,8 @@ import {
   marketingPerformanceRows,
 } from "@/lib/report-export-metrics";
 import type { ContestAnalyticsTabSnapshot } from "@/lib/contest-analytics-snapshot";
+import { buildTopTenCombinedSummaryRows } from "@/lib/contest-analytics-snapshot";
+import { resolvePdfCellLink } from "@/lib/report-export-links";
 
 const INDIGO = REPORT_THEME.indigo;
 const NAVY = REPORT_THEME.navyMid;
@@ -73,6 +75,66 @@ async function loadExcelLogoBuffer(): Promise<ArrayBuffer | null> {
   }
 }
 
+function formatCampaignDurationLabel(
+  branding: ExportReportBranding,
+  metrics: ReportCoverMetrics,
+): string {
+  const dateRange = formatCampaignDateRange(branding);
+  if (metrics.durationLabel !== "N/A" && dateRange !== "—") {
+    return `${metrics.durationLabel} (${dateRange})`;
+  }
+  if (metrics.durationLabel !== "N/A") return metrics.durationLabel;
+  return dateRange;
+}
+
+function appendReportMetadataRows(
+  ws: ExcelJS.Worksheet,
+  branding: ExportReportBranding,
+  metrics: ReportCoverMetrics,
+  startRow: number,
+): number {
+  let rowIdx = startRow;
+  const infoRows: [string, string][] = [
+    ["Prepared for", branding.brandCompanyName],
+    ["Campaign Name", branding.contestTitle],
+    [
+      "Campaign Duration",
+      formatCampaignDurationLabel(branding, metrics),
+    ],
+    ["Exported on", branding.exportedAt],
+    ["Filter", branding.filtersApplied ?? branding.dataScopeLabel],
+  ];
+
+  for (const [label, value] of infoRows) {
+    const r = ws.getRow(rowIdx++);
+    r.getCell(1).value = label;
+    r.getCell(1).font = { bold: true, color: { argb: "FF475569" } };
+    ws.mergeCells(rowIdx - 1, 2, rowIdx - 1, 4);
+    r.getCell(2).value = value;
+  }
+
+  return rowIdx;
+}
+
+function appendTopTenCombinedSummaryRows(
+  ws: ExcelJS.Worksheet,
+  snapshot: ContestAnalyticsTabSnapshot,
+  startRow: number,
+): number {
+  let rowIdx = startRow + 1;
+
+  for (const [label, value] of buildTopTenCombinedSummaryRows(snapshot)) {
+    const row = ws.getRow(rowIdx++);
+    row.getCell(1).value = label;
+    row.getCell(1).font = { bold: true, color: { argb: "FF475569" } };
+    ws.mergeCells(rowIdx - 1, 2, rowIdx - 1, 4);
+    row.getCell(2).value = value;
+    row.getCell(2).numFmt = "#,##0";
+  }
+
+  return rowIdx + 1;
+}
+
 function formatCampaignDateRange(branding: ExportReportBranding): string {
   if (branding.contestStart && branding.contestEnd) {
     const fmt = (d: string) =>
@@ -93,11 +155,90 @@ function isNumericHeader(header: string): boolean {
   const hl = header.toLowerCase();
   return (
     /^rank$/.test(hl.trim()) ||
-    (/views|likes|comments|shares|points|amount|submissions|reach|saves|reward/.test(
+    (/views|likes|comments|shares|points|amount|submissions|reach|saves|reward|posts|impressions|retweets|interactions/.test(
       hl,
     ) &&
       !/reason|title|link|name|username|summary|status/.test(hl))
   );
+}
+
+function isMoneyHeader(header: string): boolean {
+  const hl = header.toLowerCase();
+  return /amount|reward|earnings|payout|budget|cpm|paid|spend|bonus/.test(hl);
+}
+
+function isPercentHeader(header: string): boolean {
+  return /%|percent|pct/.test(header.toLowerCase());
+}
+
+const EXCEL_EMPTY_CELL = "\u2014";
+
+/** Parse locale-formatted export strings into Excel numbers for correct sorting. */
+export function coerceExcelNumericCell(
+  header: string,
+  value: string | number,
+): string | number {
+  if (typeof value === "number") return value;
+  if (
+    value === EXCEL_EMPTY_CELL ||
+    value === "" ||
+    value === "-" ||
+    value === "—"
+  ) {
+    return value;
+  }
+
+  if (!isNumericHeader(header) && !isPercentHeader(header)) {
+    return value;
+  }
+
+  if (isMoneyHeader(header) || /^\$/.test(value.trim())) {
+    const n = Number(value.replace(/[$,]/g, "").trim());
+    if (Number.isFinite(n)) return n;
+    return value;
+  }
+
+  if (isPercentHeader(header) || /%\s*$/.test(value.trim())) {
+    const n = Number(value.replace(/%/g, "").replace(/,/g, "").trim());
+    if (Number.isFinite(n)) return n;
+    return value;
+  }
+
+  const cleaned = value.replace(/,/g, "").trim();
+  const n = Number(cleaned);
+  if (Number.isFinite(n) && cleaned !== "") return n;
+
+  return value;
+}
+
+function excelNumFmtForHeader(header: string): string | undefined {
+  if (isMoneyHeader(header)) return '"$"#,##0.00';
+  if (isPercentHeader(header)) return '0.0"%"';
+  if (isNumericHeader(header)) return "#,##0";
+  return undefined;
+}
+
+function applyExcelNumericCell(
+  cell: ExcelJS.Cell,
+  header: string,
+  value: string | number,
+): void {
+  const coerced = coerceExcelNumericCell(header, value);
+  cell.value = coerced;
+  if (typeof coerced === "number") {
+    const fmt = excelNumFmtForHeader(header);
+    if (fmt) cell.numFmt = fmt;
+  }
+}
+
+function coerceExcelMetricValue(value: string): string | number {
+  if (/^\$/.test(value.trim())) {
+    const n = Number(value.replace(/[$,]/g, "").trim());
+    if (Number.isFinite(n)) return n;
+  }
+  const cleaned = value.replace(/,/g, "").trim();
+  if (/^\d+(\.\d+)?$/.test(cleaned)) return Number(cleaned);
+  return value;
 }
 
 export async function buildSummarySheet(
@@ -139,39 +280,7 @@ export async function buildSummarySheet(
   }
 
   rowIdx++;
-  const blockAStart = rowIdx;
-  const infoRows: [string, string][] = [
-    ["Prepared for", branding.brandCompanyName],
-    ["Campaign", branding.contestTitle],
-    ["Report type", branding.reportDescription || branding.reportTitle],
-    ["Exported", branding.exportedAt],
-  ];
-  if (branding.filtersApplied) {
-    infoRows.push(["Filters", branding.filtersApplied]);
-  }
-
-  for (const [label, value] of infoRows) {
-    const r = ws.getRow(rowIdx++);
-    r.getCell(1).value = label;
-    r.getCell(1).font = { bold: true, color: { argb: "FF475569" } };
-    ws.mergeCells(rowIdx - 1, 2, rowIdx - 1, 4);
-    r.getCell(2).value = value;
-  }
-
-  const metaRows: [string, string][] = [
-    ["Platform", branding.platformName],
-    ["Duration", metrics.durationLabel],
-    ["Date range", formatCampaignDateRange(branding)],
-  ];
-  let metaIdx = blockAStart;
-  for (const [label, value] of metaRows) {
-    const r = ws.getRow(metaIdx++);
-    r.getCell(3).value = label;
-    r.getCell(3).font = { bold: true, color: { argb: "FF475569" } };
-    r.getCell(4).value = value;
-  }
-
-  rowIdx = Math.max(rowIdx, metaIdx) + 1;
+  rowIdx = appendReportMetadataRows(ws, branding, metrics, rowIdx) + 1;
 
   const execHeader = ws.getRow(rowIdx++);
   ws.mergeCells(rowIdx - 1, 1, rowIdx - 1, 4);
@@ -230,11 +339,34 @@ export async function buildSummarySheet(
   return ws;
 }
 
+export type DataSheetOptions = {
+  cellLinks?: (string | null)[][];
+  platform?: string;
+};
+
+function applyExcelCellHyperlink(
+  cell: ExcelJS.Cell,
+  displayValue: string,
+  url: string,
+) {
+  cell.value = {
+    text: displayValue,
+    hyperlink: url,
+    tooltip: url,
+  };
+  cell.font = {
+    ...cell.font,
+    color: { argb: "FF0563C1" },
+    underline: true,
+  };
+}
+
 export function buildDataSheet(
   workbook: ExcelJS.Workbook,
   sheetName: string,
   headers: string[],
   rows: string[][],
+  options?: DataSheetOptions,
 ): ExcelJS.Worksheet {
   const safeName = sheetName.replace(/[\\/*?:\[\]]/g, "").slice(0, 31);
   const ws = workbook.addWorksheet(safeName);
@@ -247,9 +379,25 @@ export function buildDataSheet(
   rows.forEach((row, i) => {
     const dataRow = ws.addRow(row);
     applyDataRowStyle(dataRow, i % 2 === 1);
-    row.forEach((cell, colIdx) => {
-      if (isNumericHeader(headers[colIdx] ?? "")) {
-        dataRow.getCell(colIdx + 1).alignment = {
+    row.forEach((cellValue, colIdx) => {
+      const header = headers[colIdx] ?? "";
+      const cell = dataRow.getCell(colIdx + 1);
+      const displayValue = String(cellValue);
+      const url = resolvePdfCellLink(
+        i,
+        colIdx,
+        header,
+        displayValue,
+        options?.cellLinks,
+        options?.platform,
+      );
+      if (url) {
+        applyExcelCellHyperlink(cell, displayValue, url);
+      } else {
+        applyExcelNumericCell(cell, header, cellValue);
+      }
+      if (isNumericHeader(header) || typeof cell.value === "number") {
+        cell.alignment = {
           horizontal: "right",
           vertical: "top",
           wrapText: true,
@@ -269,16 +417,33 @@ export function buildDataSheet(
   return ws;
 }
 
+export type AnalyticsSheetOptions = {
+  branding?: ExportReportBranding;
+  metrics?: ReportCoverMetrics;
+};
+
 export function buildAnalyticsSheet(
   workbook: ExcelJS.Workbook,
   snapshot: ContestAnalyticsTabSnapshot,
   sheetName = "Analytics",
+  options?: AnalyticsSheetOptions,
 ): ExcelJS.Worksheet {
   const safeName = sheetName.replace(/[\\/*?:\[\]]/g, "").slice(0, 31);
   const ws = workbook.addWorksheet(safeName);
-  ws.columns = [{ width: 36 }, { width: 28 }];
+  ws.columns = [{ width: 36 }, { width: 28 }, { width: 18 }, { width: 18 }, { width: 18 }];
 
   let rowIdx = 1;
+
+  if (options?.branding && options?.metrics) {
+    rowIdx = appendReportMetadataRows(
+      ws,
+      options.branding,
+      options.metrics,
+      rowIdx,
+    );
+    rowIdx = appendTopTenCombinedSummaryRows(ws, snapshot, rowIdx);
+  }
+
   const tabRow = ws.getRow(rowIdx++);
   tabRow.getCell(1).value = `Analytics · ${snapshot.tabLabel}`;
   tabRow.getCell(1).font = { bold: true, size: 13, color: { argb: `FF${INDIGO}` } };
@@ -297,7 +462,11 @@ export function buildAnalyticsSheet(
     section.rows.forEach((row, i) => {
       const r = ws.getRow(rowIdx++);
       r.getCell(1).value = row[0];
-      r.getCell(2).value = row[1];
+      const metricValue = coerceExcelMetricValue(row[1]);
+      r.getCell(2).value = metricValue;
+      if (typeof metricValue === "number") {
+        r.getCell(2).numFmt = row[1].includes("$") ? '"$"#,##0.00' : "#,##0";
+      }
       applyDataRowStyle(r, i % 2 === 1);
     });
   }
@@ -311,19 +480,16 @@ export function buildAnalyticsSheet(
     distTitle.getCell(1).value = table.title;
     distTitle.getCell(1).font = { bold: true, size: 11 };
 
-    if (table.combinedViews != null) {
-      const combinedRow = ws.getRow(rowIdx++);
-      combinedRow.getCell(1).value = "Top 10 Combined Views";
-      combinedRow.getCell(2).value = table.combinedViews.toLocaleString();
-    }
-
     const distHead = ws.getRow(rowIdx++);
     distHead.values = table.headers;
     applyHeaderRowStyle(distHead);
 
     table.rows.forEach((row, i) => {
       const r = ws.getRow(rowIdx++);
-      r.values = row;
+      row.forEach((cellValue, colIdx) => {
+        const header = table.headers[colIdx] ?? "";
+        applyExcelNumericCell(r.getCell(colIdx + 1), header, cellValue);
+      });
       applyDataRowStyle(r, i % 2 === 1);
     });
     rowIdx++;

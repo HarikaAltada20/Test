@@ -1098,11 +1098,18 @@ export default async function ContestDetailPage({
   let brandProfile: { company_name: string | null; website_url: string | null } =
     { company_name: null, website_url: null };
   if (contestData.advertiser_id) {
-    const { data: advertiserProfile } = await supabase
+    const { data: advertiserProfile, error: advertiserProfileError } =
+      await supabase
       .from("advertiser_profiles")
       .select("company_name, website_url")
       .eq("id", contestData.advertiser_id)
       .maybeSingle();
+    if (advertiserProfileError) {
+      console.warn(
+        `[ContestDetailPage] Failed to load advertiser profile for contest ${contestId} (advertiser ${contestData.advertiser_id}):`,
+        advertiserProfileError.message,
+      );
+    }
     if (advertiserProfile) {
       brandProfile = advertiserProfile;
     }

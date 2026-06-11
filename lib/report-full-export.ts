@@ -9,6 +9,7 @@ import {
 } from "@/lib/report-export-branding";
 import type { ReportCoverMetrics } from "@/lib/report-export-metrics";
 import type { ContestAnalyticsTabSnapshot } from "@/lib/contest-analytics-snapshot";
+import { buildTopTenCombinedSummaryRows } from "@/lib/contest-analytics-snapshot";
 import ExcelJS from "exceljs";
 import {
   buildAnalyticsSheet,
@@ -99,18 +100,20 @@ export async function downloadFullCampaignReport(
       lines.push("");
     }
     lines.push("Views Distribution");
+    const topTenSummaryRows = buildTopTenCombinedSummaryRows(
+      input.analyticsSnapshot,
+    );
+    for (const [label, value] of topTenSummaryRows) {
+      lines.push([label, value.toLocaleString()].map(csvEscape).join(","));
+    }
+    if (topTenSummaryRows.length > 0) {
+      lines.push("");
+    }
     for (const table of [
       input.analyticsSnapshot.viewsDistributionBySubmission,
       input.analyticsSnapshot.viewsDistributionByCreator,
     ]) {
       lines.push(table.title);
-      if (table.combinedViews != null) {
-        lines.push(
-          ["Top 10 Combined Views", table.combinedViews.toLocaleString()]
-            .map(csvEscape)
-            .join(","),
-        );
-      }
       lines.push(table.headers.map(csvEscape).join(","));
       lines.push(
         ...table.rows.map((r) => r.map(csvEscape).join(",")),
@@ -134,9 +137,30 @@ export async function downloadFullCampaignReport(
       input.metrics,
       input.approvedCount,
     );
-    buildDataSheet(workbook, "Submissions", input.submissionHeaders, input.submissionRows);
-    buildDataSheet(workbook, "Creator-wise", input.creatorHeaders, input.creatorRows);
-    buildAnalyticsSheet(workbook, input.analyticsSnapshot, "Analytics");
+    buildDataSheet(
+      workbook,
+      "Submissions",
+      input.submissionHeaders,
+      input.submissionRows,
+      {
+        cellLinks: input.submissionCellLinks,
+        platform: input.platform,
+      },
+    );
+    buildDataSheet(
+      workbook,
+      "Creator-wise",
+      input.creatorHeaders,
+      input.creatorRows,
+      {
+        cellLinks: input.creatorCellLinks,
+        platform: input.platform,
+      },
+    );
+    buildAnalyticsSheet(workbook, input.analyticsSnapshot, "Analytics", {
+      branding: input.branding,
+      metrics: input.metrics,
+    });
     const buffer = await writeExcelWorkbook(workbook);
     downloadExcelBuffer(buffer, `${safeBase}-${date}.xlsx`);
     return;

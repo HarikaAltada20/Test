@@ -64,6 +64,8 @@ import {
   sortSubmissionsForExport,
   type ReportExportSortOption,
 } from "@/lib/report-export-sort";
+import { omitCreatorNameForSpreadsheetFormats } from "@/lib/report-export-columns";
+import { maybeWarnLargePdfExport } from "@/lib/report-export-guards";
 
 const FORMAT_LABELS: Record<LeaderboardExportFormat, string> = {
   xlsx: "Excel (.xlsx)",
@@ -73,6 +75,7 @@ const FORMAT_LABELS: Record<LeaderboardExportFormat, string> = {
 
 const SUBMISSION_FILTER_OPTIONS: ReportSubmissionFilter[] = [
   "verified_or_paid",
+  "not_rejected",
   "all",
   "verified",
   "paid",
@@ -88,24 +91,11 @@ const SUBMISSION_FILTER_LABELS: Record<ReportSubmissionFilter, string> = {
   not_rejected: "Not rejected",
 };
 
-const CREATOR_NAME_COLUMN_ID = "creator_name";
-
-function omitCreatorNameForSpreadsheetFormats(
-  columns: { id: string; label: string }[],
-  format: LeaderboardExportFormat,
-) {
-  if (format === "csv") return columns;
-  return columns.filter((c) => c.id !== CREATOR_NAME_COLUMN_ID);
-}
-
 export type FullCampaignReportExportDialogProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   isDark?: boolean;
   contestTitle: string;
-  submissionCount: number;
-  creatorCount: number;
-  submissions: Record<string, unknown>[];
   creatorGroups: Record<string, unknown>[];
   getMetrics: (submission: Record<string, unknown>) => PlatformMetrics;
   rewardContext: RewardExportContext;
@@ -119,7 +109,6 @@ export type FullCampaignReportExportDialogProps = {
   brandProfile?: BrandProfile | null;
   reportContest: ReportExportContestContext;
   reportAllSubmissions: ContestAnalyticsExportSubmission[];
-  reportApprovedCount: number;
   getReportStatus: (submission: ContestAnalyticsExportSubmission) => string;
   getReportExpectedCents: (
     submission: ContestAnalyticsExportSubmission,
@@ -132,7 +121,6 @@ export function FullCampaignReportExportDialog({
   onOpenChange,
   isDark = false,
   contestTitle,
-  submissions,
   creatorGroups,
   getMetrics,
   rewardContext,
@@ -146,7 +134,6 @@ export function FullCampaignReportExportDialog({
   brandProfile,
   reportContest,
   reportAllSubmissions,
-  reportApprovedCount,
   getReportStatus,
   getReportExpectedCents,
   isTwitterTextImage = false,
@@ -304,6 +291,11 @@ export function FullCampaignReportExportDialog({
       toast.error("Select at least one column for each section");
       return;
     }
+
+    maybeWarnLargePdfExport(
+      Math.max(scopedSubmissions.length, scopedCreatorGroups.length),
+      format,
+    );
 
     setExporting(true);
     try {

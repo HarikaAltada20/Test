@@ -477,7 +477,7 @@ function renderMetricSectionHtml(
 
 function renderDistributionTableHtml(
   table: ViewsDistributionTable,
-  options?: { isLast?: boolean },
+  options?: { isLast?: boolean; variant?: "submission" | "creator" },
 ): string {
   const head = table.headers
     .map((header) => `<th>${escapeHtml(header)}</th>`)
@@ -490,10 +490,27 @@ function renderDistributionTableHtml(
     .join("");
 
   const lastClass = options?.isLast ? " analytics-section-last" : "";
-  const combinedNote =
-    table.combinedViews != null
-      ? `<div class="distribution-note">Top 10 combined: ${escapeHtml(table.combinedViews.toLocaleString())} views</div>`
-      : "";
+  const summaryLines: string[] = [];
+  if (options?.variant === "submission" && table.combinedViews != null) {
+    summaryLines.push(
+      `Top 10 Submissions Combined Views: ${table.combinedViews.toLocaleString()}`,
+    );
+  }
+  if (options?.variant === "creator") {
+    if (table.combinedViews != null) {
+      summaryLines.push(
+        `Top 10 Creators Combined Views: ${table.combinedViews.toLocaleString()}`,
+      );
+    }
+    if (table.combinedPosts != null) {
+      summaryLines.push(
+        `Top 10 Creators Combined Posts: ${table.combinedPosts.toLocaleString()}`,
+      );
+    }
+  }
+  const combinedNote = summaryLines
+    .map((line) => `<div class="distribution-note">${escapeHtml(line)}</div>`)
+    .join("");
 
   return `
     <div class="analytics-section${lastClass}">
@@ -773,14 +790,19 @@ export function buildAnalyticsSummaryPagesHtml(
     ${renderReportBrandBarHtml(assets, { compact: true })}
     <div class="content">
       ${renderAnalyticsHeroHtml("Views Distribution", snapshot.tabLabel)}
-      ${renderDistributionTableHtml(snapshot.viewsDistributionBySubmission)}
+      ${renderDistributionTableHtml(snapshot.viewsDistributionBySubmission, {
+        variant: "submission",
+      })}
     </div>`;
 
   const page3Inner = `
     ${renderReportBrandBarHtml(assets, { compact: true })}
     <div class="content">
       ${renderAnalyticsHeroHtml("Views Distribution", snapshot.tabLabel)}
-      ${renderDistributionTableHtml(snapshot.viewsDistributionByCreator, { isLast: true })}
+      ${renderDistributionTableHtml(snapshot.viewsDistributionByCreator, {
+        isLast: true,
+        variant: "creator",
+      })}
       <div class="analytics-footer">
         <div class="report-by">Report by</div>
         <div class="report-brand-name">Game of Creators</div>
@@ -919,12 +941,6 @@ export async function captureHtmlPageToDataUrl(
   host.setAttribute("data-pdf-capture", "true");
   host.style.cssText = `position:fixed;left:0;top:0;width:${PAGE_W}px;height:${PAGE_H}px;opacity:0;pointer-events:none;z-index:2147483646;overflow:hidden;`;
 
-  const fontLink = document.createElement("link");
-  fontLink.rel = "stylesheet";
-  fontLink.href =
-    "https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap";
-  document.head.appendChild(fontLink);
-
   host.innerHTML = html;
   document.body.appendChild(host);
 
@@ -954,8 +970,7 @@ export async function captureHtmlPageToDataUrl(
     console.warn("[report-export] HTML page capture failed:", err);
     return null;
   } finally {
-    document.body.removeChild(host);
-    document.head.removeChild(fontLink);
+    if (host.parentNode) host.parentNode.removeChild(host);
   }
 }
 

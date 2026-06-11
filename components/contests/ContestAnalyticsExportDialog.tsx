@@ -30,12 +30,13 @@ import {
 import type { ContestAnalyticsTabSnapshot } from "@/lib/contest-analytics-snapshot";
 import type { LeaderboardExportFormat } from "@/lib/submission-leaderboard-export";
 import { toast } from "sonner";
-import type { BrandProfile } from "@/lib/report-export-branding";
+import type { BrandProfile, ReportSubmissionFilter } from "@/lib/report-export-branding";
 import {
   buildReportExportBundle,
   type ReportExportContestContext,
 } from "@/lib/report-export-context";
 import type { ContestAnalyticsExportSubmission } from "@/lib/contest-analytics-export";
+import { maybeWarnLargePdfExport } from "@/lib/report-export-guards";
 
 const FORMAT_LABELS: Record<LeaderboardExportFormat, string> = {
   xlsx: "Excel (.xlsx)",
@@ -56,13 +57,14 @@ export type ContestAnalyticsExportDialogProps = {
   reportContest?: ReportExportContestContext;
   reportAllSubmissions?: ContestAnalyticsExportSubmission[];
   reportSubmissions?: ContestAnalyticsExportSubmission[];
-  reportApprovedCount?: number;
   getReportStatus?: (
     submission: ContestAnalyticsExportSubmission,
   ) => string;
   getReportExpectedCents?: (
     submission: ContestAnalyticsExportSubmission,
   ) => number;
+  /** Dashboard tab selected when opening the dialog; only that tab is checked by default. */
+  activeTab?: ContestAnalyticsTabId;
 };
 
 export function ContestAnalyticsExportDialog({
@@ -76,9 +78,9 @@ export function ContestAnalyticsExportDialog({
   reportContest,
   reportAllSubmissions,
   reportSubmissions,
-  reportApprovedCount,
   getReportStatus,
   getReportExpectedCents,
+  activeTab = "all",
 }: ContestAnalyticsExportDialogProps) {
   const [selectedTabs, setSelectedTabs] = useState<
     Record<ContestAnalyticsTabId, boolean>
@@ -90,11 +92,11 @@ export function ContestAnalyticsExportDialog({
     if (!open) return;
     const next = {} as Record<ContestAnalyticsTabId, boolean>;
     for (const tab of CONTEST_ANALYTICS_TAB_IDS) {
-      next[tab] = true;
+      next[tab] = tab === activeTab;
     }
     setSelectedTabs(next);
     setFormat("xlsx");
-  }, [open]);
+  }, [open, activeTab]);
 
   const selectedTabIds = useMemo(
     () => CONTEST_ANALYTICS_TAB_IDS.filter((tab) => selectedTabs[tab]),
@@ -123,6 +125,11 @@ export function ContestAnalyticsExportDialog({
       return;
     }
 
+    maybeWarnLargePdfExport(
+      (reportAllSubmissions ?? reportSubmissions)?.length ?? 0,
+      format,
+    );
+
     setExporting(true);
     try {
       const snapshots = getSnapshotsForTabs(selectedTabIds);
@@ -136,6 +143,12 @@ export function ContestAnalyticsExportDialog({
         getReportStatus &&
         getReportExpectedCents
       ) {
+        const coverFilter: ReportSubmissionFilter =
+          selectedTabIds.length === 1 ? selectedTabIds[0]! : "all";
+        const filterLabel =
+          selectedTabIds.length === 1
+            ? contestAnalyticsTabLabel(selectedTabIds[0]!)
+            : tabNames.join(", ");
         const bundle = buildReportExportBundle({
           brandProfile,
           contest: reportContest,
@@ -144,12 +157,15 @@ export function ContestAnalyticsExportDialog({
           getStatus: getReportStatus,
           getSubmissionExpectedCents: getReportExpectedCents,
           analyticsTabs: tabNames,
+          submissionFilter: coverFilter,
+          filtersApplied: filterLabel,
           exportedAt: new Date(),
         });
         exportOptions = {
           branding: bundle.branding,
           metrics: bundle.metrics,
           approvedCount: bundle.approvedCount,
+          submissionFilter: coverFilter,
         };
       }
 

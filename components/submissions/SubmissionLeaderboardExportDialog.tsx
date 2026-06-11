@@ -67,23 +67,14 @@ import {
   sortSubmissionsForExport,
   type ReportExportSortOption,
 } from "@/lib/report-export-sort";
+import { omitCreatorNameForSpreadsheetFormats } from "@/lib/report-export-columns";
+import { maybeWarnLargePdfExport } from "@/lib/report-export-guards";
 
 const FORMAT_LABELS: Record<LeaderboardExportFormat, string> = {
   xlsx: "Excel (.xlsx)",
   csv: "CSV (.csv)",
   pdf: "PDF (.pdf)",
 };
-
-/** PDF/Excel use Username only; Creator (display name) stays available for CSV. */
-const CREATOR_NAME_COLUMN_ID = "creator_name";
-
-function omitCreatorNameForSpreadsheetFormats(
-  columns: { id: string; label: string }[],
-  format: LeaderboardExportFormat,
-) {
-  if (format === "csv") return columns;
-  return columns.filter((c) => c.id !== CREATOR_NAME_COLUMN_ID);
-}
 
 type SubmissionExportProps = {
   exportKind: "submission";
@@ -116,7 +107,6 @@ export type SubmissionLeaderboardExportDialogProps = {
   reportContest?: ReportExportContestContext;
   reportAllSubmissions?: ContestAnalyticsExportSubmission[];
   reportSubmissions?: ContestAnalyticsExportSubmission[];
-  reportApprovedCount?: number;
   getReportStatus?: (
     submission: ContestAnalyticsExportSubmission,
   ) => string;
@@ -343,6 +333,8 @@ export function SubmissionLeaderboardExportDialog(
       return;
     }
 
+    maybeWarnLargePdfExport(rowCount, format);
+
     setExporting(true);
     try {
       let instagramArchiveByCreatorId: Record<string, unknown> | null = null;
@@ -428,8 +420,18 @@ export function SubmissionLeaderboardExportDialog(
           },
         ));
       } else {
+        const exportFilter =
+          props.submissionFilter ?? DEFAULT_REPORT_SUBMISSION_FILTER;
+        let submissionsForExport = props.submissions;
+        if (props.getReportStatus && props.reportAllSubmissions?.length) {
+          submissionsForExport = filterSubmissionsForReportExport(
+            props.reportAllSubmissions,
+            exportFilter,
+            props.getReportStatus,
+          ) as unknown as Record<string, unknown>[];
+        }
         const sortedSubmissions = sortSubmissionsForExport(
-          props.submissions,
+          submissionsForExport,
           exportSortOption,
           {
             isTwitterTextImage: props.isTwitterTextImage,
@@ -466,6 +468,9 @@ export function SubmissionLeaderboardExportDialog(
         rewardContext: props.rewardContext,
       };
 
+      const exportFilter =
+        props.submissionFilter ?? DEFAULT_REPORT_SUBMISSION_FILTER;
+
       if (
         props.reportContest &&
         (props.reportAllSubmissions ?? props.reportSubmissions) &&
@@ -482,13 +487,13 @@ export function SubmissionLeaderboardExportDialog(
           getSubmissionExpectedCents: props.getReportExpectedCents,
           viewLabel,
           sortLabel: exportSortLabel,
+          submissionFilter: exportFilter,
           exportedAt: new Date(),
         });
         exportOptions.branding = bundle.branding;
         exportOptions.metrics = bundle.metrics;
         exportOptions.approvedCount = bundle.approvedCount;
-        exportOptions.submissionFilter =
-          props.submissionFilter ?? DEFAULT_REPORT_SUBMISSION_FILTER;
+        exportOptions.submissionFilter = exportFilter;
         if (exportKind === "submission") {
           exportOptions.submissionSortLabel =
             getReportExportSortDividerLine(exportSortOption);

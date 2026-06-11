@@ -986,7 +986,10 @@ export async function downloadLeaderboardReport(
         options.metrics,
         options.approvedCount ?? 0,
       );
-      buildDataSheet(workbook, dataSheetName, headers, rows);
+      buildDataSheet(workbook, dataSheetName, headers, rows, {
+        cellLinks: options?.cellLinks,
+        platform: options?.platform,
+      });
       const buffer = await writeExcelWorkbook(workbook);
       downloadExcelBuffer(buffer, `${safeBase}-${date}.xlsx`);
       return;

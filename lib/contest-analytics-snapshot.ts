@@ -28,6 +28,7 @@ export type ViewsDistributionTable = {
   headers: string[];
   rows: string[][];
   combinedViews?: number;
+  combinedPosts?: number;
 };
 
 export type ViewsDistributionChartItem = {
@@ -284,6 +285,7 @@ export function buildTopSubmissionsViewsDistribution(
       formatTopTenSharePct(item.shareOfTop10Combined),
     ]),
     combinedViews,
+    combinedPosts: items.length,
   };
 }
 
@@ -293,6 +295,7 @@ export function buildTopCreatorsViewsDistribution(
 ): ViewsDistributionTable {
   const items = buildTopCreatorChartItems(subs);
   const combinedViews = topTenCombinedViews(items);
+  const combinedPosts = items.reduce((sum, item) => sum + (item.posts ?? 0), 0);
 
   return {
     title: "Top 10 Creators by Views",
@@ -305,6 +308,7 @@ export function buildTopCreatorsViewsDistribution(
       formatTopTenSharePct(item.shareOfTop10Combined),
     ]),
     combinedViews,
+    combinedPosts,
   };
 }
 
@@ -318,6 +322,30 @@ export function buildViewsDistributionTables(
     bySubmission: buildTopSubmissionsViewsDistribution(subs),
     byCreator: buildTopCreatorsViewsDistribution(subs),
   };
+}
+
+export type TopTenCombinedSummaryRow = [label: string, value: number];
+
+/** Metadata rows for top-10 views/posts totals (submission vs creator breakdown). */
+export function buildTopTenCombinedSummaryRows(snapshot: {
+  viewsDistributionBySubmission: ViewsDistributionTable;
+  viewsDistributionByCreator: ViewsDistributionTable;
+}): TopTenCombinedSummaryRow[] {
+  const sub = snapshot.viewsDistributionBySubmission;
+  const creator = snapshot.viewsDistributionByCreator;
+  const rows: TopTenCombinedSummaryRow[] = [];
+
+  if (sub.combinedViews != null) {
+    rows.push(["Top 10 Submissions Combined Views", sub.combinedViews]);
+  }
+  if (creator.combinedViews != null) {
+    rows.push(["Top 10 Creators Combined Views", creator.combinedViews]);
+  }
+  if (creator.combinedPosts != null) {
+    rows.push(["Top 10 Creators Combined Posts", creator.combinedPosts]);
+  }
+
+  return rows;
 }
 
 export function buildContestAnalyticsTabSnapshot(

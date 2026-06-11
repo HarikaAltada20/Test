@@ -5,10 +5,8 @@ import type { ReportCoverMetrics } from "@/lib/report-export-metrics";
 import type { ContestAnalyticsTabSnapshot } from "@/lib/contest-analytics-snapshot";
 import { formatLocalDateTime } from "@/lib/utils";
 
-const PDF_FONT_REGULAR_URL =
-  "https://cdn.jsdelivr.net/gh/googlefonts/roboto@3.012/hinted/Roboto-Regular.ttf";
-const PDF_FONT_BOLD_URL =
-  "https://cdn.jsdelivr.net/gh/googlefonts/roboto@3.012/hinted/Roboto-Bold.ttf";
+const PDF_FONT_REGULAR_URL = "/fonts/Roboto-Regular.ttf";
+const PDF_FONT_BOLD_URL = "/fonts/Roboto-Bold.ttf";
 
 const LOGO_HORIZONTAL_URL = "/images/gold_logo_horizontal.png";
 const LOGO_VERTICAL_URL = "/images/gold_logo_vertical.png";
@@ -1370,14 +1368,31 @@ async function renderPdfAnalyticsSectionsProcedural(
     );
     y += 14;
 
-    if (table.combinedViews != null) {
+    const isSubmissionTable =
+      table === snapshot.viewsDistributionBySubmission;
+    const summaryLines: string[] = [];
+    if (isSubmissionTable && table.combinedViews != null) {
+      summaryLines.push(
+        `Top 10 Submissions Combined Views: ${table.combinedViews.toLocaleString()}`,
+      );
+    } else if (!isSubmissionTable) {
+      if (table.combinedViews != null) {
+        summaryLines.push(
+          `Top 10 Creators Combined Views: ${table.combinedViews.toLocaleString()}`,
+        );
+      }
+      if (table.combinedPosts != null) {
+        summaryLines.push(
+          `Top 10 Creators Combined Posts: ${table.combinedPosts.toLocaleString()}`,
+        );
+      }
+    }
+
+    for (const line of summaryLines) {
       doc.setFontSize(8);
       doc.setTextColor(...SLATE_RGB);
       doc.text(
-        pdfText(
-          `Top 10 combined: ${table.combinedViews.toLocaleString()} views`,
-          fonts.useUnicode,
-        ),
+        pdfText(line, fonts.useUnicode),
         doc.internal.pageSize.getWidth() / 2,
         y,
         { align: "center" },

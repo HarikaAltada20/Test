@@ -7932,15 +7932,6 @@ export default function ContestDetailClient({
     [sortedSubmissions],
   );
 
-  const reportApprovedCount = useMemo(
-    () =>
-      currentSubmissions.filter((s) => {
-        const status = getStatus(s);
-        return status === "verified" || status === "paid";
-      }).length,
-    [currentSubmissions, getStatus],
-  );
-
   const fullReportAnalyticsSnapshot = useMemo(
     () => buildContestAnalyticsTabSnapshot("all", analyticsSnapshotContext),
     [analyticsSnapshotContext],
@@ -7952,7 +7943,6 @@ export default function ContestDetailClient({
       reportContest: reportExportContest,
       reportAllSubmissions,
       reportSubmissions: reportExportSubmissions,
-      reportApprovedCount,
       getReportStatus: (submission: ContestAnalyticsExportSubmission) =>
         getStatus(submission as unknown as Submission),
       getReportExpectedCents: (submission: ContestAnalyticsExportSubmission) =>
@@ -7963,7 +7953,6 @@ export default function ContestDetailClient({
       reportExportContest,
       reportAllSubmissions,
       reportExportSubmissions,
-      reportApprovedCount,
       getStatus,
       getSubmissionAnalyticsExpectedCents,
     ],
@@ -14227,11 +14216,6 @@ export default function ContestDetailClient({
               onOpenChange={setFullReportDialogOpen}
               isDark={isDark}
               contestTitle={currentContest?.title || "Campaign"}
-              submissionCount={sortedSubmissions.length}
-              creatorCount={filteredCreatorGroups?.length ?? 0}
-              submissions={
-                sortedSubmissions as unknown as Record<string, unknown>[]
-              }
               creatorGroups={
                 (sortedCreatorGroups ?? []) as unknown as Record<
                   string,
@@ -23483,6 +23467,7 @@ export default function ContestDetailClient({
                     tabCounts={analyticsTabCounts}
                     getSnapshotsForTabs={getAnalyticsSnapshotsForTabs}
                     isDark={isDark}
+                    activeTab={activeAnalyticsTab}
                     {...reportExportDialogProps}
                   />
                 </div>
@@ -26249,7 +26234,9 @@ export default function ContestDetailClient({
                                 isDark ? "text-white" : "text-gray-900",
                               )}
                             >
-                              Top 10 Submissions by Views
+                              {viewsDistributionMode === "creator"
+                                ? "Top 10 Creators by Views"
+                                : "Top 10 Submissions by Views"}
                             </h3>
                             {activeItems.length > 0 ? (
                               <p
