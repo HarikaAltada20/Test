@@ -367,6 +367,30 @@ function getProcessAdminNotificationDeliveryQueueUrl(): string {
 /**
  * Trigger the admin notification delivery queue processor via QStash.
  */
+/**
+ * Trigger the admin email delivery queue processor via QStash.
+ */
+export async function triggerProcessAdminEmailDeliveryQueue(
+  baseUrl?: string,
+): Promise<{ messageId?: string; error?: string }> {
+  const client = getQStashClient();
+  if (!client) return { error: "QStash not configured" };
+  const url = `${baseUrl ?? getBaseUrl()}/api/cron/process-admin-email-delivery-queue`;
+  if (isLoopbackUrl(url))
+    return { error: "Loopback URL; QStash cannot reach localhost" };
+  try {
+    const res = await client.publishJSON({ url, body: {}, method: "POST" });
+    return { messageId: (res as { messageId?: string }).messageId };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error(
+      "[qstash] triggerProcessAdminEmailDeliveryQueue failed:",
+      message,
+    );
+    return { error: message };
+  }
+}
+
 export async function triggerProcessAdminNotificationDeliveryQueue(
   baseUrl?: string,
   campaignId?: string,

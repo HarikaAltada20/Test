@@ -34,6 +34,7 @@ import {
   Map,
   List,
   Bell,
+  Mail,
   Send,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
@@ -45,6 +46,8 @@ import {
   type NotificationSelectionState,
 } from "./SendNotificationModal";
 import { AdminNotificationsView } from "./AdminNotificationsView";
+import { AdminEmailView } from "./AdminEmailView";
+import { AttachEmailCampaignModal } from "./AttachEmailCampaignModal";
 import type { RecipientUserRow } from "@/lib/admin-notifications/types";
 import { cn } from "@/lib/utils";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -588,28 +591,46 @@ export default function AdminUsersPage() {
   });
   const [showColumnSettings, setShowColumnSettings] = useState(false);
   const [stickyHeader, setStickyHeader] = useState(true);
-  const [viewMode, setViewMode] = useState<"table" | "map" | "notifications">(
-    () => {
-      if (typeof window !== "undefined") {
-        const saved = localStorage.getItem("users-management-view-mode");
-        if (saved === "table" || saved === "map" || saved === "notifications") {
-          return saved;
-        }
+  const [viewMode, setViewMode] = useState<
+    "table" | "map" | "notifications" | "email"
+  >(() => {
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get("tab") === "email") return "email";
+      const saved = localStorage.getItem("users-management-view-mode");
+      if (
+        saved === "table" ||
+        saved === "map" ||
+        saved === "notifications" ||
+        saved === "email"
+      ) {
+        return saved;
       }
-      return "table";
-    },
-  );
+    }
+    return "table";
+  });
   const { toast } = useToast();
   const [selectedUserIds, setSelectedUserIds] = useState<Set<string>>(
     () => new Set(),
   );
   const [selectAllFiltered, setSelectAllFiltered] = useState(false);
   const [sendModalOpen, setSendModalOpen] = useState(false);
+  const [emailSendModalOpen, setEmailSendModalOpen] = useState(false);
   const [highlightCampaignId, setHighlightCampaignId] = useState<string | null>(
     null,
   );
+  const [highlightEmailCampaignId, setHighlightEmailCampaignId] = useState<
+    string | null
+  >(() => {
+    if (typeof window !== "undefined") {
+      return new URLSearchParams(window.location.search).get("campaignId");
+    }
+    return null;
+  });
 
-  const setViewModePersisted = (mode: "table" | "map" | "notifications") => {
+  const setViewModePersisted = (
+    mode: "table" | "map" | "notifications" | "email",
+  ) => {
     setViewMode(mode);
     if (typeof window !== "undefined") {
       localStorage.setItem("users-management-view-mode", mode);
@@ -2569,6 +2590,15 @@ export default function AdminUsersPage() {
                   <Bell className="w-4 h-4" />
                   <span className="hidden sm:inline">Notifications</span>
                 </Button>
+                <Button
+                  variant={viewMode === "email" ? "secondary" : "ghost"}
+                  size="sm"
+                  className="rounded-none h-8 px-2 sm:px-3 gap-1.5"
+                  onClick={() => setViewModePersisted("email")}
+                >
+                  <Mail className="w-4 h-4" />
+                  <span className="hidden sm:inline">Email</span>
+                </Button>
               </div>
               <Button
                 variant="outline"
@@ -2611,23 +2641,35 @@ export default function AdminUsersPage() {
                 <span className="hidden sm:inline">Customize Tiles</span>
               </Button>
               {viewMode === "table" && (
-                <Button
-                  size="sm"
-                  className="gap-1.5 px-2 sm:px-3"
-                  disabled={!hasNotificationSelection}
-                  onClick={() => setSendModalOpen(true)}
-                >
-                  <Send className="w-4 h-4" />
-                  <span className="hidden sm:inline">Send notification</span>
-                  {selectedCount > 0 && (
-                    <Badge
-                      variant="secondary"
-                      className="h-5 min-w-5 rounded-full px-1.5 text-xs bg-white/20 text-inherit"
-                    >
-                      {selectedCount}
-                    </Badge>
-                  )}
-                </Button>
+                <>
+                  <Button
+                    size="sm"
+                    className="gap-1.5 px-2 sm:px-3"
+                    disabled={!hasNotificationSelection}
+                    onClick={() => setEmailSendModalOpen(true)}
+                  >
+                    <Mail className="w-4 h-4" />
+                    <span className="hidden sm:inline">Send email</span>
+                    {selectedCount > 0 && (
+                      <Badge
+                        variant="secondary"
+                        className="h-5 min-w-5 rounded-full px-1.5 text-xs bg-white/20 text-inherit"
+                      >
+                        {selectedCount}
+                      </Badge>
+                    )}
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="gap-1.5 px-2 sm:px-3"
+                    disabled={!hasNotificationSelection}
+                    onClick={() => setSendModalOpen(true)}
+                  >
+                    <Send className="w-4 h-4" />
+                    <span className="hidden sm:inline">Send notification</span>
+                  </Button>
+                </>
               )}
               <Button
                 variant="outline"
@@ -2653,7 +2695,7 @@ export default function AdminUsersPage() {
             </div>
           </div>
         </CardHeader>
-        {viewMode !== "notifications" && (
+        {viewMode !== "notifications" && viewMode !== "email" && (
           <CardContent className="py-2 px-6">
             <EnhancedTabs
               tabs={[
@@ -4944,6 +4986,37 @@ export default function AdminUsersPage() {
           onHighlightConsumed={() => setHighlightCampaignId(null)}
         />
       )}
+
+      {viewMode === "email" && (
+        <AdminEmailView
+          isDark={isDark}
+          highlightCampaignId={highlightEmailCampaignId}
+          onHighlightConsumed={() => setHighlightEmailCampaignId(null)}
+        />
+      )}
+
+      <AttachEmailCampaignModal
+        open={emailSendModalOpen}
+        onOpenChange={setEmailSendModalOpen}
+        selection={notificationSelection}
+        isDark={isDark}
+        onSuccess={(campaignId) => {
+          setSelectedUserIds(new Set());
+          setSelectAllFiltered(false);
+          toast({
+            title: "Users attached",
+            description: "Configure template and schedule on the campaign page.",
+          });
+          setHighlightEmailCampaignId(campaignId);
+          setViewModePersisted("email");
+          if (typeof window !== "undefined") {
+            const url = new URL(window.location.href);
+            url.searchParams.set("tab", "email");
+            url.searchParams.set("campaignId", campaignId);
+            window.history.replaceState({}, "", url.toString());
+          }
+        }}
+      />
 
       <SendNotificationModal
         open={sendModalOpen}
