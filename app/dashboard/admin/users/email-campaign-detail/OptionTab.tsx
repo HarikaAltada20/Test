@@ -82,7 +82,7 @@ export function OptionTab({ campaignId, onSaved }: Props) {
   }
 
   return (
-    <div className="space-y-4 max-w-2xl">
+    <div className="space-y-4 w-full">
       <Card className="rounded-xl border border-gray-200 bg-white shadow-sm">
         <CardContent className="p-5 space-y-3">
           <div>
@@ -92,7 +92,7 @@ export function OptionTab({ campaignId, onSaved }: Props) {
             </p>
           </div>
           <Select value={senderId} onValueChange={setSenderId}>
-            <SelectTrigger className="bg-white border-gray-300 h-11">
+            <SelectTrigger className="w-full bg-white border-gray-300 h-11">
               <SelectValue placeholder="Select" />
             </SelectTrigger>
             <SelectContent>

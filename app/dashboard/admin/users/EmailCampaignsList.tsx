@@ -5,8 +5,17 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Progress } from "@/components/ui/progress";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import {
   Select,
   SelectContent,
@@ -31,9 +40,10 @@ import {
   Plus,
   Search,
   Send,
-  Tag,
+  Trash2,
   UserPlus,
 } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
 
 type Props = {
   campaigns: EmailCampaignListItem[];
@@ -112,7 +122,11 @@ export function EmailCampaignsList({
   const [search, setSearch] = useState("");
   const [projectFilter, setProjectFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [deleteTarget, setDeleteTarget] = useState<EmailCampaignListItem | null>(
+    null,
+  );
+  const [deleting, setDeleting] = useState(false);
+  const { toast } = useToast();
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -149,20 +163,6 @@ export function EmailCampaignsList({
     };
   }, [campaigns]);
 
-  const toggleSelect = (id: string, checked: boolean) => {
-    setSelectedIds((prev) => {
-      const next = new Set(prev);
-      if (checked) next.add(id);
-      else next.delete(id);
-      return next;
-    });
-  };
-
-  const toggleSelectAll = (checked: boolean) => {
-    if (checked) setSelectedIds(new Set(filtered.map((c) => c.id)));
-    else setSelectedIds(new Set());
-  };
-
   const handleStart = async (campaignId: string) => {
     await fetch(`/api/admin/email-campaigns/${campaignId}/start`, {
       method: "POST",
@@ -175,6 +175,34 @@ export function EmailCampaignsList({
       method: "POST",
     });
     onRefresh();
+  };
+
+  const handleDelete = async () => {
+    if (!deleteTarget) return;
+    setDeleting(true);
+    try {
+      const res = await fetch(
+        `/api/admin/email-campaigns/${deleteTarget.id}`,
+        { method: "DELETE" },
+      );
+      const data = await res.json();
+      if (!res.ok) {
+        toast({
+          title: "Could not delete campaign",
+          description: data.error || "Delete failed",
+          variant: "destructive",
+        });
+        return;
+      }
+      setDeleteTarget(null);
+      onRefresh();
+      toast({
+        title: "Campaign deleted",
+        description: `"${deleteTarget.name}" was removed.`,
+      });
+    } finally {
+      setDeleting(false);
+    }
   };
 
   const projectFilterLabel = (projectId: string) => {
@@ -266,15 +294,6 @@ export function EmailCampaignsList({
         </Select>
 
         <Button
-          variant="outline"
-          size="icon"
-          className="h-11 w-11 shrink-0 border-gray-300"
-          title="Filter by tags"
-        >
-          <Tag className="h-4 w-4" />
-        </Button>
-
-        <Button
           className="h-11 bg-[#662EBD] hover:bg-[#5524a8] shrink-0"
           onClick={onAddNew}
         >
@@ -288,15 +307,6 @@ export function EmailCampaignsList({
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b text-muted-foreground">
-                <th className="p-4 w-10 text-left font-medium">
-                  <Checkbox
-                    checked={
-                      filtered.length > 0 &&
-                      filtered.every((c) => selectedIds.has(c.id))
-                    }
-                    onCheckedChange={(v) => toggleSelectAll(!!v)}
-                  />
-                </th>
                 <th className="p-4 text-left font-medium">Campaign</th>
                 <th className="p-4 text-left font-medium">Status</th>
                 <th className="p-4 text-left font-medium min-w-[120px]">
@@ -314,12 +324,6 @@ export function EmailCampaignsList({
                   key={c.id}
                   className="border-b last:border-0 hover:bg-muted/30"
                 >
-                  <td className="p-4 align-middle">
-                    <Checkbox
-                      checked={selectedIds.has(c.id)}
-                      onCheckedChange={(v) => toggleSelect(c.id, !!v)}
-                    />
-                  </td>
                   <td
                     className="p-4 align-middle cursor-pointer"
                     onClick={() => onCampaignClick(c.id)}
@@ -328,7 +332,6 @@ export function EmailCampaignsList({
                     <p className="text-muted-foreground text-xs mt-0.5">
                       {c.project?.name ?? "—"}
                     </p>
-                    <p className="text-muted-foreground text-xs">No tags</p>
                   </td>
                   <td className="p-4 align-middle">
                     <Badge className={cn("capitalize", statusBadgeClass(c.status))}>
@@ -397,6 +400,15 @@ export function EmailCampaignsList({
                               Pause
                             </DropdownMenuItem>
                           )}
+                          {c.status !== "active" && (
+                            <DropdownMenuItem
+                              className="text-red-600 focus:text-red-600"
+                              onClick={() => setDeleteTarget(c)}
+                            >
+                              <Trash2 className="h-4 w-4 mr-2" />
+                              Delete
+                            </DropdownMenuItem>
+                          )}
                         </DropdownMenuContent>
                       </DropdownMenu>
                     </div>
@@ -406,7 +418,7 @@ export function EmailCampaignsList({
               {filtered.length === 0 && (
                 <tr>
                   <td
-                    colSpan={8}
+                    colSpan={7}
                     className="p-12 text-center text-muted-foreground"
                   >
                     {campaigns.length === 0
@@ -419,6 +431,34 @@ export function EmailCampaignsList({
           </table>
         </CardContent>
       </Card>
+
+      <AlertDialog
+        open={!!deleteTarget}
+        onOpenChange={(open) => !open && setDeleteTarget(null)}
+      >
+        <AlertDialogContent className="bg-white">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete campaign?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently delete &quot;{deleteTarget?.name}&quot; and
+              all of its leads, sequence, and tracking data. This cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleting}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              disabled={deleting}
+              onClick={(e) => {
+                e.preventDefault();
+                handleDelete();
+              }}
+            >
+              {deleting ? "Deleting..." : "Delete"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

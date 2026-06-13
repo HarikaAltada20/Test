@@ -159,7 +159,7 @@ export function EmailProjectCard({
           )}
         </div>
 
-        {verified && project.full_domain && (
+        {(verified || project.full_domain) && project.full_domain && (
           <div className="text-sm">
             <span className="text-muted-foreground">Domain</span>
             <p className="font-medium break-all">{project.full_domain}</p>
@@ -184,7 +184,7 @@ export function EmailProjectCard({
           </Button>
         </div>
 
-        {!verified && !project.use_platform_sender ? (
+        {!verified && !project.use_platform_sender && !project.full_domain && (
           <Button
             size="sm"
             variant="outline"
@@ -194,28 +194,27 @@ export function EmailProjectCard({
             <Settings className="h-4 w-4 mr-1" />
             Configure Email
           </Button>
-        ) : (
-          <>
-            <Button
-              size="sm"
-              variant="outline"
-              className="w-full border-purple-300 text-purple-700"
-              onClick={onManageSenders}
-            >
-              <Mail className="h-4 w-4 mr-1" />
-              Manage Senders
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              className="w-full border-blue-300 text-blue-700"
-              onClick={onScheduleSettings}
-            >
-              <Clock className="h-4 w-4 mr-1" />
-              Schedule Settings
-            </Button>
-          </>
         )}
+
+        <Button
+          size="sm"
+          variant="outline"
+          className="w-full border-purple-300 text-purple-700"
+          onClick={onManageSenders}
+        >
+          <Mail className="h-4 w-4 mr-1" />
+          Manage Senders
+        </Button>
+
+        <Button
+          size="sm"
+          variant="outline"
+          className="w-full border-blue-300 text-blue-700"
+          onClick={onScheduleSettings}
+        >
+          <Clock className="h-4 w-4 mr-1" />
+          Schedule Settings
+        </Button>
 
         <p className="text-xs text-muted-foreground pt-1">
           Created {new Date(project.created_at).toLocaleDateString()}

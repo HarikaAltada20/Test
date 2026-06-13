@@ -5,16 +5,6 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 import {
   BarChart3,
@@ -65,14 +55,6 @@ export type EmailProjectDetailData = {
   };
 };
 
-type EmailCampaign = {
-  id: string;
-  name: string;
-  status: string;
-  recipient_count: number;
-  created_at: string;
-};
-
 type Props = {
   projectId: string;
   isDark?: boolean;
@@ -81,7 +63,6 @@ type Props = {
   onManageSenders: () => void;
   onConfigureScheduling: () => void;
   onCheckStatus: () => void;
-  onCampaignClick: (campaignId: string) => void;
 };
 
 function formatTzLabel(tz?: string) {
@@ -97,25 +78,16 @@ export function EmailProjectDetail({
   onManageSenders,
   onConfigureScheduling,
   onCheckStatus,
-  onCampaignClick,
 }: Props) {
   const [project, setProject] = useState<EmailProjectDetailData | null>(null);
-  const [campaigns, setCampaigns] = useState<EmailCampaign[]>([]);
   const [loading, setLoading] = useState(true);
-  const [newCampaignName, setNewCampaignName] = useState("");
-  const [creating, setCreating] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [projectRes, campaignsRes] = await Promise.all([
-        fetch(`/api/admin/email-projects/${projectId}`),
-        fetch(`/api/admin/email-campaigns?projectId=${projectId}`),
-      ]);
+      const projectRes = await fetch(`/api/admin/email-projects/${projectId}`);
       const projectData = await projectRes.json();
-      const campaignsData = await campaignsRes.json();
       if (projectRes.ok) setProject(projectData.project);
-      setCampaigns(campaignsData.campaigns ?? []);
     } finally {
       setLoading(false);
     }
@@ -124,26 +96,6 @@ export function EmailProjectDetail({
   useEffect(() => {
     load();
   }, [load]);
-
-  const createCampaign = async () => {
-    if (!newCampaignName.trim()) return;
-    setCreating(true);
-    try {
-      const res = await fetch("/api/admin/email-campaigns", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ projectId, name: newCampaignName.trim() }),
-      });
-      const data = await res.json();
-      if (res.ok) {
-        setCampaigns((prev) => [data.campaign, ...prev]);
-        setNewCampaignName("");
-        load();
-      }
-    } finally {
-      setCreating(false);
-    }
-  };
 
   if (loading || !project) {
     return (
@@ -439,71 +391,6 @@ export function EmailProjectDetail({
               Remaining: {remaining} emails today
             </p>
           </div>
-        </CardContent>
-      </Card>
-
-      <Card className={cardClass}>
-        <CardHeader className="pb-2">
-          <CardTitle className="text-base">Campaigns</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="flex gap-2 items-end">
-            <div className="flex-1 space-y-1">
-              <Label>New campaign</Label>
-              <Input
-                placeholder="Summer contest blast"
-                value={newCampaignName}
-                onChange={(e) => setNewCampaignName(e.target.value)}
-              />
-            </div>
-            <Button
-              onClick={createCampaign}
-              disabled={creating || !newCampaignName.trim()}
-              className="bg-purple-600 hover:bg-purple-700"
-            >
-              {creating && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              + New campaign
-            </Button>
-          </div>
-
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Name</TableHead>
-                <TableHead>Recipients</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Created</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {campaigns.map((c) => (
-                <TableRow
-                  key={c.id}
-                  className="cursor-pointer hover:bg-muted/50"
-                  onClick={() => onCampaignClick(c.id)}
-                >
-                  <TableCell className="font-medium">{c.name}</TableCell>
-                  <TableCell>{c.recipient_count}</TableCell>
-                  <TableCell>
-                    <Badge className="capitalize">{c.status}</Badge>
-                  </TableCell>
-                  <TableCell>
-                    {new Date(c.created_at).toLocaleDateString()}
-                  </TableCell>
-                </TableRow>
-              ))}
-              {campaigns.length === 0 && (
-                <TableRow>
-                  <TableCell
-                    colSpan={4}
-                    className="text-center text-muted-foreground"
-                  >
-                    No campaigns yet
-                  </TableCell>
-                </TableRow>
-              )}
-            </TableBody>
-          </Table>
         </CardContent>
       </Card>
     </div>

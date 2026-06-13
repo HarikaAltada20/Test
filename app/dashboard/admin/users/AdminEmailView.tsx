@@ -23,6 +23,7 @@ import { EmailProjectConfigWizard } from "./EmailProjectConfigWizard";
 import { EmailProjectCard, type EmailProjectCardData } from "./EmailProjectCard";
 import { EmailProjectDetail } from "./EmailProjectDetail";
 import { EmailSchedulingDialog } from "./EmailSchedulingDialog";
+import { SenderEmailManagementDialog } from "./SenderEmailManagementDialog";
 import { EmailCampaignDetail } from "./EmailCampaignDetail";
 import { EmailCampaignsList } from "./EmailCampaignsList";
 import { MAX_PROJECT_DESCRIPTION_LENGTH } from "@/lib/admin-email/project-options";
@@ -55,8 +56,8 @@ export function AdminEmailView({
   const [configOpen, setConfigOpen] = useState(false);
   const [scheduleOpen, setScheduleOpen] = useState(false);
   const [sendersOpen, setSendersOpen] = useState(false);
+  const [sendersProjectId, setSendersProjectId] = useState<string | null>(null);
   const [editOpen, setEditOpen] = useState(false);
-  const [newSenderEmail, setNewSenderEmail] = useState("");
   const [scheduleProjectMeta, setScheduleProjectMeta] = useState<{
     name?: string;
     dailyLimit?: number;
@@ -138,6 +139,11 @@ export function AdminEmailView({
     loadData();
   };
 
+  const openManageSenders = (projectId: string) => {
+    setSendersProjectId(projectId);
+    setSendersOpen(true);
+  };
+
   const saveEdit = async () => {
     if (!selectedProjectId) return;
     await fetch(`/api/admin/email-projects/${selectedProjectId}`, {
@@ -151,17 +157,6 @@ export function AdminEmailView({
       }),
     });
     setEditOpen(false);
-    loadData();
-  };
-
-  const addSender = async () => {
-    if (!selectedProjectId || !newSenderEmail.trim()) return;
-    await fetch(`/api/admin/email-projects/${selectedProjectId}/senders`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email: newSenderEmail.trim(), isDefault: false }),
-    });
-    setNewSenderEmail("");
     loadData();
   };
 
@@ -219,13 +214,9 @@ export function AdminEmailView({
             setSelectedProjectId(null);
           }}
           onConfigureEmail={() => openConfig(selectedProjectId)}
-          onManageSenders={() => {
-            setSelectedProjectId(selectedProjectId);
-            setSendersOpen(true);
-          }}
+          onManageSenders={() => openManageSenders(selectedProjectId)}
           onConfigureScheduling={() => openSchedule(selectedProjectId)}
           onCheckStatus={() => checkStatus(selectedProjectId)}
-          onCampaignClick={setSelectedCampaignId}
         />
 
         <EmailProjectConfigWizard
@@ -248,26 +239,12 @@ export function AdminEmailView({
           onSaved={loadData}
         />
 
-        <Dialog open={sendersOpen} onOpenChange={setSendersOpen}>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Manage Sender Emails</DialogTitle>
-            </DialogHeader>
-            <div className="flex gap-2">
-              <Input
-                placeholder="announcements@domain.com"
-                value={newSenderEmail}
-                onChange={(e) => setNewSenderEmail(e.target.value)}
-              />
-              <Button onClick={addSender}>Add</Button>
-            </div>
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setSendersOpen(false)}>
-                Close
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
+        <SenderEmailManagementDialog
+          open={sendersOpen}
+          projectId={sendersProjectId}
+          onOpenChange={setSendersOpen}
+          onUpdated={loadData}
+        />
       </>
     );
   }
@@ -321,10 +298,7 @@ export function AdminEmailView({
                 }}
                 onEdit={() => openEdit(p)}
                 onConfigureEmail={() => openConfig(p.id)}
-                onManageSenders={() => {
-                  setSelectedProjectId(p.id);
-                  setSendersOpen(true);
-                }}
+                onManageSenders={() => openManageSenders(p.id)}
                 onScheduleSettings={() => openSchedule(p.id)}
               />
             ))}
@@ -419,26 +393,12 @@ export function AdminEmailView({
         }}
       />
 
-      <Dialog open={sendersOpen} onOpenChange={setSendersOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Manage Sender Emails</DialogTitle>
-          </DialogHeader>
-          <div className="flex gap-2">
-            <Input
-              placeholder="announcements@domain.com"
-              value={newSenderEmail}
-              onChange={(e) => setNewSenderEmail(e.target.value)}
-            />
-            <Button onClick={addSender}>Add</Button>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setSendersOpen(false)}>
-              Close
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <SenderEmailManagementDialog
+        open={sendersOpen}
+        projectId={sendersProjectId}
+        onOpenChange={setSendersOpen}
+        onUpdated={loadData}
+      />
 
     </>
   );

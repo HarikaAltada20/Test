@@ -11,7 +11,6 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
-import { Input } from "@/components/ui/input";
 import {
   Select,
   SelectContent,
@@ -54,10 +53,9 @@ export function AttachEmailCampaignModal({
   const [projectId, setProjectId] = useState("");
   const [campaignId, setCampaignId] = useState("");
   const [loading, setLoading] = useState(false);
+  const [campaignsLoading, setCampaignsLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [showNewCampaign, setShowNewCampaign] = useState(false);
-  const [newCampaignName, setNewCampaignName] = useState("");
 
   const typeCounts = useMemo(() => {
     if (!selection) return { creator: 0, advertiser: 0, admin: 0 };
@@ -72,11 +70,6 @@ export function AttachEmailCampaignModal({
     );
   }, [selection]);
 
-  const verifiedProjects = useMemo(
-    () => projects.filter((p) => p.ses_verification_status === "verified"),
-    [projects],
-  );
-
   const draftCampaigns = useMemo(
     () => campaigns.filter((c) => c.status === "draft"),
     [campaigns],
@@ -85,58 +78,55 @@ export function AttachEmailCampaignModal({
   useEffect(() => {
     if (!open) return;
     setLoading(true);
+    setError(null);
+    setCampaignId("");
+    setCampaigns([]);
+
     fetch("/api/admin/email-projects")
       .then((r) => r.json())
       .then((data) => {
-        setProjects(data.projects ?? []);
-        const verified = (data.projects ?? []).filter(
-          (p: EmailProject) => p.ses_verification_status === "verified",
-        );
-        if (verified.length > 0) setProjectId(verified[0].id);
+        const list: EmailProject[] = data.projects ?? [];
+        setProjects(list);
+        setProjectId(list[0]?.id ?? "");
       })
       .finally(() => setLoading(false));
   }, [open]);
 
   useEffect(() => {
-    if (!projectId) {
+    if (!open || !projectId) {
       setCampaigns([]);
       setCampaignId("");
       return;
     }
-    fetch(`/api/admin/email-campaigns?projectId=${projectId}`)
+
+    let cancelled = false;
+    setCampaignsLoading(true);
+    setCampaignId("");
+
+    fetch(
+      `/api/admin/email-campaigns?projectId=${encodeURIComponent(projectId)}`,
+    )
       .then((r) => r.json())
       .then((data) => {
-        setCampaigns(data.campaigns ?? []);
-        const drafts = (data.campaigns ?? []).filter(
-          (c: EmailCampaign) => c.status === "draft",
-        );
+        if (cancelled) return;
+        const list: EmailCampaign[] = data.campaigns ?? [];
+        setCampaigns(list);
+        const drafts = list.filter((c) => c.status === "draft");
         setCampaignId(drafts[0]?.id ?? "");
+      })
+      .finally(() => {
+        if (!cancelled) setCampaignsLoading(false);
       });
-  }, [projectId]);
 
-  const handleCreateCampaign = async () => {
-    if (!projectId || !newCampaignName.trim()) return;
-    setSubmitting(true);
-    setError(null);
-    try {
-      const res = await fetch("/api/admin/email-campaigns", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ projectId, name: newCampaignName.trim() }),
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        setError(data.error || "Failed to create campaign");
-        return;
-      }
-      setCampaigns((prev) => [...prev, data.campaign]);
-      setCampaignId(data.campaign.id);
-      setShowNewCampaign(false);
-      setNewCampaignName("");
-    } finally {
-      setSubmitting(false);
-    }
-  };
+    return () => {
+      cancelled = true;
+    };
+  }, [open, projectId]);
+
+  const projectLabel = (p: EmailProject) =>
+    p.ses_verification_status === "verified"
+      ? `${p.name} (Verified)`
+      : p.name;
 
   const handleSubmit = async () => {
     if (!selection || !campaignId) {
@@ -202,14 +192,20 @@ export function AttachEmailCampaignModal({
 
             <div className="space-y-2">
               <Label>Project *</Label>
-              <Select value={projectId} onValueChange={setProjectId}>
+              <Select
+                value={projectId || undefined}
+                onValueChange={(id) => {
+                  setProjectId(id);
+                  setCampaignId("");
+                }}
+              >
                 <SelectTrigger>
                   <SelectValue placeholder="Select project" />
                 </SelectTrigger>
                 <SelectContent>
-                  {verifiedProjects.map((p) => (
+                  {projects.map((p) => (
                     <SelectItem key={p.id} value={p.id}>
-                      {p.name}
+                      {projectLabel(p)}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -218,45 +214,29 @@ export function AttachEmailCampaignModal({
 
             <div className="space-y-2">
               <Label>Campaign *</Label>
-              <div className="flex gap-2">
-                <Select value={campaignId} onValueChange={setCampaignId}>
-                  <SelectTrigger className="flex-1">
-                    <SelectValue placeholder="Select draft campaign" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {draftCampaigns.map((c) => (
-                      <SelectItem key={c.id} value={c.id}>
-                        {c.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => setShowNewCampaign((v) => !v)}
-                >
-                  + New
-                </Button>
-              </div>
+              <Select
+                value={campaignId || undefined}
+                onValueChange={setCampaignId}
+                disabled={!projectId || campaignsLoading}
+              >
+                <SelectTrigger>
+                  <SelectValue
+                    placeholder={
+                      campaignsLoading
+                        ? "Loading campaigns..."
+                        : "Select draft campaign"
+                    }
+                  />
+                </SelectTrigger>
+                <SelectContent>
+                  {draftCampaigns.map((c) => (
+                    <SelectItem key={c.id} value={c.id}>
+                      {c.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
-
-            {showNewCampaign && (
-              <div className="flex gap-2">
-                <Input
-                  placeholder="Campaign name"
-                  value={newCampaignName}
-                  onChange={(e) => setNewCampaignName(e.target.value)}
-                />
-                <Button
-                  type="button"
-                  onClick={handleCreateCampaign}
-                  disabled={submitting}
-                >
-                  Create
-                </Button>
-              </div>
-            )}
 
             {error && <p className="text-sm text-red-500">{error}</p>}
           </div>

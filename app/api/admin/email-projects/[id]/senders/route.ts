@@ -16,7 +16,7 @@ export async function GET(_req: Request, context: RouteContext) {
   const db = createAdminClient();
   const { data, error } = await db
     .from("admin_email_project_senders")
-    .select("id, email, is_default, ses_verified, created_at")
+    .select("id, email, is_default, ses_verified, display_name, first_name, last_name, created_at")
     .eq("project_id", id)
     .order("created_at", { ascending: true });
 
@@ -31,7 +31,13 @@ export async function POST(req: NextRequest, context: RouteContext) {
   if (auth.response) return auth.response;
 
   const { id } = await context.params;
-  let body: { email?: string; isDefault?: boolean };
+  let body: {
+    email?: string;
+    isDefault?: boolean;
+    displayName?: string;
+    firstName?: string;
+    lastName?: string;
+  };
   try {
     body = await req.json();
   } catch {
@@ -81,8 +87,13 @@ export async function POST(req: NextRequest, context: RouteContext) {
       email,
       is_default: !!body.isDefault,
       ses_verified: verified,
+      display_name: body.displayName?.trim() || null,
+      first_name: body.firstName?.trim() || null,
+      last_name: body.lastName?.trim() || null,
     })
-    .select("id, email, is_default, ses_verified")
+    .select(
+      "id, email, is_default, ses_verified, display_name, first_name, last_name",
+    )
     .single();
 
   if (error) {

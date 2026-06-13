@@ -12,11 +12,22 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Card, CardContent } from "@/components/ui/card";
-import { Filter, Plus, Search, SlidersHorizontal } from "lucide-react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { Filter, Plus, Search, SlidersHorizontal, Trash2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 type RecipientRow = {
   index: number;
+  userId: string;
   email: string;
   fullName: string;
   username: string;
@@ -33,19 +44,29 @@ export function LeadTab({ campaignId }: Props) {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [recipients, setRecipients] = useState<RecipientRow[]>([]);
+  const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
-  const [selected, setSelected] = useState<Set<number>>(new Set());
+  const [deleting, setDeleting] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
 
-  useEffect(() => {
+  const loadRecipients = () => {
     setLoading(true);
-    const params = new URLSearchParams({ page: "1" });
+    const params = new URLSearchParams({ page: "1", limit: "500" });
     if (statusFilter !== "all") params.set("status", statusFilter);
     if (search.trim()) params.set("search", search.trim());
 
-    fetch(`/api/admin/email-campaigns/${campaignId}/recipients?${params}`)
+    return fetch(`/api/admin/email-campaigns/${campaignId}/recipients?${params}`)
       .then((r) => r.json())
-      .then((d) => setRecipients(d.recipients ?? []))
+      .then((d) => {
+        setRecipients(d.recipients ?? []);
+        setTotal(d.total ?? d.recipients?.length ?? 0);
+      })
       .finally(() => setLoading(false));
+  };
+
+  useEffect(() => {
+    loadRecipients();
   }, [campaignId, statusFilter, search]);
 
   const filtered = useMemo(() => {
@@ -60,8 +81,50 @@ export function LeadTab({ campaignId }: Props) {
   }, [recipients, search]);
 
   const toggleAll = (checked: boolean) => {
-    if (checked) setSelected(new Set(filtered.map((r) => r.index)));
+    if (checked) setSelected(new Set(filtered.map((r) => r.userId)));
     else setSelected(new Set());
+  };
+
+  const handleDeleteSelected = async () => {
+    const userIds = Array.from(selected);
+    if (!userIds.length) return;
+
+    setDeleting(true);
+    try {
+      const res = await fetch(
+        `/api/admin/email-campaigns/${campaignId}/recipients`,
+        {
+          method: "DELETE",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ userIds }),
+        },
+      );
+      const data = await res.json();
+      if (!res.ok) {
+        toast({
+          title: "Could not remove leads",
+          description: data.error || "Delete failed",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      const removedIds = new Set(userIds);
+      setRecipients((prev) => prev.filter((r) => !removedIds.has(r.userId)));
+      setTotal((prev) => Math.max(0, prev - (data.deletedCount ?? userIds.length)));
+      setSelected(new Set());
+      setConfirmDelete(false);
+
+      await loadRecipients();
+
+      const remaining = data.recipientCount ?? 0;
+      toast({
+        title: "Leads removed",
+        description: `Removed ${data.deletedCount ?? userIds.length} lead(s). ${remaining} remaining.`,
+      });
+    } finally {
+      setDeleting(false);
+    }
   };
 
   const contactLabel = (r: RecipientRow) =>
@@ -101,6 +164,26 @@ export function LeadTab({ campaignId }: Props) {
           Manage Table
         </Button>
 
+        {selected.size > 0 && (
+          <>
+            <span className="text-sm text-muted-foreground">
+              {selected.size} selected
+              {!loading && total > filtered.length
+                ? ` · ${filtered.length} shown`
+                : ""}
+            </span>
+            <Button
+              variant="destructive"
+              className="h-11"
+              onClick={() => setConfirmDelete(true)}
+              disabled={deleting}
+            >
+              <Trash2 className="h-4 w-4 mr-2" />
+              Delete
+            </Button>
+          </>
+        )}
+
         <Button
           className="h-11 bg-[#662EBD] hover:bg-[#5524a8]"
           onClick={() =>
@@ -117,6 +200,11 @@ export function LeadTab({ campaignId }: Props) {
       </div>
 
       <Card className="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden">
+        {!loading && total > 0 && (
+          <div className="px-4 py-2 border-b border-gray-100 text-xs text-muted-foreground">
+            Showing {filtered.length} of {total} leads
+          </div>
+        )}
         <CardContent className="p-0 overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
@@ -125,7 +213,7 @@ export function LeadTab({ campaignId }: Props) {
                   <Checkbox
                     checked={
                       filtered.length > 0 &&
-                      filtered.every((r) => selected.has(r.index))
+                      filtered.every((r) => selected.has(r.userId))
                     }
                     onCheckedChange={(v) => toggleAll(!!v)}
                   />
@@ -149,15 +237,15 @@ export function LeadTab({ campaignId }: Props) {
               )}
               {!loading &&
                 filtered.map((r) => (
-                  <tr key={r.index} className="border-b last:border-0 hover:bg-muted/20">
+                  <tr key={r.userId} className="border-b last:border-0 hover:bg-muted/20">
                     <td className="p-4">
                       <Checkbox
-                        checked={selected.has(r.index)}
+                        checked={selected.has(r.userId)}
                         onCheckedChange={(v) => {
                           setSelected((prev) => {
                             const next = new Set(prev);
-                            if (v) next.add(r.index);
-                            else next.delete(r.index);
+                            if (v) next.add(r.userId);
+                            else next.delete(r.userId);
                             return next;
                           });
                         }}
@@ -187,6 +275,32 @@ export function LeadTab({ campaignId }: Props) {
           </table>
         </CardContent>
       </Card>
+
+      <AlertDialog open={confirmDelete} onOpenChange={setConfirmDelete}>
+        <AlertDialogContent className="bg-white">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Remove selected leads?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will remove {selected.size} lead
+              {selected.size === 1 ? "" : "s"} from this campaign. This cannot be
+              undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleting}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              disabled={deleting}
+              onClick={(e) => {
+                e.preventDefault();
+                handleDeleteSelected();
+              }}
+            >
+              {deleting ? "Removing..." : "Delete"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
