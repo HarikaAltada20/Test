@@ -10,6 +10,7 @@ import {
   Rect,
   Line,
 } from "@react-pdf/renderer";
+import type { Style } from "@react-pdf/types";
 import type { CampaignCoverReportData } from "@/lib/report-export-pdf-cover-data";
 import {
   registerPremiumFonts,
@@ -269,19 +270,19 @@ const KPI_ICONS = [IconUsers, IconEye, IconTrophy, IconCalendar];
 
 function pickValueStyle(
   value: string,
-  lg: object,
-  md: object,
-  sm: object,
-) {
+  lg: Style,
+  md: Style,
+  sm: Style,
+): Style {
   if (value.length > 11) return sm;
   if (value.length > 8) return md;
   return lg;
 }
 
-function pickBrandStyle(name: string) {
+function pickBrandStyle(name: string): Style | undefined {
   if (name.length > 44) return styles.brandXs;
   if (name.length > 32) return styles.brandSm;
-  return null;
+  return undefined;
 }
 
 function pickCampaignFontSize(name: string): number {
@@ -348,7 +349,7 @@ function PerformanceSection({
             key={item.label}
             style={[
               styles.perfItem,
-              index < items.length - 1 ? styles.perfItemBorder : null,
+              ...(index < items.length - 1 ? [styles.perfItemBorder] : []),
             ]}
           >
             <Text style={styles.perfLabel}>{item.label}</Text>
@@ -387,6 +388,7 @@ function CoverPage({
     styles.heroValueSm,
   );
   const heroSublineLines = data.heroMetric.subline.split("\n");
+  const brandStyle = pickBrandStyle(data.brandName);
 
   return (
     <Page size={PAGE_SIZE} style={premiumPageStyle.page} wrap={false}>
@@ -407,7 +409,7 @@ function CoverPage({
           <Text style={styles.titleLine2}>Performance</Text>
           <Text style={styles.titleLine3}>Report</Text>
           <Text style={styles.prepared}>Prepared for</Text>
-          <Text style={[styles.brand, pickBrandStyle(data.brandName)]}>
+          <Text style={brandStyle ? [styles.brand, brandStyle] : styles.brand}>
             {data.brandName}
           </Text>
           <DividerOrnament />
@@ -449,7 +451,11 @@ function CoverPage({
 
         <View style={styles.insightSection}>
           <Text
-            style={[styles.insightText, longInsight ? styles.insightTextLong : null]}
+            style={
+              longInsight
+                ? [styles.insightText, styles.insightTextLong]
+                : styles.insightText
+            }
           >
             {data.insightSentence}
           </Text>

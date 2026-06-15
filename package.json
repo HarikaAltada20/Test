@@ -50,6 +50,8 @@
     "@radix-ui/react-visually-hidden": "^1.2.3",
     "@react-pdf/renderer": "^4.5.1",
     "@solana/spl-token": "^0.4.14",
+    "@solana/wallet-adapter-base": "^0.9.27",
+    "@solana/wallet-adapter-react": "^0.15.39",
     "@solana/web3.js": "^1.98.4",
     "@stripe/react-stripe-js": "^3.8.1",
     "@stripe/stripe-js": "^7.7.0",

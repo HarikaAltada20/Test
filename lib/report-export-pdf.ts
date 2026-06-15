@@ -84,6 +84,7 @@ type JsPdfDoc = {
     h: number,
     options: { pageNumber?: number; url?: string },
   ) => void;
+  output: (type: string) => unknown;
   addFileToVFS: (fileName: string, fileContent: string) => void;
   addFont: (
     postScriptName: string,

@@ -361,7 +361,7 @@ const [isDark, setIsDark] = useState<boolean>(() => {
     bank_transfer: "Bank transfer",
     phantom: "Phantom",
   };
-  const DEFAULT_METHOD_TYPES = ["crypto", "upi", "bank_transfer", "phantom"];
+  const DEFAULT_METHOD_TYPES = ["crypto", "upi", "bank_transfer"];
 
   const setPayoutMethodPaused = async (methodType: string, isPaused: boolean) => {
     setUpdatingPayoutMethod(methodType);

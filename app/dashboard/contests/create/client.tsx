@@ -3,7 +3,7 @@
 import type React from "react";
 
 import { useState, useRef, useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -52,6 +52,8 @@ import {
 } from "@/lib/contest-type";
 import { isVideoContestFormat } from "@/lib/trust-score";
 import { formatCurrencyFromCents } from "@/lib/currency-utils";
+import { shouldSkipBeforeUnload, consumeCreateFlowReturnStep } from "@/lib/before-unload-utils";
+import { reconcileLeaderboardPrizeAmounts } from "@/lib/contest-prize-utils";
 import { toast } from "@/hooks/use-toast"; // Added import
 import dynamic from "next/dynamic";
 import REGIONS_AND_COUNTRIES_DATA from "@/data/regions-and-countries.json";
@@ -87,6 +89,7 @@ import {
 } from "@/constants/subscriptionPlans";
 import { createClient } from "@/utils/supabase/client";
 import { UserResponse } from "@supabase/supabase-js";
+import { CampaignPaymentModal } from "@/components/CampaignPaymentModal";
 import { ContestPaymentSelection } from "@/components/ContestPaymentSelection";
 import {
   Collapsible,
@@ -555,6 +558,8 @@ export default function CreateContestPage({
   const resourceFileRef = useRef<HTMLInputElement>(null);
   const bonusRichTextEditorRef = useRef<any>(null);
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const processedContestPaymentRef = useRef<string | null>(null);
   const supabase = createClient();
   const [userPlan, setUserPlan] = useState<string | null>(null);
   const [totalPrizePool, setTotalPrizePool] = useState<number>(
@@ -683,6 +688,8 @@ export default function CreateContestPage({
 
     // Set up beforeunload event listener
     const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (shouldSkipBeforeUnload()) return;
+
       if (hasChanges) {
         e.preventDefault();
         e.returnValue =
@@ -3719,6 +3726,107 @@ export default function CreateContestPage({
     setShowPayment(false);
   };
 
+  useEffect(() => {
+    const contestPayment = searchParams.get("contest_payment");
+    const sessionId = searchParams.get("session_id");
+    const contestIdParam = searchParams.get("contest_id");
+
+    if (contestPayment === "cancelled") {
+      const dedupeKey = `cancelled-${contestIdParam || "unknown"}`;
+      if (processedContestPaymentRef.current === dedupeKey) return;
+      processedContestPaymentRef.current = dedupeKey;
+
+      toast({
+        title: "Payment cancelled",
+        description: "No charge was made.",
+      });
+      restoreCreateStepFromReturn();
+      setShowPayment(true);
+
+      if (contestIdParam) {
+        setDraftId(contestIdParam);
+        setContestId(contestIdParam);
+        window.history.replaceState(
+          {},
+          "",
+          buildDraftReturnUrl(contestIdParam),
+        );
+        void reloadContestById(contestIdParam);
+      } else {
+        window.history.replaceState({}, "", window.location.pathname);
+      }
+      return;
+    }
+
+    if (contestPayment === "success" && sessionId) {
+      if (processedContestPaymentRef.current === sessionId) return;
+      processedContestPaymentRef.current = sessionId;
+
+      window.history.replaceState({}, "", window.location.pathname);
+
+      const completeStripeReturn = async () => {
+        try {
+          const sessionResponse = await fetch(
+            `/api/payments/contest/session?session_id=${encodeURIComponent(sessionId)}`,
+          );
+          const sessionData = await sessionResponse.json();
+
+          if (!sessionResponse.ok || !sessionData.success) {
+            toast({
+              title: "Payment verification failed",
+              description:
+                sessionData.error ||
+                "We couldn't verify your payment. Please try again.",
+              variant: "destructive",
+            });
+            restoreCreateStepFromReturn();
+            if (contestIdParam) {
+              window.history.replaceState(
+                {},
+                "",
+                buildDraftReturnUrl(contestIdParam),
+              );
+              void reloadContestById(contestIdParam);
+            }
+            setShowPayment(true);
+            return;
+          }
+
+          toast({
+            title: "Payment successful",
+            description:
+              "Your campaign payment was completed. Submitting for review...",
+          });
+          setShowPayment(true);
+          await handlePaymentSuccess({
+            contestId: contestIdParam || sessionData.contestId || draftId,
+            paymentDetails: sessionData,
+          });
+        } catch (error) {
+          console.error("Error processing contest payment return:", error);
+          toast({
+            title: "Payment error",
+            description:
+              "Something went wrong verifying your payment. Please try again.",
+            variant: "destructive",
+          });
+          restoreCreateStepFromReturn();
+          if (contestIdParam) {
+            window.history.replaceState(
+              {},
+              "",
+              buildDraftReturnUrl(contestIdParam),
+            );
+            void reloadContestById(contestIdParam);
+          }
+          setShowPayment(true);
+        }
+      };
+
+      void completeStripeReturn();
+    }
+  }, [searchParams, draftId]);
+
   const addResource = async () => {
     setExternalLinkError(null);
     if (!newResourceUrl.trim()) {
@@ -3880,6 +3988,19 @@ export default function CreateContestPage({
     if (!isNaN(dollars)) {
       // Convert dollars to cents for internal storage
       const numValue = Math.round(dollars * 100);
+
+      if (totalPrizePool > 0 && numValue > totalPrizePool * 10) {
+        toast({
+          title: "Prize Amount Too High",
+          description: `Winner ${
+            index + 1
+          } looks unusually large for this prize pool. Did you mean ${formatCurrencyFromCents(
+            Math.round(dollars / 10) * 100,
+          )}?`,
+          variant: "destructive",
+        });
+        return;
+      }
 
       // Update the value immediately to improve responsiveness
       const newWinnerAmounts = [...winnerAmounts];
@@ -4817,6 +4938,39 @@ export default function CreateContestPage({
   };
 
   // Function to load draft data
+  const restoreCreateStepFromReturn = () => {
+    setStep("prize");
+  };
+
+  const buildDraftReturnUrl = (contestIdToLoad: string) =>
+    `${window.location.pathname}?draft=${contestIdToLoad}&step=prize`;
+
+  const reloadContestById = async (contestIdToLoad: string) => {
+    try {
+      const { data: authData, error: authError } =
+        await supabase.auth.getUser();
+
+      if (authError || !authData.user) return;
+
+      const { data: contest, error } = await supabase
+        .from("contests")
+        .select("*")
+        .eq("id", contestIdToLoad)
+        .eq("advertiser_id", authData.user.id)
+        .single();
+
+      if (error || !contest) {
+        console.error("Error reloading contest after payment return:", error);
+        return;
+      }
+
+      populateDraftData(contest);
+      restoreCreateStepFromReturn();
+    } catch (err) {
+      console.error("Error reloading contest:", err);
+    }
+  };
+
   const loadDraftData = async () => {
     try {
       // Use getUser instead of session
@@ -4832,6 +4986,15 @@ export default function CreateContestPage({
 
       // Allow pre-selecting campaign type from URL.
       const urlParams = new URLSearchParams(window.location.search);
+
+      if (
+        urlParams.get("step") === "prize" ||
+        urlParams.get("contest_payment") ||
+        consumeCreateFlowReturnStep() === "prize"
+      ) {
+        restoreCreateStepFromReturn();
+      }
+
       const selectedTypeParam = (
         urlParams.get("contestType") ||
         urlParams.get("type") ||
@@ -4859,7 +5022,8 @@ export default function CreateContestPage({
       }
 
       // Check if there's a draft ID in the URL query parameters
-      const draftIdFromUrl = urlParams.get("draft");
+      const draftIdFromUrl =
+        urlParams.get("draft") || urlParams.get("contest_id");
 
       if (draftIdFromUrl) {
         // Load specific draft from URL parameter
@@ -5135,8 +5299,40 @@ export default function CreateContestPage({
         const amounts = lc.prizes.map(
           (prize: { amount?: number }) => prize.amount || 0,
         );
-        setWinnerAmounts(amounts);
-        updateTotalPrizePool(amounts);
+        const totalPrize =
+          typeof lc.total_prize === "number" && lc.total_prize > 0
+            ? lc.total_prize
+            : amounts.reduce((sum: number, amount: number) => sum + amount, 0);
+        const reconciled = reconcileLeaderboardPrizeAmounts(amounts, totalPrize);
+
+        setWinnerAmounts(reconciled);
+        setTotalPrizePool(totalPrize);
+
+        const prizesChanged =
+          reconciled.length !== amounts.length ||
+          reconciled.some((amount, index) => amount !== amounts[index]);
+
+        if (prizesChanged && draft.id) {
+          const prizesArray = reconciled.map((amount, index) => ({
+            position: index + 1,
+            amount,
+          }));
+
+          void supabase
+            .from("contests")
+            .update({
+              contest_based_details: {
+                ...contestDetails,
+                leaderboard_contest: {
+                  ...lc,
+                  prizes: prizesArray,
+                  total_prize: totalPrize,
+                },
+              },
+            })
+            .eq("id", draft.id)
+            .eq("advertiser_id", user?.id);
+        }
       }
 
       // Restore flat fee bonus (stored in cents)
@@ -5570,9 +5766,6 @@ export default function CreateContestPage({
         await checkStorageAvailability();
         await getUserPlan(); // getUserPlan might depend on loaded plans if defaults change
         await loadDraftData();
-
-        // Set initial default prize allocations for the default 3 winners
-        updateTotalPrizePool();
       } catch (error) {
         console.error("Error initializing data:", error);
         // Continue with the application even if there are errors
@@ -13169,29 +13362,13 @@ export default function CreateContestPage({
         )}
       </div>
 
-      {/* Payment Modal */}
-      {showPayment && (
-        <div
-          className={cn(
-            "fixed inset-0 bg-black bg-opacity-65 flex items-center justify-center p-2 sm:p-4 z-50",
-            isDark ? "bg-[#100A33]" : "bg-black",
-          )}
-        >
-          <div
-            className={cn(
-              "rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto",
-              isDark
-                ? "bg-[#06021D] border border-gray-800 text-white"
-                : "bg-white text-gray-900 ",
-            )}
-          >
-            <div className="p-6">
-              <div className="mb-6">
-                <h2 className="text-2xl font-bold mb-2">Campaign Payment</h2>
-                <p>Complete payment to submit your campaign for review</p>
-              </div>
-
-              <ContestPaymentSelection
+      <CampaignPaymentModal
+        open={showPayment}
+        onClose={() => setShowPayment(false)}
+        isDark={isDark}
+        disabled={isLoading}
+      >
+        <ContestPaymentSelection
                 contestAmount={
                   contestType === "leaderboard"
                     ? (() => {
@@ -13233,33 +13410,15 @@ export default function CreateContestPage({
                 }
                 contestTitle={title || "Untitled Campaign"}
                 contestId={draftId || undefined}
+                returnPath="/dashboard/contests/create"
                 commissionPercentage={
                   getPlanFeatures(userPlan).commissionPercentage
                 }
-                onPaymentSuccess={handlePaymentSuccess}
-                onPaymentError={handlePaymentError}
-                disabled={isLoading}
-              />
-
-              <div className="w-full mt-3">
-                <Button
-                  className={cn(
-                    "w-full text-md rounded-full",
-                    isDark
-                      ? "py-3 border bg-[#06021D] border-[#FF5353] text-[#FF5353]"
-                      : "bg-[#FF323224] text-[#E50000] py-4",
-                  )}
-                  onClick={() => setShowPayment(false)}
-                  disabled={isLoading}
-                  size="lg"
-                >
-                  Cancel
-                </Button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+          onPaymentSuccess={handlePaymentSuccess}
+          onPaymentError={handlePaymentError}
+          disabled={isLoading}
+        />
+      </CampaignPaymentModal>
 
       {/* Floating Error Alert */}
       {toastErrorMessage && (

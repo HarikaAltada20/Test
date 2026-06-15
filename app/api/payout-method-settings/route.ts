@@ -22,14 +22,14 @@ export async function GET() {
   if (error) {
     console.error("payout-method-settings fetch error:", error);
     return NextResponse.json(
-      { error: "Failed to load payout method settings", pausedMethodTypes: [], enabledMethodTypes: ["crypto", "upi", "bank_transfer", "phantom"] },
+      { error: "Failed to load payout method settings", pausedMethodTypes: [], enabledMethodTypes: ["crypto", "upi", "bank_transfer"] },
       { status: 500 }
     );
   }
 
   const settings = rows || [];
   const pausedMethodTypes = settings.filter((r) => r.is_paused).map((r) => r.method_type);
-  const allTypes = ["crypto", "upi", "bank_transfer", "phantom"];
+  const allTypes = ["crypto", "upi", "bank_transfer"];
   const enabledMethodTypes = allTypes.filter((t) => !pausedMethodTypes.includes(t));
 
   return NextResponse.json({

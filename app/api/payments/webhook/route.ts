@@ -2,7 +2,11 @@ import { NextRequest, NextResponse } from 'next/server';
 import { headers } from 'next/headers';
 import { stripe } from '@/lib/stripe';
 import { createAdminClient } from '@/utils/supabase/admin';
-import { updateTransactionStatus, ensureDefaultPaymentMethod } from '@/lib/payment-utils';
+import {
+  updateTransactionStatus,
+  ensureDefaultPaymentMethod,
+  logTransactionAsAdmin,
+} from '@/lib/payment-utils';
 import Stripe from 'stripe';
 
 export async function POST(request: NextRequest) {
@@ -161,7 +165,8 @@ async function handlePaymentSuccess(paymentIntent: any) {
 
       console.log('✅ Balance update successful:', updateData);
 
-      // Update existing pending transaction to success
+      // Update existing pending transaction to success, or create one if Checkout
+      // did not produce a payment_intent at session creation time
       const updateSuccess = await updateTransactionStatus(
         paymentIntent.id,
         'success',
@@ -169,8 +174,39 @@ async function handlePaymentSuccess(paymentIntent: any) {
         'Wallet topped up successfully'
       );
 
+      if (!updateSuccess) {
+        console.log(
+          '📝 No pending transaction found — creating success deposit record'
+        );
+        const customerId =
+          typeof paymentIntent.customer === 'string'
+            ? paymentIntent.customer
+            : paymentIntent.customer?.id;
+
+        const logged = await logTransactionAsAdmin(
+          userId,
+          'deposit',
+          amountInCents,
+          'success',
+          `Wallet top-up completed - Payment Intent: ${paymentIntent.id}`,
+          {
+            paymentIntentId: paymentIntent.id,
+            remarks: 'Wallet topped up successfully',
+            paymentMethod: 'stripe',
+            metadata: customerId
+              ? { stripe_customer_id: customerId }
+              : undefined,
+          }
+        );
+        console.log(
+          `Transaction record created: ${logged ? 'SUCCESS' : 'FAILED'}`
+        );
+      }
+
       console.log(`Deposit successful: $${amountInDollars} (${amountInCents} cents) added to user ${userId}`);
-      console.log(`Transaction status updated: ${updateSuccess ? 'SUCCESS' : 'FAILED'}`);
+      console.log(
+        `Transaction logged: ${updateSuccess ? 'UPDATED_PENDING' : 'CREATED_NEW'}`
+      );
       console.log(`Customer ID: ${paymentIntent.customer}`);
     }
 
@@ -347,10 +383,17 @@ async function handlePaymentSuccess(paymentIntent: any) {
       console.log(`Transaction status updated: ${updateSuccess ? 'SUCCESS' : 'FAILED'}`);
     }
 
-    // 🆕 AUTO-SET DEFAULT PAYMENT METHOD
-    // After successful payment, set the payment method as default for the customer
-    if (paymentIntent.customer && paymentIntent.payment_method) {
-      await ensureDefaultPaymentMethod(paymentIntent.customer, paymentIntent.payment_method);
+    // Set default payment method for contest payments only.
+    // Wallet top-ups use one-time Checkout — the PM is not attached to the customer.
+    if (
+      paymentIntent.customer &&
+      paymentIntent.payment_method &&
+      type !== 'wallet_topup'
+    ) {
+      await ensureDefaultPaymentMethod(
+        paymentIntent.customer,
+        paymentIntent.payment_method
+      );
     }
 
   } catch (error) {

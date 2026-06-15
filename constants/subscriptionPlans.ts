@@ -233,6 +233,9 @@ export const DEFAULT_WINNER_COUNT = 3;
 
 // --- Form Limits and Placeholders ---
 // Wallet top-up limits
+export const WALLET_TOP_UP_MIN_AMOUNT = 1;
+/** Lower minimum for Solana USDC/USDT top-ups (useful for testing). */
+export const SOLANA_TOP_UP_MIN_AMOUNT = 0.1;
 export const WALLET_TOP_UP_MAX_AMOUNT = 10000; // $100.00 maximum top-up
 
 // Form placeholder values (in dollars for display)

@@ -1,4 +1,5 @@
 import { createClient } from "@/utils/supabase/server";
+import { createAdminClient } from "@/utils/supabase/admin";
 import { stripe } from "./stripe";
 import { formatCurrencyFromCents } from "./currency-utils";
 import {
@@ -258,82 +259,123 @@ const plan = getSubscriptionPlanById(subscription.product_id);
   return plan?.features || null;
 }
 
+function getStripeCustomerErrorMessage(error: unknown): string | null {
+  if (typeof error !== "object" || error === null) {
+    return null;
+  }
+
+  const stripeError = error as { type?: string; code?: string };
+  if (stripeError.type === "StripeAuthenticationError") {
+    return "Card payments are temporarily unavailable. Please use Solana or contact support.";
+  }
+
+  return null;
+}
+
+async function resolveUserEmailForStripe(userId: string): Promise<string | null> {
+  const admin = createAdminClient();
+
+  const { data: userData, error: userError } = await admin
+    .from("users")
+    .select("email")
+    .eq("id", userId)
+    .maybeSingle();
+
+  if (userData?.email) {
+    return userData.email;
+  }
+
+  if (userError && userError.code !== "PGRST116") {
+    console.error("Error fetching user email:", userId, userError);
+  }
+
+  const { data: authData, error: authError } =
+    await admin.auth.admin.getUserById(userId);
+
+  if (authError || !authData.user?.email) {
+    console.error("No email found for user:", userId, authError);
+    return null;
+  }
+
+  return authData.user.email;
+}
+
 // Create or get Stripe customer
-export async function createOrGetStripeCustomer(userId: string): Promise<string | null> {
-const supabase = await createClient();
+export async function createOrGetStripeCustomer(
+  userId: string,
+): Promise<string | null> {
+  const admin = createAdminClient();
 
-// Check if user already has a Stripe customer ID in customers table
-const { data: customer, error } = await supabase
-.from('customers')
-.select('stripe_customer_id')
-.eq('id', userId)
-.single();
+  const { data: customer, error } = await admin
+    .from("customers")
+    .select("stripe_customer_id")
+    .eq("id", userId)
+    .maybeSingle();
 
-if (error && error.code !== 'PGRST116') {
-console.error('Error fetching customer record:', error);
-return null;
-}
+  if (error && error.code !== "PGRST116") {
+    console.error("Error fetching customer record:", error);
+    return null;
+  }
 
-// If we have a customer ID, verify it exists in Stripe
-if (customer?.stripe_customer_id) {
-try {
-// Verify customer exists in Stripe
-await stripe().customers.retrieve(customer.stripe_customer_id);
-console.log('✅ Verified existing Stripe customer:', customer.stripe_customer_id);
-return customer.stripe_customer_id;
-} catch (stripeError: any) {
-if (stripeError.code === 'resource_missing') {
-console.log('⚠️ Customer exists in database but not in Stripe, recreating...');
-// Customer doesn't exist in Stripe, we'll recreate it
-} else {
-console.error('Error verifying Stripe customer:', stripeError);
-return null;
-}
-}
-}
+  if (customer?.stripe_customer_id) {
+    try {
+      await stripe().customers.retrieve(customer.stripe_customer_id);
+      console.log(
+        "✅ Verified existing Stripe customer:",
+        customer.stripe_customer_id,
+      );
+      return customer.stripe_customer_id;
+    } catch (stripeError: any) {
+      if (stripeError.code === "resource_missing") {
+        console.log(
+          "⚠️ Customer exists in database but not in Stripe, recreating...",
+        );
+      } else {
+        const stripeMessage = getStripeCustomerErrorMessage(stripeError);
+        if (stripeMessage) {
+          throw new Error(stripeMessage);
+        }
+        console.error("Error verifying Stripe customer:", stripeError);
+        return null;
+      }
+    }
+  }
 
-// Get user email from our users table
-const { data: userData, error: userError } = await supabase
-.from('users')
-.select('email')
-.eq('id', userId)
-.single();
+  const email = await resolveUserEmailForStripe(userId);
+  if (!email) {
+    return null;
+  }
 
-if (userError || !userData?.email) {
-console.error('No email found for user:', userId, userError);
-return null;
-}
+  try {
+    console.log("🔧 Creating new Stripe customer for:", email);
+    const stripeCustomer = await stripe().customers.create({
+      email,
+      metadata: {
+        user_id: userId,
+      },
+    });
 
-try {
-// Create new Stripe customer
-console.log('🔧 Creating new Stripe customer for:', userData.email);
-const stripeCustomer = await stripe().customers.create({
-email: userData.email,
-metadata: {
-user_id: userId
-}
-});
+    console.log("✅ Created new Stripe customer:", stripeCustomer.id);
 
-console.log('✅ Created new Stripe customer:', stripeCustomer.id);
+    const { error: upsertError } = await admin.from("customers").upsert({
+      id: userId,
+      stripe_customer_id: stripeCustomer.id,
+    });
 
-// Save customer ID to customers table (upsert in case record exists)
-const { error: upsertError } = await supabase
-.from('customers')
-.upsert({ 
-id: userId, 
-stripe_customer_id: stripeCustomer.id 
-});
+    if (upsertError) {
+      console.error("Error saving customer record:", upsertError);
+      return null;
+    }
 
-if (upsertError) {
-console.error('Error saving customer record:', upsertError);
-return null;
-}
-
-return stripeCustomer.id;
-} catch (error) {
-console.error('Error creating Stripe customer:', error);
-return null;
-}
+    return stripeCustomer.id;
+  } catch (error) {
+    const stripeMessage = getStripeCustomerErrorMessage(error);
+    if (stripeMessage) {
+      throw new Error(stripeMessage);
+    }
+    console.error("Error creating Stripe customer:", error);
+    return null;
+  }
 }
 
 /**
