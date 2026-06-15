@@ -103,6 +103,22 @@ export function getQStashPublishBaseUrl(request?: Request): string {
   return resolvePublicBaseUrl(request);
 }
 
+/**
+ * Prefer the incoming request origin when running on localhost, even if
+ * NEXT_PUBLIC_APP_URL points at production. Used for direct delivery processor
+ * triggers during local development.
+ */
+export function resolveLocalAwareBaseUrl(request?: Request): string {
+  if (request) {
+    try {
+      return new URL(request.url).origin.replace(/\/$/, "");
+    } catch {
+      // fall through
+    }
+  }
+  return getQStashPublishBaseUrl(request);
+}
+
 /** QStash cannot deliver to localhost; detect loopback so callers can fall back to direct POST. */
 export function isLoopbackUrl(url: string): boolean {
   try {

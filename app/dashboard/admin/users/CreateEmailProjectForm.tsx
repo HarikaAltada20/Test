@@ -6,7 +6,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { MAX_PROJECT_DESCRIPTION_LENGTH } from "@/lib/admin-email/project-options";
@@ -26,7 +25,6 @@ export function CreateEmailProjectForm({
   const [websiteUrl, setWebsiteUrl] = useState("");
   const [targetAudience, setTargetAudience] = useState("");
   const [description, setDescription] = useState("");
-  const [usePlatformSender, setUsePlatformSender] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -48,7 +46,6 @@ export function CreateEmailProjectForm({
           websiteUrl: websiteUrl.trim() || null,
           targetAudience: targetAudience.trim() || null,
           description: description.trim() || null,
-          usePlatformSender,
         }),
       });
       const data = await res.json();
@@ -56,7 +53,7 @@ export function CreateEmailProjectForm({
         setError(data.error || "Failed to create project");
         return;
       }
-      onCreated(data.project.id, !usePlatformSender);
+      onCreated(data.project.id, true);
     } finally {
       setSubmitting(false);
     }
@@ -132,18 +129,6 @@ export function CreateEmailProjectForm({
                   isDark ? "bg-[#22044a] border-purple-800" : "",
                 )}
               />
-            </div>
-
-            <div className="flex items-center gap-2 md:col-span-2">
-              <Checkbox
-                id="platform-sender"
-                checked={usePlatformSender}
-                onCheckedChange={(c) => setUsePlatformSender(!!c)}
-              />
-              <Label htmlFor="platform-sender" className="font-normal cursor-pointer">
-                Use platform sender (noreply@gameofcreators.com) — skip custom domain
-                setup
-              </Label>
             </div>
           </div>
 

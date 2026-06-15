@@ -2,7 +2,8 @@ import { createAdminClient } from "@/utils/supabase/admin";
 import {
   buildBulkEmailHtml,
   buildBulkEmailSubject,
-  getUnsubscribeFooter,
+  getBulkEmailFromName,
+  getBulkEmailReplyTo,
 } from "@/lib/email/admin-bulk-email";
 import { sendSesEmail } from "@/lib/email/ses-client";
 import {
@@ -10,12 +11,15 @@ import {
   isAdminEmailDeliveryQueueEnabled,
 } from "@/lib/queue/admin-email-delivery-queue";
 import {
+  isLoopbackUrl,
   isQStashEnabled,
   triggerProcessAdminEmailDeliveryQueue,
 } from "@/lib/qstash";
 import type { ContestTemplateContext } from "@/lib/admin-notifications/template";
 import type { RecipientUserRow } from "@/lib/admin-notifications/types";
 import { EMAIL_DELIVERY_BATCH_SIZE } from "./types";
+import { resolveRecipientEmailContent } from "./sequence-store";
+import type { StoredSequence } from "./sequence-types";
 
 async function loadContestContext(
   contestId: string | null,
@@ -88,7 +92,7 @@ export async function deliverEmailCampaignBatch(
   const { data: campaign, error: campaignError } = await db
     .from("admin_email_campaigns")
     .select(
-      "id, email_subject, message_template, from_email, status, contest_id, project_id",
+      "id, email_subject, message_template, from_email, status, contest_id, project_id, sequence_data",
     )
     .eq("id", campaignId)
     .single();
@@ -115,6 +119,10 @@ export async function deliverEmailCampaignBatch(
 
   const users = await loadUsersByIds(userIds);
   const contest = await loadContestContext(campaign.contest_id);
+  const campaignFallback = {
+    subject: campaign.email_subject || "",
+    body: campaign.message_template || "",
+  };
   let successCount = 0;
   let failureCount = 0;
   let skippedCount = 0;
@@ -151,24 +159,35 @@ export async function deliverEmailCampaignBatch(
       continue;
     }
 
-    const subject = buildBulkEmailSubject(
-      campaign.email_subject,
-      user,
-      contest,
-    );
-    const { html } = buildBulkEmailHtml({
-      bodyTemplate: campaign.message_template,
+    const { subject: emailSubject, body: messageTemplate } =
+      resolveRecipientEmailContent(
+        campaign.sequence_data as StoredSequence | null,
+        user.id,
+        campaignFallback,
+      );
+
+    if (!emailSubject.trim() || !messageTemplate.trim()) {
+      failureCount += 1;
+      continue;
+    }
+
+    const subject = buildBulkEmailSubject(emailSubject, user, contest);
+    const { html, text } = buildBulkEmailHtml({
+      bodyTemplate: messageTemplate,
       user,
       trackingId,
       contest,
+      personalInbox: true,
     });
-    const fullHtml = html + getUnsubscribeFooter(user.id);
 
     const sendResult = await sendSesEmail({
       from: campaign.from_email,
+      fromName: getBulkEmailFromName(campaign.from_email),
       to: user.email,
       subject,
-      html: fullHtml,
+      html,
+      text,
+      replyTo: getBulkEmailReplyTo(campaign.from_email),
     });
 
     if (sendResult.messageId) {
@@ -338,23 +357,45 @@ export async function startEmailCampaignDelivery(
     })
     .eq("id", campaignId);
 
+  const deliveryBaseUrl =
+    baseUrl ??
+    process.env.NEXT_PUBLIC_APP_URL?.trim() ??
+    "http://localhost:3000";
+  const onProductionVercel = process.env.VERCEL_ENV === "production";
+  const useDirectProcessor =
+    !onProductionVercel ||
+    isLoopbackUrl(deliveryBaseUrl) ||
+    !isQStashEnabled();
+
   if (isAdminEmailDeliveryQueueEnabled()) {
     const { error } = await enqueueAdminEmailDeliveryJob({ campaignId });
     if (error) {
       return { started: false, reason: "enqueue_failed" };
     }
-    if (isQStashEnabled()) {
-      await triggerProcessAdminEmailDeliveryQueue(baseUrl);
-    } else {
-      const triggered = await triggerEmailDeliveryProcessor(baseUrl, campaignId);
-      if (!triggered.triggered) {
-        return { started: false, reason: "processor_trigger_failed" };
+    if (!useDirectProcessor) {
+      const qstash = await triggerProcessAdminEmailDeliveryQueue(deliveryBaseUrl);
+      if (!qstash.error) {
+        return { started: true };
       }
+      console.warn(
+        "[admin-email] QStash trigger failed, falling back to direct processor:",
+        qstash.error,
+      );
+    }
+    const triggered = await triggerEmailDeliveryProcessor(
+      deliveryBaseUrl,
+      campaignId,
+    );
+    if (!triggered.triggered) {
+      return { started: false, reason: "processor_trigger_failed" };
     }
     return { started: true };
   }
 
-  const triggered = await triggerEmailDeliveryProcessor(baseUrl, campaignId);
+  const triggered = await triggerEmailDeliveryProcessor(
+    deliveryBaseUrl,
+    campaignId,
+  );
   if (!triggered.triggered) {
     return { started: false, reason: "processor_trigger_failed" };
   }

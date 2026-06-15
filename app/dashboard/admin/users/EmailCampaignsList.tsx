@@ -163,10 +163,27 @@ export function EmailCampaignsList({
     };
   }, [campaigns]);
 
-  const handleStart = async (campaignId: string) => {
-    await fetch(`/api/admin/email-campaigns/${campaignId}/start`, {
+  const handleStart = async (campaign: EmailCampaignListItem) => {
+    if ((campaign.recipient_count ?? 0) <= 0) {
+      toast({
+        title: "Add leads first",
+        description: "Attach recipients before starting this campaign.",
+        variant: "destructive",
+      });
+      return;
+    }
+    const res = await fetch(`/api/admin/email-campaigns/${campaign.id}/start`, {
       method: "POST",
     });
+    const data = await res.json();
+    if (!res.ok) {
+      toast({
+        title: "Could not start campaign",
+        description: data.error || "Start failed",
+        variant: "destructive",
+      });
+      return;
+    }
     onRefresh();
   };
 
@@ -366,12 +383,17 @@ export function EmailCampaignsList({
                         <Button
                           variant="ghost"
                           size="icon"
-                          className="h-8 w-8"
+                          className="h-8 w-8 disabled:opacity-40"
                           onClick={(e) => {
                             e.stopPropagation();
-                            handleStart(c.id);
+                            handleStart(c);
                           }}
-                          title="Start campaign"
+                          disabled={(c.recipient_count ?? 0) <= 0}
+                          title={
+                            (c.recipient_count ?? 0) <= 0
+                              ? "Add leads before starting"
+                              : "Start campaign"
+                          }
                         >
                           <Play className="h-4 w-4" />
                         </Button>

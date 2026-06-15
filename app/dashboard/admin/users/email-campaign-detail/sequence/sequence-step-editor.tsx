@@ -21,6 +21,7 @@ type Props = {
   onClose: () => void;
   projectId?: string;
   onDirtyChange?: (dirty: boolean) => void;
+  readOnly?: boolean;
 };
 
 export function SequenceStepEditor({
@@ -28,6 +29,7 @@ export function SequenceStepEditor({
   onSave,
   onClose,
   onDirtyChange,
+  readOnly = false,
 }: Props) {
   const { state } = useSequence();
   const [draft, setDraft] = useState(step);
@@ -45,6 +47,7 @@ export function SequenceStepEditor({
   const body = activeVariant ? activeVariant.body : draft.body;
 
   const setSubject = (value: string) => {
+    if (readOnly) return;
     onDirtyChange?.(true);
     if (activeVariant) {
       setDraft({
@@ -59,6 +62,7 @@ export function SequenceStepEditor({
   };
 
   const setBody = (value: string) => {
+    if (readOnly) return;
     onDirtyChange?.(true);
     if (activeVariant) {
       setDraft({
@@ -72,12 +76,11 @@ export function SequenceStepEditor({
     }
   };
 
-  const handleSave = async (andClose = false) => {
+  const handleSave = async () => {
     setSaving(true);
     try {
       await onSave(draft);
       onDirtyChange?.(false);
-      if (andClose) onClose();
     } finally {
       setSaving(false);
     }
@@ -106,13 +109,18 @@ export function SequenceStepEditor({
             </Label>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="sm" className="h-8 text-xs text-[#8B5CF6]">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-8 text-xs text-[#8B5CF6]"
+                  disabled={readOnly}
+                >
                   <Braces className="h-3.5 w-3.5 mr-1" />
                   Variables
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
-                {["{full_name}", "{email}", "{username}", "{user_type}"].map(
+                {["{first_name}", "{full_name}", "{email}", "{username}", "{user_type}"].map(
                   (tag) => (
                     <DropdownMenuItem
                       key={tag}
@@ -130,6 +138,7 @@ export function SequenceStepEditor({
             onChange={(e) => setSubject(e.target.value)}
             placeholder="Enter email subject..."
             className="bg-white border-gray-300 h-11"
+            readOnly={readOnly}
           />
         </div>
 
@@ -138,8 +147,9 @@ export function SequenceStepEditor({
           <EmailRichTextEditor
             value={body}
             onChange={setBody}
-            onSave={() => handleSave(false)}
+            onSave={() => handleSave()}
             saving={saving}
+            readOnly={readOnly}
           />
         </div>
       </div>

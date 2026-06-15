@@ -1,8 +1,11 @@
 import {
   SESClient,
   SendEmailCommand,
+  SendRawEmailCommand,
   type SendEmailCommandInput,
 } from "@aws-sdk/client-ses";
+import { buildMimeMessage } from "@/lib/email/mime-message";
+import { htmlToPlainText } from "@/lib/email/admin-bulk-email";
 
 let sesClient: SESClient | null = null;
 
@@ -29,33 +32,81 @@ export function isSesConfigured(): boolean {
   return !!getSesClient();
 }
 
+function formatSesSource(email: string, name?: string): string {
+  const trimmed = email.trim();
+  if (!name?.trim()) return trimmed;
+  const safeName = name.trim().replace(/"/g, '\\"');
+  return `"${safeName}" <${trimmed}>`;
+}
+
+function configurationSetName(): string | undefined {
+  const name = process.env.SES_CONFIGURATION_SET?.trim();
+  return name || undefined;
+}
+
 export async function sendSesEmail(input: {
   from: string;
+  fromName?: string;
   to: string;
   subject: string;
   html: string;
   text?: string;
+  replyTo?: string;
+  listUnsubscribeUrl?: string;
+  plainTextOnly?: boolean;
 }): Promise<{ messageId?: string; error?: string }> {
   const client = getSesClient();
   if (!client) {
     return { error: "AWS SES is not configured" };
   }
 
+  const text = input.text?.trim() || htmlToPlainText(input.html);
+  const html = input.html?.trim() || text.replace(/\n/g, "<br>");
+  const configSet = configurationSetName();
+
+  if (input.listUnsubscribeUrl?.trim()) {
+    try {
+      const raw = buildMimeMessage({
+        from: input.from,
+        fromName: input.fromName,
+        to: input.to,
+        subject: input.subject,
+        html,
+        text,
+        replyTo: input.replyTo,
+        listUnsubscribeUrl: input.listUnsubscribeUrl,
+        plainTextOnly: input.plainTextOnly,
+      });
+      const result = await client.send(
+        new SendRawEmailCommand({
+          Source: input.from.trim(),
+          Destinations: [input.to.trim()],
+          RawMessage: { Data: Buffer.from(raw, "utf-8") },
+          ...(configSet ? { ConfigurationSetName: configSet } : {}),
+        }),
+      );
+      return { messageId: result.MessageId };
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      console.error("[ses-client] raw send failed:", message);
+      return { error: message };
+    }
+  }
+
   const params: SendEmailCommandInput = {
-    Source: input.from,
-    Destination: { ToAddresses: [input.to] },
+    Source: formatSesSource(input.from, input.fromName),
+    Destination: { ToAddresses: [input.to.trim()] },
     Message: {
       Subject: { Data: input.subject, Charset: "UTF-8" },
       Body: {
-        Html: { Data: input.html, Charset: "UTF-8" },
-        ...(input.text
-          ? { Text: { Data: input.text, Charset: "UTF-8" } }
-          : {}),
+        Text: { Data: text, Charset: "UTF-8" },
+        Html: { Data: html, Charset: "UTF-8" },
       },
     },
-    ...(process.env.SES_CONFIGURATION_SET?.trim()
-      ? { ConfigurationSetName: process.env.SES_CONFIGURATION_SET.trim() }
+    ...(input.replyTo?.trim()
+      ? { ReplyToAddresses: [input.replyTo.trim()] }
       : {}),
+    ...(configSet ? { ConfigurationSetName: configSet } : {}),
   };
 
   try {

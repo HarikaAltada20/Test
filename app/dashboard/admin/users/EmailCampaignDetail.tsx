@@ -50,8 +50,8 @@ export function EmailCampaignDetail({ campaignId, onBack }: Props) {
   const [activeTab, setActiveTab] = useState<CampaignDetailTab>("analytics");
   const [starting, setStarting] = useState(false);
 
-  const loadDetail = useCallback(async () => {
-    setLoading(true);
+  const loadDetail = useCallback(async (opts?: { silent?: boolean }) => {
+    if (!opts?.silent) setLoading(true);
     try {
       const res = await fetch(`/api/admin/email-campaigns/${campaignId}`);
       const data = await res.json();
@@ -59,13 +59,23 @@ export function EmailCampaignDetail({ campaignId, onBack }: Props) {
         setDetail(data);
       }
     } finally {
-      setLoading(false);
+      if (!opts?.silent) setLoading(false);
     }
   }, [campaignId]);
 
   useEffect(() => {
     loadDetail();
   }, [loadDetail]);
+
+  useEffect(() => {
+    const onFocus = () => loadDetail({ silent: true });
+    window.addEventListener("focus", onFocus);
+    return () => window.removeEventListener("focus", onFocus);
+  }, [loadDetail]);
+
+  useEffect(() => {
+    if (activeTab === "lead") loadDetail({ silent: true });
+  }, [activeTab, loadDetail]);
 
   const pauseCampaign = async () => {
     const res = await fetch(`/api/admin/email-campaigns/${campaignId}/pause`, {
@@ -78,6 +88,15 @@ export function EmailCampaignDetail({ campaignId, onBack }: Props) {
   };
 
   const startCampaign = async () => {
+    if ((detail?.recipientCount ?? 0) <= 0) {
+      toast({
+        title: "Add leads first",
+        description:
+          "Attach recipients on the Lead tab before starting this campaign.",
+        variant: "destructive",
+      });
+      return;
+    }
     setStarting(true);
     try {
       const res = await fetch(
@@ -106,7 +125,10 @@ export function EmailCampaignDetail({ campaignId, onBack }: Props) {
 
   const canPause = ["active", "scheduled"].includes(detail.status);
   const canStart = !["active", "completed"].includes(detail.status);
-  const readOnlySequence = detail.status === "completed";
+  const hasLeads = detail.recipientCount > 0;
+  const sequenceReadOnly = ["active", "completed", "partial"].includes(
+    detail.status,
+  );
 
   return (
     <div className="space-y-6">
@@ -121,18 +143,27 @@ export function EmailCampaignDetail({ campaignId, onBack }: Props) {
 
         <div className="flex gap-2">
           {canStart && (
-            <Button
-              className="bg-[#662EBD] hover:bg-[#5524a8]"
-              onClick={startCampaign}
-              disabled={starting}
+            <span
+              className="inline-flex"
+              title={
+                !hasLeads
+                  ? "Add leads on the Lead tab before starting"
+                  : undefined
+              }
             >
+              <Button
+                className="bg-[#662EBD] hover:bg-[#5524a8] disabled:opacity-50"
+                onClick={startCampaign}
+                disabled={starting || !hasLeads}
+              >
               {starting ? (
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
               ) : (
                 <Play className="mr-2 h-4 w-4" />
               )}
               Start Campaign
-            </Button>
+              </Button>
+            </span>
           )}
           {canPause && (
             <Button
@@ -155,7 +186,12 @@ export function EmailCampaignDetail({ campaignId, onBack }: Props) {
 
       {activeTab === "analytics" && <AnalyticsTab detail={detail} />}
 
-      {activeTab === "lead" && <LeadTab campaignId={campaignId} />}
+      {activeTab === "lead" && (
+        <LeadTab
+          campaignId={campaignId}
+          onRecipientsChange={() => loadDetail({ silent: true })}
+        />
+      )}
 
       {activeTab === "sequence" && (
         <SequenceProvider campaignId={campaignId}>
@@ -166,7 +202,7 @@ export function EmailCampaignDetail({ campaignId, onBack }: Props) {
               name: detail.name,
               status: detail.status,
             }}
-            readOnly={readOnlySequence}
+            readOnly={sequenceReadOnly}
           />
         </SequenceProvider>
       )}

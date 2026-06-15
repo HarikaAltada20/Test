@@ -10,7 +10,6 @@ import {
   ChevronDown,
   Clock,
   Loader2,
-  Mail,
   Plus,
   Send,
   Settings,
@@ -27,10 +26,10 @@ type Props = {
   onSelectVariant: (stepId: string, variantId: string) => void;
   onToggleVariant: (variantId: string, isActive: boolean) => void;
   onDeleteVariant: (variantId: string) => void;
-  onSendTestEmail: (stepId: string) => void;
   isSelected: boolean;
   isDeleting: boolean;
   isLastStep: boolean;
+  readOnly?: boolean;
 };
 
 function variantSubjectPreview(v: { subject: string; body: string }) {
@@ -48,10 +47,10 @@ export function SequenceStepComponent({
   onSelectVariant,
   onToggleVariant,
   onDeleteVariant,
-  onSendTestEmail,
   isSelected,
   isDeleting,
   isLastStep,
+  readOnly = false,
 }: Props) {
   const expanded = step.isExpanded !== false;
   const [editingDelay, setEditingDelay] = useState(false);
@@ -79,29 +78,17 @@ export function SequenceStepComponent({
             )}
           />
         </button>
-        <span className="flex-1 font-semibold text-sm text-gray-900">
-          Step {displayNumber}
-        </span>
-        <Mail className="h-4 w-4 text-gray-400 shrink-0" />
-        <button
-          type="button"
-          title="Send test email"
-          onClick={() => onSendTestEmail(step.id)}
-          className="text-gray-400 hover:text-[#8B5CF6] p-1"
-        >
-          <Send className="h-4 w-4" />
-        </button>
         <button
           type="button"
           onClick={() => onSelectStep(step.id)}
-          className="text-sm font-medium text-[#8B5CF6] hover:text-[#7C3AED] px-1"
+          className="flex-1 text-left font-semibold text-sm text-gray-900 hover:text-[#8B5CF6]"
         >
-          Edit
+          Step {displayNumber}
         </button>
         <button
           type="button"
-          onClick={() => onDelete(step.id)}
-          disabled={isDeleting}
+          onClick={() => !readOnly && onDelete(step.id)}
+          disabled={isDeleting || readOnly}
           className="text-red-500 hover:text-red-600 p-1 disabled:opacity-50"
         >
           {isDeleting ? (
@@ -148,8 +135,9 @@ export function SequenceStepComponent({
                   </span>
                   <button
                     type="button"
-                    onClick={() => setEditingDelay(true)}
-                    className="text-gray-400 hover:text-[#8B5CF6] ml-auto"
+                    onClick={() => !readOnly && setEditingDelay(true)}
+                    disabled={readOnly}
+                    className="text-gray-400 hover:text-[#8B5CF6] ml-auto disabled:opacity-40"
                   >
                     <Settings className="h-3.5 w-3.5" />
                   </button>
@@ -188,12 +176,14 @@ export function SequenceStepComponent({
                           onCheckedChange={(checked) =>
                             onToggleVariant(v.id, checked)
                           }
+                          disabled={readOnly}
                           className="data-[state=checked]:bg-[#8B5CF6]"
                         />
                         <button
                           type="button"
-                          className="text-red-400 hover:text-red-600"
-                          onClick={() => onDeleteVariant(v.id)}
+                          className="text-red-400 hover:text-red-600 disabled:opacity-40"
+                          onClick={() => !readOnly && onDeleteVariant(v.id)}
+                          disabled={readOnly}
                         >
                           <Trash2 className="h-3.5 w-3.5" />
                         </button>
@@ -210,6 +200,7 @@ export function SequenceStepComponent({
             size="sm"
             className="w-full h-8 text-xs text-[#8B5CF6] border-[#8B5CF6]/40 hover:bg-purple-50"
             onClick={() => onAddVariant(step.id)}
+            disabled={readOnly}
           >
             <Plus className="h-3.5 w-3.5 mr-1" />
             Add Variant

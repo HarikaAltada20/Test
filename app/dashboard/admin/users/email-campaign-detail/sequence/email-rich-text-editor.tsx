@@ -7,6 +7,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import { sanitizeEmailContent } from "@/lib/email/admin-bulk-email";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import {
@@ -53,12 +54,20 @@ const FONTS = [
 const SIZES = ["12", "14", "16", "18", "20", "24"];
 
 const MERGE_TAGS = [
+  { label: "First name", value: "{first_name}" },
   { label: "Full name", value: "{full_name}" },
   { label: "Email", value: "{email}" },
   { label: "Username", value: "{username}" },
   { label: "User type", value: "{user_type}" },
   { label: "Contest title", value: "{contest_title}" },
 ];
+
+function normalizeUrl(url: string): string {
+  const trimmed = url.trim();
+  if (!trimmed) return trimmed;
+  if (/^https?:\/\//i.test(trimmed)) return trimmed;
+  return `https://${trimmed}`;
+}
 
 type EditorMode = "visual" | "source" | "preview";
 
@@ -68,6 +77,7 @@ type Props = {
   onSave: () => void;
   saving?: boolean;
   minHeight?: number;
+  readOnly?: boolean;
 };
 
 export function EmailRichTextEditor({
@@ -76,9 +86,11 @@ export function EmailRichTextEditor({
   onSave,
   saving = false,
   minHeight = 280,
+  readOnly = false,
 }: Props) {
   const editorRef = useRef<HTMLDivElement>(null);
   const savedRangeRef = useRef<Range | null>(null);
+  const lastLocalHtmlRef = useRef<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
   const [mode, setMode] = useState<EditorMode>("visual");
@@ -90,16 +102,27 @@ export function EmailRichTextEditor({
   const [imageModalOpen, setImageModalOpen] = useState(false);
 
   const syncFromEditor = useCallback(() => {
-    if (editorRef.current) {
-      onChange(editorRef.current.innerHTML);
-    }
+    const editor = editorRef.current;
+    if (!editor?.isConnected) return;
+    const html = sanitizeEmailContent(editor.innerHTML);
+    lastLocalHtmlRef.current = html;
+    onChange(html);
   }, [onChange]);
 
   useEffect(() => {
     if (mode === "visual" && editorRef.current) {
-      if (editorRef.current.innerHTML !== value) {
+      const editorHtml = editorRef.current.innerHTML;
+      if (
+        value === lastLocalHtmlRef.current &&
+        editorHtml === value
+      ) {
+        lastLocalHtmlRef.current = null;
+        return;
+      }
+      if (editorHtml !== value) {
         editorRef.current.innerHTML = value || "";
       }
+      lastLocalHtmlRef.current = null;
     }
     if (mode === "source") {
       setSourceHtml(value);
@@ -118,14 +141,54 @@ export function EmailRichTextEditor({
 
   const restoreSelection = () => {
     const editor = editorRef.current;
-    if (!editor) return;
+    if (!editor) return false;
     editor.focus();
     const range = savedRangeRef.current;
-    if (!range || !editor.contains(range.commonAncestorContainer)) return;
+    if (!range) return false;
+    try {
+      if (!editor.contains(range.commonAncestorContainer)) return false;
+      const sel = window.getSelection();
+      if (!sel) return false;
+      sel.removeAllRanges();
+      sel.addRange(range);
+      return true;
+    } catch {
+      return false;
+    }
+  };
+
+  const getInsertionRange = (): Range | null => {
+    const editor = editorRef.current;
+    if (!editor) return null;
+
+    const saved = savedRangeRef.current;
+    if (saved) {
+      try {
+        if (editor.contains(saved.commonAncestorContainer)) {
+          return saved.cloneRange();
+        }
+      } catch {
+        // Range was detached from the document.
+      }
+    }
+
     const sel = window.getSelection();
-    if (!sel) return;
-    sel.removeAllRanges();
-    sel.addRange(range);
+    if (sel && sel.rangeCount > 0) {
+      const current = sel.getRangeAt(0);
+      if (editor.contains(current.commonAncestorContainer)) {
+        return current.cloneRange();
+      }
+    }
+
+    const range = document.createRange();
+    if (editor.childNodes.length === 0) {
+      range.setStart(editor, 0);
+      range.collapse(true);
+    } else {
+      range.selectNodeContents(editor);
+      range.collapse(false);
+    }
+    return range;
   };
 
   const exec = (command: string, val?: string) => {
@@ -180,20 +243,99 @@ export function EmailRichTextEditor({
     saveSelection();
   };
 
-  const wrapStyle = (style: string) => {
-    const sel = window.getSelection();
-    const text = sel?.toString() || "text";
-    insertHtml(`<span style="${style}">${text}</span>`);
+  const applyStyleToRange = (
+    styleProperty: "fontFamily" | "fontSize",
+    styleValue: string,
+  ) => {
+    const editor = editorRef.current;
+    if (!editor) return;
+
+    editor.focus();
+    const range = getInsertionRange();
+    if (!range) return;
+
+    const selectedText = range.toString();
+
+    if (selectedText.length > 0) {
+      const span = document.createElement("span");
+      if (styleProperty === "fontFamily") {
+        span.style.fontFamily = styleValue;
+      } else {
+        span.style.fontSize = styleValue;
+      }
+
+      try {
+        const fragment = range.extractContents();
+        span.appendChild(fragment);
+        range.insertNode(span);
+
+        const after = document.createRange();
+        after.selectNodeContents(span);
+        after.collapse(false);
+        const sel = window.getSelection();
+        sel?.removeAllRanges();
+        sel?.addRange(after);
+        savedRangeRef.current = after.cloneRange();
+      } catch {
+        restoreSelection();
+        document.execCommand("styleWithCSS", false, "true");
+        if (styleProperty === "fontFamily") {
+          const fontName = styleValue.split(",")[0].replace(/['"]/g, "").trim();
+          document.execCommand("fontName", false, fontName);
+        } else {
+          document.execCommand("fontSize", false, styleValue.replace(/px$/, ""));
+        }
+      }
+    } else {
+      restoreSelection();
+      document.execCommand("styleWithCSS", false, "true");
+      if (styleProperty === "fontFamily") {
+        const fontName = styleValue.split(",")[0].replace(/['"]/g, "").trim();
+        document.execCommand("fontName", false, fontName);
+      } else {
+        const span = document.createElement("span");
+        span.style.fontSize = styleValue;
+        const zwsp = document.createTextNode("\u200B");
+        span.appendChild(zwsp);
+        range.insertNode(span);
+        const caret = document.createRange();
+        caret.setStart(zwsp, 1);
+        caret.collapse(true);
+        const sel = window.getSelection();
+        sel?.removeAllRanges();
+        sel?.addRange(caret);
+        savedRangeRef.current = caret.cloneRange();
+      }
+    }
+
+    syncFromEditor();
+    saveSelection();
   };
 
   const applyFont = (font: string) => {
     setFontFamily(font);
-    wrapStyle(`font-family:${font}`);
+    requestAnimationFrame(() => {
+      applyStyleToRange("fontFamily", font);
+    });
   };
 
   const applySize = (size: string) => {
     setFontSize(size);
-    wrapStyle(`font-size:${size}px`);
+    requestAnimationFrame(() => {
+      applyStyleToRange("fontSize", `${size}px`);
+    });
+  };
+
+  const handleToolbarControlOpen = (open: boolean) => {
+    if (!open) return;
+    const editor = editorRef.current;
+    const sel = window.getSelection();
+    if (!editor || !sel || sel.rangeCount === 0) return;
+    const range = sel.getRangeAt(0);
+    if (!editor.contains(range.commonAncestorContainer)) return;
+    if (range.toString().length > 0 || !range.collapsed) {
+      savedRangeRef.current = range.cloneRange();
+    }
   };
 
   const openInsertLinkModal = () => {
@@ -205,24 +347,41 @@ export function EmailRichTextEditor({
   };
 
   const confirmInsertLink = (url: string, text?: string) => {
-    restoreSelection();
-    const selectedText = window.getSelection()?.toString() ?? "";
-    const safeUrl = url.replace(/"/g, "&quot;");
-    const displayText = text || selectedText || "Link text";
-    const safeText = displayText
-      .replace(/&/g, "&amp;")
-      .replace(/</g, "&lt;")
-      .replace(/>/g, "&gt;");
+    const editor = editorRef.current;
+    if (!editor) return;
 
-    if (selectedText && (!text || text === selectedText)) {
-      document.execCommand("createLink", false, url);
-    } else {
-      document.execCommand(
-        "insertHTML",
-        false,
-        `<a href="${safeUrl}" target="_blank" rel="noopener noreferrer">${safeText}</a>`,
-      );
+    const href = normalizeUrl(url);
+    const linkText = text?.trim() || href;
+
+    editor.focus();
+    const range = getInsertionRange();
+    if (!range) return;
+
+    const anchor = document.createElement("a");
+    anchor.href = href;
+    anchor.target = "_blank";
+    anchor.rel = "noopener noreferrer";
+    anchor.textContent = linkText;
+
+    try {
+      range.deleteContents();
+      range.insertNode(anchor);
+
+      const after = document.createRange();
+      after.setStartAfter(anchor);
+      after.collapse(true);
+      const sel = window.getSelection();
+      sel?.removeAllRanges();
+      sel?.addRange(after);
+      savedRangeRef.current = after.cloneRange();
+    } catch {
+      editor.appendChild(anchor);
+      const after = document.createRange();
+      after.selectNodeContents(editor);
+      after.collapse(false);
+      savedRangeRef.current = after.cloneRange();
     }
+
     syncFromEditor();
     saveSelection();
   };
@@ -290,10 +449,16 @@ export function EmailRichTextEditor({
 
   const switchMode = (next: EditorMode) => {
     if (mode === "visual" && editorRef.current) {
-      onChange(editorRef.current.innerHTML);
+      const html = editorRef.current.innerHTML;
+      lastLocalHtmlRef.current = html;
+      onChange(html);
     }
     if (mode === "source") {
+      lastLocalHtmlRef.current = sourceHtml;
       onChange(sourceHtml);
+    }
+    if (mode === "preview" && next === "visual") {
+      lastLocalHtmlRef.current = null;
     }
     setMode(next);
     if (next === "source") {
@@ -308,7 +473,7 @@ export function EmailRichTextEditor({
   const previewHtml =
     value.includes("<") ? value : `<p>${value.replace(/\n/g, "<br/>")}</p>`;
 
-  const toolbarDisabled = mode === "preview";
+  const toolbarDisabled = readOnly || mode === "preview";
 
   return (
     <div className="rounded-lg border border-gray-300 overflow-hidden flex flex-col flex-1 min-h-[320px]">
@@ -349,6 +514,7 @@ export function EmailRichTextEditor({
           className="border-0 rounded-none resize-none focus-visible:ring-0 flex-1 font-mono text-sm"
           style={{ minHeight }}
           spellCheck={false}
+          readOnly={readOnly}
         />
       )}
 
@@ -373,16 +539,27 @@ export function EmailRichTextEditor({
             .email-rich-editor li {
               display: list-item;
             }
+            .email-rich-editor a {
+              color: #662EBD;
+              text-decoration: underline;
+              cursor: pointer;
+            }
           `}</style>
           <div
             ref={editorRef}
-            contentEditable
+            contentEditable={!readOnly}
             suppressContentEditableWarning
             onInput={syncFromEditor}
-            onBlur={syncFromEditor}
+            onBlur={() => {
+              if (mode === "visual") syncFromEditor();
+            }}
             onMouseUp={saveSelection}
             onKeyUp={saveSelection}
             onSelect={saveSelection}
+            onClick={(e) => {
+              const anchor = (e.target as HTMLElement).closest("a");
+              if (anchor) e.preventDefault();
+            }}
             className="email-rich-editor flex-1 overflow-y-auto p-4 text-sm text-gray-800 outline-none focus:ring-0"
             style={{ minHeight, fontFamily, fontSize: `${fontSize}px` }}
             data-placeholder="Write your email content..."
@@ -414,6 +591,7 @@ export function EmailRichTextEditor({
           <Select
             value={fontFamily}
             onValueChange={applyFont}
+            onOpenChange={handleToolbarControlOpen}
             disabled={toolbarDisabled}
           >
             <SelectTrigger className="h-8 w-[130px] text-xs border-gray-200">
@@ -431,6 +609,7 @@ export function EmailRichTextEditor({
           <Select
             value={fontSize}
             onValueChange={applySize}
+            onOpenChange={handleToolbarControlOpen}
             disabled={toolbarDisabled}
           >
             <SelectTrigger className="h-8 w-[72px] text-xs border-gray-200">
@@ -576,14 +755,17 @@ export function EmailRichTextEditor({
                 Edit
               </Button>
             )}
-            <Button
-              className="bg-[#8B5CF6] hover:bg-[#7C3AED] h-8 rounded-md px-4"
-              onClick={onSave}
-              disabled={saving}
-            >
-              {saving && <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />}
-              Save
-            </Button>
+            {!readOnly && (
+              <Button
+                type="button"
+                className="bg-[#8B5CF6] hover:bg-[#7C3AED] h-8 rounded-md px-4"
+                onClick={onSave}
+                disabled={saving}
+              >
+                {saving && <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />}
+                Save
+              </Button>
+            )}
           </div>
         </div>
       </div>

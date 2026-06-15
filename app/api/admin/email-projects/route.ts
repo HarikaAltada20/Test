@@ -5,12 +5,14 @@ import { EMAIL_PROJECT_WITH_SENDERS_SELECT } from "@/lib/admin-email/project-opt
 
 const PLATFORM_SENDER = process.env.SES_FROM_EMAIL?.trim() || "noreply@gameofcreators.com";
 
+type EmailProjectRow = { id: string } & Record<string, unknown>;
+
 export async function GET() {
   const auth = await requireAdminApi();
   if (auth.response) return auth.response;
 
   const db = createAdminClient();
-  let projects: Record<string, unknown>[] | null = null;
+  let projects: EmailProjectRow[] | null = null;
   let fetchError: { message: string } | null = null;
 
   const withSenders = await db
@@ -24,10 +26,10 @@ export async function GET() {
       .from("admin_email_projects")
       .select("*")
       .order("created_at", { ascending: false });
-    projects = plain.data;
+    projects = (plain.data ?? null) as EmailProjectRow[] | null;
     fetchError = plain.error;
   } else {
-    projects = withSenders.data;
+    projects = (withSenders.data ?? null) as EmailProjectRow[] | null;
   }
 
   if (fetchError) {
@@ -62,7 +64,7 @@ export async function GET() {
       .select(EMAIL_PROJECT_WITH_SENDERS_SELECT)
       .order("created_at", { ascending: false });
     return NextResponse.json({
-      projects: await attachProjectStats(db, refreshed ?? []),
+      projects: await attachProjectStats(db, (refreshed ?? []) as EmailProjectRow[]),
     });
   }
 
@@ -73,7 +75,7 @@ export async function GET() {
 
 async function attachProjectStats(
   db: ReturnType<typeof createAdminClient>,
-  projects: Array<{ id: string }>,
+  projects: EmailProjectRow[],
 ) {
   if (projects.length === 0) return [];
 

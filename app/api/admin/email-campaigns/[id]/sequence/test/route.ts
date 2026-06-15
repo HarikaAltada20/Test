@@ -1,6 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/utils/supabase/admin";
 import { requireAdminApi } from "@/lib/admin-email/api-auth";
+import {
+  getBulkEmailFromName,
+  getBulkEmailReplyTo,
+  htmlToPlainText,
+  normalizeBodyHtml,
+  stripPromotionalHtml,
+} from "@/lib/email/admin-bulk-email";
 import { sendSesEmail } from "@/lib/email/ses-client";
 
 type RouteContext = { params: Promise<{ id: string }> };
@@ -58,13 +65,25 @@ export async function POST(req: NextRequest, context: RouteContext) {
   }
 
   const subject = body.subject?.trim() || "Test Email";
-  const html = body.body?.trim() || "<p>Test email from your sequence.</p>";
+  const html = stripPromotionalHtml(
+    normalizeBodyHtml(body.body?.trim() || "") ||
+      "<p>Test email from your sequence.</p>",
+  );
+  const text = htmlToPlainText(html);
 
   let sentCount = 0;
   const errors: string[] = [];
 
   for (const to of emails) {
-    const result = await sendSesEmail({ from: fromEmail, to, subject, html });
+    const result = await sendSesEmail({
+      from: fromEmail,
+      fromName: getBulkEmailFromName(fromEmail),
+      to,
+      subject,
+      html,
+      text,
+      replyTo: getBulkEmailReplyTo(fromEmail),
+    });
     if (result.error) errors.push(`${to}: ${result.error}`);
     else sentCount += 1;
   }

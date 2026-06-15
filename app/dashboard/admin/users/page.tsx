@@ -2528,171 +2528,171 @@ export default function AdminUsersPage() {
           isDark ? "bg-[#020817]" : "bg-white",
         )}
       >
-        <CardHeader className="py-3 px-3 sm:px-6">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-0">
+        <CardHeader className="py-3 px-3 sm:px-6 space-y-3">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <CardTitle
               className={cn(
-                "text-xl sm:text-2xl",
+                "text-xl sm:text-2xl shrink-0",
                 isDark ? "text-white" : "text-black",
               )}
             >
               Users Management
             </CardTitle>
-            <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
-              <div className="flex items-center gap-1.5 sm:gap-2 px-2 sm:px-3 py-1.5 rounded-md border border-input">
-                <Checkbox
-                  id="sticky-header"
-                  checked={stickyHeader}
-                  onCheckedChange={(checked) =>
-                    setStickyHeader(checked as boolean)
-                  }
-                  className={cn(
-                    isDark
-                      ? "border-gray-400 data-[state=checked]:bg-purple-600 data-[state=checked]:text-white"
-                      : "border-gray-400 data-[state=checked]:bg-purple-600",
+            {viewMode === "table" && (
+              <div className="flex shrink-0 items-center gap-2">
+                <Button
+                  size="sm"
+                  className="h-8 gap-1.5 px-2 sm:px-3"
+                  disabled={!hasNotificationSelection}
+                  onClick={() => setEmailSendModalOpen(true)}
+                >
+                  <Mail className="h-4 w-4" />
+                  <span className="hidden sm:inline">Send email</span>
+                  {selectedCount > 0 && (
+                    <Badge
+                      variant="secondary"
+                      className="h-5 min-w-5 rounded-full bg-white/20 px-1.5 text-xs text-inherit"
+                    >
+                      {selectedCount}
+                    </Badge>
                   )}
-                />
-                <label
-                  htmlFor="sticky-header"
-                  className={cn(
-                    "text-xs sm:text-sm font-normal cursor-pointer select-none hidden sm:inline",
-                    isDark ? "text-gray-300" : "text-gray-700",
-                  )}
-                >
-                  Sticky Header
-                </label>
-              </div>
-              <div className="flex items-center rounded-md border border-input overflow-hidden">
-                <Button
-                  variant={viewMode === "table" ? "secondary" : "ghost"}
-                  size="sm"
-                  className="rounded-none h-8 px-2 sm:px-3 gap-1.5"
-                  onClick={() => setViewModePersisted("table")}
-                >
-                  <List className="w-4 h-4" />
-                  <span className="hidden sm:inline">Table</span>
                 </Button>
                 <Button
-                  variant={viewMode === "map" ? "secondary" : "ghost"}
                   size="sm"
-                  className="rounded-none h-8 px-2 sm:px-3 gap-1.5"
-                  onClick={() => setViewModePersisted("map")}
+                  variant="outline"
+                  className="h-8 gap-1.5 px-2 sm:px-3"
+                  disabled={!hasNotificationSelection}
+                  onClick={() => setSendModalOpen(true)}
                 >
-                  <Map className="w-4 h-4" />
-                  <span className="hidden sm:inline">Map</span>
-                </Button>
-                <Button
-                  variant={viewMode === "notifications" ? "secondary" : "ghost"}
-                  size="sm"
-                  className="rounded-none h-8 px-2 sm:px-3 gap-1.5"
-                  onClick={() => setViewModePersisted("notifications")}
-                >
-                  <Bell className="w-4 h-4" />
-                  <span className="hidden sm:inline">Notifications</span>
-                </Button>
-                <Button
-                  variant={viewMode === "email" ? "secondary" : "ghost"}
-                  size="sm"
-                  className="rounded-none h-8 px-2 sm:px-3 gap-1.5"
-                  onClick={() => setViewModePersisted("email")}
-                >
-                  <Mail className="w-4 h-4" />
-                  <span className="hidden sm:inline">Email</span>
+                  <Send className="h-4 w-4" />
+                  <span className="hidden sm:inline">Send notification</span>
                 </Button>
               </div>
-              <Button
-                variant="outline"
-                onClick={() => {
-                  if (filters.length === 0) {
-                    const availableColumns = allColumns[
-                      activeTab as keyof typeof allColumns
-                    ].filter(isTableFilterColumn);
-                    setFilters([
-                      {
-                        id: `filter-${Date.now()}-${Math.random()}`,
-                        column: availableColumns[0]?.id || "",
-                        value: "",
-                      },
-                    ]);
-                  }
-                  setShowFilterModal(true);
-                }}
-                className="flex items-center gap-1.5 sm:gap-2 px-2 sm:px-3"
-                size="sm"
-              >
-                <Filter className="w-4 h-4" />
-                <span className="hidden sm:inline">Filter</span>
-                {filters.filter((f) => f.value.trim()).length > 0 && (
-                  <Badge
-                    variant="secondary"
-                    className="h-5 min-w-5 rounded-full px-1.5 text-xs"
-                  >
-                    {filters.filter((f) => f.value.trim()).length}
-                  </Badge>
+            )}
+          </div>
+          <div className="flex items-center gap-2 overflow-x-auto pb-0.5 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+            <div className="flex h-8 shrink-0 items-center gap-1.5 rounded-md border border-input px-2 sm:px-3">
+              <Checkbox
+                id="sticky-header"
+                checked={stickyHeader}
+                onCheckedChange={(checked) =>
+                  setStickyHeader(checked as boolean)
+                }
+                className={cn(
+                  isDark
+                    ? "border-gray-400 data-[state=checked]:bg-purple-600 data-[state=checked]:text-white"
+                    : "border-gray-400 data-[state=checked]:bg-purple-600",
                 )}
+              />
+              <label
+                htmlFor="sticky-header"
+                className={cn(
+                  "hidden cursor-pointer select-none text-xs font-normal sm:inline sm:text-sm",
+                  isDark ? "text-gray-300" : "text-gray-700",
+                )}
+              >
+                Sticky Header
+              </label>
+            </div>
+            <div className="flex h-8 shrink-0 items-center overflow-hidden rounded-md border border-input">
+              <Button
+                variant={viewMode === "table" ? "secondary" : "ghost"}
+                size="sm"
+                className="h-8 gap-1.5 rounded-none px-2 sm:px-3"
+                onClick={() => setViewModePersisted("table")}
+              >
+                <List className="h-4 w-4" />
+                <span className="hidden sm:inline">Table</span>
               </Button>
               <Button
-                variant="outline"
-                onClick={() => setShowColumnSettings(true)}
-                className="flex items-center gap-1.5 sm:gap-2 px-2 sm:px-3"
+                variant={viewMode === "map" ? "secondary" : "ghost"}
                 size="sm"
+                className="h-8 gap-1.5 rounded-none px-2 sm:px-3"
+                onClick={() => setViewModePersisted("map")}
               >
-                <Settings className="w-4 h-4" />
-                <span className="hidden sm:inline">Customize Tiles</span>
+                <Map className="h-4 w-4" />
+                <span className="hidden sm:inline">Map</span>
               </Button>
-              {viewMode === "table" && (
-                <>
-                  <Button
-                    size="sm"
-                    className="gap-1.5 px-2 sm:px-3"
-                    disabled={!hasNotificationSelection}
-                    onClick={() => setEmailSendModalOpen(true)}
-                  >
-                    <Mail className="w-4 h-4" />
-                    <span className="hidden sm:inline">Send email</span>
-                    {selectedCount > 0 && (
-                      <Badge
-                        variant="secondary"
-                        className="h-5 min-w-5 rounded-full px-1.5 text-xs bg-white/20 text-inherit"
-                      >
-                        {selectedCount}
-                      </Badge>
-                    )}
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="gap-1.5 px-2 sm:px-3"
-                    disabled={!hasNotificationSelection}
-                    onClick={() => setSendModalOpen(true)}
-                  >
-                    <Send className="w-4 h-4" />
-                    <span className="hidden sm:inline">Send notification</span>
-                  </Button>
-                </>
-              )}
               <Button
-                variant="outline"
-                onClick={() => {
-                  const newTimezone = timezone === "UTC" ? "local" : "UTC";
-                  setTimezone(newTimezone);
-                  localStorage.setItem(
-                    "users-management-timezone",
-                    newTimezone,
-                  );
-                }}
-                className="flex items-center gap-1.5 sm:gap-2 px-2 sm:px-3"
+                variant={viewMode === "notifications" ? "secondary" : "ghost"}
                 size="sm"
-                title={`Current timezone: ${
-                  timezone === "UTC" ? "UTC" : "Local"
-                }. Click to switch.`}
+                className="h-8 gap-1.5 rounded-none px-2 sm:px-3"
+                onClick={() => setViewModePersisted("notifications")}
               >
-                <Clock className="w-4 h-4" />
-                <span className="text-xs font-medium hidden sm:inline">
-                  {timezone === "UTC" ? "UTC" : "Local"}
-                </span>
+                <Bell className="h-4 w-4" />
+                <span className="hidden sm:inline">Notifications</span>
+              </Button>
+              <Button
+                variant={viewMode === "email" ? "secondary" : "ghost"}
+                size="sm"
+                className="h-8 gap-1.5 rounded-none px-2 sm:px-3"
+                onClick={() => setViewModePersisted("email")}
+              >
+                <Mail className="h-4 w-4" />
+                <span className="hidden sm:inline">Email</span>
               </Button>
             </div>
+            <Button
+              variant="outline"
+              onClick={() => {
+                if (filters.length === 0) {
+                  const availableColumns = allColumns[
+                    activeTab as keyof typeof allColumns
+                  ].filter(isTableFilterColumn);
+                  setFilters([
+                    {
+                      id: `filter-${Date.now()}-${Math.random()}`,
+                      column: availableColumns[0]?.id || "",
+                      value: "",
+                    },
+                  ]);
+                }
+                setShowFilterModal(true);
+              }}
+              className="h-8 shrink-0 gap-1.5 px-2 sm:px-3"
+              size="sm"
+            >
+              <Filter className="h-4 w-4" />
+              <span className="hidden sm:inline">Filter</span>
+              {filters.filter((f) => f.value.trim()).length > 0 && (
+                <Badge
+                  variant="secondary"
+                  className="h-5 min-w-5 rounded-full px-1.5 text-xs"
+                >
+                  {filters.filter((f) => f.value.trim()).length}
+                </Badge>
+              )}
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => setShowColumnSettings(true)}
+              className="h-8 shrink-0 gap-1.5 px-2 sm:px-3"
+              size="sm"
+            >
+              <Settings className="h-4 w-4" />
+              <span className="hidden sm:inline">Customize Tiles</span>
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => {
+                const newTimezone = timezone === "UTC" ? "local" : "UTC";
+                setTimezone(newTimezone);
+                localStorage.setItem(
+                  "users-management-timezone",
+                  newTimezone,
+                );
+              }}
+              className="h-8 shrink-0 gap-1.5 px-2 sm:px-3"
+              size="sm"
+              title={`Current timezone: ${
+                timezone === "UTC" ? "UTC" : "Local"
+              }. Click to switch.`}
+            >
+              <Clock className="h-4 w-4" />
+              <span className="hidden text-xs font-medium sm:inline">
+                {timezone === "UTC" ? "UTC" : "Local"}
+              </span>
+            </Button>
           </div>
         </CardHeader>
         {viewMode !== "notifications" && viewMode !== "email" && (

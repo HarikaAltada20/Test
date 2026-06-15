@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/utils/supabase/admin";
 import { startEmailCampaignDelivery } from "@/lib/admin-email/delivery";
-import { getQStashPublishBaseUrl } from "@/lib/qstash";
+import { resolveLocalAwareBaseUrl } from "@/lib/qstash";
 import { requireAdminApi } from "@/lib/admin-email/api-auth";
 
 type RouteContext = { params: Promise<{ id: string }> };
@@ -16,7 +16,7 @@ export async function POST(req: NextRequest, context: RouteContext) {
   const { data: campaign } = await db
     .from("admin_email_campaigns")
     .select(
-      "id, status, email_subject, message_template, from_email, scheduled_at",
+      "id, status, email_subject, message_template, from_email, scheduled_at, recipient_count",
     )
     .eq("id", id)
     .single();
@@ -46,6 +46,13 @@ export async function POST(req: NextRequest, context: RouteContext) {
     );
   }
 
+  if ((campaign.recipient_count ?? 0) <= 0) {
+    return NextResponse.json(
+      { error: "Add leads to this campaign before starting" },
+      { status: 400 },
+    );
+  }
+
   const scheduledAt = campaign.scheduled_at
     ? new Date(campaign.scheduled_at)
     : null;
@@ -60,7 +67,7 @@ export async function POST(req: NextRequest, context: RouteContext) {
     return NextResponse.json({ status: "scheduled", scheduledAt: campaign.scheduled_at });
   }
 
-  const baseUrl = getQStashPublishBaseUrl(req);
+  const baseUrl = resolveLocalAwareBaseUrl(req);
   const started = await startEmailCampaignDelivery(id, baseUrl);
 
   if (!started.started) {

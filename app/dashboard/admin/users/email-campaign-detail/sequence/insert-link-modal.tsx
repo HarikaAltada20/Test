@@ -40,8 +40,12 @@ export function InsertLinkModal({
 
   const handleInsert = () => {
     if (!canInsert) return;
-    onInsert(trimmedUrl, text.trim() || undefined);
+    const urlToInsert = trimmedUrl;
+    const textToInsert = text.trim() || undefined;
     onClose();
+    window.setTimeout(() => {
+      onInsert(urlToInsert, textToInsert);
+    }, 10);
   };
 
   return (
@@ -67,10 +71,10 @@ export function InsertLinkModal({
           </div>
           <div className="space-y-2">
             <Label className="text-sm font-normal text-gray-500">
-              Text (optional)
+              Title (optional)
             </Label>
             <Input
-              placeholder="Link text"
+              placeholder="Link title — leave empty to use URL"
               value={text}
               onChange={(e) => setText(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && canInsert && handleInsert()}
@@ -81,6 +85,7 @@ export function InsertLinkModal({
 
         <DialogFooter className="pb-3 pt-2">
           <Button
+            type="button"
             variant="outline"
             className="border-[#662EBD] text-[#662EBD] hover:bg-purple-50 hover:text-[#662EBD]"
             onClick={onClose}
@@ -88,6 +93,7 @@ export function InsertLinkModal({
             Cancel
           </Button>
           <Button
+            type="button"
             className="bg-[#662EBD] hover:bg-[#5524a8] text-white"
             onClick={handleInsert}
             disabled={!canInsert}

@@ -1,4 +1,4 @@
-import { randomUUID } from "crypto";
+import { randomUUID, createHash } from "crypto";
 import { createAdminClient } from "@/utils/supabase/admin";
 import type {
   SequenceStep,
@@ -31,6 +31,67 @@ function toClientStep(s: StoredStep): SequenceStep {
   };
 }
 
+function sortVariants(variants: StoredVariant[]): StoredVariant[] {
+  return [...variants].sort((a, b) =>
+    a.variant_letter.localeCompare(b.variant_letter),
+  );
+}
+
+/** Active step-1 variants included in A/B send (empty when none active). */
+export function getStep1SendVariants(
+  sequenceData: StoredSequence | null | undefined,
+): StoredVariant[] {
+  if (!sequenceData?.steps?.length) return [];
+  const variants = sequenceData.steps[0].variants ?? [];
+  const active = variants.filter((v) => v.is_active);
+  return active.length > 0 ? sortVariants(active) : [];
+}
+
+/** Deterministic variant pick so the same user always gets the same variant. */
+export function pickVariantForRecipient<T extends { id: string }>(
+  userId: string,
+  variants: T[],
+): T {
+  if (variants.length === 1) return variants[0];
+  const hash = createHash("sha256").update(userId).digest();
+  const index = hash.readUInt32BE(0) % variants.length;
+  return variants[index];
+}
+
+/** Subject/body for one recipient (A/B variant when multiple are active). */
+export function resolveRecipientEmailContent(
+  sequenceData: StoredSequence | null | undefined,
+  userId: string,
+  fallback: { subject: string; body: string },
+): { subject: string; body: string; variantId?: string; variantLetter?: string } {
+  const step = sequenceData?.steps?.[0];
+  const sendVariants = getStep1SendVariants(sequenceData);
+
+  if (sendVariants.length > 0) {
+    const variant = pickVariantForRecipient(userId, sendVariants);
+    return {
+      subject:
+        variant.subject?.trim() || step?.subject?.trim() || fallback.subject,
+      body: variant.body?.trim() || step?.body?.trim() || fallback.body,
+      variantId: variant.id,
+      variantLetter: variant.variant_letter,
+    };
+  }
+
+  if (step?.subject?.trim() || step?.body?.trim()) {
+    return {
+      subject: step.subject?.trim() || fallback.subject,
+      body: step.body?.trim() || fallback.body,
+    };
+  }
+
+  const primary = getPrimaryEmailContent(sequenceData);
+  return {
+    subject: primary?.subject?.trim() || fallback.subject,
+    body: primary?.body?.trim() || fallback.body,
+  };
+}
+
 function primaryContent(steps: StoredStep[]): {
   subject: string;
   body: string;
@@ -43,6 +104,16 @@ function primaryContent(steps: StoredStep[]): {
     return { subject: active.subject, body: active.body };
   }
   return { subject: first.subject, body: first.body };
+}
+
+/** Subject/body from step 1 (active variant preferred) for outbound send. */
+export function getPrimaryEmailContent(
+  sequenceData: StoredSequence | null | undefined,
+): { subject: string; body: string } | null {
+  if (!sequenceData?.steps?.length) return null;
+  const content = primaryContent(sequenceData.steps);
+  if (!content.subject && !content.body) return null;
+  return content;
 }
 
 async function persistSequence(

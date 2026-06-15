@@ -4,7 +4,6 @@ import React, { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { SequenceStepComponent } from "./sequence-step";
 import { SequenceStepEditor } from "./sequence-step-editor";
-import { TestEmailModal } from "./test-email-modal";
 import { Plus, Mail, RefreshCw } from "lucide-react";
 import type { SequenceStep, SequenceVariant } from "@/lib/admin-email/sequence-types";
 import { useSequence } from "./sequence-context";
@@ -34,15 +33,31 @@ export function SequenceTab({
   const [loading, setLoading] = useState(false);
   const [draftSteps, setDraftSteps] = useState<SequenceStep[]>([]);
   const [deletingStepId, setDeletingStepId] = useState<string | null>(null);
-  const [showTestEmailModal, setShowTestEmailModal] = useState(false);
-  const [testEmailStep, setTestEmailStep] = useState<SequenceStep | null>(null);
-  const [availableSenders, setAvailableSenders] = useState<
-    { id: string; email: string; display_name?: string }[]
-  >([]);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [showUnsavedChangesDialog, setShowUnsavedChangesDialog] = useState(false);
   const [pendingAction, setPendingAction] = useState<(() => void) | null>(null);
   const justSavedRef = useRef(false);
+  const [pendingSelection, setPendingSelection] = useState<{
+    stepId: string | null;
+    variantId: string | null;
+    editing: boolean;
+  } | null>(null);
+
+  const scheduleSelection = (
+    stepId: string | null,
+    variantId: string | null,
+    editing: boolean,
+  ) => {
+    setPendingSelection({ stepId, variantId, editing });
+  };
+
+  useEffect(() => {
+    if (!pendingSelection) return;
+    actions.setSelectedStep(pendingSelection.stepId);
+    actions.setSelectedVariant(pendingSelection.variantId);
+    actions.setEditing(pendingSelection.editing);
+    setPendingSelection(null);
+  }, [pendingSelection, actions]);
 
   const showSuccess = (msg: string) => toast({ title: msg });
   const showError = (msg: string) =>
@@ -78,20 +93,6 @@ export function SequenceTab({
       if (res.ok && !(data.steps?.length)) {
         initializeDefaultSequence();
       }
-      if (campaign.projectId) {
-        const optRes = await fetch(
-          `/api/admin/email-campaigns/${campaignId}/options`,
-        );
-        const optData = await optRes.json();
-        setAvailableSenders(
-          (optData.senders ?? []).map(
-            (s: { id: string; email: string }) => ({
-              id: s.id,
-              email: s.email,
-            }),
-          ),
-        );
-      }
     } catch {
       initializeDefaultSequence();
     } finally {
@@ -115,9 +116,7 @@ export function SequenceTab({
       isExpanded: true,
     };
     setDraftSteps([defaultStep]);
-    actions.setSelectedStep(defaultStep.id);
-    actions.setSelectedVariant(null);
-    actions.setEditing(true);
+    scheduleSelection(defaultStep.id, null, true);
   };
 
   const handleAddStep = () => {
@@ -137,8 +136,7 @@ export function SequenceTab({
         isExpanded: true,
       };
       setDraftSteps((prev) => [...prev, newStep]);
-      actions.setSelectedStep(null);
-      actions.setEditing(false);
+      scheduleSelection(null, null, false);
       setHasUnsavedChanges(false);
     };
 
@@ -185,8 +183,7 @@ export function SequenceTab({
       if (stepId.startsWith("step-") || draftSteps.some((s) => s.id === stepId)) {
         setDraftSteps((prev) => prev.filter((s) => s.id !== stepId));
         if (state.selectedStepId === stepId) {
-          actions.setSelectedStep(null);
-          actions.setEditing(false);
+          scheduleSelection(null, null, false);
         }
         showSuccess("Draft step removed");
         return;
@@ -225,9 +222,7 @@ export function SequenceTab({
           };
         }),
       );
-      actions.setSelectedStep(stepId);
-      actions.setSelectedVariant(newVariantId);
-      actions.setEditing(true);
+      scheduleSelection(stepId, newVariantId, true);
       showSuccess(`Variant ${letter} added successfully!`);
       return;
     }
@@ -249,9 +244,7 @@ export function SequenceTab({
       isExpanded: true,
       variants: [...step.variants, newVariant],
     });
-    actions.setSelectedStep(stepId);
-    actions.setSelectedVariant(newVariantId);
-    actions.setEditing(true);
+    scheduleSelection(stepId, newVariantId, true);
   };
 
   const handleAddVariant = (stepId: string) => {
@@ -272,17 +265,14 @@ export function SequenceTab({
   };
 
   const handleSelectStep = (stepId: string) => {
-    if (readOnly) return;
     const step = [...state.steps, ...draftSteps].find((s) => s.id === stepId);
     const defaultVariant =
       step?.variants.find((v) => v.is_active) ?? step?.variants[0];
     const run = () => {
-      actions.setSelectedStep(stepId);
-      actions.setSelectedVariant(defaultVariant?.id ?? null);
-      actions.setEditing(true);
+      scheduleSelection(stepId, defaultVariant?.id ?? null, true);
       setHasUnsavedChanges(false);
     };
-    if (hasUnsavedChanges) {
+    if (!readOnly && hasUnsavedChanges) {
       setPendingAction(run);
       setShowUnsavedChangesDialog(true);
       return;
@@ -291,14 +281,11 @@ export function SequenceTab({
   };
 
   const handleSelectVariant = (stepId: string, variantId: string) => {
-    if (readOnly) return;
     const run = () => {
-      actions.setSelectedStep(stepId);
-      actions.setSelectedVariant(variantId);
-      actions.setEditing(true);
+      scheduleSelection(stepId, variantId, true);
       setHasUnsavedChanges(false);
     };
-    if (hasUnsavedChanges) {
+    if (!readOnly && hasUnsavedChanges) {
       setPendingAction(run);
       setShowUnsavedChangesDialog(true);
       return;
@@ -435,8 +422,7 @@ export function SequenceTab({
         error instanceof Error ? error.message : "Failed to save step.";
       showError(message);
     } finally {
-      actions.setEditing(false);
-      actions.setSelectedStep(null);
+      scheduleSelection(null, null, false);
       setHasUnsavedChanges(false);
       setTimeout(() => {
         justSavedRef.current = false;
@@ -447,22 +433,19 @@ export function SequenceTab({
   const handleCloseEditor = () => {
     if (justSavedRef.current) {
       justSavedRef.current = false;
-      actions.setEditing(false);
-      actions.setSelectedStep(null);
+      scheduleSelection(null, null, false);
       setHasUnsavedChanges(false);
       return;
     }
     if (hasUnsavedChanges) {
       setPendingAction(() => () => {
-        actions.setEditing(false);
-        actions.setSelectedStep(null);
+        scheduleSelection(null, null, false);
         setHasUnsavedChanges(false);
       });
       setShowUnsavedChangesDialog(true);
       return;
     }
-    actions.setEditing(false);
-    actions.setSelectedStep(null);
+    scheduleSelection(null, null, false);
   };
 
   const handleConfirmDiscard = () => {
@@ -551,51 +534,6 @@ export function SequenceTab({
     (step) => step.id === state.selectedStepId,
   );
 
-  const handleOpenTestEmail = (stepId: string) => {
-    const step = stepsToShow.find((s) => s.id === stepId);
-    if (step) {
-      setTestEmailStep(step);
-      setShowTestEmailModal(true);
-    }
-  };
-
-  const handleSendTestEmail = async (
-    emails: string[],
-    fromEmail?: string,
-    processedSubject?: string,
-    processedBody?: string,
-  ) => {
-    if (!testEmailStep) return;
-    let subject = processedSubject ?? testEmailStep.subject;
-    let body = processedBody ?? testEmailStep.body;
-    if (testEmailStep.variants?.length) {
-      const first =
-        testEmailStep.variants.find((v) => v.is_active) ||
-        testEmailStep.variants[0];
-      if (first?.subject) subject = first.subject;
-      if (first?.body) body = first.body;
-    }
-    const res = await fetch(
-      `/api/admin/email-campaigns/${campaignId}/sequence/test`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          to_emails: emails,
-          from_email: fromEmail,
-          subject: subject || "Test Email",
-          body: body || "<p>Test email</p>",
-        }),
-      },
-    );
-    const data = await res.json();
-    if (data.success) {
-      showSuccess(data.message || `Sent test email to ${emails.join(", ")}`);
-    } else {
-      showError(data.message || data.error || "Failed to send test email");
-    }
-  };
-
   const isLoading =
     loading || state.isLoading || state.isLoadingSequence;
 
@@ -630,6 +568,12 @@ export function SequenceTab({
           </div>
         )}
       </div>
+
+      {readOnly && (
+        <div className="rounded-lg bg-amber-50 border border-amber-100 px-4 py-3 text-sm text-amber-900">
+          This campaign has already sent (or is sending). Sequence steps are view-only.
+        </div>
+      )}
 
       {state.error && (
         <div className="bg-red-50 border border-red-200 rounded-lg p-3">
@@ -674,10 +618,10 @@ export function SequenceTab({
                       onSelectVariant={handleSelectVariant}
                       onToggleVariant={handleToggleVariant}
                       onDeleteVariant={handleDeleteVariant}
-                      onSendTestEmail={handleOpenTestEmail}
                       isSelected={state.selectedStepId === step.id}
                       isDeleting={deletingStepId === step.id}
                       isLastStep={index === stepsToShow.length - 1}
+                      readOnly={readOnly}
                     />
                     {index === stepsToShow.length - 1 && !readOnly && (
                       <div className="mt-3">
@@ -699,21 +643,26 @@ export function SequenceTab({
           </div>
 
           <div className="flex-1 min-h-[400px]">
-            {state.isEditing && selectedStep && !readOnly ? (
+            {state.isEditing && selectedStep ? (
               <SequenceStepEditor
                 step={selectedStep}
                 onSave={handleSaveStep}
                 onClose={handleCloseEditor}
                 projectId={campaign.projectId}
                 onDirtyChange={setHasUnsavedChanges}
+                readOnly={readOnly}
               />
             ) : (
               <div className="flex items-center justify-center h-64 text-gray-500 rounded-xl border border-dashed border-gray-200 bg-white">
                 <div className="text-center">
                   <Mail className="w-12 h-12 mx-auto mb-4 text-gray-300" />
-                  <p className="text-lg font-medium mb-2">Select a step to edit</p>
+                  <p className="text-lg font-medium mb-2">
+                    {readOnly ? "Select a step to view" : "Select a step to edit"}
+                  </p>
                   <p className="text-sm">
-                    Choose a step from the left sidebar to start editing
+                    {readOnly
+                      ? "Choose a step from the left sidebar to review its content"
+                      : "Choose a step from the left sidebar to start editing"}
                   </p>
                 </div>
               </div>
@@ -750,22 +699,6 @@ export function SequenceTab({
             </div>
           </div>
         </div>
-      )}
-
-      {testEmailStep && (
-        <TestEmailModal
-          isOpen={showTestEmailModal}
-          onClose={() => {
-            setShowTestEmailModal(false);
-            setTestEmailStep(null);
-          }}
-          onSend={handleSendTestEmail}
-          subject={testEmailStep.subject}
-          body={testEmailStep.body}
-          stepNumber={testEmailStep.stepNumber}
-          senders={availableSenders}
-          campaignId={campaignId}
-        />
       )}
 
       {showUnsavedChangesDialog && (

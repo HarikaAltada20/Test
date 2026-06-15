@@ -64,6 +64,8 @@ export function AdminEmailView({
     sentToday?: number;
     sendIntervalSeconds?: number;
     scheduleTimezone?: string;
+    scheduleFromTime?: string;
+    scheduleToTime?: string;
   }>({});
 
   const [editName, setEditName] = useState("");
@@ -122,6 +124,8 @@ export function AdminEmailView({
         sentToday: p.stats?.sentTotal ?? 0,
         sendIntervalSeconds: p.send_interval_seconds ?? 60,
         scheduleTimezone: p.schedule_timezone ?? "UTC",
+        scheduleFromTime: p.schedule_from_time ?? "09:00",
+        scheduleToTime: p.schedule_to_time ?? "17:00",
       });
     }
     setScheduleOpen(true);
@@ -235,6 +239,8 @@ export function AdminEmailView({
           sentToday={scheduleProjectMeta.sentToday}
           sendIntervalSeconds={scheduleProjectMeta.sendIntervalSeconds}
           scheduleTimezone={scheduleProjectMeta.scheduleTimezone}
+          scheduleFromTime={scheduleProjectMeta.scheduleFromTime}
+          scheduleToTime={scheduleProjectMeta.scheduleToTime}
           onOpenChange={setScheduleOpen}
           onSaved={loadData}
         />
@@ -338,6 +344,8 @@ export function AdminEmailView({
         sentToday={scheduleProjectMeta.sentToday}
         sendIntervalSeconds={scheduleProjectMeta.sendIntervalSeconds}
         scheduleTimezone={scheduleProjectMeta.scheduleTimezone}
+        scheduleFromTime={scheduleProjectMeta.scheduleFromTime}
+        scheduleToTime={scheduleProjectMeta.scheduleToTime}
         onOpenChange={setScheduleOpen}
         onSaved={loadData}
       />

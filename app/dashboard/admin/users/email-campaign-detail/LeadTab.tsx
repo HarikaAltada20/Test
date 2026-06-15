@@ -37,9 +37,10 @@ type RecipientRow = {
 
 type Props = {
   campaignId: string;
+  onRecipientsChange?: () => void;
 };
 
-export function LeadTab({ campaignId }: Props) {
+export function LeadTab({ campaignId, onRecipientsChange }: Props) {
   const { toast } = useToast();
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
@@ -116,6 +117,7 @@ export function LeadTab({ campaignId }: Props) {
       setConfirmDelete(false);
 
       await loadRecipients();
+      onRecipientsChange?.();
 
       const remaining = data.recipientCount ?? 0;
       toast({
