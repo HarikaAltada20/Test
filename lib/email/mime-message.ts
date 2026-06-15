@@ -30,6 +30,8 @@ export function buildMimeMessage(input: {
   html: string;
   text: string;
   replyTo?: string;
+  inReplyTo?: string;
+  references?: string;
   listUnsubscribeUrl?: string;
   /** Send a single text/plain part (best for Gmail Primary on simple notes). */
   plainTextOnly?: boolean;
@@ -49,6 +51,14 @@ export function buildMimeMessage(input: {
 
   if (input.replyTo?.trim()) {
     lines.push(`Reply-To: ${input.replyTo.trim()}`);
+  }
+
+  if (input.inReplyTo?.trim()) {
+    lines.push(`In-Reply-To: ${input.inReplyTo.trim()}`);
+  }
+
+  if (input.references?.trim()) {
+    lines.push(`References: ${input.references.trim()}`);
   }
 
   if (input.listUnsubscribeUrl?.trim()) {

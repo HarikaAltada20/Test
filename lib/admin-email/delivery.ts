@@ -202,6 +202,22 @@ export async function deliverEmailCampaignBatch(
         .eq("campaign_id", campaignId)
         .eq("user_id", user.id)
         .eq("email_delivery_status", "pending");
+
+      const { logOutboundUniboxMessage } = await import("./unibox");
+      await logOutboundUniboxMessage({
+        projectId: campaign.project_id,
+        campaignId,
+        userId: user.id,
+        contactEmail: user.email,
+        contactName: user.full_name ?? user.username,
+        fromEmail: campaign.from_email,
+        fromName: getBulkEmailFromName(campaign.from_email),
+        subject,
+        bodyHtml: html,
+        bodyText: text,
+        sesMessageId: sendResult.messageId,
+      });
+
       successCount += 1;
     } else {
       await db

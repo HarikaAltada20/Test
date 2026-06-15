@@ -35,6 +35,7 @@ type CampaignDetail = {
     clickRate: number;
     clickCount: number;
   };
+  sentCount: number;
 };
 
 type Props = {
@@ -184,7 +185,9 @@ export function EmailCampaignDetail({ campaignId, onBack }: Props) {
 
       <CampaignUnderlineTabs activeTab={activeTab} onTabChange={setActiveTab} />
 
-      {activeTab === "analytics" && <AnalyticsTab detail={detail} />}
+      {activeTab === "analytics" && (
+        <AnalyticsTab campaignId={campaignId} detail={detail} />
+      )}
 
       {activeTab === "lead" && (
         <LeadTab

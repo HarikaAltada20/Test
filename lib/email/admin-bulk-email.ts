@@ -100,10 +100,11 @@ export function injectTrackedLinks(
   trackingId: string,
 ): string {
   return html.replace(
-    /href="(https?:\/\/[^"]+)"/gi,
-    (_match, url: string) => {
-      if (url.includes("/track/click/")) return `href="${url}"`;
-      return `href="${wrapClickUrl(trackingId, url)}"`;
+    /<a\b([^>]*?)\shref=(["'])(https?:\/\/[^"']+)\2([^>]*)>/gi,
+    (_match, before, _quote, url, after) => {
+      if (url.includes("/track/click/")) return _match;
+      const tracked = wrapClickUrl(trackingId, url);
+      return `<a${before} href="${tracked}"${after}>`;
     },
   );
 }
@@ -153,10 +154,11 @@ export function buildBulkEmailHtml(input: {
 
   if (personal) {
     const cleanHtml = stripPromotionalHtml(bodyHtml);
-    const text = htmlToPlainText(cleanHtml);
+    const html = injectTrackedLinks(cleanHtml, input.trackingId);
+    const text = htmlToPlainText(html);
     return {
       subject: "",
-      html: cleanHtml,
+      html,
       text,
       plainTextOnly: false,
     };

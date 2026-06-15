@@ -1,10 +1,10 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import { Eye, MessageCircle, MousePointerClick, Send } from "lucide-react";
+import { Eye, Loader2, MessageCircle, MousePointerClick, Send } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 type Detail = {
@@ -12,6 +12,7 @@ type Detail = {
   progressPercent: number;
   startedAt: string | null;
   recipientCount: number;
+  sentCount: number;
   remainingCount: number;
   estimatedCompletionAt: string | null;
   summary: {
@@ -19,12 +20,69 @@ type Detail = {
     openCount: number;
     clickRate: number;
     clickCount: number;
+    bounceRate?: number;
+    bounceCount?: number;
   };
+};
+
+type VariantAnalyticsRow = {
+  variantId: string;
+  label: string;
+  sent: number;
+  opened: number;
+  clicked: number;
+  replied: number;
+  openRate: number;
+  clickRate: number;
+  replyRate: number;
+};
+
+type StepAnalyticsRow = {
+  stepNumber: number;
+  sent: number;
+  opened: number;
+  clicked: number;
+  bounced: number;
+  replied: number;
+  openRate: number;
+  clickRate: number;
+  replyRate: number;
+  variants: VariantAnalyticsRow[];
+};
+
+type Props = {
+  campaignId: string;
+  detail: Detail;
 };
 
 function formatDate(value: string | null) {
   if (!value) return "—";
   return new Date(value).toLocaleDateString();
+}
+
+function formatRate(value: number) {
+  return `${(value * 100).toFixed(1)}%`;
+}
+
+function RateCell({
+  value,
+  tone = "green",
+}: {
+  value: number;
+  tone?: "green" | "blue" | "muted";
+}) {
+  return (
+    <span
+      className={cn(
+        "font-medium",
+        tone === "green" && "text-green-600",
+        tone === "blue" && "text-blue-600",
+        tone === "muted" && "text-muted-foreground",
+      )}
+    >
+      {formatRate(value)}
+    </span>
+  );
 }
 
 function MetricCard({
@@ -65,9 +123,71 @@ function MetricCard({
   );
 }
 
-export function AnalyticsTab({ detail }: { detail: Detail }) {
+function AnalyticsTable({
+  columns,
+  children,
+}: {
+  columns: string[];
+  children: ReactNode;
+}) {
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full text-sm">
+        <thead>
+          <tr className="border-b text-muted-foreground">
+            {columns.map((col) => (
+              <th key={col} className="p-3 text-left font-medium whitespace-nowrap">
+                {col}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>{children}</tbody>
+      </table>
+    </div>
+  );
+}
+
+const STEP_COLUMNS = [
+  "Step",
+  "Sent",
+  "Opened",
+  "Open Rate",
+  "Clicked",
+  "Click Rate",
+  "Bounced",
+  "Replies",
+  "Reply Rate",
+];
+
+const VARIANT_COLUMNS = [
+  "Variant",
+  "Sent",
+  "Opened",
+  "Open Rate",
+  "Clicked",
+  "Click Rate",
+  "Replied",
+  "Reply Rate",
+];
+
+export function AnalyticsTab({ campaignId, detail }: Props) {
   const paused = detail.status === "paused";
   const active = detail.status === "active";
+  const [stepAnalytics, setStepAnalytics] = useState<StepAnalyticsRow[]>([]);
+  const [loadingSteps, setLoadingSteps] = useState(true);
+
+  useEffect(() => {
+    setLoadingSteps(true);
+    fetch(`/api/admin/email-campaigns/${campaignId}/analytics`)
+      .then((r) => r.json())
+      .then((data) => {
+        setStepAnalytics(data.stepAnalytics ?? []);
+      })
+      .finally(() => setLoadingSteps(false));
+  }, [campaignId, detail.sentCount, detail.summary.openCount, detail.summary.clickCount]);
+
+  const hasStepData = stepAnalytics.some((s) => s.sent > 0);
 
   return (
     <div className="space-y-4">
@@ -147,12 +267,79 @@ export function AnalyticsTab({ detail }: { detail: Detail }) {
         />
       </div>
 
-      <Card className="rounded-xl border border-gray-200 bg-white shadow-sm min-h-[200px]">
+      <Card className="rounded-xl border border-gray-200 bg-white shadow-sm">
         <CardContent className="p-5">
-          <h3 className="font-semibold text-gray-900 mb-4">Campaign Performance</h3>
-          <div className="flex items-center justify-center h-32 text-muted-foreground text-sm">
-            No performance data yet
-          </div>
+          <h3 className="font-semibold text-gray-900 mb-4">Step-wise Analytics</h3>
+
+          {loadingSteps ? (
+            <div className="flex justify-center py-10">
+              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+            </div>
+          ) : !hasStepData ? (
+            <div className="flex items-center justify-center h-32 text-muted-foreground text-sm">
+              No performance data yet
+            </div>
+          ) : (
+            <div className="space-y-4">
+              <AnalyticsTable columns={STEP_COLUMNS}>
+                {stepAnalytics.map((step) => (
+                  <tr key={step.stepNumber} className="border-b last:border-0">
+                    <td className="p-3 font-medium">Step {step.stepNumber}</td>
+                    <td className="p-3">{step.sent}</td>
+                    <td className="p-3">{step.opened}</td>
+                    <td className="p-3">
+                      <RateCell value={step.openRate} tone="green" />
+                    </td>
+                    <td className="p-3">{step.clicked}</td>
+                    <td className="p-3">
+                      <RateCell value={step.clickRate} tone="blue" />
+                    </td>
+                    <td className="p-3">{step.bounced}</td>
+                    <td className="p-3">{step.replied}</td>
+                    <td className="p-3">
+                      <RateCell value={step.replyRate} tone="muted" />
+                    </td>
+                  </tr>
+                ))}
+              </AnalyticsTable>
+
+              {stepAnalytics.map((step) =>
+                step.variants.length > 0 ? (
+                  <div
+                    key={`variants-${step.stepNumber}`}
+                    className="rounded-lg border border-gray-100 bg-gray-50/60 p-4"
+                  >
+                    <p className="text-sm font-medium text-gray-700 mb-3">
+                      Variant Analysis
+                    </p>
+                    <AnalyticsTable columns={VARIANT_COLUMNS}>
+                      {step.variants.map((variant) => (
+                        <tr
+                          key={variant.variantId}
+                          className="border-b last:border-0 bg-white"
+                        >
+                          <td className="p-3 font-medium">{variant.label}</td>
+                          <td className="p-3">{variant.sent}</td>
+                          <td className="p-3">{variant.opened}</td>
+                          <td className="p-3">
+                            <RateCell value={variant.openRate} tone="green" />
+                          </td>
+                          <td className="p-3">{variant.clicked}</td>
+                          <td className="p-3">
+                            <RateCell value={variant.clickRate} tone="blue" />
+                          </td>
+                          <td className="p-3">{variant.replied}</td>
+                          <td className="p-3">
+                            <RateCell value={variant.replyRate} tone="muted" />
+                          </td>
+                        </tr>
+                      ))}
+                    </AnalyticsTable>
+                  </div>
+                ) : null,
+              )}
+            </div>
+          )}
         </CardContent>
       </Card>
     </div>

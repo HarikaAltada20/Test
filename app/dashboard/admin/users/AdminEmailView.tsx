@@ -26,10 +26,11 @@ import { EmailSchedulingDialog } from "./EmailSchedulingDialog";
 import { SenderEmailManagementDialog } from "./SenderEmailManagementDialog";
 import { EmailCampaignDetail } from "./EmailCampaignDetail";
 import { EmailCampaignsList } from "./EmailCampaignsList";
+import { EmailUnibox } from "./EmailUnibox";
 import { MAX_PROJECT_DESCRIPTION_LENGTH } from "@/lib/admin-email/project-options";
 
 type ViewMode = "list" | "create" | "project";
-type ListTab = "projects" | "campaigns";
+type ListTab = "projects" | "campaigns" | "unibox";
 
 type Props = {
   isDark?: boolean;
@@ -72,8 +73,19 @@ export function AdminEmailView({
   const [editWebsiteUrl, setEditWebsiteUrl] = useState("");
   const [editTargetAudience, setEditTargetAudience] = useState("");
   const [editDescription, setEditDescription] = useState("");
+  const [unreadCount, setUnreadCount] = useState(0);
 
   const selectedProject = projects.find((p) => p.id === selectedProjectId);
+
+  const loadUnreadCount = useCallback(async () => {
+    try {
+      const res = await fetch("/api/admin/email-unibox?unreadCount=1");
+      const data = await res.json();
+      if (res.ok) setUnreadCount(data.unreadCount ?? 0);
+    } catch {
+      // ignore
+    }
+  }, []);
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -86,10 +98,11 @@ export function AdminEmailView({
       const campaignsData = await campaignsRes.json();
       setProjects(projectsData.projects ?? []);
       setCampaigns(campaignsData.campaigns ?? []);
+      await loadUnreadCount();
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [loadUnreadCount]);
 
   useEffect(() => {
     loadData();
@@ -258,34 +271,49 @@ export function AdminEmailView({
   return (
     <>
       <div className="space-y-6">
-        <div className="flex flex-wrap items-start justify-between gap-4">
-          <div>
-            <h2 className={cn("text-2xl font-bold", isDark ? "text-white" : "text-gray-900")}>
-              Projects
-            </h2>
-            <p className="text-sm text-muted-foreground">
-              Manage your marketing projects and campaigns
-            </p>
+        {listTab !== "unibox" && (
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div>
+              <h2 className={cn("text-2xl font-bold", isDark ? "text-white" : "text-gray-900")}>
+                Projects
+              </h2>
+              <p className="text-sm text-muted-foreground">
+                Manage your marketing projects and campaigns
+              </p>
+            </div>
+            {listTab === "projects" && (
+              <Button
+                className="bg-purple-600 hover:bg-purple-700"
+                onClick={() => setViewMode("create")}
+              >
+                <Plus className="h-4 w-4 mr-1" />
+                Create Project
+              </Button>
+            )}
           </div>
-          {listTab === "projects" && (
-            <Button
-              className="bg-purple-600 hover:bg-purple-700"
-              onClick={() => setViewMode("create")}
-            >
-              <Plus className="h-4 w-4 mr-1" />
-              Create Project
-            </Button>
-          )}
-        </div>
+        )}
 
         <EnhancedTabs
           tabs={[
             { id: "projects", label: `Projects (${projects.length})` },
             { id: "campaigns", label: `Campaigns (${campaigns.length})` },
+            {
+              id: "unibox",
+              label: (
+                <span className="inline-flex items-center gap-1.5">
+                  Unibox
+                  {unreadCount > 0 && (
+                    <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-purple-600 px-1.5 text-[11px] font-semibold text-white">
+                      {unreadCount}
+                    </span>
+                  )}
+                </span>
+              ),
+            },
           ]}
           activeTab={listTab}
           onTabChange={(id) => setListTab(id as ListTab)}
-          className="w-full max-w-md"
+          className="w-full max-w-2xl overflow-x-auto"
           isDark={isDark}
           light
           fillWidth={false}
@@ -325,6 +353,10 @@ export function AdminEmailView({
             onAddNew={() => setCreateCampaignOpen(true)}
             onRefresh={loadData}
           />
+        )}
+
+        {listTab === "unibox" && (
+          <EmailUnibox campaigns={campaigns} isDark={isDark} />
         )}
       </div>
 

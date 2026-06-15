@@ -352,38 +352,19 @@ export function EmailRichTextEditor({
 
     const href = normalizeUrl(url);
     const linkText = text?.trim() || href;
+    const safeHref = href
+      .replace(/&/g, "&amp;")
+      .replace(/"/g, "&quot;");
+    const safeText = linkText
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;");
 
     editor.focus();
-    const range = getInsertionRange();
-    if (!range) return;
-
-    const anchor = document.createElement("a");
-    anchor.href = href;
-    anchor.target = "_blank";
-    anchor.rel = "noopener noreferrer";
-    anchor.textContent = linkText;
-
-    try {
-      range.deleteContents();
-      range.insertNode(anchor);
-
-      const after = document.createRange();
-      after.setStartAfter(anchor);
-      after.collapse(true);
-      const sel = window.getSelection();
-      sel?.removeAllRanges();
-      sel?.addRange(after);
-      savedRangeRef.current = after.cloneRange();
-    } catch {
-      editor.appendChild(anchor);
-      const after = document.createRange();
-      after.selectNodeContents(editor);
-      after.collapse(false);
-      savedRangeRef.current = after.cloneRange();
-    }
-
-    syncFromEditor();
-    saveSelection();
+    restoreSelection();
+    insertHtml(
+      `<a href="${safeHref}" target="_blank" rel="noopener noreferrer">${safeText}</a>`,
+    );
   };
 
   const insertImage = (src: string, alt = "Image") => {
@@ -497,9 +478,16 @@ export function EmailRichTextEditor({
             Preview
           </div>
           <div
-            className="flex-1 overflow-y-auto p-4 text-sm text-gray-800 prose prose-sm max-w-none"
+            className="flex-1 overflow-y-auto p-4 text-sm text-gray-800 prose prose-sm max-w-none [&_a]:text-[#662EBD] [&_a]:underline"
             style={{ minHeight }}
             dangerouslySetInnerHTML={{ __html: previewHtml }}
+            onClick={(e) => {
+              const anchor = (e.target as HTMLElement).closest("a");
+              if (anchor instanceof HTMLAnchorElement && anchor.href) {
+                e.preventDefault();
+                window.open(anchor.href, "_blank", "noopener,noreferrer");
+              }
+            }}
           />
         </div>
       )}
@@ -558,7 +546,13 @@ export function EmailRichTextEditor({
             onSelect={saveSelection}
             onClick={(e) => {
               const anchor = (e.target as HTMLElement).closest("a");
-              if (anchor) e.preventDefault();
+              if (!(anchor instanceof HTMLAnchorElement) || !anchor.href) return;
+              if (readOnly || e.ctrlKey || e.metaKey) {
+                e.preventDefault();
+                window.open(anchor.href, "_blank", "noopener,noreferrer");
+              } else {
+                e.preventDefault();
+              }
             }}
             className="email-rich-editor flex-1 overflow-y-auto p-4 text-sm text-gray-800 outline-none focus:ring-0"
             style={{ minHeight, fontFamily, fontSize: `${fontSize}px` }}

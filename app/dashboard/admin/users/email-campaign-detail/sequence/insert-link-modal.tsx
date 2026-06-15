@@ -42,10 +42,8 @@ export function InsertLinkModal({
     if (!canInsert) return;
     const urlToInsert = trimmedUrl;
     const textToInsert = text.trim() || undefined;
+    onInsert(urlToInsert, textToInsert);
     onClose();
-    window.setTimeout(() => {
-      onInsert(urlToInsert, textToInsert);
-    }, 10);
   };
 
   return (

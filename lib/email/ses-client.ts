@@ -52,8 +52,11 @@ export async function sendSesEmail(input: {
   html: string;
   text?: string;
   replyTo?: string;
+  inReplyTo?: string;
+  references?: string;
   listUnsubscribeUrl?: string;
   plainTextOnly?: boolean;
+  useRaw?: boolean;
 }): Promise<{ messageId?: string; error?: string }> {
   const client = getSesClient();
   if (!client) {
@@ -64,7 +67,7 @@ export async function sendSesEmail(input: {
   const html = input.html?.trim() || text.replace(/\n/g, "<br>");
   const configSet = configurationSetName();
 
-  if (input.listUnsubscribeUrl?.trim()) {
+  if (input.listUnsubscribeUrl?.trim() || input.inReplyTo?.trim() || input.useRaw) {
     try {
       const raw = buildMimeMessage({
         from: input.from,
@@ -74,6 +77,8 @@ export async function sendSesEmail(input: {
         html,
         text,
         replyTo: input.replyTo,
+        inReplyTo: input.inReplyTo,
+        references: input.references,
         listUnsubscribeUrl: input.listUnsubscribeUrl,
         plainTextOnly: input.plainTextOnly,
       });
