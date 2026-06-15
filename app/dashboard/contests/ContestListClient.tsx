@@ -84,7 +84,6 @@ import {
 import {
   ADMIN_CONTEST_LIST_FILTERS_KEY,
   BRAND_CONTEST_LIST_FILTERS_KEY,
-  ADMIN_ONLY_CONTEST_LIST_SORT_OPTIONS,
   readStoredContestListFilters,
   writeStoredContestListFilters,
   type BrandPostPhaseFilterOption,
@@ -686,17 +685,6 @@ export function ContestListClient({
     }
     setFiltersHydrated(true);
   }, [contestListFiltersStorageKey, externalViewMode]);
-
-  useEffect(() => {
-    if (
-      !isAdminView &&
-      (ADMIN_ONLY_CONTEST_LIST_SORT_OPTIONS as readonly string[]).includes(
-        sortOption,
-      )
-    ) {
-      setSortOption("created_at_desc");
-    }
-  }, [isAdminView, sortOption]);
 
   useEffect(() => {
     if (!filtersHydrated || postPhaseFilterRestoredRef.current) return;
@@ -4220,22 +4208,18 @@ export function ContestListClient({
                   <SelectItem isDark={isDark} value="budget_used_asc">
                     Budget Used: Least
                   </SelectItem>
-                  {isAdminView && (
-                    <>
-                      <SelectItem isDark={isDark} value="approval_rate_desc">
-                        Approval Rate: High
-                      </SelectItem>
-                      <SelectItem isDark={isDark} value="approval_rate_asc">
-                        Approval Rate: Low
-                      </SelectItem>
-                      <SelectItem isDark={isDark} value="views_desc">
-                        Views: High
-                      </SelectItem>
-                      <SelectItem isDark={isDark} value="views_asc">
-                        Views: Low
-                      </SelectItem>
-                    </>
-                  )}
+                  <SelectItem isDark={isDark} value="approval_rate_desc">
+                    Approval Rate: High
+                  </SelectItem>
+                  <SelectItem isDark={isDark} value="approval_rate_asc">
+                    Approval Rate: Low
+                  </SelectItem>
+                  <SelectItem isDark={isDark} value="views_desc">
+                    Views: High
+                  </SelectItem>
+                  <SelectItem isDark={isDark} value="views_asc">
+                    Views: Low
+                  </SelectItem>
                   <SelectItem isDark={isDark} value="cpm_rate_desc">
                     CPM Rate: High to Low
                   </SelectItem>
