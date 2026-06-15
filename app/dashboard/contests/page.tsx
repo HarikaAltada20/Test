@@ -7,6 +7,7 @@ import {
   type CreatorRouteNotice,
 } from "./ContestsPageClient";
 import { getAdvertiserContestsWithCalculatedBudgets } from "@/lib/contest-service";
+import { enrichContestsWithListCardStats } from "@/lib/contest-list-card-stats";
 import { PageLoadingSpinner } from "@/components/loading/LoadingSpinner";
 
 export default async function ContestsPage({
@@ -53,7 +54,9 @@ export default async function ContestsPage({
   const contestsWithCalculatedBudgets =
     await getAdvertiserContestsWithCalculatedBudgets(data.user.id, supabase);
 
-  const typedContests = contestsWithCalculatedBudgets as any[];
+  const typedContests = await enrichContestsWithListCardStats(
+    contestsWithCalculatedBudgets || [],
+  );
 
   const resolvedSearch = await searchParams;
   let creatorRouteNotice: CreatorRouteNotice = null;
