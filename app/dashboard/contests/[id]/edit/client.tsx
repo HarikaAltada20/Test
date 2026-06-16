@@ -75,8 +75,35 @@ import { createClient } from "@/utils/supabase/client";
 import { UserResponse } from "@supabase/supabase-js";
 import { useToast } from "@/hooks/use-toast";
 import { reconcileLeaderboardPrizeAmounts } from "@/lib/contest-prize-utils";
+import { getChargeableBudgetCents } from "@/lib/contest-chargeable-budget";
+
+/** When paid, baseline for budget deltas must be payment_details.total_prize_pool, not saved contest budget. */
+function resolvePaidBudgetBaselineCents(
+  contestBasedBudgetCents: number,
+  paymentDetailsRaw: unknown,
+): number {
+  try {
+    const paymentDetails =
+      typeof paymentDetailsRaw === "string"
+        ? JSON.parse(paymentDetailsRaw)
+        : paymentDetailsRaw;
+    if (
+      paymentDetails?.payment_status === "completed" &&
+      typeof paymentDetails.total_prize_pool === "number"
+    ) {
+      return paymentDetails.total_prize_pool;
+    }
+  } catch {
+    // fall through
+  }
+  return contestBasedBudgetCents;
+}
 import { consumeEditFlowReturnScroll } from "@/lib/before-unload-utils";
 import { CampaignPaymentModal } from "@/components/CampaignPaymentModal";
+import {
+  CampaignPaymentProcessingOverlay,
+  type CampaignPaymentProcessingPhase,
+} from "@/components/CampaignPaymentProcessingOverlay";
 import { ContestPaymentSelection } from "@/components/ContestPaymentSelection";
 import dynamic from "next/dynamic";
 import { PageLoadingSpinner } from "@/components/loading/LoadingSpinner";
@@ -385,6 +412,8 @@ export default function EditContestPage({
   const [isLoading, setIsLoading] = useState(true);
   const [isFormHydrated, setIsFormHydrated] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false); // Separate state for submission loading
+  const [paymentProcessingPhase, setPaymentProcessingPhase] =
+    useState<CampaignPaymentProcessingPhase | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [validationError, setValidationError] = useState<string | null>(null);
   const [contest, setContest] = useState<ContestData | null>(null);
@@ -1266,7 +1295,11 @@ export default function EditContestPage({
                   totalPrize,
                 );
                 setWinnerAmounts(reconciled);
-                setOriginalBudget(totalPrize);
+                const resolvedBaseline = resolvePaidBudgetBaselineCents(
+                  totalPrize,
+                  data.payment_details,
+                );
+                setOriginalBudget(resolvedBaseline);
               } else if (Array.isArray(data.prizes)) {
                 // Fallback to old structure if new one not present
                 setWinnerCount(data.winner_count || data.prizes.length);
@@ -1279,12 +1312,22 @@ export default function EditContestPage({
                   (sum: number, amount: number) => sum + amount,
                   0,
                 );
-                setOriginalBudget(originalBudgetInCents);
+                setOriginalBudget(
+                  resolvePaidBudgetBaselineCents(
+                    originalBudgetInCents,
+                    data.payment_details,
+                  ),
+                );
               } else {
                 setWinnerCount(DEFAULT_WINNER_COUNT); // Default
                 setWinnerAmounts(DEFAULT_WINNER_AMOUNTS); // Default
                 // Set default original budget (prize pool only)
-                setOriginalBudget(DEFAULT_TOTAL_PRIZE_POOL); // Default total
+                setOriginalBudget(
+                  resolvePaidBudgetBaselineCents(
+                    DEFAULT_TOTAL_PRIZE_POOL,
+                    data.payment_details,
+                  ),
+                );
               }
             } else if (resolvedContestType === "cpm") {
               const cpmDetails = data.contest_based_details?.cpm_contest;
@@ -1299,7 +1342,12 @@ export default function EditContestPage({
                 );
                 setTermsConditions(cpmDetails.terms_conditions || "");
                 // Set original budget for tracking changes (cpm budget is stored in cents, prize pool only)
-                setOriginalBudget(cpmDetails.total_budget || 0);
+                setOriginalBudget(
+                  resolvePaidBudgetBaselineCents(
+                    cpmDetails.total_budget || 0,
+                    data.payment_details,
+                  ),
+                );
 
                 // Load CPM Points Configuration from twitter_campaign.points_config (multipliers are nested inside comments_weight, retweets_weight, quote_reposts_weight)
                 // Note: This is loaded later when we process twitter_campaign data
@@ -1353,7 +1401,12 @@ export default function EditContestPage({
                 if (unifiedCents > 0) {
                   setTotalBudget((unifiedCents / 100).toString());
                 }
-                setOriginalBudget(unifiedCents);
+                setOriginalBudget(
+                  resolvePaidBudgetBaselineCents(
+                    unifiedCents,
+                    data.payment_details,
+                  ),
+                );
               } else if (
                 typeof milestoneDetails?.total_budget_cents === "number" &&
                 milestoneDetails.total_budget_cents > 0
@@ -1361,7 +1414,12 @@ export default function EditContestPage({
                 setTotalBudget(
                   (milestoneDetails.total_budget_cents / 100).toString(),
                 );
-                setOriginalBudget(milestoneDetails.total_budget_cents);
+                setOriginalBudget(
+                  resolvePaidBudgetBaselineCents(
+                    milestoneDetails.total_budget_cents,
+                    data.payment_details,
+                  ),
+                );
               }
 
               const bonus = milestoneDetails?.bonus;
@@ -1917,7 +1975,11 @@ export default function EditContestPage({
               const currentTotal =
                 leaderboardData.total_prize ||
                 updatedAmounts.reduce((sum, amount) => sum + amount, 0);
-              setOriginalBudget(currentTotal);
+              const resolvedBaseline = resolvePaidBudgetBaselineCents(
+                currentTotal,
+                refreshedContest.payment_details,
+              );
+              setOriginalBudget(resolvedBaseline);
 
               console.log("🔄 Updated leaderboard amounts from database:", {
                 updatedAmounts,
@@ -1936,7 +1998,12 @@ export default function EditContestPage({
               setTotalBudget(budgetInDollars.toString());
 
               // Update originalBudget with current total from database
-              setOriginalBudget(cpmData.total_budget);
+              setOriginalBudget(
+                resolvePaidBudgetBaselineCents(
+                  cpmData.total_budget,
+                  refreshedContest.payment_details,
+                ),
+              );
 
               console.log("🔄 Updated CPM budget from database:", {
                 totalBudgetCents: cpmData.total_budget,
@@ -1955,7 +2022,12 @@ export default function EditContestPage({
             if (unifiedCents > 0) {
               setTotalBudget((unifiedCents / 100).toString());
             }
-            setOriginalBudget(unifiedCents);
+            setOriginalBudget(
+              resolvePaidBudgetBaselineCents(
+                unifiedCents,
+                refreshedContest.payment_details,
+              ),
+            );
             console.log("🔄 Updated dual rewards budget from database:", {
               unifiedCents,
             });
@@ -1969,7 +2041,12 @@ export default function EditContestPage({
               setTotalBudget(
                 (milestoneData.total_budget_cents / 100).toString(),
               );
-              setOriginalBudget(milestoneData.total_budget_cents);
+              setOriginalBudget(
+                resolvePaidBudgetBaselineCents(
+                  milestoneData.total_budget_cents,
+                  refreshedContest.payment_details,
+                ),
+              );
             }
           }
         }
@@ -4112,6 +4189,109 @@ export default function EditContestPage({
     }
   };
 
+  const getPaidPrizePoolBaseline = (): number => {
+    if (!contest?.payment_details) return 0;
+    try {
+      const paymentDetails =
+        typeof contest.payment_details === "string"
+          ? JSON.parse(contest.payment_details)
+          : contest.payment_details;
+      if (paymentDetails.payment_status !== "completed") return 0;
+      return paymentDetails.total_prize_pool ?? 0;
+    } catch {
+      return 0;
+    }
+  };
+
+  const getCurrentChargeableBudgetCents = (
+    amountsOverride?: number[],
+    totalBudgetOverride?: string,
+  ): number => {
+    if (contestType === "leaderboard") {
+      const amounts = amountsOverride ?? winnerAmounts;
+      const totalPrize = amounts.reduce(
+        (sum, amount) => sum + (amount || 0),
+        0,
+      );
+      const flatFeeCents =
+        flatFeeBonus && parseFloat(flatFeeBonus.toString()) > 0
+          ? Math.round(parseFloat(flatFeeBonus.toString()) * 100)
+          : 0;
+      const bonusBudgetCents =
+        flatFeeCents > 0 &&
+        totalBudget &&
+        parseFloat(totalBudget.toString()) > 0
+          ? Math.round(parseFloat(totalBudget.toString()) * 100)
+          : 0;
+
+      return getChargeableBudgetCents({
+        id: contestId,
+        contest_type: "leaderboard",
+        contest_based_details: {
+          leaderboard_contest: {
+            total_prize: totalPrize,
+            flat_fee_bonus: flatFeeCents || undefined,
+            total_budget: bonusBudgetCents || undefined,
+          },
+        },
+      });
+    }
+
+    if (
+      contestType === "cpm" ||
+      contestType === "milestone" ||
+      contestType === "dual_rewards"
+    ) {
+      const budgetCents = Math.round(
+        parseFloat((totalBudgetOverride ?? totalBudget.toString()) || "0") * 100,
+      );
+      if (contestType === "dual_rewards") {
+        return getChargeableBudgetCents({
+          id: contestId,
+          contest_type: "dual_rewards",
+          contest_based_details: { total_budget_cents: budgetCents },
+        });
+      }
+      if (contestType === "milestone") {
+        return getChargeableBudgetCents({
+          id: contestId,
+          contest_type: "milestone",
+          contest_based_details: {
+            milestone_contest: { total_budget_cents: budgetCents },
+          },
+        });
+      }
+      return getChargeableBudgetCents({
+        id: contestId,
+        contest_type: "cpm",
+        contest_based_details: {
+          cpm_contest: { total_budget: budgetCents },
+        },
+      });
+    }
+
+    return 0;
+  };
+
+  const syncBudgetChangeFromPaidBaseline = (
+    amountsOverride?: number[],
+    totalBudgetOverride?: string,
+  ) => {
+    const paidBaseline = getPaidPrizePoolBaseline();
+    const baseline =
+      paidBaseline > 0 ? paidBaseline : originalBudget;
+    const currentChargeable = getCurrentChargeableBudgetCents(
+      amountsOverride,
+      totalBudgetOverride,
+    );
+    const prizePoolDifference = currentChargeable - baseline;
+
+    setBudgetDifference(prizePoolDifference);
+    setBudgetChanged(Math.abs(prizePoolDifference) > 0);
+
+    return { currentChargeable, difference: prizePoolDifference };
+  };
+
   // Process refund after user confirmation
   const processRefund = async () => {
     if (!refundDetails) return;
@@ -4313,7 +4493,7 @@ export default function EditContestPage({
   };
 
   // Helper function to submit campaign for approval with retries
-  const submitForApproval = async (retries = 3, delay = 2000) => {
+  const submitForApproval = async (retries = 5, delay = 2000): Promise<boolean> => {
     for (let attempt = 1; attempt <= retries; attempt++) {
       try {
         console.log(
@@ -4333,13 +4513,14 @@ export default function EditContestPage({
         const result = await response.json();
 
         if (response.ok && result.success) {
+          setPaymentProcessingPhase("redirecting");
           toast({
             title: "Success",
             description: "Campaign submitted for approval successfully!",
             variant: "default",
           });
           router.push(`/dashboard/contests/${contestId}`);
-          return;
+          return true;
         } else {
           throw new Error(result.error || "Failed to submit for approval");
         }
@@ -4347,12 +4528,13 @@ export default function EditContestPage({
         console.log(`Attempt ${attempt} failed:`, error.message);
 
         if (attempt === retries) {
+          setPaymentProcessingPhase(null);
           toast({
             title: "Submission Failed",
             description: `Failed to submit campaign for approval: ${error.message}`,
             variant: "destructive",
           });
-          return;
+          return false;
         }
 
         // Wait before retrying
@@ -4360,6 +4542,7 @@ export default function EditContestPage({
         await new Promise((resolve) => setTimeout(resolve, delay));
       }
     }
+    return false;
   };
 
   // Helper function to validate form for submission
@@ -6023,30 +6206,13 @@ export default function EditContestPage({
         variant: "default",
       });
 
-      // Reset budget change tracking since payment is now complete
+      // Reset budget change tracking; refreshContestData sets baseline from payment_details
       setBudgetChanged(false);
       setBudgetDifference(0);
 
-      // Update originalBudget to the new budget to prevent false change detection
-      if (contestType === "leaderboard") {
-        const newTotalPrize = winnerAmounts.reduce(
-          (sum, amount) => sum + amount,
-          0,
-        );
-        setOriginalBudget(newTotalPrize);
-      } else if (
-        contestType === "cpm" ||
-        contestType === "milestone" ||
-        contestType === "dual_rewards"
-      ) {
-        const newBudgetInCents = Math.round(
-          parseFloat(totalBudget.toString()) * 100,
-        );
-        setOriginalBudget(newBudgetInCents);
-      }
-
       // Refresh contest data to show updated payment details
       await refreshContestData();
+      syncBudgetChangeFromPaidBaseline();
 
       // Force a re-render by clearing and resetting budget change detection
       console.log(
@@ -6088,24 +6254,21 @@ export default function EditContestPage({
 
   /** Stripe return: form state is lost on reload — refresh from DB, do not overwrite with empty state. */
   const handleStripePaymentReturn = async () => {
+    setPaymentProcessingPhase("submitting");
     setIsSubmitting(true);
     setShowPayment(false);
     try {
       await refreshContestData();
-      setBudgetChanged(false);
-      setBudgetDifference(0);
+      syncBudgetChangeFromPaidBaseline();
 
-      toast({
-        title: "Payment Successful",
-        description:
-          "Your campaign payment was completed. Submitting for approval...",
-        variant: "default",
-      });
-
-      scrollToBottomActions();
-      await submitForApproval();
+      const submitted = await submitForApproval();
+      if (!submitted) {
+        setPaymentProcessingPhase(null);
+        scrollToBottomActions();
+      }
     } catch (error: unknown) {
       console.error("Error processing Stripe payment return:", error);
+      setPaymentProcessingPhase(null);
       toast({
         title: "Payment error",
         description:
@@ -6114,6 +6277,7 @@ export default function EditContestPage({
             : "Something went wrong after payment. Please try again.",
         variant: "destructive",
       });
+      scrollToBottomActions();
     } finally {
       setIsSubmitting(false);
     }
@@ -6150,6 +6314,7 @@ export default function EditContestPage({
         const sessionData = await sessionResponse.json();
 
         if (!sessionResponse.ok || !sessionData.success) {
+          setPaymentProcessingPhase(null);
           toast({
             title: "Payment verification failed",
             description:
@@ -6162,9 +6327,23 @@ export default function EditContestPage({
           return;
         }
 
+        if (sessionData.paymentStatus !== "completed") {
+          setPaymentProcessingPhase(null);
+          toast({
+            title: "Payment still processing",
+            description:
+              "Your payment was received but is still being finalized. Please wait a moment and try again.",
+            variant: "destructive",
+          });
+          setShowPayment(true);
+          scrollToBottomActions();
+          return;
+        }
+
         await handleStripePaymentReturn();
       } catch (error) {
         console.error("Error processing contest payment return:", error);
+        setPaymentProcessingPhase(null);
         toast({
           title: "Payment error",
           description:
@@ -6205,6 +6384,7 @@ export default function EditContestPage({
         sessionId,
         contestIdParam,
       };
+      setPaymentProcessingPhase("verifying");
       window.history.replaceState({}, "", window.location.pathname);
     }
 
@@ -6225,40 +6405,12 @@ export default function EditContestPage({
     newWinnerAmounts?: number[],
     newTotalBudget?: string,
   ) => {
-    let currentPrizePool = 0;
-
-    if (contestType === "leaderboard") {
-      const amounts = newWinnerAmounts || winnerAmounts;
-      currentPrizePool = amounts.reduce(
-        (sum: number, amount: number) => sum + amount,
-        0,
-      );
-    } else if (
-      contestType === "cpm" ||
-      contestType === "milestone" ||
-      contestType === "dual_rewards"
-    ) {
-      const budget = newTotalBudget || totalBudget;
-      currentPrizePool = Math.round(parseFloat(budget.toString()) * 100); // Convert to cents
+    if (newWinnerAmounts) {
+      setWinnerAmounts(newWinnerAmounts);
+    } else if (newTotalBudget) {
+      setTotalBudget(newTotalBudget);
     }
-
-    // Calculate ONLY the prize pool difference (for better UX)
-    const prizePoolDifference = currentPrizePool - originalBudget;
-
-    setBudgetDifference(prizePoolDifference); // Store prize pool difference only
-    setBudgetChanged(Math.abs(prizePoolDifference) > 0);
-
-    console.log("💰 Budget change check:", {
-      contestType,
-      originalBudget,
-      currentPrizePool,
-      prizePoolDifference,
-      budgetChanged: Math.abs(prizePoolDifference) > 0,
-      newWinnerAmounts: newWinnerAmounts?.slice(0, 3),
-      newTotalBudget,
-    });
-
-    return { currentBudget: currentPrizePool, difference: prizePoolDifference };
+    return syncBudgetChangeFromPaidBaseline(newWinnerAmounts, newTotalBudget);
   };
 
   // Update budget change detection when prize amounts change
@@ -6271,6 +6423,7 @@ export default function EditContestPage({
     await handleSubmitWithStatus("draft");
     // Refresh contest data after saving to ensure UI is up to date
     await refreshContestData();
+    checkBudgetChange();
   };
 
   // Add async comprehensive validation for edit contest (mirrors creation)
@@ -6406,10 +6559,12 @@ export default function EditContestPage({
         show_demographics_to_brand: showBrandDemographics,
       };
     }
-    // Check if payment/refund processing is required
+    // Check if payment/refund processing is required (always vs paid baseline, not stale state)
     const paid = isContestPaid();
-    const needsPayment = !paid || (budgetChanged && budgetDifference > 0);
-    const needsRefund = paid && budgetChanged && budgetDifference < 0;
+    const { difference: prizePoolDifference } = syncBudgetChangeFromPaidBaseline();
+    const hasBudgetDelta = Math.abs(prizePoolDifference) > 0;
+    const needsPayment = !paid || (hasBudgetDelta && prizePoolDifference > 0);
+    const needsRefund = paid && hasBudgetDelta && prizePoolDifference < 0;
 
     if (needsRefund) {
       // Show refund preview modal instead of processing directly
@@ -6417,7 +6572,7 @@ export default function EditContestPage({
         await handleSubmitWithStatus("draft", true); // Save contest data first
 
         // Calculate refund details for preview
-        const prizePoolDecrease = Math.abs(budgetDifference);
+        const prizePoolDecrease = Math.abs(prizePoolDifference);
 
         // Get commission percentage from original payment details, not current plan
         let commissionPercentage = null;
@@ -8015,11 +8170,12 @@ export default function EditContestPage({
   if (isLoading || isPlansLoading || isUserPlanLoading) {
     // Check all loading states
     return (
-      // <div className="flex items-center justify-center h-full">
-      //   <p>Loading campaign data...</p>
-      // </div>
       <div className="flex items-center justify-center h-[76vh]">
-        <PageLoadingSpinner mode="light" />
+        {paymentProcessingPhase ? (
+          <CampaignPaymentProcessingOverlay phase={paymentProcessingPhase} />
+        ) : (
+          <PageLoadingSpinner mode="light" />
+        )}
       </div>
     );
   }
@@ -11178,6 +11334,7 @@ export default function EditContestPage({
                           const newWinnerAmounts = [...winnerAmounts];
                           newWinnerAmounts[i] = 0; // Temporarily set to 0
                           setWinnerAmounts(newWinnerAmounts);
+                          updateBudgetTracking(newWinnerAmounts);
                           return;
                         }
 
@@ -12820,6 +12977,92 @@ export default function EditContestPage({
                 )}
               </div>
 
+              {!datesOnly && platform?.toLowerCase() === "youtube" && (
+                <div
+                  className={cn(
+                    "space-y-3 rounded-xl border p-4",
+                    isDark
+                      ? "border-slate-700 bg-slate-900/40"
+                      : "border-slate-200 bg-slate-50",
+                  )}
+                >
+                  <div className="flex flex-col gap-1">
+                    <h4 className="text-base font-semibold">
+                      YouTube Analytics visibility (Brand view)
+                    </h4>
+                    <p className="text-sm text-muted-foreground">
+                      Choose which advanced YouTube analytics are visible to the
+                      advertiser on this campaign. Admins always see everything.
+                    </p>
+                  </div>
+                  <div className="space-y-2">
+                    <div className="flex items-start gap-2">
+                      <Checkbox
+                        id="yt-core-visibility"
+                        checked={showBrandCoreAnalytics}
+                        onCheckedChange={(checked) =>
+                          setShowBrandCoreAnalytics(!!checked)
+                        }
+                      />
+                      <div>
+                        <Label
+                          htmlFor="yt-core-visibility"
+                          className="text-sm font-medium"
+                        >
+                          Show Core Analytics
+                        </Label>
+                        <p className="text-xs text-muted-foreground">
+                          Avg view %, watch time, engaged views, shares,
+                          subscribers, playlists and bot score.
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-start gap-2">
+                      <Checkbox
+                        id="yt-traffic-visibility"
+                        checked={showBrandTrafficSources}
+                        onCheckedChange={(checked) =>
+                          setShowBrandTrafficSources(!!checked)
+                        }
+                      />
+                      <div>
+                        <Label
+                          htmlFor="yt-traffic-visibility"
+                          className="text-sm font-medium"
+                        >
+                          Show Traffic Sources
+                        </Label>
+                        <p className="text-xs text-muted-foreground">
+                          Breakdown of Shorts feed, search, external links and
+                          other traffic sources.
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-start gap-2">
+                      <Checkbox
+                        id="yt-demo-visibility"
+                        checked={showBrandDemographics}
+                        onCheckedChange={(checked) =>
+                          setShowBrandDemographics(!!checked)
+                        }
+                      />
+                      <div>
+                        <Label
+                          htmlFor="yt-demo-visibility"
+                          className="text-sm font-medium"
+                        >
+                          Show Demographics
+                        </Label>
+                        <p className="text-xs text-muted-foreground">
+                          Age groups, gender split and top countries for each
+                          submission.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {/* Bonus configuration */}
               {true && (
                 <>
@@ -13147,7 +13390,7 @@ export default function EditContestPage({
 
           {/* Modern Error Display exactly like create campaign page */}
           {formFeedback && formFeedbackType === "error" && (
-            <div className="mr-auto">
+            <div className="mr-auto w-full">
               <div className="bg-gradient-to-r from-red-50 to-red-100 dark:from-red-950/50 dark:to-red-900/50 border border-red-200 dark:border-red-800 rounded-lg p-3">
                 <div className="flex items-center gap-2">
                   <div className="w-5 h-5 bg-red-500 rounded-full flex items-center justify-center flex-shrink-0">
@@ -13158,93 +13401,6 @@ export default function EditContestPage({
                   </p>
                 </div>
               </div>
-
-              {/* YouTube Analytics Visibility (Brand side) */}
-              {platform?.toLowerCase() === "youtube" && (
-                <div
-                  className={cn(
-                    "space-y-3 rounded-lg border p-4",
-                    isDark
-                      ? "border-slate-600 bg-slate-900/40"
-                      : "border-slate-200 bg-slate-50",
-                  )}
-                >
-                  <div className="flex flex-col gap-1">
-                    <h4 className="text-base font-medium">
-                      YouTube Analytics visibility (Brand view)
-                    </h4>
-                    <p className="text-sm text-muted-foreground">
-                      Choose which advanced YouTube analytics are visible to the
-                      advertiser on this campaign. Admins always see everything.
-                    </p>
-                  </div>
-                  <div className="space-y-2">
-                    <div className="flex items-start gap-2">
-                      <Checkbox
-                        id="yt-core-visibility"
-                        checked={showBrandCoreAnalytics}
-                        onCheckedChange={(checked) =>
-                          setShowBrandCoreAnalytics(!!checked)
-                        }
-                      />
-                      <div>
-                        <Label
-                          htmlFor="yt-core-visibility"
-                          className="text-sm font-medium"
-                        >
-                          Show Core Analytics
-                        </Label>
-                        <p className="text-xs text-muted-foreground">
-                          Avg view %, watch time, engaged views, shares,
-                          subscribers, playlists and bot score.
-                        </p>
-                      </div>
-                    </div>
-                    <div className="flex items-start gap-2">
-                      <Checkbox
-                        id="yt-traffic-visibility"
-                        checked={showBrandTrafficSources}
-                        onCheckedChange={(checked) =>
-                          setShowBrandTrafficSources(!!checked)
-                        }
-                      />
-                      <div>
-                        <Label
-                          htmlFor="yt-traffic-visibility"
-                          className="text-sm font-medium"
-                        >
-                          Show Traffic Sources
-                        </Label>
-                        <p className="text-xs text-muted-foreground">
-                          Breakdown of Shorts feed, search, external links and
-                          other traffic sources.
-                        </p>
-                      </div>
-                    </div>
-                    <div className="flex items-start gap-2">
-                      <Checkbox
-                        id="yt-demo-visibility"
-                        checked={showBrandDemographics}
-                        onCheckedChange={(checked) =>
-                          setShowBrandDemographics(!!checked)
-                        }
-                      />
-                      <div>
-                        <Label
-                          htmlFor="yt-demo-visibility"
-                          className="text-sm font-medium"
-                        >
-                          Show Demographics
-                        </Label>
-                        <p className="text-xs text-muted-foreground">
-                          Age groups, gender split and top countries for each
-                          submission.
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              )}
             </div>
           )}
 
@@ -13819,6 +13975,10 @@ export default function EditContestPage({
             isDecrease={false}
           />
         </CampaignPaymentModal>
+      )}
+
+      {paymentProcessingPhase && (
+        <CampaignPaymentProcessingOverlay phase={paymentProcessingPhase} />
       )}
     </div>
   );

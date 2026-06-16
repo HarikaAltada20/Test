@@ -90,6 +90,10 @@ import {
 import { createClient } from "@/utils/supabase/client";
 import { UserResponse } from "@supabase/supabase-js";
 import { CampaignPaymentModal } from "@/components/CampaignPaymentModal";
+import {
+  CampaignPaymentProcessingOverlay,
+  type CampaignPaymentProcessingPhase,
+} from "@/components/CampaignPaymentProcessingOverlay";
 import { ContestPaymentSelection } from "@/components/ContestPaymentSelection";
 import {
   Collapsible,
@@ -554,6 +558,8 @@ export default function CreateContestPage({
     DEFAULT_WINNER_AMOUNTS,
   );
   const [isLoading, setIsLoading] = useState(false);
+  const [paymentProcessingPhase, setPaymentProcessingPhase] =
+    useState<CampaignPaymentProcessingPhase | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const resourceFileRef = useRef<HTMLInputElement>(null);
   const bonusRichTextEditorRef = useRef<any>(null);
@@ -3637,15 +3643,12 @@ export default function CreateContestPage({
     setIsLoading(true);
     setPaymentCompleted(true);
     setShowPayment(false);
-
-    toast({
-      title: "Payment Successful!",
-      description:
-        "Campaign payment processed. We are now submitting your campaign for review...",
-    });
+    setPaymentProcessingPhase("submitting");
 
     const contestId = draftId || paymentDetails?.contestId;
     if (!contestId) {
+      setPaymentProcessingPhase(null);
+      setIsLoading(false);
       toast({
         title: "Submission Error",
         description:
@@ -3655,7 +3658,7 @@ export default function CreateContestPage({
       return;
     }
 
-    const submitForApproval = async (retries = 3, delay = 2000) => {
+    const submitForApproval = async (retries = 5, delay = 2000) => {
       try {
         console.log(
           `Attempting to submit campaign for approval. Retries left: ${retries}`,
@@ -3694,13 +3697,15 @@ export default function CreateContestPage({
 
         // Success!
         console.log("Campaign submitted for approval successfully!");
+        setPaymentProcessingPhase("redirecting");
         toast({
-          title: "Campaign Submitted!",
+          title: "Campaign submitted!",
           description: "Your campaign is now pending for admin review.",
         });
         router.push(`/dashboard/contests/${contestId}`);
       } catch (error: any) {
         console.error("Fatal error submitting contest for approval:", error);
+        setPaymentProcessingPhase(null);
         toast({
           title: "Submission Error",
           description: `Payment was successful but we failed to automatically submit your campaign. Please go to the campaign page and click 'Submit for Approval'. Error: ${error.message}`,
@@ -3762,6 +3767,8 @@ export default function CreateContestPage({
       if (processedContestPaymentRef.current === sessionId) return;
       processedContestPaymentRef.current = sessionId;
 
+      setPaymentProcessingPhase("verifying");
+      setIsLoading(true);
       window.history.replaceState({}, "", window.location.pathname);
 
       const completeStripeReturn = async () => {
@@ -3772,6 +3779,8 @@ export default function CreateContestPage({
           const sessionData = await sessionResponse.json();
 
           if (!sessionResponse.ok || !sessionData.success) {
+            setPaymentProcessingPhase(null);
+            setIsLoading(false);
             toast({
               title: "Payment verification failed",
               description:
@@ -3792,18 +3801,37 @@ export default function CreateContestPage({
             return;
           }
 
-          toast({
-            title: "Payment successful",
-            description:
-              "Your campaign payment was completed. Submitting for review...",
-          });
-          setShowPayment(true);
+          if (sessionData.paymentStatus !== "completed") {
+            setPaymentProcessingPhase(null);
+            setIsLoading(false);
+            toast({
+              title: "Payment still processing",
+              description:
+                "Your payment was received but is still being finalized. Please wait a moment and try again.",
+              variant: "destructive",
+            });
+            restoreCreateStepFromReturn();
+            if (contestIdParam) {
+              window.history.replaceState(
+                {},
+                "",
+                buildDraftReturnUrl(contestIdParam),
+              );
+              void reloadContestById(contestIdParam);
+            }
+            setShowPayment(true);
+            return;
+          }
+
+          setShowPayment(false);
           await handlePaymentSuccess({
             contestId: contestIdParam || sessionData.contestId || draftId,
             paymentDetails: sessionData,
           });
         } catch (error) {
           console.error("Error processing contest payment return:", error);
+          setPaymentProcessingPhase(null);
+          setIsLoading(false);
           toast({
             title: "Payment error",
             description:
@@ -13432,6 +13460,10 @@ export default function CreateContestPage({
 
       {/* Render RefreshWarningModal if needed */}
       {showRefreshWarning && <RefreshWarningModal />}
+
+      {paymentProcessingPhase && (
+        <CampaignPaymentProcessingOverlay phase={paymentProcessingPhase} />
+      )}
     </div>
   );
 }

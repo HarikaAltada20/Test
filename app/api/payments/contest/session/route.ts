@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/utils/supabase/server";
 import { stripe } from "@/lib/stripe";
+import { finalizeContestPaymentFromStripe } from "@/lib/payment-utils";
 
 const CONTEST_PAYMENT_TYPES = new Set([
   "contest_payment",
@@ -39,7 +40,9 @@ export async function GET(request: NextRequest) {
             ?.type
         : undefined);
 
-    if (!sessionType || !CONTEST_PAYMENT_TYPES.has(sessionType)) {
+    let resolvedType = sessionType;
+
+    if (!resolvedType || !CONTEST_PAYMENT_TYPES.has(resolvedType)) {
       const paymentIntentId =
         typeof session.payment_intent === "string"
           ? session.payment_intent
@@ -55,6 +58,7 @@ export async function GET(request: NextRequest) {
             { status: 400 },
           );
         }
+        resolvedType = piType;
       } else {
         return NextResponse.json(
           { error: "Invalid checkout session type" },
@@ -90,12 +94,42 @@ export async function GET(request: NextRequest) {
         ? session.payment_intent
         : session.payment_intent?.id ?? null;
 
+    if (!paymentIntentId) {
+      return NextResponse.json(
+        { error: "Payment intent missing from checkout session" },
+        { status: 400 },
+      );
+    }
+
+    const paymentIntent = await stripe().paymentIntents.retrieve(paymentIntentId);
+
+    if (paymentIntent.metadata?.userId && paymentIntent.metadata.userId !== user.id) {
+      return NextResponse.json(
+        { error: "Payment does not belong to this account" },
+        { status: 403 },
+      );
+    }
+
+    const finalizeResult = await finalizeContestPaymentFromStripe(paymentIntent);
+
+    if (!finalizeResult.success) {
+      return NextResponse.json(
+        {
+          error:
+            finalizeResult.error ||
+            "Failed to finalize payment. Please wait a moment and try again.",
+        },
+        { status: 500 },
+      );
+    }
+
     return NextResponse.json({
       success: true,
       contestId,
       amountInCents: session.amount_total ?? 0,
       sessionId: session.id,
       paymentIntentId,
+      paymentStatus: finalizeResult.paymentStatus,
     });
   } catch (error) {
     console.error("Error retrieving contest checkout session:", error);

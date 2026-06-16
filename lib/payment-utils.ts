@@ -486,7 +486,7 @@ export async function createContestCheckoutSession(
         paymentMethod === "split"
           ? "contest_payment_split"
           : "contest_payment",
-      amount: stripeAmountInCents.toString(),
+      amount: (stripeAmountInCents / 100).toString(),
       description,
       paymentMethod,
     };
@@ -497,9 +497,10 @@ export async function createContestCheckoutSession(
       metadata.originalWalletBalance = originalWalletBalance.toString();
     }
 
-    const returnBase = returnPath.startsWith("http")
+    const normalizedPath = returnPath.startsWith("/")
       ? returnPath
-      : `${appUrl}${returnPath.startsWith("/") ? returnPath : `/${returnPath}`}`;
+      : `/${returnPath}`;
+    const returnBase = `${appUrl.replace(/\/$/, "")}${normalizedPath}`;
     const returnSeparator = returnBase.includes("?") ? "&" : "?";
 
     const session = await stripe().checkout.sessions.create({
@@ -2050,4 +2051,315 @@ export async function setDefaultPaymentMethod(
     );
     return false;
   }
+}
+
+export type FinalizeContestPaymentResult = {
+  success: boolean;
+  alreadyProcessed: boolean;
+  paymentStatus: PaymentDetails["payment_status"];
+  error?: string;
+};
+
+type StripePaymentIntentLike = {
+  id: string;
+  /** Stripe PaymentIntent amount in cents (authoritative for Stripe portion). */
+  amount?: number;
+  metadata: Record<string, string | undefined>;
+};
+
+async function ensureContestStripeTransactionLogged(
+  supabase: ReturnType<typeof createAdminClient>,
+  params: {
+    userId: string;
+    contestId: string;
+    paymentIntentId: string;
+    stripeAmountCents: number;
+    isSplit: boolean;
+    paymentDescription?: string;
+  },
+): Promise<boolean> {
+  const { data: existingSuccess } = await supabase
+    .from("money_transactions")
+    .select("id")
+    .eq("payment_intent_id", params.paymentIntentId)
+    .eq("status", "success")
+    .maybeSingle();
+
+  if (existingSuccess) {
+    return true;
+  }
+
+  const baseDescription =
+    params.paymentDescription ||
+    `Contest payment for contest ${params.contestId}`;
+  const enhancedDescription = params.isSplit
+    ? `${baseDescription} (Stripe Portion)`
+    : `Contest payment completed - Contest: ${params.contestId}, Payment Intent: ${params.paymentIntentId}`;
+  const remarks = params.isSplit
+    ? "Stripe portion of split payment completed successfully"
+    : "Contest payment completed successfully";
+
+  const { data: pending } = await supabase
+    .from("money_transactions")
+    .select("id")
+    .eq("payment_intent_id", params.paymentIntentId)
+    .eq("status", "pending")
+    .maybeSingle();
+
+  if (pending) {
+    const { error } = await supabase
+      .from("money_transactions")
+      .update({
+        status: "success",
+        amount: params.stripeAmountCents,
+        description: enhancedDescription,
+        remarks,
+        payment_method: params.isSplit ? "split" : "stripe",
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", pending.id);
+
+    if (!error) {
+      return true;
+    }
+    console.error(
+      "Failed to promote pending contest Stripe transaction:",
+      error,
+    );
+  }
+
+  return logTransactionAsAdmin(
+    params.userId,
+    "contest_payment",
+    params.stripeAmountCents,
+    "success",
+    enhancedDescription,
+    {
+      paymentIntentId: params.paymentIntentId,
+      paymentMethod: params.isSplit ? "split" : "stripe",
+      remarks,
+    },
+  );
+}
+
+async function processSplitWalletPortion(
+  supabase: ReturnType<typeof createAdminClient>,
+  params: {
+    userId: string;
+    contestId: string;
+    paymentIntentId: string;
+    walletAmountInCents: number;
+    walletDeductionPending: boolean;
+    paymentDescription?: string;
+  },
+): Promise<void> {
+  if (params.walletAmountInCents <= 0 || !params.walletDeductionPending) {
+    return;
+  }
+
+  const { data: existingWalletTx } = await supabase
+    .from("money_transactions")
+    .select("id")
+    .eq("user_id", params.userId)
+    .eq("type", "contest_payment")
+    .eq("payment_method", "split")
+    .eq("status", "success")
+    .contains("metadata", { split_payment_intent_id: params.paymentIntentId })
+    .maybeSingle();
+
+  if (existingWalletTx) {
+    return;
+  }
+
+  const { data: profile, error: balanceError } = await supabase
+    .from("advertiser_profiles")
+    .select("available_deposit_balance")
+    .eq("id", params.userId)
+    .single();
+
+  if (balanceError) {
+    console.error(
+      "Error fetching user balance for wallet deduction:",
+      balanceError,
+    );
+    return;
+  }
+
+  const currentBalance = profile?.available_deposit_balance || 0;
+  const newBalance = currentBalance - params.walletAmountInCents;
+
+  if (newBalance < 0) {
+    console.error(
+      `Wallet deduction would create negative balance for user ${params.userId}`,
+    );
+    return;
+  }
+
+  const { error: updateBalanceError } = await supabase
+    .from("advertiser_profiles")
+    .update({ available_deposit_balance: newBalance })
+    .eq("id", params.userId);
+
+  if (updateBalanceError) {
+    console.error(
+      "Error deducting wallet amount for split payment:",
+      updateBalanceError,
+    );
+    return;
+  }
+
+  const baseDescription =
+    params.paymentDescription ||
+    `Contest payment for contest ${params.contestId}`;
+  const logged = await logTransactionAsAdmin(
+    params.userId,
+    "contest_payment",
+    params.walletAmountInCents,
+    "success",
+    `${baseDescription} (Wallet Portion) - Split payment completed`,
+    {
+      paymentMethod: "split",
+      remarks: "Wallet portion of split payment completed successfully",
+      metadata: {
+        split_payment_intent_id: params.paymentIntentId,
+        wallet_portion: true,
+      },
+    },
+  );
+
+  if (!logged) {
+    console.error(
+      "Wallet transaction logging failed for split payment:",
+      params.paymentIntentId,
+    );
+  }
+}
+
+/**
+ * Idempotently finalize a contest Stripe payment (webhook + return URL).
+ * Uses admin client to bypass RLS.
+ */
+export async function finalizeContestPaymentFromStripe(
+  paymentIntent: StripePaymentIntentLike,
+): Promise<FinalizeContestPaymentResult> {
+  const supabase = createAdminClient();
+  const { userId, type, amount, contestId, walletAmount, description } =
+    paymentIntent.metadata;
+
+  if (!userId || !type || !amount || !contestId) {
+    return {
+      success: false,
+      alreadyProcessed: false,
+      paymentStatus: "pending",
+      error: "Missing required payment metadata",
+    };
+  }
+
+  if (type !== "contest_payment" && type !== "contest_payment_split") {
+    return {
+      success: false,
+      alreadyProcessed: false,
+      paymentStatus: "pending",
+      error: "Not a contest payment intent",
+    };
+  }
+
+  const { data: contest, error: fetchError } = await supabase
+    .from("contests")
+    .select("payment_details")
+    .eq("id", contestId)
+    .single();
+
+  if (fetchError || !contest?.payment_details) {
+    return {
+      success: false,
+      alreadyProcessed: false,
+      paymentStatus: "pending",
+      error: fetchError?.message || "Contest payment details not found",
+    };
+  }
+
+  const paymentDetails =
+    typeof contest.payment_details === "string"
+      ? (JSON.parse(contest.payment_details) as PaymentDetails)
+      : (contest.payment_details as PaymentDetails);
+
+  const { data: existingStripeTx } = await supabase
+    .from("money_transactions")
+    .select("id")
+    .eq("payment_intent_id", paymentIntent.id)
+    .eq("status", "success")
+    .maybeSingle();
+
+  if (existingStripeTx && paymentDetails.payment_status === "completed") {
+    return {
+      success: true,
+      alreadyProcessed: true,
+      paymentStatus: "completed",
+    };
+  }
+
+  const isSplit = type === "contest_payment_split";
+  const stripeAmountCents =
+    typeof paymentIntent.amount === "number" && paymentIntent.amount > 0
+      ? paymentIntent.amount
+      : Math.round(parseFloat(amount) * 100);
+
+  if (isSplit) {
+    const walletAmountInCents = Math.round(
+      parseFloat(walletAmount || "0") * 100,
+    );
+    await processSplitWalletPortion(supabase, {
+      userId,
+      contestId,
+      paymentIntentId: paymentIntent.id,
+      walletAmountInCents,
+      walletDeductionPending: paymentDetails.wallet_deduction_pending === true,
+      paymentDescription: description,
+    });
+  }
+
+  const stripeLogged = await ensureContestStripeTransactionLogged(supabase, {
+    userId,
+    contestId,
+    paymentIntentId: paymentIntent.id,
+    stripeAmountCents,
+    isSplit,
+    paymentDescription: description,
+  });
+
+  if (!stripeLogged) {
+    console.error(
+      "Failed to log Stripe contest payment transaction:",
+      paymentIntent.id,
+    );
+  }
+
+  const updatedPaymentDetails: PaymentDetails = {
+    ...paymentDetails,
+    payment_status: "completed",
+    last_updated: new Date().toISOString(),
+    wallet_deduction_pending: false,
+  };
+
+  const { error: updateError } = await supabase
+    .from("contests")
+    .update({ payment_details: updatedPaymentDetails })
+    .eq("id", contestId);
+
+  if (updateError) {
+    console.error("Error updating contest payment details:", updateError);
+    return {
+      success: false,
+      alreadyProcessed: false,
+      paymentStatus: paymentDetails.payment_status,
+      error: updateError.message,
+    };
+  }
+
+  return {
+    success: true,
+    alreadyProcessed: Boolean(existingStripeTx),
+    paymentStatus: "completed",
+  };
 }

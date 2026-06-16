@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/utils/supabase/server";
+import { stripe } from "@/lib/stripe";
 import {
   createContestCheckoutSession,
   getCustomerInfo,
@@ -8,6 +9,12 @@ import {
   processContestPaymentV2,
 } from "@/lib/payment-utils";
 import { canCreateNewContest } from "@/lib/contest-utils";
+import {
+  assertClientPaymentMatchesExpected,
+  ContestPaymentValidationError,
+  getSafeContestPaymentReturnPath,
+  resolveExpectedContestPayment,
+} from "@/lib/contest-payment-validation";
 
 export async function POST(request: NextRequest) {
   try {
@@ -22,18 +29,8 @@ export async function POST(request: NextRequest) {
       returnPath,
     } = body;
 
-    if (!contestId || !amount || amount <= 0) {
-      return NextResponse.json(
-        { error: "Invalid contest ID or amount" },
-        { status: 400 },
-      );
-    }
-
-    if (!commissionPercentage || commissionPercentage < 0) {
-      return NextResponse.json(
-        { error: "Invalid commission percentage" },
-        { status: 400 },
-      );
+    if (!contestId) {
+      return NextResponse.json({ error: "Invalid contest ID" }, { status: 400 });
     }
 
     if (!paymentMethod || !["stripe", "split"].includes(paymentMethod)) {
@@ -43,9 +40,10 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (!returnPath || typeof returnPath !== "string") {
+    const safeReturnPath = getSafeContestPaymentReturnPath(returnPath);
+    if (!safeReturnPath) {
       return NextResponse.json(
-        { error: "Return path is required" },
+        { error: "Invalid return path" },
         { status: 400 },
       );
     }
@@ -75,7 +73,9 @@ export async function POST(request: NextRequest) {
 
     const { data: contest, error: contestError } = await supabase
       .from("contests")
-      .select("id, advertiser_id, title, payment_details")
+      .select(
+        "id, advertiser_id, title, contest_type, contest_based_details, payment_details",
+      )
       .eq("id", contestId)
       .eq("advertiser_id", user.id)
       .single();
@@ -87,13 +87,31 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    let expectedPayment;
+    try {
+      expectedPayment = await resolveExpectedContestPayment(contest, user.id, {
+        isIncrease: Boolean(isIncrease),
+        isDecrease: Boolean(isDecrease),
+      });
+    } catch (error) {
+      if (error instanceof ContestPaymentValidationError) {
+        return NextResponse.json({ error: error.message }, { status: 400 });
+      }
+      throw error;
+    }
+
+    assertClientPaymentMatchesExpected(
+      amount,
+      commissionPercentage,
+      expectedPayment,
+    );
+
+    const { prizePoolInCents, commissionPercentage: serverCommission } =
+      expectedPayment;
+
     const existingPaymentDetails =
       contest.payment_details as PaymentDetails | null;
-    const budgetChangeType = isIncrease
-      ? "increase"
-      : isDecrease
-        ? "decrease"
-        : undefined;
+    const budgetChangeType = expectedPayment.changeType;
     const isInitialPayment =
       !existingPaymentDetails ||
       existingPaymentDetails.payment_status !== "completed";
@@ -129,18 +147,13 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    const totalAmountInCents = Math.round(amount * 100);
-    const commissionRate = commissionPercentage / 100;
-    const prizePoolInCents = Math.round(
-      totalAmountInCents / (1 + commissionRate),
-    );
     const description = `Contest payment for "${contest.title}" (ID: ${contestId})`;
 
     const paymentResult = await processContestPaymentV2(
       user.id,
       contestId,
       prizePoolInCents,
-      commissionPercentage,
+      serverCommission,
       description,
       paymentMethod !== "stripe",
       existingPaymentDetails || undefined,
@@ -159,8 +172,7 @@ export async function POST(request: NextRequest) {
     if (stripeAmount <= 0) {
       return NextResponse.json(
         {
-          error:
-            "No Stripe payment required. Use wallet payment instead.",
+          error: "No Stripe payment required. Use wallet payment instead.",
         },
         { status: 400 },
       );
@@ -174,12 +186,13 @@ export async function POST(request: NextRequest) {
       contestId,
       contestTitle: contest.title,
       stripeAmountInCents: stripeAmount,
-      totalAmountInCents: paymentResult.totalAmount ?? totalAmountInCents,
+      totalAmountInCents:
+        paymentResult.totalAmount ?? expectedPayment.totalAmountInCents,
       walletAmountInCents: paymentResult.walletAmount ?? 0,
       originalWalletBalance: paymentResult.originalWalletBalance ?? 0,
       description,
       paymentMethod: stripePaymentMethod,
-      returnPath,
+      returnPath: safeReturnPath,
     });
 
     if ("error" in checkoutSession) {
@@ -189,10 +202,21 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (paymentResult.paymentDetails && checkoutSession.paymentIntentId) {
+    let paymentIntentId = checkoutSession.paymentIntentId;
+    if (!paymentIntentId && checkoutSession.sessionId) {
+      const retrievedSession = await stripe().checkout.sessions.retrieve(
+        checkoutSession.sessionId,
+      );
+      paymentIntentId =
+        typeof retrievedSession.payment_intent === "string"
+          ? retrievedSession.payment_intent
+          : retrievedSession.payment_intent?.id ?? null;
+    }
+
+    if (paymentResult.paymentDetails && paymentIntentId) {
       const updatedDetails = {
         ...paymentResult.paymentDetails,
-        payment_intent_ids: [checkoutSession.paymentIntentId],
+        payment_intent_ids: [paymentIntentId],
       };
 
       const { error: updateError } = await supabase
@@ -224,8 +248,7 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    if (checkoutSession.paymentIntentId) {
-      const customerInfo = await getCustomerInfo(user.id);
+    if (paymentIntentId) {
       const enhancedDescription =
         stripePaymentMethod === "split"
           ? `${description} (Stripe Portion)`
@@ -241,7 +264,7 @@ export async function POST(request: NextRequest) {
         stripeAmount,
         "pending",
         enhancedDescription,
-        checkoutSession.paymentIntentId,
+        paymentIntentId,
         remarks,
         stripePaymentMethod,
       );
@@ -250,7 +273,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       url: checkoutSession.url,
       sessionId: checkoutSession.sessionId,
-      paymentIntentId: checkoutSession.paymentIntentId,
+      paymentIntentId,
     });
   } catch (error) {
     console.error("Error in contest checkout endpoint:", error);
