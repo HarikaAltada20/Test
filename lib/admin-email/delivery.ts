@@ -13,13 +13,16 @@ import {
 import {
   isLoopbackUrl,
   isQStashEnabled,
+  resolveQstashBaseUrl,
   triggerProcessAdminEmailDeliveryQueue,
+  triggerProcessAdminEmailDeliveryQueueDelayed,
 } from "@/lib/qstash";
 import type { ContestTemplateContext } from "@/lib/admin-notifications/template";
 import type { RecipientUserRow } from "@/lib/admin-notifications/types";
 import { EMAIL_DELIVERY_BATCH_SIZE } from "./types";
 import { resolveRecipientEmailContent } from "./sequence-store";
 import type { StoredSequence } from "./sequence-types";
+import { evaluateCampaignSendGate, resolveEffectiveSchedule } from "./schedule";
 
 async function loadContestContext(
   contestId: string | null,
@@ -83,7 +86,11 @@ export async function countPendingEmailRecipients(
 export async function deliverEmailCampaignBatch(
   campaignId: string,
   userIds: string[],
-): Promise<{ successCount: number; failureCount: number; skippedCount: number }> {
+): Promise<{
+  successCount: number;
+  failureCount: number;
+  skippedCount: number;
+}> {
   if (userIds.length === 0) {
     return { successCount: 0, failureCount: 0, skippedCount: 0 };
   }
@@ -105,7 +112,11 @@ export async function deliverEmailCampaignBatch(
     return { successCount: 0, failureCount: 0, skippedCount: 0 };
   }
 
-  if (!campaign.email_subject || !campaign.message_template || !campaign.from_email) {
+  if (
+    !campaign.email_subject ||
+    !campaign.message_template ||
+    !campaign.from_email
+  ) {
     throw new Error("Campaign is not fully configured");
   }
 
@@ -172,7 +183,7 @@ export async function deliverEmailCampaignBatch(
     }
 
     const subject = buildBulkEmailSubject(emailSubject, user, contest);
-    const { html, text } = buildBulkEmailHtml({
+    const { html, text, plainTextOnly, useRaw } = buildBulkEmailHtml({
       bodyTemplate: messageTemplate,
       user,
       trackingId,
@@ -188,6 +199,8 @@ export async function deliverEmailCampaignBatch(
       html,
       text,
       replyTo: getBulkEmailReplyTo(campaign.from_email),
+      plainTextOnly,
+      useRaw,
     });
 
     if (sendResult.messageId) {
@@ -238,7 +251,9 @@ export async function deliverEmailCampaignBatch(
   return { successCount, failureCount, skippedCount };
 }
 
-async function refreshEmailCampaignSentCount(campaignId: string): Promise<void> {
+async function refreshEmailCampaignSentCount(
+  campaignId: string,
+): Promise<void> {
   const db = createAdminClient();
   const { count: totalSent } = await db
     .from("admin_email_campaign_recipients")
@@ -252,7 +267,9 @@ async function refreshEmailCampaignSentCount(campaignId: string): Promise<void> 
     .eq("id", campaignId);
 }
 
-async function finalizeEmailCampaignDelivery(campaignId: string): Promise<void> {
+async function finalizeEmailCampaignDelivery(
+  campaignId: string,
+): Promise<void> {
   const db = createAdminClient();
   const pending = await countPendingEmailRecipients(campaignId);
   await refreshEmailCampaignSentCount(campaignId);
@@ -274,29 +291,77 @@ async function finalizeEmailCampaignDelivery(campaignId: string): Promise<void> 
   }
 }
 
-async function triggerEmailDeliveryProcessor(
+async function scheduleEmailDeliveryRetry(
+  campaignId: string,
+  retryAt: Date,
   baseUrl?: string,
-  campaignId?: string,
-): Promise<{ triggered: boolean; error?: string }> {
-  const cronSecret = process.env.CRON_SECRET;
-  const url = `${(baseUrl ?? process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000").replace(/\/$/, "")}/api/cron/process-admin-email-delivery-queue`;
-  const body = campaignId ? JSON.stringify({ campaignId }) : "{}";
+): Promise<void> {
+  if (isAdminEmailDeliveryQueueEnabled()) {
+    await enqueueAdminEmailDeliveryJob({ campaignId });
+  }
 
-  try {
-    const res = await fetch(url, {
+  const qstashBaseUrl = resolveQstashBaseUrl(baseUrl);
+  const qstash = await triggerProcessAdminEmailDeliveryQueueDelayed(
+    qstashBaseUrl,
+    campaignId,
+    retryAt,
+  );
+  if (!qstash.error) return;
+
+  const delayMs = Math.max(1_000, retryAt.getTime() - Date.now());
+  const cappedDelayMs = Math.min(delayMs, 24 * 60 * 60 * 1000);
+  const url = `${qstashBaseUrl}/api/cron/process-admin-email-delivery-queue`;
+  const cronSecret = process.env.CRON_SECRET;
+  setTimeout(() => {
+    void fetch(url, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         ...(cronSecret ? { Authorization: `Bearer ${cronSecret}` } : {}),
       },
-      body,
+      body: JSON.stringify({ campaignId }),
+    }).catch((err) => {
+      console.warn("[admin-email] deferred delivery retry failed:", err);
     });
-    if (!res.ok) {
-      return { triggered: false, error: `HTTP ${res.status}` };
+  }, cappedDelayMs);
+}
+
+async function triggerEmailDeliveryProcessor(
+  baseUrl?: string,
+  campaignId?: string,
+): Promise<{ triggered: boolean; error?: string }> {
+  const qstashBaseUrl = resolveQstashBaseUrl(baseUrl);
+
+  if (isQStashEnabled() && !isLoopbackUrl(qstashBaseUrl)) {
+    const qstash = campaignId
+      ? await triggerProcessAdminEmailDeliveryQueueDelayed(
+          qstashBaseUrl,
+          campaignId,
+          new Date(),
+        )
+      : await triggerProcessAdminEmailDeliveryQueue(qstashBaseUrl);
+    if (!qstash.error) {
+      return { triggered: true };
     }
+    console.warn(
+      "[admin-email] QStash trigger failed, falling back to direct processor:",
+      qstash.error,
+    );
+  }
+
+  let targetCampaignId = campaignId;
+  if (!targetCampaignId) {
+    targetCampaignId = (await findCampaignNeedingDelivery()) ?? undefined;
+  }
+  if (!targetCampaignId) {
+    return { triggered: false, error: "no_campaign" };
+  }
+  try {
+    await processEmailCampaignDeliveryJob(targetCampaignId, qstashBaseUrl);
     return { triggered: true };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
+    console.warn("[admin-email] direct delivery processor failed:", message);
     return { triggered: false, error: message };
   }
 }
@@ -308,11 +373,28 @@ export async function processEmailCampaignDeliveryJob(
   batchDelivered: number;
   hasMore: boolean;
   finalized: boolean;
+  deferred?: boolean;
+  deferReason?: string;
 }> {
   const db = createAdminClient();
   const { data: campaign } = await db
     .from("admin_email_campaigns")
-    .select("status")
+    .select(
+      `
+      id,
+      status,
+      scheduled_at,
+      started_at,
+      project_id,
+      use_project_schedule,
+      daily_limit,
+      schedule_from_time,
+      schedule_to_time,
+      schedule_timezone,
+      schedule_days,
+      schedule_data
+    `,
+    )
     .eq("id", campaignId)
     .maybeSingle();
 
@@ -324,7 +406,65 @@ export async function processEmailCampaignDeliveryJob(
     return { batchDelivered: 0, hasMore: false, finalized: false };
   }
 
-  const userIds = await loadNextPendingEmailRecipients(campaignId);
+  if (campaign.status === "scheduled") {
+    const due = campaign.scheduled_at ? new Date(campaign.scheduled_at) : null;
+    if (due && due.getTime() > Date.now() + 60_000) {
+      await scheduleEmailDeliveryRetry(campaignId, due, baseUrl);
+      return {
+        batchDelivered: 0,
+        hasMore: true,
+        finalized: false,
+        deferred: true,
+        deferReason: "not_due",
+      };
+    }
+
+    await db
+      .from("admin_email_campaigns")
+      .update({
+        status: "active",
+        started_at: campaign.started_at ?? new Date().toISOString(),
+      })
+      .eq("id", campaignId);
+    campaign.status = "active";
+  }
+
+  const { data: project } = await db
+    .from("admin_email_projects")
+    .select(
+      "daily_limit, schedule_from_time, schedule_to_time, schedule_timezone, schedule_days",
+    )
+    .eq("id", campaign.project_id)
+    .maybeSingle();
+
+  const schedule = resolveEffectiveSchedule(campaign, project);
+  const gate = await evaluateCampaignSendGate(campaignId, schedule, {
+    scheduledAt: campaign.scheduled_at,
+  });
+
+  if (!gate.allowed) {
+    await scheduleEmailDeliveryRetry(campaignId, gate.retryAt, baseUrl);
+    console.log("[admin-email] delivery deferred by schedule", {
+      campaignId,
+      reason: gate.reason,
+      retryAt: gate.retryAt.toISOString(),
+      timezone: schedule.timezone,
+      fromTime: schedule.fromTime,
+      toTime: schedule.toTime,
+    });
+    return {
+      batchDelivered: 0,
+      hasMore: true,
+      finalized: false,
+      deferred: true,
+      deferReason: gate.reason,
+    };
+  }
+
+  const userIds = await loadNextPendingEmailRecipients(
+    campaignId,
+    gate.batchLimit,
+  );
   if (userIds.length === 0) {
     await finalizeEmailCampaignDelivery(campaignId);
     return { batchDelivered: 0, hasMore: false, finalized: true };
@@ -336,6 +476,20 @@ export async function processEmailCampaignDeliveryJob(
 
   const stillPending = await countPendingEmailRecipients(campaignId);
   if (stillPending > 0) {
+    const nextGate = await evaluateCampaignSendGate(campaignId, schedule, {
+      scheduledAt: campaign.scheduled_at,
+    });
+    if (!nextGate.allowed) {
+      await scheduleEmailDeliveryRetry(campaignId, nextGate.retryAt, baseUrl);
+      return {
+        batchDelivered,
+        hasMore: true,
+        finalized: false,
+        deferred: true,
+        deferReason: nextGate.reason,
+      };
+    }
+
     if (isAdminEmailDeliveryQueueEnabled()) {
       await enqueueAdminEmailDeliveryJob({ campaignId });
     }
@@ -345,6 +499,23 @@ export async function processEmailCampaignDeliveryJob(
 
   await finalizeEmailCampaignDelivery(campaignId);
   return { batchDelivered, hasMore: false, finalized: true };
+}
+
+/** Find an active campaign with pending recipients (cron fallback). */
+export async function findCampaignNeedingDelivery(): Promise<string | null> {
+  const db = createAdminClient();
+  const { data } = await db
+    .from("admin_email_campaigns")
+    .select("id")
+    .in("status", ["active", "scheduled"])
+    .order("started_at", { ascending: true, nullsFirst: true })
+    .limit(25);
+
+  for (const row of data ?? []) {
+    const pending = await countPendingEmailRecipients(row.id);
+    if (pending > 0) return row.id;
+  }
+  return null;
 }
 
 export async function startEmailCampaignDelivery(
@@ -360,7 +531,11 @@ export async function startEmailCampaignDelivery(
     .single();
 
   if (!campaign) return { started: false, reason: "not_found" };
-  if (!campaign.email_subject || !campaign.message_template || !campaign.from_email) {
+  if (
+    !campaign.email_subject ||
+    !campaign.message_template ||
+    !campaign.from_email
+  ) {
     return { started: false, reason: "not_configured" };
   }
 
@@ -373,24 +548,21 @@ export async function startEmailCampaignDelivery(
     })
     .eq("id", campaignId);
 
-  const deliveryBaseUrl =
-    baseUrl ??
-    process.env.NEXT_PUBLIC_APP_URL?.trim() ??
-    "http://localhost:3000";
-  const onProductionVercel = process.env.VERCEL_ENV === "production";
-  const useDirectProcessor =
-    !onProductionVercel ||
-    isLoopbackUrl(deliveryBaseUrl) ||
-    !isQStashEnabled();
+  const qstashBaseUrl = resolveQstashBaseUrl(baseUrl);
 
   if (isAdminEmailDeliveryQueueEnabled()) {
     const { error } = await enqueueAdminEmailDeliveryJob({ campaignId });
     if (error) {
       return { started: false, reason: "enqueue_failed" };
     }
-    if (!useDirectProcessor) {
-      const qstash = await triggerProcessAdminEmailDeliveryQueue(deliveryBaseUrl);
+    if (isQStashEnabled() && !isLoopbackUrl(qstashBaseUrl)) {
+      const qstash = await triggerProcessAdminEmailDeliveryQueue(qstashBaseUrl);
       if (!qstash.error) {
+        console.log("[admin-email] campaign started via QStash", {
+          campaignId,
+          qstashBaseUrl,
+          messageId: qstash.messageId,
+        });
         return { started: true };
       }
       console.warn(
@@ -399,7 +571,7 @@ export async function startEmailCampaignDelivery(
       );
     }
     const triggered = await triggerEmailDeliveryProcessor(
-      deliveryBaseUrl,
+      qstashBaseUrl,
       campaignId,
     );
     if (!triggered.triggered) {
@@ -409,7 +581,7 @@ export async function startEmailCampaignDelivery(
   }
 
   const triggered = await triggerEmailDeliveryProcessor(
-    deliveryBaseUrl,
+    qstashBaseUrl,
     campaignId,
   );
   if (!triggered.triggered) {

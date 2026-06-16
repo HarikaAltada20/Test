@@ -8,6 +8,10 @@ import {
   type ReactNode,
 } from "react";
 import { sanitizeEmailContent } from "@/lib/email/admin-bulk-email";
+import {
+  BULK_EMAIL_MERGE_VARIABLES,
+  mergeTag,
+} from "@/lib/admin-notifications/template";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import {
@@ -53,14 +57,10 @@ const FONTS = [
 
 const SIZES = ["12", "14", "16", "18", "20", "24"];
 
-const MERGE_TAGS = [
-  { label: "First name", value: "{first_name}" },
-  { label: "Full name", value: "{full_name}" },
-  { label: "Email", value: "{email}" },
-  { label: "Username", value: "{username}" },
-  { label: "User type", value: "{user_type}" },
-  { label: "Contest title", value: "{contest_title}" },
-];
+const MERGE_TAGS = BULK_EMAIL_MERGE_VARIABLES.map((v) => ({
+  label: v.label,
+  value: mergeTag(v.key),
+}));
 
 function normalizeUrl(url: string): string {
   const trimmed = url.trim();

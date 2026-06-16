@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/utils/supabase/admin";
 import { startEmailCampaignDelivery } from "@/lib/admin-email/delivery";
-import { resolveLocalAwareBaseUrl } from "@/lib/qstash";
+import { getQStashPublishBaseUrl } from "@/lib/qstash";
 import { requireAdminApi } from "@/lib/admin-email/api-auth";
 
 type RouteContext = { params: Promise<{ id: string }> };
@@ -67,7 +67,7 @@ export async function POST(req: NextRequest, context: RouteContext) {
     return NextResponse.json({ status: "scheduled", scheduledAt: campaign.scheduled_at });
   }
 
-  const baseUrl = resolveLocalAwareBaseUrl(req);
+  const baseUrl = getQStashPublishBaseUrl(req);
   const started = await startEmailCampaignDelivery(id, baseUrl);
 
   if (!started.started) {

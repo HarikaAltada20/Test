@@ -18,6 +18,7 @@ import { Calendar, Loader2, Pencil, Plus, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import { CreateScheduleModal } from "./CreateScheduleModal";
+import { ScheduleTimePicker } from "./ScheduleTimePicker";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -438,20 +439,18 @@ export function ScheduleTab({ campaignId, projectId }: Props) {
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div className="space-y-2">
                   <Label className="text-muted-foreground text-xs">From</Label>
-                  <Input
+                  <ScheduleTimePicker
                     value={fromTime}
-                    onChange={(e) => setFromTime(e.target.value)}
+                    onChange={setFromTime}
                     disabled={readOnly}
-                    className="bg-white border-gray-300"
                   />
                 </div>
                 <div className="space-y-2">
                   <Label className="text-muted-foreground text-xs">To</Label>
-                  <Input
+                  <ScheduleTimePicker
                     value={toTime}
-                    onChange={(e) => setToTime(e.target.value)}
+                    onChange={setToTime}
                     disabled={readOnly}
-                    className="bg-white border-gray-300"
                   />
                 </div>
                 <div className="space-y-2">

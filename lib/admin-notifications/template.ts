@@ -105,3 +105,20 @@ export const TEMPLATE_VARIABLES = [
 export const CONTEST_TEMPLATE_VARIABLES = [
   { key: "contest_title", label: "Contest title" },
 ] as const;
+
+/** All merge tags supported when sending admin bulk / campaign emails. */
+export const BULK_EMAIL_MERGE_VARIABLES = [
+  ...TEMPLATE_VARIABLES,
+  ...CONTEST_TEMPLATE_VARIABLES,
+] as const;
+
+export function mergeTag(key: string): string {
+  return `{${key}}`;
+}
+
+export const BULK_EMAIL_MERGE_TAG_DEFAULTS = [
+  "first_name",
+  "full_name",
+  "username",
+  "contest_title",
+] as const;

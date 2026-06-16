@@ -31,6 +31,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
 import type { EmailCampaignListItem } from "@/lib/admin-email/campaign-list";
+import { getCampaignStartReadiness } from "@/lib/admin-email/campaign-readiness";
 import type { EmailProjectCardData } from "./EmailProjectCard";
 import {
   Briefcase,
@@ -164,10 +165,16 @@ export function EmailCampaignsList({
   }, [campaigns]);
 
   const handleStart = async (campaign: EmailCampaignListItem) => {
-    if ((campaign.recipient_count ?? 0) <= 0) {
+    const readiness = getCampaignStartReadiness({
+      recipientCount: campaign.recipient_count,
+      emailSubject: campaign.email_subject,
+      messageTemplate: campaign.message_template,
+      fromEmail: campaign.from_email,
+    });
+    if (!readiness.canStart) {
       toast({
-        title: "Add leads first",
-        description: "Attach recipients before starting this campaign.",
+        title: "Campaign not ready",
+        description: readiness.disabledReason ?? "Complete setup before starting",
         variant: "destructive",
       });
       return;
@@ -379,7 +386,14 @@ export function EmailCampaignsList({
                     <div className="flex items-center justify-end gap-1">
                       {["paused", "draft", "configured", "scheduled"].includes(
                         c.status,
-                      ) && (
+                      ) && (() => {
+                        const readiness = getCampaignStartReadiness({
+                          recipientCount: c.recipient_count,
+                          emailSubject: c.email_subject,
+                          messageTemplate: c.message_template,
+                          fromEmail: c.from_email,
+                        });
+                        return (
                         <Button
                           variant="ghost"
                           size="icon"
@@ -388,16 +402,15 @@ export function EmailCampaignsList({
                             e.stopPropagation();
                             handleStart(c);
                           }}
-                          disabled={(c.recipient_count ?? 0) <= 0}
+                          disabled={!readiness.canStart}
                           title={
-                            (c.recipient_count ?? 0) <= 0
-                              ? "Add leads before starting"
-                              : "Start campaign"
+                            readiness.disabledReason ?? "Start campaign"
                           }
                         >
                           <Play className="h-4 w-4" />
                         </Button>
-                      )}
+                        );
+                      })()}
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
                           <Button

@@ -1,5 +1,16 @@
 import { createAdminClient } from "@/utils/supabase/admin";
 
+type ProjectRelation = {
+  name: string;
+  ses_verification_status: string;
+};
+
+/** Supabase embeds can be a row or an array depending on inferred cardinality. */
+function relationOne<T>(value: T | T[] | null | undefined): T | null {
+  if (value == null) return null;
+  return Array.isArray(value) ? (value[0] ?? null) : value;
+}
+
 export type EmailCampaignListItem = {
   id: string;
   project_id: string;
@@ -7,6 +18,9 @@ export type EmailCampaignListItem = {
   status: string;
   recipient_count: number;
   sent_count: number;
+  email_subject: string | null;
+  message_template: string | null;
+  from_email: string | null;
   created_at: string;
   project?: {
     name: string;
@@ -27,7 +41,8 @@ export async function listEmailCampaigns(projectId?: string | null) {
     .from("admin_email_campaigns")
     .select(
       `
-      id, project_id, name, status, recipient_count, sent_count, created_at,
+      id, project_id, name, status, recipient_count, sent_count,
+      email_subject, message_template, from_email, created_at,
       project:admin_email_projects (name, ses_verification_status)
     `,
     )
@@ -70,10 +85,7 @@ export async function listEmailCampaigns(projectId?: string | null) {
       openCount: 0,
       clickCount: 0,
     };
-    const project = c.project as {
-      name: string;
-      ses_verification_status: string;
-    } | null;
+    const project = relationOne<ProjectRelation>(c.project);
 
     return {
       id: c.id,
@@ -82,6 +94,9 @@ export async function listEmailCampaigns(projectId?: string | null) {
       status: c.status,
       recipient_count: recipientCount,
       sent_count: sentCount,
+      email_subject: c.email_subject ?? null,
+      message_template: c.message_template ?? null,
+      from_email: c.from_email ?? null,
       created_at: c.created_at,
       project: project
         ? {

@@ -3,14 +3,17 @@
  */
 
 import { NextResponse } from "next/server";
-import { processEmailCampaignDeliveryJob } from "@/lib/admin-email/delivery";
+import {
+  findCampaignNeedingDelivery,
+  processEmailCampaignDeliveryJob,
+} from "@/lib/admin-email/delivery";
 import {
   popAdminEmailDeliveryJob,
   removeAdminEmailDeliveryFromProcessing,
   recoverAdminEmailDeliveryProcessingToQueue,
   isAdminEmailDeliveryQueueEnabled,
 } from "@/lib/queue/admin-email-delivery-queue";
-import { authorizeProcessAdminNotificationDeliveryQueue } from "@/lib/qstash";
+import { authorizeProcessAdminEmailDeliveryQueue } from "@/lib/qstash";
 
 function getBaseUrlFromRequest(request: Request): string {
   try {
@@ -39,7 +42,7 @@ function parseCampaignIdFromBody(rawBody: string): string | undefined {
 }
 
 export async function GET(request: Request) {
-  const authorized = await authorizeProcessAdminNotificationDeliveryQueue(
+  const authorized = await authorizeProcessAdminEmailDeliveryQueue(
     request,
     "",
   );
@@ -51,7 +54,7 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   const rawBody = await request.text();
-  const authorized = await authorizeProcessAdminNotificationDeliveryQueue(
+  const authorized = await authorizeProcessAdminEmailDeliveryQueue(
     request,
     rawBody,
   );
@@ -85,6 +88,10 @@ async function handleRequest(
   }
 
   if (!campaignId) {
+    campaignId = await findCampaignNeedingDelivery() ?? undefined;
+  }
+
+  if (!campaignId) {
     return NextResponse.json({
       processed: 0,
       message: "No campaign to process",
@@ -96,6 +103,10 @@ async function handleRequest(
     if (rawJobString) {
       await removeAdminEmailDeliveryFromProcessing(rawJobString);
     }
+    console.log("[admin-email] delivery queue processed", {
+      campaignId,
+      ...result,
+    });
     return NextResponse.json({
       processed: 1,
       campaignId,

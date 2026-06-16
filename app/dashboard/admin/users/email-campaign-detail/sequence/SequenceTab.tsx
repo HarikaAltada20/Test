@@ -20,12 +20,14 @@ type Props = {
   campaign: CampaignInfo;
   readOnly?: boolean;
   onUnsavedChangesChange?: (hasUnsavedChanges: boolean) => void;
+  onSaved?: () => void;
 };
 
 export function SequenceTab({
   campaign,
   readOnly = false,
   onUnsavedChangesChange,
+  onSaved,
 }: Props) {
   const campaignId = campaign.id;
   const { state, actions } = useSequence();
@@ -427,6 +429,9 @@ export function SequenceTab({
       setTimeout(() => {
         justSavedRef.current = false;
       }, 100);
+      if (justSavedRef.current) {
+        onSaved?.();
+      }
     }
   };
 

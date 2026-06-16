@@ -66,10 +66,12 @@ function displayName(email: string, name?: string | null): string {
 function MessageBody({ message }: { message: UniboxMessage }) {
   if (message.bodyHtml?.trim()) {
     return (
-      <div
-        className="prose prose-sm max-w-none text-[15px] leading-relaxed text-gray-700 prose-p:my-3 prose-p:leading-relaxed"
-        dangerouslySetInnerHTML={{ __html: message.bodyHtml }}
-      />
+      <div className="overflow-x-auto max-w-full unibox-email-body">
+        <div
+          className="prose prose-sm max-w-none text-[15px] leading-relaxed text-gray-700 prose-p:my-3 prose-p:leading-relaxed [&_img]:max-w-full [&_table]:max-w-full"
+          dangerouslySetInnerHTML={{ __html: message.bodyHtml }}
+        />
+      </div>
     );
   }
   return (
@@ -86,9 +88,8 @@ export function EmailUnibox({ campaigns, isDark }: Props) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [messages, setMessages] = useState<UniboxMessage[]>([]);
   const [detailLoading, setDetailLoading] = useState(false);
-  const [selectedThread, setSelectedThread] = useState<UniboxThreadListItem | null>(
-    null,
-  );
+  const [selectedThread, setSelectedThread] =
+    useState<UniboxThreadListItem | null>(null);
   const [checkedIds, setCheckedIds] = useState<Set<string>>(new Set());
   const [search, setSearch] = useState("");
   const [folder, setFolder] = useState<Folder>("all");
@@ -100,37 +101,40 @@ export function EmailUnibox({ campaigns, isDark }: Props) {
   const [unreadCount, setUnreadCount] = useState(0);
   const [syncingInbound, setSyncingInbound] = useState(false);
 
-  const syncInbound = useCallback(async (silent = false) => {
-    setSyncingInbound(true);
-    try {
-      const res = await fetch("/api/admin/email-unibox/sync-inbound", {
-        method: "POST",
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        if (!silent) {
-          throw new Error(data.error ?? "Sync failed");
+  const syncInbound = useCallback(
+    async (silent = false) => {
+      setSyncingInbound(true);
+      try {
+        const res = await fetch("/api/admin/email-unibox/sync-inbound", {
+          method: "POST",
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          if (!silent) {
+            throw new Error(data.error ?? "Sync failed");
+          }
+          return;
         }
-        return;
+        if (!silent && (data.processed ?? 0) > 0) {
+          toast({
+            title: "Replies synced",
+            description: `${data.processed} new reply(s) imported`,
+          });
+        }
+      } catch (err) {
+        if (!silent) {
+          toast({
+            title: "Sync failed",
+            description: err instanceof Error ? err.message : "Unknown error",
+            variant: "destructive",
+          });
+        }
+      } finally {
+        setSyncingInbound(false);
       }
-      if (!silent && (data.processed ?? 0) > 0) {
-        toast({
-          title: "Replies synced",
-          description: `${data.processed} new reply(s) imported`,
-        });
-      }
-    } catch (err) {
-      if (!silent) {
-        toast({
-          title: "Sync failed",
-          description: err instanceof Error ? err.message : "Unknown error",
-          variant: "destructive",
-        });
-      }
-    } finally {
-      setSyncingInbound(false);
-    }
-  }, [toast]);
+    },
+    [toast],
+  );
 
   const loadThreads = useCallback(async () => {
     setLoading(true);
@@ -152,7 +156,8 @@ export function EmailUnibox({ campaigns, isDark }: Props) {
       const listData = await listRes.json();
       const unreadData = await unreadRes.json();
 
-      if (!listRes.ok) throw new Error(listData.error ?? "Failed to load mails");
+      if (!listRes.ok)
+        throw new Error(listData.error ?? "Failed to load mails");
       setThreads(listData.threads ?? []);
       setUnreadCount(unreadData.unreadCount ?? 0);
     } catch (err) {
@@ -319,10 +324,11 @@ export function EmailUnibox({ campaigns, isDark }: Props) {
   const latestMessage = messages[messages.length - 1];
   const displayMessages =
     messages.length > 0 ? messages : latestMessage ? [latestMessage] : [];
+  const headerMessage = latestMessage ?? displayMessages[0] ?? null;
 
   return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap items-center gap-3 rounded-xl border border-gray-200 bg-white px-4 py-3 shadow-sm">
+    <div className="flex flex-col gap-4 min-h-0 h-[calc(100vh-12rem)] max-h-[calc(100vh-8rem)]">
+      <div className="flex flex-wrap items-center gap-3 rounded-xl border border-gray-200 bg-white px-4 py-3 shadow-sm shrink-0">
         <div className="relative flex-1 min-w-[240px]">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
           <Input
@@ -333,7 +339,10 @@ export function EmailUnibox({ campaigns, isDark }: Props) {
             onKeyDown={(e) => e.key === "Enter" && loadThreads()}
           />
         </div>
-        <Select value={readFilter} onValueChange={(v) => setReadFilter(v as ReadFilter)}>
+        <Select
+          value={readFilter}
+          onValueChange={(v) => setReadFilter(v as ReadFilter)}
+        >
           <SelectTrigger className="h-10 w-[140px] border-gray-200 bg-white">
             <SelectValue placeholder="All Status" />
           </SelectTrigger>
@@ -392,20 +401,22 @@ export function EmailUnibox({ campaigns, isDark }: Props) {
 
       <div
         className={cn(
-          "grid grid-cols-1 lg:grid-cols-[minmax(320px,380px)_1fr] gap-0 rounded-2xl border border-gray-200 bg-white shadow-md overflow-hidden min-h-[calc(100vh-280px)]",
+          "grid grid-cols-1 lg:grid-cols-[minmax(320px,380px)_1fr] gap-0 rounded-2xl border border-gray-200 bg-white shadow-md overflow-hidden flex-1 min-h-0",
           isDark && "border-purple-900/40 bg-[#170337]",
         )}
       >
         <div
           className={cn(
-            "flex flex-col border-b lg:border-b-0 lg:border-r",
+            "flex flex-col min-h-0 h-full max-h-full border-b lg:border-b-0 lg:border-r overflow-hidden",
             isDark ? "border-purple-900/40" : "border-gray-200",
           )}
         >
           <div
             className={cn(
-              "px-5 py-4 border-b",
-              isDark ? "border-purple-900/40 text-white" : "border-gray-100 text-gray-900",
+              "px-5 py-4 border-b shrink-0",
+              isDark
+                ? "border-purple-900/40 text-white"
+                : "border-gray-100 text-gray-900",
             )}
           >
             <h3 className="text-lg font-bold tracking-tight">Mails</h3>
@@ -417,10 +428,11 @@ export function EmailUnibox({ campaigns, isDark }: Props) {
             </div>
           ) : threads.length === 0 ? (
             <div className="py-20 text-center text-sm text-gray-500 px-6">
-              No messages yet. Sent campaign emails and replies will appear here.
+              No messages yet. Sent campaign emails and replies will appear
+              here.
             </div>
           ) : (
-            <div className="flex-1 overflow-y-auto max-h-[calc(100vh-360px)] unibox-scrollbar">
+            <div className="flex-1 min-h-0 overflow-y-auto unibox-scrollbar">
               {threads.map((thread) => {
                 const isSelected = selectedId === thread.id;
                 const label = displayName(
@@ -520,20 +532,27 @@ export function EmailUnibox({ campaigns, isDark }: Props) {
           )}
         </div>
 
-        <div className="relative flex flex-col min-h-[480px] bg-white">
+        <div className="relative min-h-0 h-full max-h-full overflow-hidden bg-white grid grid-rows-[auto_1fr]">
           {!selectedId ? (
-            <div className="flex flex-1 items-center justify-center text-gray-400 text-sm">
+            <div className="flex items-center justify-center text-gray-400 text-sm min-h-[320px]">
               <div className="text-center">
                 <Mail className="h-12 w-12 mx-auto mb-3 opacity-30" />
                 <p>Select a message to read</p>
               </div>
             </div>
           ) : detailLoading ? (
-            <div className="flex flex-1 items-center justify-center">
+            <div className="flex items-center justify-center min-h-[320px]">
               <Loader2 className="h-6 w-6 animate-spin text-blue-500" />
             </div>
           ) : selectedThread ? (
-            <>
+            <div
+              className={cn(
+                "min-h-0 h-full max-h-full overflow-hidden grid",
+                replyOpen
+                  ? "grid-rows-[auto_auto_minmax(0,1fr)_auto]"
+                  : "grid-rows-[auto_auto_minmax(0,1fr)]",
+              )}
+            >
               <div className="flex items-center justify-between border-b border-gray-100 px-6 py-3">
                 <div className="flex items-center gap-3 min-w-0">
                   <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-purple-600 text-sm font-semibold text-white">
@@ -550,12 +569,18 @@ export function EmailUnibox({ campaigns, isDark }: Props) {
                 </div>
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
-                    <Button variant="ghost" size="icon" className="text-gray-500">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="text-gray-500"
+                    >
                       <MoreVertical className="h-5 w-5" />
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end">
-                    <DropdownMenuItem onClick={() => handleStar(selectedThread)}>
+                    <DropdownMenuItem
+                      onClick={() => handleStar(selectedThread)}
+                    >
                       {selectedThread.isStarred ? "Unstar" : "Star"}
                     </DropdownMenuItem>
                     <DropdownMenuItem
@@ -579,14 +604,30 @@ export function EmailUnibox({ campaigns, isDark }: Props) {
               </div>
 
               <div className="border-b border-gray-100 px-6 py-5">
-                <div className="flex items-start justify-between gap-6">
-                  <h3 className="text-2xl font-bold leading-tight text-gray-900">
-                    {selectedThread.subject ?? "(No subject)"}
-                  </h3>
-                  <span className="shrink-0 text-sm text-gray-500 pt-1">
-                    {formatDate(selectedThread.lastMessageAt)}
-                  </span>
-                </div>
+                <h3 className="text-2xl font-bold leading-tight text-gray-900">
+                  {selectedThread.subject ?? "(No subject)"}
+                </h3>
+                {headerMessage && (
+                  <div className="mt-3 flex items-start justify-between gap-4">
+                    <div className="text-md text-gray-500 space-y-1 min-w-0">
+                      <p className="truncate">
+                        <span className="font-medium text-gray-800">From:</span>{" "}
+                        {headerMessage.fromName
+                          ? `${headerMessage.fromName} <${headerMessage.fromEmail}>`
+                          : headerMessage.fromEmail}
+                      </p>
+                      <p className="truncate">
+                        <span className="font-medium text-gray-800">To:</span>{" "}
+                        {headerMessage.toName
+                          ? `${headerMessage.toName} <${headerMessage.toEmail}>`
+                          : headerMessage.toEmail}
+                      </p>
+                    </div>
+                    <span className="shrink-0 text-sm text-gray-500 whitespace-nowrap pt-0.5">
+                      {formatDate(headerMessage.createdAt)}
+                    </span>
+                  </div>
+                )}
                 <div className="mt-4 flex items-center justify-end gap-1">
                   <button
                     type="button"
@@ -596,7 +637,8 @@ export function EmailUnibox({ campaigns, isDark }: Props) {
                     <Star
                       className={cn(
                         "h-5 w-5",
-                        selectedThread.isStarred && "fill-amber-400 text-amber-500",
+                        selectedThread.isStarred &&
+                          "fill-amber-400 text-amber-500",
                       )}
                     />
                   </button>
@@ -631,7 +673,7 @@ export function EmailUnibox({ campaigns, isDark }: Props) {
                 </div>
               </div>
 
-              <div className="flex-1 overflow-y-auto px-6 py-5 unibox-scrollbar space-y-8">
+              <div className="min-h-0 overflow-y-auto overflow-x-hidden px-6 py-5 pb-24 unibox-scrollbar space-y-8">
                 {displayMessages.map((message, index) => (
                   <div
                     key={message.id}
@@ -640,32 +682,36 @@ export function EmailUnibox({ campaigns, isDark }: Props) {
                       index > 0 && "border-t border-gray-100 pt-6",
                     )}
                   >
-                    <div className="flex items-center justify-between gap-3">
-                      <div className="text-xs text-gray-500 space-y-1">
-                        <p>
-                          <span className="font-medium text-gray-800">From:</span>{" "}
-                          {message.fromName
-                            ? `${message.fromName} <${message.fromEmail}>`
-                            : message.fromEmail}
-                        </p>
-                        <p>
-                          <span className="font-medium text-gray-800">to:</span>{" "}
-                          {message.toName
-                            ? `${message.toName} <${message.toEmail}>`
-                            : message.toEmail}
-                        </p>
-                      </div>
-                      <div className="flex items-center gap-2 shrink-0">
-                        {message.direction === "inbound" && (
-                          <span className="rounded-full bg-green-100 px-2 py-0.5 text-[10px] font-semibold uppercase text-green-700">
-                            Reply
+                    {headerMessage && message.id !== headerMessage.id && (
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="text-md text-gray-500 space-y-1 min-w-0">
+                          <p className="truncate">
+                            <span className="font-medium text-gray-800">
+                              From:
+                            </span>{" "}
+                            {message.fromName
+                              ? `${message.fromName} <${message.fromEmail}>`
+                              : message.fromEmail}
+                          </p>
+                          <p className="truncate">
+                            <span className="font-medium text-gray-800">To:</span>{" "}
+                            {message.toName
+                              ? `${message.toName} <${message.toEmail}>`
+                              : message.toEmail}
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-2 shrink-0">
+                          {message.direction === "inbound" && (
+                            <span className="rounded-full bg-green-100 px-2 py-0.5 text-[10px] font-semibold uppercase text-green-700">
+                              Reply
+                            </span>
+                          )}
+                          <span className="text-xs text-gray-400 whitespace-nowrap">
+                            {formatDate(message.createdAt)}
                           </span>
-                        )}
-                        <span className="text-xs text-gray-400">
-                          {formatDate(message.createdAt)}
-                        </span>
+                        </div>
                       </div>
-                    </div>
+                    )}
                     <MessageBody message={message} />
                     {message.attachments.length > 0 && (
                       <div className="space-y-2 pt-2">
@@ -700,7 +746,10 @@ export function EmailUnibox({ campaigns, isDark }: Props) {
                     rows={4}
                   />
                   <div className="flex justify-end gap-2">
-                    <Button variant="outline" onClick={() => setReplyOpen(false)}>
+                    <Button
+                      variant="outline"
+                      onClick={() => setReplyOpen(false)}
+                    >
                       Cancel
                     </Button>
                     <Button
@@ -718,7 +767,7 @@ export function EmailUnibox({ campaigns, isDark }: Props) {
                   </div>
                 </div>
               )}
-            </>
+            </div>
           ) : null}
 
           {!replyOpen && selectedId && (
@@ -746,6 +795,13 @@ export function EmailUnibox({ campaigns, isDark }: Props) {
         }
         .unibox-scrollbar::-webkit-scrollbar-thumb:hover {
           background: #2563eb;
+        }
+        .unibox-email-body {
+          isolation: isolate;
+        }
+        .unibox-email-body table {
+          width: 100% !important;
+          max-width: 100% !important;
         }
       `}</style>
     </div>

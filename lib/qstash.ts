@@ -9,16 +9,36 @@
 
 import { Client, Receiver } from "@upstash/qstash";
 
+function sanitizeEnvValue(value: string | undefined): string {
+  if (!value?.trim()) return "";
+  return value
+    .trim()
+    .replace(/^["']|["']$/g, "")
+    .split(/\s+#/)[0]
+    .trim()
+    .replace(/["']$/g, "");
+}
+
 function getBaseUrl(): string {
-  const url =
-    process.env.NEXT_PUBLIC_APP_URL?.trim() || "http://localhost:3000";
-  return url.replace(/\/$/, "");
+  const url = sanitizeEnvValue(process.env.NEXT_PUBLIC_APP_URL);
+  return (url || "http://localhost:3000").replace(/\/$/, "");
+}
+
+function getCronSecret(): string {
+  return sanitizeEnvValue(process.env.CRON_SECRET);
+}
+
+function getQStashAuthHeaders(): Record<string, string> | undefined {
+  const cronSecret = getCronSecret();
+  if (!cronSecret) return undefined;
+  return { Authorization: `Bearer ${cronSecret}` };
 }
 
 function getForwardedOrigin(request: Request): string | null {
   const proto = request.headers.get("x-forwarded-proto")?.split(",")[0]?.trim();
-  const host = request.headers.get("x-forwarded-host")?.split(",")[0]?.trim()
-    ?? request.headers.get("host")?.split(",")[0]?.trim();
+  const host =
+    request.headers.get("x-forwarded-host")?.split(",")[0]?.trim() ??
+    request.headers.get("host")?.split(",")[0]?.trim();
   if (!proto || !host) return null;
   return `${proto}://${host}`;
 }
@@ -42,12 +62,21 @@ async function verifyQStashAgainstUrls(
   rawBody: string,
   urls: string[],
 ): Promise<boolean> {
+  const bodies = uniqueStrings([
+    rawBody,
+    rawBody.trim(),
+    rawBody.trim() === "" ? "{}" : null,
+    rawBody.trim() === "{}" ? "" : null,
+  ]);
+
   for (const url of urls) {
-    try {
-      await receiver.verify({ signature, body: rawBody, url });
-      return true;
-    } catch {
-      // try next url
+    for (const body of bodies) {
+      try {
+        await receiver.verify({ signature, body, url });
+        return true;
+      } catch {
+        // try next body/url
+      }
     }
   }
   return false;
@@ -81,7 +110,7 @@ export function resolvePublicBaseUrl(request?: Request): string {
  * cloudflared/ngrok URL), then NEXT_PUBLIC_APP_URL, then the incoming request origin.
  */
 export function getQStashPublishBaseUrl(request?: Request): string {
-  const explicit = process.env.QSTASH_CALLBACK_URL?.trim();
+  const explicit = sanitizeEnvValue(process.env.QSTASH_CALLBACK_URL);
   if (explicit) {
     try {
       const origin = new URL(
@@ -101,6 +130,19 @@ export function getQStashPublishBaseUrl(request?: Request): string {
   }
 
   return resolvePublicBaseUrl(request);
+}
+
+export function resolveQstashBaseUrl(
+  explicit?: string,
+  request?: Request,
+): string {
+  if (explicit) {
+    const normalized = explicit.replace(/\/$/, "");
+    if (!isLoopbackUrl(normalized)) {
+      return normalized;
+    }
+  }
+  return getQStashPublishBaseUrl(request).replace(/\/$/, "");
 }
 
 /**
@@ -237,7 +279,9 @@ export async function verifyQStashSignature(
     })();
     const candidates = uniqueStrings([
       getProcessMetricsQueueUrl(),
-      forwardedOrigin ? `${forwardedOrigin}/api/cron/process-metrics-queue` : null,
+      forwardedOrigin
+        ? `${forwardedOrigin}/api/cron/process-metrics-queue`
+        : null,
       requestUrl ? `${requestUrl.origin}/api/cron/process-metrics-queue` : null,
       requestUrl?.toString() ?? null,
     ]);
@@ -315,10 +359,7 @@ export async function triggerProcessTikTokMetricsQueue(
     return { messageId: (res as { messageId?: string }).messageId };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    console.error(
-      "[qstash] triggerProcessTikTokMetricsQueue failed:",
-      message,
-    );
+    console.error("[qstash] triggerProcessTikTokMetricsQueue failed:", message);
     return { error: message };
   }
 }
@@ -343,7 +384,10 @@ export async function triggerProcessYouTubeMetricsQueue(
     return { messageId: (res as { messageId?: string }).messageId };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    console.error("[qstash] triggerProcessYouTubeMetricsQueue failed:", message);
+    console.error(
+      "[qstash] triggerProcessYouTubeMetricsQueue failed:",
+      message,
+    );
     return { error: message };
   }
 }
@@ -368,16 +412,17 @@ export async function triggerProcessTokenRefreshQueue(
     return { messageId: (res as { messageId?: string }).messageId };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    console.error(
-      "[qstash] triggerProcessTokenRefreshQueue failed:",
-      message,
-    );
+    console.error("[qstash] triggerProcessTokenRefreshQueue failed:", message);
     return { error: message };
   }
 }
 
 function getProcessAdminNotificationDeliveryQueueUrl(): string {
-  return `${getBaseUrl()}/api/cron/process-admin-notification-delivery-queue`;
+  return `${getQStashPublishBaseUrl()}/api/cron/process-admin-notification-delivery-queue`;
+}
+
+function getProcessAdminEmailDeliveryQueueUrl(): string {
+  return `${getQStashPublishBaseUrl()}/api/cron/process-admin-email-delivery-queue`;
 }
 
 /**
@@ -391,16 +436,79 @@ export async function triggerProcessAdminEmailDeliveryQueue(
 ): Promise<{ messageId?: string; error?: string }> {
   const client = getQStashClient();
   if (!client) return { error: "QStash not configured" };
-  const url = `${baseUrl ?? getBaseUrl()}/api/cron/process-admin-email-delivery-queue`;
+  const url = `${baseUrl ?? getQStashPublishBaseUrl()}/api/cron/process-admin-email-delivery-queue`;
   if (isLoopbackUrl(url))
     return { error: "Loopback URL; QStash cannot reach localhost" };
   try {
-    const res = await client.publishJSON({ url, body: {}, method: "POST" });
-    return { messageId: (res as { messageId?: string }).messageId };
+    const res = await client.publishJSON({
+      url,
+      body: {},
+      method: "POST",
+      headers: getQStashAuthHeaders(),
+    });
+    const messageId = (res as { messageId?: string }).messageId;
+    console.log("[qstash] triggered admin email delivery queue", {
+      messageId,
+      publishUrl: url,
+    });
+    return { messageId };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     console.error(
       "[qstash] triggerProcessAdminEmailDeliveryQueue failed:",
+      message,
+    );
+    return { error: message };
+  }
+}
+
+export async function triggerProcessAdminEmailDeliveryQueueDelayed(
+  baseUrl: string | undefined,
+  campaignId: string,
+  retryAt: Date,
+): Promise<{ messageId?: string; error?: string }> {
+  const client = getQStashClient();
+  if (!client) return { error: "QStash not configured" };
+  const url = `${(baseUrl ?? getQStashPublishBaseUrl()).replace(/\/$/, "")}/api/cron/process-admin-email-delivery-queue`;
+  if (isLoopbackUrl(url)) {
+    return { error: "Loopback URL; QStash cannot reach localhost" };
+  }
+
+  const msUntil = retryAt.getTime() - Date.now();
+  const body = { campaignId };
+  const deduplicationId = `admin-email-delivery-${campaignId}-${retryAt.getTime()}`;
+
+  const publishOptions = {
+    url,
+    body,
+    method: "POST" as const,
+    deduplicationId,
+    retries: 5,
+    label: "admin-email-delivery-deferred",
+    headers: getQStashAuthHeaders(),
+  };
+
+  try {
+    const res =
+      msUntil <= 0
+        ? await client.publishJSON(publishOptions)
+        : await client.publishJSON({
+            ...publishOptions,
+            notBefore: Math.floor(retryAt.getTime() / 1000),
+          });
+    const messageId = (res as { messageId?: string }).messageId;
+    console.log("[qstash] scheduled admin email delivery", {
+      campaignId,
+      messageId,
+      publishUrl: url,
+      notBefore:
+        msUntil > 0 ? new Date(retryAt.getTime()).toISOString() : "immediate",
+    });
+    return { messageId };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error(
+      "[qstash] triggerProcessAdminEmailDeliveryQueueDelayed failed:",
       message,
     );
     return { error: message };
@@ -472,6 +580,45 @@ async function verifyQStashSignatureAdminNotificationDelivery(
   }
 }
 
+async function verifyQStashSignatureAdminEmailDelivery(
+  request: Request,
+  rawBody: string,
+): Promise<boolean> {
+  const signature = request.headers.get("Upstash-Signature");
+  if (!signature || typeof signature !== "string") return false;
+  const currentKey = sanitizeEnvValue(process.env.QSTASH_CURRENT_SIGNING_KEY);
+  const nextKey = sanitizeEnvValue(process.env.QSTASH_NEXT_SIGNING_KEY);
+  if (!currentKey && !nextKey) return false;
+  try {
+    const receiver = new Receiver({
+      currentSigningKey: currentKey,
+      nextSigningKey: nextKey,
+    });
+    const forwardedOrigin = getForwardedOrigin(request);
+    const requestUrl = (() => {
+      try {
+        return new URL(request.url);
+      } catch {
+        return null;
+      }
+    })();
+    const candidates = uniqueStrings([
+      getProcessAdminEmailDeliveryQueueUrl(),
+      `${getBaseUrl()}/api/cron/process-admin-email-delivery-queue`,
+      forwardedOrigin
+        ? `${forwardedOrigin}/api/cron/process-admin-email-delivery-queue`
+        : null,
+      requestUrl
+        ? `${requestUrl.origin}/api/cron/process-admin-email-delivery-queue`
+        : null,
+      requestUrl?.toString() ?? null,
+    ]);
+    return verifyQStashAgainstUrls(receiver, signature, rawBody, candidates);
+  } catch {
+    return false;
+  }
+}
+
 /**
  * Authorize process-admin-notification-delivery-queue: QStash signature or Bearer CRON_SECRET.
  */
@@ -485,6 +632,37 @@ export async function authorizeProcessAdminNotificationDeliveryQueue(
   const cronSecret = process.env.CRON_SECRET;
   const auth = request.headers.get("Authorization");
   if (cronSecret) return auth === `Bearer ${cronSecret}`;
+  return process.env.NODE_ENV === "development";
+}
+
+/**
+ * Authorize process-admin-email-delivery-queue: QStash signature or Bearer CRON_SECRET.
+ */
+export async function authorizeProcessAdminEmailDeliveryQueue(
+  request: Request,
+  rawBody: string,
+): Promise<boolean> {
+  const cronSecret = getCronSecret();
+  const auth = request.headers.get("Authorization");
+  if (cronSecret && auth === `Bearer ${cronSecret}`) {
+    return true;
+  }
+
+  if (request.headers.get("Upstash-Signature")) {
+    const verified = await verifyQStashSignatureAdminEmailDelivery(
+      request,
+      rawBody,
+    );
+    if (!verified) {
+      console.warn("[qstash] admin email delivery signature rejected", {
+        forwardedOrigin: getForwardedOrigin(request),
+        bodyLength: rawBody.length,
+      });
+    }
+    return verified;
+  }
+
+  if (cronSecret) return false;
   return process.env.NODE_ENV === "development";
 }
 
@@ -515,8 +693,12 @@ async function verifyQStashSignatureInstagram(
     })();
     const candidates = uniqueStrings([
       getProcessInstagramInsightsQueueUrl(),
-      forwardedOrigin ? `${forwardedOrigin}/api/cron/process-instagram-insights-queue` : null,
-      requestUrl ? `${requestUrl.origin}/api/cron/process-instagram-insights-queue` : null,
+      forwardedOrigin
+        ? `${forwardedOrigin}/api/cron/process-instagram-insights-queue`
+        : null,
+      requestUrl
+        ? `${requestUrl.origin}/api/cron/process-instagram-insights-queue`
+        : null,
       requestUrl?.toString() ?? null,
     ]);
     return verifyQStashAgainstUrls(receiver, signature, rawBody, candidates);
@@ -568,8 +750,12 @@ export async function verifyQStashSignatureTikTok(
     })();
     const candidates = uniqueStrings([
       getProcessTikTokMetricsQueueUrl(),
-      forwardedOrigin ? `${forwardedOrigin}/api/cron/process-tiktok-metrics-queue` : null,
-      requestUrl ? `${requestUrl.origin}/api/cron/process-tiktok-metrics-queue` : null,
+      forwardedOrigin
+        ? `${forwardedOrigin}/api/cron/process-tiktok-metrics-queue`
+        : null,
+      requestUrl
+        ? `${requestUrl.origin}/api/cron/process-tiktok-metrics-queue`
+        : null,
       requestUrl?.toString() ?? null,
     ]);
     return verifyQStashAgainstUrls(receiver, signature, rawBody, candidates);
@@ -618,8 +804,12 @@ async function verifyQStashSignatureYouTube(
     })();
     const candidates = uniqueStrings([
       getProcessYouTubeMetricsQueueUrl(),
-      forwardedOrigin ? `${forwardedOrigin}/api/cron/process-youtube-metrics-queue` : null,
-      requestUrl ? `${requestUrl.origin}/api/cron/process-youtube-metrics-queue` : null,
+      forwardedOrigin
+        ? `${forwardedOrigin}/api/cron/process-youtube-metrics-queue`
+        : null,
+      requestUrl
+        ? `${requestUrl.origin}/api/cron/process-youtube-metrics-queue`
+        : null,
       requestUrl?.toString() ?? null,
     ]);
     return verifyQStashAgainstUrls(receiver, signature, rawBody, candidates);
@@ -671,8 +861,12 @@ export async function authorizeProcessTokenRefreshQueue(
       })();
       const candidates = uniqueStrings([
         getProcessTokenRefreshQueueUrl(),
-        forwardedOrigin ? `${forwardedOrigin}/api/cron/process-token-refresh-queue` : null,
-        requestUrl ? `${requestUrl.origin}/api/cron/process-token-refresh-queue` : null,
+        forwardedOrigin
+          ? `${forwardedOrigin}/api/cron/process-token-refresh-queue`
+          : null,
+        requestUrl
+          ? `${requestUrl.origin}/api/cron/process-token-refresh-queue`
+          : null,
         requestUrl?.toString() ?? null,
       ]);
       return verifyQStashAgainstUrls(receiver, signature, rawBody, candidates);

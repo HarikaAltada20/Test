@@ -33,6 +33,23 @@ function escapeHtml(text: string): string {
     .replace(/"/g, "&quot;");
 }
 
+/** True when the body is a full HTML document (template file), not editor fragments. */
+export function isFullHtmlEmailTemplate(html: string): boolean {
+  const trimmed = html.trim();
+  return (
+    /<!DOCTYPE\s+html/i.test(trimmed) ||
+    /<html[\s>]/i.test(trimmed)
+  );
+}
+
+export function injectTrackingPixel(html: string, trackingPixelUrl: string): string {
+  const pixel = `<img src="${trackingPixelUrl}" width="1" height="1" alt="" style="display:none" />`;
+  if (/<\/body>/i.test(html)) {
+    return html.replace(/<\/body>/i, `${pixel}</body>`);
+  }
+  return `${html}${pixel}`;
+}
+
 /** Replace non-breaking spaces (entity or character) with normal spaces. */
 export function sanitizeEmailContent(text: string): string {
   return text
@@ -135,13 +152,14 @@ export function buildBulkEmailHtml(input: {
   user: RecipientUserRow;
   trackingId: string;
   contest?: ContestTemplateContext | null;
-  /** When true, skip bulk marketing signals (pixel, tracked links, wrapper). */
+  /** When true, prefer Primary-friendly delivery for simple notes only. */
   personalInbox?: boolean;
 }): {
   subject: string;
   html: string;
   text: string;
   plainTextOnly: boolean;
+  useRaw: boolean;
 } {
   const resolvedBody = resolveNotificationTemplate(
     input.bodyTemplate,
@@ -151,27 +169,66 @@ export function buildBulkEmailHtml(input: {
   );
   const bodyHtml = normalizeBodyHtml(resolvedBody);
   const personal = input.personalInbox !== false;
+  const trackingPixelUrl = `${APP_URL}/track/open/${input.trackingId}`;
+  const fullTemplate = isFullHtmlEmailTemplate(bodyHtml);
 
-  if (personal) {
-    const cleanHtml = stripPromotionalHtml(bodyHtml);
-    const html = injectTrackedLinks(cleanHtml, input.trackingId);
+  // Full HTML templates: preserve design, inject tracking + link wrapping.
+  if (fullTemplate) {
+    const html = injectTrackingPixel(
+      injectTrackedLinks(bodyHtml, input.trackingId),
+      trackingPixelUrl,
+    );
     const text = htmlToPlainText(html);
     return {
       subject: "",
       html,
       text,
       plainTextOnly: false,
+      useRaw: true,
     };
   }
 
-  const trackingPixelUrl = `${APP_URL}/track/open/${input.trackingId}`;
+  // Simple personal notes: plain-text MIME lands in Gmail Primary more reliably.
+  if (personal && isSimplePersonalContent(bodyHtml)) {
+    const text = htmlToPlainText(bodyHtml);
+    return {
+      subject: "",
+      html: text.replace(/\n/g, "<br />"),
+      text,
+      plainTextOnly: true,
+      useRaw: true,
+    };
+  }
+
+  // Rich editor HTML (headings, links, emojis): keep formatting, minimal wrapper.
+  if (personal) {
+    const html = injectTrackedLinks(
+      wrapEmailHtml(bodyHtml, trackingPixelUrl),
+      input.trackingId,
+    );
+    const text = htmlToPlainText(html);
+    return {
+      subject: "",
+      html,
+      text,
+      plainTextOnly: false,
+      useRaw: true,
+    };
+  }
+
   const html = injectTrackedLinks(
     wrapEmailHtml(bodyHtml, trackingPixelUrl),
     input.trackingId,
   );
   const text = htmlToPlainText(html);
 
-  return { subject: "", html, text, plainTextOnly: false };
+  return {
+    subject: "",
+    html,
+    text,
+    plainTextOnly: false,
+    useRaw: true,
+  };
 }
 
 export function buildBulkEmailSubject(

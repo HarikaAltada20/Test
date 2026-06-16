@@ -270,7 +270,13 @@ export function AdminEmailView({
 
   return (
     <>
-      <div className="space-y-6">
+      <div
+        className={cn(
+          listTab === "unibox"
+            ? "flex flex-col min-h-0 h-[calc(100vh-7rem)]"
+            : "space-y-6",
+        )}
+      >
         {listTab !== "unibox" && (
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div>
@@ -356,7 +362,9 @@ export function AdminEmailView({
         )}
 
         {listTab === "unibox" && (
-          <EmailUnibox campaigns={campaigns} isDark={isDark} />
+          <div className="flex flex-col flex-1 min-h-0">
+            <EmailUnibox campaigns={campaigns} isDark={isDark} />
+          </div>
         )}
       </div>
 

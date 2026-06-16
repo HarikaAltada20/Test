@@ -14,6 +14,7 @@ import { SequenceProvider } from "./email-campaign-detail/sequence/sequence-cont
 import { SequenceTab } from "./email-campaign-detail/sequence/SequenceTab";
 import { ScheduleTab } from "./email-campaign-detail/ScheduleTab";
 import { OptionTab } from "./email-campaign-detail/OptionTab";
+import { getCampaignStartReadiness } from "@/lib/admin-email/campaign-readiness";
 
 type CampaignDetail = {
   id: string;
@@ -27,6 +28,7 @@ type CampaignDetail = {
   progressPercent: number;
   emailSubject: string | null;
   messageTemplate: string | null;
+  fromEmail: string | null;
   startedAt: string | null;
   estimatedCompletionAt: string | null;
   summary: {
@@ -35,7 +37,6 @@ type CampaignDetail = {
     clickRate: number;
     clickCount: number;
   };
-  sentCount: number;
 };
 
 type Props = {
@@ -89,11 +90,16 @@ export function EmailCampaignDetail({ campaignId, onBack }: Props) {
   };
 
   const startCampaign = async () => {
-    if ((detail?.recipientCount ?? 0) <= 0) {
+    const readiness = getCampaignStartReadiness({
+      recipientCount: detail?.recipientCount,
+      emailSubject: detail?.emailSubject,
+      messageTemplate: detail?.messageTemplate,
+      fromEmail: detail?.fromEmail,
+    });
+    if (!readiness.canStart) {
       toast({
-        title: "Add leads first",
-        description:
-          "Attach recipients on the Lead tab before starting this campaign.",
+        title: "Campaign not ready",
+        description: readiness.disabledReason ?? "Complete setup before starting",
         variant: "destructive",
       });
       return;
@@ -126,7 +132,12 @@ export function EmailCampaignDetail({ campaignId, onBack }: Props) {
 
   const canPause = ["active", "scheduled"].includes(detail.status);
   const canStart = !["active", "completed"].includes(detail.status);
-  const hasLeads = detail.recipientCount > 0;
+  const startReadiness = getCampaignStartReadiness({
+    recipientCount: detail.recipientCount,
+    emailSubject: detail.emailSubject,
+    messageTemplate: detail.messageTemplate,
+    fromEmail: detail.fromEmail,
+  });
   const sequenceReadOnly = ["active", "completed", "partial"].includes(
     detail.status,
   );
@@ -146,16 +157,12 @@ export function EmailCampaignDetail({ campaignId, onBack }: Props) {
           {canStart && (
             <span
               className="inline-flex"
-              title={
-                !hasLeads
-                  ? "Add leads on the Lead tab before starting"
-                  : undefined
-              }
+              title={startReadiness.disabledReason ?? undefined}
             >
               <Button
                 className="bg-[#662EBD] hover:bg-[#5524a8] disabled:opacity-50"
                 onClick={startCampaign}
-                disabled={starting || !hasLeads}
+                disabled={starting || !startReadiness.canStart}
               >
               {starting ? (
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -206,6 +213,7 @@ export function EmailCampaignDetail({ campaignId, onBack }: Props) {
               status: detail.status,
             }}
             readOnly={sequenceReadOnly}
+            onSaved={() => loadDetail({ silent: true })}
           />
         </SequenceProvider>
       )}

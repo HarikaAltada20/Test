@@ -35,6 +35,10 @@
     {
       "path": "/api/cron/process-admin-notification-delivery-queue",
       "schedule": "0 5 * * *"
+    },
+    {
+      "path": "/api/cron/process-admin-email-delivery-queue",
+      "schedule": "0 6 * * *"
     }
   ]
 }
