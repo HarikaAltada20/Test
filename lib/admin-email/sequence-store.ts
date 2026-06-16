@@ -32,9 +32,92 @@ function toClientStep(s: StoredStep): SequenceStep {
 }
 
 function sortVariants(variants: StoredVariant[]): StoredVariant[] {
+  return sortVariantsByLetter(variants);
+}
+
+export function sortVariantsByLetter(variants: StoredVariant[]): StoredVariant[] {
   return [...variants].sort((a, b) =>
     a.variant_letter.localeCompare(b.variant_letter),
   );
+}
+
+export function getActiveVariantsForStep(
+  step: { variants?: StoredVariant[] } | null | undefined,
+): StoredVariant[] {
+  if (!step?.variants?.length) return [];
+  const active = step.variants.filter((v) => v.is_active);
+  return active.length > 0 ? sortVariantsByLetter(active) : [];
+}
+
+export function getStoredStepByNumber(
+  sequenceData: StoredSequence | null | undefined,
+  stepNumber: number,
+): StoredStep | null {
+  if (!sequenceData?.steps?.length) return null;
+  return (
+    sequenceData.steps.find((s) => s.step_number === stepNumber) ?? null
+  );
+}
+
+export function getNextStoredStep(
+  sequenceData: StoredSequence | null | undefined,
+  currentStepNumber: number,
+): StoredStep | null {
+  if (!sequenceData?.steps?.length) return null;
+  const sorted = [...sequenceData.steps].sort(
+    (a, b) => a.step_number - b.step_number,
+  );
+  const idx = sorted.findIndex((s) => s.step_number === currentStepNumber);
+  if (idx < 0 || idx >= sorted.length - 1) return null;
+  return sorted[idx + 1];
+}
+
+/** Subject/body for a specific step + variant (variant optional). */
+export function resolveStepEmailContent(
+  step: StoredStep,
+  variant: StoredVariant | null,
+  fallback: { subject: string; body: string },
+): {
+  subject: string;
+  body: string;
+  variantId?: string;
+  variantLetter?: string;
+} {
+  if (variant) {
+    return {
+      subject:
+        variant.subject?.trim() || step.subject?.trim() || fallback.subject,
+      body: variant.body?.trim() || step.body?.trim() || fallback.body,
+      variantId: variant.id,
+      variantLetter: variant.variant_letter,
+    };
+  }
+
+  if (step.subject?.trim() || step.body?.trim()) {
+    return {
+      subject: step.subject?.trim() || fallback.subject,
+      body: step.body?.trim() || fallback.body,
+    };
+  }
+
+  return {
+    subject: fallback.subject,
+    body: fallback.body,
+  };
+}
+
+/** When the next step should send (delay_days on the upcoming step). */
+export function computeNextStepScheduledAt(
+  nextStep: StoredStep,
+  baseTime = new Date(),
+): Date {
+  const delayDays = Number(nextStep.delay_days);
+  if (!Number.isFinite(delayDays) || delayDays <= 0) {
+    return baseTime;
+  }
+  const scheduled = new Date(baseTime);
+  scheduled.setUTCDate(scheduled.getUTCDate() + delayDays);
+  return scheduled;
 }
 
 /** Active step-1 variants included in A/B send (empty when none active). */

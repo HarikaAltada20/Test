@@ -9,6 +9,7 @@ export type AdminEmailCampaignStatus =
 
 export type EmailDeliveryStatus =
   | "pending"
+  | "in_sequence"
   | "sent"
   | "delivered"
   | "opened"

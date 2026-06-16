@@ -45,13 +45,16 @@ export async function GET(req: NextRequest, context: RouteContext) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
+  type RecipientUser = {
+    email: string;
+    full_name: string | null;
+    username: string | null;
+    user_type: string;
+  };
+
   let rows = (data ?? []).map((r, idx) => {
-    const user = r.user as {
-      email: string;
-      full_name: string | null;
-      username: string | null;
-      user_type: string;
-    } | null;
+    const rawUser = r.user as RecipientUser | RecipientUser[] | null;
+    const user = Array.isArray(rawUser) ? rawUser[0] ?? null : rawUser;
     return {
       index: offset + idx + 1,
       userId: r.user_id,

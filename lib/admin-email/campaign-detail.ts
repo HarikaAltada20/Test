@@ -25,6 +25,10 @@ export async function getEmailCampaignDetail(campaignId: string) {
   const recipientCount = campaign.recipient_count ?? 0;
   const sentCount = campaign.sent_count ?? 0;
   const remainingCount = pendingCount ?? 0;
+  const effectiveStatus =
+    remainingCount > 0 && ["completed", "partial"].includes(campaign.status)
+      ? "configured"
+      : campaign.status;
   const progressPercent =
     recipientCount > 0 ? (sentCount / recipientCount) * 100 : 0;
 
@@ -60,7 +64,7 @@ export async function getEmailCampaignDetail(campaignId: string) {
     name: campaign.name,
     emailSubject: campaign.email_subject,
     messageTemplate: campaign.message_template,
-    status: campaign.status,
+    status: effectiveStatus,
     recipientCount,
     sentCount,
     remainingCount,

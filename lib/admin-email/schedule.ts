@@ -206,6 +206,20 @@ export async function countCampaignSentToday(
   const lookback = new Date(now.getTime() - 48 * 3_600_000).toISOString();
 
   const db = createAdminClient();
+  const { data: stepSends } = await db
+    .from("admin_email_sequence_step_sends")
+    .select("sent_at")
+    .eq("campaign_id", campaignId)
+    .gte("sent_at", lookback);
+
+  if ((stepSends ?? []).length > 0) {
+    return (stepSends ?? []).filter(
+      (row) =>
+        row.sent_at &&
+        getDateKeyInTimezone(new Date(row.sent_at), timezone) === todayKey,
+    ).length;
+  }
+
   const { data } = await db
     .from("admin_email_campaign_recipients")
     .select("updated_at")

@@ -91,6 +91,8 @@ export function EmailRichTextEditor({
   const editorRef = useRef<HTMLDivElement>(null);
   const savedRangeRef = useRef<Range | null>(null);
   const lastLocalHtmlRef = useRef<string | null>(null);
+  const lastEmittedRef = useRef<string | null>(null);
+  const isFocusedRef = useRef(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
   const [mode, setMode] = useState<EditorMode>("visual");
@@ -101,16 +103,24 @@ export function EmailRichTextEditor({
   const [linkDefaultText, setLinkDefaultText] = useState("");
   const [imageModalOpen, setImageModalOpen] = useState(false);
 
-  const syncFromEditor = useCallback(() => {
-    const editor = editorRef.current;
-    if (!editor?.isConnected) return;
-    const html = sanitizeEmailContent(editor.innerHTML);
-    lastLocalHtmlRef.current = html;
-    onChange(html);
-  }, [onChange]);
+  const syncFromEditor = useCallback(
+    (sanitize = false) => {
+      const editor = editorRef.current;
+      if (!editor?.isConnected) return;
+      const raw = editor.innerHTML;
+      const html = sanitize ? sanitizeEmailContent(raw) : raw;
+      lastLocalHtmlRef.current = html;
+      lastEmittedRef.current = html;
+      onChange(html);
+    },
+    [onChange],
+  );
 
   useEffect(() => {
     if (mode === "visual" && editorRef.current) {
+      if (isFocusedRef.current && value === lastEmittedRef.current) {
+        return;
+      }
       const editorHtml = editorRef.current.innerHTML;
       if (
         value === lastLocalHtmlRef.current &&
@@ -119,10 +129,11 @@ export function EmailRichTextEditor({
         lastLocalHtmlRef.current = null;
         return;
       }
-      if (editorHtml !== value) {
+      if (editorHtml !== (value || "")) {
         editorRef.current.innerHTML = value || "";
       }
       lastLocalHtmlRef.current = null;
+      lastEmittedRef.current = value || "";
     }
     if (mode === "source") {
       setSourceHtml(value);
@@ -537,9 +548,13 @@ export function EmailRichTextEditor({
             ref={editorRef}
             contentEditable={!readOnly}
             suppressContentEditableWarning
-            onInput={syncFromEditor}
+            onFocus={() => {
+              isFocusedRef.current = true;
+            }}
+            onInput={() => syncFromEditor(false)}
             onBlur={() => {
-              if (mode === "visual") syncFromEditor();
+              isFocusedRef.current = false;
+              if (mode === "visual") syncFromEditor(true);
             }}
             onMouseUp={saveSelection}
             onKeyUp={saveSelection}

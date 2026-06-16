@@ -25,11 +25,35 @@ export async function POST(req: NextRequest, context: RouteContext) {
     return NextResponse.json({ error: "Campaign not found" }, { status: 404 });
   }
 
-  if (!["configured", "draft", "scheduled", "paused"].includes(campaign.status)) {
+  const { count: pendingCount } = await db
+    .from("admin_email_campaign_recipients")
+    .select("user_id", { count: "exact", head: true })
+    .eq("campaign_id", id)
+    .in("email_delivery_status", ["pending", "in_sequence"]);
+
+  const pendingLeads = pendingCount ?? 0;
+  const normalizedStatus =
+    pendingLeads > 0 && ["completed", "partial"].includes(campaign.status)
+      ? "configured"
+      : campaign.status;
+
+  if (
+    !["configured", "draft", "scheduled", "paused", "active"].includes(
+      normalizedStatus,
+    ) ||
+    (normalizedStatus === "active" && pendingLeads <= 0)
+  ) {
     return NextResponse.json(
       { error: `Cannot start campaign in status: ${campaign.status}` },
       { status: 400 },
     );
+  }
+
+  if (normalizedStatus !== campaign.status) {
+    await db
+      .from("admin_email_campaigns")
+      .update({ status: normalizedStatus, completed_at: null })
+      .eq("id", id);
   }
 
   if (
@@ -46,7 +70,7 @@ export async function POST(req: NextRequest, context: RouteContext) {
     );
   }
 
-  if ((campaign.recipient_count ?? 0) <= 0) {
+  if ((campaign.recipient_count ?? 0) <= 0 && pendingLeads <= 0) {
     return NextResponse.json(
       { error: "Add leads to this campaign before starting" },
       { status: 400 },

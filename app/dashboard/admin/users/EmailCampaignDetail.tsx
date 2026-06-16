@@ -131,7 +131,7 @@ export function EmailCampaignDetail({ campaignId, onBack }: Props) {
   }
 
   const canPause = ["active", "scheduled"].includes(detail.status);
-  const canStart = !["active", "completed"].includes(detail.status);
+  const canStart = !["active", "scheduled", "completed"].includes(detail.status);
   const startReadiness = getCampaignStartReadiness({
     recipientCount: detail.recipientCount,
     emailSubject: detail.emailSubject,

@@ -1,8 +1,4 @@
 import { createAdminClient } from "@/utils/supabase/admin";
-import {
-  getStep1SendVariants,
-  pickVariantForRecipient,
-} from "@/lib/admin-email/sequence-store";
 import type { StoredSequence, StoredVariant } from "@/lib/admin-email/sequence-types";
 
 const SENT_STATUSES = new Set([
@@ -53,10 +49,7 @@ function toRate(numerator: number, denominator: number): number {
   return denominator > 0 ? numerator / denominator : 0;
 }
 
-function isOpened(
-  status: string,
-  openCount: number,
-): boolean {
+function isOpened(status: string, openCount: number): boolean {
   return openCount > 0 || status === "opened" || status === "clicked";
 }
 
@@ -82,86 +75,111 @@ export async function getCampaignStepAnalytics(
     .single();
 
   const sequence = (campaign?.sequence_data as StoredSequence | null) ?? null;
-  const step = sequence?.steps?.[0];
-  const stepNumber = step?.step_number ?? 1;
-  const stepVariants = [...(step?.variants ?? [])].sort((a, b) =>
-    a.variant_letter.localeCompare(b.variant_letter),
+  const steps = [...(sequence?.steps ?? [])].sort(
+    (a, b) => a.step_number - b.step_number,
   );
-  const sendVariants = getStep1SendVariants(sequence);
+
+  if (steps.length === 0) {
+    return [];
+  }
+
+  const { data: stepSends } = await db
+    .from("admin_email_sequence_step_sends")
+    .select(
+      "step_number, variant_id, tracking_id, email_delivery_status",
+    )
+    .eq("campaign_id", campaignId);
+
+  const trackingIds = (stepSends ?? [])
+    .map((row) => row.tracking_id)
+    .filter(Boolean);
+
+  const trackingById = new Map<
+    string,
+    { openCount: number; clickCount: number }
+  >();
+
+  if (trackingIds.length > 0) {
+    const { data: trackingRows } = await db
+      .from("admin_email_tracking")
+      .select("tracking_id, open_count, click_count")
+      .in("tracking_id", trackingIds);
+
+    for (const row of trackingRows ?? []) {
+      trackingById.set(row.tracking_id, {
+        openCount: row.open_count ?? 0,
+        clickCount: row.click_count ?? 0,
+      });
+    }
+  }
 
   const { data: recipients } = await db
     .from("admin_email_campaign_recipients")
-    .select("user_id, email_delivery_status")
+    .select("email_delivery_status")
     .eq("campaign_id", campaignId);
 
-  const { data: trackingRows } = await db
-    .from("admin_email_tracking")
-    .select("user_id, open_count, click_count")
-    .eq("campaign_id", campaignId);
+  const bouncedCount = (recipients ?? []).filter(
+    (r) => r.email_delivery_status === "bounced",
+  ).length;
 
-  const trackingByUser = new Map(
-    (trackingRows ?? []).map((row) => [
-      row.user_id,
-      {
-        openCount: row.open_count ?? 0,
-        clickCount: row.click_count ?? 0,
-      },
-    ]),
-  );
-
-  const stepCounts = emptyCounts();
-  const variantCounts = new Map<string, Counts>();
-  for (const variant of stepVariants) {
-    variantCounts.set(variant.id, emptyCounts());
-  }
-
-  for (const recipient of recipients ?? []) {
-    const status = recipient.email_delivery_status;
-    const tracking = trackingByUser.get(recipient.user_id);
-    const openCount = tracking?.openCount ?? 0;
-    const clickCount = tracking?.clickCount ?? 0;
-
-    if (status === "bounced") {
-      stepCounts.bounced += 1;
-      continue;
+  return steps.map((step) => {
+    const stepVariants = [...(step.variants ?? [])].sort((a, b) =>
+      a.variant_letter.localeCompare(b.variant_letter),
+    );
+    const stepCounts = emptyCounts();
+    const variantCounts = new Map<string, Counts>();
+    for (const variant of stepVariants) {
+      variantCounts.set(variant.id, emptyCounts());
     }
 
-    if (!SENT_STATUSES.has(status)) continue;
+    const sendsForStep = (stepSends ?? []).filter(
+      (send) => send.step_number === step.step_number,
+    );
 
-    stepCounts.sent += 1;
-    if (isOpened(status, openCount)) stepCounts.opened += 1;
-    if (isClicked(status, clickCount)) stepCounts.clicked += 1;
+    for (const send of sendsForStep) {
+      const status = send.email_delivery_status;
+      if (!SENT_STATUSES.has(status)) continue;
 
-    if (stepVariants.length === 0) continue;
+      const tracking = send.tracking_id
+        ? trackingById.get(send.tracking_id)
+        : undefined;
+      const openCount = tracking?.openCount ?? 0;
+      const clickCount = tracking?.clickCount ?? 0;
 
-    const pool = sendVariants.length > 0 ? sendVariants : stepVariants;
-    const assigned = pickVariantForRecipient(recipient.user_id, pool);
-    const counts = variantCounts.get(assigned.id);
-    if (!counts) continue;
+      stepCounts.sent += 1;
+      if (isOpened(status, openCount)) stepCounts.opened += 1;
+      if (isClicked(status, clickCount)) stepCounts.clicked += 1;
 
-    counts.sent += 1;
-    if (isOpened(status, openCount)) counts.opened += 1;
-    if (isClicked(status, clickCount)) counts.clicked += 1;
-  }
+      if (!send.variant_id) continue;
+      const counts = variantCounts.get(send.variant_id);
+      if (!counts) continue;
 
-  const variants: VariantAnalyticsRow[] = stepVariants.map((variant) => {
-    const counts = variantCounts.get(variant.id) ?? emptyCounts();
+      counts.sent += 1;
+      if (isOpened(status, openCount)) counts.opened += 1;
+      if (isClicked(status, clickCount)) counts.clicked += 1;
+    }
+
+    if (step.step_number === 1) {
+      stepCounts.bounced = bouncedCount;
+    }
+
+    const variants: VariantAnalyticsRow[] = stepVariants.map((variant) => {
+      const counts = variantCounts.get(variant.id) ?? emptyCounts();
+      return {
+        variantId: variant.id,
+        label: variantLabel(variant),
+        sent: counts.sent,
+        opened: counts.opened,
+        clicked: counts.clicked,
+        replied: counts.replied,
+        openRate: toRate(counts.opened, counts.sent),
+        clickRate: toRate(counts.clicked, counts.sent),
+        replyRate: toRate(counts.replied, counts.sent),
+      };
+    });
+
     return {
-      variantId: variant.id,
-      label: variantLabel(variant),
-      sent: counts.sent,
-      opened: counts.opened,
-      clicked: counts.clicked,
-      replied: counts.replied,
-      openRate: toRate(counts.opened, counts.sent),
-      clickRate: toRate(counts.clicked, counts.sent),
-      replyRate: toRate(counts.replied, counts.sent),
-    };
-  });
-
-  return [
-    {
-      stepNumber,
+      stepNumber: step.step_number,
       sent: stepCounts.sent,
       opened: stepCounts.opened,
       clicked: stepCounts.clicked,
@@ -171,6 +189,6 @@ export async function getCampaignStepAnalytics(
       clickRate: toRate(stepCounts.clicked, stepCounts.sent),
       replyRate: toRate(stepCounts.replied, stepCounts.sent),
       variants,
-    },
-  ];
+    };
+  });
 }

@@ -431,11 +431,12 @@ export async function ingestInboundUniboxMessage(input: {
           .update({
             email_delivery_status: "skipped",
             skipped_reason: "replied",
+            next_email_scheduled_at: null,
             updated_at: now,
           })
           .eq("campaign_id", campaignId)
           .eq("user_id", userId)
-          .eq("email_delivery_status", "pending");
+          .in("email_delivery_status", ["pending", "in_sequence"]);
       }
     }
   }
