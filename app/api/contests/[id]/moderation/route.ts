@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
+import { getContestBudgetPaymentMismatch } from '@/lib/contest-payment-validation';
 
 // POST: Brand submit contest for approval or publish approved contest
 export async function POST(
@@ -36,7 +37,7 @@ export async function POST(
     // Verify user owns this contest (or is admin)
     let contestQuery = supabase
       .from('contests_with_status')
-      .select('id, title, moderation_status, advertiser_id, start_date, end_date, brief_html, rules_html, thumbnail_url, payment_details, status')
+      .select('id, title, moderation_status, advertiser_id, start_date, end_date, brief_html, rules_html, thumbnail_url, payment_details, status, contest_type, contest_based_details')
       .eq('id', contestId);
 
     // Only check ownership if not admin
@@ -82,6 +83,27 @@ export async function POST(
           return NextResponse.json({ 
             error: 'Contest payment must be completed before submission for approval' 
           }, { status: 400 });
+          }
+
+          const budgetMismatch = getContestBudgetPaymentMismatch({
+            id: contestId,
+            contest_type: contest.contest_type,
+            contest_based_details: contest.contest_based_details as Record<string, unknown> | null,
+            payment_details: paymentDetails,
+          });
+
+          if (budgetMismatch) {
+            if (budgetMismatch.deltaCents > 0) {
+              console.log('❌ Budget increase not paid:', budgetMismatch);
+              return NextResponse.json({
+                error: 'Campaign budget was increased after payment. Complete the additional payment before submitting for approval.',
+              }, { status: 400 });
+            }
+
+            console.log('❌ Budget decrease not refunded:', budgetMismatch);
+            return NextResponse.json({
+              error: 'Campaign budget was decreased after payment. Process the refund before submitting for approval.',
+            }, { status: 400 });
           }
         } catch (err) {
           console.log('❌ Invalid payment details JSON:', err);

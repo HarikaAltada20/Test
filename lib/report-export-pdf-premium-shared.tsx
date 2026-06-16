@@ -602,7 +602,12 @@ function CoverFooterCol({
   bordered?: boolean;
 }) {
   return (
-    <View style={[coverFooterStyles.col, bordered ? coverFooterStyles.colBorder : null]}>
+    <View
+      style={[
+        coverFooterStyles.col,
+        ...(bordered ? [coverFooterStyles.colBorder] : []),
+      ]}
+    >
       <View style={coverFooterStyles.iconSlot}>{icon}</View>
       <Text style={coverFooterStyles.label}>{label}</Text>
       <Text style={coverFooterStyles.value}>{value}</Text>
@@ -704,7 +709,12 @@ function FooterCol({
   bordered?: boolean;
 }) {
   return (
-    <View style={[footerStyles.col, bordered ? footerStyles.colBorder : null]}>
+    <View
+      style={[
+        footerStyles.col,
+        ...(bordered ? [footerStyles.colBorder] : []),
+      ]}
+    >
       <View style={footerStyles.iconSlot}>{icon}</View>
       <Text style={footerStyles.label}>{label}</Text>
       <Text style={footerStyles.value}>{value}</Text>

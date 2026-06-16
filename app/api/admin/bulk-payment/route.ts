@@ -786,7 +786,7 @@ export async function POST(request: NextRequest) {
           submission_id: update.id as string,
           message: updateError.message,
         });
-      } else if (!updatedRows || updatedRows.length === 0) {
+      } else if (!updatedRows) {
         updateFailures.push({
           submission_id: update.id as string,
           message:

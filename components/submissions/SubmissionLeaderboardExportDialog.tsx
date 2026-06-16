@@ -30,6 +30,7 @@ import {
   buildLeaderboardExportMatrix,
   downloadLeaderboardReport,
   type LeaderboardExportFormat,
+  type LeaderboardExportOptions,
   type PlatformMetrics,
   type RewardExportContext,
 } from "@/lib/submission-leaderboard-export";
@@ -383,7 +384,7 @@ export function SubmissionLeaderboardExportDialog(
         if (props.getReportStatus) {
           const submissionSource = (props.reportAllSubmissions ??
             props.reportSubmissions ??
-            props.submissions) as ContestAnalyticsExportSubmission[];
+            []) as ContestAnalyticsExportSubmission[];
           const scopedSubmissions = filterSubmissionsForReportExport(
             submissionSource,
             exportFilter,
@@ -429,7 +430,7 @@ export function SubmissionLeaderboardExportDialog(
         if (props.getReportStatus) {
           const submissionSource = (props.reportAllSubmissions ??
             props.reportSubmissions ??
-            props.submissions) as ContestAnalyticsExportSubmission[];
+            (props.exportKind === "submission" ? props.submissions : [])) as ContestAnalyticsExportSubmission[];
           submissionsForExport = filterSubmissionsForReportExport(
             submissionSource,
             exportFilter,
@@ -467,13 +468,13 @@ export function SubmissionLeaderboardExportDialog(
           ? props.creatorExportContext.platform
           : props.rewardContext.platform;
 
-      const exportOptions: Parameters<typeof downloadLeaderboardReport>[4] = {
+      const exportOptions: LeaderboardExportOptions = {
         contestTitle: `${contestTitle} (${viewLabel})`,
         exportedAt: new Date().toLocaleString(),
         dataSheetName:
           exportKind === "creator" ? "Creator-wise" : "Submissions",
         cellLinks,
-        platform: exportPlatform,
+        platform: exportPlatform ?? undefined,
         ...(exportKind === "submission"
           ? { rewardContext: props.rewardContext }
           : {}),

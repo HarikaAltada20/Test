@@ -13,9 +13,45 @@ interface ContestData {
   id: string;
   advertiser_id: string;
   moderation_status: string;
-  payment_details: any;
+  payment_details: unknown;
   thumbnail_url: string | null;
   resources: ResourceItem[] | null;
+}
+
+type ParsedPaymentDetails = {
+  payment_status?: string;
+  total_amount_paid?: number;
+};
+
+function parsePaymentDetails(raw: unknown): ParsedPaymentDetails | null {
+  if (!raw) return null;
+  if (typeof raw === "string") {
+    try {
+      return JSON.parse(raw) as ParsedPaymentDetails;
+    } catch {
+      return null;
+    }
+  }
+  return raw as ParsedPaymentDetails;
+}
+
+/** Refund wallet balance when a paid contest is deleted before it goes live. */
+function getDeleteRefundAmountCents(contest: ContestData): number {
+  if (contest.moderation_status === "published") {
+    return 0;
+  }
+
+  const paymentDetails = parsePaymentDetails(contest.payment_details);
+  if (
+    !paymentDetails ||
+    paymentDetails.payment_status !== "completed" ||
+    !paymentDetails.total_amount_paid ||
+    paymentDetails.total_amount_paid <= 0
+  ) {
+    return 0;
+  }
+
+  return paymentDetails.total_amount_paid;
 }
 
 // Helper function to extract file path from Supabase storage URL
@@ -114,18 +150,13 @@ export async function DELETE(
       return NextResponse.json({ error: 'Access denied' }, { status: 403 });
     }
 
-    // 2. Check if refund is applicable
-    // Refund paid contests that haven't gone live yet (draft=no payment, published=already live)
-    const isRefundable = ['pending_approval', 'approved', 'rejected'].includes(contest.moderation_status);
+    // 2. Refund paid contests that haven't gone live (includes draft after payment)
     let refundAmount = 0;
+    const refundAmountCents = getDeleteRefundAmountCents(contest);
 
-    if (isRefundable && contest.payment_details) {
-        const paymentDetails = contest.payment_details as any;
-        if (paymentDetails.payment_status === 'completed' && paymentDetails.total_amount_paid > 0) {
-            refundAmount = paymentDetails.total_amount_paid;
-            // IMPORTANT: Refund the advertiser, not the current user (admin may be deleting)
-            await issueRefund(contest.advertiser_id, contestId, refundAmount);
-        }
+    if (refundAmountCents > 0) {
+      refundAmount = refundAmountCents;
+      await issueRefund(contest.advertiser_id, contestId, refundAmount);
     }
 
     // 3. Clean up storage files (thumbnail and resources)

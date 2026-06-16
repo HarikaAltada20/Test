@@ -73,7 +73,7 @@ function fieldError(
 
 export default function BrandPartnershipForm() {
   const { toast } = useToast();
-  const [step, setStep] = useState(1);
+  const [step, setStep] = useState<1 | 2 | 3 | 4>(1);
   const [form, setForm] = useState<BrandPartnershipFormData>(INITIAL_FORM);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [submitting, setSubmitting] = useState(false);
@@ -134,10 +134,13 @@ export default function BrandPartnershipForm() {
   };
 
   const handleNext = () => {
-    if (validateStep(step)) setStep((s) => Math.min(s + 1, 3));
+    if (validateStep(step as 1 | 2 | 3)) {
+      setStep((s) => Math.min(s + 1, 3) as 1 | 2 | 3 | 4);
+    }
   };
 
-  const handleBack = () => setStep((s) => Math.max(s - 1, 1));
+  const handleBack = () =>
+    setStep((s) => Math.max(s - 1, 1) as 1 | 2 | 3 | 4);
 
   const handleSubmit = async () => {
     if (!validateStep(3)) return;

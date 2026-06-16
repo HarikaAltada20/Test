@@ -631,10 +631,10 @@ export async function fetchDualRewardsPoolSpendRows(
   return {
     rows: (data || []).map((row) => ({
       id: String(row.id),
-      earnings: row.earnings,
-      paid: row.paid,
-      bonus_amount: row.bonus_amount,
-      bonus_paid: row.bonus_paid,
+      earnings: row.earnings as number | null | undefined,
+      paid: row.paid as boolean | null | undefined,
+      bonus_amount: row.bonus_amount as number | null | undefined,
+      bonus_paid: row.bonus_paid as boolean | null | undefined,
       dual_rewards_payout: row.dual_rewards_payout,
     })),
   };
