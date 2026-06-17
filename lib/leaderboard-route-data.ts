@@ -1,5 +1,6 @@
 import { createAdminClient } from "@/utils/supabase/admin";
 import { getSortedCreatorAggregates } from "@/lib/leaderboard-creator-wise";
+import { resolveAggregateLeaderboardStatus } from "@/lib/status-badges";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 function buildCreatorDisplay(
@@ -102,6 +103,31 @@ async function getLeaderboardGroupedByCreator(
     .eq("contest_id", contestId)
     .in("creator_id", creatorIds);
 
+  const displayStatusByCreator = new Map<string, string | null>();
+
+  const { data: creatorStatusRows, error: creatorStatusError } = await supabase
+    .from("submissions")
+    .select("creator_id, status")
+    .eq("contest_id", contestId)
+    .in("creator_id", creatorIds)
+    .neq("status", "rejected");
+
+  if (creatorStatusError) {
+    console.error(
+      "Error fetching creator submission statuses for creator-wise:",
+      creatorStatusError,
+    );
+  } else {
+    for (const creatorId of creatorIds) {
+      const statuses =
+        creatorStatusRows?.filter((row) => row.creator_id === creatorId) ?? [];
+      const displayStatus = resolveAggregateLeaderboardStatus(
+        statuses.map((row) => ({ status: row.status })),
+      );
+      displayStatusByCreator.set(creatorId, displayStatus);
+    }
+  }
+
   if (creatorBonusError) {
     console.error(
       "Error fetching creator bonus paid totals for creator-wise:",
@@ -176,6 +202,7 @@ async function getLeaderboardGroupedByCreator(
         creatorMostVerifiedBonusPaidViewsMap.get(agg.creator_id) ?? 0,
       most_verified_bonus_paid_reels_cents:
         creatorMostVerifiedBonusPaidReelsMap.get(agg.creator_id) ?? 0,
+      display_status: displayStatusByCreator.get(agg.creator_id) ?? null,
       submissions: [],
     };
   });

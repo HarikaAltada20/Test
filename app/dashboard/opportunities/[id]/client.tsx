@@ -67,7 +67,7 @@ import {
   getTrustSubmissionBlockedMessage,
   isCreatorTrustSubmissionBlocked,
 } from "@/lib/trust-score";
-import { renderStatusBadge } from "@/lib/status-badges";
+import { renderLeaderboardStatusBadge } from "@/lib/status-badges";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
@@ -866,6 +866,8 @@ export function ContestClientPage({
           total_impressions: entry.total_impressions || 0,
           paid: entry.moderation_status === "paid",
           paid_at: entry.paid_at,
+          moderation_status: entry.moderation_status ?? null,
+          status: entry.status ?? null,
         };
       });
     }
@@ -1565,6 +1567,7 @@ export function ContestClientPage({
                 r.most_verified_bonus_paid_views_cents ?? 0,
               most_verified_bonus_paid_reels_cents:
                 r.most_verified_bonus_paid_reels_cents ?? 0,
+              display_status: r.display_status ?? null,
             })),
           );
           setCreatorTotalEntries(data.totalEntries ?? 0);
@@ -1597,14 +1600,22 @@ export function ContestClientPage({
     };
   }, []);
 
-  // Helper function to render verification badges
-  const renderVerificationBadges = (status: string) => {
-    // For Twitter (X) contests, leaderboard rows come from twitter_campaign_leaderboard
-    // and do not have a per-submission verification status. Skip badges in that case.
-    if (!status || contest?.platform === "twitter") return null;
-
-    return renderStatusBadge(status as any, contestType);
-  };
+  // Helper function to render verification badges (all contest types / platforms)
+  const renderVerificationBadges = (
+    source:
+      | string
+      | {
+          status?: string | null;
+          moderation_status?: string | null;
+          display_status?: string | null;
+          submissions?: Array<{
+            status?: string | null;
+            moderation_status?: string | null;
+          }>;
+        }
+      | null
+      | undefined,
+  ) => renderLeaderboardStatusBadge(source);
 
   const renderPostContestStatusBadge = (status: string | null) => {
     if (!status) return null;
@@ -7943,19 +7954,11 @@ export function ContestClientPage({
                                           </span>
                                         )}
                                       {renderVerificationBadges(
-                                        displayEntry.status,
+                                        isCreatorWiseMyCard &&
+                                          eligibleSubs.length > 0
+                                          ? { submissions: eligibleSubs }
+                                          : displayEntry,
                                       )}
-                                      {/* Show rejected badge for Twitter entries */}
-                                      {contest?.platform === "twitter" &&
-                                        (displayEntry as any)
-                                          .moderation_status === "rejected" && (
-                                          <Badge
-                                            className="ml-2 bg-red-500 text-white text-xs"
-                                            variant="destructive"
-                                          >
-                                            Rejected
-                                          </Badge>
-                                        )}
                                     </div>
                                     {/* Show rejection reason if available - compact UI */}
                                     {contest?.platform === "twitter" &&
@@ -8794,9 +8797,7 @@ export function ContestClientPage({
                                                                 myLeaderboardEntry?.id &&
                                                                 "(You)"}
                                                             </p>
-                                                            {renderVerificationBadges(
-                                                              submission.status,
-                                                            )}
+                                                            {renderVerificationBadges(submission)}
                                                           </div>
                                                           <p
                                                             className={cn(
@@ -9659,9 +9660,7 @@ export function ContestClientPage({
                                                       video.user_platform_username
                                                     : video.user_platform_username}
                                                 </p>
-                                                {renderVerificationBadges(
-                                                  video.status,
-                                                )}
+                                                {renderVerificationBadges(video)}
                                               </div>
                                               <p
                                                 className={cn(
@@ -10526,7 +10525,7 @@ export function ContestClientPage({
 
                                       <div className="min-w-0 flex-1 space-y-0.5">
                                         <div className="min-w-0">
-                                          <div className="flex items-start justify-between gap-2 min-w-0">
+                                          <div className="flex flex-wrap items-center gap-2 min-w-0">
                                             <span
                                               className={cn(
                                                 "min-w-0 text-sm sm:text-base font-semibold leading-snug",
@@ -10537,6 +10536,7 @@ export function ContestClientPage({
                                             >
                                               {twitterDisplayName}
                                             </span>
+                                            {renderVerificationBadges(creatorGroup)}
                                           </div>
 
                                           {showTwitterHandle ? (
@@ -11158,7 +11158,7 @@ export function ContestClientPage({
                                         >
                                           {entry.user_platform_username}
                                         </p>
-                                        {renderVerificationBadges(entry.status)}
+                                        {renderVerificationBadges(entry)}
                                       </div>
                                       <p
                                         className={cn(
