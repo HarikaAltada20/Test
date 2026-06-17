@@ -70,6 +70,7 @@ describe("resolveLeaderboardBadgeStatus", () => {
     assert.equal(
       resolveLeaderboardBadgeStatus({
         display_status: null,
+        pending_submission_count: 0,
         submissions: [],
       }),
       null,
@@ -83,6 +84,20 @@ describe("resolveLeaderboardBadgeStatus", () => {
         submissions: [],
       }),
       SUBMISSION_STATUS.pending,
+    );
+  });
+
+  it("uses pending_submission_count for creator-wise rows", () => {
+    assert.equal(
+      resolveLeaderboardBadgeStatus({
+        pending_submission_count: 12,
+        display_status: null,
+      }),
+      SUBMISSION_STATUS.pending,
+    );
+    assert.equal(
+      resolveLeaderboardBadgeStatus({ pending_submission_count: 0 }),
+      null,
     );
   });
 });

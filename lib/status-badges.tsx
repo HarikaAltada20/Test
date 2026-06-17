@@ -85,11 +85,36 @@ export type LeaderboardBadgeSource = {
   status?: string | null;
   moderation_status?: string | null;
   display_status?: string | null;
+  pending_submission_count?: number | null;
   submissions?: Array<{
     status?: string | null;
     moderation_status?: string | null;
   }>;
 };
+
+/** Count pending submissions from in-memory rows (client-side grouping on one page). */
+export function countPendingLeaderboardSubmissions(
+  entries: Array<{
+    status?: string | null;
+    moderation_status?: string | null;
+  }>,
+): number {
+  let count = 0;
+  for (const entry of entries) {
+    if (
+      normalizeLeaderboardSubmissionStatus(entry.status, entry.moderation_status) ===
+      SUBMISSION_STATUS.pending
+    ) {
+      count += 1;
+    }
+  }
+  return count;
+}
+
+export function formatPendingLeaderboardBadgeLabel(count: number): string {
+  if (count <= 0) return STATUS_BADGE_CONFIG[SUBMISSION_STATUS.pending].label;
+  return count === 1 ? "1 Pending" : `${count.toLocaleString()} Pending`;
+}
 
 export function resolveLeaderboardBadgeStatus(
   source: LeaderboardBadgeSource | string | null | undefined,
@@ -97,6 +122,15 @@ export function resolveLeaderboardBadgeStatus(
   if (!source) return null;
   if (typeof source === "string") {
     return normalizeLeaderboardSubmissionStatus(source);
+  }
+
+  if (
+    "pending_submission_count" in source &&
+    source.pending_submission_count != null
+  ) {
+    return source.pending_submission_count > 0
+      ? SUBMISSION_STATUS.pending
+      : null;
   }
 
   if (source.submissions?.length) {
@@ -123,11 +157,13 @@ export function resolveLeaderboardBadgeStatus(
 export function renderStatusBadge(
   status: SubmissionStatus,
   _contestType?: string | null,
+  labelOverride?: string,
 ) {
   const config = STATUS_BADGE_CONFIG[status];
   if (!config?.showInLeaderboard) return null;
 
   const Icon = config.icon;
+  const label = labelOverride ?? config.label;
 
   return React.createElement(
     Badge,
@@ -136,7 +172,7 @@ export function renderStatusBadge(
       className: `${config.className} text-xs font-medium`,
     },
     React.createElement(Icon, { className: "h-3 w-3 mr-1" }),
-    config.label,
+    label,
   );
 }
 
@@ -145,5 +181,19 @@ export function renderLeaderboardStatusBadge(
 ): React.ReactNode | null {
   const normalized = resolveLeaderboardBadgeStatus(source);
   if (!normalized) return null;
-  return renderStatusBadge(normalized);
+
+  let labelOverride: string | undefined;
+  if (
+    normalized === SUBMISSION_STATUS.pending &&
+    typeof source === "object" &&
+    source != null &&
+    source.pending_submission_count != null &&
+    source.pending_submission_count > 0
+  ) {
+    labelOverride = formatPendingLeaderboardBadgeLabel(
+      source.pending_submission_count,
+    );
+  }
+
+  return renderStatusBadge(normalized, null, labelOverride);
 }

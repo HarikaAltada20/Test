@@ -67,7 +67,10 @@ import {
   getTrustSubmissionBlockedMessage,
   isCreatorTrustSubmissionBlocked,
 } from "@/lib/trust-score";
-import { renderLeaderboardStatusBadge } from "@/lib/status-badges";
+import {
+  countPendingLeaderboardSubmissions,
+  renderLeaderboardStatusBadge,
+} from "@/lib/status-badges";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
@@ -868,6 +871,14 @@ export function ContestClientPage({
           paid_at: entry.paid_at,
           moderation_status: entry.moderation_status ?? null,
           status: entry.status ?? null,
+          pending_submission_count:
+            String(entry.moderation_status || "").toLowerCase() === "pending"
+              ? 1
+              : 0,
+          display_status:
+            String(entry.moderation_status || "").toLowerCase() === "pending"
+              ? "pending"
+              : null,
         };
       });
     }
@@ -934,10 +945,19 @@ export function ContestClientPage({
     });
 
     // Rank by highest total_views first (then best_rank as tiebreak) to match opportunities creator-wise view
-    return Array.from(grouped.values()).sort((a, b) => {
-      if (b.total_views !== a.total_views) return b.total_views - a.total_views;
-      return a.best_rank - b.best_rank;
-    });
+    return Array.from(grouped.values())
+      .sort((a, b) => {
+        if (b.total_views !== a.total_views) return b.total_views - a.total_views;
+        return a.best_rank - b.best_rank;
+      })
+      .map((group) => {
+        const pendingCount = countPendingLeaderboardSubmissions(group.submissions);
+        return {
+          ...group,
+          pending_submission_count: pendingCount,
+          display_status: pendingCount > 0 ? "pending" : null,
+        };
+      });
   }, [
     leaderboard,
     leaderboardDisplayMode,
@@ -1568,6 +1588,7 @@ export function ContestClientPage({
               most_verified_bonus_paid_reels_cents:
                 r.most_verified_bonus_paid_reels_cents ?? 0,
               display_status: r.display_status ?? null,
+              pending_submission_count: r.pending_submission_count ?? 0,
             })),
           );
           setCreatorTotalEntries(data.totalEntries ?? 0);
@@ -1608,6 +1629,7 @@ export function ContestClientPage({
           status?: string | null;
           moderation_status?: string | null;
           display_status?: string | null;
+          pending_submission_count?: number | null;
           submissions?: Array<{
             status?: string | null;
             moderation_status?: string | null;
@@ -7956,7 +7978,13 @@ export function ContestClientPage({
                                       {renderVerificationBadges(
                                         isCreatorWiseMyCard &&
                                           eligibleSubs.length > 0
-                                          ? { submissions: eligibleSubs }
+                                          ? {
+                                              submissions: eligibleSubs,
+                                              pending_submission_count:
+                                                countPendingLeaderboardSubmissions(
+                                                  eligibleSubs,
+                                                ),
+                                            }
                                           : displayEntry,
                                       )}
                                     </div>

@@ -10,6 +10,8 @@ export type CreatorAggRow = {
   best_rank: number;
   has_paid_submission: boolean;
   platform: string | null;
+  /** Present when DB function includes pending_submission_count (migration 20260615150000). */
+  pending_submission_count?: number;
 };
 
 type RpcCreatorRow = {
@@ -21,6 +23,7 @@ type RpcCreatorRow = {
   best_submission_rank: number;
   has_paid_submission: boolean;
   platform: string | null;
+  pending_submission_count?: number | null;
 };
 
 /**
@@ -51,5 +54,8 @@ export async function getSortedCreatorAggregates(
     best_rank: row.best_submission_rank,
     has_paid_submission: row.has_paid_submission,
     platform: row.platform ?? null,
+    ...(row.pending_submission_count != null
+      ? { pending_submission_count: Number(row.pending_submission_count) }
+      : {}),
   }));
 }
