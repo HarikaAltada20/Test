@@ -1,9 +1,8 @@
 /**
- * Cron: daily warm-up sends (09:00 IST / 03:30 UTC)
- * Also handles midnight counter reset and end-of-day metrics.
+ * Cron: daily warm-up sends, counter reset, metrics, health checks.
  *
- * Schedule this via Vercel Cron / QStash / external scheduler.
- * Authorization: Bearer ${CRON_SECRET}
+ * Scheduling: QStash (recommended) — POST /api/admin/warm-up/admin/setup-schedules
+ * Authorization: QStash Upstash-Signature or Bearer ${CRON_SECRET}
  */
 
 import { NextResponse } from "next/server";
@@ -11,43 +10,41 @@ import {
   runDailyWarmUpSends,
   resetDailyCounters,
   calculateDailyMetrics,
+  checkWarmUpHealth,
 } from "@/lib/admin-email/warm-up-service";
+import { authorizeProcessWarmUpSends } from "@/lib/qstash";
 
-function authorize(request: Request): boolean {
-  const cronSecret = process.env.CRON_SECRET?.trim();
-  if (!cronSecret) return true; // allow in dev when secret not set
+function parseAction(request: Request, rawBody: string): string {
+  const url = new URL(request.url);
+  const fromQuery = url.searchParams.get("action");
+  if (fromQuery) return fromQuery;
 
-  const auth = request.headers.get("authorization") ?? "";
-  if (auth === `Bearer ${cronSecret}`) return true;
+  if (rawBody.trim()) {
+    try {
+      const body = JSON.parse(rawBody) as { action?: string };
+      if (body.action) return body.action;
+    } catch {
+      // ignore
+    }
+  }
 
-  // Vercel Cron sends x-vercel-cron-signature or omits auth
-  const vercelCron = request.headers.get("x-vercel-cron");
-  if (vercelCron) return true;
-
-  return false;
+  return "sends";
 }
 
 export async function GET(request: Request) {
-  if (!authorize(request)) {
+  const rawBody = await request.text();
+  if (!(await authorizeProcessWarmUpSends(request, rawBody))) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-  return handleRequest("sends");
+  return handleRequest(parseAction(request, rawBody));
 }
 
 export async function POST(request: Request) {
-  if (!authorize(request)) {
+  const rawBody = await request.text();
+  if (!(await authorizeProcessWarmUpSends(request, rawBody))) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-
-  let action = "sends";
-  try {
-    const body = await request.json() as { action?: string };
-    if (body.action) action = body.action;
-  } catch {
-    // default to sends
-  }
-
-  return handleRequest(action);
+  return handleRequest(parseAction(request, rawBody));
 }
 
 async function handleRequest(action: string): Promise<NextResponse> {
@@ -62,7 +59,11 @@ async function handleRequest(action: string): Promise<NextResponse> {
       return NextResponse.json({ action: "metrics", ...result });
     }
 
-    // Default: daily sends
+    if (action === "health") {
+      const result = await checkWarmUpHealth();
+      return NextResponse.json({ action: "health", ...result });
+    }
+
     const result = await runDailyWarmUpSends();
     return NextResponse.json({ action: "sends", ...result });
   } catch (err) {

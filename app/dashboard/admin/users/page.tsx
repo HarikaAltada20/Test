@@ -623,6 +623,17 @@ export default function AdminUsersPage() {
     }
     return false;
   });
+  const [wuMaxRecipients, setWuMaxRecipients] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (!warmupSelectMode) {
+      setWuMaxRecipients(null);
+      return;
+    }
+    const raw = sessionStorage.getItem("wu_max_recipients");
+    const parsed = raw ? parseInt(raw, 10) : NaN;
+    setWuMaxRecipients(Number.isFinite(parsed) ? parsed : null);
+  }, [warmupSelectMode]);
   const [highlightCampaignId, setHighlightCampaignId] = useState<string | null>(
     null,
   );
@@ -2748,6 +2759,14 @@ export default function AdminUsersPage() {
               </p>
               <p className="text-xs text-indigo-700 mt-0.5">
                 Select users below using the checkboxes, then click "Add to Warm-Up Send".
+                {wuMaxRecipients != null && (
+                  <span>
+                    {" "}
+                    Daily limit: select up to{" "}
+                    <span className="font-semibold">{wuMaxRecipients}</span> recipient
+                    {wuMaxRecipients !== 1 ? "s" : ""}.
+                  </span>
+                )}
                 {selectedCount > 0 && (
                   <span className="font-semibold"> {selectedCount} user{selectedCount !== 1 ? "s" : ""} selected.</span>
                 )}
@@ -2789,19 +2808,35 @@ export default function AdminUsersPage() {
                     if (user?.email) emails.push(user.email);
                   });
                 }
+
+                const maxRaw = sessionStorage.getItem("wu_max_recipients");
+                const maxRecipients = maxRaw ? parseInt(maxRaw, 10) : NaN;
+                let finalEmails = emails;
+                if (Number.isFinite(maxRecipients) && maxRecipients >= 0) {
+                  if (emails.length > maxRecipients) {
+                    finalEmails = emails.slice(0, maxRecipients);
+                    toast({
+                      title: "Daily send limit reached",
+                      description: `Only ${maxRecipients} warm-up recipient${maxRecipients !== 1 ? "s" : ""} can be sent today. The first ${maxRecipients} were added.`,
+                      variant: "destructive",
+                    });
+                  }
+                }
+
                 // Store emails and tab flag in sessionStorage
                 if (typeof window !== "undefined") {
-                  sessionStorage.setItem("wu_emails", JSON.stringify(emails));
+                  sessionStorage.setItem("wu_emails", JSON.stringify(finalEmails));
                   sessionStorage.setItem("wu_open_tab", "1");
                 }
                 // Send emails back to the modal via custom event (fallback)
                 window.dispatchEvent(
-                  new CustomEvent("wu:users-selected", { detail: emails }),
+                  new CustomEvent("wu:users-selected", { detail: finalEmails }),
                 );
                 setSelectedUserIds(new Set());
                 setSelectAllFiltered(false);
                 setWarmupSelectMode(false);
                 sessionStorage.removeItem("wu_mode");
+                sessionStorage.removeItem("wu_max_recipients");
                 // Switch back to email → warmup tab
                 setViewModePersisted("email");
                 window.dispatchEvent(new CustomEvent("wu:open-warmup-tab"));

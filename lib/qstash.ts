@@ -1030,3 +1030,69 @@ export async function cancelAdminNotificationQStashSchedule(
     return { ok: false, error: message };
   }
 }
+
+function getProcessWarmUpSendsUrl(): string {
+  return `${getQStashPublishBaseUrl()}/api/cron/process-warm-up-sends`;
+}
+
+async function verifyQStashSignatureWarmUp(
+  request: Request,
+  rawBody: string,
+): Promise<boolean> {
+  const signature = request.headers.get("Upstash-Signature");
+  if (!signature || typeof signature !== "string") return false;
+  const currentKey = sanitizeEnvValue(process.env.QSTASH_CURRENT_SIGNING_KEY);
+  const nextKey = sanitizeEnvValue(process.env.QSTASH_NEXT_SIGNING_KEY);
+  if (!currentKey && !nextKey) return false;
+  try {
+    const receiver = new Receiver({
+      currentSigningKey: currentKey,
+      nextSigningKey: nextKey,
+    });
+    const forwardedOrigin = getForwardedOrigin(request);
+    const requestUrl = (() => {
+      try {
+        return new URL(request.url);
+      } catch {
+        return null;
+      }
+    })();
+    const candidates = uniqueStrings([
+      getProcessWarmUpSendsUrl(),
+      `${getBaseUrl()}/api/cron/process-warm-up-sends`,
+      forwardedOrigin
+        ? `${forwardedOrigin}/api/cron/process-warm-up-sends`
+        : null,
+      requestUrl
+        ? `${requestUrl.origin}/api/cron/process-warm-up-sends`
+        : null,
+      requestUrl?.toString() ?? null,
+    ]);
+    return verifyQStashAgainstUrls(receiver, signature, rawBody, candidates);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Authorize process-warm-up-sends: QStash signature or Bearer CRON_SECRET.
+ */
+export async function authorizeProcessWarmUpSends(
+  request: Request,
+  rawBody: string,
+): Promise<boolean> {
+  const cronSecret = getCronSecret();
+  const auth = request.headers.get("Authorization");
+  if (cronSecret && auth === `Bearer ${cronSecret}`) {
+    return true;
+  }
+
+  if (request.headers.get("Upstash-Signature")) {
+    return verifyQStashSignatureWarmUp(request, rawBody);
+  }
+
+  // Vercel Cron (legacy) or local dev
+  if (request.headers.get("x-vercel-cron")) return true;
+  if (cronSecret) return false;
+  return process.env.NODE_ENV === "development";
+}

@@ -332,33 +332,6 @@ export default function WarmUpManualSendModal({
   const [customFromEmail, setCustomFromEmail] = useState("");
   const [selectedTemplateId, setSelectedTemplateId] = useState("");
   const [recipientSource, setRecipientSource] = useState<"database" | "custom">("database");
-
-  // Dispatch cross-page select-mode event and store context in sessionStorage
-  const enterSelectMode = useCallback(() => {
-    if (typeof window === "undefined") return;
-    sessionStorage.setItem("wu_mode", "1");
-    sessionStorage.setItem("wu_project_id", selectedProjectId);
-    sessionStorage.setItem("wu_account_id", selectedAccountId);
-    window.dispatchEvent(new CustomEvent("wu:enter-select-mode"));
-  }, [selectedProjectId, selectedAccountId]);
-
-  // Listen for emails returned from the users table
-  useEffect(() => {
-    const handler = (e: Event) => {
-      const emails: string[] = (e as CustomEvent<string[]>).detail ?? [];
-      if (emails.length === 0) return;
-      if (recipientSource === "custom") {
-        setCustomRecipients((prev) => {
-          const existing = prev.split("\n").map((x) => x.trim()).filter(Boolean);
-          return Array.from(new Set([...existing, ...emails])).join("\n");
-        });
-      } else {
-        setSelectedRecipients((prev) => Array.from(new Set([...prev, ...emails])));
-      }
-    };
-    window.addEventListener("wu:users-selected", handler);
-    return () => window.removeEventListener("wu:users-selected", handler);
-  }, [recipientSource]);
   const [selectedRecipients, setSelectedRecipients] = useState<string[]>([]);
   const [customRecipients, setCustomRecipients] = useState("");
   const [customSubject, setCustomSubject] = useState("");
@@ -427,12 +400,8 @@ export default function WarmUpManualSendModal({
       setCustomFromEmail("");
       setSendImmediately(true);
       setScheduledTime("");
-      // Pre-fill from users-table selection if provided
-      if (prefillEmails.length > 0) {
-        setSelectedRecipients(prefillEmails);
-        setCustomRecipients("");
-        setRecipientSource("database");
-      } else {
+      // Pre-fill from users-table selection once account limits are known
+      if (prefillEmails.length === 0) {
         setSelectedRecipients([]);
         setCustomRecipients("");
         setRecipientSource("database");
@@ -473,6 +442,133 @@ export default function WarmUpManualSendModal({
   const selectedAccount = modalAccounts.find((a) => a.id === selectedAccountId);
   const selectedTemplate = templates.find((t) => t.id === selectedTemplateId);
 
+  const remainingToday = useMemo(() => {
+    if (!selectedAccount) return 0;
+    return Math.max(
+      0,
+      selectedAccount.daily_limit - selectedAccount.emails_sent_today,
+    );
+  }, [selectedAccount]);
+
+  const notifyRecipientLimit = useCallback(
+    (attempted: number, kept: number) => {
+      if (attempted <= kept) return;
+      toast({
+        title: "Daily send limit reached",
+        description: `This account can send ${remainingToday} more warm-up email${remainingToday !== 1 ? "s" : ""} today (${selectedAccount?.emails_sent_today ?? 0} of ${selectedAccount?.daily_limit ?? 0} used). Only ${kept} recipient${kept !== 1 ? "s" : ""} were kept.`,
+        variant: "destructive",
+      });
+    },
+    [remainingToday, selectedAccount, toast],
+  );
+
+  const capRecipients = useCallback(
+    (emails: string[]): string[] => {
+      const unique = Array.from(
+        new Set(emails.map((e) => e.trim().toLowerCase()).filter((e) => e.includes("@"))),
+      );
+      if (remainingToday <= 0) {
+        if (unique.length > 0) {
+          toast({
+            title: "Daily limit reached",
+            description: `This account has already sent ${selectedAccount?.emails_sent_today ?? 0} of ${selectedAccount?.daily_limit ?? 0} warm-up emails today.`,
+            variant: "destructive",
+          });
+        }
+        return [];
+      }
+      const capped = unique.slice(0, remainingToday);
+      notifyRecipientLimit(unique.length, capped.length);
+      return capped;
+    },
+    [remainingToday, selectedAccount, notifyRecipientLimit, toast],
+  );
+
+  const tryAddRecipient = useCallback(
+    (email: string, current: string[]): string[] | null => {
+      const normalized = email.trim().toLowerCase();
+      if (!normalized.includes("@")) return current;
+      if (current.includes(normalized)) return current;
+      if (current.length >= remainingToday) {
+        toast({
+          title: "Daily send limit reached",
+          description: `You can select up to ${remainingToday} recipient${remainingToday !== 1 ? "s" : ""} today (${selectedAccount?.emails_sent_today ?? 0} of ${selectedAccount?.daily_limit ?? 0} warm-up emails sent).`,
+          variant: "destructive",
+        });
+        return null;
+      }
+      return [...current, normalized];
+    },
+    [remainingToday, selectedAccount, toast],
+  );
+
+  const enterSelectMode = useCallback(() => {
+    if (typeof window === "undefined") return;
+    if (remainingToday <= 0) {
+      toast({
+        title: "Daily limit reached",
+        description: `This account cannot send more warm-up emails today (${selectedAccount?.emails_sent_today ?? 0}/${selectedAccount?.daily_limit ?? 0}).`,
+        variant: "destructive",
+      });
+      return;
+    }
+    sessionStorage.setItem("wu_mode", "1");
+    sessionStorage.setItem("wu_project_id", selectedProjectId);
+    sessionStorage.setItem("wu_account_id", selectedAccountId);
+    sessionStorage.setItem("wu_max_recipients", String(remainingToday));
+    window.dispatchEvent(new CustomEvent("wu:enter-select-mode"));
+  }, [
+    selectedProjectId,
+    selectedAccountId,
+    remainingToday,
+    selectedAccount,
+    toast,
+  ]);
+
+  useEffect(() => {
+    if (!isOpen || prefillEmails.length === 0 || !selectedAccount) return;
+    setSelectedRecipients(capRecipients(prefillEmails));
+    setCustomRecipients("");
+    setRecipientSource("database");
+  }, [isOpen, prefillEmails, selectedAccount, capRecipients]);
+
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const emails: string[] = (e as CustomEvent<string[]>).detail ?? [];
+      if (emails.length === 0) return;
+      if (recipientSource === "custom") {
+        setCustomRecipients((prev) => {
+          const existing = prev.split("\n").map((x) => x.trim()).filter(Boolean);
+          return capRecipients([...existing, ...emails]).join("\n");
+        });
+      } else {
+        setSelectedRecipients((prev) => capRecipients([...prev, ...emails]));
+      }
+    };
+    window.addEventListener("wu:users-selected", handler);
+    return () => window.removeEventListener("wu:users-selected", handler);
+  }, [recipientSource, capRecipients]);
+
+  useEffect(() => {
+    if (!selectedAccount) return;
+    setSelectedRecipients((prev) => {
+      if (prev.length <= remainingToday) return prev;
+      const capped = prev.slice(0, remainingToday);
+      notifyRecipientLimit(prev.length, capped.length);
+      return capped;
+    });
+  }, [selectedAccountId, remainingToday, selectedAccount, notifyRecipientLimit]);
+
+  // Keep warm-up account in sync with selected sender
+  useEffect(() => {
+    const sender = senders.find((s) => s.id === selectedSenderId);
+    if (!sender) return;
+    const account = modalAccounts.find((a) => a.email === sender.email);
+    if (account && account.id !== selectedAccountId) {
+      setSelectedAccountId(account.id);
+    }
+  }, [selectedSenderId, senders, modalAccounts, selectedAccountId]);
+
   const resolvedFromEmail =
     fromEmailMode === "account"
       ? (selectedAccount?.email ?? "")
@@ -485,22 +581,38 @@ export default function WarmUpManualSendModal({
     .map((e) => e.trim())
     .filter((e) => e.includes("@"));
 
+  const cappedCustomEmails = useMemo(() => {
+    const unique = Array.from(new Set(parsedCustomEmails));
+    return unique.slice(0, remainingToday);
+  }, [parsedCustomEmails, remainingToday]);
+
   const recipientCount =
     recipientSource === "database"
       ? selectedRecipients.length
-      : parsedCustomEmails.length;
+      : cappedCustomEmails.length;
 
   const canSend =
     !!selectedAccountId &&
     !!selectedTemplateId &&
     !!resolvedFromEmail &&
-    recipientCount > 0;
+    recipientCount > 0 &&
+    remainingToday > 0;
 
   const handleSend = async () => {
     if (!canSend) return;
 
-    const recipientEmails =
+    const rawRecipients =
       recipientSource === "database" ? selectedRecipients : parsedCustomEmails;
+    const recipientEmails = capRecipients(rawRecipients);
+
+    if (recipientEmails.length === 0) {
+      toast({
+        title: "Daily limit reached",
+        description: "No warm-up emails remaining for this account today.",
+        variant: "destructive",
+      });
+      return;
+    }
 
     setSending(true);
     try {
@@ -621,6 +733,17 @@ export default function WarmUpManualSendModal({
                     </Select>
                   </div>
 
+                  {selectedAccount && (
+                    <div className="rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-blue-900">
+                      <span className="font-medium">{selectedAccount.email}</span>
+                      <span className="text-blue-700">
+                        {" "}
+                        — {remainingToday} of {selectedAccount.daily_limit} warm-up
+                        emails remaining today ({selectedAccount.emails_sent_today} sent)
+                      </span>
+                    </div>
+                  )}
+
                   {activeAccounts.length === 0 && (
                     <p className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-md px-3 py-2">
                       No active/paused warm-up accounts found for this project. Add senders in the Warm-Up tab first.
@@ -735,6 +858,12 @@ export default function WarmUpManualSendModal({
                   </CardTitle>
                   <CardDescription>
                     Choose recipients from your database or enter custom addresses
+                    {selectedAccount && (
+                      <span className="block mt-1 text-blue-700 font-medium">
+                        You can select up to {remainingToday} recipient
+                        {remainingToday !== 1 ? "s" : ""} for this account today.
+                      </span>
+                    )}
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-3">
@@ -769,6 +898,7 @@ export default function WarmUpManualSendModal({
                           size="sm"
                           variant="outline"
                           className="h-8 text-indigo-600 border-indigo-300 hover:bg-indigo-50"
+                          disabled={remainingToday <= 0}
                           onClick={enterSelectMode}
                         >
                           <ExternalLink className="w-3.5 h-3.5 mr-1.5" />
@@ -792,6 +922,7 @@ export default function WarmUpManualSendModal({
                               type="button"
                               size="sm"
                               className="bg-indigo-600 hover:bg-indigo-700 mt-1"
+                              disabled={remainingToday <= 0}
                               onClick={enterSelectMode}
                             >
                               <UserCheck className="w-3.5 h-3.5 mr-1.5" />
@@ -811,11 +942,17 @@ export default function WarmUpManualSendModal({
                                   className="w-4 h-4 rounded text-blue-600"
                                   checked={selectedRecipients.includes(r.email)}
                                   onChange={(e) => {
-                                    setSelectedRecipients((prev) =>
-                                      e.target.checked
-                                        ? [...prev, r.email]
-                                        : prev.filter((x) => x !== r.email),
-                                    );
+                                    if (e.target.checked) {
+                                      const next = tryAddRecipient(
+                                        r.email,
+                                        selectedRecipients,
+                                      );
+                                      if (next) setSelectedRecipients(next);
+                                    } else {
+                                      setSelectedRecipients((prev) =>
+                                        prev.filter((x) => x !== r.email),
+                                      );
+                                    }
                                   }}
                                 />
                                 <span className="text-sm">{r.email}</span>
@@ -881,6 +1018,7 @@ export default function WarmUpManualSendModal({
                           size="sm"
                           variant="outline"
                           className="h-7 text-xs text-indigo-600 border-indigo-300 hover:bg-indigo-50"
+                          disabled={remainingToday <= 0}
                           onClick={enterSelectMode}
                         >
                           <ExternalLink className="w-3 h-3 mr-1" />
@@ -890,13 +1028,22 @@ export default function WarmUpManualSendModal({
                       <Textarea
                         placeholder={"Enter one email per line:\njohn@example.com\njane@example.com"}
                         value={customRecipients}
-                        onChange={(e) => setCustomRecipients(e.target.value)}
+                        onChange={(e) => {
+                          const lines = e.target.value
+                            .split("\n")
+                            .map((x) => x.trim())
+                            .filter(Boolean);
+                          const capped = capRecipients(lines);
+                          setCustomRecipients(capped.join("\n"));
+                        }}
                         className="min-h-[100px]"
                       />
-                      {parsedCustomEmails.length > 0 && (
+                      {cappedCustomEmails.length > 0 && (
                         <Badge className="bg-blue-100 text-blue-800">
-                          {parsedCustomEmails.length} valid email
-                          {parsedCustomEmails.length !== 1 ? "s" : ""}
+                          {cappedCustomEmails.length} valid email
+                          {cappedCustomEmails.length !== 1 ? "s" : ""}
+                          {parsedCustomEmails.length > cappedCustomEmails.length &&
+                            ` (capped at ${remainingToday} daily limit)`}
                         </Badge>
                       )}
                     </div>
@@ -995,6 +1142,12 @@ export default function WarmUpManualSendModal({
                     <span className="text-slate-600">Recipients:</span>
                     <span className="font-medium">
                       {recipientCount} email{recipientCount !== 1 ? "s" : ""}
+                      {selectedAccount && (
+                        <span className="text-slate-500 font-normal">
+                          {" "}
+                          (max {remainingToday} today)
+                        </span>
+                      )}
                     </span>
                     <span className="text-slate-600">Send time:</span>
                     <span className="font-medium">

@@ -290,6 +290,174 @@ Quick note — I've been thinking about {company} and your work in {industry}.
 {Take care|Talk soon},
 {from_name}`,
   },
+  {
+    name: "Thought leadership",
+    subject: "A perspective on {industry_topic}",
+    body: `{Hi|Hello} {first_name},
+
+I've been writing about {industry_topic} lately and thought {company} might find it relevant.
+
+{Happy to share|Would love to send over} a short summary if you're interested — no pitch, just ideas.
+
+{Best|Cheers},
+{from_name}`,
+  },
+  {
+    name: "Peer intro",
+    subject: "{Hi|Hey} {first_name} — fellow {industry} builder",
+    body: `{Hey|Hi} {first_name},
+
+I'm {from_name} and I work with teams in {industry} on {specific_topic}. Noticed {company} and wanted to say hello.
+
+{Always open to swapping notes|Happy to connect} with others in the space.
+
+{Best|Thanks},
+{from_name}`,
+  },
+  {
+    name: "Quick question",
+    subject: "Quick question for {company}",
+    body: `{Hi|Hello} {first_name},
+
+I'm researching how {industry} companies approach {specific_topic} and {company} came up as a great example.
+
+{Would you mind sharing|Any chance you could point me to} how your team thinks about this? Totally fine if you're swamped.
+
+{Thanks|Appreciate it},
+{from_name}`,
+  },
+  {
+    name: "Content share",
+    subject: "Something useful on {specific_topic}",
+    body: `{Hey|Hi} {first_name},
+
+Came across an article on {industry_topic} that reminded me of what {company} is building.
+
+{Thought you might enjoy it|Worth a skim if you have 5 minutes} — happy to forward the link.
+
+{Best|Cheers},
+{from_name}`,
+  },
+  {
+    name: "Congratulatory note",
+    subject: "Congrats on the momentum at {company}",
+    body: `{Hi|Hello} {first_name},
+
+I've been following {company}'s progress in {industry} — really impressive trajectory on {specific_topic}.
+
+{Would love to learn more|Happy to cheer you on} as you keep scaling.
+
+{Best wishes|All the best},
+{from_name}`,
+  },
+  {
+    name: "Soft ask",
+    subject: "{from_name} — quick favor?",
+    body: `{Hey|Hi} {first_name},
+
+I'm putting together a short list of {industry} leaders working on {specific_topic} and thought of {company}.
+
+{Would you be open to a 10-minute chat|Any interest in a brief call}? No pressure at all.
+
+{Thanks|Talk soon},
+{from_name}`,
+  },
+  {
+    name: "Newsletter invite",
+    subject: "Monthly notes on {industry_topic}",
+    body: `{Hi|Hello} {first_name},
+
+I send a low-volume newsletter on {industry_topic} — practical stuff, no fluff.
+
+{Thought it might resonate|Figured it could be useful} for someone at {company}. Want me to add you?
+
+{Best|Cheers},
+{from_name}`,
+  },
+  {
+    name: "Event invite",
+    subject: "Virtual roundtable on {specific_topic}",
+    body: `{Hey|Hi} {first_name},
+
+We're hosting a small virtual session on {industry_topic} next week — founders and operators from {industry}.
+
+{Would love to have {company} represented|Thought you might enjoy it}. Interested?
+
+{Best|Thanks},
+{from_name}`,
+  },
+  {
+    name: "Tool recommendation",
+    subject: "Tool that helped with {specific_topic}",
+    body: `{Hi|Hello} {first_name},
+
+We've been testing a few approaches to {specific_topic} and one stack change made a real difference for teams like {company}.
+
+{Happy to share details|Can send a one-pager} if useful — no vendor tie-in.
+
+{Best|Cheers},
+{from_name}`,
+  },
+  {
+    name: "Benchmark offer",
+    subject: "Benchmark data for {industry}",
+    body: `{Hey|Hi} {first_name},
+
+We compiled anonymized benchmarks on {specific_topic} across {industry} companies — {company}'s segment included.
+
+{Want a copy|Happy to share the highlights} if that'd help your planning.
+
+{Best|Thanks},
+{from_name}`,
+  },
+  {
+    name: "Introduction offer",
+    subject: "Intro to someone in {industry}?",
+    body: `{Hi|Hello} {first_name},
+
+I know a few folks in {industry} focused on {specific_topic} and thought an intro might be valuable for {company}.
+
+{Let me know if interested|Happy to make a warm intro} — no strings attached.
+
+{Best|Cheers},
+{from_name}`,
+  },
+  {
+    name: "Feedback request",
+    subject: "Your take on {industry_topic}?",
+    body: `{Hey|Hi} {first_name},
+
+I'm refining a framework around {industry_topic} and would value a practitioner perspective from someone at {company}.
+
+{5 minutes of feedback|A quick async reply} would mean a lot.
+
+{Thanks|Appreciate you},
+{from_name}`,
+  },
+  {
+    name: "Seasonal check-in",
+    subject: "Q{Hi|Hello} from {from_name}",
+    body: `{Hi|Hello} {first_name},
+
+Hope things are going well at {company}. As teams plan for the next quarter, {specific_topic} keeps coming up in {industry}.
+
+{Happy to share what we're seeing|Open to compare notes} if helpful.
+
+{Best|Take care},
+{from_name}`,
+  },
+  {
+    name: "Podcast pitch",
+    subject: "Podcast guest idea — {company}",
+    body: `{Hey|Hi} {first_name},
+
+We host a short podcast on {industry_topic} and {company}'s story stood out.
+
+{Would you or a teammate be open to a 20-min chat|Any interest in being a guest}? Totally flexible on timing.
+
+{Best|Thanks},
+{from_name}`,
+  },
 ];
 
 // ---------------------------------------------------------------------------
@@ -545,8 +713,17 @@ export async function sendWarmUpEmails(
     return { accountId, attempted: 0, sent: 0, errors: ["Account not active"] };
   }
 
+  const { data: projectRow } = await db
+    .from("admin_email_projects")
+    .select("daily_limit")
+    .eq("id", account.project_id)
+    .single();
+  const projectDailyCap = projectRow?.daily_limit ?? 300;
+
   const stageConfig = STAGE_CONFIG[account.current_stage];
-  const remaining = stageConfig.dailyLimit - account.emails_sent_today;
+  const stageRemaining = stageConfig.dailyLimit - account.emails_sent_today;
+  const projectRemaining = projectDailyCap - account.emails_sent_today;
+  const remaining = Math.min(stageRemaining, projectRemaining);
   if (remaining <= 0) {
     return {
       accountId,
@@ -558,7 +735,11 @@ export async function sendWarmUpEmails(
 
   const targetCount =
     opts?.count ??
-    Math.min(remaining, getDailySendTarget(account, stageConfig.dailyLimit));
+    Math.min(
+      remaining,
+      getDailySendTarget(account, stageConfig.dailyLimit),
+      projectDailyCap,
+    );
 
   // Ensure default templates exist
   await seedDefaultTemplates(account.project_id);
@@ -732,23 +913,7 @@ export async function calculateDailyMetrics(projectId?: string) {
         complainedCount,
       });
 
-      // Upsert daily metric row
-      await db.from("admin_email_warm_up_metrics").upsert(
-        {
-          account_id: account.id,
-          project_id: account.project_id,
-          date: today,
-          sends_count: sendsCount,
-          delivered_count: deliveredCount,
-          opened_count: openedCount,
-          clicked_count: clickedCount,
-          bounced_count: bouncedCount,
-          complained_count: complainedCount,
-          health_score: healthScore,
-          stage: account.current_stage,
-        },
-        { onConflict: "account_id,date" },
-      );
+      let stageProgressionTriggered = false;
 
       // Update health score on account
       const updates: Partial<WarmUpAccountRow> & { updated_at: string } = {
@@ -777,11 +942,31 @@ export async function calculateDailyMetrics(projectId?: string) {
           const nextStage = stageConfig.nextStage;
           updates.current_stage = nextStage;
           updates.daily_limit = STAGE_CONFIG[nextStage].dailyLimit;
+          stageProgressionTriggered = true;
           if (nextStage === "ready") {
             updates.warm_up_status = "completed";
           }
         }
       }
+
+      // Upsert daily metric row
+      await db.from("admin_email_warm_up_metrics").upsert(
+        {
+          account_id: account.id,
+          project_id: account.project_id,
+          date: today,
+          sends_count: sendsCount,
+          delivered_count: deliveredCount,
+          opened_count: openedCount,
+          clicked_count: clickedCount,
+          bounced_count: bouncedCount,
+          complained_count: complainedCount,
+          health_score: healthScore,
+          stage: updates.current_stage ?? account.current_stage,
+          stage_progression_triggered: stageProgressionTriggered,
+        },
+        { onConflict: "account_id,date" },
+      );
 
       await db
         .from("admin_email_warm_up_accounts")
@@ -808,6 +993,13 @@ export async function runDailyWarmUpSends(projectId?: string): Promise<{
 }> {
   const db = createAdminClient();
 
+  const { data: enabledProjects } = await db
+    .from("admin_email_projects")
+    .select("id")
+    .eq("warm_up_enabled", true);
+  const enabledIds = new Set((enabledProjects ?? []).map((p) => p.id));
+  if (enabledIds.size === 0) return { processed: 0, sent: 0, errors: 0 };
+
   let query = db
     .from("admin_email_warm_up_accounts")
     .select("id, project_id")
@@ -817,12 +1009,13 @@ export async function runDailyWarmUpSends(projectId?: string): Promise<{
   }
 
   const { data: accounts } = await query;
-  if (!accounts?.length) return { processed: 0, sent: 0, errors: 0 };
+  const eligible = (accounts ?? []).filter((a) => enabledIds.has(a.project_id));
+  if (!eligible.length) return { processed: 0, sent: 0, errors: 0 };
 
   let totalSent = 0;
   let totalErrors = 0;
 
-  for (const { id } of accounts) {
+  for (const { id } of eligible) {
     try {
       const result = await sendWarmUpEmails(id);
       totalSent += result.sent;
@@ -832,7 +1025,7 @@ export async function runDailyWarmUpSends(projectId?: string): Promise<{
     }
   }
 
-  return { processed: accounts.length, sent: totalSent, errors: totalErrors };
+  return { processed: eligible.length, sent: totalSent, errors: totalErrors };
 }
 
 // ---------------------------------------------------------------------------
@@ -1027,4 +1220,159 @@ export async function getWarmUpDailyStats(accountId: string, days = 30) {
     .order("date", { ascending: true });
   if (error) throw new Error(error.message);
   return (data ?? []) as WarmUpMetricsRow[];
+}
+
+export async function getWarmUpMetricsHistory(accountId: string, days = 30) {
+  return getWarmUpDailyStats(accountId, days);
+}
+
+export async function getWarmUpAccountStatus(accountId: string) {
+  const db = createAdminClient();
+  const { data: account } = await db
+    .from("admin_email_warm_up_accounts")
+    .select("*")
+    .eq("id", accountId)
+    .single();
+  if (!account) throw new Error("Warm-up account not found");
+
+  const today = new Date().toISOString().slice(0, 10);
+  const [{ data: todayMetric }, { data: recentSends }] = await Promise.all([
+    db
+      .from("admin_email_warm_up_metrics")
+      .select("*")
+      .eq("account_id", accountId)
+      .eq("date", today)
+      .maybeSingle(),
+    db
+      .from("admin_email_warm_up_sends")
+      .select("id, sent_at, is_delivered, opened_at, is_bounced")
+      .eq("account_id", accountId)
+      .order("sent_at", { ascending: false })
+      .limit(5),
+  ]);
+
+  const row = account as WarmUpAccountRow;
+  return {
+    account: row,
+    todayMetrics: todayMetric as WarmUpMetricsRow | null,
+    recentSends: recentSends ?? [],
+    remainingToday: Math.max(0, row.daily_limit - row.emails_sent_today),
+    campaignRemainingToday: Math.max(
+      0,
+      row.campaign_daily_limit - row.campaign_sent_today,
+    ),
+  };
+}
+
+export async function getWarmUpSidebarDetails(accountId: string) {
+  const status = await getWarmUpAccountStatus(accountId);
+  const metrics = await getWarmUpDailyStats(accountId, 14);
+  const sends = await getWarmUpSends(accountId, 20);
+
+  return {
+    ...status,
+    metricsChart: metrics,
+    sendLog: sends,
+  };
+}
+
+export async function getHealthScoresList(projectId?: string) {
+  const db = createAdminClient();
+  let query = db
+    .from("admin_email_warm_up_accounts")
+    .select("id, email, current_health_score, best_health_score, warm_up_status, current_stage")
+    .order("current_health_score", { ascending: false });
+  if (projectId) query = query.eq("project_id", projectId);
+
+  const { data, error } = await query;
+  if (error) throw new Error(error.message);
+  return data ?? [];
+}
+
+const STAGE_ORDER: WarmUpStage[] = [
+  "foundation",
+  "growth",
+  "expansion",
+  "ready",
+];
+
+export async function recoverFromJunk(accountId: string) {
+  const db = createAdminClient();
+  const { data: account } = await db
+    .from("admin_email_warm_up_accounts")
+    .select("*")
+    .eq("id", accountId)
+    .single();
+  if (!account) throw new Error("Warm-up account not found");
+
+  const row = account as WarmUpAccountRow;
+  const stageIdx = STAGE_ORDER.indexOf(row.current_stage);
+  const prevStage = stageIdx > 0 ? STAGE_ORDER[stageIdx - 1] : row.current_stage;
+  const reducedLimit = Math.max(
+    5,
+    Math.floor(STAGE_CONFIG[prevStage].dailyLimit * 0.5),
+  );
+
+  const { data, error } = await db
+    .from("admin_email_warm_up_accounts")
+    .update({
+      warm_up_status: "paused",
+      current_stage: prevStage,
+      daily_limit: reducedLimit,
+      emails_sent_today: 0,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", accountId)
+    .select("*")
+    .single();
+  if (error) throw new Error(error.message);
+  return data as WarmUpAccountRow;
+}
+
+export async function sendTestWarmUpEmail(
+  accountId: string,
+  recipientEmail: string,
+) {
+  const result = await sendManualWarmUpEmailRich(accountId, {
+    recipientEmails: [recipientEmail],
+  });
+  return result;
+}
+
+export async function checkWarmUpHealth(projectId?: string) {
+  const db = createAdminClient();
+  let query = db
+    .from("admin_email_warm_up_accounts")
+    .select("id, email, current_health_score, emails_sent_today, daily_limit, warm_up_status")
+    .in("warm_up_status", ["active", "paused"]);
+  if (projectId) query = query.eq("project_id", projectId);
+
+  const { data: accounts } = await query;
+  if (!accounts?.length) return { checked: 0, lowHealth: 0, resetCounters: 0 };
+
+  let lowHealth = 0;
+  let resetCounters = 0;
+  const now = new Date().toISOString();
+
+  for (const account of accounts) {
+    if (account.current_health_score < 30) {
+      lowHealth++;
+      console.warn(
+        `[warm-up health] Low health score for ${account.email}: ${account.current_health_score}`,
+      );
+    }
+
+    if (account.emails_sent_today > account.daily_limit) {
+      await db
+        .from("admin_email_warm_up_accounts")
+        .update({
+          emails_sent_today: account.daily_limit,
+          updated_at: now,
+        })
+        .eq("id", account.id);
+      resetCounters++;
+    }
+  }
+
+  return { checked: accounts.length, lowHealth, resetCounters };
 }

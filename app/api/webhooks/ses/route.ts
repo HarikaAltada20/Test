@@ -1,9 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/utils/supabase/admin";
+import { handleWarmUpSesEvent } from "@/lib/admin-email/warm-up-events";
 
 type SesNotification = {
   notificationType?: string;
+  eventType?: string;
+  mail?: { messageId?: string };
   bounce?: {
+    bounceType?: string;
     bouncedRecipients?: Array<{ emailAddress?: string }>;
   };
   complaint?: {
@@ -31,7 +35,9 @@ export async function POST(req: NextRequest) {
   const db = createAdminClient();
   const now = new Date().toISOString();
 
-  if (notification.notificationType === "Bounce") {
+  await handleWarmUpSesEvent(notification);
+
+  if (notification.notificationType === "Bounce" || notification.eventType === "Bounce") {
     const emails =
       notification.bounce?.bouncedRecipients
         ?.map((r) => r.emailAddress?.toLowerCase())
@@ -60,7 +66,7 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  if (notification.notificationType === "Complaint") {
+  if (notification.notificationType === "Complaint" || notification.eventType === "Complaint") {
     const emails =
       notification.complaint?.complainedRecipients
         ?.map((r) => r.emailAddress?.toLowerCase())

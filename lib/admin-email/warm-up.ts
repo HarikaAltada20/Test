@@ -244,6 +244,15 @@ export async function startWarmUpAccount(accountId: string) {
     .single();
 
   if (error) throw new Error(error.message);
+
+  await db
+    .from("admin_email_projects")
+    .update({
+      warm_up_enabled: true,
+      updated_at: now.toISOString(),
+    })
+    .eq("id", data.project_id);
+
   return mapWarmUpAccount(data as WarmUpAccountRow);
 }
 
@@ -261,6 +270,204 @@ export async function pauseWarmUpAccount(accountId: string) {
 
   if (error) throw new Error(error.message);
   return mapWarmUpAccount(data as WarmUpAccountRow);
+}
+
+export async function getWarmUpAccount(accountId: string) {
+  const db = createAdminClient();
+  const { data, error } = await db
+    .from("admin_email_warm_up_accounts")
+    .select("*")
+    .eq("id", accountId)
+    .single();
+  if (error || !data) throw new Error("Warm-up account not found");
+  return mapWarmUpAccount(data as WarmUpAccountRow);
+}
+
+export async function updateWarmUpAccount(
+  accountId: string,
+  updates: {
+    firstName?: string | null;
+    lastName?: string | null;
+    campaignDailyLimit?: number;
+  },
+) {
+  const db = createAdminClient();
+  const patch: Record<string, unknown> = {
+    updated_at: new Date().toISOString(),
+  };
+  if (updates.firstName !== undefined) patch.first_name = updates.firstName;
+  if (updates.lastName !== undefined) patch.last_name = updates.lastName;
+  if (updates.campaignDailyLimit !== undefined) {
+    patch.campaign_daily_limit = updates.campaignDailyLimit;
+  }
+
+  const { data, error } = await db
+    .from("admin_email_warm_up_accounts")
+    .update(patch)
+    .eq("id", accountId)
+    .select("*")
+    .single();
+  if (error) throw new Error(error.message);
+  return mapWarmUpAccount(data as WarmUpAccountRow);
+}
+
+export async function deleteWarmUpAccount(accountId: string) {
+  const db = createAdminClient();
+  const { error } = await db
+    .from("admin_email_warm_up_accounts")
+    .delete()
+    .eq("id", accountId);
+  if (error) throw new Error(error.message);
+}
+
+export async function resumeWarmUpAccount(accountId: string) {
+  const db = createAdminClient();
+  const { data, error } = await db
+    .from("admin_email_warm_up_accounts")
+    .update({
+      warm_up_status: "active",
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", accountId)
+    .select("*")
+    .single();
+  if (error) throw new Error(error.message);
+  return mapWarmUpAccount(data as WarmUpAccountRow);
+}
+
+export async function markReadyForSending(accountId: string) {
+  const db = createAdminClient();
+  const { data: existing } = await db
+    .from("admin_email_warm_up_accounts")
+    .select("warm_up_status, current_stage")
+    .eq("id", accountId)
+    .single();
+  if (!existing) throw new Error("Warm-up account not found");
+  if (
+    existing.warm_up_status !== "completed" &&
+    existing.current_stage !== "ready"
+  ) {
+    throw new Error("Account must complete warm-up before marking ready");
+  }
+
+  const { data, error } = await db
+    .from("admin_email_warm_up_accounts")
+    .update({
+      is_ready_for_sending: true,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", accountId)
+    .select("*")
+    .single();
+  if (error) throw new Error(error.message);
+  return mapWarmUpAccount(data as WarmUpAccountRow);
+}
+
+export async function markNotReadyForSending(accountId: string) {
+  const db = createAdminClient();
+  const { data, error } = await db
+    .from("admin_email_warm_up_accounts")
+    .update({
+      is_ready_for_sending: false,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", accountId)
+    .select("*")
+    .single();
+  if (error) throw new Error(error.message);
+  return mapWarmUpAccount(data as WarmUpAccountRow);
+}
+
+export async function listReadyForSendingAccounts(projectId?: string | null) {
+  const db = createAdminClient();
+  let query = db
+    .from("admin_email_warm_up_accounts")
+    .select("*")
+    .eq("is_ready_for_sending", true)
+    .in("warm_up_status", ["completed", "active"]);
+  if (projectId) query = query.eq("project_id", projectId);
+
+  const { data, error } = await query.order("email", { ascending: true });
+  if (error) throw new Error(error.message);
+  return (data ?? []).map((row) => mapWarmUpAccount(row as WarmUpAccountRow));
+}
+
+export async function createWarmUpAccountFromSender(senderId: string) {
+  const db = createAdminClient();
+  const { data: sender } = await db
+    .from("admin_email_project_senders")
+    .select("id, project_id, email, first_name, last_name, display_name, ses_verified")
+    .eq("id", senderId)
+    .single();
+  if (!sender) throw new Error("Verified sender not found");
+
+  const { data: existing } = await db
+    .from("admin_email_warm_up_accounts")
+    .select("id")
+    .eq("project_id", sender.project_id)
+    .eq("email", sender.email)
+    .maybeSingle();
+  if (existing) {
+    return getWarmUpAccount(existing.id);
+  }
+
+  return createWarmUpAccount({
+    projectId: sender.project_id,
+    email: sender.email,
+    firstName: sender.first_name ?? sender.display_name?.split(" ")[0],
+    lastName: sender.last_name ?? undefined,
+  });
+}
+
+export type ProjectWarmUpStatus = {
+  warmUpEnabled: boolean;
+  totalAccounts: number;
+  activeAccounts: number;
+  completedAccounts: number;
+  readyForSending: number;
+};
+
+export async function getProjectWarmUpStatus(
+  projectId: string,
+): Promise<ProjectWarmUpStatus> {
+  const db = createAdminClient();
+  const [{ data: project }, { data: accounts }] = await Promise.all([
+    db
+      .from("admin_email_projects")
+      .select("warm_up_enabled")
+      .eq("id", projectId)
+      .single(),
+    db
+      .from("admin_email_warm_up_accounts")
+      .select("warm_up_status, is_ready_for_sending")
+      .eq("project_id", projectId),
+  ]);
+
+  const rows = accounts ?? [];
+  return {
+    warmUpEnabled: project?.warm_up_enabled ?? false,
+    totalAccounts: rows.length,
+    activeAccounts: rows.filter((a) => a.warm_up_status === "active").length,
+    completedAccounts: rows.filter((a) => a.warm_up_status === "completed")
+      .length,
+    readyForSending: rows.filter((a) => a.is_ready_for_sending).length,
+  };
+}
+
+export async function setProjectWarmUpEnabled(
+  projectId: string,
+  enabled: boolean,
+) {
+  const db = createAdminClient();
+  const { error } = await db
+    .from("admin_email_projects")
+    .update({
+      warm_up_enabled: enabled,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", projectId);
+  if (error) throw new Error(error.message);
+  return getProjectWarmUpStatus(projectId);
 }
 
 export async function createWarmUpAccount(input: {
@@ -308,5 +515,9 @@ export async function createWarmUpAccount(input: {
     .single();
 
   if (error) throw new Error(error.message);
+
+  const { seedDefaultTemplates } = await import("./warm-up-service");
+  await seedDefaultTemplates(input.projectId);
+
   return mapWarmUpAccount(data as WarmUpAccountRow);
 }
