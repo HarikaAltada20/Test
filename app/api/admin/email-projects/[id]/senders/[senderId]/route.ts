@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/utils/supabase/admin";
 import { requireAdminApi } from "@/lib/admin-email/api-auth";
+import { syncWarmUpAccountsForProject } from "@/lib/admin-email/warm-up";
 import {
   checkSesVerificationStatus,
   verifySenderEmailWithSes,
@@ -128,6 +129,12 @@ export async function DELETE(_req: Request, context: RouteContext) {
       .from("admin_email_projects")
       .update({ default_sender_id: null })
       .eq("id", projectId);
+  }
+
+  try {
+    await syncWarmUpAccountsForProject(projectId);
+  } catch {
+    // best-effort cleanup
   }
 
   return NextResponse.json({ ok: true });

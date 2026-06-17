@@ -8,6 +8,7 @@ import {
   normalizeSesMessageId,
   parseRawEmail,
   pickInReplyToId,
+  collectReferenceMessageIds,
 } from "@/lib/email/inbound-email-parse";
 import { ingestInboundUniboxMessage } from "@/lib/admin-email/unibox";
 
@@ -114,6 +115,10 @@ export async function processInboundRawEmail(
     bodyHtml: parsed.bodyHtml,
     sesMessageId: parsed.messageId,
     inReplyToMessageId: inReplyTo,
+    referenceMessageIds: collectReferenceMessageIds(
+      parsed.inReplyTo,
+      parsed.references,
+    ),
     stopOnReply: true,
   });
 
@@ -182,6 +187,7 @@ export async function processSesInboundNotification(
 export async function syncInboundEmailsFromBucket(options?: {
   maxKeys?: number;
   prefix?: string;
+  maxScan?: number;
 }): Promise<{
   processed: number;
   skipped: number;
@@ -194,33 +200,65 @@ export async function syncInboundEmailsFromBucket(options?: {
   const client = getS3Client();
   if (!client) throw new Error("AWS S3 is not configured");
 
-  const maxKeys = options?.maxKeys ?? 50;
+  const processLimit = options?.maxKeys ?? 15;
+  const maxScan = options?.maxScan ?? 80;
   const prefix = options?.prefix ?? "";
+  const pageSize = 100;
+  const maxConsecutiveSkips = 20;
 
-  const list = await client.send(
-    new ListObjectsV2Command({
-      Bucket: bucket,
-      Prefix: prefix || undefined,
-      MaxKeys: maxKeys,
-    }),
+  type ListedObject = { Key: string; LastModified?: Date };
+  const collected: ListedObject[] = [];
+  let continuationToken: string | undefined;
+
+  while (collected.length < maxScan) {
+    const list = await client.send(
+      new ListObjectsV2Command({
+        Bucket: bucket,
+        Prefix: prefix || undefined,
+        MaxKeys: Math.min(pageSize, maxScan - collected.length),
+        ContinuationToken: continuationToken,
+      }),
+    );
+
+    for (const obj of list.Contents ?? []) {
+      if (obj.Key) {
+        collected.push({ Key: obj.Key, LastModified: obj.LastModified });
+      }
+    }
+
+    if (!list.IsTruncated || collected.length >= maxScan) break;
+    continuationToken = list.NextContinuationToken;
+  }
+
+  const objects = collected.sort(
+    (a, b) => (b.LastModified?.getTime() ?? 0) - (a.LastModified?.getTime() ?? 0),
   );
 
   let processed = 0;
   let skipped = 0;
   let errors = 0;
-  const objects = list.Contents ?? [];
+  let scanned = 0;
+  let consecutiveSkips = 0;
 
   for (const obj of objects) {
-    if (!obj.Key) continue;
+    scanned += 1;
     try {
       const result = await processInboundS3Object(bucket, obj.Key);
-      if (result.skipped) skipped += 1;
-      else processed += 1;
+      if (result.skipped) {
+        skipped += 1;
+        consecutiveSkips += 1;
+        if (consecutiveSkips >= maxConsecutiveSkips) break;
+      } else {
+        processed += 1;
+        consecutiveSkips = 0;
+        if (processed >= processLimit) break;
+      }
     } catch (err) {
       console.error("[inbound-s3] sync key failed:", obj.Key, err);
       errors += 1;
+      consecutiveSkips = 0;
     }
   }
 
-  return { processed, skipped, errors, scanned: objects.length };
+  return { processed, skipped, errors, scanned };
 }

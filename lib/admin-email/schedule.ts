@@ -36,9 +36,16 @@ export type ProjectScheduleRow = {
 };
 
 export function parseTimeToMinutes(time: string): number {
-  const match = time.trim().match(/^(\d{1,2}):(\d{2})$/);
+  const match = time.trim().match(/^(\d{1,2}):(\d{2})(?::\d{2})?$/);
   if (!match) return 0;
   return parseInt(match[1], 10) * 60 + parseInt(match[2], 10);
+}
+
+/** Normalize HH:mm or HH:mm:ss to HH:mm for storage and comparisons. */
+export function normalizeScheduleTime(time: string): string {
+  const match = time.trim().match(/^(\d{1,2}):(\d{2})(?::\d{2})?$/);
+  if (!match) return time.trim();
+  return `${String(parseInt(match[1], 10)).padStart(2, "0")}:${match[2]}`;
 }
 
 export function getDateKeyInTimezone(date: Date, timezone: string): string {
@@ -197,6 +204,90 @@ export function getNextSendWindowStart(
   return new Date(startMinute.getTime() + 3_600_000);
 }
 
+function countRowsOnDateKey(
+  rows: Array<{ sent_at?: string | null; updated_at?: string | null }>,
+  timezone: string,
+  todayKey: string,
+  timestampField: "sent_at" | "updated_at",
+): number {
+  return rows.filter((row) => {
+    const value = row[timestampField];
+    return (
+      value && getDateKeyInTimezone(new Date(value), timezone) === todayKey
+    );
+  }).length;
+}
+
+async function loadCampaignSendRows(
+  campaignIds: string[],
+  lookback: string,
+): Promise<{
+  stepSendsByCampaign: Map<string, Array<{ sent_at: string | null }>>;
+  recipientsByCampaign: Map<string, Array<{ updated_at: string | null }>>;
+}> {
+  const stepSendsByCampaign = new Map<
+    string,
+    Array<{ sent_at: string | null }>
+  >();
+  const recipientsByCampaign = new Map<
+    string,
+    Array<{ updated_at: string | null }>
+  >();
+
+  if (campaignIds.length === 0) {
+    return { stepSendsByCampaign, recipientsByCampaign };
+  }
+
+  const db = createAdminClient();
+  const { data: stepSends } = await db
+    .from("admin_email_sequence_step_sends")
+    .select("campaign_id, sent_at")
+    .in("campaign_id", campaignIds)
+    .gte("sent_at", lookback);
+
+  for (const row of stepSends ?? []) {
+    const bucket = stepSendsByCampaign.get(row.campaign_id) ?? [];
+    bucket.push({ sent_at: row.sent_at });
+    stepSendsByCampaign.set(row.campaign_id, bucket);
+  }
+
+  const campaignsWithoutStepSends = campaignIds.filter(
+    (id) => !stepSendsByCampaign.has(id),
+  );
+  if (campaignsWithoutStepSends.length > 0) {
+    const { data: recipients } = await db
+      .from("admin_email_campaign_recipients")
+      .select("campaign_id, updated_at")
+      .in("campaign_id", campaignsWithoutStepSends)
+      .in("email_delivery_status", [...SENT_STATUSES])
+      .gte("updated_at", lookback);
+
+    for (const row of recipients ?? []) {
+      const bucket = recipientsByCampaign.get(row.campaign_id) ?? [];
+      bucket.push({ updated_at: row.updated_at });
+      recipientsByCampaign.set(row.campaign_id, bucket);
+    }
+  }
+
+  return { stepSendsByCampaign, recipientsByCampaign };
+}
+
+function countCampaignSentTodayFromRows(
+  campaignId: string,
+  timezone: string,
+  todayKey: string,
+  stepSendsByCampaign: Map<string, Array<{ sent_at: string | null }>>,
+  recipientsByCampaign: Map<string, Array<{ updated_at: string | null }>>,
+): number {
+  const stepSends = stepSendsByCampaign.get(campaignId) ?? [];
+  if (stepSends.length > 0) {
+    return countRowsOnDateKey(stepSends, timezone, todayKey, "sent_at");
+  }
+
+  const recipients = recipientsByCampaign.get(campaignId) ?? [];
+  return countRowsOnDateKey(recipients, timezone, todayKey, "updated_at");
+}
+
 export async function countCampaignSentToday(
   campaignId: string,
   timezone: string,
@@ -204,34 +295,96 @@ export async function countCampaignSentToday(
 ): Promise<number> {
   const todayKey = getDateKeyInTimezone(now, timezone);
   const lookback = new Date(now.getTime() - 48 * 3_600_000).toISOString();
+  const { stepSendsByCampaign, recipientsByCampaign } =
+    await loadCampaignSendRows([campaignId], lookback);
 
-  const db = createAdminClient();
-  const { data: stepSends } = await db
-    .from("admin_email_sequence_step_sends")
-    .select("sent_at")
-    .eq("campaign_id", campaignId)
-    .gte("sent_at", lookback);
+  return countCampaignSentTodayFromRows(
+    campaignId,
+    timezone,
+    todayKey,
+    stepSendsByCampaign,
+    recipientsByCampaign,
+  );
+}
 
-  if ((stepSends ?? []).length > 0) {
-    return (stepSends ?? []).filter(
-      (row) =>
-        row.sent_at &&
-        getDateKeyInTimezone(new Date(row.sent_at), timezone) === todayKey,
-    ).length;
+export type ProjectSentTodayInput = {
+  projectId: string;
+  timezone: string;
+};
+
+export async function countProjectSentToday(
+  projectId: string,
+  timezone: string,
+  now = new Date(),
+): Promise<number> {
+  const counts = await countProjectsSentToday(
+    [{ projectId, timezone }],
+    now,
+  );
+  return counts.get(projectId) ?? 0;
+}
+
+export async function countProjectsSentToday(
+  projects: ProjectSentTodayInput[],
+  now = new Date(),
+): Promise<Map<string, number>> {
+  const counts = new Map<string, number>();
+  if (projects.length === 0) return counts;
+
+  for (const project of projects) {
+    counts.set(project.projectId, 0);
   }
 
-  const { data } = await db
-    .from("admin_email_campaign_recipients")
-    .select("updated_at")
-    .eq("campaign_id", campaignId)
-    .in("email_delivery_status", [...SENT_STATUSES])
-    .gte("updated_at", lookback);
+  const db = createAdminClient();
+  const projectIds = projects.map((project) => project.projectId);
+  const timezoneByProject = new Map(
+    projects.map((project) => [project.projectId, project.timezone]),
+  );
+  const todayKeyByProject = new Map(
+    projects.map((project) => [
+      project.projectId,
+      getDateKeyInTimezone(now, project.timezone),
+    ]),
+  );
 
-  return (data ?? []).filter(
-    (row) =>
-      row.updated_at &&
-      getDateKeyInTimezone(new Date(row.updated_at), timezone) === todayKey,
-  ).length;
+  const { data: campaigns } = await db
+    .from("admin_email_campaigns")
+    .select("id, project_id")
+    .in("project_id", projectIds);
+
+  if (!campaigns?.length) return counts;
+
+  const campaignsByProject = new Map<string, string[]>();
+  for (const campaign of campaigns) {
+    const bucket = campaignsByProject.get(campaign.project_id) ?? [];
+    bucket.push(campaign.id);
+    campaignsByProject.set(campaign.project_id, bucket);
+  }
+
+  const lookback = new Date(now.getTime() - 48 * 3_600_000).toISOString();
+  const { stepSendsByCampaign, recipientsByCampaign } =
+    await loadCampaignSendRows(
+      campaigns.map((campaign) => campaign.id),
+      lookback,
+    );
+
+  for (const [projectId, campaignIds] of campaignsByProject) {
+    const timezone = timezoneByProject.get(projectId) ?? "UTC";
+    const todayKey = todayKeyByProject.get(projectId) ?? getDateKeyInTimezone(now, timezone);
+    let total = 0;
+    for (const campaignId of campaignIds) {
+      total += countCampaignSentTodayFromRows(
+        campaignId,
+        timezone,
+        todayKey,
+        stepSendsByCampaign,
+        recipientsByCampaign,
+      );
+    }
+    counts.set(projectId, total);
+  }
+
+  return counts;
 }
 
 export type SendGateResult =
@@ -243,7 +396,11 @@ const SCHEDULE_START_GRACE_MS = 60_000;
 export async function evaluateCampaignSendGate(
   campaignId: string,
   schedule: ResolvedSchedule,
-  options?: { scheduledAt?: string | null; now?: Date },
+  options?: {
+    scheduledAt?: string | null;
+    now?: Date;
+    projectId?: string;
+  },
 ): Promise<SendGateResult> {
   const now = options?.now ?? new Date();
 
@@ -265,11 +422,9 @@ export async function evaluateCampaignSendGate(
     };
   }
 
-  const sentToday = await countCampaignSentToday(
-    campaignId,
-    schedule.timezone,
-    now,
-  );
+  const sentToday = options?.projectId
+    ? await countProjectSentToday(options.projectId, schedule.timezone, now)
+    : await countCampaignSentToday(campaignId, schedule.timezone, now);
   const remaining = schedule.dailyLimit - sentToday;
   if (remaining <= 0) {
     const tomorrowKey = addDaysToDateKey(

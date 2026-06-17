@@ -19,16 +19,11 @@ import { useSequence } from "./sequence-context";
 import { EmailRichTextEditor } from "./email-rich-text-editor";
 import { EmailTemplatePickerModal } from "./email-template-picker-modal";
 import {
-  applySpintextToHtml,
-  applySpintextToPlainText,
-} from "@/lib/admin-email/spintext";
-import {
   Braces,
   Eye,
   LayoutGrid,
   Mail,
   Save,
-  Sparkles,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import {
@@ -106,19 +101,26 @@ export function SequenceStepEditor({
   };
 
   const applyTemplate = (tplSubject: string, tplBody: string) => {
-    setSubject(tplSubject);
-    setBody(tplBody);
+    if (readOnly) return;
+    // Apply subject + body in ONE setDraft call to avoid the second update
+    // overwriting the first when both read from the same stale `draft` snapshot.
+    setDraft((prev) => {
+      if (activeVariant) {
+        return {
+          ...prev,
+          variants: prev.variants.map((v) =>
+            v.id === activeVariant.id
+              ? { ...v, subject: tplSubject, body: tplBody }
+              : v,
+          ),
+        };
+      }
+      return { ...prev, subject: tplSubject, body: tplBody };
+    });
     onDirtyChange?.(true);
     toast({ title: "Template inserted" });
   };
 
-  const handleSpintext = () => {
-    if (readOnly) return;
-    setSubject(applySpintextToPlainText(subject));
-    setBody(applySpintextToHtml(body));
-    onDirtyChange?.(true);
-    toast({ title: "Spintext added" });
-  };
 
   const handleSaveAsTemplate = async () => {
     if (!subject.trim() || !body.trim()) return;
@@ -225,15 +227,6 @@ export function SequenceStepEditor({
                   >
                     <LayoutGrid className="h-4 w-4 mr-1" />
                     Templates
-                  </Button>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    onClick={handleSpintext}
-                    title="Add spintext variations"
-                  >
-                    <Sparkles className="h-4 w-4" />
                   </Button>
                 </>
               )}

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/utils/supabase/admin";
 import { requireAdminApi } from "@/lib/admin-email/api-auth";
+import { syncWarmUpAccountsForProject } from "@/lib/admin-email/warm-up";
 import {
   checkSesVerificationStatus,
   verifySenderEmailWithSes,
@@ -105,6 +106,12 @@ export async function POST(req: NextRequest, context: RouteContext) {
       .from("admin_email_projects")
       .update({ default_sender_id: sender.id })
       .eq("id", id);
+  }
+
+  try {
+    await syncWarmUpAccountsForProject(id);
+  } catch {
+    // warm-up sync is best-effort; sender was saved
   }
 
   return NextResponse.json({

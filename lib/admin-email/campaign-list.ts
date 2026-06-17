@@ -74,8 +74,10 @@ export async function listEmailCampaigns(projectId?: string | null) {
   for (const row of trackingRows ?? []) {
     const agg = trackingByCampaign.get(row.campaign_id);
     if (!agg) continue;
-    if ((row.open_count ?? 0) > 0) agg.openCount += 1;
-    if ((row.click_count ?? 0) > 0) agg.clickCount += 1;
+    const opens = row.open_count ?? 0;
+    const clicks = row.click_count ?? 0;
+    if (opens > 0 || clicks > 0) agg.openCount += 1;
+    if (clicks > 0) agg.clickCount += 1;
   }
 
   return rows.map((c) => {

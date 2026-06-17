@@ -265,18 +265,18 @@ export function getBulkEmailFromName(_fromEmail?: string): string {
 export function getBulkEmailReplyTo(fromEmail?: string): string {
   const envReply = process.env.SES_REPLY_TO?.trim();
   if (!fromEmail?.includes("@")) {
-    return envReply || DEFAULT_REPLY_TO;
+    return envReply || fromEmail || DEFAULT_REPLY_TO;
   }
 
   const fromDomain = fromEmail.split("@")[1]?.toLowerCase();
-  if (!fromDomain) return envReply || DEFAULT_REPLY_TO;
+  if (!fromDomain) return envReply || fromEmail || DEFAULT_REPLY_TO;
 
   if (envReply) {
     const replyDomain = envReply.split("@")[1]?.toLowerCase();
+    // Only use SES_REPLY_TO if it shares the same domain (DMARC alignment)
     if (replyDomain === fromDomain) return envReply;
-    const local = envReply.split("@")[0]?.trim() || "support";
-    return `${local}@${fromDomain}`;
   }
 
-  return `support@${fromDomain}`;
+  // Default: reply directly to the from address so replies reach the campaign inbox
+  return fromEmail;
 }

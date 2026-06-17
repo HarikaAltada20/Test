@@ -57,7 +57,11 @@ export async function sendSesEmail(input: {
   listUnsubscribeUrl?: string;
   plainTextOnly?: boolean;
   useRaw?: boolean;
-}): Promise<{ messageId?: string; error?: string }> {
+}): Promise<{
+  messageId?: string;
+  sesMessageId?: string;
+  error?: string;
+}> {
   const client = getSesClient();
   if (!client) {
     return { error: "AWS SES is not configured" };
@@ -69,7 +73,7 @@ export async function sendSesEmail(input: {
 
   if (input.listUnsubscribeUrl?.trim() || input.inReplyTo?.trim() || input.useRaw) {
     try {
-      const raw = buildMimeMessage({
+      const mime = buildMimeMessage({
         from: input.from,
         fromName: input.fromName,
         to: input.to,
@@ -86,11 +90,14 @@ export async function sendSesEmail(input: {
         new SendRawEmailCommand({
           Source: input.from.trim(),
           Destinations: [input.to.trim()],
-          RawMessage: { Data: Buffer.from(raw, "utf-8") },
+          RawMessage: { Data: Buffer.from(mime.raw, "utf-8") },
           ...(configSet ? { ConfigurationSetName: configSet } : {}),
         }),
       );
-      return { messageId: result.MessageId };
+      return {
+        messageId: mime.messageId,
+        sesMessageId: result.MessageId,
+      };
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       console.error("[ses-client] raw send failed:", message);

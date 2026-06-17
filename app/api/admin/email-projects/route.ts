@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/utils/supabase/admin";
 import { requireAdminApi } from "@/lib/admin-email/api-auth";
 import { EMAIL_PROJECT_WITH_SENDERS_SELECT } from "@/lib/admin-email/project-options";
+import { countProjectsSentToday } from "@/lib/admin-email/schedule";
 
 const PLATFORM_SENDER = process.env.SES_FROM_EMAIL?.trim() || "noreply@gameofcreators.com";
 
@@ -89,7 +90,7 @@ async function attachProjectStats(
     console.warn("[email-projects] campaign stats skipped:", campaignsError.message);
     return projects.map((p) => ({
       ...p,
-      stats: { campaignCount: 0, recipientTotal: 0, sentTotal: 0 },
+      stats: { campaignCount: 0, recipientTotal: 0, sentTotal: 0, sentToday: 0 },
     }));
   }
 
@@ -112,12 +113,26 @@ async function attachProjectStats(
     s.sentTotal += c.sent_count ?? 0;
   }
 
+  const sentTodayByProject = await countProjectsSentToday(
+    projects.map((project) => ({
+      projectId: project.id,
+      timezone:
+        typeof project.schedule_timezone === "string" &&
+        project.schedule_timezone
+          ? project.schedule_timezone
+          : "UTC",
+    })),
+  );
+
   return projects.map((p) => ({
     ...p,
-    stats: statsByProject.get(p.id) ?? {
-      campaignCount: 0,
-      recipientTotal: 0,
-      sentTotal: 0,
+    stats: {
+      ...(statsByProject.get(p.id) ?? {
+        campaignCount: 0,
+        recipientTotal: 0,
+        sentTotal: 0,
+      }),
+      sentToday: sentTodayByProject.get(p.id) ?? 0,
     },
   }));
 }

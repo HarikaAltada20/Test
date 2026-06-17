@@ -40,8 +40,10 @@ export async function getEmailCampaignDetail(campaignId: string) {
   let openCount = 0;
   let clickCount = 0;
   for (const row of trackingRows ?? []) {
-    if ((row.open_count ?? 0) > 0) openCount += 1;
-    if ((row.click_count ?? 0) > 0) clickCount += 1;
+    const opens = row.open_count ?? 0;
+    const clicks = row.click_count ?? 0;
+    if (opens > 0 || clicks > 0) openCount += 1;
+    if (clicks > 0) clickCount += 1;
   }
 
   const { count: bounceCount } = await db

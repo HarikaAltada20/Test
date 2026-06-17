@@ -5,6 +5,10 @@ import {
   EMAIL_PROJECT_WITH_SENDERS_SELECT,
   MAX_PROJECT_DESCRIPTION_LENGTH,
 } from "@/lib/admin-email/project-options";
+import {
+  countProjectSentToday,
+  normalizeScheduleTime,
+} from "@/lib/admin-email/schedule";
 
 type RouteContext = { params: Promise<{ id: string }> };
 
@@ -43,6 +47,11 @@ export async function GET(_req: NextRequest, context: RouteContext) {
     sentTotal += c.sent_count ?? 0;
   }
 
+  const sentToday = await countProjectSentToday(
+    id,
+    data.schedule_timezone ?? "UTC",
+  );
+
   return NextResponse.json({
     project: {
       ...data,
@@ -50,6 +59,7 @@ export async function GET(_req: NextRequest, context: RouteContext) {
         campaignCount: campaignCount ?? 0,
         recipientTotal,
         sentTotal,
+        sentToday,
       },
     },
   });
@@ -93,10 +103,10 @@ export async function PATCH(req: NextRequest, context: RouteContext) {
   }
   if (typeof body.dailyLimit === "number") patch.daily_limit = body.dailyLimit;
   if (typeof body.scheduleFromTime === "string") {
-    patch.schedule_from_time = body.scheduleFromTime;
+    patch.schedule_from_time = normalizeScheduleTime(body.scheduleFromTime);
   }
   if (typeof body.scheduleToTime === "string") {
-    patch.schedule_to_time = body.scheduleToTime;
+    patch.schedule_to_time = normalizeScheduleTime(body.scheduleToTime);
   }
   if (typeof body.scheduleTimezone === "string") {
     patch.schedule_timezone = body.scheduleTimezone;

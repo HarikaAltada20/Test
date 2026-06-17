@@ -36,22 +36,109 @@ function decodeMimeWords(value: string): string {
   );
 }
 
-function parseMailbox(value: string | null): { email: string; name: string | null } {
+export function parseMailbox(value: string | null): {
+  email: string;
+  name: string | null;
+} {
   if (!value) return { email: "", name: null };
-  const decoded = decodeMimeWords(value);
-  const angle = decoded.match(/<([^>]+)>/);
-  if (angle) {
-    const email = angle[1].trim().toLowerCase();
-    const name = decoded.replace(/<[^>]+>/, "").replace(/"/g, "").trim();
+  const decoded = decodeMimeWords(value).trim();
+
+  // Use the last angle-bracketed address (RFC 5322 "Display Name <email@domain>")
+  const bracketed = [...decoded.matchAll(/<([^<>]+@[^<>]+)>/g)];
+  if (bracketed.length > 0) {
+    const last = bracketed[bracketed.length - 1];
+    const email = last[1].trim().toLowerCase();
+    let name = decoded
+      .slice(0, last.index)
+      .replace(/"/g, "")
+      .replace(/<[^>]*$/, "")
+      .trim();
+    if (name.includes("<")) {
+      name = name.match(/^([^<]+)/)?.[1]?.trim() ?? "";
+    }
     return { email, name: name || null };
   }
-  const email = decoded.trim().toLowerCase();
-  return { email, name: null };
+
+  const plainEmail = decoded.match(/[^\s<>]+@[^\s<>]+/);
+  if (plainEmail) {
+    return { email: plainEmail[0].trim().toLowerCase(), name: null };
+  }
+
+  return { email: decoded.toLowerCase(), name: null };
 }
 
 function extractFirstEmail(value: string | null): string {
   const { email } = parseMailbox(value);
   return email;
+}
+
+function decodeQuotedPrintable(input: string): string {
+  const normalized = input.replace(/\r\n/g, "\n");
+  const withoutSoftBreaks = normalized.replace(/=\n/g, "");
+
+  const bytes: number[] = [];
+  for (let i = 0; i < withoutSoftBreaks.length; i += 1) {
+    const char = withoutSoftBreaks[i];
+    if (
+      char === "=" &&
+      i + 2 < withoutSoftBreaks.length &&
+      /^[0-9A-F]{2}$/i.test(withoutSoftBreaks.slice(i + 1, i + 3))
+    ) {
+      bytes.push(parseInt(withoutSoftBreaks.slice(i + 1, i + 3), 16));
+      i += 2;
+      continue;
+    }
+    bytes.push(withoutSoftBreaks.charCodeAt(i));
+  }
+
+  const decoded = Buffer.from(bytes).toString("utf-8");
+  return decoded
+    .replace(/= (?![0-9A-F]{2})/gi, " ")
+    .replace(/\u00A0|\u202F|\u2009/g, " ")
+    .replace(/[ \t]+\n/g, "\n")
+    .trim();
+}
+
+function looksLikeQuotedPrintable(input: string): boolean {
+  return /=([0-9A-F]{2})/i.test(input) && /=(?:\r?\n|[0-9A-F]{2})/i.test(input);
+}
+
+function getTransferEncoding(headers: string): string {
+  return (getHeader(headers, "Content-Transfer-Encoding") ?? "7bit")
+    .toLowerCase()
+    .trim();
+}
+
+function decodeBodyContent(headers: string, body: string): string {
+  const trimmed = body.trim();
+  if (!trimmed) return "";
+
+  const encoding = getTransferEncoding(headers);
+
+  if (encoding === "base64") {
+    try {
+      return Buffer.from(trimmed.replace(/\s/g, ""), "base64").toString("utf-8");
+    } catch {
+      return trimmed;
+    }
+  }
+
+  if (encoding === "quoted-printable" || encoding === "qp") {
+    return decodeQuotedPrintable(trimmed);
+  }
+
+  if (looksLikeQuotedPrintable(trimmed)) {
+    return decodeQuotedPrintable(trimmed);
+  }
+
+  return trimmed;
+}
+
+/** Decode quoted-printable artifacts in stored/displayed inbound text. */
+export function decodeInboundBodyText(text: string | null | undefined): string {
+  if (!text?.trim()) return text ?? "";
+  if (!looksLikeQuotedPrintable(text)) return text;
+  return decodeQuotedPrintable(text);
 }
 
 function stripHtml(html: string): string {
@@ -91,9 +178,9 @@ function parseMultipartBody(
     }
 
     if (contentType.includes("text/plain") && !text) {
-      text = partBody.trim();
+      text = decodeBodyContent(partHeaders, partBody);
     } else if (contentType.includes("text/html") && !html) {
-      html = partBody.trim();
+      html = decodeBodyContent(partHeaders, partBody);
     }
   }
 
@@ -123,7 +210,9 @@ export function parseRawEmail(raw: string): ParsedInboundEmail {
   const toEmail =
     extractFirstEmail(getHeader(headerBlock, "To")) ||
     extractFirstEmail(getHeader(headerBlock, "Delivered-To")) ||
-    extractFirstEmail(getHeader(headerBlock, "Envelope-To"));
+    extractFirstEmail(getHeader(headerBlock, "Envelope-To")) ||
+    extractFirstEmail(getHeader(headerBlock, "X-Original-To")) ||
+    extractFirstEmail(getHeader(headerBlock, "X-Forwarded-To"));
 
   const subject = decodeMimeWords(getHeader(headerBlock, "Subject") ?? "(No subject)");
   const messageId = getHeader(headerBlock, "Message-ID");
@@ -141,10 +230,15 @@ export function parseRawEmail(raw: string): ParsedInboundEmail {
     bodyText = parsed.text;
     bodyHtml = parsed.html;
   } else if (contentType.includes("text/html")) {
-    bodyHtml = bodyBlock.trim();
+    bodyHtml = decodeBodyContent(headerBlock, bodyBlock);
     bodyText = stripHtml(bodyHtml);
   } else {
-    bodyText = bodyBlock.trim();
+    bodyText = decodeBodyContent(headerBlock, bodyBlock);
+  }
+
+  bodyText = decodeInboundBodyText(bodyText);
+  if (bodyHtml) {
+    bodyHtml = decodeInboundBodyText(bodyHtml);
   }
 
   if (!bodyText && bodyHtml) {
@@ -162,6 +256,24 @@ export function parseRawEmail(raw: string): ParsedInboundEmail {
     inReplyTo,
     references,
   };
+}
+
+export function collectReferenceMessageIds(
+  inReplyTo: string | null,
+  references: string | null,
+): string[] {
+  const ids: string[] = [];
+  const add = (value: string | null | undefined) => {
+    const trimmed = value?.trim();
+    if (trimmed && !ids.includes(trimmed)) ids.push(trimmed);
+  };
+
+  add(inReplyTo);
+  if (references?.trim()) {
+    for (const id of references.trim().split(/\s+/)) add(id);
+  }
+
+  return ids.reverse();
 }
 
 export function pickInReplyToId(

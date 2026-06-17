@@ -27,10 +27,11 @@ import { SenderEmailManagementDialog } from "./SenderEmailManagementDialog";
 import { EmailCampaignDetail } from "./EmailCampaignDetail";
 import { EmailCampaignsList } from "./EmailCampaignsList";
 import { EmailUnibox } from "./EmailUnibox";
+import { EmailWarmUpView } from "./EmailWarmUpView";
 import { MAX_PROJECT_DESCRIPTION_LENGTH } from "@/lib/admin-email/project-options";
 
 type ViewMode = "list" | "create" | "project";
-type ListTab = "projects" | "campaigns" | "unibox";
+type ListTab = "projects" | "campaigns" | "warmup" | "unibox";
 
 type Props = {
   isDark?: boolean;
@@ -48,7 +49,15 @@ export function AdminEmailView({
   const [createCampaignOpen, setCreateCampaignOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [viewMode, setViewMode] = useState<ViewMode>("list");
-  const [listTab, setListTab] = useState<ListTab>("projects");
+  const [listTab, setListTab] = useState<ListTab>(() => {
+    if (typeof window !== "undefined") {
+      if (sessionStorage.getItem("wu_open_tab") === "1") {
+        sessionStorage.removeItem("wu_open_tab");
+        return "warmup";
+      }
+    }
+    return "projects";
+  });
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
   const [selectedCampaignId, setSelectedCampaignId] = useState<string | null>(
     highlightCampaignId ?? null,
@@ -74,8 +83,23 @@ export function AdminEmailView({
   const [editTargetAudience, setEditTargetAudience] = useState("");
   const [editDescription, setEditDescription] = useState("");
   const [unreadCount, setUnreadCount] = useState(0);
+  const [warmUpRefreshKey, setWarmUpRefreshKey] = useState(0);
 
   const selectedProject = projects.find((p) => p.id === selectedProjectId);
+
+  // When the user returns from the users table after selecting warm-up recipients,
+  // switch to the warmup tab so EmailWarmUpView can pick up the pre-fill data.
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      if (sessionStorage.getItem("wu_open_tab") === "1") {
+        sessionStorage.removeItem("wu_open_tab");
+        setListTab("warmup");
+      }
+    }
+    const handler = () => setListTab("warmup");
+    window.addEventListener("wu:open-warmup-tab", handler);
+    return () => window.removeEventListener("wu:open-warmup-tab", handler);
+  }, []);
 
   const loadUnreadCount = useCallback(async () => {
     try {
@@ -134,7 +158,7 @@ export function AdminEmailView({
       setScheduleProjectMeta({
         name: p.name,
         dailyLimit: p.daily_limit ?? 300,
-        sentToday: p.stats?.sentTotal ?? 0,
+        sentToday: p.stats?.sentToday ?? 0,
         sendIntervalSeconds: p.send_interval_seconds ?? 60,
         scheduleTimezone: p.schedule_timezone ?? "UTC",
         scheduleFromTime: p.schedule_from_time ?? "09:00",
@@ -159,6 +183,11 @@ export function AdminEmailView({
   const openManageSenders = (projectId: string) => {
     setSendersProjectId(projectId);
     setSendersOpen(true);
+  };
+
+  const handleSendersUpdated = () => {
+    loadData();
+    setWarmUpRefreshKey((key) => key + 1);
   };
 
   const saveEdit = async () => {
@@ -262,7 +291,7 @@ export function AdminEmailView({
           open={sendersOpen}
           projectId={sendersProjectId}
           onOpenChange={setSendersOpen}
-          onUpdated={loadData}
+          onUpdated={handleSendersUpdated}
         />
       </>
     );
@@ -273,11 +302,11 @@ export function AdminEmailView({
       <div
         className={cn(
           listTab === "unibox"
-            ? "flex flex-col min-h-0 h-[calc(100vh-7rem)]"
+            ? "flex flex-col min-h-0 h-[calc(100vh-5rem)]"
             : "space-y-6",
         )}
       >
-        {listTab !== "unibox" && (
+        {listTab !== "unibox" && listTab !== "warmup" && (
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div>
               <h2 className={cn("text-2xl font-bold", isDark ? "text-white" : "text-gray-900")}>
@@ -303,6 +332,7 @@ export function AdminEmailView({
           tabs={[
             { id: "projects", label: `Projects (${projects.length})` },
             { id: "campaigns", label: `Campaigns (${campaigns.length})` },
+            { id: "warmup", label: "Warm Up" },
             {
               id: "unibox",
               label: (
@@ -358,6 +388,15 @@ export function AdminEmailView({
             onCampaignClick={setSelectedCampaignId}
             onAddNew={() => setCreateCampaignOpen(true)}
             onRefresh={loadData}
+          />
+        )}
+
+        {listTab === "warmup" && (
+          <EmailWarmUpView
+            projects={projects}
+            isDark={isDark}
+            refreshKey={warmUpRefreshKey}
+            onManageSenders={openManageSenders}
           />
         )}
 
@@ -445,7 +484,7 @@ export function AdminEmailView({
         open={sendersOpen}
         projectId={sendersProjectId}
         onOpenChange={setSendersOpen}
-        onUpdated={loadData}
+        onUpdated={handleSendersUpdated}
       />
 
     </>

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { ingestInboundUniboxMessage } from "@/lib/admin-email/unibox";
+import { parseMailbox } from "@/lib/email/inbound-email-parse";
 import {
   processInboundRawEmail,
   processInboundS3Object,
@@ -84,18 +85,21 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ ok: true, ...result });
       }
 
-      const fromEmail =
+      const fromRaw =
         (inner.fromEmail as string | undefined) ??
         (inner.from as string | undefined);
-      const toEmail =
+      const toRaw =
         (inner.toEmail as string | undefined) ??
         (inner.to as string | undefined);
 
-      if (fromEmail && toEmail && inner.subject) {
+      if (fromRaw && toRaw && inner.subject) {
+        const from = parseMailbox(fromRaw);
+        const to = parseMailbox(toRaw);
         const result = await ingestInboundUniboxMessage({
-          fromEmail,
-          fromName: inner.fromName as string | undefined,
-          toEmail,
+          fromEmail: from.email || fromRaw,
+          fromName:
+            (inner.fromName as string | undefined) ?? from.name ?? undefined,
+          toEmail: to.email || toRaw,
           subject: String(inner.subject),
           bodyText: inner.bodyText as string | undefined,
           bodyHtml: inner.bodyHtml as string | undefined,
@@ -122,8 +126,10 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const fromEmail = body.fromEmail?.trim();
-  const toEmail = body.toEmail?.trim();
+  const fromParsed = parseMailbox(body.fromEmail?.trim() ?? null);
+  const toParsed = parseMailbox(body.toEmail?.trim() ?? null);
+  const fromEmail = fromParsed.email || body.fromEmail?.trim();
+  const toEmail = toParsed.email || body.toEmail?.trim();
   const subject = body.subject?.trim();
 
   if (!fromEmail || !toEmail || !subject) {
@@ -136,7 +142,7 @@ export async function POST(req: NextRequest) {
   try {
     const result = await ingestInboundUniboxMessage({
       fromEmail,
-      fromName: body.fromName,
+      fromName: body.fromName ?? fromParsed.name,
       toEmail,
       subject,
       bodyText: body.bodyText,

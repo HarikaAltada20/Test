@@ -36,8 +36,10 @@ import { parseScheduleData } from "./schedule-store";
 function shouldBypassScheduleGate(campaign: {
   scheduled_at: string | null;
   schedule_data?: unknown;
+  use_project_schedule?: boolean;
 }): boolean {
   if (campaign.scheduled_at) return false;
+  if (campaign.use_project_schedule) return false;
   const scheduleData = parseScheduleData(campaign.schedule_data);
   if (scheduleData.schedules.length === 0) return true;
   return scheduleData.activeScheduleId === "default";
@@ -645,6 +647,31 @@ async function scheduleEmailDeliveryRetry(
   }, cappedDelayMs);
 }
 
+function clampSendIntervalSeconds(seconds: number | null | undefined): number {
+  return Math.max(1, Math.min(seconds ?? 60, 3600));
+}
+
+async function scheduleNextDeliveryJob(
+  campaignId: string,
+  baseUrl: string | undefined,
+  options: { bypassScheduleGate: boolean; sendIntervalSeconds: number },
+): Promise<void> {
+  if (options.bypassScheduleGate) {
+    if (isAdminEmailDeliveryQueueEnabled()) {
+      await enqueueAdminEmailDeliveryJob({ campaignId });
+    }
+    await triggerEmailDeliveryProcessor(baseUrl, campaignId);
+    return;
+  }
+
+  const intervalMs = clampSendIntervalSeconds(options.sendIntervalSeconds) * 1000;
+  await scheduleEmailDeliveryRetry(
+    campaignId,
+    new Date(Date.now() + intervalMs),
+    baseUrl,
+  );
+}
+
 async function triggerEmailDeliveryProcessor(
   baseUrl?: string,
   campaignId?: string,
@@ -753,17 +780,25 @@ export async function processEmailCampaignDeliveryJob(
   const { data: project } = await db
     .from("admin_email_projects")
     .select(
-      "daily_limit, schedule_from_time, schedule_to_time, schedule_timezone, schedule_days",
+      "daily_limit, schedule_from_time, schedule_to_time, schedule_timezone, schedule_days, send_interval_seconds",
     )
     .eq("id", campaign.project_id)
     .maybeSingle();
 
   const schedule = resolveEffectiveSchedule(campaign, project);
   const bypassScheduleGate = shouldBypassScheduleGate(campaign);
+  const sendIntervalSeconds = clampSendIntervalSeconds(
+    project?.send_interval_seconds,
+  );
+  const emailsPerJob = bypassScheduleGate ? undefined : 1;
+  const projectScopeId = campaign.use_project_schedule
+    ? campaign.project_id
+    : undefined;
   const gate = bypassScheduleGate
     ? { allowed: true as const, batchLimit: EMAIL_DELIVERY_BATCH_SIZE }
     : await evaluateCampaignSendGate(campaignId, schedule, {
         scheduledAt: campaign.scheduled_at,
+        projectId: projectScopeId,
       });
 
   if (!gate.allowed) {
@@ -785,12 +820,13 @@ export async function processEmailCampaignDeliveryJob(
     };
   }
 
+  const jobBatchLimit = emailsPerJob ?? gate.batchLimit;
   let userIds = await loadNextPendingEmailRecipients(
     campaignId,
-    gate.batchLimit,
+    jobBatchLimit,
   );
   if (userIds.length === 0) {
-    userIds = await loadPendingRecipientUserIds(campaignId, gate.batchLimit);
+    userIds = await loadPendingRecipientUserIds(campaignId, jobBatchLimit);
   }
   if (userIds.length === 0) {
     const stillIncomplete = await countIncompleteRecipients(campaignId);
@@ -848,6 +884,7 @@ export async function processEmailCampaignDeliveryJob(
       ? { allowed: true as const, batchLimit: EMAIL_DELIVERY_BATCH_SIZE }
       : await evaluateCampaignSendGate(campaignId, schedule, {
           scheduledAt: campaign.scheduled_at,
+          projectId: projectScopeId,
         });
     if (!nextGate.allowed) {
       await scheduleEmailDeliveryRetry(campaignId, nextGate.retryAt, baseUrl);
@@ -860,10 +897,10 @@ export async function processEmailCampaignDeliveryJob(
       };
     }
 
-    if (isAdminEmailDeliveryQueueEnabled()) {
-      await enqueueAdminEmailDeliveryJob({ campaignId });
-    }
-    await triggerEmailDeliveryProcessor(baseUrl, campaignId);
+    await scheduleNextDeliveryJob(campaignId, baseUrl, {
+      bypassScheduleGate,
+      sendIntervalSeconds,
+    });
     return { batchDelivered, hasMore: true, finalized: false };
   }
 

@@ -595,6 +595,7 @@ export default function AdminUsersPage() {
     "table" | "map" | "notifications" | "email"
   >(() => {
     if (typeof window !== "undefined") {
+      if (sessionStorage.getItem("wu_mode") === "1") return "table";
       const params = new URLSearchParams(window.location.search);
       if (params.get("tab") === "email") return "email";
       const saved = localStorage.getItem("users-management-view-mode");
@@ -616,6 +617,12 @@ export default function AdminUsersPage() {
   const [selectAllFiltered, setSelectAllFiltered] = useState(false);
   const [sendModalOpen, setSendModalOpen] = useState(false);
   const [emailSendModalOpen, setEmailSendModalOpen] = useState(false);
+  const [warmupSelectMode, setWarmupSelectMode] = useState(() => {
+    if (typeof window !== "undefined") {
+      return sessionStorage.getItem("wu_mode") === "1";
+    }
+    return false;
+  });
   const [highlightCampaignId, setHighlightCampaignId] = useState<string | null>(
     null,
   );
@@ -636,6 +643,19 @@ export default function AdminUsersPage() {
       localStorage.setItem("users-management-view-mode", mode);
     }
   };
+
+  // Warm-up selection mode: listen for event dispatched from WarmUpManualSendModal
+  useEffect(() => {
+    const handleEnterSelect = () => {
+      setSelectedUserIds(new Set());
+      setSelectAllFiltered(false);
+      setWarmupSelectMode(true);
+      setViewModePersisted("table");
+    };
+    window.addEventListener("wu:enter-select-mode", handleEnterSelect);
+    return () => window.removeEventListener("wu:enter-select-mode", handleEnterSelect);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const syncSupportChatEnabled = (userId: string, enabled: boolean) => {
     setRows((prev) =>
@@ -2714,6 +2734,85 @@ export default function AdminUsersPage() {
           </CardContent>
         )}
       </Card>
+
+      {/* Warm-up selection mode banner */}
+      {viewMode === "table" && warmupSelectMode && (
+        <div className="rounded-xl border-2 border-indigo-400 bg-indigo-50 px-5 py-4 flex items-center justify-between gap-4 shadow-sm">
+          <div className="flex items-center gap-3">
+            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-indigo-600 text-white shrink-0">
+              <Send className="h-4 w-4" />
+            </div>
+            <div>
+              <p className="font-semibold text-indigo-900 text-sm">
+                Warm-Up Recipient Selection
+              </p>
+              <p className="text-xs text-indigo-700 mt-0.5">
+                Select users below using the checkboxes, then click "Add to Warm-Up Send".
+                {selectedCount > 0 && (
+                  <span className="font-semibold"> {selectedCount} user{selectedCount !== 1 ? "s" : ""} selected.</span>
+                )}
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <Button
+              size="sm"
+              variant="outline"
+              className="border-indigo-300 text-indigo-700 hover:bg-indigo-100"
+              onClick={() => {
+                setSelectedUserIds(new Set());
+                setSelectAllFiltered(false);
+                setWarmupSelectMode(false);
+                sessionStorage.removeItem("wu_mode");
+                // Set tab flag in sessionStorage
+                if (typeof window !== "undefined") {
+                  sessionStorage.setItem("wu_open_tab", "1");
+                }
+                setViewModePersisted("email");
+                window.dispatchEvent(new CustomEvent("wu:open-warmup-tab"));
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              size="sm"
+              disabled={selectedCount === 0}
+              className="bg-indigo-600 hover:bg-indigo-700 text-white"
+              onClick={() => {
+                // Collect emails from selected users
+                const emails: string[] = [];
+                if (selectAllFiltered) {
+                  tabFiltered.forEach((u) => emails.push(u.email));
+                } else {
+                  selectedUserIds.forEach((id) => {
+                    const user = rows.find((r) => r.id === id);
+                    if (user?.email) emails.push(user.email);
+                  });
+                }
+                // Store emails and tab flag in sessionStorage
+                if (typeof window !== "undefined") {
+                  sessionStorage.setItem("wu_emails", JSON.stringify(emails));
+                  sessionStorage.setItem("wu_open_tab", "1");
+                }
+                // Send emails back to the modal via custom event (fallback)
+                window.dispatchEvent(
+                  new CustomEvent("wu:users-selected", { detail: emails }),
+                );
+                setSelectedUserIds(new Set());
+                setSelectAllFiltered(false);
+                setWarmupSelectMode(false);
+                sessionStorage.removeItem("wu_mode");
+                // Switch back to email → warmup tab
+                setViewModePersisted("email");
+                window.dispatchEvent(new CustomEvent("wu:open-warmup-tab"));
+              }}
+            >
+              <Send className="h-3.5 w-3.5 mr-1.5" />
+              Add {selectedCount > 0 ? selectedCount : ""} to Warm-Up Send
+            </Button>
+          </div>
+        </div>
+      )}
 
       {viewMode === "table" && (
         <Card

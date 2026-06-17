@@ -24,6 +24,7 @@ import type {
   UniboxMessage,
   UniboxThreadListItem,
 } from "@/lib/admin-email/unibox";
+import { decodeInboundBodyText } from "@/lib/email/inbound-email-parse";
 import { useToast } from "@/hooks/use-toast";
 import {
   Archive,
@@ -63,20 +64,31 @@ function displayName(email: string, name?: string | null): string {
   return email.split("@")[0] ?? email;
 }
 
+function formatEmailAddress(email: string, name?: string | null): string {
+  const trimmedEmail = email.trim();
+  if (!name?.trim()) return trimmedEmail;
+  if (trimmedEmail.includes("<") && trimmedEmail.includes("@")) {
+    return trimmedEmail;
+  }
+  return `${name.trim()} <${trimmedEmail}>`;
+}
+
 function MessageBody({ message }: { message: UniboxMessage }) {
+  const bodyText = decodeInboundBodyText(message.bodyText ?? message.snippet ?? "");
   if (message.bodyHtml?.trim()) {
+    const bodyHtml = decodeInboundBodyText(message.bodyHtml);
     return (
       <div className="overflow-x-auto max-w-full unibox-email-body">
         <div
           className="prose prose-sm max-w-none text-[15px] leading-relaxed text-gray-700 prose-p:my-3 prose-p:leading-relaxed [&_img]:max-w-full [&_table]:max-w-full"
-          dangerouslySetInnerHTML={{ __html: message.bodyHtml }}
+          dangerouslySetInnerHTML={{ __html: bodyHtml }}
         />
       </div>
     );
   }
   return (
     <p className="whitespace-pre-wrap text-[15px] leading-relaxed text-gray-700">
-      {message.bodyText ?? message.snippet ?? ""}
+      {bodyText}
     </p>
   );
 }
@@ -102,18 +114,24 @@ export function EmailUnibox({ campaigns, isDark }: Props) {
   const [syncingInbound, setSyncingInbound] = useState(false);
 
   const syncInbound = useCallback(
-    async (silent = false) => {
+    async (options?: { silent?: boolean; full?: boolean }) => {
+      const silent = options?.silent ?? false;
+      const full = options?.full ?? false;
       setSyncingInbound(true);
       try {
-        const res = await fetch("/api/admin/email-unibox/sync-inbound", {
-          method: "POST",
-        });
+        const params = new URLSearchParams();
+        if (full) params.set("full", "1");
+        const query = params.toString();
+        const res = await fetch(
+          `/api/admin/email-unibox/sync-inbound${query ? `?${query}` : ""}`,
+          { method: "POST" },
+        );
         const data = await res.json();
         if (!res.ok) {
           if (!silent) {
             throw new Error(data.error ?? "Sync failed");
           }
-          return;
+          return null;
         }
         if (!silent && (data.processed ?? 0) > 0) {
           toast({
@@ -121,6 +139,7 @@ export function EmailUnibox({ campaigns, isDark }: Props) {
             description: `${data.processed} new reply(s) imported`,
           });
         }
+        return data as { processed?: number };
       } catch (err) {
         if (!silent) {
           toast({
@@ -129,6 +148,7 @@ export function EmailUnibox({ campaigns, isDark }: Props) {
             variant: "destructive",
           });
         }
+        return null;
       } finally {
         setSyncingInbound(false);
       }
@@ -198,10 +218,16 @@ export function EmailUnibox({ campaigns, isDark }: Props) {
   );
 
   useEffect(() => {
+    void loadThreads();
+  }, [loadThreads]);
+
+  useEffect(() => {
     let cancelled = false;
     (async () => {
-      await syncInbound(true);
-      if (!cancelled) await loadThreads();
+      const result = await syncInbound({ silent: true });
+      if (!cancelled && (result?.processed ?? 0) > 0) {
+        await loadThreads();
+      }
     })();
     return () => {
       cancelled = true;
@@ -210,10 +236,12 @@ export function EmailUnibox({ campaigns, isDark }: Props) {
 
   useEffect(() => {
     const interval = setInterval(async () => {
-      await syncInbound(true);
-      await loadThreads();
-      if (selectedId) await loadThreadDetail(selectedId);
-    }, 30000);
+      const result = await syncInbound({ silent: true });
+      if ((result?.processed ?? 0) > 0) {
+        await loadThreads();
+        if (selectedId) await loadThreadDetail(selectedId);
+      }
+    }, 60000);
     return () => clearInterval(interval);
   }, [syncInbound, loadThreads, loadThreadDetail, selectedId]);
 
@@ -327,7 +355,7 @@ export function EmailUnibox({ campaigns, isDark }: Props) {
   const headerMessage = latestMessage ?? displayMessages[0] ?? null;
 
   return (
-    <div className="flex flex-col gap-4 min-h-0 h-[calc(100vh-12rem)] max-h-[calc(100vh-8rem)]">
+    <div className="flex flex-col gap-4 min-h-0 flex-1 h-full">
       <div className="flex flex-wrap items-center gap-3 rounded-xl border border-gray-200 bg-white px-4 py-3 shadow-sm shrink-0">
         <div className="relative flex-1 min-w-[240px]">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
@@ -385,7 +413,7 @@ export function EmailUnibox({ campaigns, isDark }: Props) {
           className="h-10 border-gray-200"
           disabled={syncingInbound}
           onClick={async () => {
-            await syncInbound(false);
+            await syncInbound({ full: true });
             await loadThreads();
             if (selectedId) await loadThreadDetail(selectedId);
           }}
@@ -612,15 +640,17 @@ export function EmailUnibox({ campaigns, isDark }: Props) {
                     <div className="text-md text-gray-500 space-y-1 min-w-0">
                       <p className="truncate">
                         <span className="font-medium text-gray-800">From:</span>{" "}
-                        {headerMessage.fromName
-                          ? `${headerMessage.fromName} <${headerMessage.fromEmail}>`
-                          : headerMessage.fromEmail}
+                        {formatEmailAddress(
+                          headerMessage.fromEmail,
+                          headerMessage.fromName,
+                        )}
                       </p>
                       <p className="truncate">
                         <span className="font-medium text-gray-800">To:</span>{" "}
-                        {headerMessage.toName
-                          ? `${headerMessage.toName} <${headerMessage.toEmail}>`
-                          : headerMessage.toEmail}
+                        {formatEmailAddress(
+                          headerMessage.toEmail,
+                          headerMessage.toName,
+                        )}
                       </p>
                     </div>
                     <span className="shrink-0 text-sm text-gray-500 whitespace-nowrap pt-0.5">
@@ -689,15 +719,17 @@ export function EmailUnibox({ campaigns, isDark }: Props) {
                             <span className="font-medium text-gray-800">
                               From:
                             </span>{" "}
-                            {message.fromName
-                              ? `${message.fromName} <${message.fromEmail}>`
-                              : message.fromEmail}
+                            {formatEmailAddress(
+                              message.fromEmail,
+                              message.fromName,
+                            )}
                           </p>
                           <p className="truncate">
                             <span className="font-medium text-gray-800">To:</span>{" "}
-                            {message.toName
-                              ? `${message.toName} <${message.toEmail}>`
-                              : message.toEmail}
+                            {formatEmailAddress(
+                              message.toEmail,
+                              message.toName,
+                            )}
                           </p>
                         </div>
                         <div className="flex items-center gap-2 shrink-0">

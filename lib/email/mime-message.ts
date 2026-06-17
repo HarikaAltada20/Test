@@ -35,17 +35,18 @@ export function buildMimeMessage(input: {
   listUnsubscribeUrl?: string;
   /** Send a single text/plain part (best for Gmail Primary on simple notes). */
   plainTextOnly?: boolean;
-}): string {
+}): { raw: string; messageId: string } {
   const boundary = `----=_Part_${Date.now()}_${Math.random().toString(36).slice(2)}`;
   const subject = encodeHeaderValue(input.subject);
   const from = formatMailbox(input.from, input.fromName);
+  const mimeMessageId = `<${randomUUID()}@${messageIdDomain(input.from)}>`;
   const now = new Date();
   const lines: string[] = [
     `From: ${from}`,
     `To: ${input.to.trim()}`,
     `Subject: ${subject}`,
     `Date: ${now.toUTCString()}`,
-    `Message-ID: <${randomUUID()}@${messageIdDomain(input.from)}>`,
+    `Message-ID: ${mimeMessageId}`,
     "MIME-Version: 1.0",
   ];
 
@@ -73,7 +74,7 @@ export function buildMimeMessage(input: {
       wrapBase64Lines(Buffer.from(input.text, "utf-8").toString("base64")),
       "",
     );
-    return lines.join("\r\n");
+    return { raw: lines.join("\r\n"), messageId: mimeMessageId };
   }
 
   lines.push(
@@ -95,5 +96,5 @@ export function buildMimeMessage(input: {
     "",
   );
 
-  return lines.join("\r\n");
+  return { raw: lines.join("\r\n"), messageId: mimeMessageId };
 }

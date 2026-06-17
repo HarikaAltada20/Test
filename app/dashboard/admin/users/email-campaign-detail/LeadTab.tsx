@@ -31,6 +31,7 @@ type RecipientRow = {
   email: string;
   fullName: string;
   username: string;
+  userType: string;
   status: string;
   fromEmail: string | null;
 };
@@ -225,14 +226,13 @@ export function LeadTab({ campaignId, onRecipientsChange }: Props) {
                 <th className="p-4 text-left font-medium">Status</th>
                 <th className="p-4 text-left font-medium">From Email</th>
                 <th className="p-4 text-left font-medium">Contact</th>
-                <th className="p-4 text-left font-medium">Company</th>
-                <th className="p-4 text-left font-medium">Website</th>
+                <th className="p-4 text-left font-medium">User Type</th>
               </tr>
             </thead>
             <tbody>
               {loading && (
                 <tr>
-                  <td colSpan={8} className="p-12 text-center text-muted-foreground">
+                  <td colSpan={7} className="p-12 text-center text-muted-foreground">
                     Loading leads...
                   </td>
                 </tr>
@@ -262,13 +262,12 @@ export function LeadTab({ campaignId, onRecipientsChange }: Props) {
                       {r.fromEmail || "—"}
                     </td>
                     <td className="p-4">{contactLabel(r)}</td>
-                    <td className="p-4 text-muted-foreground">—</td>
-                    <td className="p-4 text-muted-foreground">—</td>
+                    <td className="p-4 capitalize text-muted-foreground">{r.userType || "—"}</td>
                   </tr>
                 ))}
               {!loading && filtered.length === 0 && (
                 <tr>
-                  <td colSpan={8} className="p-12 text-center text-muted-foreground">
+                  <td colSpan={7} className="p-12 text-center text-muted-foreground">
                     No leads attached yet. Use Add Leads or send from the Users table.
                   </td>
                 </tr>

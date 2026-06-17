@@ -1,6 +1,10 @@
 import { createAdminClient } from "@/utils/supabase/admin";
 import { htmlToPlainText } from "@/lib/email/admin-bulk-email";
-import { normalizeSesMessageId } from "@/lib/email/inbound-email-parse";
+import {
+  decodeInboundBodyText,
+  normalizeSesMessageId,
+  parseMailbox,
+} from "@/lib/email/inbound-email-parse";
 
 export type UniboxFolder = "all" | "sent" | "replies";
 export type UniboxReadFilter = "all" | "read" | "unread";
@@ -155,6 +159,45 @@ async function findThreadBySesReference(
   }
 
   return null;
+}
+
+async function findThreadByRecentOutboundTo(
+  fromEmail: string,
+): Promise<{
+  threadId: string;
+  projectId: string | null;
+  campaignId: string | null;
+  userId: string | null;
+  replyCount: number;
+} | null> {
+  const db = createAdminClient();
+  const { data: outbound } = await db
+    .from("admin_email_unibox_messages")
+    .select("thread_id, project_id, campaign_id, user_id")
+    .eq("direction", "outbound")
+    .eq("to_email", fromEmail)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (!outbound?.thread_id) return null;
+
+  const { data: thread } = await db
+    .from("admin_email_unibox_threads")
+    .select("id, project_id, campaign_id, user_id, reply_count")
+    .eq("id", outbound.thread_id)
+    .eq("is_deleted", false)
+    .maybeSingle();
+
+  if (!thread) return null;
+
+  return {
+    threadId: thread.id,
+    projectId: thread.project_id ?? outbound.project_id,
+    campaignId: thread.campaign_id ?? outbound.campaign_id,
+    userId: thread.user_id ?? outbound.user_id,
+    replyCount: thread.reply_count ?? 0,
+  };
 }
 
 async function findThreadByContactEmail(
@@ -314,6 +357,7 @@ export async function ingestInboundUniboxMessage(input: {
   bodyHtml?: string | null;
   sesMessageId?: string | null;
   inReplyToMessageId?: string | null;
+  referenceMessageIds?: string[];
   stopOnReply?: boolean;
   attachments?: Array<{
     filename: string;
@@ -324,10 +368,21 @@ export async function ingestInboundUniboxMessage(input: {
 }): Promise<{ threadId?: string; messageId?: string }> {
   const db = createAdminClient();
   const now = new Date().toISOString();
-  const fromEmail = input.fromEmail.toLowerCase().trim();
-  const bodyText =
+
+  const fromParsed = parseMailbox(input.fromEmail);
+  const fromEmail = (fromParsed.email || input.fromEmail).toLowerCase().trim();
+  const fromName = input.fromName?.trim() || fromParsed.name;
+
+  const toParsed = parseMailbox(input.toEmail);
+  const toEmail = (toParsed.email || input.toEmail).toLowerCase().trim();
+
+  const bodyText = decodeInboundBodyText(
     input.bodyText?.trim() ||
-    (input.bodyHtml ? htmlToPlainText(input.bodyHtml) : "");
+      (input.bodyHtml ? htmlToPlainText(input.bodyHtml) : ""),
+  );
+  const bodyHtml = input.bodyHtml
+    ? decodeInboundBodyText(input.bodyHtml)
+    : null;
   const snippet = makeSnippet(bodyText);
 
   if (input.sesMessageId) {
@@ -351,12 +406,31 @@ export async function ingestInboundUniboxMessage(input: {
   let userId: string | null = null;
   let existingReplyCount = 0;
 
-  const byReference = await findThreadBySesReference(input.inReplyToMessageId);
-  if (byReference) {
-    threadId = byReference.threadId;
-    projectId = byReference.projectId;
-    campaignId = byReference.campaignId;
-    userId = byReference.userId;
+  const referenceIds = [
+    ...(input.referenceMessageIds ?? []),
+    ...(input.inReplyToMessageId ? [input.inReplyToMessageId] : []),
+  ].filter((id, index, all) => all.indexOf(id) === index);
+
+  for (const refId of referenceIds) {
+    const byReference = await findThreadBySesReference(refId);
+    if (byReference) {
+      threadId = byReference.threadId;
+      projectId = byReference.projectId;
+      campaignId = byReference.campaignId;
+      userId = byReference.userId;
+      break;
+    }
+  }
+
+  if (!threadId) {
+    const byOutbound = await findThreadByRecentOutboundTo(fromEmail);
+    if (byOutbound) {
+      threadId = byOutbound.threadId;
+      projectId = byOutbound.projectId;
+      campaignId = byOutbound.campaignId;
+      userId = byOutbound.userId;
+      existingReplyCount = byOutbound.replyCount;
+    }
   }
 
   if (!threadId) {
@@ -370,6 +444,14 @@ export async function ingestInboundUniboxMessage(input: {
     }
   }
 
+  if (!threadId) {
+    return {};
+  }
+
+  if (!campaignId && !projectId) {
+    return {};
+  }
+
   if (threadId && existingReplyCount === 0) {
     const { data: thread } = await createAdminClient()
       .from("admin_email_unibox_threads")
@@ -379,65 +461,59 @@ export async function ingestInboundUniboxMessage(input: {
     existingReplyCount = thread?.reply_count ?? 0;
   }
 
-  if (!threadId) {
-    const { data: createdThread, error } = await db
-      .from("admin_email_unibox_threads")
-      .insert({
-        project_id: projectId,
-        campaign_id: campaignId,
-        user_id: userId,
-        contact_email: fromEmail,
-        contact_name: input.fromName ?? null,
-        subject: input.subject,
-        last_message_at: now,
-        latest_snippet: snippet,
-        latest_direction: "inbound",
-        reply_count: 1,
-        is_read: false,
-        updated_at: now,
-      })
-      .select("id")
-      .single();
+  await db
+    .from("admin_email_unibox_threads")
+    .update({
+      subject: input.subject,
+      last_message_at: now,
+      latest_snippet: snippet,
+      latest_direction: "inbound",
+      reply_count: existingReplyCount + 1,
+      is_read: false,
+      updated_at: now,
+    })
+    .eq("id", threadId);
 
-    if (error || !createdThread) {
-      console.error("[unibox] inbound thread create failed:", error?.message);
-      return {};
+  if (input.stopOnReply && campaignId && userId) {
+    const { data: campaign } = await db
+      .from("admin_email_campaigns")
+      .select("stop_on_reply")
+      .eq("id", campaignId)
+      .maybeSingle();
+
+    if (campaign?.stop_on_reply) {
+      await db
+        .from("admin_email_campaign_recipients")
+        .update({
+          email_delivery_status: "skipped",
+          skipped_reason: "replied",
+          next_email_scheduled_at: null,
+          updated_at: now,
+        })
+        .eq("campaign_id", campaignId)
+        .eq("user_id", userId)
+        .in("email_delivery_status", ["pending", "in_sequence"]);
     }
-    threadId = createdThread.id;
-  } else {
-    await db
-      .from("admin_email_unibox_threads")
-      .update({
-        subject: input.subject,
-        last_message_at: now,
-        latest_snippet: snippet,
-        latest_direction: "inbound",
-        reply_count: existingReplyCount + 1,
-        is_read: false,
-        updated_at: now,
-      })
-      .eq("id", threadId);
+  }
 
-    if (input.stopOnReply && campaignId && userId) {
-      const { data: campaign } = await db
-        .from("admin_email_campaigns")
-        .select("stop_on_reply")
-        .eq("id", campaignId)
-        .maybeSingle();
+  if (fromEmail && bodyText) {
+    const since = new Date(Date.now() - 10 * 60 * 1000).toISOString();
+    let dupQuery = db
+      .from("admin_email_unibox_messages")
+      .select("id, thread_id")
+      .eq("direction", "inbound")
+      .eq("from_email", fromEmail)
+      .eq("subject", input.subject)
+      .eq("body_text", bodyText)
+      .gte("created_at", since);
 
-      if (campaign?.stop_on_reply) {
-        await db
-          .from("admin_email_campaign_recipients")
-          .update({
-            email_delivery_status: "skipped",
-            skipped_reason: "replied",
-            next_email_scheduled_at: null,
-            updated_at: now,
-          })
-          .eq("campaign_id", campaignId)
-          .eq("user_id", userId)
-          .in("email_delivery_status", ["pending", "in_sequence"]);
-      }
+    if (threadId) {
+      dupQuery = dupQuery.eq("thread_id", threadId);
+    }
+
+    const { data: contentDup } = await dupQuery.maybeSingle();
+    if (contentDup) {
+      return { threadId: contentDup.thread_id, messageId: contentDup.id };
     }
   }
 
@@ -450,12 +526,12 @@ export async function ingestInboundUniboxMessage(input: {
       campaign_id: campaignId,
       user_id: userId,
       from_email: fromEmail,
-      from_name: input.fromName ?? null,
-      to_email: input.toEmail.toLowerCase().trim(),
+      from_name: fromName ?? null,
+      to_email: toEmail,
       to_name: null,
       subject: input.subject,
       body_text: bodyText,
-      body_html: input.bodyHtml ?? null,
+      body_html: bodyHtml,
       snippet,
       ses_message_id: input.sesMessageId ?? null,
       in_reply_to_message_id: input.inReplyToMessageId ?? null,
@@ -520,6 +596,7 @@ export async function listUniboxThreads(params: {
     )
     .eq("is_deleted", false)
     .eq("is_archived", false)
+    .or("campaign_id.not.is.null,project_id.not.is.null")
     .order("last_message_at", { ascending: false })
     .range(offset, offset + limit - 1);
 
@@ -715,6 +792,7 @@ export async function getUniboxUnreadCount(): Promise<number> {
     .select("id", { count: "exact", head: true })
     .eq("is_deleted", false)
     .eq("is_archived", false)
-    .eq("is_read", false);
+    .eq("is_read", false)
+    .or("campaign_id.not.is.null,project_id.not.is.null");
   return count ?? 0;
 }

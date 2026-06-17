@@ -52,6 +52,7 @@ export type EmailProjectDetailData = {
     campaignCount: number;
     recipientTotal: number;
     sentTotal: number;
+    sentToday: number;
   };
 };
 
@@ -110,7 +111,7 @@ export function EmailProjectDetail({
     project.full_domain ??
     (project.use_platform_sender ? "Platform sender" : "Not configured");
   const dailyLimit = project.daily_limit ?? 300;
-  const sentToday = project.stats?.sentTotal ?? 0;
+  const sentToday = project.stats?.sentToday ?? 0;
   const remaining = Math.max(0, dailyLimit - sentToday);
   const usagePercent = dailyLimit > 0 ? (sentToday / dailyLimit) * 100 : 0;
 
