@@ -1,5 +1,7 @@
 import { createAdminClient } from "@/utils/supabase/admin";
 import { getSortedCreatorAggregates } from "@/lib/leaderboard-creator-wise";
+import { fetchPendingSubmissionCountsByCreator } from "@/lib/leaderboard-pending-counts";
+import { SUBMISSION_STATUS } from "@/lib/constants-status";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 function buildCreatorDisplay(
@@ -102,6 +104,29 @@ async function getLeaderboardGroupedByCreator(
     .eq("contest_id", contestId)
     .in("creator_id", creatorIds);
 
+  const displayStatusByCreator = new Map<string, string | null>();
+  const rpcSupportsPendingCount =
+    sortedCreators.length > 0 &&
+    sortedCreators[0].pending_submission_count !== undefined;
+  let pendingCountByCreator = new Map<string, number>();
+  if (!rpcSupportsPendingCount) {
+    pendingCountByCreator = await fetchPendingSubmissionCountsByCreator(
+      supabase,
+      contestId,
+      creatorIds,
+    );
+  }
+
+  for (const agg of pageCreators) {
+    const pendingCount = rpcSupportsPendingCount
+      ? (agg.pending_submission_count ?? 0)
+      : (pendingCountByCreator.get(agg.creator_id) ?? 0);
+    displayStatusByCreator.set(
+      agg.creator_id,
+      pendingCount > 0 ? SUBMISSION_STATUS.pending : null,
+    );
+  }
+
   if (creatorBonusError) {
     console.error(
       "Error fetching creator bonus paid totals for creator-wise:",
@@ -156,6 +181,9 @@ async function getLeaderboardGroupedByCreator(
     const { creator_pfp_url, creator_display_name, creator_username } =
       buildCreatorDisplay(creatorProfile, userProfile, agg.platform);
     const best_rank = from + index + 1;
+    const pendingCount = rpcSupportsPendingCount
+      ? (agg.pending_submission_count ?? 0)
+      : (pendingCountByCreator.get(agg.creator_id) ?? 0);
     return {
       creator_id: agg.creator_id,
       creator_username: creator_username ?? "N/A",
@@ -176,6 +204,8 @@ async function getLeaderboardGroupedByCreator(
         creatorMostVerifiedBonusPaidViewsMap.get(agg.creator_id) ?? 0,
       most_verified_bonus_paid_reels_cents:
         creatorMostVerifiedBonusPaidReelsMap.get(agg.creator_id) ?? 0,
+      display_status: displayStatusByCreator.get(agg.creator_id) ?? null,
+      pending_submission_count: pendingCount,
       submissions: [],
     };
   });
