@@ -1,11 +1,12 @@
 "use client";
 
-import { useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
+import { PaginationControls } from "@/components/ui/pagination-controls";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -47,13 +48,16 @@ import {
 import { useToast } from "@/hooks/use-toast";
 
 type Props = {
-  campaigns: EmailCampaignListItem[];
   projects: EmailProjectCardData[];
   isDark?: boolean;
+  refreshKey?: number;
+  onTotalChange?: (total: number) => void;
   onCampaignClick: (campaignId: string) => void;
   onAddNew: () => void;
   onRefresh: () => void;
 };
+
+const DEFAULT_PAGE_SIZE = 25;
 
 const STATUS_OPTIONS = [
   { value: "all", label: "All Status" },
@@ -113,37 +117,88 @@ function StatCard({
 }
 
 export function EmailCampaignsList({
-  campaigns,
   projects,
   isDark,
+  refreshKey = 0,
+  onTotalChange,
   onCampaignClick,
   onAddNew,
   onRefresh,
 }: Props) {
+  const [campaigns, setCampaigns] = useState<EmailCampaignListItem[]>([]);
   const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [projectFilter, setProjectFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
+  const [page, setPage] = useState(1);
+  const [limit, setLimit] = useState(DEFAULT_PAGE_SIZE);
+  const [total, setTotal] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
+  const [listSummary, setListSummary] = useState({ total: 0, active: 0 });
+  const [loading, setLoading] = useState(true);
   const [deleteTarget, setDeleteTarget] = useState<EmailCampaignListItem | null>(
     null,
   );
   const [deleting, setDeleting] = useState(false);
   const { toast } = useToast();
 
-  const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    return campaigns.filter((c) => {
-      if (projectFilter !== "all" && c.project_id !== projectFilter) return false;
-      if (statusFilter !== "all" && c.status !== statusFilter) return false;
-      if (!q) return true;
-      const projectName = c.project?.name?.toLowerCase() ?? "";
-      return (
-        c.name.toLowerCase().includes(q) || projectName.includes(q)
-      );
-    });
-  }, [campaigns, search, projectFilter, statusFilter]);
+  useEffect(() => {
+    const timer = window.setTimeout(() => setDebouncedSearch(search), 300);
+    return () => window.clearTimeout(timer);
+  }, [search]);
 
-  const summary = useMemo(() => {
-    const activeCount = campaigns.filter((c) => c.status === "active").length;
+  useEffect(() => {
+    setPage(1);
+  }, [projectFilter, statusFilter, debouncedSearch, limit]);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+
+    const params = new URLSearchParams({
+      page: String(page),
+      limit: String(limit),
+    });
+    if (projectFilter !== "all") params.set("projectId", projectFilter);
+    if (statusFilter !== "all") params.set("status", statusFilter);
+    if (debouncedSearch.trim()) params.set("search", debouncedSearch.trim());
+
+    fetch(`/api/admin/email-campaigns?${params}`)
+      .then((r) => r.json())
+      .then((data) => {
+        if (cancelled) return;
+        if (data.error) {
+          toast({
+            title: "Could not load campaigns",
+            description: data.error,
+            variant: "destructive",
+          });
+          return;
+        }
+        setCampaigns(data.campaigns ?? []);
+        setTotal(data.total ?? 0);
+        setTotalPages(data.totalPages ?? 1);
+        setListSummary(data.summary ?? { total: data.total ?? 0, active: 0 });
+        onTotalChange?.(data.total ?? 0);
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- onTotalChange/toast are stable enough
+  }, [
+    page,
+    limit,
+    projectFilter,
+    statusFilter,
+    debouncedSearch,
+    refreshKey,
+  ]);
+
+  const pageStats = useMemo(() => {
     const totalOpens = campaigns.reduce(
       (sum, c) => sum + c.stats.openCount,
       0,
@@ -155,13 +210,7 @@ export function EmailCampaignsList({
       clickRates.length > 0
         ? (clickRates.reduce((a, b) => a + b, 0) / clickRates.length) * 100
         : 0;
-
-    return {
-      total: campaigns.length,
-      active: activeCount,
-      totalOpens,
-      avgClickRate: avgClickRate.toFixed(1),
-    };
+    return { totalOpens, avgClickRate: avgClickRate.toFixed(1) };
   }, [campaigns]);
 
   const handleStart = async (campaign: EmailCampaignListItem) => {
@@ -246,25 +295,25 @@ export function EmailCampaignsList({
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
         <StatCard
           label="Total Campaigns"
-          value={summary.total}
+          value={listSummary.total}
           icon={<Briefcase className="h-5 w-5 text-purple-600" />}
           iconBg="bg-purple-100"
         />
         <StatCard
           label="Active Campaigns"
-          value={summary.active}
+          value={listSummary.active}
           icon={<UserPlus className="h-5 w-5 text-green-600" />}
           iconBg="bg-green-100"
         />
         <StatCard
-          label="Total Opens"
-          value={summary.totalOpens}
+          label="Opens"
+          value={pageStats.totalOpens}
           icon={<Eye className="h-5 w-5 text-orange-500" />}
           iconBg="bg-orange-100"
         />
         <StatCard
-          label="Avg Click Rate"
-          value={`${summary.avgClickRate}%`}
+          label="Avg Click"
+          value={`${pageStats.avgClickRate}%`}
           icon={<Send className="h-5 w-5 text-green-600" />}
           iconBg="bg-green-100"
         />
@@ -343,7 +392,18 @@ export function EmailCampaignsList({
               </tr>
             </thead>
             <tbody>
-              {filtered.map((c) => (
+              {loading &&
+                Array.from({ length: 5 }).map((_, i) => (
+                  <tr key={i} className="border-b last:border-0">
+                    {Array.from({ length: 7 }).map((_, j) => (
+                      <td key={j} className="p-4">
+                        <div className="h-4 w-20 rounded-md bg-muted animate-pulse" />
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              {!loading &&
+                campaigns.map((c) => (
                 <tr
                   key={c.id}
                   className="border-b last:border-0 hover:bg-muted/30"
@@ -452,13 +512,16 @@ export function EmailCampaignsList({
                   </td>
                 </tr>
               ))}
-              {filtered.length === 0 && (
+              {!loading && campaigns.length === 0 && (
                 <tr>
                   <td
                     colSpan={7}
                     className="p-12 text-center text-muted-foreground"
                   >
-                    {campaigns.length === 0
+                    {total === 0 &&
+                    !debouncedSearch &&
+                    projectFilter === "all" &&
+                    statusFilter === "all"
                       ? "No campaigns yet. Click Add new to create one."
                       : "No campaigns match your filters."}
                   </td>
@@ -467,6 +530,23 @@ export function EmailCampaignsList({
             </tbody>
           </table>
         </CardContent>
+        {total > 0 && (
+          <div className="px-4 py-3 border-t border-gray-100">
+            <PaginationControls
+              page={page}
+              limit={limit}
+              total={total}
+              totalPages={totalPages}
+              hasNextPage={page < totalPages}
+              hasPreviousPage={page > 1}
+              onPageChange={setPage}
+              onLimitChange={setLimit}
+              loading={loading}
+              isDark={isDark}
+              pageSizeOptions={[10, 25, 50, 100]}
+            />
+          </div>
+        )}
       </Card>
 
       <AlertDialog

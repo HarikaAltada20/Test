@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/utils/supabase/admin";
 import { requireAdminApi } from "@/lib/admin-email/api-auth";
-import { listEmailCampaigns, listEmailCampaignsMinimal } from "@/lib/admin-email/campaign-list";
+import { listEmailCampaigns, listEmailCampaignsMinimal, listEmailCampaignsPaginated } from "@/lib/admin-email/campaign-list";
 
 export async function GET(req: NextRequest) {
   const auth = await requireAdminApi();
@@ -9,11 +9,27 @@ export async function GET(req: NextRequest) {
 
   const projectId = req.nextUrl.searchParams.get("projectId");
   const minimal = req.nextUrl.searchParams.get("minimal") === "1";
+  const pageParam = req.nextUrl.searchParams.get("page");
 
   try {
     if (minimal) {
       const campaigns = await listEmailCampaignsMinimal(projectId);
       return NextResponse.json({ campaigns });
+    }
+
+    if (pageParam) {
+      const status = req.nextUrl.searchParams.get("status");
+      const search = req.nextUrl.searchParams.get("search");
+      const page = parseInt(pageParam, 10);
+      const limit = parseInt(req.nextUrl.searchParams.get("limit") ?? "25", 10);
+      const result = await listEmailCampaignsPaginated({
+        projectId,
+        status,
+        search,
+        page,
+        limit,
+      });
+      return NextResponse.json(result);
     }
 
     const campaigns = await listEmailCampaigns(projectId);

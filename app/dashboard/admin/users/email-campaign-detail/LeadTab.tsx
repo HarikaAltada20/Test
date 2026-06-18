@@ -24,10 +24,11 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { ChevronLeft, ChevronRight, Filter, Plus, Search, SlidersHorizontal, Trash2 } from "lucide-react";
+import { Filter, Plus, Search, Trash2 } from "lucide-react";
+import { PaginationControls } from "@/components/ui/pagination-controls";
 import { useToast } from "@/hooks/use-toast";
 
-const PAGE_SIZE = 50;
+const DEFAULT_PAGE_SIZE = 50;
 
 type RecipientRow = {
   index: number;
@@ -111,6 +112,7 @@ export function LeadTab({ campaignId, onRecipientsChange }: Props) {
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [page, setPage] = useState(1);
+  const [limit, setLimit] = useState(DEFAULT_PAGE_SIZE);
   const [recipients, setRecipients] = useState<RecipientRow[]>([]);
   const [total, setTotal] = useState(0);
   const [totalPages, setTotalPages] = useState(1);
@@ -126,13 +128,13 @@ export function LeadTab({ campaignId, onRecipientsChange }: Props) {
 
   useEffect(() => {
     setPage(1);
-  }, [campaignId, statusFilter, debouncedSearch]);
+  }, [campaignId, statusFilter, debouncedSearch, limit]);
 
   const loadRecipients = () => {
     setLoading(true);
     const params = new URLSearchParams({
       page: String(page),
-      limit: String(PAGE_SIZE),
+      limit: String(limit),
     });
     if (statusFilter !== "all") params.set("status", statusFilter);
     if (debouncedSearch.trim()) params.set("search", debouncedSearch.trim());
@@ -149,7 +151,7 @@ export function LeadTab({ campaignId, onRecipientsChange }: Props) {
 
   useEffect(() => {
     loadRecipients();
-  }, [campaignId, statusFilter, debouncedSearch, page]);
+  }, [campaignId, statusFilter, debouncedSearch, page, limit]);
 
   const toggleAll = (checked: boolean) => {
     if (checked) setSelected(new Set(recipients.map((r) => r.userId)));
@@ -269,41 +271,6 @@ export function LeadTab({ campaignId, onRecipientsChange }: Props) {
       </div>
 
       <Card className="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden">
-        {!loading && total > 0 && (
-          <div className="px-4 py-2 border-b border-gray-100 text-xs text-muted-foreground flex flex-wrap items-center justify-between gap-2">
-            <span>
-              Showing {(page - 1) * PAGE_SIZE + 1}–
-              {Math.min(page * PAGE_SIZE, total)} of {total} leads
-            </span>
-            {totalPages > 1 && (
-              <div className="flex items-center gap-1">
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="icon"
-                  className="h-7 w-7"
-                  disabled={page <= 1}
-                  onClick={() => setPage((p) => Math.max(1, p - 1))}
-                >
-                  <ChevronLeft className="h-4 w-4" />
-                </Button>
-                <span className="px-2">
-                  Page {page} of {totalPages}
-                </span>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="icon"
-                  className="h-7 w-7"
-                  disabled={page >= totalPages}
-                  onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-                >
-                  <ChevronRight className="h-4 w-4" />
-                </Button>
-              </div>
-            )}
-          </div>
-        )}
         <CardContent className="p-0 overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
@@ -386,6 +353,22 @@ export function LeadTab({ campaignId, onRecipientsChange }: Props) {
             </tbody>
           </table>
         </CardContent>
+        {total > 0 && (
+          <div className="px-4 py-3 border-t border-gray-100">
+            <PaginationControls
+              page={page}
+              limit={limit}
+              total={total}
+              totalPages={totalPages}
+              hasNextPage={page < totalPages}
+              hasPreviousPage={page > 1}
+              onPageChange={setPage}
+              onLimitChange={setLimit}
+              loading={loading}
+              pageSizeOptions={[25, 50, 100, 200]}
+            />
+          </div>
+        )}
       </Card>
 
       <AlertDialog open={confirmDelete} onOpenChange={setConfirmDelete}>

@@ -19,7 +19,6 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
-import type { EmailCampaignListItem } from "@/lib/admin-email/campaign-list";
 import type {
   UniboxMessage,
   UniboxThreadListItem,
@@ -42,7 +41,7 @@ import {
 } from "lucide-react";
 
 type Props = {
-  campaigns: EmailCampaignListItem[];
+  campaigns: Array<{ id: string; name: string }>;
   isDark?: boolean;
   isActive?: boolean;
 };

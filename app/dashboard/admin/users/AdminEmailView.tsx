@@ -15,10 +15,8 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { EnhancedTabs } from "@/components/ui/enhancedTabs";
 import { cn } from "@/lib/utils";
-import type { EmailCampaignListItem } from "@/lib/admin-email/campaign-list";
 import { Loader2, Plus } from "lucide-react";
 import {
-  EmailCampaignListSkeleton,
   EmailProjectCardsSkeleton,
 } from "./EmailSkeletons";
 import { CreateEmailProjectForm } from "./CreateEmailProjectForm";
@@ -49,10 +47,13 @@ export function AdminEmailView({
   onHighlightConsumed,
 }: Props) {
   const [projects, setProjects] = useState<EmailProjectCardData[]>([]);
-  const [campaigns, setCampaigns] = useState<EmailCampaignListItem[]>([]);
+  const [uniboxCampaigns, setUniboxCampaigns] = useState<
+    Array<{ id: string; name: string }>
+  >([]);
+  const [campaignTotal, setCampaignTotal] = useState(0);
+  const [campaignsRefreshKey, setCampaignsRefreshKey] = useState(0);
   const [createCampaignOpen, setCreateCampaignOpen] = useState(false);
   const [projectsLoading, setProjectsLoading] = useState(true);
-  const [campaignsLoading, setCampaignsLoading] = useState(true);
   const [viewMode, setViewMode] = useState<ViewMode>("list");
   const [listTab, setListTab] = useState<ListTab>(() => {
     if (typeof window !== "undefined") {
@@ -132,6 +133,10 @@ export function AdminEmailView({
     }
   }, []);
 
+  const refreshCampaignsList = useCallback(() => {
+    setCampaignsRefreshKey((k) => k + 1);
+  }, []);
+
   const loadData = useCallback(async (options?: { silent?: boolean }) => {
     const silent = options?.silent ?? hasLoadedOnceRef.current;
 
@@ -146,20 +151,20 @@ export function AdminEmailView({
       }
     };
 
-    const fetchCampaigns = async () => {
-      if (!silent) setCampaignsLoading(true);
+    const fetchUniboxCampaigns = async () => {
       try {
-        const res = await fetch("/api/admin/email-campaigns");
+        const res = await fetch("/api/admin/email-campaigns?minimal=1");
         const data = await res.json();
-        if (res.ok) setCampaigns(data.campaigns ?? []);
-      } finally {
-        if (!silent) setCampaignsLoading(false);
+        if (res.ok) setUniboxCampaigns(data.campaigns ?? []);
+      } catch {
+        // ignore
       }
     };
 
-    await Promise.all([fetchProjects(), fetchCampaigns(), loadUnreadCount()]);
+    await Promise.all([fetchProjects(), fetchUniboxCampaigns(), loadUnreadCount()]);
+    refreshCampaignsList();
     hasLoadedOnceRef.current = true;
-  }, [loadUnreadCount]);
+  }, [loadUnreadCount, refreshCampaignsList]);
 
   useEffect(() => {
     loadData();
@@ -364,7 +369,7 @@ export function AdminEmailView({
         <EnhancedTabs
           tabs={[
             { id: "projects", label: `Projects (${projects.length})` },
-            { id: "campaigns", label: `Campaigns (${campaigns.length})` },
+            { id: "campaigns", label: `Campaigns (${campaignTotal})` },
             { id: "warmup", label: "Warm Up" },
             {
               id: "unibox",
@@ -420,18 +425,15 @@ export function AdminEmailView({
         </div>
 
         <div className={cn(listTab !== "campaigns" && "hidden")}>
-          {campaignsLoading && campaigns.length === 0 ? (
-            <EmailCampaignListSkeleton isDark={isDark} />
-          ) : (
-            <EmailCampaignsList
-              campaigns={campaigns}
-              projects={projects}
-              isDark={isDark}
-              onCampaignClick={setSelectedCampaignId}
-              onAddNew={() => setCreateCampaignOpen(true)}
-              onRefresh={() => loadData({ silent: true })}
-            />
-          )}
+          <EmailCampaignsList
+            projects={projects}
+            isDark={isDark}
+            refreshKey={campaignsRefreshKey}
+            onTotalChange={setCampaignTotal}
+            onCampaignClick={setSelectedCampaignId}
+            onAddNew={() => setCreateCampaignOpen(true)}
+            onRefresh={refreshCampaignsList}
+          />
         </div>
 
         {warmUpTabVisited && (
@@ -454,7 +456,7 @@ export function AdminEmailView({
             )}
           >
             <EmailUnibox
-              campaigns={campaigns}
+              campaigns={uniboxCampaigns}
               isDark={isDark}
               isActive={listTab === "unibox"}
             />
