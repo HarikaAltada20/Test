@@ -39,6 +39,124 @@ import { pickVariantByRecipientIndex } from "./sequence-variant-pick";
 import { evaluateCampaignSendGate, resolveEffectiveSchedule } from "./schedule";
 import { parseScheduleData } from "./schedule-store";
 
+/** In-flight send reservations older than this are treated as stale and cleared. */
+const SEND_RESERVATION_STALE_MS = 15 * 60 * 1000;
+
+type SendReservationResult =
+  | { action: "reserved"; sendRowId: string }
+  | { action: "already_sent" }
+  | { action: "in_progress" };
+
+async function reserveCampaignStepSend(
+  campaignId: string,
+  params: {
+    userId: string;
+    stepNumber: number;
+    stepId: string;
+    variantId: string | null;
+    trackingId: string;
+  },
+): Promise<SendReservationResult> {
+  const db = createAdminClient();
+  const { data: existing } = await db
+    .from("admin_email_sequence_step_sends")
+    .select("id, ses_message_id, created_at")
+    .eq("campaign_id", campaignId)
+    .eq("user_id", params.userId)
+    .eq("step_number", params.stepNumber)
+    .maybeSingle();
+
+  if (existing?.ses_message_id) {
+    return { action: "already_sent" };
+  }
+
+  if (existing && !existing.ses_message_id) {
+    const ageMs = Date.now() - new Date(existing.created_at).getTime();
+    if (ageMs < SEND_RESERVATION_STALE_MS) {
+      return { action: "in_progress" };
+    }
+    await db
+      .from("admin_email_sequence_step_sends")
+      .delete()
+      .eq("id", existing.id);
+  }
+
+  const { data: inserted, error } = await db
+    .from("admin_email_sequence_step_sends")
+    .insert({
+      campaign_id: campaignId,
+      user_id: params.userId,
+      step_number: params.stepNumber,
+      step_id: params.stepId,
+      variant_id: params.variantId,
+      tracking_id: params.trackingId,
+      ses_message_id: null,
+    })
+    .select("id")
+    .single();
+
+  if (error) {
+    if (error.code === "23505") {
+      return { action: "in_progress" };
+    }
+    throw new Error(error.message);
+  }
+
+  return { action: "reserved", sendRowId: inserted.id };
+}
+
+async function releaseCampaignStepSendReservation(sendRowId: string): Promise<void> {
+  const db = createAdminClient();
+  await db
+    .from("admin_email_sequence_step_sends")
+    .delete()
+    .eq("id", sendRowId)
+    .is("ses_message_id", null);
+}
+
+async function syncRecipientProgressAfterSentStep(
+  campaignId: string,
+  userId: string,
+  sequence: StoredSequence | null,
+  stepNumber: number,
+  useSequenceSteps: boolean,
+): Promise<void> {
+  const db = createAdminClient();
+  const now = new Date().toISOString();
+  const nextStep = useSequenceSteps
+    ? getNextStoredStep(sequence, stepNumber)
+    : null;
+
+  if (nextStep) {
+    await db
+      .from("admin_email_campaign_recipients")
+      .update({
+        email_delivery_status: "in_sequence",
+        current_step_number: nextStep.step_number,
+        next_email_scheduled_at: computeNextStepScheduledAt(
+          nextStep,
+          new Date(),
+        ).toISOString(),
+        updated_at: now,
+      })
+      .eq("campaign_id", campaignId)
+      .eq("user_id", userId)
+      .in("email_delivery_status", ["pending", "in_sequence"]);
+    return;
+  }
+
+  await db
+    .from("admin_email_campaign_recipients")
+    .update({
+      email_delivery_status: "sent",
+      next_email_scheduled_at: null,
+      updated_at: now,
+    })
+    .eq("campaign_id", campaignId)
+    .eq("user_id", userId)
+    .in("email_delivery_status", ["pending", "in_sequence"]);
+}
+
 function shouldBypassScheduleGate(campaign: {
   scheduled_at: string | null;
   schedule_data?: unknown;
@@ -70,11 +188,16 @@ export async function repairRecipientsForDelivery(
   const db = createAdminClient();
   const now = new Date().toISOString();
 
+  const staleBefore = new Date(
+    Date.now() - SEND_RESERVATION_STALE_MS,
+  ).toISOString();
+
   const { data: stuckSends } = await db
     .from("admin_email_sequence_step_sends")
     .select("user_id")
     .eq("campaign_id", campaignId)
-    .is("ses_message_id", null);
+    .is("ses_message_id", null)
+    .lt("created_at", staleBefore);
 
   const stuckUserIds = [
     ...new Set((stuckSends ?? []).map((row) => row.user_id).filter(Boolean)),
@@ -89,6 +212,7 @@ export async function repairRecipientsForDelivery(
         .delete()
         .eq("campaign_id", campaignId)
         .is("ses_message_id", null)
+        .lt("created_at", staleBefore)
         .in("user_id", chunk);
     }
   }
@@ -323,50 +447,7 @@ export async function deliverEmailCampaignBatch(
       .eq("step_number", stepNumber)
       .maybeSingle();
 
-    let reservedVariantId: string | null = existingSend?.variant_id ?? null;
-
-    if (existingSend?.ses_message_id) {
-      // Already sent via SES — sync recipient state only.
-      const nextStep = useSequenceSteps
-        ? getNextStoredStep(sequence, stepNumber)
-        : null;
-      if (nextStep) {
-        await db
-          .from("admin_email_campaign_recipients")
-          .update({
-            email_delivery_status: "in_sequence",
-            current_step_number: nextStep.step_number,
-            next_email_scheduled_at: computeNextStepScheduledAt(
-              nextStep,
-              new Date(),
-            ).toISOString(),
-            updated_at: now,
-          })
-          .eq("campaign_id", campaignId)
-          .eq("user_id", user.id)
-          .in("email_delivery_status", ["pending", "in_sequence"]);
-      } else {
-        await db
-          .from("admin_email_campaign_recipients")
-          .update({
-            email_delivery_status: "sent",
-            next_email_scheduled_at: null,
-            updated_at: now,
-          })
-          .eq("campaign_id", campaignId)
-          .eq("user_id", user.id)
-          .in("email_delivery_status", ["pending", "in_sequence"]);
-      }
-      skippedCount += 1;
-      continue;
-    }
-
-    if (existingSend && !existingSend.ses_message_id) {
-      await db
-        .from("admin_email_sequence_step_sends")
-        .delete()
-        .eq("id", existingSend.id);
-    }
+    const reservedVariantId: string | null = existingSend?.variant_id ?? null;
 
     let emailSubject: string;
     let messageTemplate: string;
@@ -443,6 +524,34 @@ export async function deliverEmailCampaignBatch(
       continue;
     }
 
+    const lockStepId = stepId ?? campaignId;
+    const reservation = await reserveCampaignStepSend(campaignId, {
+      userId: user.id,
+      stepNumber,
+      stepId: lockStepId,
+      variantId,
+      trackingId,
+    });
+
+    if (reservation.action === "already_sent") {
+      await syncRecipientProgressAfterSentStep(
+        campaignId,
+        user.id,
+        sequence,
+        stepNumber,
+        useSequenceSteps,
+      );
+      skippedCount += 1;
+      continue;
+    }
+
+    if (reservation.action === "in_progress") {
+      skippedCount += 1;
+      continue;
+    }
+
+    const sendRowId = reservation.sendRowId;
+
     const subject = buildBulkEmailSubject(emailSubject, user, {
       campaign: campaignContext,
     });
@@ -471,19 +580,15 @@ export async function deliverEmailCampaignBatch(
     });
 
     if (sendResult.messageId) {
-      if (useSequenceSteps && stepId) {
-        await db.from("admin_email_sequence_step_sends").insert({
-          campaign_id: campaignId,
-          user_id: user.id,
-          step_number: stepNumber,
-          step_id: stepId,
-          variant_id: variantId,
-          tracking_id: trackingId,
+      await db
+        .from("admin_email_sequence_step_sends")
+        .update({
           ses_message_id: sendResult.messageId,
+          variant_id: variantId,
           email_delivery_status: "sent",
           sent_at: now,
-        });
-      }
+        })
+        .eq("id", sendRowId);
 
       const nextStep = useSequenceSteps
         ? getNextStoredStep(sequence, stepNumber)
@@ -540,6 +645,7 @@ export async function deliverEmailCampaignBatch(
 
       successCount += 1;
     } else {
+      await releaseCampaignStepSendReservation(sendRowId);
       await db
         .from("admin_email_campaign_recipients")
         .update({

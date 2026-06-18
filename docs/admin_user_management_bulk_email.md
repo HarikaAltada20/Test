@@ -583,17 +583,28 @@ After step 3, API returns `{ campaignId }` → frontend redirects to `/dashboard
 
 ## 14. Environment variables
 
+Apply **all** `db/migrations/20260612_*` … `20260623_*` SQL files on the database **before** deploying the app code. Also run any related `SUPABASE/migrations/` files on that branch (e.g. leaderboard pending-count RPC).
+
 ```env
 AWS_REGION=us-east-1
 AWS_ACCESS_KEY_ID=
 AWS_SECRET_ACCESS_KEY=
 SES_CONFIGURATION_SET=gameofcreators-bulk
+SES_SNS_TOPIC_ARN=              # required in production for bounce/complaint webhook
+INBOUND_SNS_TOPIC_ARN=            # inbound mail SNS topic (unibox sync)
+CRON_SECRET=                      # authorizes /api/cron/* when not using QStash signature
 NEXT_PUBLIC_APP_URL=https://gameofcreators.com
 
-UPSTASH_REDIS_REST_URL=
+UPSTASH_REDIS_REST_URL=           # admin email delivery queue
 UPSTASH_REDIS_REST_TOKEN=
 QSTASH_TOKEN=
+QSTASH_CURRENT_SIGNING_KEY=
+QSTASH_NEXT_SIGNING_KEY=
+
+GEMINI_API_KEY=                   # optional: AI template generation
 ```
+
+Cron: `vercel.json` schedules `/api/cron/process-admin-email-delivery-queue` daily. Warm-up sends use QStash via `/api/admin/warm-up/admin/setup-schedules` (not in `vercel.json`).
 
 ---
 
