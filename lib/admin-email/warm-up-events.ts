@@ -3,6 +3,7 @@
  */
 
 import { createAdminClient } from "@/utils/supabase/admin";
+import { recalculateAccountHealthScore } from "@/lib/admin-email/warm-up-service";
 
 type SesEventPayload = {
   notificationType?: string;
@@ -67,20 +68,17 @@ export async function handleWarmUpSesEvent(
     .update(patch)
     .eq("id", send.id);
 
-  if (kind === "Bounce" || kind === "Complaint") {
-    const { data: account } = await db
-      .from("admin_email_warm_up_accounts")
-      .select("current_health_score")
-      .eq("id", send.account_id)
-      .single();
-    if (account && account.current_health_score > 20) {
-      await db
-        .from("admin_email_warm_up_accounts")
-        .update({
-          current_health_score: Math.max(20, account.current_health_score - 5),
-          updated_at: now,
-        })
-        .eq("id", send.account_id);
+  if (
+    kind === "Delivery" ||
+    kind === "Open" ||
+    kind === "Click" ||
+    kind === "Bounce" ||
+    kind === "Complaint"
+  ) {
+    try {
+      await recalculateAccountHealthScore(send.account_id);
+    } catch {
+      // Non-fatal: send row was still updated
     }
   }
 

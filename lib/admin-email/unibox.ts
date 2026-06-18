@@ -57,8 +57,13 @@ export type UniboxThreadDetail = {
   messages: UniboxMessage[];
 };
 
+function formatStoredSnippet(text: string | null | undefined): string | null {
+  if (!text?.trim()) return null;
+  return decodeInboundBodyText(text);
+}
+
 function makeSnippet(text: string, maxLen = 200): string {
-  const plain = text.replace(/\s+/g, " ").trim();
+  const plain = decodeInboundBodyText(text).replace(/\s+/g, " ").trim();
   if (plain.length <= maxLen) return plain;
   return `${plain.slice(0, maxLen)}…`;
 }
@@ -638,7 +643,7 @@ export async function listUniboxThreads(params: {
     contactEmail: row.contact_email,
     contactName: row.contact_name,
     subject: row.subject,
-    snippet: row.latest_snippet ?? null,
+    snippet: formatStoredSnippet(row.latest_snippet),
     lastMessageAt: row.last_message_at,
     replyCount: row.reply_count ?? 0,
     isRead: row.is_read,
@@ -747,7 +752,7 @@ export async function getUniboxThreadDetail(
     contactEmail: row.contact_email,
     contactName: row.contact_name,
     subject: row.subject,
-    snippet: latest?.snippet ?? null,
+    snippet: formatStoredSnippet(latest?.snippet),
     lastMessageAt: row.last_message_at,
     replyCount: row.reply_count ?? 0,
     isRead: row.is_read,
@@ -771,7 +776,7 @@ export async function getUniboxThreadDetail(
       subject: m.subject,
       bodyText: m.body_text,
       bodyHtml: m.body_html,
-      snippet: m.snippet,
+      snippet: formatStoredSnippet(m.snippet),
       sesMessageId: m.ses_message_id,
       inReplyToMessageId: m.in_reply_to_message_id,
       createdAt: m.created_at,

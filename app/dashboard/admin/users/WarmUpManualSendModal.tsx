@@ -34,6 +34,7 @@ import {
   UserCheck,
   ExternalLink,
 } from "lucide-react";
+import { EmailModalSkeleton } from "./EmailSkeletons";
 import { useToast } from "@/hooks/use-toast";
 import type { WarmUpAccountListItem } from "@/lib/admin-email/warm-up";
 import type { WarmUpRecipientRow, WarmUpTemplateRow } from "@/lib/admin-email/warm-up-service";
@@ -179,9 +180,10 @@ function UserPickerDialog({
         {/* Table */}
         <div className="flex-1 overflow-y-auto">
           {loading ? (
-            <div className="flex items-center justify-center py-16 gap-2 text-slate-500">
-              <Loader2 className="w-5 h-5 animate-spin" />
-              <span className="text-sm">Loading users…</span>
+            <div className="py-4 space-y-3">
+              {Array.from({ length: 8 }).map((_, i) => (
+                <div key={i} className="h-10 rounded-md bg-muted animate-pulse" />
+              ))}
             </div>
           ) : filtered.length === 0 ? (
             <p className="text-center text-sm text-slate-500 py-12">
@@ -698,10 +700,7 @@ export default function WarmUpManualSendModal({
         {/* Scrollable body */}
         <div className="overflow-y-auto flex-1 p-6">
           {loading ? (
-            <div className="flex items-center justify-center py-16">
-              <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
-              <span className="ml-3 text-slate-600">Loading templates and recipients…</span>
-            </div>
+            <EmailModalSkeleton />
           ) : (
             <div className="space-y-5">
 

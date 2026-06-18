@@ -17,6 +17,11 @@ import { EnhancedTabs } from "@/components/ui/enhancedTabs";
 import { cn } from "@/lib/utils";
 import type { EmailCampaignListItem } from "@/lib/admin-email/campaign-list";
 import { Loader2, Plus } from "lucide-react";
+import {
+  EmailCampaignListSkeleton,
+  EmailProjectCardsSkeleton,
+  EmailTabSkeleton,
+} from "./EmailSkeletons";
 import { CreateEmailProjectForm } from "./CreateEmailProjectForm";
 import { CreateEmailCampaignModal } from "./CreateEmailCampaignModal";
 import { EmailProjectConfigWizard } from "./EmailProjectConfigWizard";
@@ -84,6 +89,15 @@ export function AdminEmailView({
   const [editDescription, setEditDescription] = useState("");
   const [unreadCount, setUnreadCount] = useState(0);
   const [warmUpRefreshKey, setWarmUpRefreshKey] = useState(0);
+  const [warmUpTabVisited, setWarmUpTabVisited] = useState(
+    () => listTab === "warmup",
+  );
+
+  useEffect(() => {
+    if (listTab === "warmup") {
+      setWarmUpTabVisited(true);
+    }
+  }, [listTab]);
 
   const selectedProject = projects.find((p) => p.id === selectedProjectId);
 
@@ -221,11 +235,7 @@ export function AdminEmailView({
   }
 
   if (loading && viewMode === "list") {
-    return (
-      <div className="flex justify-center py-12">
-        <Loader2 className="h-8 w-8 animate-spin" />
-      </div>
-    );
+    return <EmailTabSkeleton isDark={isDark} />;
   }
 
   if (viewMode === "create") {
@@ -357,47 +367,60 @@ export function AdminEmailView({
 
         {listTab === "projects" && (
           <div className="space-y-4">
-            {projects.map((p) => (
-              <EmailProjectCard
-                key={p.id}
-                project={p}
-                isDark={isDark}
-                onView={() => {
-                  setSelectedProjectId(p.id);
-                  setViewMode("project");
-                }}
-                onEdit={() => openEdit(p)}
-                onConfigureEmail={() => openConfig(p.id)}
-                onManageSenders={() => openManageSenders(p.id)}
-                onScheduleSettings={() => openSchedule(p.id)}
-              />
-            ))}
-            {projects.length === 0 && (
-              <p className="text-center text-muted-foreground py-12">
-                No projects yet. Click Create Project to get started.
-              </p>
+            {loading ? (
+              <EmailProjectCardsSkeleton isDark={isDark} />
+            ) : (
+              <>
+                {projects.map((p) => (
+                  <EmailProjectCard
+                    key={p.id}
+                    project={p}
+                    isDark={isDark}
+                    onView={() => {
+                      setSelectedProjectId(p.id);
+                      setViewMode("project");
+                    }}
+                    onEdit={() => openEdit(p)}
+                    onConfigureEmail={() => openConfig(p.id)}
+                    onManageSenders={() => openManageSenders(p.id)}
+                    onScheduleSettings={() => openSchedule(p.id)}
+                  />
+                ))}
+                {projects.length === 0 && (
+                  <p className="text-center text-muted-foreground py-12">
+                    No projects yet. Click Create Project to get started.
+                  </p>
+                )}
+              </>
             )}
           </div>
         )}
 
         {listTab === "campaigns" && (
-          <EmailCampaignsList
-            campaigns={campaigns}
-            projects={projects}
-            isDark={isDark}
-            onCampaignClick={setSelectedCampaignId}
-            onAddNew={() => setCreateCampaignOpen(true)}
-            onRefresh={loadData}
-          />
+          loading ? (
+            <EmailCampaignListSkeleton isDark={isDark} />
+          ) : (
+            <EmailCampaignsList
+              campaigns={campaigns}
+              projects={projects}
+              isDark={isDark}
+              onCampaignClick={setSelectedCampaignId}
+              onAddNew={() => setCreateCampaignOpen(true)}
+              onRefresh={loadData}
+            />
+          )
         )}
 
-        {listTab === "warmup" && (
-          <EmailWarmUpView
-            projects={projects}
-            isDark={isDark}
-            refreshKey={warmUpRefreshKey}
-            onManageSenders={openManageSenders}
-          />
+        {warmUpTabVisited && (
+          <div className={cn(listTab !== "warmup" && "hidden")}>
+            <EmailWarmUpView
+              projects={projects}
+              isDark={isDark}
+              refreshKey={warmUpRefreshKey}
+              isActive={listTab === "warmup"}
+              onManageSenders={openManageSenders}
+            />
+          </div>
         )}
 
         {listTab === "unibox" && (

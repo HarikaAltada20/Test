@@ -15,6 +15,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Calendar, Loader2, Pencil, Plus, Trash2 } from "lucide-react";
+import { EmailFormPanelSkeleton } from "../EmailSkeletons";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import { CreateScheduleModal } from "./CreateScheduleModal";
@@ -295,11 +296,7 @@ export function ScheduleTab({ campaignId, projectId }: Props) {
   };
 
   if (loading) {
-    return (
-      <div className="flex justify-center py-12">
-        <Loader2 className="h-8 w-8 animate-spin" />
-      </div>
-    );
+    return <EmailFormPanelSkeleton />;
   }
 
   return (

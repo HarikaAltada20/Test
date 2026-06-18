@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { SequenceStepComponent } from "./sequence-step";
 import { SequenceStepEditor } from "./sequence-step-editor";
 import { Plus, Mail, RefreshCw } from "lucide-react";
+import { EmailFormPanelSkeleton } from "../../EmailSkeletons";
 import type { SequenceStep, SequenceVariant } from "@/lib/admin-email/sequence-types";
 import { useSequence } from "./sequence-context";
 import { useToast } from "@/hooks/use-toast";
@@ -586,14 +587,7 @@ export function SequenceTab({
         </div>
       )}
 
-      {isLoading && (
-        <div className="flex items-center justify-center py-8">
-          <div className="text-center">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600 mx-auto mb-4" />
-            <p className="text-sm text-gray-600">Loading sequence...</p>
-          </div>
-        </div>
-      )}
+      {isLoading && <EmailFormPanelSkeleton />}
 
       {!isLoading && (
         <div className="flex flex-col lg:flex-row gap-6">

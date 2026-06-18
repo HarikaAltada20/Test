@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getEmailCampaignDetail } from "@/lib/admin-email/campaign-detail";
+import { createAdminClient } from "@/utils/supabase/admin";
 import { getCampaignStepAnalytics } from "@/lib/admin-email/campaign-analytics";
 import { requireAdminApi } from "@/lib/admin-email/api-auth";
 
@@ -10,22 +10,19 @@ export async function GET(_req: Request, context: RouteContext) {
   if (auth.response) return auth.response;
 
   const { id } = await context.params;
-  const detail = await getEmailCampaignDetail(id);
-  if (!detail) {
+
+  const db = createAdminClient();
+  const { data: campaign } = await db
+    .from("admin_email_campaigns")
+    .select("id")
+    .eq("id", id)
+    .single();
+
+  if (!campaign) {
     return NextResponse.json({ error: "Campaign not found" }, { status: 404 });
   }
 
   const stepAnalytics = await getCampaignStepAnalytics(id);
 
-  return NextResponse.json({
-    status: detail.status,
-    progressPercent: detail.progressPercent,
-    recipientCount: detail.recipientCount,
-    sentCount: detail.sentCount,
-    remainingCount: detail.remainingCount,
-    startedAt: detail.startedAt,
-    estimatedCompletionAt: detail.estimatedCompletionAt,
-    summary: detail.summary,
-    stepAnalytics,
-  });
+  return NextResponse.json({ stepAnalytics });
 }

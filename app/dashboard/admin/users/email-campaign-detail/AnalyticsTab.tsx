@@ -178,14 +178,22 @@ export function AnalyticsTab({ campaignId, detail }: Props) {
   const [loadingSteps, setLoadingSteps] = useState(true);
 
   useEffect(() => {
+    let cancelled = false;
     setLoadingSteps(true);
     fetch(`/api/admin/email-campaigns/${campaignId}/analytics`)
       .then((r) => r.json())
       .then((data) => {
-        setStepAnalytics(data.stepAnalytics ?? []);
+        if (!cancelled) {
+          setStepAnalytics(data.stepAnalytics ?? []);
+        }
       })
-      .finally(() => setLoadingSteps(false));
-  }, [campaignId, detail.sentCount, detail.summary.openCount, detail.summary.clickCount]);
+      .finally(() => {
+        if (!cancelled) setLoadingSteps(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [campaignId]);
 
   const hasStepData = stepAnalytics.some((s) => s.sent > 0);
 
@@ -272,8 +280,10 @@ export function AnalyticsTab({ campaignId, detail }: Props) {
           <h3 className="font-semibold text-gray-900 mb-4">Step-wise Analytics</h3>
 
           {loadingSteps ? (
-            <div className="flex justify-center py-10">
-              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+            <div className="space-y-3 py-2">
+              {Array.from({ length: 4 }).map((_, i) => (
+                <div key={i} className="h-10 w-full rounded-md bg-muted animate-pulse" />
+              ))}
             </div>
           ) : !hasStepData ? (
             <div className="flex items-center justify-center h-32 text-muted-foreground text-sm">

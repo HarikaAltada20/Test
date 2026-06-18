@@ -464,17 +464,44 @@ We host a short podcast on {industry_topic} and {company}'s story stood out.
 // Health score calculation
 // ---------------------------------------------------------------------------
 
-export function calculateHealthScore(metrics: {
-  sendsCount: number;
-  deliveredCount: number;
-  openedCount: number;
-  bouncedCount: number;
-  complainedCount: number;
-}): number {
+const HEALTH_SCORE_WINDOW_DAYS = 30;
+const DEFAULT_HEALTH_SCORE = 30;
+
+type SendMetricsInput = Pick<
+  WarmUpSendRow,
+  "is_delivered" | "opened_at" | "clicked_at" | "is_bounced" | "is_complained"
+>;
+
+function healthScoreWindowSince(): string {
+  const since = new Date();
+  since.setUTCDate(since.getUTCDate() - HEALTH_SCORE_WINDOW_DAYS);
+  return since.toISOString();
+}
+
+function aggregateSendMetrics(sends: SendMetricsInput[]) {
+  return {
+    sendsCount: sends.length,
+    deliveredCount: sends.filter((s) => s.is_delivered).length,
+    openedCount: sends.filter((s) => s.opened_at).length,
+    bouncedCount: sends.filter((s) => s.is_bounced).length,
+    complainedCount: sends.filter((s) => s.is_complained).length,
+  };
+}
+
+export function calculateHealthScore(
+  metrics: {
+    sendsCount: number;
+    deliveredCount: number;
+    openedCount: number;
+    bouncedCount: number;
+    complainedCount: number;
+  },
+  opts?: { defaultWhenEmpty?: number },
+): number {
   const { sendsCount, deliveredCount, openedCount, bouncedCount, complainedCount } =
     metrics;
 
-  if (sendsCount === 0) return 30;
+  if (sendsCount === 0) return opts?.defaultWhenEmpty ?? DEFAULT_HEALTH_SCORE;
 
   const deliveryRate = (deliveredCount / sendsCount) * 100;
   const openRate = (openedCount / Math.max(deliveredCount, 1)) * 100;
@@ -484,6 +511,49 @@ export function calculateHealthScore(metrics: {
 
   const score = deliveryRate * 0.4 + openRate * 0.35 + reputation * 0.25;
   return Math.min(100, Math.max(0, Math.round(score)));
+}
+
+export async function recalculateAccountHealthScore(
+  accountId: string,
+  account?: WarmUpAccountRow,
+): Promise<number> {
+  const db = createAdminClient();
+
+  let accountRow = account;
+  if (!accountRow) {
+    const { data, error } = await db
+      .from("admin_email_warm_up_accounts")
+      .select("*")
+      .eq("id", accountId)
+      .single();
+    if (error || !data) throw new Error("Warm-up account not found");
+    accountRow = data as WarmUpAccountRow;
+  }
+
+  const { data: sends } = await db
+    .from("admin_email_warm_up_sends")
+    .select("is_delivered,opened_at,clicked_at,is_bounced,is_complained")
+    .eq("account_id", accountId)
+    .gte("sent_at", healthScoreWindowSince());
+
+  const metrics = aggregateSendMetrics((sends ?? []) as SendMetricsInput[]);
+  const defaultWhenEmpty =
+    accountRow.total_emails_sent > 0 && accountRow.current_health_score > 0
+      ? accountRow.current_health_score
+      : DEFAULT_HEALTH_SCORE;
+  const healthScore = calculateHealthScore(metrics, { defaultWhenEmpty });
+
+  const now = new Date().toISOString();
+  await db
+    .from("admin_email_warm_up_accounts")
+    .update({
+      current_health_score: healthScore,
+      best_health_score: Math.max(accountRow.best_health_score, healthScore),
+      updated_at: now,
+    })
+    .eq("id", accountId);
+
+  return healthScore;
 }
 
 // ---------------------------------------------------------------------------
@@ -847,6 +917,14 @@ export async function sendWarmUpEmails(
     })
     .eq("id", accountId);
 
+  if (sent > 0) {
+    await recalculateAccountHealthScore(accountId, {
+      ...account,
+      emails_sent_today: account.emails_sent_today + sent,
+      total_emails_sent: account.total_emails_sent + sent,
+    });
+  }
+
   return { accountId, attempted: targetCount, sent, errors };
 }
 
@@ -857,15 +935,24 @@ export async function sendWarmUpEmails(
 export async function resetDailyCounters() {
   const db = createAdminClient();
   const now = new Date().toISOString();
-  const { error } = await db
+  const { data: accounts, error } = await db
     .from("admin_email_warm_up_accounts")
     .update({
       emails_sent_today: 0,
       campaign_sent_today: 0,
       updated_at: now,
     })
-    .neq("warm_up_status", "failed");
+    .neq("warm_up_status", "failed")
+    .select("id");
   if (error) throw new Error(error.message);
+
+  for (const account of accounts ?? []) {
+    try {
+      await recalculateAccountHealthScore(account.id);
+    } catch {
+      // Continue recalculating other accounts
+    }
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -892,25 +979,43 @@ export async function calculateDailyMetrics(projectId?: string) {
   for (const accountData of accounts) {
     const account = accountData as WarmUpAccountRow;
     try {
-      const { data: sends } = await db
-        .from("admin_email_warm_up_sends")
-        .select("is_delivered,opened_at,clicked_at,is_bounced,is_complained")
-        .eq("account_id", account.id)
-        .gte("sent_at", `${today}T00:00:00.000Z`);
+      const sendFields =
+        "is_delivered,opened_at,clicked_at,is_bounced,is_complained" as const;
 
-      const sendsCount = sends?.length ?? 0;
-      const deliveredCount = (sends ?? []).filter((s) => s.is_delivered).length;
-      const openedCount = (sends ?? []).filter((s) => s.opened_at).length;
-      const clickedCount = (sends ?? []).filter((s) => s.clicked_at).length;
-      const bouncedCount = (sends ?? []).filter((s) => s.is_bounced).length;
-      const complainedCount = (sends ?? []).filter((s) => s.is_complained).length;
+      const [{ data: todaySends }, { data: windowSends }] = await Promise.all([
+        db
+          .from("admin_email_warm_up_sends")
+          .select(sendFields)
+          .eq("account_id", account.id)
+          .gte("sent_at", `${today}T00:00:00.000Z`),
+        db
+          .from("admin_email_warm_up_sends")
+          .select(sendFields)
+          .eq("account_id", account.id)
+          .gte("sent_at", healthScoreWindowSince()),
+      ]);
 
-      const healthScore = calculateHealthScore({
+      const todayMetrics = aggregateSendMetrics(
+        (todaySends ?? []) as SendMetricsInput[],
+      );
+      const windowMetrics = aggregateSendMetrics(
+        (windowSends ?? []) as SendMetricsInput[],
+      );
+      const {
         sendsCount,
         deliveredCount,
         openedCount,
         bouncedCount,
         complainedCount,
+      } = todayMetrics;
+      const clickedCount = (todaySends ?? []).filter((s) => s.clicked_at).length;
+
+      const defaultWhenEmpty =
+        account.total_emails_sent > 0 && account.current_health_score > 0
+          ? account.current_health_score
+          : DEFAULT_HEALTH_SCORE;
+      const healthScore = calculateHealthScore(windowMetrics, {
+        defaultWhenEmpty,
       });
 
       let stageProgressionTriggered = false;
@@ -928,11 +1033,16 @@ export async function calculateDailyMetrics(projectId?: string) {
         stageConfig.nextStage &&
         account.total_emails_sent >= stageConfig.minSendsForProgression &&
         healthScore >= stageConfig.minDeliveryRate * 0.4 &&
-        sendsCount > 0
+        windowMetrics.sendsCount > 0
       ) {
-        const deliveryRate = (deliveredCount / sendsCount) * 100;
-        const openRate = (openedCount / Math.max(deliveredCount, 1)) * 100;
-        const bounceRate = (bouncedCount / sendsCount) * 100;
+        const deliveryRate =
+          (windowMetrics.deliveredCount / windowMetrics.sendsCount) * 100;
+        const openRate =
+          (windowMetrics.openedCount /
+            Math.max(windowMetrics.deliveredCount, 1)) *
+          100;
+        const bounceRate =
+          (windowMetrics.bouncedCount / windowMetrics.sendsCount) * 100;
 
         if (
           deliveryRate >= stageConfig.minDeliveryRate &&
@@ -1177,6 +1287,14 @@ export async function sendManualWarmUpEmailRich(
       updated_at: now,
     })
     .eq("id", accountId);
+
+  if (sent > 0) {
+    await recalculateAccountHealthScore(accountId, {
+      ...account,
+      emails_sent_today: account.emails_sent_today + sent,
+      total_emails_sent: account.total_emails_sent + sent,
+    });
+  }
 
   return {
     attempted: toSend.length,

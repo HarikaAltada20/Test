@@ -12,12 +12,12 @@ import {
   CheckCircle2,
   Clock,
   Globe,
-  Loader2,
   Mail,
   Settings,
   Timer,
   UserPlus,
 } from "lucide-react";
+import { EmailProjectDetailSkeleton } from "./EmailSkeletons";
 
 type ProjectSender = {
   id: string;
@@ -99,11 +99,7 @@ export function EmailProjectDetail({
   }, [load]);
 
   if (loading || !project) {
-    return (
-      <div className="flex justify-center py-16">
-        <Loader2 className="h-8 w-8 animate-spin" />
-      </div>
-    );
+    return <EmailProjectDetailSkeleton isDark={isDark} />;
   }
 
   const verified = project.ses_verification_status === "verified";

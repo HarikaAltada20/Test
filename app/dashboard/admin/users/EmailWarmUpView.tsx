@@ -45,6 +45,7 @@ import {
   Users,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { EmailWarmUpSkeleton } from "./EmailSkeletons";
 
 type StatusTab = "all" | "healthy" | "warming" | "paused";
 
@@ -52,8 +53,16 @@ type Props = {
   projects: EmailProjectCardData[];
   isDark?: boolean;
   refreshKey?: number;
+  isActive?: boolean;
   onManageSenders?: (projectId: string) => void;
 };
+
+type WarmUpCacheEntry = {
+  accounts: WarmUpAccountListItem[];
+  overview: WarmUpOverview | null;
+};
+
+const warmUpDataCache = new Map<string, WarmUpCacheEntry>();
 
 
 const STATUS_TABS: { id: StatusTab; label: string }[] = [
@@ -119,6 +128,7 @@ export function EmailWarmUpView({
   projects,
   isDark,
   refreshKey = 0,
+  isActive = true,
   onManageSenders,
 }: Props) {
   const [accounts, setAccounts] = useState<WarmUpAccountListItem[]>([]);
@@ -178,51 +188,66 @@ export function EmailWarmUpView({
   }, []);
   const { toast } = useToast();
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    try {
-      const params = new URLSearchParams();
-      if (projectFilter !== "all") {
-        params.set("project_id", projectFilter);
-      } else if (projects.length === 1) {
-        params.set("project_id", projects[0].id);
+  const resolvedProjectId = useMemo(() => {
+    if (projectFilter !== "all") return projectFilter;
+    if (projects.length === 1) return projects[0].id;
+    return projects[0]?.id ?? null;
+  }, [projectFilter, projects]);
+
+  const cacheKey = resolvedProjectId
+    ? `${resolvedProjectId}:${refreshKey}`
+    : null;
+
+  const load = useCallback(
+    async (opts?: { force?: boolean }) => {
+      if (!resolvedProjectId || !cacheKey) return;
+
+      const cached = warmUpDataCache.get(cacheKey);
+      if (cached && !opts?.force) {
+        setAccounts(cached.accounts);
+        setOverview(cached.overview);
+        setLoading(false);
+        return;
       }
 
-      const qs = params.toString();
-      const [accountsRes, overviewRes] = await Promise.all([
-        fetch(`/api/admin/warm-up/emails${qs ? `?${qs}` : ""}`),
-        fetch(`/api/admin/warm-up/analytics/overview${qs ? `?${qs}` : ""}`),
-      ]);
-      const accountsData = await accountsRes.json();
-      const overviewData = await overviewRes.json();
+      if (!cached) setLoading(true);
 
-      if (accountsRes.ok) {
-        setAccounts(accountsData.accounts ?? []);
-      } else {
-        toast({
-          title: "Could not load warm-up accounts",
-          description: accountsData.error || "Request failed",
-          variant: "destructive",
-        });
-      }
+      try {
+        const params = new URLSearchParams({ project_id: resolvedProjectId });
+        const res = await fetch(`/api/admin/warm-up/dashboard?${params}`);
+        const data = await res.json();
 
-      if (overviewRes.ok) {
-        setOverview(overviewData.overview ?? null);
+        if (res.ok) {
+          const nextAccounts = data.accounts ?? [];
+          const nextOverview = data.overview ?? null;
+          warmUpDataCache.set(cacheKey, {
+            accounts: nextAccounts,
+            overview: nextOverview,
+          });
+          setAccounts(nextAccounts);
+          setOverview(nextOverview);
+        } else {
+          toast({
+            title: "Could not load warm-up accounts",
+            description: data.error || "Request failed",
+            variant: "destructive",
+          });
+        }
+      } finally {
+        setLoading(false);
       }
-    } finally {
-      setLoading(false);
-    }
-  }, [projectFilter, projects, toast]);
+    },
+    [cacheKey, resolvedProjectId, toast],
+  );
 
   useEffect(() => {
     if (projects.length > 0 && projectFilter === "all") {
       setProjectFilter(projects[0].id);
       return;
     }
-    if (projectFilter !== "all") {
-      load();
-    }
-  }, [load, projectFilter, projects, refreshKey]);
+    if (!isActive || !resolvedProjectId) return;
+    void load();
+  }, [isActive, load, projectFilter, projects, refreshKey, resolvedProjectId]);
 
   const openSenderManagement = () => {
     const projectId = projectFilter !== "all" ? projectFilter : projects[0]?.id;
@@ -274,7 +299,7 @@ export function EmailWarmUpView({
         });
         return;
       }
-      await load();
+      await load({ force: true });
       toast({ title: "Warm-up started", description: "Account is now warming up." });
     } finally {
       setActionId(null);
@@ -296,7 +321,7 @@ export function EmailWarmUpView({
         });
         return;
       }
-      await load();
+      await load({ force: true });
       toast({ title: "Warm-up paused" });
     } finally {
       setActionId(null);
@@ -327,7 +352,7 @@ export function EmailWarmUpView({
       }}
       projectId={projectFilter !== "all" ? projectFilter : (projects[0]?.id ?? "")}
       projects={projects}
-      onSuccess={() => { void load(); }}
+      onSuccess={() => { void load({ force: true }); }}
       prefillEmails={prefillEmails}
       prefillAccountId={prefillAccountId}
     />
@@ -343,6 +368,10 @@ export function EmailWarmUpView({
         </div>
       </div>
 
+      {loading ? (
+        <EmailWarmUpSkeleton isDark={isDark} />
+      ) : (
+        <>
       <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-4">
         <StatCard
           label="Total Accounts"
@@ -457,11 +486,7 @@ export function EmailWarmUpView({
 
       <Card className={cardClass}>
         <CardContent className="p-0">
-          {loading ? (
-            <div className="flex justify-center py-16">
-              <Loader2 className="h-8 w-8 animate-spin" />
-            </div>
-          ) : filtered.length === 0 ? (
+          {filtered.length === 0 ? (
             <p className="text-center text-muted-foreground py-12">
               No warm-up accounts match this filter.
             </p>
@@ -472,8 +497,7 @@ export function EmailWarmUpView({
                   <TableHead>User</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead>Health Score</TableHead>
-                  <TableHead>Email Sent</TableHead>
-                  <TableHead>Warmup Mails</TableHead>
+                  <TableHead className="text-center">Warmup Mails</TableHead>
                   <TableHead>Health %</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
@@ -494,56 +518,30 @@ export function EmailWarmUpView({
                         {account.status_label}
                       </Badge>
                     </TableCell>
-                    <TableCell className="min-w-[140px]">
-                      <div className="h-2 w-full rounded-full bg-gray-100 overflow-hidden">
-                        <div
-                          className={cn(
-                            "h-full rounded-full transition-all",
-                            healthBarColor(account.current_health_score),
-                          )}
-                          style={{ width: `${account.current_health_score}%` }}
-                        />
+                    <TableCell className="min-w-[160px]">
+                      <div className="flex items-center gap-2">
+                        <div className="h-2 flex-1 rounded-full bg-gray-100 overflow-hidden">
+                          <div
+                            className={cn(
+                              "h-full rounded-full transition-all",
+                              healthBarColor(account.current_health_score),
+                            )}
+                            style={{ width: `${account.current_health_score}%` }}
+                          />
+                        </div>
+                        <span className="text-sm font-medium tabular-nums shrink-0 w-9 text-right">
+                          {account.current_health_score}%
+                        </span>
                       </div>
                     </TableCell>
-                    <TableCell className="text-sm">
-                      {account.campaign_sent_today} of {account.campaign_daily_limit}
-                    </TableCell>
-                    <TableCell className="text-sm">
-                      <div className="flex items-center gap-1.5">
-                        <span>{account.emails_sent_today} of {account.daily_limit}</span>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-6 w-6 text-blue-600 hover:text-blue-700 hover:bg-blue-50 shrink-0"
-                          onClick={() => {
-                            setPrefillAccountId(account.id);
-                            setPrefillEmails([]);
-                            setManualSendOpen(true);
-                          }}
-                          title="Send manual warm-up email"
-                        >
-                          <Send className="h-3.5 w-3.5" />
-                        </Button>
-                      </div>
+                    <TableCell className="text-sm text-center">
+                      {account.emails_sent_today} of {account.daily_limit}
                     </TableCell>
                     <TableCell className="text-sm font-medium">
                       {account.current_health_score}%
                     </TableCell>
                     <TableCell className="text-right">
                       <div className="inline-flex items-center gap-1">
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8 text-blue-600 hover:text-blue-700 hover:bg-blue-50"
-                          onClick={() => {
-                            setPrefillAccountId(account.id);
-                            setPrefillEmails([]);
-                            setManualSendOpen(true);
-                          }}
-                          title="Send manual warm-up email"
-                        >
-                          <Send className="h-4 w-4" />
-                        </Button>
                         {account.warm_up_status === "active" ? (
                           <Button
                             variant="ghost"
@@ -593,7 +591,7 @@ export function EmailWarmUpView({
                                 Start warm-up
                               </DropdownMenuItem>
                             )}
-                            <DropdownMenuItem
+                            {/* <DropdownMenuItem
                               onClick={() => {
                                 setPrefillAccountId(account.id);
                                 setPrefillEmails([]);
@@ -602,7 +600,7 @@ export function EmailWarmUpView({
                             >
                               <Send className="h-4 w-4 mr-2" />
                               Send manual email
-                            </DropdownMenuItem>
+                            </DropdownMenuItem> */}
                           </DropdownMenuContent>
                         </DropdownMenu>
                       </div>
@@ -614,6 +612,8 @@ export function EmailWarmUpView({
           )}
         </CardContent>
       </Card>
+        </>
+      )}
     </div>
     </>
   );

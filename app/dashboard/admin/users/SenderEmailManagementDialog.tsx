@@ -29,6 +29,7 @@ import {
   Trash2,
   User,
 } from "lucide-react";
+import { EmailModalSkeleton } from "./EmailSkeletons";
 
 type SenderRow = {
   id: string;
@@ -350,9 +351,7 @@ export function SenderEmailManagementDialog({
               </h3>
 
               {loading ? (
-                <div className="flex justify-center py-10">
-                  <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-                </div>
+                <EmailModalSkeleton />
               ) : senders.length === 0 ? (
                 <p className="text-sm text-muted-foreground py-6 text-center border border-dashed rounded-lg">
                   No sender emails yet. Add one above.

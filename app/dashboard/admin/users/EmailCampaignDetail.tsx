@@ -1,8 +1,11 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { Loader2, Pause, Play } from "lucide-react";
+import {
+  EmailCampaignDetailSkeleton,
+} from "./EmailSkeletons";
 import { useToast } from "@/hooks/use-toast";
 import {
   CampaignUnderlineTabs,
@@ -45,11 +48,33 @@ type Props = {
   onBack: () => void;
 };
 
+function TabPanel({
+  tab,
+  activeTab,
+  visited,
+  children,
+}: {
+  tab: CampaignDetailTab;
+  activeTab: CampaignDetailTab;
+  visited: boolean;
+  children: ReactNode;
+}) {
+  if (!visited) return null;
+  return (
+    <div className={activeTab === tab ? undefined : "hidden"} aria-hidden={activeTab !== tab}>
+      {children}
+    </div>
+  );
+}
+
 export function EmailCampaignDetail({ campaignId, onBack }: Props) {
   const { toast } = useToast();
   const [detail, setDetail] = useState<CampaignDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<CampaignDetailTab>("analytics");
+  const [visitedTabs, setVisitedTabs] = useState<Set<CampaignDetailTab>>(
+    () => new Set(["analytics"]),
+  );
   const [starting, setStarting] = useState(false);
 
   const loadDetail = useCallback(async (opts?: { silent?: boolean }) => {
@@ -66,8 +91,11 @@ export function EmailCampaignDetail({ campaignId, onBack }: Props) {
   }, [campaignId]);
 
   useEffect(() => {
+    setDetail(null);
+    setActiveTab("analytics");
+    setVisitedTabs(new Set(["analytics"]));
     loadDetail();
-  }, [loadDetail]);
+  }, [campaignId, loadDetail]);
 
   useEffect(() => {
     const onFocus = () => loadDetail({ silent: true });
@@ -75,9 +103,15 @@ export function EmailCampaignDetail({ campaignId, onBack }: Props) {
     return () => window.removeEventListener("focus", onFocus);
   }, [loadDetail]);
 
-  useEffect(() => {
-    if (activeTab === "lead") loadDetail({ silent: true });
-  }, [activeTab, loadDetail]);
+  const handleTabChange = useCallback((tab: CampaignDetailTab) => {
+    setActiveTab(tab);
+    setVisitedTabs((prev) => {
+      if (prev.has(tab)) return prev;
+      const next = new Set(prev);
+      next.add(tab);
+      return next;
+    });
+  }, []);
 
   const pauseCampaign = async () => {
     const res = await fetch(`/api/admin/email-campaigns/${campaignId}/pause`, {
@@ -85,7 +119,7 @@ export function EmailCampaignDetail({ campaignId, onBack }: Props) {
     });
     if (res.ok) {
       toast({ title: "Campaign paused" });
-      loadDetail();
+      loadDetail({ silent: true });
     }
   };
 
@@ -116,18 +150,18 @@ export function EmailCampaignDetail({ campaignId, onBack }: Props) {
         return;
       }
       toast({ title: "Campaign started" });
-      loadDetail();
+      loadDetail({ silent: true });
     } finally {
       setStarting(false);
     }
   };
 
-  if (loading || !detail) {
-    return (
-      <div className="flex justify-center py-12">
-        <Loader2 className="h-8 w-8 animate-spin" />
-      </div>
-    );
+  if (loading && !detail) {
+    return <EmailCampaignDetailSkeleton />;
+  }
+
+  if (!detail) {
+    return null;
   }
 
   const canPause = ["active", "scheduled"].includes(detail.status);
@@ -190,20 +224,20 @@ export function EmailCampaignDetail({ campaignId, onBack }: Props) {
         <p className="text-sm text-muted-foreground">{detail.projectName}</p>
       </div>
 
-      <CampaignUnderlineTabs activeTab={activeTab} onTabChange={setActiveTab} />
+      <CampaignUnderlineTabs activeTab={activeTab} onTabChange={handleTabChange} />
 
-      {activeTab === "analytics" && (
+      <TabPanel tab="analytics" activeTab={activeTab} visited={visitedTabs.has("analytics")}>
         <AnalyticsTab campaignId={campaignId} detail={detail} />
-      )}
+      </TabPanel>
 
-      {activeTab === "lead" && (
+      <TabPanel tab="lead" activeTab={activeTab} visited={visitedTabs.has("lead")}>
         <LeadTab
           campaignId={campaignId}
           onRecipientsChange={() => loadDetail({ silent: true })}
         />
-      )}
+      </TabPanel>
 
-      {activeTab === "sequence" && (
+      <TabPanel tab="sequence" activeTab={activeTab} visited={visitedTabs.has("sequence")}>
         <SequenceProvider campaignId={campaignId}>
           <SequenceTab
             campaign={{
@@ -216,15 +250,18 @@ export function EmailCampaignDetail({ campaignId, onBack }: Props) {
             onSaved={() => loadDetail({ silent: true })}
           />
         </SequenceProvider>
-      )}
+      </TabPanel>
 
-      {activeTab === "schedule" && (
+      <TabPanel tab="schedule" activeTab={activeTab} visited={visitedTabs.has("schedule")}>
         <ScheduleTab campaignId={campaignId} projectId={detail.projectId} />
-      )}
+      </TabPanel>
 
-      {activeTab === "option" && (
-        <OptionTab campaignId={campaignId} onSaved={loadDetail} />
-      )}
+      <TabPanel tab="option" activeTab={activeTab} visited={visitedTabs.has("option")}>
+        <OptionTab
+          campaignId={campaignId}
+          onSaved={() => loadDetail({ silent: true })}
+        />
+      </TabPanel>
     </div>
   );
 }

@@ -19,6 +19,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Loader2 } from "lucide-react";
+import { EmailModalSkeleton } from "./EmailSkeletons";
 import type { NotificationSelectionState } from "./SendNotificationModal";
 
 type EmailProject = {
@@ -177,9 +178,7 @@ export function AttachEmailCampaignModal({
         </DialogHeader>
 
         {loading ? (
-          <div className="flex justify-center py-8">
-            <Loader2 className="h-6 w-6 animate-spin" />
-          </div>
+          <EmailModalSkeleton isDark={isDark} />
         ) : (
           <div className="space-y-4">
             <div className="rounded-md border p-3 text-sm">

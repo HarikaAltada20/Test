@@ -27,16 +27,17 @@ import type {
 import { decodeInboundBodyText } from "@/lib/email/inbound-email-parse";
 import { useToast } from "@/hooks/use-toast";
 import {
-  Archive,
+  EmailUniboxDetailSkeleton,
+  EmailUniboxThreadSkeleton,
+} from "./EmailSkeletons";
+import {
   Loader2,
   Mail,
   MoreVertical,
   RefreshCw,
   Reply,
-  ReplyAll,
   Search,
   Send,
-  Star,
   Trash2,
 } from "lucide-react";
 
@@ -246,6 +247,17 @@ export function EmailUnibox({ campaigns, isDark }: Props) {
   }, [syncInbound, loadThreads, loadThreadDetail, selectedId]);
 
   useEffect(() => {
+    if (threads.length === 0) {
+      setSelectedId(null);
+      return;
+    }
+    const stillVisible = selectedId && threads.some((t) => t.id === selectedId);
+    if (!stillVisible) {
+      setSelectedId(threads[0].id);
+    }
+  }, [threads, selectedId]);
+
+  useEffect(() => {
     if (selectedId) {
       loadThreadDetail(selectedId);
     } else {
@@ -278,30 +290,12 @@ export function EmailUnibox({ campaigns, isDark }: Props) {
     }
   };
 
-  const handleStar = async (thread: UniboxThreadListItem) => {
-    const next = !thread.isStarred;
-    await patchThread(thread.id, { isStarred: next });
-    setThreads((prev) =>
-      prev.map((t) => (t.id === thread.id ? { ...t, isStarred: next } : t)),
-    );
-    if (selectedThread?.id === thread.id) {
-      setSelectedThread({ ...selectedThread, isStarred: next });
-    }
-  };
-
   const handleMarkUnread = async (thread: UniboxThreadListItem) => {
     await patchThread(thread.id, { isRead: false });
     setThreads((prev) =>
       prev.map((t) => (t.id === thread.id ? { ...t, isRead: false } : t)),
     );
     setUnreadCount((c) => c + 1);
-  };
-
-  const handleArchive = async (threadId: string) => {
-    await patchThread(threadId, { isArchived: true });
-    setThreads((prev) => prev.filter((t) => t.id !== threadId));
-    if (selectedId === threadId) setSelectedId(null);
-    toast({ title: "Archived" });
   };
 
   const handleDelete = async (threadId: string) => {
@@ -451,9 +445,7 @@ export function EmailUnibox({ campaigns, isDark }: Props) {
           </div>
 
           {loading ? (
-            <div className="flex flex-1 justify-center py-20">
-              <Loader2 className="h-6 w-6 animate-spin text-blue-500" />
-            </div>
+            <EmailUniboxThreadSkeleton isDark={isDark} />
           ) : threads.length === 0 ? (
             <div className="py-20 text-center text-sm text-gray-500 px-6">
               No messages yet. Sent campaign emails and replies will appear
@@ -502,18 +494,6 @@ export function EmailUnibox({ campaigns, isDark }: Props) {
                           </span>
                         </div>
 
-                        <div className="flex items-center gap-1 text-gray-500">
-                          <Star
-                            className={cn(
-                              "h-3.5 w-3.5",
-                              thread.isStarred
-                                ? "fill-amber-400 text-amber-500"
-                                : "text-gray-400",
-                            )}
-                          />
-                          <span className="text-xs">{thread.replyCount}</span>
-                        </div>
-
                         <p
                           className={cn(
                             "text-sm text-gray-900 leading-snug",
@@ -525,7 +505,7 @@ export function EmailUnibox({ campaigns, isDark }: Props) {
 
                         {thread.snippet && (
                           <p className="text-xs text-gray-500 line-clamp-2 leading-relaxed">
-                            {thread.snippet}
+                            {decodeInboundBodyText(thread.snippet)}
                           </p>
                         )}
 
@@ -569,9 +549,7 @@ export function EmailUnibox({ campaigns, isDark }: Props) {
               </div>
             </div>
           ) : detailLoading ? (
-            <div className="flex items-center justify-center min-h-[320px]">
-              <Loader2 className="h-6 w-6 animate-spin text-blue-500" />
-            </div>
+            <EmailUniboxDetailSkeleton isDark={isDark} />
           ) : selectedThread ? (
             <div
               className={cn(
@@ -607,19 +585,9 @@ export function EmailUnibox({ campaigns, isDark }: Props) {
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end">
                     <DropdownMenuItem
-                      onClick={() => handleStar(selectedThread)}
-                    >
-                      {selectedThread.isStarred ? "Unstar" : "Star"}
-                    </DropdownMenuItem>
-                    <DropdownMenuItem
                       onClick={() => handleMarkUnread(selectedThread)}
                     >
                       Mark unread
-                    </DropdownMenuItem>
-                    <DropdownMenuItem
-                      onClick={() => handleArchive(selectedThread.id)}
-                    >
-                      Archive
                     </DropdownMenuItem>
                     <DropdownMenuItem
                       className="text-red-600"
@@ -661,26 +629,6 @@ export function EmailUnibox({ campaigns, isDark }: Props) {
                 <div className="mt-4 flex items-center justify-end gap-1">
                   <button
                     type="button"
-                    className="rounded-md p-2 text-gray-500 hover:bg-gray-100 hover:text-gray-700"
-                    onClick={() => handleStar(selectedThread)}
-                  >
-                    <Star
-                      className={cn(
-                        "h-5 w-5",
-                        selectedThread.isStarred &&
-                          "fill-amber-400 text-amber-500",
-                      )}
-                    />
-                  </button>
-                  <button
-                    type="button"
-                    className="rounded-md p-2 text-gray-500 hover:bg-gray-100 hover:text-gray-700"
-                    onClick={() => handleArchive(selectedThread.id)}
-                  >
-                    <Archive className="h-5 w-5" />
-                  </button>
-                  <button
-                    type="button"
                     className="rounded-md p-2 text-gray-500 hover:bg-gray-100 hover:text-red-600"
                     onClick={() => handleDelete(selectedThread.id)}
                   >
@@ -692,13 +640,6 @@ export function EmailUnibox({ campaigns, isDark }: Props) {
                     onClick={() => setReplyOpen(true)}
                   >
                     <Reply className="h-5 w-5" />
-                  </button>
-                  <button
-                    type="button"
-                    className="rounded-md p-2 text-gray-500 hover:bg-gray-100 hover:text-gray-700"
-                    onClick={() => setReplyOpen(true)}
-                  >
-                    <ReplyAll className="h-5 w-5" />
                   </button>
                 </div>
               </div>
@@ -801,16 +742,6 @@ export function EmailUnibox({ campaigns, isDark }: Props) {
               )}
             </div>
           ) : null}
-
-          {!replyOpen && selectedId && (
-            <Button
-              className="absolute bottom-6 right-6 h-14 w-14 rounded-full bg-purple-600 shadow-xl hover:bg-purple-700 hover:shadow-2xl"
-              size="icon"
-              onClick={() => setReplyOpen(true)}
-            >
-              <Send className="h-6 w-6" />
-            </Button>
-          )}
         </div>
       </div>
 

@@ -19,18 +19,21 @@ export async function GET(req: NextRequest, context: RouteContext) {
   const offset = (page - 1) * limit;
 
   const db = createAdminClient();
+  const userRelation = search
+    ? "user:users!inner (email, full_name, username, user_type)"
+    : "user:users (email, full_name, username, user_type)";
+
   let query = db
     .from("admin_email_campaign_recipients")
     .select(
       `
       user_id, email_delivery_status, from_email, opened_at, clicked_at,
-      user:users (email, full_name, username, user_type)
+      ${userRelation}
     `,
       { count: "exact" },
     )
     .eq("campaign_id", id)
-    .order("user_id", { ascending: true })
-    .range(offset, offset + limit - 1);
+    .order("user_id", { ascending: true });
 
   if (status && status !== "all") {
     if (status === "not_opened") {
@@ -39,6 +42,16 @@ export async function GET(req: NextRequest, context: RouteContext) {
       query = query.eq("email_delivery_status", status);
     }
   }
+
+  if (search) {
+    const pattern = `%${search}%`;
+    query = query.or(
+      `email.ilike.${pattern},full_name.ilike.${pattern},username.ilike.${pattern}`,
+      { referencedTable: "users" },
+    );
+  }
+
+  query = query.range(offset, offset + limit - 1);
 
   const { data, error, count } = await query;
   if (error) {
@@ -69,15 +82,6 @@ export async function GET(req: NextRequest, context: RouteContext) {
       clickedAt: r.clicked_at,
     };
   });
-
-  if (search) {
-    rows = rows.filter(
-      (r) =>
-        r.email.toLowerCase().includes(search) ||
-        r.fullName.toLowerCase().includes(search) ||
-        r.username.toLowerCase().includes(search),
-    );
-  }
 
   return NextResponse.json({
     recipients: rows,

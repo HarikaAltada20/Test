@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -24,8 +24,10 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Filter, Plus, Search, SlidersHorizontal, Trash2 } from "lucide-react";
+import { ChevronLeft, ChevronRight, Filter, Plus, Search, SlidersHorizontal, Trash2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+
+const PAGE_SIZE = 50;
 
 type RecipientRow = {
   index: number;
@@ -106,46 +108,51 @@ type Props = {
 export function LeadTab({ campaignId, onRecipientsChange }: Props) {
   const { toast } = useToast();
   const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
+  const [page, setPage] = useState(1);
   const [recipients, setRecipients] = useState<RecipientRow[]>([]);
   const [total, setTotal] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
   const [loading, setLoading] = useState(true);
   const [deleting, setDeleting] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
 
+  useEffect(() => {
+    const timer = window.setTimeout(() => setDebouncedSearch(search), 300);
+    return () => window.clearTimeout(timer);
+  }, [search]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [campaignId, statusFilter, debouncedSearch]);
+
   const loadRecipients = () => {
     setLoading(true);
-    const params = new URLSearchParams({ page: "1", limit: "500" });
+    const params = new URLSearchParams({
+      page: String(page),
+      limit: String(PAGE_SIZE),
+    });
     if (statusFilter !== "all") params.set("status", statusFilter);
-    if (search.trim()) params.set("search", search.trim());
+    if (debouncedSearch.trim()) params.set("search", debouncedSearch.trim());
 
     return fetch(`/api/admin/email-campaigns/${campaignId}/recipients?${params}`)
       .then((r) => r.json())
       .then((d) => {
         setRecipients(d.recipients ?? []);
         setTotal(d.total ?? d.recipients?.length ?? 0);
+        setTotalPages(d.totalPages ?? 1);
       })
       .finally(() => setLoading(false));
   };
 
   useEffect(() => {
     loadRecipients();
-  }, [campaignId, statusFilter, search]);
-
-  const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    if (!q) return recipients;
-    return recipients.filter(
-      (r) =>
-        r.email.toLowerCase().includes(q) ||
-        r.fullName.toLowerCase().includes(q) ||
-        r.username.toLowerCase().includes(q),
-    );
-  }, [recipients, search]);
+  }, [campaignId, statusFilter, debouncedSearch, page]);
 
   const toggleAll = (checked: boolean) => {
-    if (checked) setSelected(new Set(filtered.map((r) => r.userId)));
+    if (checked) setSelected(new Set(recipients.map((r) => r.userId)));
     else setSelected(new Set());
   };
 
@@ -233,9 +240,6 @@ export function LeadTab({ campaignId, onRecipientsChange }: Props) {
           <>
             <span className="text-sm text-muted-foreground">
               {selected.size} selected
-              {!loading && total > filtered.length
-                ? ` · ${filtered.length} shown`
-                : ""}
             </span>
             <Button
               variant="destructive"
@@ -266,8 +270,38 @@ export function LeadTab({ campaignId, onRecipientsChange }: Props) {
 
       <Card className="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden">
         {!loading && total > 0 && (
-          <div className="px-4 py-2 border-b border-gray-100 text-xs text-muted-foreground">
-            Showing {filtered.length} of {total} leads
+          <div className="px-4 py-2 border-b border-gray-100 text-xs text-muted-foreground flex flex-wrap items-center justify-between gap-2">
+            <span>
+              Showing {(page - 1) * PAGE_SIZE + 1}–
+              {Math.min(page * PAGE_SIZE, total)} of {total} leads
+            </span>
+            {totalPages > 1 && (
+              <div className="flex items-center gap-1">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon"
+                  className="h-7 w-7"
+                  disabled={page <= 1}
+                  onClick={() => setPage((p) => Math.max(1, p - 1))}
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                </Button>
+                <span className="px-2">
+                  Page {page} of {totalPages}
+                </span>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon"
+                  className="h-7 w-7"
+                  disabled={page >= totalPages}
+                  onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                >
+                  <ChevronRight className="h-4 w-4" />
+                </Button>
+              </div>
+            )}
           </div>
         )}
         <CardContent className="p-0 overflow-x-auto">
@@ -277,8 +311,8 @@ export function LeadTab({ campaignId, onRecipientsChange }: Props) {
                 <th className="p-4 w-10">
                   <Checkbox
                     checked={
-                      filtered.length > 0 &&
-                      filtered.every((r) => selected.has(r.userId))
+                      recipients.length > 0 &&
+                      recipients.every((r) => selected.has(r.userId))
                     }
                     onCheckedChange={(v) => toggleAll(!!v)}
                   />
@@ -293,14 +327,20 @@ export function LeadTab({ campaignId, onRecipientsChange }: Props) {
             </thead>
             <tbody>
               {loading && (
-                <tr>
-                  <td colSpan={7} className="p-12 text-center text-muted-foreground">
-                    Loading leads...
-                  </td>
-                </tr>
+                <>
+                  {Array.from({ length: 8 }).map((_, i) => (
+                    <tr key={i} className="border-b last:border-0">
+                      {Array.from({ length: 7 }).map((_, j) => (
+                        <td key={j} className="p-4">
+                          <div className="h-4 w-20 rounded-md bg-muted animate-pulse" />
+                        </td>
+                      ))}
+                    </tr>
+                  ))}
+                </>
               )}
               {!loading &&
-                filtered.map((r) => (
+                recipients.map((r) => (
                   <tr key={r.userId} className="border-b last:border-0 hover:bg-muted/20">
                     <td className="p-4">
                       <Checkbox
@@ -336,7 +376,7 @@ export function LeadTab({ campaignId, onRecipientsChange }: Props) {
                     <td className="p-4 capitalize text-muted-foreground">{r.userType || "—"}</td>
                   </tr>
                 ))}
-              {!loading && filtered.length === 0 && (
+              {!loading && recipients.length === 0 && (
                 <tr>
                   <td colSpan={7} className="p-12 text-center text-muted-foreground">
                     No leads attached yet. Use Add Leads or send from the Users table.

@@ -36,6 +36,7 @@ import {
   Bell,
   Mail,
   Send,
+  Loader2,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import {
@@ -46,8 +47,8 @@ import {
   type NotificationSelectionState,
 } from "./SendNotificationModal";
 import { AdminNotificationsView } from "./AdminNotificationsView";
-import { AdminEmailView } from "./AdminEmailView";
 import { AttachEmailCampaignModal } from "./AttachEmailCampaignModal";
+import { EmailTabSkeleton } from "./EmailSkeletons";
 import type { RecipientUserRow } from "@/lib/admin-notifications/types";
 import { cn } from "@/lib/utils";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -76,6 +77,14 @@ import { SupportChatToggle } from "@/components/admin/SupportChatToggle";
 const UsersMap = dynamic(
   () => import("./UsersMap").then((m) => ({ default: m.UsersMap })),
   { ssr: false },
+);
+
+const AdminEmailView = dynamic(
+  () => import("./AdminEmailView").then((m) => ({ default: m.AdminEmailView })),
+  {
+    ssr: false,
+    loading: () => <EmailTabSkeleton />,
+  },
 );
 
 type AdvertiserProfile = {
@@ -608,12 +617,8 @@ export default function AdminUsersPage() {
       const params = new URLSearchParams(window.location.search);
       if (params.get("tab") === "email") return "email";
       const saved = localStorage.getItem("users-management-view-mode");
-      if (
-        saved === "table" ||
-        saved === "map" ||
-        saved === "notifications" ||
-        saved === "email"
-      ) {
+      // Restore table/map/notifications only — email data loads when user opens Email tab
+      if (saved === "table" || saved === "map" || saved === "notifications") {
         return saved;
       }
     }

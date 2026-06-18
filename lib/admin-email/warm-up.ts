@@ -184,12 +184,15 @@ export async function syncWarmUpAccountsForProject(projectId: string) {
 }
 
 export async function listWarmUpAccounts(projectId?: string | null) {
-  const db = createAdminClient();
-
   if (projectId) {
     await syncWarmUpAccountsForProject(projectId);
   }
+  const rows = await queryWarmUpAccountRows(projectId);
+  return rows.map((row) => mapWarmUpAccount(row));
+}
 
+async function queryWarmUpAccountRows(projectId?: string | null) {
+  const db = createAdminClient();
   let query = db
     .from("admin_email_warm_up_accounts")
     .select("*")
@@ -201,26 +204,24 @@ export async function listWarmUpAccounts(projectId?: string | null) {
 
   const { data, error } = await query;
   if (error) throw new Error(error.message);
-
-  return (data ?? []).map((row) => mapWarmUpAccount(row as WarmUpAccountRow));
+  return (data ?? []) as WarmUpAccountRow[];
 }
 
-export async function getWarmUpOverview(projectId?: string | null) {
-  const db = createAdminClient();
-
+/** Single round-trip: sync senders once, one DB read, accounts + overview. */
+export async function getWarmUpDashboard(projectId?: string | null) {
   if (projectId) {
     await syncWarmUpAccountsForProject(projectId);
   }
+  const rows = await queryWarmUpAccountRows(projectId);
+  return {
+    accounts: rows.map((row) => mapWarmUpAccount(row)),
+    overview: computeWarmUpOverview(rows),
+  };
+}
 
-  let query = db.from("admin_email_warm_up_accounts").select("*");
-  if (projectId) {
-    query = query.eq("project_id", projectId);
-  }
-
-  const { data, error } = await query;
-  if (error) throw new Error(error.message);
-
-  return computeWarmUpOverview((data ?? []) as WarmUpAccountRow[]);
+export async function getWarmUpOverview(projectId?: string | null) {
+  const rows = await queryWarmUpAccountRows(projectId);
+  return computeWarmUpOverview(rows);
 }
 
 export async function startWarmUpAccount(accountId: string) {
