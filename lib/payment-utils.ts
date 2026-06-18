@@ -124,7 +124,7 @@ export async function addToDepositBalance(
         ? `Wallet top-up via Stripe payment`
         : paymentMethod === "solana"
         ? `Wallet top-up via Solana payment`
-        : `Wallet top-up via Phantom Wallet`;
+        : `Wallet top-up via Solana (USDC/USDT)`;
 
     const depositRemarks = `Deposit added to wallet balance`;
 
@@ -313,6 +313,246 @@ export async function createTopUpPaymentIntent(
   } catch (error) {
     console.error("Error creating payment intent:", error);
     return null;
+  }
+}
+
+export type WalletTopUpCheckoutSession = {
+  sessionId: string;
+  url: string;
+  paymentIntentId: string | null;
+};
+
+export type ContestCheckoutSession = WalletTopUpCheckoutSession;
+
+export type CreateContestCheckoutSessionParams = {
+  userId: string;
+  contestId: string;
+  contestTitle: string;
+  stripeAmountInCents: number;
+  totalAmountInCents: number;
+  walletAmountInCents: number;
+  originalWalletBalance: number;
+  description: string;
+  paymentMethod: "stripe" | "split";
+  returnPath: string;
+};
+
+// Create Stripe Checkout session for wallet top-up (hosted checkout page)
+export async function createWalletTopUpCheckoutSession(
+  userId: string,
+  amount: number,
+): Promise<WalletTopUpCheckoutSession | { error: string }> {
+  try {
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL;
+    if (!appUrl) {
+      console.error("NEXT_PUBLIC_APP_URL is not configured");
+      return {
+        error: "Payment checkout is not configured. Please contact support.",
+      };
+    }
+
+    let customerId: string | null;
+    try {
+      customerId = await createOrGetStripeCustomer(userId);
+    } catch (error) {
+      return {
+        error:
+          error instanceof Error
+            ? error.message
+            : "Failed to start secure checkout. Please try again.",
+      };
+    }
+
+    if (!customerId) {
+      console.error(
+        "Failed to create or get Stripe customer for user:",
+        userId,
+      );
+      return {
+        error:
+          "We couldn't set up billing for your account. Please ensure your profile has a valid email, or contact support.",
+      };
+    }
+
+    const amountInCents = formatAmountForStripe(amount);
+    const session = await stripe().checkout.sessions.create({
+      customer: customerId,
+      mode: "payment",
+      payment_method_types: ["card"],
+      line_items: [
+        {
+          quantity: 1,
+          price_data: {
+            currency: "usd",
+            unit_amount: amountInCents,
+            product_data: {
+              name: "Wallet top-up",
+              description: `Add $${amount.toFixed(2)} to your Game of Creators wallet`,
+            },
+          },
+        },
+      ],
+      payment_intent_data: {
+        metadata: {
+          userId,
+          type: "wallet_topup",
+          amount: amount.toString(),
+        },
+      },
+      metadata: {
+        userId,
+        type: "wallet_topup",
+        amount: amount.toString(),
+      },
+      success_url: `${appUrl}/dashboard/billing?topup=success&session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${appUrl}/dashboard/billing?topup=cancelled`,
+    });
+
+    const paymentIntentId =
+      typeof session.payment_intent === "string"
+        ? session.payment_intent
+        : session.payment_intent?.id ?? null;
+
+    if (!session.url) {
+      console.error("Checkout session created without URL");
+      return { error: "Failed to start secure checkout. Please try again." };
+    }
+
+    return {
+      sessionId: session.id,
+      url: session.url,
+      paymentIntentId,
+    };
+  } catch (error) {
+    console.error("Error creating wallet top-up checkout session:", error);
+    return {
+      error:
+        error instanceof Error
+          ? error.message
+          : "Failed to start secure checkout. Please try again.",
+    };
+  }
+}
+
+// Create Stripe Checkout session for contest payment (hosted checkout page)
+export async function createContestCheckoutSession(
+  params: CreateContestCheckoutSessionParams,
+): Promise<ContestCheckoutSession | { error: string }> {
+  try {
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL;
+    if (!appUrl) {
+      console.error("NEXT_PUBLIC_APP_URL is not configured");
+      return {
+        error: "Payment checkout is not configured. Please contact support.",
+      };
+    }
+
+    let customerId: string | null;
+    try {
+      customerId = await createOrGetStripeCustomer(params.userId);
+    } catch (error) {
+      return {
+        error:
+          error instanceof Error
+            ? error.message
+            : "Failed to start secure checkout. Please try again.",
+      };
+    }
+
+    if (!customerId) {
+      return {
+        error:
+          "We couldn't set up billing for your account. Please ensure your profile has a valid email, or contact support.",
+      };
+    }
+
+    const {
+      userId,
+      contestId,
+      contestTitle,
+      stripeAmountInCents,
+      totalAmountInCents,
+      walletAmountInCents,
+      originalWalletBalance,
+      description,
+      paymentMethod,
+      returnPath,
+    } = params;
+
+    const metadata: Record<string, string> = {
+      userId,
+      contestId,
+      type:
+        paymentMethod === "split"
+          ? "contest_payment_split"
+          : "contest_payment",
+      amount: (stripeAmountInCents / 100).toString(),
+      description,
+      paymentMethod,
+    };
+
+    if (paymentMethod === "split") {
+      metadata.walletAmount = (walletAmountInCents / 100).toString();
+      metadata.totalAmount = (totalAmountInCents / 100).toString();
+      metadata.originalWalletBalance = originalWalletBalance.toString();
+    }
+
+    const normalizedPath = returnPath.startsWith("/")
+      ? returnPath
+      : `/${returnPath}`;
+    const returnBase = `${appUrl.replace(/\/$/, "")}${normalizedPath}`;
+    const returnSeparator = returnBase.includes("?") ? "&" : "?";
+
+    const session = await stripe().checkout.sessions.create({
+      customer: customerId,
+      mode: "payment",
+      payment_method_types: ["card"],
+      line_items: [
+        {
+          quantity: 1,
+          price_data: {
+            currency: "usd",
+            unit_amount: stripeAmountInCents,
+            product_data: {
+              name: "Campaign payment",
+              description: `Payment for "${contestTitle}" via Game of Creators`,
+            },
+          },
+        },
+      ],
+      payment_intent_data: { metadata },
+      metadata: {
+        userId,
+        contestId,
+        type: metadata.type,
+      },
+      success_url: `${returnBase}${returnSeparator}contest_payment=success&contest_id=${contestId}&session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${returnBase}${returnSeparator}contest_payment=cancelled&contest_id=${contestId}`,
+    });
+
+    const paymentIntentId =
+      typeof session.payment_intent === "string"
+        ? session.payment_intent
+        : session.payment_intent?.id ?? null;
+
+    if (!session.url) {
+      console.error("Contest checkout session created without URL");
+      return { error: "Failed to start secure checkout. Please try again." };
+    }
+
+    return {
+      sessionId: session.id,
+      url: session.url,
+      paymentIntentId,
+    };
+  } catch (error) {
+    console.error("Error creating contest checkout session:", error);
+    return {
+      error:
+        error instanceof Error
+          ? error.message
+          : "Failed to start secure checkout. Please try again.",
+    };
   }
 }
 
@@ -620,7 +860,12 @@ export async function logTransaction(
 
     // If no customer ID provided but we have a payment intent, try to get customer info
     let finalMetadata = metadata || {};
-    if (!stripeCustomerId && paymentIntentId) {
+    // Solana deposits store the tx signature in payment_intent_id — not a Stripe ID.
+    if (
+      !stripeCustomerId &&
+      paymentIntentId &&
+      paymentMethod !== "solana"
+    ) {
       try {
         const paymentIntent = await stripe().paymentIntents.retrieve(
           paymentIntentId
@@ -1220,8 +1465,17 @@ export async function processContestPaymentV2(
   description: string,
   useWalletFirst: boolean = true,
   existingPaymentDetails?: PaymentDetails,
-  changeType?: "increase" | "decrease"
-): Promise<PaymentProcessingResult & { paymentDetails?: PaymentDetails }> {
+  changeType?: "increase" | "decrease",
+  options?: { checkoutMode?: boolean }
+): Promise<
+  PaymentProcessingResult & {
+    paymentDetails?: PaymentDetails;
+    stripeAmount?: number;
+    walletAmount?: number;
+    totalAmount?: number;
+    originalWalletBalance?: number;
+  }
+> {
   try {
     const totalAmount =
       prizePoolInCents +
@@ -1256,8 +1510,8 @@ export async function processContestPaymentV2(
       stripeAmount = totalAmount;
     }
 
-    // Create Stripe payment intent if needed
-    if (stripeAmount > 0) {
+    // Create Stripe payment intent if needed (skipped in checkout mode — Checkout creates the PI)
+    if (stripeAmount > 0 && !options?.checkoutMode) {
       const stripePaymentMethod = walletAmount > 0 ? "split" : "stripe";
 
       // For split payments, pass additional metadata for atomic transactions
@@ -1386,6 +1640,10 @@ export async function processContestPaymentV2(
       amountFromStripe: stripeAmount,
       paymentIntent: paymentIntent || undefined,
       paymentDetails,
+      stripeAmount,
+      walletAmount,
+      totalAmount,
+      originalWalletBalance: currentBalance.balance,
     };
   } catch (error) {
     console.error("Error in processContestPaymentV2:", error);
@@ -1793,4 +2051,315 @@ export async function setDefaultPaymentMethod(
     );
     return false;
   }
+}
+
+export type FinalizeContestPaymentResult = {
+  success: boolean;
+  alreadyProcessed: boolean;
+  paymentStatus: PaymentDetails["payment_status"];
+  error?: string;
+};
+
+type StripePaymentIntentLike = {
+  id: string;
+  /** Stripe PaymentIntent amount in cents (authoritative for Stripe portion). */
+  amount?: number;
+  metadata: Record<string, string | undefined>;
+};
+
+async function ensureContestStripeTransactionLogged(
+  supabase: ReturnType<typeof createAdminClient>,
+  params: {
+    userId: string;
+    contestId: string;
+    paymentIntentId: string;
+    stripeAmountCents: number;
+    isSplit: boolean;
+    paymentDescription?: string;
+  },
+): Promise<boolean> {
+  const { data: existingSuccess } = await supabase
+    .from("money_transactions")
+    .select("id")
+    .eq("payment_intent_id", params.paymentIntentId)
+    .eq("status", "success")
+    .maybeSingle();
+
+  if (existingSuccess) {
+    return true;
+  }
+
+  const baseDescription =
+    params.paymentDescription ||
+    `Contest payment for contest ${params.contestId}`;
+  const enhancedDescription = params.isSplit
+    ? `${baseDescription} (Stripe Portion)`
+    : `Contest payment completed - Contest: ${params.contestId}, Payment Intent: ${params.paymentIntentId}`;
+  const remarks = params.isSplit
+    ? "Stripe portion of split payment completed successfully"
+    : "Contest payment completed successfully";
+
+  const { data: pending } = await supabase
+    .from("money_transactions")
+    .select("id")
+    .eq("payment_intent_id", params.paymentIntentId)
+    .eq("status", "pending")
+    .maybeSingle();
+
+  if (pending) {
+    const { error } = await supabase
+      .from("money_transactions")
+      .update({
+        status: "success",
+        amount: params.stripeAmountCents,
+        description: enhancedDescription,
+        remarks,
+        payment_method: params.isSplit ? "split" : "stripe",
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", pending.id);
+
+    if (!error) {
+      return true;
+    }
+    console.error(
+      "Failed to promote pending contest Stripe transaction:",
+      error,
+    );
+  }
+
+  return logTransactionAsAdmin(
+    params.userId,
+    "contest_payment",
+    params.stripeAmountCents,
+    "success",
+    enhancedDescription,
+    {
+      paymentIntentId: params.paymentIntentId,
+      paymentMethod: params.isSplit ? "split" : "stripe",
+      remarks,
+    },
+  );
+}
+
+async function processSplitWalletPortion(
+  supabase: ReturnType<typeof createAdminClient>,
+  params: {
+    userId: string;
+    contestId: string;
+    paymentIntentId: string;
+    walletAmountInCents: number;
+    walletDeductionPending: boolean;
+    paymentDescription?: string;
+  },
+): Promise<void> {
+  if (params.walletAmountInCents <= 0 || !params.walletDeductionPending) {
+    return;
+  }
+
+  const { data: existingWalletTx } = await supabase
+    .from("money_transactions")
+    .select("id")
+    .eq("user_id", params.userId)
+    .eq("type", "contest_payment")
+    .eq("payment_method", "split")
+    .eq("status", "success")
+    .contains("metadata", { split_payment_intent_id: params.paymentIntentId })
+    .maybeSingle();
+
+  if (existingWalletTx) {
+    return;
+  }
+
+  const { data: profile, error: balanceError } = await supabase
+    .from("advertiser_profiles")
+    .select("available_deposit_balance")
+    .eq("id", params.userId)
+    .single();
+
+  if (balanceError) {
+    console.error(
+      "Error fetching user balance for wallet deduction:",
+      balanceError,
+    );
+    return;
+  }
+
+  const currentBalance = profile?.available_deposit_balance || 0;
+  const newBalance = currentBalance - params.walletAmountInCents;
+
+  if (newBalance < 0) {
+    console.error(
+      `Wallet deduction would create negative balance for user ${params.userId}`,
+    );
+    return;
+  }
+
+  const { error: updateBalanceError } = await supabase
+    .from("advertiser_profiles")
+    .update({ available_deposit_balance: newBalance })
+    .eq("id", params.userId);
+
+  if (updateBalanceError) {
+    console.error(
+      "Error deducting wallet amount for split payment:",
+      updateBalanceError,
+    );
+    return;
+  }
+
+  const baseDescription =
+    params.paymentDescription ||
+    `Contest payment for contest ${params.contestId}`;
+  const logged = await logTransactionAsAdmin(
+    params.userId,
+    "contest_payment",
+    params.walletAmountInCents,
+    "success",
+    `${baseDescription} (Wallet Portion) - Split payment completed`,
+    {
+      paymentMethod: "split",
+      remarks: "Wallet portion of split payment completed successfully",
+      metadata: {
+        split_payment_intent_id: params.paymentIntentId,
+        wallet_portion: true,
+      },
+    },
+  );
+
+  if (!logged) {
+    console.error(
+      "Wallet transaction logging failed for split payment:",
+      params.paymentIntentId,
+    );
+  }
+}
+
+/**
+ * Idempotently finalize a contest Stripe payment (webhook + return URL).
+ * Uses admin client to bypass RLS.
+ */
+export async function finalizeContestPaymentFromStripe(
+  paymentIntent: StripePaymentIntentLike,
+): Promise<FinalizeContestPaymentResult> {
+  const supabase = createAdminClient();
+  const { userId, type, amount, contestId, walletAmount, description } =
+    paymentIntent.metadata;
+
+  if (!userId || !type || !amount || !contestId) {
+    return {
+      success: false,
+      alreadyProcessed: false,
+      paymentStatus: "pending",
+      error: "Missing required payment metadata",
+    };
+  }
+
+  if (type !== "contest_payment" && type !== "contest_payment_split") {
+    return {
+      success: false,
+      alreadyProcessed: false,
+      paymentStatus: "pending",
+      error: "Not a contest payment intent",
+    };
+  }
+
+  const { data: contest, error: fetchError } = await supabase
+    .from("contests")
+    .select("payment_details")
+    .eq("id", contestId)
+    .single();
+
+  if (fetchError || !contest?.payment_details) {
+    return {
+      success: false,
+      alreadyProcessed: false,
+      paymentStatus: "pending",
+      error: fetchError?.message || "Contest payment details not found",
+    };
+  }
+
+  const paymentDetails =
+    typeof contest.payment_details === "string"
+      ? (JSON.parse(contest.payment_details) as PaymentDetails)
+      : (contest.payment_details as PaymentDetails);
+
+  const { data: existingStripeTx } = await supabase
+    .from("money_transactions")
+    .select("id")
+    .eq("payment_intent_id", paymentIntent.id)
+    .eq("status", "success")
+    .maybeSingle();
+
+  if (existingStripeTx && paymentDetails.payment_status === "completed") {
+    return {
+      success: true,
+      alreadyProcessed: true,
+      paymentStatus: "completed",
+    };
+  }
+
+  const isSplit = type === "contest_payment_split";
+  const stripeAmountCents =
+    typeof paymentIntent.amount === "number" && paymentIntent.amount > 0
+      ? paymentIntent.amount
+      : Math.round(parseFloat(amount) * 100);
+
+  if (isSplit) {
+    const walletAmountInCents = Math.round(
+      parseFloat(walletAmount || "0") * 100,
+    );
+    await processSplitWalletPortion(supabase, {
+      userId,
+      contestId,
+      paymentIntentId: paymentIntent.id,
+      walletAmountInCents,
+      walletDeductionPending: paymentDetails.wallet_deduction_pending === true,
+      paymentDescription: description,
+    });
+  }
+
+  const stripeLogged = await ensureContestStripeTransactionLogged(supabase, {
+    userId,
+    contestId,
+    paymentIntentId: paymentIntent.id,
+    stripeAmountCents,
+    isSplit,
+    paymentDescription: description,
+  });
+
+  if (!stripeLogged) {
+    console.error(
+      "Failed to log Stripe contest payment transaction:",
+      paymentIntent.id,
+    );
+  }
+
+  const updatedPaymentDetails: PaymentDetails = {
+    ...paymentDetails,
+    payment_status: "completed",
+    last_updated: new Date().toISOString(),
+    wallet_deduction_pending: false,
+  };
+
+  const { error: updateError } = await supabase
+    .from("contests")
+    .update({ payment_details: updatedPaymentDetails })
+    .eq("id", contestId);
+
+  if (updateError) {
+    console.error("Error updating contest payment details:", updateError);
+    return {
+      success: false,
+      alreadyProcessed: false,
+      paymentStatus: paymentDetails.payment_status,
+      error: updateError.message,
+    };
+  }
+
+  return {
+    success: true,
+    alreadyProcessed: Boolean(existingStripeTx),
+    paymentStatus: "completed",
+  };
 }

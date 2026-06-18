@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -38,6 +38,8 @@ import {
   Loader2,
   ChevronDown,
   RotateCcw,
+  X,
+  Wallet,
 } from "lucide-react";
 import Link from "next/link";
 import { Separator } from "@/components/ui/separator";
@@ -72,6 +74,36 @@ import {
 import { createClient } from "@/utils/supabase/client";
 import { UserResponse } from "@supabase/supabase-js";
 import { useToast } from "@/hooks/use-toast";
+import { reconcileLeaderboardPrizeAmounts } from "@/lib/contest-prize-utils";
+import { getChargeableBudgetCents } from "@/lib/contest-chargeable-budget";
+
+/** When paid, baseline for budget deltas must be payment_details.total_prize_pool, not saved contest budget. */
+function resolvePaidBudgetBaselineCents(
+  contestBasedBudgetCents: number,
+  paymentDetailsRaw: unknown,
+): number {
+  try {
+    const paymentDetails =
+      typeof paymentDetailsRaw === "string"
+        ? JSON.parse(paymentDetailsRaw)
+        : paymentDetailsRaw;
+    if (
+      paymentDetails?.payment_status === "completed" &&
+      typeof paymentDetails.total_prize_pool === "number"
+    ) {
+      return paymentDetails.total_prize_pool;
+    }
+  } catch {
+    // fall through
+  }
+  return contestBasedBudgetCents;
+}
+import { consumeEditFlowReturnScroll } from "@/lib/before-unload-utils";
+import { CampaignPaymentModal } from "@/components/CampaignPaymentModal";
+import {
+  CampaignPaymentProcessingOverlay,
+  type CampaignPaymentProcessingPhase,
+} from "@/components/CampaignPaymentProcessingOverlay";
 import { ContestPaymentSelection } from "@/components/ContestPaymentSelection";
 import dynamic from "next/dynamic";
 import { PageLoadingSpinner } from "@/components/loading/LoadingSpinner";
@@ -208,6 +240,45 @@ const extractRegionsAndCountries = (
   return { regions, countries };
 };
 
+type ResolvedContestType = "leaderboard" | "cpm" | "milestone" | "dual_rewards";
+
+function resolveContestType(data: {
+  contest_type?: string | null;
+  contest_based_details?: Record<string, unknown> | null;
+}): ResolvedContestType {
+  const contestType = data.contest_type;
+  if (
+    contestType === "leaderboard" ||
+    contestType === "cpm" ||
+    contestType === "milestone" ||
+    contestType === "dual_rewards"
+  ) {
+    return contestType;
+  }
+
+  const details = data.contest_based_details || {};
+  const leaderboard = details.leaderboard_contest as
+    | { prizes?: unknown[] }
+    | undefined;
+  if (
+    leaderboard?.prizes &&
+    Array.isArray(leaderboard.prizes) &&
+    leaderboard.prizes.length > 0
+  ) {
+    return "leaderboard";
+  }
+  if (details.milestone_contest && details.cpm_contest) {
+    return "dual_rewards";
+  }
+  if (details.milestone_contest) {
+    return "milestone";
+  }
+  if (details.cpm_contest) {
+    return "cpm";
+  }
+  return "leaderboard";
+}
+
 type PlanFeatures = {
   maxActiveContests: number;
   minContestBudget: number;
@@ -327,11 +398,22 @@ export default function EditContestPage({
   isAdmin?: boolean;
 }) {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const processedContestPaymentRef = useRef<string | null>(null);
+  const pendingStripeReturnRef = useRef<{
+    type: "cancelled" | "success";
+    sessionId?: string;
+    contestIdParam?: string | null;
+  } | null>(null);
+  const bottomActionsRef = useRef<HTMLDivElement>(null);
   const supabase = createClient();
   const { toast } = useToast();
 
   const [isLoading, setIsLoading] = useState(true);
+  const [isFormHydrated, setIsFormHydrated] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false); // Separate state for submission loading
+  const [paymentProcessingPhase, setPaymentProcessingPhase] =
+    useState<CampaignPaymentProcessingPhase | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [validationError, setValidationError] = useState<string | null>(null);
   const [contest, setContest] = useState<ContestData | null>(null);
@@ -961,7 +1043,8 @@ export default function EditContestPage({
   // Fetch contest data and plan data
   useEffect(() => {
     async function fetchInitialData() {
-      setIsLoading(true); // General loading state for the page
+      setIsLoading(true);
+      setIsFormHydrated(false);
       await loadSubscriptionPlans(); // Load plans first
 
       if (!user) {
@@ -1187,16 +1270,10 @@ export default function EditContestPage({
             setTrackingLinks(parsedTrackingLinks);
 
             setThumbnailPreview(data.thumbnail_url || null);
-            const resolvedContestType =
-              data.contest_type ||
-              (data.contest_based_details?.milestone_contest
-                ? "milestone"
-                : data.contest_based_details?.cpm_contest
-                  ? "cpm"
-                  : "leaderboard");
+            const resolvedContestType = resolveContestType(data);
             setContestType(resolvedContestType);
 
-            if (data.contest_type === "leaderboard") {
+            if (resolvedContestType === "leaderboard") {
               const lbDetails = data.contest_based_details?.leaderboard_contest;
               if (lbDetails && Array.isArray(lbDetails.prizes)) {
                 setWinnerCount(
@@ -1205,13 +1282,24 @@ export default function EditContestPage({
                 const prizes = lbDetails.prizes.map(
                   (prize: { amount: number }) => prize.amount,
                 );
-                setWinnerAmounts(prizes);
-                // Set original budget for tracking changes (prize pool only)
-                const originalBudgetInCents = prizes.reduce(
-                  (sum: number, amount: number) => sum + amount,
-                  0,
+                const totalPrize =
+                  typeof lbDetails.total_prize === "number" &&
+                  lbDetails.total_prize > 0
+                    ? lbDetails.total_prize
+                    : prizes.reduce(
+                        (sum: number, amount: number) => sum + amount,
+                        0,
+                      );
+                const reconciled = reconcileLeaderboardPrizeAmounts(
+                  prizes,
+                  totalPrize,
                 );
-                setOriginalBudget(originalBudgetInCents);
+                setWinnerAmounts(reconciled);
+                const resolvedBaseline = resolvePaidBudgetBaselineCents(
+                  totalPrize,
+                  data.payment_details,
+                );
+                setOriginalBudget(resolvedBaseline);
               } else if (Array.isArray(data.prizes)) {
                 // Fallback to old structure if new one not present
                 setWinnerCount(data.winner_count || data.prizes.length);
@@ -1224,14 +1312,24 @@ export default function EditContestPage({
                   (sum: number, amount: number) => sum + amount,
                   0,
                 );
-                setOriginalBudget(originalBudgetInCents);
+                setOriginalBudget(
+                  resolvePaidBudgetBaselineCents(
+                    originalBudgetInCents,
+                    data.payment_details,
+                  ),
+                );
               } else {
                 setWinnerCount(DEFAULT_WINNER_COUNT); // Default
                 setWinnerAmounts(DEFAULT_WINNER_AMOUNTS); // Default
                 // Set default original budget (prize pool only)
-                setOriginalBudget(DEFAULT_TOTAL_PRIZE_POOL); // Default total
+                setOriginalBudget(
+                  resolvePaidBudgetBaselineCents(
+                    DEFAULT_TOTAL_PRIZE_POOL,
+                    data.payment_details,
+                  ),
+                );
               }
-            } else if (data.contest_type === "cpm") {
+            } else if (resolvedContestType === "cpm") {
               const cpmDetails = data.contest_based_details?.cpm_contest;
               if (cpmDetails) {
                 setCpmRate(cpmDetails.cpm_rate_usd?.toString() || "");
@@ -1244,19 +1342,24 @@ export default function EditContestPage({
                 );
                 setTermsConditions(cpmDetails.terms_conditions || "");
                 // Set original budget for tracking changes (cpm budget is stored in cents, prize pool only)
-                setOriginalBudget(cpmDetails.total_budget || 0);
+                setOriginalBudget(
+                  resolvePaidBudgetBaselineCents(
+                    cpmDetails.total_budget || 0,
+                    data.payment_details,
+                  ),
+                );
 
                 // Load CPM Points Configuration from twitter_campaign.points_config (multipliers are nested inside comments_weight, retweets_weight, quote_reposts_weight)
                 // Note: This is loaded later when we process twitter_campaign data
               }
             } else if (
-              data.contest_type === "milestone" ||
-              data.contest_type === "dual_rewards"
+              resolvedContestType === "milestone" ||
+              resolvedContestType === "dual_rewards"
             ) {
               const milestoneDetails =
                 data.contest_based_details?.milestone_contest;
 
-              if (data.contest_type === "dual_rewards") {
+              if (resolvedContestType === "dual_rewards") {
                 const cpmDetails = data.contest_based_details?.cpm_contest;
                 if (cpmDetails) {
                   setCpmRate(cpmDetails.cpm_rate_usd?.toString() || "");
@@ -1290,7 +1393,7 @@ export default function EditContestPage({
                 setMilestoneRows([createEmptyMilestoneRow()]);
               }
 
-              if (data.contest_type === "dual_rewards") {
+              if (resolvedContestType === "dual_rewards") {
                 const unifiedCents = getPoolBudgetCentsFromDetails(
                   "dual_rewards",
                   data.contest_based_details,
@@ -1298,7 +1401,12 @@ export default function EditContestPage({
                 if (unifiedCents > 0) {
                   setTotalBudget((unifiedCents / 100).toString());
                 }
-                setOriginalBudget(unifiedCents);
+                setOriginalBudget(
+                  resolvePaidBudgetBaselineCents(
+                    unifiedCents,
+                    data.payment_details,
+                  ),
+                );
               } else if (
                 typeof milestoneDetails?.total_budget_cents === "number" &&
                 milestoneDetails.total_budget_cents > 0
@@ -1306,7 +1414,12 @@ export default function EditContestPage({
                 setTotalBudget(
                   (milestoneDetails.total_budget_cents / 100).toString(),
                 );
-                setOriginalBudget(milestoneDetails.total_budget_cents);
+                setOriginalBudget(
+                  resolvePaidBudgetBaselineCents(
+                    milestoneDetails.total_budget_cents,
+                    data.payment_details,
+                  ),
+                );
               }
 
               const bonus = milestoneDetails?.bonus;
@@ -1794,6 +1907,7 @@ export default function EditContestPage({
         setContest(null);
       } finally {
         setIsLoading(false);
+        setIsFormHydrated(true);
       }
     }
 
@@ -1861,7 +1975,11 @@ export default function EditContestPage({
               const currentTotal =
                 leaderboardData.total_prize ||
                 updatedAmounts.reduce((sum, amount) => sum + amount, 0);
-              setOriginalBudget(currentTotal);
+              const resolvedBaseline = resolvePaidBudgetBaselineCents(
+                currentTotal,
+                refreshedContest.payment_details,
+              );
+              setOriginalBudget(resolvedBaseline);
 
               console.log("🔄 Updated leaderboard amounts from database:", {
                 updatedAmounts,
@@ -1880,7 +1998,12 @@ export default function EditContestPage({
               setTotalBudget(budgetInDollars.toString());
 
               // Update originalBudget with current total from database
-              setOriginalBudget(cpmData.total_budget);
+              setOriginalBudget(
+                resolvePaidBudgetBaselineCents(
+                  cpmData.total_budget,
+                  refreshedContest.payment_details,
+                ),
+              );
 
               console.log("🔄 Updated CPM budget from database:", {
                 totalBudgetCents: cpmData.total_budget,
@@ -1899,7 +2022,12 @@ export default function EditContestPage({
             if (unifiedCents > 0) {
               setTotalBudget((unifiedCents / 100).toString());
             }
-            setOriginalBudget(unifiedCents);
+            setOriginalBudget(
+              resolvePaidBudgetBaselineCents(
+                unifiedCents,
+                refreshedContest.payment_details,
+              ),
+            );
             console.log("🔄 Updated dual rewards budget from database:", {
               unifiedCents,
             });
@@ -1913,7 +2041,12 @@ export default function EditContestPage({
               setTotalBudget(
                 (milestoneData.total_budget_cents / 100).toString(),
               );
-              setOriginalBudget(milestoneData.total_budget_cents);
+              setOriginalBudget(
+                resolvePaidBudgetBaselineCents(
+                  milestoneData.total_budget_cents,
+                  refreshedContest.payment_details,
+                ),
+              );
             }
           }
         }
@@ -4056,6 +4189,109 @@ export default function EditContestPage({
     }
   };
 
+  const getPaidPrizePoolBaseline = (): number => {
+    if (!contest?.payment_details) return 0;
+    try {
+      const paymentDetails =
+        typeof contest.payment_details === "string"
+          ? JSON.parse(contest.payment_details)
+          : contest.payment_details;
+      if (paymentDetails.payment_status !== "completed") return 0;
+      return paymentDetails.total_prize_pool ?? 0;
+    } catch {
+      return 0;
+    }
+  };
+
+  const getCurrentChargeableBudgetCents = (
+    amountsOverride?: number[],
+    totalBudgetOverride?: string,
+  ): number => {
+    if (contestType === "leaderboard") {
+      const amounts = amountsOverride ?? winnerAmounts;
+      const totalPrize = amounts.reduce(
+        (sum, amount) => sum + (amount || 0),
+        0,
+      );
+      const flatFeeCents =
+        flatFeeBonus && parseFloat(flatFeeBonus.toString()) > 0
+          ? Math.round(parseFloat(flatFeeBonus.toString()) * 100)
+          : 0;
+      const bonusBudgetCents =
+        flatFeeCents > 0 &&
+        totalBudget &&
+        parseFloat(totalBudget.toString()) > 0
+          ? Math.round(parseFloat(totalBudget.toString()) * 100)
+          : 0;
+
+      return getChargeableBudgetCents({
+        id: contestId,
+        contest_type: "leaderboard",
+        contest_based_details: {
+          leaderboard_contest: {
+            total_prize: totalPrize,
+            flat_fee_bonus: flatFeeCents || undefined,
+            total_budget: bonusBudgetCents || undefined,
+          },
+        },
+      });
+    }
+
+    if (
+      contestType === "cpm" ||
+      contestType === "milestone" ||
+      contestType === "dual_rewards"
+    ) {
+      const budgetCents = Math.round(
+        parseFloat((totalBudgetOverride ?? totalBudget.toString()) || "0") * 100,
+      );
+      if (contestType === "dual_rewards") {
+        return getChargeableBudgetCents({
+          id: contestId,
+          contest_type: "dual_rewards",
+          contest_based_details: { total_budget_cents: budgetCents },
+        });
+      }
+      if (contestType === "milestone") {
+        return getChargeableBudgetCents({
+          id: contestId,
+          contest_type: "milestone",
+          contest_based_details: {
+            milestone_contest: { total_budget_cents: budgetCents },
+          },
+        });
+      }
+      return getChargeableBudgetCents({
+        id: contestId,
+        contest_type: "cpm",
+        contest_based_details: {
+          cpm_contest: { total_budget: budgetCents },
+        },
+      });
+    }
+
+    return 0;
+  };
+
+  const syncBudgetChangeFromPaidBaseline = (
+    amountsOverride?: number[],
+    totalBudgetOverride?: string,
+  ) => {
+    const paidBaseline = getPaidPrizePoolBaseline();
+    const baseline =
+      paidBaseline > 0 ? paidBaseline : originalBudget;
+    const currentChargeable = getCurrentChargeableBudgetCents(
+      amountsOverride,
+      totalBudgetOverride,
+    );
+    const prizePoolDifference = currentChargeable - baseline;
+
+    setBudgetDifference(prizePoolDifference);
+    setBudgetChanged(Math.abs(prizePoolDifference) > 0);
+
+    return { currentChargeable, difference: prizePoolDifference };
+  };
+
   // Process refund after user confirmation
   const processRefund = async () => {
     if (!refundDetails) return;
@@ -4257,7 +4493,7 @@ export default function EditContestPage({
   };
 
   // Helper function to submit campaign for approval with retries
-  const submitForApproval = async (retries = 3, delay = 2000) => {
+  const submitForApproval = async (retries = 5, delay = 2000): Promise<boolean> => {
     for (let attempt = 1; attempt <= retries; attempt++) {
       try {
         console.log(
@@ -4277,13 +4513,14 @@ export default function EditContestPage({
         const result = await response.json();
 
         if (response.ok && result.success) {
+          setPaymentProcessingPhase("redirecting");
           toast({
             title: "Success",
             description: "Campaign submitted for approval successfully!",
             variant: "default",
           });
           router.push(`/dashboard/contests/${contestId}`);
-          return;
+          return true;
         } else {
           throw new Error(result.error || "Failed to submit for approval");
         }
@@ -4291,12 +4528,13 @@ export default function EditContestPage({
         console.log(`Attempt ${attempt} failed:`, error.message);
 
         if (attempt === retries) {
+          setPaymentProcessingPhase(null);
           toast({
             title: "Submission Failed",
             description: `Failed to submit campaign for approval: ${error.message}`,
             variant: "destructive",
           });
-          return;
+          return false;
         }
 
         // Wait before retrying
@@ -4304,6 +4542,7 @@ export default function EditContestPage({
         await new Promise((resolve) => setTimeout(resolve, delay));
       }
     }
+    return false;
   };
 
   // Helper function to validate form for submission
@@ -5967,30 +6206,13 @@ export default function EditContestPage({
         variant: "default",
       });
 
-      // Reset budget change tracking since payment is now complete
+      // Reset budget change tracking; refreshContestData sets baseline from payment_details
       setBudgetChanged(false);
       setBudgetDifference(0);
 
-      // Update originalBudget to the new budget to prevent false change detection
-      if (contestType === "leaderboard") {
-        const newTotalPrize = winnerAmounts.reduce(
-          (sum, amount) => sum + amount,
-          0,
-        );
-        setOriginalBudget(newTotalPrize);
-      } else if (
-        contestType === "cpm" ||
-        contestType === "milestone" ||
-        contestType === "dual_rewards"
-      ) {
-        const newBudgetInCents = Math.round(
-          parseFloat(totalBudget.toString()) * 100,
-        );
-        setOriginalBudget(newBudgetInCents);
-      }
-
       // Refresh contest data to show updated payment details
       await refreshContestData();
+      syncBudgetChangeFromPaidBaseline();
 
       // Force a re-render by clearing and resetting budget change detection
       console.log(
@@ -6021,6 +6243,119 @@ export default function EditContestPage({
     }
   };
 
+  const scrollToBottomActions = () => {
+    requestAnimationFrame(() => {
+      bottomActionsRef.current?.scrollIntoView({
+        behavior: "smooth",
+        block: "end",
+      });
+    });
+  };
+
+  /** Stripe return: form state is lost on reload — refresh from DB, do not overwrite with empty state. */
+  const handleStripePaymentReturn = async () => {
+    setPaymentProcessingPhase("submitting");
+    setIsSubmitting(true);
+    setShowPayment(false);
+    try {
+      await refreshContestData();
+      syncBudgetChangeFromPaidBaseline();
+
+      const submitted = await submitForApproval();
+      if (!submitted) {
+        setPaymentProcessingPhase(null);
+        scrollToBottomActions();
+      }
+    } catch (error: unknown) {
+      console.error("Error processing Stripe payment return:", error);
+      setPaymentProcessingPhase(null);
+      toast({
+        title: "Payment error",
+        description:
+          error instanceof Error
+            ? error.message
+            : "Something went wrong after payment. Please try again.",
+        variant: "destructive",
+      });
+      scrollToBottomActions();
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const processPendingStripeReturn = async () => {
+    const pending = pendingStripeReturnRef.current;
+    if (!pending) return;
+
+    if (pending.type === "cancelled") {
+      const dedupeKey = `cancelled-${pending.contestIdParam || contestId}`;
+      if (processedContestPaymentRef.current === dedupeKey) return;
+      processedContestPaymentRef.current = dedupeKey;
+      pendingStripeReturnRef.current = null;
+
+      toast({
+        title: "Payment cancelled",
+        description: "No charge was made.",
+      });
+      setShowPayment(true);
+      scrollToBottomActions();
+      return;
+    }
+
+    if (pending.type === "success" && pending.sessionId) {
+      if (processedContestPaymentRef.current === pending.sessionId) return;
+      processedContestPaymentRef.current = pending.sessionId;
+      pendingStripeReturnRef.current = null;
+
+      try {
+        const sessionResponse = await fetch(
+          `/api/payments/contest/session?session_id=${encodeURIComponent(pending.sessionId)}`,
+        );
+        const sessionData = await sessionResponse.json();
+
+        if (!sessionResponse.ok || !sessionData.success) {
+          setPaymentProcessingPhase(null);
+          toast({
+            title: "Payment verification failed",
+            description:
+              sessionData.error ||
+              "We couldn't verify your payment. Please try again.",
+            variant: "destructive",
+          });
+          setShowPayment(true);
+          scrollToBottomActions();
+          return;
+        }
+
+        if (sessionData.paymentStatus !== "completed") {
+          setPaymentProcessingPhase(null);
+          toast({
+            title: "Payment still processing",
+            description:
+              "Your payment was received but is still being finalized. Please wait a moment and try again.",
+            variant: "destructive",
+          });
+          setShowPayment(true);
+          scrollToBottomActions();
+          return;
+        }
+
+        await handleStripePaymentReturn();
+      } catch (error) {
+        console.error("Error processing contest payment return:", error);
+        setPaymentProcessingPhase(null);
+        toast({
+          title: "Payment error",
+          description:
+            "Something went wrong verifying your payment. Please try again.",
+          variant: "destructive",
+        });
+        setShowPayment(true);
+        scrollToBottomActions();
+      }
+    }
+  };
+
   // Payment error handler
   const handlePaymentError = (error: string) => {
     console.error("Payment failed:", error);
@@ -6032,45 +6367,50 @@ export default function EditContestPage({
     });
   };
 
+  useEffect(() => {
+    const contestPayment = searchParams.get("contest_payment");
+    const sessionId = searchParams.get("session_id");
+    const contestIdParam = searchParams.get("contest_id");
+
+    if (contestPayment === "cancelled") {
+      pendingStripeReturnRef.current = {
+        type: "cancelled",
+        contestIdParam,
+      };
+      window.history.replaceState({}, "", window.location.pathname);
+    } else if (contestPayment === "success" && sessionId) {
+      pendingStripeReturnRef.current = {
+        type: "success",
+        sessionId,
+        contestIdParam,
+      };
+      setPaymentProcessingPhase("verifying");
+      window.history.replaceState({}, "", window.location.pathname);
+    }
+
+    if (!isFormHydrated || isLoading || !contest) return;
+
+    void processPendingStripeReturn();
+  }, [searchParams, contestId, isFormHydrated, isLoading, contest]);
+
+  useEffect(() => {
+    if (!isFormHydrated || isLoading) return;
+    if (consumeEditFlowReturnScroll()) {
+      scrollToBottomActions();
+    }
+  }, [isFormHydrated, isLoading]);
+
   // Budget change detection helper
   const checkBudgetChange = (
     newWinnerAmounts?: number[],
     newTotalBudget?: string,
   ) => {
-    let currentPrizePool = 0;
-
-    if (contestType === "leaderboard") {
-      const amounts = newWinnerAmounts || winnerAmounts;
-      currentPrizePool = amounts.reduce(
-        (sum: number, amount: number) => sum + amount,
-        0,
-      );
-    } else if (
-      contestType === "cpm" ||
-      contestType === "milestone" ||
-      contestType === "dual_rewards"
-    ) {
-      const budget = newTotalBudget || totalBudget;
-      currentPrizePool = Math.round(parseFloat(budget.toString()) * 100); // Convert to cents
+    if (newWinnerAmounts) {
+      setWinnerAmounts(newWinnerAmounts);
+    } else if (newTotalBudget) {
+      setTotalBudget(newTotalBudget);
     }
-
-    // Calculate ONLY the prize pool difference (for better UX)
-    const prizePoolDifference = currentPrizePool - originalBudget;
-
-    setBudgetDifference(prizePoolDifference); // Store prize pool difference only
-    setBudgetChanged(Math.abs(prizePoolDifference) > 0);
-
-    console.log("💰 Budget change check:", {
-      contestType,
-      originalBudget,
-      currentPrizePool,
-      prizePoolDifference,
-      budgetChanged: Math.abs(prizePoolDifference) > 0,
-      newWinnerAmounts: newWinnerAmounts?.slice(0, 3),
-      newTotalBudget,
-    });
-
-    return { currentBudget: currentPrizePool, difference: prizePoolDifference };
+    return syncBudgetChangeFromPaidBaseline(newWinnerAmounts, newTotalBudget);
   };
 
   // Update budget change detection when prize amounts change
@@ -6083,6 +6423,7 @@ export default function EditContestPage({
     await handleSubmitWithStatus("draft");
     // Refresh contest data after saving to ensure UI is up to date
     await refreshContestData();
+    checkBudgetChange();
   };
 
   // Add async comprehensive validation for edit contest (mirrors creation)
@@ -6218,10 +6559,12 @@ export default function EditContestPage({
         show_demographics_to_brand: showBrandDemographics,
       };
     }
-    // Check if payment/refund processing is required
+    // Check if payment/refund processing is required (always vs paid baseline, not stale state)
     const paid = isContestPaid();
-    const needsPayment = !paid || (budgetChanged && budgetDifference > 0);
-    const needsRefund = budgetChanged && budgetDifference < 0;
+    const { difference: prizePoolDifference } = syncBudgetChangeFromPaidBaseline();
+    const hasBudgetDelta = Math.abs(prizePoolDifference) > 0;
+    const needsPayment = !paid || (hasBudgetDelta && prizePoolDifference > 0);
+    const needsRefund = paid && hasBudgetDelta && prizePoolDifference < 0;
 
     if (needsRefund) {
       // Show refund preview modal instead of processing directly
@@ -6229,7 +6572,7 @@ export default function EditContestPage({
         await handleSubmitWithStatus("draft", true); // Save contest data first
 
         // Calculate refund details for preview
-        const prizePoolDecrease = Math.abs(budgetDifference);
+        const prizePoolDecrease = Math.abs(prizePoolDifference);
 
         // Get commission percentage from original payment details, not current plan
         let commissionPercentage = null;
@@ -7827,11 +8170,12 @@ export default function EditContestPage({
   if (isLoading || isPlansLoading || isUserPlanLoading) {
     // Check all loading states
     return (
-      // <div className="flex items-center justify-center h-full">
-      //   <p>Loading campaign data...</p>
-      // </div>
       <div className="flex items-center justify-center h-[76vh]">
-        <PageLoadingSpinner mode="light" />
+        {paymentProcessingPhase ? (
+          <CampaignPaymentProcessingOverlay phase={paymentProcessingPhase} />
+        ) : (
+          <PageLoadingSpinner mode="light" />
+        )}
       </div>
     );
   }
@@ -10990,6 +11334,7 @@ export default function EditContestPage({
                           const newWinnerAmounts = [...winnerAmounts];
                           newWinnerAmounts[i] = 0; // Temporarily set to 0
                           setWinnerAmounts(newWinnerAmounts);
+                          updateBudgetTracking(newWinnerAmounts);
                           return;
                         }
 
@@ -12404,12 +12749,18 @@ export default function EditContestPage({
 
           {/* New Features Section (2025-10-01) - Common for both campaign types */}
           {!datesOnly && (
-            <div className="space-y-6 pt-4">
-              <Separator />
+            <div className="space-y-5 border-t border-dashed pt-6 mt-6">
               <div>
-                <h3 className="text-lg font-medium">Additional Features</h3>
-                <p className="text-sm text-muted-foreground">
-                  Configure optional features for enhanced creator engagement.
+                <h3
+                  className={cn(
+                    "text-xl font-semibold",
+                    isDark ? "text-white" : "text-gray-900",
+                  )}
+                >
+                  Campaign settings
+                </h3>
+                <p className="text-sm text-muted-foreground mt-1">
+                  Optional features for creator engagement and submissions.
                 </p>
               </div>
               {/* <div className="space-y-2">
@@ -12448,34 +12799,13 @@ export default function EditContestPage({
               {isVideoContestFormat(contest?.contest_format) && (
               <div
                 className={cn(
-                  "space-y-3 rounded-lg border p-4",
+                  "space-y-3 rounded-xl border p-4",
                   isDark
-                    ? "border-purple-600/50 bg-purple-900/20"
-                    : "border-purple-200 bg-purple-100/30",
+                    ? "border-slate-700 bg-slate-900/40"
+                    : "border-slate-200 bg-slate-50",
                 )}
               >
-                <div className="flex items-center justify-between">
-                  <div className="flex-1">
-                    <Label
-                      htmlFor="trust-score-enabled"
-                      className={cn(
-                        "text-base font-medium",
-                        isDark ? "text-white" : "text-black",
-                      )}
-                    >
-                      Trust Score
-                    </Label>
-                    <p
-                      className={cn(
-                        "text-sm text-muted-foreground mt-1",
-                        isDark ? "text-white" : "text-black",
-                      )}
-                    >
-                     Enable trust score requirements to allow only reliable creators to participate.
-  Trust scores may decrease for rejected for not meeting campaign requirements, low-quality content,
-  spam, or policy violations.Creators below the required score cannot submit to this campaign.
-                    </p>
-                  </div>
+                <div className="flex items-start gap-3">
                   <Checkbox
                     id="trust-score-enabled"
                     checked={trustScoreEnabled}
@@ -12487,12 +12817,30 @@ export default function EditContestPage({
                         setContestTrustScore(70);
                       }
                     }}
-                    className="h-5 w-5 data-[state=checked]:bg-purple-600 data-[state=checked]:border-purple-600 data-[state=checked]:text-white"
+                    className="mt-0.5 h-5 w-5 shrink-0 data-[state=checked]:bg-[#7F39EC] data-[state=checked]:border-[#7F39EC] data-[state=checked]:text-white"
                   />
+                  <div className="min-w-0 flex-1">
+                    <Label
+                      htmlFor="trust-score-enabled"
+                      className="text-base font-semibold cursor-pointer"
+                    >
+                      Trust Score
+                    </Label>
+                    <p className="text-sm text-muted-foreground mt-1">
+                      Require a minimum trust score so only reliable creators can
+                      participate. Scores may decrease for rejected submissions,
+                      low-quality content, spam, or policy violations.
+                    </p>
+                  </div>
                 </div>
 
                 {trustScoreEnabled && (
-                  <div className="space-y-2 pt-3 border-t border-purple-200">
+                  <div
+                    className={cn(
+                      "space-y-2 pt-3 border-t",
+                      isDark ? "border-slate-700" : "border-slate-200",
+                    )}
+                  >
                     <Label htmlFor="trust-score-input">Trust Score</Label>
                     <Input
                       id="trust-score-input"
@@ -12526,33 +12874,13 @@ export default function EditContestPage({
               {/* Multiple Submissions Toggle */}
               <div
                 className={cn(
-                  "space-y-3 rounded-lg border p-4",
+                  "space-y-3 rounded-xl border p-4",
                   isDark
-                    ? "border-purple-600/50 bg-purple-900/20"
-                    : "border-purple-200 bg-purple-100/30",
+                    ? "border-slate-700 bg-slate-900/40"
+                    : "border-slate-200 bg-slate-50",
                 )}
               >
-                <div className="flex items-center justify-between">
-                  <div className="flex-1">
-                    <Label
-                      htmlFor="multiple-submissions"
-                      className={cn(
-                        "text-base font-medium",
-                        isDark ? "text-white" : "text-black",
-                      )}
-                    >
-                      Allow Multiple Submissions
-                    </Label>
-                    <p
-                      className={cn(
-                        "text-sm text-muted-foreground mt-1",
-                        isDark ? "text-white" : "text-black",
-                      )}
-                    >
-                      Enable creators to submit multiple entries to this
-                      contest.
-                    </p>
-                  </div>
+                <div className="flex items-start gap-3">
                   <Checkbox
                     id="multiple-submissions"
                     checked={multipleSubmissionsEnabled}
@@ -12562,16 +12890,32 @@ export default function EditContestPage({
                         setMaxSubmissionsPerCreator(1);
                         setMaxEarningsPerCreator("");
                       } else {
-                        // Set default to minimum (2) when enabling multiple submissions
                         setMaxSubmissionsPerCreator(2);
                       }
                     }}
-                    className="h-5 w-5 data-[state=checked]:bg-purple-600 data-[state=checked]:border-purple-600 data-[state=checked]:text-white"
+                    className="mt-0.5 h-5 w-5 shrink-0 data-[state=checked]:bg-[#7F39EC] data-[state=checked]:border-[#7F39EC] data-[state=checked]:text-white"
                   />
+                  <div className="min-w-0 flex-1">
+                    <Label
+                      htmlFor="multiple-submissions"
+                      className="text-base font-semibold cursor-pointer"
+                    >
+                      Allow Multiple Submissions
+                    </Label>
+                    <p className="text-sm text-muted-foreground mt-1">
+                      Enable creators to submit multiple entries to this
+                      contest.
+                    </p>
+                  </div>
                 </div>
 
                 {multipleSubmissionsEnabled && (
-                  <div className="space-y-4 pt-3 border-t border-purple-200">
+                  <div
+                    className={cn(
+                      "space-y-4 pt-3 border-t",
+                      isDark ? "border-slate-700" : "border-slate-200",
+                    )}
+                  >
                     <div className="space-y-2">
                       <Label htmlFor="max-submissions">
                         Maximum Submissions Per Creator{" "}
@@ -12633,18 +12977,135 @@ export default function EditContestPage({
                 )}
               </div>
 
+              {!datesOnly && platform?.toLowerCase() === "youtube" && (
+                <div
+                  className={cn(
+                    "space-y-3 rounded-xl border p-4",
+                    isDark
+                      ? "border-slate-700 bg-slate-900/40"
+                      : "border-slate-200 bg-slate-50",
+                  )}
+                >
+                  <div className="flex flex-col gap-1">
+                    <h4 className="text-base font-semibold">
+                      YouTube Analytics visibility (Brand view)
+                    </h4>
+                    <p className="text-sm text-muted-foreground">
+                      Choose which advanced YouTube analytics are visible to the
+                      advertiser on this campaign. Admins always see everything.
+                    </p>
+                  </div>
+                  <div className="space-y-2">
+                    <div className="flex items-start gap-2">
+                      <Checkbox
+                        id="yt-core-visibility"
+                        checked={showBrandCoreAnalytics}
+                        onCheckedChange={(checked) =>
+                          setShowBrandCoreAnalytics(!!checked)
+                        }
+                      />
+                      <div>
+                        <Label
+                          htmlFor="yt-core-visibility"
+                          className="text-sm font-medium"
+                        >
+                          Show Core Analytics
+                        </Label>
+                        <p className="text-xs text-muted-foreground">
+                          Avg view %, watch time, engaged views, shares,
+                          subscribers, playlists and bot score.
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-start gap-2">
+                      <Checkbox
+                        id="yt-traffic-visibility"
+                        checked={showBrandTrafficSources}
+                        onCheckedChange={(checked) =>
+                          setShowBrandTrafficSources(!!checked)
+                        }
+                      />
+                      <div>
+                        <Label
+                          htmlFor="yt-traffic-visibility"
+                          className="text-sm font-medium"
+                        >
+                          Show Traffic Sources
+                        </Label>
+                        <p className="text-xs text-muted-foreground">
+                          Breakdown of Shorts feed, search, external links and
+                          other traffic sources.
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-start gap-2">
+                      <Checkbox
+                        id="yt-demo-visibility"
+                        checked={showBrandDemographics}
+                        onCheckedChange={(checked) =>
+                          setShowBrandDemographics(!!checked)
+                        }
+                      />
+                      <div>
+                        <Label
+                          htmlFor="yt-demo-visibility"
+                          className="text-sm font-medium"
+                        >
+                          Show Demographics
+                        </Label>
+                        <p className="text-xs text-muted-foreground">
+                          Age groups, gender split and top countries for each
+                          submission.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {/* Bonus configuration */}
               {true && (
                 <>
+                  <div className="space-y-4 pt-2">
+                    <div>
+                      <h4
+                        className={cn(
+                          "text-lg font-semibold",
+                          isDark ? "text-white" : "text-[#7F39EC]",
+                        )}
+                      >
+                        Creator earning opportunities
+                      </h4>
+                      <p className="text-sm text-muted-foreground mt-1">
+                        Motivate creators with bonuses beyond the main prize pool
+                        or CPM rate.
+                      </p>
+                    </div>
+
                   {contestType !== "milestone" && (
                     <>
                       {contestType !== "dual_rewards" && (
                         <>
                           {/* Flat Fee Bonus — hidden for dual (CPM + milestone pools only) */}
-                          <div className="space-y-2">
-                            <Label htmlFor="flat-fee-bonus">
-                              Flat Fee Bonus Per Verified Submission (Optional)
-                            </Label>
+                          <div
+                            className={cn(
+                              "space-y-3 rounded-xl border p-4",
+                              isDark
+                                ? "border-emerald-900/50 bg-emerald-950/30"
+                                : "border-emerald-200 bg-gradient-to-r from-emerald-50 to-green-50",
+                            )}
+                          >
+                            <div className="flex items-center gap-2">
+                              <span className="text-xl" aria-hidden="true">
+                                🎁
+                              </span>
+                              <Label
+                                htmlFor="flat-fee-bonus"
+                                className="text-base font-semibold"
+                              >
+                                Flat Fee Bonus (Per Verified Submission)
+                              </Label>
+                            </div>
                             <Input
                               id="flat-fee-bonus"
                               type="number"
@@ -12653,23 +13114,50 @@ export default function EditContestPage({
                               value={flatFeeBonus}
                               className={cn(
                                 isDark
-                                  ? "bg-[#180438] border border-gray-600 text-white"
-                                  : "bg-white text-black",
+                                  ? "bg-slate-900/60 border-slate-600 text-white"
+                                  : "bg-white border-slate-200",
                               )}
                               onChange={(e) => setFlatFeeBonus(e.target.value)}
                               placeholder="e.g., 10.00"
                             />
-                            <p className="text-xs text-muted-foreground">
-                              🎁 Guaranteed payment for EVERY verified
+                            <p className="text-sm text-muted-foreground">
+                              Optional guaranteed payment for each verified
                               submission, regardless of views or ranking. Paid
-                              after contest ends. Great motivator for creators!
+                              after the contest ends.
                             </p>
+                            {flatFeeBonus &&
+                              parseFloat(flatFeeBonus.toString()) > 0 && (
+                                <div
+                                  className={cn(
+                                    "rounded-lg border px-3 py-2 text-sm",
+                                    isDark
+                                      ? "border-[#7F39EC]/40 bg-[#7F39EC]/10 text-white"
+                                      : "border-[#7F39EC]/30 bg-[#7F39EC]/5 text-gray-800",
+                                  )}
+                                >
+                                  Creators will earn{" "}
+                                  <strong>
+                                    $
+                                    {parseFloat(flatFeeBonus.toString()).toFixed(
+                                      2,
+                                    )}
+                                  </strong>{" "}
+                                  for each verified submission.
+                                </div>
+                              )}
                           </div>
                           {/* Flat Fee Bonus Cap (Only for CPM campaigns) */}
                           {contestType === "cpm" &&
                             flatFeeBonus &&
                             parseFloat(flatFeeBonus.toString()) > 0 && (
-                              <div className="space-y-2">
+                              <div
+                                className={cn(
+                                  "space-y-2 rounded-xl border p-4",
+                                  isDark
+                                    ? "border-slate-700 bg-slate-900/40"
+                                    : "border-slate-200 bg-slate-50",
+                                )}
+                              >
                                 <Label htmlFor="flat-fee-bonus-cap">
                                   Flat Fee Bonus Cap{" "}
                                   <span className="text-red-500">*</span>
@@ -12706,7 +13194,14 @@ export default function EditContestPage({
                       {contestType === "leaderboard" &&
                         flatFeeBonus &&
                         parseFloat(flatFeeBonus.toString()) > 0 && (
-                          <div className="space-y-2">
+                          <div
+                            className={cn(
+                              "space-y-2 rounded-xl border p-4",
+                              isDark
+                                ? "border-slate-700 bg-slate-900/40"
+                                : "border-slate-200 bg-slate-50",
+                            )}
+                          >
                             <Label htmlFor="total-budget">
                               Total Budget for Bonuses{" "}
                               <span className="text-red-500">*</span>
@@ -12749,42 +13244,47 @@ export default function EditContestPage({
                   {/* Bonus Section Toggle & Editor */}
                   <div
                     className={cn(
-                      "space-y-3 rounded-lg border p-4",
+                      "space-y-3 rounded-xl border p-4",
                       isDark
-                        ? "border-[#C9A7FF] bg-[#C9A7FF26]"
-                        : "border-amber-200 bg-amber-100/30",
+                        ? "border-[#7F39EC]/30 bg-[#7F39EC]/10"
+                        : "border-[#7F39EC]/25 bg-[#7F39EC]/5",
                     )}
                   >
-                    <div className="flex items-center justify-between">
-                      <div className="flex-1">
-                        <Label
-                          htmlFor="bonus-enabled"
-                          className="text-base font-medium"
-                        >
-                          Additional Bonus Opportunities
-                        </Label>
-                        <p
-                          className={cn(
-                            "text-sm mt-1",
-                            isDark ? "text-gray-400" : "text-gray-600",
-                          )}
-                        >
-                          Describe other bonuses (top creator rewards, affiliate
-                          links, special bonuses). Handled manually by you.
-                        </p>
-                      </div>
+                    <div className="flex items-start gap-3">
                       <Checkbox
                         id="bonus-enabled"
                         checked={bonusEnabled}
                         onCheckedChange={(checked) =>
                           setBonusEnabled(checked === true)
                         }
-                        className="h-5 w-5 data-[state=checked]:bg-purple-600 data-[state=checked]:border-purple-600 data-[state=checked]:text-white"
+                        className="mt-0.5 h-5 w-5 shrink-0 data-[state=checked]:bg-[#7F39EC] data-[state=checked]:border-[#7F39EC] data-[state=checked]:text-white"
                       />
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2">
+                          <span className="text-xl" aria-hidden="true">
+                            🏆
+                          </span>
+                          <Label
+                            htmlFor="bonus-enabled"
+                            className="text-base font-semibold cursor-pointer"
+                          >
+                            Additional Bonus Opportunities
+                          </Label>
+                        </div>
+                        <p className="text-sm text-muted-foreground mt-1">
+                          Describe other bonuses (top creator rewards, affiliate
+                          links, special bonuses). Handled manually by you.
+                        </p>
+                      </div>
                     </div>
 
                     {bonusEnabled && (
-                      <div className="space-y-3 pt-3 border-t border-amber-300">
+                      <div
+                        className={cn(
+                          "space-y-3 pt-3 border-t",
+                          isDark ? "border-[#7F39EC]/20" : "border-[#7F39EC]/15",
+                        )}
+                      >
                         <div className="flex items-center justify-between">
                           <Label>Bonus Details</Label>
                           <Button
@@ -12861,6 +13361,7 @@ export default function EditContestPage({
                       </div>
                     )}
                   </div>
+                  </div>
                 </>
               )}
             </div>
@@ -12889,7 +13390,7 @@ export default function EditContestPage({
 
           {/* Modern Error Display exactly like create campaign page */}
           {formFeedback && formFeedbackType === "error" && (
-            <div className="mr-auto">
+            <div className="mr-auto w-full">
               <div className="bg-gradient-to-r from-red-50 to-red-100 dark:from-red-950/50 dark:to-red-900/50 border border-red-200 dark:border-red-800 rounded-lg p-3">
                 <div className="flex items-center gap-2">
                   <div className="w-5 h-5 bg-red-500 rounded-full flex items-center justify-center flex-shrink-0">
@@ -12900,155 +13401,113 @@ export default function EditContestPage({
                   </p>
                 </div>
               </div>
-
-              {/* YouTube Analytics Visibility (Brand side) */}
-              {platform?.toLowerCase() === "youtube" && (
-                <div
-                  className={cn(
-                    "space-y-3 rounded-lg border p-4",
-                    isDark
-                      ? "border-slate-600 bg-slate-900/40"
-                      : "border-slate-200 bg-slate-50",
-                  )}
-                >
-                  <div className="flex flex-col gap-1">
-                    <h4 className="text-base font-medium">
-                      YouTube Analytics visibility (Brand view)
-                    </h4>
-                    <p className="text-sm text-muted-foreground">
-                      Choose which advanced YouTube analytics are visible to the
-                      advertiser on this campaign. Admins always see everything.
-                    </p>
-                  </div>
-                  <div className="space-y-2">
-                    <div className="flex items-start gap-2">
-                      <Checkbox
-                        id="yt-core-visibility"
-                        checked={showBrandCoreAnalytics}
-                        onCheckedChange={(checked) =>
-                          setShowBrandCoreAnalytics(!!checked)
-                        }
-                      />
-                      <div>
-                        <Label
-                          htmlFor="yt-core-visibility"
-                          className="text-sm font-medium"
-                        >
-                          Show Core Analytics
-                        </Label>
-                        <p className="text-xs text-muted-foreground">
-                          Avg view %, watch time, engaged views, shares,
-                          subscribers, playlists and bot score.
-                        </p>
-                      </div>
-                    </div>
-                    <div className="flex items-start gap-2">
-                      <Checkbox
-                        id="yt-traffic-visibility"
-                        checked={showBrandTrafficSources}
-                        onCheckedChange={(checked) =>
-                          setShowBrandTrafficSources(!!checked)
-                        }
-                      />
-                      <div>
-                        <Label
-                          htmlFor="yt-traffic-visibility"
-                          className="text-sm font-medium"
-                        >
-                          Show Traffic Sources
-                        </Label>
-                        <p className="text-xs text-muted-foreground">
-                          Breakdown of Shorts feed, search, external links and
-                          other traffic sources.
-                        </p>
-                      </div>
-                    </div>
-                    <div className="flex items-start gap-2">
-                      <Checkbox
-                        id="yt-demo-visibility"
-                        checked={showBrandDemographics}
-                        onCheckedChange={(checked) =>
-                          setShowBrandDemographics(!!checked)
-                        }
-                      />
-                      <div>
-                        <Label
-                          htmlFor="yt-demo-visibility"
-                          className="text-sm font-medium"
-                        >
-                          Show Demographics
-                        </Label>
-                        <p className="text-xs text-muted-foreground">
-                          Age groups, gender split and top countries for each
-                          submission.
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              )}
             </div>
           )}
 
           {/* Prize Pool Change Warning - Moved above all buttons for better responsive layout */}
           {budgetChanged && isContestPaid() && (
-            <div className="w-full">
-              <Alert
-                variant={budgetDifference > 0 ? "destructive" : "default"}
-                className={
-                  budgetDifference > 0
-                    ? "w-full border-orange-200 bg-orange-50"
-                    : "w-full border-green-200 bg-green-50"
-                }
-              >
-                <AlertTriangle className="h-4 w-4 flex-shrink-0" />
-                <div className="min-w-0">
-                  <div className="font-medium">Prize Pool Changed</div>
-                  <div className="text-sm mt-1 break-words">
-                    {budgetDifference > 0
-                      ? `Prize pool increased by ${formatCurrencyFromCents(
-                          budgetDifference,
-                        )}. Original: ${formatCurrencyFromCents(
-                          originalBudget,
-                        )} → New Total: ${formatCurrencyFromCents(
-                          originalBudget + budgetDifference,
-                        )}. Additional payment (including commission) will be required.`
-                      : `Prize pool decreased by ${formatCurrencyFromCents(
-                          Math.abs(budgetDifference),
-                        )}. You will be refunded this amount plus commission.`}
+            <div
+              className={cn(
+                "w-full rounded-xl border p-4",
+                budgetDifference > 0
+                  ? isDark
+                    ? "border-amber-800/50 bg-amber-950/25"
+                    : "border-amber-200 bg-amber-50"
+                  : isDark
+                    ? "border-emerald-800/50 bg-emerald-950/25"
+                    : "border-emerald-200 bg-emerald-50",
+              )}
+            >
+              <div className="flex gap-3">
+                <AlertTriangle
+                  className={cn(
+                    "h-5 w-5 shrink-0 mt-0.5",
+                    budgetDifference > 0
+                      ? "text-amber-600"
+                      : "text-emerald-600",
+                  )}
+                />
+                <div className="min-w-0 flex-1 space-y-2">
+                  <p
+                    className={cn(
+                      "font-semibold",
+                      budgetDifference > 0
+                        ? isDark
+                          ? "text-amber-200"
+                          : "text-amber-900"
+                        : isDark
+                          ? "text-emerald-200"
+                          : "text-emerald-900",
+                    )}
+                  >
+                    Prize pool changed
+                  </p>
+                  <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm">
+                    <span className="text-muted-foreground">
+                      {formatCurrencyFromCents(originalBudget)}
+                    </span>
+                    <span className="text-muted-foreground">→</span>
+                    <span className="font-medium">
+                      {formatCurrencyFromCents(
+                        originalBudget + budgetDifference,
+                      )}
+                    </span>
+                    <span
+                      className={cn(
+                        "inline-flex rounded-full px-2 py-0.5 text-xs font-medium",
+                        budgetDifference > 0
+                          ? isDark
+                            ? "bg-amber-900/50 text-amber-200"
+                            : "bg-amber-100 text-amber-800"
+                          : isDark
+                            ? "bg-emerald-900/50 text-emerald-200"
+                            : "bg-emerald-100 text-emerald-800",
+                      )}
+                    >
+                      {budgetDifference > 0 ? "+" : "−"}
+                      {formatCurrencyFromCents(Math.abs(budgetDifference))}
+                    </span>
                   </div>
+                  <p className="text-sm text-muted-foreground">
+                    {budgetDifference > 0
+                      ? "Additional payment (including commission) will be required before resubmitting."
+                      : "You will be refunded this amount plus commission when you save."}
+                  </p>
                 </div>
-              </Alert>
+              </div>
             </div>
           )}
 
           {/* Button Row - Cancel on left, Save/Submit on right */}
-          <div className="flex px-4 flex-col sm:flex-row sm:justify-between items-stretch sm:items-center gap-2 w-full">
-            {/* Cancel button on the left */}
-            <button
+          <div
+            ref={bottomActionsRef}
+            className={cn(
+              "flex w-full flex-col gap-3 border-t pt-5 sm:flex-row sm:items-center sm:justify-between",
+              isDark ? "border-slate-800" : "border-slate-200",
+            )}
+          >
+            <Button
+              type="button"
+              variant="ghost"
               onClick={() => router.back()}
               disabled={isSubmitting}
               className={cn(
-                "border font-semibold px-4 py-2 rounded-lg text-md w-full sm:w-auto",
+                "h-10 w-full rounded-xl sm:w-auto",
                 isDark
-                  ? "text-white border-gray-400"
-                  : "border-[#4A00BE] bg-white text-[#4A00BE]",
+                  ? "text-slate-300 hover:bg-slate-800 hover:text-white"
+                  : "text-gray-600 hover:bg-slate-100 hover:text-gray-900",
               )}
             >
               Cancel
-            </button>
+            </Button>
 
             {/* Save/Submit buttons on the right */}
-            <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
+            <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
               {datesOnly ? (
-                // Dates-only mode: Just save changes (no approval needed)
                 <Button
                   onClick={handleSubmit}
                   disabled={isSubmitting || !!validationError}
-                  className={cn(
-                    "border text-white h-[38px] font-semibold px-3 sm:px-4 py-2 rounded-lg text-sm w-full sm:w-auto flex-shrink-0 whitespace-nowrap",
-                    isDark ? "bg-[#7F39EC]" : "bg-[#4A00BE]",
-                  )}
+                  className="h-10 w-full rounded-xl bg-[#7F39EC] px-4 font-semibold text-white hover:bg-[#6B2FD4] sm:w-auto"
                 >
                   {isSubmitting ? (
                     <div className="flex items-center gap-2">
@@ -13060,18 +13519,19 @@ export default function EditContestPage({
                   )}
                 </Button>
               ) : contest?.moderation_status !== "published" ? (
-                // Full edit mode for non-published contests: Draft/Save and Submit buttons
                 <>
-                  <div className="flex flex-col sm:flex-row gap-2 w-full">
-                    <button
-                      className={cn(
-                        "border h-[38px] font-semibold px-3 sm:px-4 py-2 rounded-lg text-sm w-full sm:w-auto flex-shrink-0 whitespace-nowrap",
-                        isDark
-                          ? "text-white border-gray-400"
-                          : "border-[#4A00BE] bg-white text-[#4A00BE]",
-                      )}
+                  <div className="flex w-full flex-col gap-2 sm:flex-row">
+                    <Button
+                      type="button"
+                      variant="outline"
                       onClick={handleSaveAsDraft}
                       disabled={isSubmitting || !!validationError}
+                      className={cn(
+                        "h-10 w-full rounded-xl font-semibold sm:w-auto",
+                        isDark
+                          ? "border-slate-600 bg-transparent text-white hover:bg-slate-800"
+                          : "border-[#7F39EC]/40 text-[#7F39EC] hover:bg-[#7F39EC]/5",
+                      )}
                     >
                       {isSubmitting ? (
                         <div className="flex items-center gap-2">
@@ -13081,14 +13541,11 @@ export default function EditContestPage({
                       ) : (
                         "Save as Draft"
                       )}
-                    </button>
+                    </Button>
                     <Button
                       onClick={handleResubmitForApproval}
                       disabled={isSubmitting || !!validationError}
-                      className={cn(
-                        "border h-[38px] font-semibold px-3 sm:px-4 py-2 rounded-lg text-sm w-full sm:w-auto flex-shrink-0 whitespace-nowrap",
-                        isDark ? "bg-[#7F39EC]" : "bg-[#4A00BE]",
-                      )}
+                      className="h-10 w-full rounded-xl bg-[#7F39EC] px-4 font-semibold text-white hover:bg-[#6B2FD4] sm:w-auto"
                     >
                       {isSubmitting ? (
                         <div className="flex items-center gap-2">
@@ -13127,11 +13584,10 @@ export default function EditContestPage({
                   </div>
                 </>
               ) : (
-                // Full edit mode for published contests: Just save changes (should rarely happen)
                 <Button
                   onClick={handleSubmit}
                   disabled={isSubmitting || !!validationError}
-                  className="bg-rose-600 hover:bg-rose-700 text-white"
+                  className="h-10 w-full rounded-xl bg-[#7F39EC] px-4 font-semibold text-white hover:bg-[#6B2FD4] sm:w-auto"
                 >
                   {isSubmitting ? (
                     <div className="flex items-center gap-2">
@@ -13152,211 +13608,256 @@ export default function EditContestPage({
       {showRefundPreview && refundDetails && (
         <div
           className={cn(
-            "fixed inset-0 bg-opacity-65 flex items-center justify-center p-2 sm:p-4 z-50",
-            isDark ? "bg-[#100A33]" : "bg-black",
+            "fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4",
+            "bg-black/60 backdrop-blur-sm",
           )}
         >
           <div
             className={cn(
-              "rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto",
-              isDark ? "bg-[#06021D] border border-gray-800" : "bg-white",
+              "relative flex w-full max-w-lg max-h-[90vh] flex-col overflow-hidden rounded-2xl shadow-2xl",
+              isDark
+                ? "border border-gray-800 bg-[#06021D] text-white"
+                : "border border-gray-200 bg-white text-gray-900",
             )}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="refund-preview-title"
           >
-            <div className="p-6">
-              <div className="mb-6">
-                <h2
-                  className={cn(
-                    "text-2xl font-bold mb-2",
-                    isDark ? "text-white" : "text-gray-900",
-                  )}
-                >
-                  Refund Preview
-                </h2>
-                <p
-                  className={cn(
-                    "text-gray-600",
-                    isDark ? "text-white" : "text-gray-600",
-                  )}
-                >
-                  Review the refund details before proceeding
-                </p>
-              </div>
-
-              <div className="mb-6">
-                <Alert
-                  className={cn(
-                    "mb-4 border",
-                    isDark
-                      ? "bg-[#C9A7FF26] border-[#C9A7FF] text-white"
-                      : "border-green-200 bg-green-50",
-                  )}
-                >
-                  <CheckCircle2 className="h-4 w-4" />
-                  <AlertDescription>
-                    <strong>Prize Pool Decreased:</strong> Your prize pool
-                    decreased by{" "}
-                    {formatCurrencyFromCents(refundDetails.prizePoolDecrease)}.
-                    decreased by{" "}
-                    {formatCurrencyFromCents(refundDetails.prizePoolDecrease)}.
-                    You will receive a refund of this amount plus commission.
-                  </AlertDescription>
-                </Alert>
-
-                <div
-                  className={cn(
-                    "p-4 rounded-lg space-y-3",
-                    isDark
-                      ? "bg-[#1F0944] text-white"
-                      : "bg-gray-50 text-gray-800",
-                  )}
-                >
-                  <h3
+            <div className="flex-shrink-0 border-b px-5 py-4 sm:px-6">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0 flex-1">
+                  <h2
+                    id="refund-preview-title"
                     className={cn(
-                      "font-semibold text-gray-900 mb-3",
+                      "text-xl font-bold tracking-tight sm:text-2xl",
                       isDark ? "text-white" : "text-gray-900",
                     )}
                   >
-                    Refund Breakdown
-                  </h3>
+                    Refund Preview
+                  </h2>
+                  <p
+                    className={cn(
+                      "mt-1 text-sm",
+                      isDark ? "text-gray-400" : "text-gray-600",
+                    )}
+                  >
+                    Review your refund before confirming
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (isSubmitting) return;
+                    setShowRefundPreview(false);
+                    setRefundDetails(null);
+                  }}
+                  disabled={isSubmitting}
+                  className={cn(
+                    "rounded-lg p-1.5 transition-colors",
+                    isDark
+                      ? "text-gray-400 hover:bg-white/10 hover:text-white"
+                      : "text-gray-500 hover:bg-gray-100 hover:text-gray-900",
+                    isSubmitting && "pointer-events-none opacity-50",
+                  )}
+                  aria-label="Close"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+            </div>
 
-                  <div className="space-y-2">
-                    <div className="flex justify-between text-sm">
-                      <span>Prize Pool Reduction:</span>
-                      <span className="font-medium">
-                        {formatCurrencyFromCents(
-                          refundDetails.prizePoolDecrease,
-                        )}
-                      </span>
-                      <span className="font-medium">
-                        {formatCurrencyFromCents(
-                          refundDetails.prizePoolDecrease,
-                        )}
-                      </span>
-                    </div>
+            <div className="flex-1 overflow-y-auto px-5 py-4 sm:px-6 space-y-4">
+              <div
+                className={cn(
+                  "flex items-start gap-3 rounded-xl border p-3",
+                  isDark
+                    ? "border-green-500/30 bg-green-500/10"
+                    : "border-green-200 bg-green-50",
+                )}
+              >
+                <CheckCircle2
+                  className={cn(
+                    "mt-0.5 h-5 w-5 shrink-0",
+                    isDark ? "text-green-400" : "text-green-600",
+                  )}
+                />
+                <p
+                  className={cn(
+                    "text-sm leading-relaxed",
+                    isDark ? "text-gray-200" : "text-gray-700",
+                  )}
+                >
+                  Your prize pool decreased by{" "}
+                  <span className="font-semibold tabular-nums">
+                    {formatCurrencyFromCents(refundDetails.prizePoolDecrease)}
+                  </span>
+                  . You&apos;ll receive that amount plus commission back to
+                  your wallet.
+                </p>
+              </div>
 
-                    <div className="flex justify-between text-sm">
-                      <span>
-                        Commission Refund ({refundDetails.commissionPercentage}
-                        %):
-                      </span>
-                      <span className="font-medium">
-                        {formatCurrencyFromCents(
-                          refundDetails.commissionRefund,
-                        )}
-                      </span>
-                      <span>
-                        Commission Refund ({refundDetails.commissionPercentage}
-                        %):
-                      </span>
-                      <span className="font-medium">
-                        {formatCurrencyFromCents(
-                          refundDetails.commissionRefund,
-                        )}
-                      </span>
-                    </div>
+              <div
+                className={cn(
+                  "rounded-xl border p-4",
+                  isDark
+                    ? "border-[#2F2754] bg-[#120A30]/50"
+                    : "border-purple-100 bg-purple-50/40",
+                )}
+              >
+                <p
+                  className={cn(
+                    "mb-3 text-sm font-semibold",
+                    isDark ? "text-gray-300" : "text-gray-600",
+                  )}
+                >
+                  Refund breakdown
+                </p>
 
-                    <Separator />
-
-                    <div className="flex justify-between text-lg font-semibold">
-                      <span>Total Refund Amount:</span>
-                      <span className="text-green-600">
-                        {formatCurrencyFromCents(refundDetails.totalRefund)}
-                      </span>
-                      <span className="text-green-600">
-                        {formatCurrencyFromCents(refundDetails.totalRefund)}
-                      </span>
-                    </div>
+                <div className="space-y-2 text-sm">
+                  <div className="flex justify-between gap-3">
+                    <span className={isDark ? "text-gray-400" : "text-gray-600"}>
+                      Prize pool reduction
+                    </span>
+                    <span
+                      className={cn(
+                        "font-medium tabular-nums",
+                        isDark ? "text-white" : "text-gray-900",
+                      )}
+                    >
+                      {formatCurrencyFromCents(refundDetails.prizePoolDecrease)}
+                    </span>
+                  </div>
+                  <div className="flex justify-between gap-3">
+                    <span className={isDark ? "text-gray-400" : "text-gray-600"}>
+                      Commission refund ({refundDetails.commissionPercentage}%)
+                    </span>
+                    <span
+                      className={cn(
+                        "font-medium tabular-nums",
+                        isDark ? "text-white" : "text-gray-900",
+                      )}
+                    >
+                      {formatCurrencyFromCents(refundDetails.commissionRefund)}
+                    </span>
                   </div>
                 </div>
 
                 <div
                   className={cn(
-                    "mt-4 p-3 rounded-lg border",
-                    isDark
-                      ? "bg-[#FDD36F5C] border-[#FDD36F5C] text-[#FDD36F]"
-                      : "border border-blue-200 text-blue-800",
+                    "my-4 border-t",
+                    isDark ? "border-gray-700" : "border-purple-100",
                   )}
-                >
-                  <p className="text-sm ">
-                    <strong>Note:</strong> This refund will be processed to your
-                    wallet balance. The contest will be saved as draft and
-                    submitted for approval after the refund is completed.
-                  </p>
+                />
+
+                <div className="flex items-end justify-between gap-3">
+                  <span
+                    className={cn(
+                      "text-sm font-medium",
+                      isDark ? "text-gray-400" : "text-gray-600",
+                    )}
+                  >
+                    Total refund
+                  </span>
+                  <span
+                    className={cn(
+                      "text-2xl font-bold tabular-nums",
+                      isDark ? "text-green-400" : "text-green-600",
+                    )}
+                  >
+                    {formatCurrencyFromCents(refundDetails.totalRefund)}
+                  </span>
                 </div>
               </div>
 
-              <div className="flex flex-col gap-3">
-                <button
-                  onClick={processRefund}
-                  disabled={isSubmitting}
+              <div
+                className={cn(
+                  "flex items-start gap-3 rounded-xl border p-3",
+                  isDark
+                    ? "border-[#2F2754] bg-[#120A30]/80"
+                    : "border-blue-100 bg-blue-50/60",
+                )}
+              >
+                <Wallet
                   className={cn(
-                    "w-full text-md rounded-full py-3 flex items-center justify-center",
-                    isDark
-                      ? "bg-[#7F39EC] text-white"
-                      : " bg-[#D9C0FF61] text-[#7F39EC] ",
+                    "mt-0.5 h-4 w-4 shrink-0",
+                    isDark ? "text-[#C4A8FF]" : "text-[#7F39EC]",
+                  )}
+                />
+                <p
+                  className={cn(
+                    "text-xs leading-relaxed",
+                    isDark ? "text-gray-400" : "text-gray-600",
                   )}
                 >
-                  {isSubmitting ? (
-                    <>
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Processing Refund...
-                    </>
-                  ) : (
-                    <>
-                      <CheckCircle2 className="mr-2 h-4 w-4" />
-                      Process Refund
-                    </>
-                  )}
-                </button>
-                <button
-                  onClick={() => {
-                    setShowRefundPreview(false);
-                    setRefundDetails(null);
-                    setIsSubmitting(false);
-                  }}
-                  className={cn(
-                    "w-full text-md rounded-full py-3",
-                    isDark
-                      ? "border border-[#FF5353] text-[#FF5353]"
-                      : "bg-[#FF323224] text-[#E50000]",
-                  )}
-                  disabled={isSubmitting}
-                >
-                  Cancel
-                </button>
+                  The refund will be credited to your wallet balance. Your
+                  campaign will be saved as a draft and submitted for review
+                  after the refund completes.
+                </p>
               </div>
+            </div>
+
+            <div
+              className={cn(
+                "flex-shrink-0 space-y-2 border-t px-5 py-4 sm:px-6",
+                isDark ? "border-gray-800" : "border-gray-100",
+              )}
+            >
+              <button
+                type="button"
+                onClick={processRefund}
+                disabled={isSubmitting}
+                className={cn(
+                  "flex w-full items-center justify-center rounded-full py-3 text-base font-semibold text-white transition-colors",
+                  "bg-[#7F39EC] hover:bg-[#6929D1] disabled:opacity-70",
+                )}
+              >
+                {isSubmitting ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Processing refund…
+                  </>
+                ) : (
+                  <>
+                    <CheckCircle2 className="mr-2 h-4 w-4" />
+                    Process refund{" "}
+                    {formatCurrencyFromCents(refundDetails.totalRefund)}
+                  </>
+                )}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowRefundPreview(false);
+                  setRefundDetails(null);
+                  setIsSubmitting(false);
+                }}
+                disabled={isSubmitting}
+                className={cn(
+                  "w-full rounded-full border py-3 text-sm font-medium transition-colors",
+                  isDark
+                    ? "border-gray-600 text-gray-300 hover:bg-white/5"
+                    : "border-gray-300 text-gray-700 hover:bg-gray-50",
+                )}
+              >
+                Cancel
+              </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* Payment Modal */}
-      {showPayment && contest && (
-        <div
-          className={cn(
-            "fixed inset-0 bg-black bg-opacity-65 flex items-center justify-center p-2 sm:p-4 z-50",
-            isDark ? "bg-[#100A33]" : "bg-black",
-          )}
-        >
-          <div
-            className={cn(
-              "rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto",
-              isDark
-                ? "bg-[#06021D] border border-gray-800 text-white"
-                : "bg-white text-gray-900 ",
-            )}
-          >
-            <div className="p-6">
-              <div className="mb-6">
-                <h2 className="text-2xl font-bold mb-2">Campaign Payment</h2>
-                <p>Complete payment to submit your campaign for review</p>
-              </div>
-
-              {/* Plan Commission Rate Information */}
+      {contest && (
+        <CampaignPaymentModal
+          open={showPayment}
+          onClose={() => setShowPayment(false)}
+          isDark={isDark}
+          disabled={isSubmitting}
+          headerExtra={
+            <>
               {contestCommissionRate !== null &&
                 currentPlanCommissionRate !== null &&
                 contestCommissionRate !== currentPlanCommissionRate && (
-                  <Alert className="mb-4 w-full bg-[#D9C0FF26] border border-[#7F39EC]">
+                  <Alert className="w-full bg-[#D9C0FF26] border border-[#7F39EC]">
                     <Info className="h-4 w-4 flex-shrink-0" />
                     <AlertDescription className="min-w-0">
                       <strong>Commission Rate Notice:</strong> This contest was
@@ -13365,8 +13866,8 @@ export default function EditContestPage({
                       commission rate.
                       <br />
                       <span className="text-sm">
-                        If you want to use your new plan's commission rate,
-                        you'll need to create a new campaign.
+                        If you want to use your new plan&apos;s commission rate,
+                        you&apos;ll need to create a new campaign.
                       </span>
                     </AlertDescription>
                   </Alert>
@@ -13375,7 +13876,12 @@ export default function EditContestPage({
               {budgetChanged && budgetDifference > 0 && (
                 <Alert
                   className={cn(
-                    "mb-4 w-full border",
+                    "w-full border",
+                    contestCommissionRate !== null &&
+                      currentPlanCommissionRate !== null &&
+                      contestCommissionRate !== currentPlanCommissionRate
+                      ? "mt-3"
+                      : "",
                     isDark
                       ? "bg-[#C9A7FF26] border-[#C9A7FF] text-white"
                       : "bg-[#D9C0FF26] border-[#7F39EC] text-gray-900",
@@ -13398,8 +13904,10 @@ export default function EditContestPage({
                   </AlertDescription>
                 </Alert>
               )}
-
-              <ContestPaymentSelection
+            </>
+          }
+        >
+          <ContestPaymentSelection
                 contestAmount={
                   budgetChanged && budgetDifference > 0
                     ? budgetDifference / 100 // Prize pool increase amount in dollars
@@ -13454,36 +13962,23 @@ export default function EditContestPage({
                 }
                 contestTitle={title || "Untitled Campaign"}
                 contestId={contestId}
+                returnPath={`/dashboard/contests/${contestId}/edit`}
                 commissionPercentage={
                   contestCommissionRate !== null
                     ? contestCommissionRate
                     : (getPlanFeatures(userPlan).commissionPercentage ?? 0)
                 }
-                onPaymentSuccess={handlePaymentSuccess}
-                onPaymentError={handlePaymentError}
-                disabled={isSubmitting}
-                isIncrease={budgetChanged && budgetDifference > 0}
-                isDecrease={false} // Budget decreases are now handled directly, not through payment modal
-              />
+            onPaymentSuccess={handlePaymentSuccess}
+            onPaymentError={handlePaymentError}
+            disabled={isSubmitting}
+            isIncrease={budgetChanged && budgetDifference > 0}
+            isDecrease={false}
+          />
+        </CampaignPaymentModal>
+      )}
 
-              <div className="mt-6">
-                <Button
-                  className={cn(
-                    "w-full text-md rounded-full",
-                    isDark
-                      ? "py-3 border border-[#FF5353] bg-[#06021D] text-[#FF5353]"
-                      : "bg-[#FF323224] text-[#E50000] py-4",
-                  )}
-                  onClick={() => setShowPayment(false)}
-                  disabled={isSubmitting}
-                  size="lg"
-                >
-                  Cancel
-                </Button>
-              </div>
-            </div>
-          </div>
-        </div>
+      {paymentProcessingPhase && (
+        <CampaignPaymentProcessingOverlay phase={paymentProcessingPhase} />
       )}
     </div>
   );

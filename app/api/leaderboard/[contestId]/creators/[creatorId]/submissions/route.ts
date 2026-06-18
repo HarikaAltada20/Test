@@ -75,9 +75,9 @@ export async function GET(
       const { count, error: countErr } = await q;
       if (countErr) {
         console.error("Error counting rank for submission:", sub.id, countErr);
-        rankBySubmissionId.set(sub.id, 0);
+        rankBySubmissionId.set(String(sub.id), 0);
       } else {
-        rankBySubmissionId.set(sub.id, (count ?? 0) + 1);
+        rankBySubmissionId.set(String(sub.id), (count ?? 0) + 1);
       }
     }
 
@@ -138,7 +138,7 @@ export async function GET(
 
     const submissions = subs.map((sub) => ({
       ...sub,
-      rank: rankBySubmissionId.get(sub.id),
+      rank: rankBySubmissionId.get(String(sub.id)),
       creator_display_name,
       creator_username,
       creator_avatar_url: creator_pfp_url,

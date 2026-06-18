@@ -43,13 +43,6 @@ export const OPPORTUNITIES_SORT_OPTIONS = [
   "submissions_asc",
 ] as const;
 
-export const ADMIN_ONLY_CONTEST_LIST_SORT_OPTIONS = [
-  "approval_rate_desc",
-  "approval_rate_asc",
-  "views_desc",
-  "views_asc",
-] as const;
-
 export const CONTEST_TYPE_FILTER_OPTIONS = [
   "all",
   "leaderboard",

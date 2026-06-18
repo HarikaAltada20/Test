@@ -85,7 +85,6 @@ import { EnhancedTabs } from "@/components/ui/enhancedTabs";
 import { TabContent, TabPanel } from "@/components/ui/tab-content";
 import { useTabState } from "@/components/ui/tab-utils";
 import { cn } from "@/lib/utils";
-import { PhantomPayoutForm } from "@/components/PhantomPayoutForm";
 import { WITHDRAWAL_REVIEW_TRIGGER_EVENT } from "@/lib/review-events";
 import {
   Tooltip,
@@ -159,7 +158,6 @@ export default function EarningsClientPage({
   // Modal States (same as before)
   const [isPayoutModalOpen, setIsPayoutModalOpen] = useState(false);
   const [isWithdrawModalOpen, setIsWithdrawModalOpen] = useState(false);
-  const [isPhantomModalOpen, setIsPhantomModalOpen] = useState(false);
   const [currentPayoutMethod, setCurrentPayoutMethod] =
     useState<PayoutMethod | null>(null);
   const [selectedPayoutType, setSelectedPayoutType] =
@@ -210,7 +208,6 @@ export default function EarningsClientPage({
     "crypto",
     "upi",
     "bank_transfer",
-    "phantom",
   ]);
 
   const getInitialMode = (): "light" | "dark" => {
@@ -362,12 +359,12 @@ export default function EarningsClientPage({
       .then((data) => {
         if (cancelled) return;
         setPausedPayoutMethodTypes(data.pausedMethodTypes || []);
-        setEnabledPayoutMethodTypes(data.enabledMethodTypes || ["crypto", "upi", "bank_transfer", "phantom"]);
+        setEnabledPayoutMethodTypes(data.enabledMethodTypes || ["crypto", "upi", "bank_transfer"]);
       })
       .catch(() => {
         if (!cancelled) {
           setPausedPayoutMethodTypes([]);
-          setEnabledPayoutMethodTypes(["crypto", "upi", "bank_transfer", "phantom"]);
+          setEnabledPayoutMethodTypes(["crypto", "upi", "bank_transfer"]);
         }
       });
     return () => { cancelled = true; };
@@ -517,14 +514,7 @@ export default function EarningsClientPage({
       if (bankBranchName.trim())
         bankDetails.branch_name = bankBranchName.trim();
       details = bankDetails;
-    } else if (selectedPayoutType === "phantom") {
-      // For Phantom Wallet, we'll use a separate form component
-      toast.error(
-        "Please use the dedicated Phantom Wallet form to add your wallet."
-      );
-      return;
     } else {
-      const exhaustiveCheck: never = selectedPayoutType;
       toast.error("Invalid payout method type selected.");
       return;
     }
@@ -668,9 +658,7 @@ export default function EarningsClientPage({
     ) {
       setPayoutCountry("IN");
     } else {
-      setPayoutCountry((prev) =>
-        prev === "IN" && method.method_type !== "phantom" ? "IN" : "OTHER"
-      );
+      setPayoutCountry("OTHER");
     }
     setPayoutFriendlyName(method.friendly_name || "");
 
@@ -2053,7 +2041,7 @@ export default function EarningsClientPage({
               className="w-full"
             >
               {payoutCountry === "IN" ? (
-                <TabsList className="grid w-full grid-cols-4 gap-2">
+                <TabsList className="grid w-full grid-cols-3 gap-2">
                   <TabsTrigger
                     value="upi"
                     className={cn(
@@ -2087,20 +2075,9 @@ export default function EarningsClientPage({
                   >
                     Crypto
                   </TabsTrigger>
-                  <TabsTrigger
-                    className={cn(
-                      "border",
-                      isDark
-                        ? "border-gray-400 text-gray-300"
-                        : "border-gray-500 text-gray-800"
-                    )}
-                    value="phantom"
-                  >
-                    Phantom Wallet
-                  </TabsTrigger>
                 </TabsList>
               ) : (
-                <TabsList className="grid w-full grid-cols-2">
+                <TabsList className="grid w-full grid-cols-1">
                   <TabsTrigger
                     value="crypto"
                     className={cn(
@@ -2111,17 +2088,6 @@ export default function EarningsClientPage({
                     )}
                   >
                     Crypto
-                  </TabsTrigger>
-                  <TabsTrigger
-                    value="phantom"
-                    className={cn(
-                      "border",
-                      isDark
-                        ? "border-gray-400 text-gray-300"
-                        : "border-gray-500 text-gray-800"
-                    )}
-                  >
-                    Phantom Wallet
                   </TabsTrigger>
                 </TabsList>
               )}
@@ -2520,35 +2486,6 @@ export default function EarningsClientPage({
                   as per Indian law.
                 </p>
               </TabsContent>
-
-              <TabsContent value="phantom" className="space-y-4">
-                <div className="text-center py-8">
-                  <Wallet className="h-12 w-12 text-purple-600 mx-auto mb-4" />
-                  <h3
-                    className={cn(
-                      "text-lg font-semibold mb-2",
-                      isDark ? "text-white" : "text-black"
-                    )}
-                  >
-                    Phantom Wallet
-                  </h3>
-                  <p className="text-sm text-muted-foreground mb-4">
-                    Add your Phantom Wallet to receive USDC or USDT payouts via
-                    Solana network directly to your wallet.
-                  </p>
-                  <Button
-                    onClick={() => {
-                      // Close current modal and open Phantom form
-                      setIsPayoutModalOpen(false);
-                      setIsPhantomModalOpen(true);
-                    }}
-                    className="bg-purple-600 hover:bg-purple-700"
-                  >
-                    <Wallet className="mr-2 h-4 w-4" />
-                    Add Phantom Wallet
-                  </Button>
-                </div>
-              </TabsContent>
             </Tabs>
           </div>
           <DialogFooter className="sm:justify-between">
@@ -2932,51 +2869,6 @@ export default function EarningsClientPage({
               </Button>
             </DialogClose>
           </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Phantom Wallet Modal */}
-      <Dialog
-        open={isPhantomModalOpen}
-        onOpenChange={setIsPhantomModalOpen}
-        isdark={isDark}
-      >
-        <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto p-4 sm:p-6">
-          <PhantomPayoutForm
-            onSave={async (details) => {
-              // Save Phantom Wallet payout method
-              setIsLoading(true);
-              try {
-                const { error } = await supabase.from("payout_methods").insert({
-                  user_id: authUser.id,
-                  method_type: "phantom",
-                  details,
-                  is_default: payoutMethods.length === 0, // Set as default if first method
-                  friendly_name: details.friendly_name || "Phantom Wallet",
-                });
-
-                if (error) throw error;
-
-                // Refresh payout methods
-                const { data: newMethods } = await supabase
-                  .from("payout_methods")
-                  .select("*")
-                  .eq("user_id", authUser.id)
-                  .order("created_at", { ascending: false });
-
-                setPayoutMethods(newMethods || []);
-                setIsPhantomModalOpen(false);
-                toast.success("Phantom Wallet added successfully!");
-              } catch (error: any) {
-                toast.error(error.message || "Failed to add Phantom Wallet");
-              } finally {
-                setIsLoading(false);
-              }
-            }}
-            onCancel={() => setIsPhantomModalOpen(false)}
-            isLoading={isLoading}
-            isDark={isDark}
-          />
         </DialogContent>
       </Dialog>
     </div>

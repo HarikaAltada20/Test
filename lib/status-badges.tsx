@@ -14,42 +14,186 @@ export const STATUS_BADGE_CONFIG: Record<SubmissionStatus, StatusBadgeConfig> = 
   [SUBMISSION_STATUS.pending]: {
     label: "Pending",
     icon: Info,
-    className: "bg-yellow-100 text-yellow-800 border-yellow-200 dark:bg-yellow-900/20 dark:text-yellow-400 dark:border-yellow-800",
+    className:
+      "bg-yellow-100 text-yellow-800 border-yellow-200 dark:bg-yellow-900/20 dark:text-yellow-400 dark:border-yellow-800",
     showInLeaderboard: true,
   },
   [SUBMISSION_STATUS.rejected]: {
-    label: "Rejected", 
+    label: "Rejected",
     icon: AlertCircle,
-    className: "bg-red-100 text-red-800 border-red-200 dark:bg-red-900/20 dark:text-red-400 dark:border-red-800",
+    className:
+      "bg-red-100 text-red-800 border-red-200 dark:bg-red-900/20 dark:text-red-400 dark:border-red-800",
     showInLeaderboard: true,
   },
   [SUBMISSION_STATUS.verified]: {
     label: "Verified",
     icon: CheckCircle,
-    className: "bg-green-100 text-green-800 border-green-200 dark:bg-green-900/20 dark:text-green-400 dark:border-green-800",
+    className:
+      "bg-green-100 text-green-800 border-green-200 dark:bg-green-900/20 dark:text-green-400 dark:border-green-800",
     showInLeaderboard: false,
   },
   [SUBMISSION_STATUS.paid]: {
     label: "Paid",
     icon: DollarSign,
-    className: "bg-blue-100 text-blue-800 border-blue-200 dark:bg-blue-900/20 dark:text-blue-400 dark:border-blue-800",
+    className:
+      "bg-blue-100 text-blue-800 border-blue-200 dark:bg-blue-900/20 dark:text-blue-400 dark:border-blue-800",
     showInLeaderboard: false,
   },
 };
 
-export function renderStatusBadge(status: SubmissionStatus, contestType?: string | null) {
-  if (contestType !== "cpm" && contestType !== "leaderboard") return null;
+const SUBMISSION_STATUS_VALUES = new Set<string>(Object.values(SUBMISSION_STATUS));
 
+/** Map submission / Twitter moderation values to a canonical submission status. */
+export function normalizeLeaderboardSubmissionStatus(
+  status?: string | null,
+  moderationStatus?: string | null,
+): SubmissionStatus | null {
+  const raw = String(status || moderationStatus || "").toLowerCase();
+  if (!raw) return null;
+  if (raw === "approved") return SUBMISSION_STATUS.verified;
+  if (SUBMISSION_STATUS_VALUES.has(raw)) {
+    return raw as SubmissionStatus;
+  }
+  return null;
+}
+
+/** Pick the status badge to show when a creator has multiple submissions. */
+export function resolveAggregateLeaderboardStatus(
+  entries: Array<{
+    status?: string | null;
+    moderation_status?: string | null;
+  }>,
+): SubmissionStatus | null {
+  let hasPending = false;
+  let hasRejected = false;
+
+  for (const entry of entries) {
+    const normalized = normalizeLeaderboardSubmissionStatus(
+      entry.status,
+      entry.moderation_status,
+    );
+    if (normalized === SUBMISSION_STATUS.pending) hasPending = true;
+    if (normalized === SUBMISSION_STATUS.rejected) hasRejected = true;
+  }
+
+  if (hasPending) return SUBMISSION_STATUS.pending;
+  if (hasRejected) return SUBMISSION_STATUS.rejected;
+  return null;
+}
+
+export type LeaderboardBadgeSource = {
+  status?: string | null;
+  moderation_status?: string | null;
+  display_status?: string | null;
+  pending_submission_count?: number | null;
+  submissions?: Array<{
+    status?: string | null;
+    moderation_status?: string | null;
+  }>;
+};
+
+/** Count pending submissions from in-memory rows (client-side grouping on one page). */
+export function countPendingLeaderboardSubmissions(
+  entries: Array<{
+    status?: string | null;
+    moderation_status?: string | null;
+  }>,
+): number {
+  let count = 0;
+  for (const entry of entries) {
+    if (
+      normalizeLeaderboardSubmissionStatus(entry.status, entry.moderation_status) ===
+      SUBMISSION_STATUS.pending
+    ) {
+      count += 1;
+    }
+  }
+  return count;
+}
+
+export function formatPendingLeaderboardBadgeLabel(count: number): string {
+  if (count <= 0) return STATUS_BADGE_CONFIG[SUBMISSION_STATUS.pending].label;
+  return count === 1 ? "1 Pending" : `${count.toLocaleString()} Pending`;
+}
+
+export function resolveLeaderboardBadgeStatus(
+  source: LeaderboardBadgeSource | string | null | undefined,
+): SubmissionStatus | null {
+  if (!source) return null;
+  if (typeof source === "string") {
+    return normalizeLeaderboardSubmissionStatus(source);
+  }
+
+  if (
+    "pending_submission_count" in source &&
+    source.pending_submission_count != null
+  ) {
+    return source.pending_submission_count > 0
+      ? SUBMISSION_STATUS.pending
+      : null;
+  }
+
+  if (source.submissions?.length) {
+    const aggregated = resolveAggregateLeaderboardStatus(source.submissions);
+    if (aggregated) return aggregated;
+  }
+
+  if (source.display_status) {
+    return normalizeLeaderboardSubmissionStatus(source.display_status);
+  }
+
+  // Server-side creator-wise rows set display_status to null when every
+  // submission is verified/paid — do not infer pending from missing fields.
+  if ("display_status" in source && source.display_status == null) {
+    return null;
+  }
+
+  return normalizeLeaderboardSubmissionStatus(
+    source.status,
+    source.moderation_status,
+  );
+}
+
+export function renderStatusBadge(
+  status: SubmissionStatus,
+  _contestType?: string | null,
+  labelOverride?: string,
+) {
   const config = STATUS_BADGE_CONFIG[status];
-  if (!config.showInLeaderboard) return null;
+  if (!config?.showInLeaderboard) return null;
 
   const Icon = config.icon;
+  const label = labelOverride ?? config.label;
 
-  return React.createElement(Badge, {
-    variant: "secondary",
-    className: `${config.className} text-xs font-medium`
-  }, 
+  return React.createElement(
+    Badge,
+    {
+      variant: "secondary",
+      className: `${config.className} text-xs font-medium`,
+    },
     React.createElement(Icon, { className: "h-3 w-3 mr-1" }),
-    config.label
+    label,
   );
+}
+
+export function renderLeaderboardStatusBadge(
+  source: LeaderboardBadgeSource | string | null | undefined,
+): React.ReactNode | null {
+  const normalized = resolveLeaderboardBadgeStatus(source);
+  if (!normalized) return null;
+
+  let labelOverride: string | undefined;
+  if (
+    normalized === SUBMISSION_STATUS.pending &&
+    typeof source === "object" &&
+    source != null &&
+    source.pending_submission_count != null &&
+    source.pending_submission_count > 0
+  ) {
+    labelOverride = formatPendingLeaderboardBadgeLabel(
+      source.pending_submission_count,
+    );
+  }
+
+  return renderStatusBadge(normalized, null, labelOverride);
 }

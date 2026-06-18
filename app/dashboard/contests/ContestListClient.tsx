@@ -84,7 +84,6 @@ import {
 import {
   ADMIN_CONTEST_LIST_FILTERS_KEY,
   BRAND_CONTEST_LIST_FILTERS_KEY,
-  ADMIN_ONLY_CONTEST_LIST_SORT_OPTIONS,
   readStoredContestListFilters,
   writeStoredContestListFilters,
   type BrandPostPhaseFilterOption,
@@ -688,17 +687,6 @@ export function ContestListClient({
   }, [contestListFiltersStorageKey, externalViewMode]);
 
   useEffect(() => {
-    if (
-      !isAdminView &&
-      (ADMIN_ONLY_CONTEST_LIST_SORT_OPTIONS as readonly string[]).includes(
-        sortOption,
-      )
-    ) {
-      setSortOption("created_at_desc");
-    }
-  }, [isAdminView, sortOption]);
-
-  useEffect(() => {
     if (!filtersHydrated || postPhaseFilterRestoredRef.current) return;
     if (selectedTab !== "all" && selectedTab !== "ended") return;
 
@@ -830,16 +818,6 @@ export function ContestListClient({
   useEffect(() => {
     setContests(initialContests);
   }, [initialContests]);
-
-  useEffect(() => {
-    if (isAdminView) {
-      return;
-    }
-
-    fetchLatestContests();
-    const intervalId = window.setInterval(fetchLatestContests, 30000);
-    return () => window.clearInterval(intervalId);
-  }, [fetchLatestContests, isAdminView]);
 
   useEffect(() => {
     if (isAdminView) {
@@ -1058,13 +1036,11 @@ export function ContestListClient({
   }, [mode]);
   const isDark = mode === "dark";
 
-  // Admin-only badges: verified/pending submission counts (header row)
+  // Verified/pending submission badges (header row)
   const renderAdminSubmissionBadges = (
     contest: Contest,
     size: "compact" | "default" = "compact",
   ) => {
-    if (!isAdminView) return null;
-
     const sizeClass =
       size === "compact" ? "text-[12px]" : "text-sm px-3 py-1 font-medium";
 
@@ -1098,10 +1074,8 @@ export function ContestListClient({
     );
   };
 
-  // Admin-only footer: approval %, views, submissions
+  // Card footer: approval %, views, submissions
   const renderAdminStatsFooter = (contest: Contest) => {
-    if (!isAdminView) return null;
-
     const total = getAdminSubmissionTotal(contest);
     const approval = getAdminApprovalPercent(contest);
     const views = contest.not_rejected_views ?? 0;
@@ -1727,51 +1701,30 @@ export function ContestListClient({
                   </span>
                 </div>
               )}
-              {!isAdminView &&
-                (() => {
+              {(() => {
                 const isTwitterTextImage =
                   (contest.platform?.toLowerCase() === "twitter" ||
                     contest.platform?.toLowerCase() === "x") &&
                   contest.contest_format === "text_image";
 
-                if (isTwitterTextImage) {
-                  // For Twitter contests, show participants count if available
-                  const participantsCount =
-                    contest.twitter_participants_count ?? 0;
-                  const maxParticipants = contest.twitter_max_participants;
-                  const displayValue = maxParticipants
-                    ? `${participantsCount} / ${maxParticipants}`
-                    : participantsCount;
+                if (!isTwitterTextImage) return null;
 
-                  return (
-                    <div className="flex items-center">
-                      <Users className="h-4 w-4 mr-2 flex-shrink-0" />
-                      <span>
-                        Participants:{" "}
-                        <span className="font-medium ">{displayValue}</span>
-                      </span>
-                    </div>
-                  );
-                }
+                const participantsCount =
+                  contest.twitter_participants_count ?? 0;
+                const maxParticipants = contest.twitter_max_participants;
+                const displayValue = maxParticipants
+                  ? `${participantsCount} / ${maxParticipants}`
+                  : participantsCount;
 
-                // For non-Twitter contests, show submissions count
-                if (
-                  contest.live_submission_count !== null &&
-                  contest.live_submission_count !== undefined
-                ) {
-                  return (
-                    <div className="flex items-center">
-                      <Users className="h-4 w-4 mr-2 flex-shrink-0" />
-                      <span>
-                        Submissions:{" "}
-                        <span className="font-medium ">
-                          {contest.live_submission_count}
-                        </span>
-                      </span>
-                    </div>
-                  );
-                }
-                return null;
+                return (
+                  <div className="flex items-center">
+                    <Users className="h-4 w-4 mr-2 flex-shrink-0" />
+                    <span>
+                      Participants:{" "}
+                      <span className="font-medium ">{displayValue}</span>
+                    </span>
+                  </div>
+                );
               })()}
               <div className="flex items-center">
                 <Info className="h-4 w-4 mr-2 flex-shrink-0" />
@@ -2563,61 +2516,35 @@ export function ContestListClient({
                     </span>
                   </div>
                 )}
-                {!isAdminView &&
-                  (() => {
+                {(() => {
                   const isTwitterTextImage =
                     (contest.platform?.toLowerCase() === "twitter" ||
                       contest.platform?.toLowerCase() === "x") &&
                     contest.contest_format === "text_image";
 
-                  if (isTwitterTextImage) {
-                    // For Twitter contests, show participants count if available
-                    const participantsCount =
-                      contest.twitter_participants_count ?? 0;
-                    const maxParticipants = contest.twitter_max_participants;
-                    const displayValue = maxParticipants
-                      ? `${participantsCount} / ${maxParticipants}`
-                      : participantsCount;
+                  if (!isTwitterTextImage) return null;
 
-                    return (
-                      <div className="flex items-center">
-                        <Users className="h-4 w-4 mr-2 flex-shrink-0" />
-                        <span
-                          style={{
-                            color: isDark ? "white" : "#475569",
-                            transition: "none",
-                          }}
-                        >
-                          Participants:{" "}
-                          <span className="font-medium">{displayValue}</span>
-                        </span>
-                      </div>
-                    );
-                  }
+                  const participantsCount =
+                    contest.twitter_participants_count ?? 0;
+                  const maxParticipants = contest.twitter_max_participants;
+                  const displayValue = maxParticipants
+                    ? `${participantsCount} / ${maxParticipants}`
+                    : participantsCount;
 
-                  // For non-Twitter contests, show submissions count
-                  if (
-                    contest.live_submission_count !== null &&
-                    contest.live_submission_count !== undefined
-                  ) {
-                    return (
-                      <div className="flex items-center">
-                        <Users className="h-4 w-4 mr-2 flex-shrink-0" />
-                        <span
-                          style={{
-                            color: isDark ? "white" : "#475569",
-                            transition: "none",
-                          }}
-                        >
-                          Submissions:{" "}
-                          <span className="font-medium">
-                            {contest.live_submission_count}
-                          </span>
-                        </span>
-                      </div>
-                    );
-                  }
-                  return null;
+                  return (
+                    <div className="flex items-center">
+                      <Users className="h-4 w-4 mr-2 flex-shrink-0" />
+                      <span
+                        style={{
+                          color: isDark ? "white" : "#475569",
+                          transition: "none",
+                        }}
+                      >
+                        Participants:{" "}
+                        <span className="font-medium">{displayValue}</span>
+                      </span>
+                    </div>
+                  );
                 })()}
                 <div className="flex items-center">
                   <Info className="h-4 w-4 mr-2 flex-shrink-0" />
@@ -4281,22 +4208,18 @@ export function ContestListClient({
                   <SelectItem isDark={isDark} value="budget_used_asc">
                     Budget Used: Least
                   </SelectItem>
-                  {isAdminView && (
-                    <>
-                      <SelectItem isDark={isDark} value="approval_rate_desc">
-                        Approval Rate: High
-                      </SelectItem>
-                      <SelectItem isDark={isDark} value="approval_rate_asc">
-                        Approval Rate: Low
-                      </SelectItem>
-                      <SelectItem isDark={isDark} value="views_desc">
-                        Views: High
-                      </SelectItem>
-                      <SelectItem isDark={isDark} value="views_asc">
-                        Views: Low
-                      </SelectItem>
-                    </>
-                  )}
+                  <SelectItem isDark={isDark} value="approval_rate_desc">
+                    Approval Rate: High
+                  </SelectItem>
+                  <SelectItem isDark={isDark} value="approval_rate_asc">
+                    Approval Rate: Low
+                  </SelectItem>
+                  <SelectItem isDark={isDark} value="views_desc">
+                    Views: High
+                  </SelectItem>
+                  <SelectItem isDark={isDark} value="views_asc">
+                    Views: Low
+                  </SelectItem>
                   <SelectItem isDark={isDark} value="cpm_rate_desc">
                     CPM Rate: High to Low
                   </SelectItem>

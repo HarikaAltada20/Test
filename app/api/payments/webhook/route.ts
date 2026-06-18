@@ -2,7 +2,12 @@ import { NextRequest, NextResponse } from 'next/server';
 import { headers } from 'next/headers';
 import { stripe } from '@/lib/stripe';
 import { createAdminClient } from '@/utils/supabase/admin';
-import { updateTransactionStatus, ensureDefaultPaymentMethod } from '@/lib/payment-utils';
+import {
+  updateTransactionStatus,
+  ensureDefaultPaymentMethod,
+  logTransactionAsAdmin,
+  finalizeContestPaymentFromStripe,
+} from '@/lib/payment-utils';
 import Stripe from 'stripe';
 
 export async function POST(request: NextRequest) {
@@ -161,7 +166,8 @@ async function handlePaymentSuccess(paymentIntent: any) {
 
       console.log('✅ Balance update successful:', updateData);
 
-      // Update existing pending transaction to success
+      // Update existing pending transaction to success, or create one if Checkout
+      // did not produce a payment_intent at session creation time
       const updateSuccess = await updateTransactionStatus(
         paymentIntent.id,
         'success',
@@ -169,188 +175,75 @@ async function handlePaymentSuccess(paymentIntent: any) {
         'Wallet topped up successfully'
       );
 
+      if (!updateSuccess) {
+        console.log(
+          '📝 No pending transaction found — creating success deposit record'
+        );
+        const customerId =
+          typeof paymentIntent.customer === 'string'
+            ? paymentIntent.customer
+            : paymentIntent.customer?.id;
+
+        const logged = await logTransactionAsAdmin(
+          userId,
+          'deposit',
+          amountInCents,
+          'success',
+          `Wallet top-up completed - Payment Intent: ${paymentIntent.id}`,
+          {
+            paymentIntentId: paymentIntent.id,
+            remarks: 'Wallet topped up successfully',
+            paymentMethod: 'stripe',
+            metadata: customerId
+              ? { stripe_customer_id: customerId }
+              : undefined,
+          }
+        );
+        console.log(
+          `Transaction record created: ${logged ? 'SUCCESS' : 'FAILED'}`
+        );
+      }
+
       console.log(`Deposit successful: $${amountInDollars} (${amountInCents} cents) added to user ${userId}`);
-      console.log(`Transaction status updated: ${updateSuccess ? 'SUCCESS' : 'FAILED'}`);
+      console.log(
+        `Transaction logged: ${updateSuccess ? 'UPDATED_PENDING' : 'CREATED_NEW'}`
+      );
       console.log(`Customer ID: ${paymentIntent.customer}`);
     }
 
     if (type === 'contest_payment' || type === 'contest_payment_split') {
-      // IDEMPOTENCY CHECK: Prevent duplicate processing of the same payment intent
-      console.log(`🔍 Checking if contest payment intent ${paymentIntent.id} has already been processed...`);
-      
-      const { data: existingTransaction, error: checkError } = await supabase
-        .from('money_transactions')
-        .select('id, status')
-        .eq('payment_intent_id', paymentIntent.id)
-        .eq('status', 'success')
-        .single();
+      const finalizeResult = await finalizeContestPaymentFromStripe(paymentIntent);
 
-      if (!checkError && existingTransaction) {
-        console.log(`⚠️ DUPLICATE WEBHOOK: Contest payment intent ${paymentIntent.id} already processed successfully. Skipping.`);
-        console.log(`⚠️ Existing transaction ID: ${existingTransaction.id}`);
-        return; // Exit early to prevent duplicate processing
-      }
-
-      if (checkError && checkError.code !== 'PGRST116') { // PGRST116 = no rows returned (expected for new transactions)
-        console.error('❌ Error checking for existing contest transaction:', checkError);
+      if (!finalizeResult.success) {
+        console.error(
+          'Contest payment finalization failed:',
+          finalizeResult.error,
+        );
         return;
       }
 
-      console.log(`✅ Contest payment intent ${paymentIntent.id} is new, proceeding with processing...`);
-
-      // Update existing pending contest payment transaction
-      const { contestId, walletAmount, totalAmount } = paymentIntent.metadata;
-      const amountInDollars = parseFloat(amount);
-      
-      // For split payments, we need to process wallet deduction atomically
-      if (type === 'contest_payment_split') {
-        console.log('🔄 Processing split payment success - deducting wallet amount');
-        
-        const walletAmountInDollars = parseFloat(walletAmount || '0');
-        const walletAmountInCents = Math.round(walletAmountInDollars * 100);
-        
-        console.log(`💰 Split payment details: Stripe $${amountInDollars}, Wallet $${walletAmountInDollars}`);
-        
-        if (walletAmountInCents > 0) {
-          // Deduct wallet amount from user's balance
-          const { data: profile, error: balanceError } = await supabase
-            .from('advertiser_profiles')
-            .select('available_deposit_balance')
-            .eq('id', userId)
-            .single();
-
-          if (balanceError) {
-            console.error('❌ Error fetching user balance for wallet deduction:', balanceError);
-          } else {
-            const currentBalance = profile?.available_deposit_balance || 0;
-            const newBalance = currentBalance - walletAmountInCents;
-            
-            console.log(`💾 Deducting wallet: ${currentBalance} -> ${newBalance} cents (${walletAmountInCents} cents deducted)`);
-            
-            // CRITICAL: Prevent negative balances
-            if (newBalance < 0) {
-              console.error(`🚨 CRITICAL: Wallet deduction would create negative balance! Current: ${currentBalance}, Deducting: ${walletAmountInCents}`);
-            } else {
-              // Update balance
-              const { error: updateBalanceError } = await supabase
-                .from('advertiser_profiles')
-                .update({ available_deposit_balance: newBalance })
-                .eq('id', userId);
-
-              if (updateBalanceError) {
-                console.error('❌ CRITICAL: Error deducting wallet amount:', updateBalanceError);
-              } else {
-                console.log('✅ Wallet balance deducted successfully');
-                
-                // Log wallet transaction using service role client (bypasses RLS)
-                try {
-                  console.log(`📝 Attempting to log wallet transaction: User=${userId}, Amount=${walletAmountInCents} cents`);
-                  
-                  // Use service role client directly for wallet transaction logging
-                  const walletTransactionData = {
-                    user_id: userId,
-                    type: 'contest_payment',
-                    status: 'success',
-                    amount: walletAmountInCents,
-                    description: `Contest payment (wallet portion) for contest ${contestId} - Split payment completed`,
-                    payment_intent_id: null, // No payment intent for wallet portion
-                    payment_method: 'split',
-                    remarks: 'Wallet portion of split payment completed successfully',
-                    created_at: new Date().toISOString(),
-                    updated_at: new Date().toISOString()
-                  };
-
-                  console.log('💾 Inserting wallet transaction with service role:', walletTransactionData);
-
-                  const { data: walletTransactionResult, error: walletLogError } = await supabase
-                    .from('money_transactions')
-                    .insert(walletTransactionData)
-                    .select()
-                    .single();
-
-                  const walletLogSuccess = !walletLogError;
-                  
-                  if (walletLogSuccess) {
-                    console.log(`✅ Wallet transaction logged successfully:`, {
-                      id: walletTransactionResult?.id,
-                      amount: walletAmountInCents,
-                      user_id: userId,
-                      payment_method: 'split'
-                    });
-                  } else {
-                    console.error(`❌ CRITICAL: Wallet transaction logging FAILED:`, {
-                      user: userId,
-                      amount: walletAmountInCents,
-                      error: walletLogError
-                    });
-                  }
-                } catch (logError) {
-                  console.error(`❌ CRITICAL: Exception during wallet transaction logging:`, logError);
-                }
-              }
-            }
-          }
-        }
-      }
-      
-      const updateSuccess = await updateTransactionStatus(
-        paymentIntent.id,
-        'success',
-        `Contest payment completed - Contest: ${contestId}, Payment Intent: ${paymentIntent.id}`,
-        'Contest payment completed successfully'
-      );
-
-      // Update contest payment details to 'completed' status
-      try {
-        
-        // Get current payment details and update status
-        const { data: contest, error: fetchError } = await supabase
-          .from('contests')
-          .select('payment_details')
-          .eq('id', contestId)
-          .single();
-
-        if (!fetchError && contest?.payment_details) {
-          const paymentDetails = typeof contest.payment_details === 'string' 
-            ? JSON.parse(contest.payment_details) 
-            : contest.payment_details;
-
-          // Update payment status and paid_at timestamp
-          const updatedPaymentDetails = {
-            ...paymentDetails,
-            payment_status: 'completed',
-            paid_at: new Date().toISOString(),
-            total_amount_paid: paymentDetails.total_amount_paid || Math.round(amountInDollars * 100), // Ensure total_amount_paid is set
-            wallet_deduction_pending: false // Clear the pending flag for split payments
-          };
-
-          const { error: updateError } = await supabase
-            .from('contests')
-            .update({ payment_details: updatedPaymentDetails })
-            .eq('id', contestId);
-
-          if (updateError) {
-            console.error('Error updating contest payment details:', updateError);
-          } else {
-            console.log('✅ Contest payment details updated to completed');
-          }
-        }
-      } catch (error) {
-        console.error('Error updating contest payment details:', error);
-      }
-
-      if (type === 'contest_payment_split') {
-        console.log(`Split payment successful: Stripe $${amountInDollars} + Wallet $${parseFloat(walletAmount || '0')} for contest ${contestId}`);
+      if (finalizeResult.alreadyProcessed) {
+        console.log(
+          `Contest payment intent ${paymentIntent.id} already processed`,
+        );
       } else {
-        console.log(`Contest payment successful: $${amountInDollars} for contest ${contestId}`);
+        console.log(
+          `Contest payment finalized for contest ${paymentIntent.metadata.contestId}`,
+        );
       }
-      console.log(`Transaction status updated: ${updateSuccess ? 'SUCCESS' : 'FAILED'}`);
     }
 
-    // 🆕 AUTO-SET DEFAULT PAYMENT METHOD
-    // After successful payment, set the payment method as default for the customer
-    if (paymentIntent.customer && paymentIntent.payment_method) {
-      await ensureDefaultPaymentMethod(paymentIntent.customer, paymentIntent.payment_method);
+    // Set default payment method for contest payments only.
+    // Wallet top-ups use one-time Checkout — the PM is not attached to the customer.
+    if (
+      paymentIntent.customer &&
+      paymentIntent.payment_method &&
+      type !== 'wallet_topup'
+    ) {
+      await ensureDefaultPaymentMethod(
+        paymentIntent.customer,
+        paymentIntent.payment_method
+      );
     }
 
   } catch (error) {

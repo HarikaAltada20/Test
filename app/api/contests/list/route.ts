@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/utils/supabase/server";
 import { getAdvertiserContestsWithCalculatedBudgets } from "@/lib/contest-service";
+import { enrichContestsWithListCardStats } from "@/lib/contest-list-card-stats";
 
 export const dynamic = "force-dynamic";
 
@@ -23,10 +24,12 @@ export async function GET() {
 
     const contests = await getAdvertiserContestsWithCalculatedBudgets(
       user.id,
-      supabase
+      supabase,
     );
 
-    return NextResponse.json({ contests });
+    const contestsWithCardStats = await enrichContestsWithListCardStats(contests);
+
+    return NextResponse.json({ contests: contestsWithCardStats });
   } catch (err: any) {
     console.error("[/api/contests/list] Error:", err);
     return NextResponse.json(
