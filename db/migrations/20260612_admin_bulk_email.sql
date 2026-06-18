@@ -36,6 +36,8 @@ CREATE TABLE IF NOT EXISTS public.admin_email_projects (
   schedule_to_time text NOT NULL DEFAULT '21:00',
   schedule_timezone text NOT NULL DEFAULT 'UTC',
   schedule_days integer[] NOT NULL DEFAULT ARRAY[1,2,3,4,5,6,7],
+  send_interval_seconds integer NOT NULL DEFAULT 60,
+  warm_up_enabled boolean NOT NULL DEFAULT false,
   CONSTRAINT admin_email_projects_pkey PRIMARY KEY (id),
   CONSTRAINT admin_email_projects_ses_status_check
     CHECK (ses_verification_status IN ('pending', 'verified', 'failed'))
@@ -45,6 +47,9 @@ CREATE TABLE IF NOT EXISTS public.admin_email_project_senders (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
   project_id uuid NOT NULL REFERENCES public.admin_email_projects (id) ON DELETE CASCADE,
   email text NOT NULL,
+  display_name text,
+  first_name text,
+  last_name text,
   is_default boolean NOT NULL DEFAULT false,
   ses_verified boolean NOT NULL DEFAULT false,
   created_at timestamptz NOT NULL DEFAULT now(),
@@ -85,6 +90,7 @@ CREATE TABLE IF NOT EXISTS public.admin_email_campaigns (
   message_template text,
   from_email text,
   from_sender_id uuid REFERENCES public.admin_email_project_senders (id) ON DELETE SET NULL,
+  from_sender_ids uuid[] NOT NULL DEFAULT '{}',
   recipient_mode text,
   filter_snapshot jsonb,
   recipient_count integer NOT NULL DEFAULT 0,
@@ -100,6 +106,8 @@ CREATE TABLE IF NOT EXISTS public.admin_email_campaigns (
   schedule_timezone text,
   schedule_days integer[],
   stop_on_reply boolean NOT NULL DEFAULT false,
+  sequence_data jsonb,
+  schedule_data jsonb,
   contest_id uuid REFERENCES public.contests (id) ON DELETE SET NULL,
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now(),
@@ -107,6 +115,9 @@ CREATE TABLE IF NOT EXISTS public.admin_email_campaigns (
   CONSTRAINT admin_email_campaigns_recipient_mode_check
     CHECK (recipient_mode IS NULL OR recipient_mode IN ('selected_user_ids', 'select_all_filtered'))
 );
+
+COMMENT ON COLUMN public.admin_email_campaigns.from_sender_ids IS
+  'Selected sender account IDs for this campaign. Empty = autoselect from project defaults.';
 
 CREATE INDEX IF NOT EXISTS idx_admin_email_campaigns_project
   ON public.admin_email_campaigns (project_id, created_at DESC);

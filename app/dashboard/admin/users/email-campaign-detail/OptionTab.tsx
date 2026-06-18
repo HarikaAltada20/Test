@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
@@ -11,7 +11,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Loader2 } from "lucide-react";
+import { Loader2, Mail, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 
@@ -27,7 +27,7 @@ export function OptionTab({ campaignId, onSaved }: Props) {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [senders, setSenders] = useState<Sender[]>([]);
-  const [senderId, setSenderId] = useState("");
+  const [selectedSenderIds, setSelectedSenderIds] = useState<string[]>([]);
   const [stopOnReply, setStopOnReply] = useState(false);
 
   useEffect(() => {
@@ -36,11 +36,39 @@ export function OptionTab({ campaignId, onSaved }: Props) {
       .then((r) => r.json())
       .then((d) => {
         setSenders(d.senders ?? []);
-        if (d.fromSenderId) setSenderId(d.fromSenderId);
+        if (Array.isArray(d.fromSenderIds) && d.fromSenderIds.length > 0) {
+          setSelectedSenderIds(d.fromSenderIds);
+        } else if (d.fromSenderId) {
+          setSelectedSenderIds([d.fromSenderId]);
+        } else {
+          setSelectedSenderIds([]);
+        }
         setStopOnReply(!!d.stopOnReply);
       })
       .finally(() => setLoading(false));
   }, [campaignId]);
+
+  const availableSenders = useMemo(
+    () => senders.filter((sender) => !selectedSenderIds.includes(sender.id)),
+    [senders, selectedSenderIds],
+  );
+
+  const selectedSenders = useMemo(
+    () =>
+      selectedSenderIds
+        .map((id) => senders.find((sender) => sender.id === id))
+        .filter((sender): sender is Sender => !!sender),
+    [selectedSenderIds, senders],
+  );
+
+  const addSender = (senderId: string) => {
+    if (!senderId || selectedSenderIds.includes(senderId)) return;
+    setSelectedSenderIds((prev) => [...prev, senderId]);
+  };
+
+  const removeSender = (senderId: string) => {
+    setSelectedSenderIds((prev) => prev.filter((id) => id !== senderId));
+  };
 
   const saveOptions = async () => {
     setSaving(true);
@@ -51,14 +79,18 @@ export function OptionTab({ campaignId, onSaved }: Props) {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            fromSenderId: senderId || null,
+            fromSenderIds: selectedSenderIds,
             stopOnReply,
           }),
         },
       );
       const data = await res.json();
       if (!res.ok) {
-        toast({ title: "Error", description: data.error, variant: "destructive" });
+        toast({
+          title: "Error",
+          description: data.error,
+          variant: "destructive",
+        });
         return;
       }
       toast({ title: "Options saved" });
@@ -69,8 +101,7 @@ export function OptionTab({ campaignId, onSaved }: Props) {
   };
 
   const resetAutoselect = () => {
-    const defaultSender = senders.find((s) => s.is_default);
-    setSenderId(defaultSender?.id ?? "");
+    setSelectedSenderIds([]);
   };
 
   if (loading) {
@@ -86,24 +117,59 @@ export function OptionTab({ campaignId, onSaved }: Props) {
       <Card className="rounded-xl border border-gray-200 bg-white shadow-sm">
         <CardContent className="p-5 space-y-3">
           <div>
-            <Label className="text-gray-900 font-semibold">Accounts to use</Label>
+            <Label className="text-gray-900 font-semibold">
+              Accounts to use
+            </Label>
             <p className="text-sm text-muted-foreground mt-1">
               Select one or more accounts to send emails from
             </p>
           </div>
-          <Select value={senderId} onValueChange={setSenderId}>
+
+          <Select
+            value=""
+            onValueChange={addSender}
+            disabled={availableSenders.length === 0}
+          >
             <SelectTrigger className="w-full bg-white border-gray-300 h-11">
               <SelectValue placeholder="Select" />
             </SelectTrigger>
             <SelectContent>
-              {senders.map((s) => (
-                <SelectItem key={s.id} value={s.id}>
-                  {s.email}
-                  {s.is_default ? " (default)" : ""}
+              {availableSenders.map((sender) => (
+                <SelectItem key={sender.id} value={sender.id}>
+                  {sender.email}
+                  {sender.is_default ? " (default)" : ""}
                 </SelectItem>
               ))}
             </SelectContent>
           </Select>
+
+          {selectedSenders.length > 0 ? (
+            <div className="flex flex-wrap gap-2">
+              {selectedSenders.map((sender) => (
+                <div
+                  key={sender.id}
+                  className="inline-flex items-center gap-2 rounded-full border border-gray-200 bg-gray-50 px-3 py-1.5 text-sm text-gray-800"
+                >
+                  <Mail className="h-3.5 w-3.5 text-gray-500 shrink-0" />
+                  <span className="truncate max-w-[280px]">{sender.email}</span>
+                  <button
+                    type="button"
+                    onClick={() => removeSender(sender.id)}
+                    className="rounded-full p-0.5 text-gray-500 hover:text-gray-900 hover:bg-gray-200/80"
+                    aria-label={`Remove ${sender.email}`}
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-xs text-muted-foreground">
+              No accounts selected — autoselect will choose senders for this
+              project.
+            </p>
+          )}
+
           <p className="text-xs text-muted-foreground">
             Autoselect will be used if no accounts or tags are selected
           </p>

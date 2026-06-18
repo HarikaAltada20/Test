@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/utils/supabase/admin";
 import { startEmailCampaignDelivery } from "@/lib/admin-email/delivery";
+import { campaignHasSenders } from "@/lib/admin-email/campaign-senders";
 import { getQStashPublishBaseUrl } from "@/lib/qstash";
 import { requireAdminApi } from "@/lib/admin-email/api-auth";
 
@@ -16,7 +17,7 @@ export async function POST(req: NextRequest, context: RouteContext) {
   const { data: campaign } = await db
     .from("admin_email_campaigns")
     .select(
-      "id, status, email_subject, message_template, from_email, scheduled_at, recipient_count",
+      "id, status, email_subject, message_template, from_email, from_sender_id, from_sender_ids, project_id, scheduled_at, recipient_count",
     )
     .eq("id", id)
     .single();
@@ -56,15 +57,22 @@ export async function POST(req: NextRequest, context: RouteContext) {
       .eq("id", id);
   }
 
-  if (
-    !campaign.email_subject ||
-    !campaign.message_template ||
-    !campaign.from_email
-  ) {
+  if (!campaign.email_subject || !campaign.message_template) {
     return NextResponse.json(
       {
         error:
           "Configure sequence (subject/body) and options (sender) before starting",
+      },
+      { status: 400 },
+    );
+  }
+
+  const hasSenders = await campaignHasSenders(db, campaign);
+  if (!hasSenders) {
+    return NextResponse.json(
+      {
+        error:
+          "Configure at least one sender account in Options before starting",
       },
       { status: 400 },
     );

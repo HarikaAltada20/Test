@@ -11,7 +11,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
+import { cn } from "@/lib/utils";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -34,7 +36,67 @@ type RecipientRow = {
   userType: string;
   status: string;
   fromEmail: string | null;
+  openedAt: string | null;
+  clickedAt: string | null;
 };
+
+const SENT_STATUSES = new Set(["sent", "delivered", "opened", "clicked"]);
+
+const LEAD_STATUS_BADGE_CLASS: Record<string, string> = {
+  Sent: "bg-green-100 text-green-800 hover:bg-green-100",
+  Opened: "bg-purple-100 text-purple-800 hover:bg-purple-100",
+  Clicked: "bg-purple-100 text-purple-800 hover:bg-purple-100",
+  Pending: "bg-gray-100 text-gray-700 hover:bg-gray-100",
+  Bounced: "bg-red-100 text-red-800 hover:bg-red-100",
+  Failed: "bg-red-100 text-red-800 hover:bg-red-100",
+};
+
+function leadStatusBadges(r: RecipientRow): string[] {
+  const badges: string[] = [];
+
+  if (SENT_STATUSES.has(r.status)) badges.push("Sent");
+  if (r.openedAt || r.status === "opened" || r.status === "clicked") {
+    badges.push("Opened");
+  }
+  if (r.clickedAt || r.status === "clicked") badges.push("Clicked");
+
+  if (badges.length === 0) {
+    if (r.status === "pending" || r.status === "in_sequence") {
+      badges.push("Pending");
+    } else if (r.status === "bounced") {
+      badges.push("Bounced");
+    } else if (r.status === "failed") {
+      badges.push("Failed");
+    } else if (r.status) {
+      badges.push(
+        r.status.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()),
+      );
+    }
+  }
+
+  return badges;
+}
+
+function LeadStatusBadges({ recipient }: { recipient: RecipientRow }) {
+  const badges = leadStatusBadges(recipient);
+  if (badges.length === 0) return <span className="text-muted-foreground">—</span>;
+
+  return (
+    <div className="flex flex-wrap gap-1.5">
+      {badges.map((label) => (
+        <Badge
+          key={label}
+          className={cn(
+            "font-normal capitalize",
+            LEAD_STATUS_BADGE_CLASS[label] ?? "bg-gray-100 text-gray-700",
+          )}
+        >
+          {label}
+        </Badge>
+      ))}
+    </div>
+  );
+}
 
 type Props = {
   campaignId: string;
@@ -255,11 +317,20 @@ export function LeadTab({ campaignId, onRecipientsChange }: Props) {
                     </td>
                     <td className="p-4 text-muted-foreground">{r.index}</td>
                     <td className="p-4 font-medium">{r.email || "—"}</td>
-                    <td className="p-4 capitalize text-muted-foreground">
-                      {r.status || "—"}
+                    <td className="p-4">
+                      <LeadStatusBadges recipient={r} />
                     </td>
-                    <td className="p-4 text-muted-foreground">
-                      {r.fromEmail || "—"}
+                    <td className="p-4">
+                      {r.fromEmail ? (
+                        <a
+                          href={`mailto:${r.fromEmail}`}
+                          className="text-blue-600 hover:underline"
+                        >
+                          {r.fromEmail}
+                        </a>
+                      ) : (
+                        <span className="text-muted-foreground">—</span>
+                      )}
                     </td>
                     <td className="p-4">{contactLabel(r)}</td>
                     <td className="p-4 capitalize text-muted-foreground">{r.userType || "—"}</td>

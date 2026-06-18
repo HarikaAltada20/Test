@@ -17,8 +17,14 @@ import {
   triggerProcessAdminEmailDeliveryQueue,
   triggerProcessAdminEmailDeliveryQueueDelayed,
 } from "@/lib/qstash";
-import type { ContestTemplateContext } from "@/lib/admin-notifications/template";
+import type { CampaignTemplateContext } from "@/lib/admin-notifications/template";
 import type { RecipientUserRow } from "@/lib/admin-notifications/types";
+import { loadRecipientUsersByIds } from "@/lib/admin-notifications/recipients";
+import {
+  pickSenderForRecipient,
+  resolveCampaignSenders,
+  campaignHasSenders,
+} from "@/lib/admin-email/campaign-senders";
 import { EMAIL_DELIVERY_BATCH_SIZE } from "./types";
 import { resolveRecipientEmailContent } from "./sequence-store";
 import type { StoredSequence } from "./sequence-types";
@@ -131,36 +137,8 @@ async function loadPendingRecipientUserIds(
   return (data ?? []).map((row) => row.user_id);
 }
 
-async function loadContestContext(
-  contestId: string | null,
-): Promise<ContestTemplateContext | null> {
-  if (!contestId) return null;
-  const db = createAdminClient();
-  const { data } = await db
-    .from("contests")
-    .select("id, title")
-    .eq("id", contestId)
-    .maybeSingle();
-  if (!data) return null;
-  return { id: data.id, title: data.title?.trim() || "Untitled contest" };
-}
-
 async function loadUsersByIds(userIds: string[]): Promise<RecipientUserRow[]> {
-  if (userIds.length === 0) return [];
-  const db = createAdminClient();
-  const users: RecipientUserRow[] = [];
-  const CHUNK = 500;
-  for (let i = 0; i < userIds.length; i += CHUNK) {
-    const chunk = userIds.slice(i, i + CHUNK);
-    const { data } = await db
-      .from("users")
-      .select(
-        "id, email, full_name, username, user_type, coins, referral_code, created_at, is_active",
-      )
-      .in("id", chunk);
-    users.push(...((data ?? []) as RecipientUserRow[]));
-  }
-  return users;
+  return loadRecipientUsersByIds(userIds);
 }
 
 export async function loadNextPendingEmailRecipients(
@@ -246,7 +224,7 @@ export async function deliverEmailCampaignBatch(
   const { data: campaign, error: campaignError } = await db
     .from("admin_email_campaigns")
     .select(
-      "id, email_subject, message_template, from_email, status, contest_id, project_id, sequence_data",
+      "id, name, email_subject, message_template, from_email, from_sender_id, from_sender_ids, status, contest_id, project_id, sequence_data",
     )
     .eq("id", campaignId)
     .single();
@@ -259,12 +237,13 @@ export async function deliverEmailCampaignBatch(
     return { successCount: 0, failureCount: 0, skippedCount: 0 };
   }
 
-  if (
-    !campaign.email_subject ||
-    !campaign.message_template ||
-    !campaign.from_email
-  ) {
+  if (!campaign.email_subject || !campaign.message_template) {
     throw new Error("Campaign is not fully configured");
+  }
+
+  const campaignSenders = await resolveCampaignSenders(db, campaign);
+  if (campaignSenders.length === 0) {
+    throw new Error("Campaign has no sender accounts configured");
   }
 
   const { data: suppressed } = await db
@@ -276,7 +255,9 @@ export async function deliverEmailCampaignBatch(
   );
 
   const users = await loadUsersByIds(userIds);
-  const contest = await loadContestContext(campaign.contest_id);
+  const campaignContext: CampaignTemplateContext | null = campaign.name?.trim()
+    ? { name: campaign.name.trim() }
+    : null;
   const campaignFallback = {
     subject: campaign.email_subject || "",
     body: campaign.message_template || "",
@@ -294,7 +275,7 @@ export async function deliverEmailCampaignBatch(
     const { data: recipientRow } = await db
       .from("admin_email_campaign_recipients")
       .select(
-        "user_id, email_delivery_status, current_step_number, next_email_scheduled_at",
+        "user_id, email_delivery_status, current_step_number, next_email_scheduled_at, from_email",
       )
       .eq("campaign_id", campaignId)
       .eq("user_id", user.id)
@@ -463,23 +444,29 @@ export async function deliverEmailCampaignBatch(
       continue;
     }
 
-    const subject = buildBulkEmailSubject(emailSubject, user, contest);
+    const subject = buildBulkEmailSubject(emailSubject, user, {
+      campaign: campaignContext,
+    });
     const { html, text, plainTextOnly, useRaw } = buildBulkEmailHtml({
       bodyTemplate: messageTemplate,
       user,
       trackingId,
-      contest,
+      campaign: campaignContext,
       personalInbox: true,
     });
 
+    const sendFromEmail =
+      recipientRow.from_email?.trim() ||
+      pickSenderForRecipient(user.id, campaignSenders).email;
+
     const sendResult = await sendSesEmail({
-      from: campaign.from_email,
-      fromName: getBulkEmailFromName(campaign.from_email),
+      from: sendFromEmail,
+      fromName: getBulkEmailFromName(sendFromEmail),
       to: user.email,
       subject,
       html,
       text,
-      replyTo: getBulkEmailReplyTo(campaign.from_email),
+      replyTo: getBulkEmailReplyTo(sendFromEmail),
       plainTextOnly,
       useRaw,
     });
@@ -516,7 +503,7 @@ export async function deliverEmailCampaignBatch(
             current_step_number: nextStep.step_number,
             next_email_scheduled_at: nextScheduledAt,
             ses_message_id: sendResult.messageId,
-            from_email: campaign.from_email,
+            from_email: sendFromEmail,
             updated_at: now,
           })
           .eq("campaign_id", campaignId)
@@ -528,7 +515,7 @@ export async function deliverEmailCampaignBatch(
           .update({
             email_delivery_status: "sent",
             ses_message_id: sendResult.messageId,
-            from_email: campaign.from_email,
+            from_email: sendFromEmail,
             next_email_scheduled_at: null,
             updated_at: now,
           })
@@ -544,8 +531,8 @@ export async function deliverEmailCampaignBatch(
         userId: user.id,
         contactEmail: user.email,
         contactName: user.full_name ?? user.username,
-        fromEmail: campaign.from_email,
-        fromName: getBulkEmailFromName(campaign.from_email),
+        fromEmail: sendFromEmail,
+        fromName: getBulkEmailFromName(sendFromEmail),
         subject,
         bodyHtml: html,
         bodyText: text,
@@ -664,7 +651,8 @@ async function scheduleNextDeliveryJob(
     return;
   }
 
-  const intervalMs = clampSendIntervalSeconds(options.sendIntervalSeconds) * 1000;
+  const intervalMs =
+    clampSendIntervalSeconds(options.sendIntervalSeconds) * 1000;
   await scheduleEmailDeliveryRetry(
     campaignId,
     new Date(Date.now() + intervalMs),
@@ -821,10 +809,7 @@ export async function processEmailCampaignDeliveryJob(
   }
 
   const jobBatchLimit = emailsPerJob ?? gate.batchLimit;
-  let userIds = await loadNextPendingEmailRecipients(
-    campaignId,
-    jobBatchLimit,
-  );
+  let userIds = await loadNextPendingEmailRecipients(campaignId, jobBatchLimit);
   if (userIds.length === 0) {
     userIds = await loadPendingRecipientUserIds(campaignId, jobBatchLimit);
   }
@@ -933,16 +918,19 @@ export async function startEmailCampaignDelivery(
 
   const { data: campaign } = await db
     .from("admin_email_campaigns")
-    .select("id, status, email_subject, message_template, from_email")
+    .select(
+      "id, status, email_subject, message_template, from_email, from_sender_id, from_sender_ids, project_id",
+    )
     .eq("id", campaignId)
     .single();
 
   if (!campaign) return { started: false, reason: "not_found" };
-  if (
-    !campaign.email_subject ||
-    !campaign.message_template ||
-    !campaign.from_email
-  ) {
+  if (!campaign.email_subject || !campaign.message_template) {
+    return { started: false, reason: "not_configured" };
+  }
+
+  const hasSenders = await campaignHasSenders(db, campaign);
+  if (!hasSenders) {
     return { started: false, reason: "not_configured" };
   }
 

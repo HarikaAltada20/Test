@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAdminApi } from "@/lib/admin-email/api-auth";
 import { generateEmailTemplateWithGemini } from "@/lib/admin-email/gemini-email-template";
-import { BULK_EMAIL_MERGE_TAG_DEFAULTS } from "@/lib/admin-notifications/template";
+import {
+  BULK_EMAIL_MERGE_TAG_DEFAULTS,
+  filterAllowedMergeVariables,
+} from "@/lib/admin-notifications/template";
 
 export async function POST(req: NextRequest) {
   const auth = await requireAdminApi();
@@ -29,9 +32,11 @@ export async function POST(req: NextRequest) {
       tone: body.tone?.trim() || "professional",
       targetAudience: body.targetAudience?.trim() || "",
       industryFocus: body.industryFocus?.trim() || "",
-      selectedVariables: Array.isArray(body.selectedVariables)
-        ? body.selectedVariables.filter((v) => typeof v === "string")
-        : [...BULK_EMAIL_MERGE_TAG_DEFAULTS],
+      selectedVariables: filterAllowedMergeVariables(
+        Array.isArray(body.selectedVariables)
+          ? body.selectedVariables.filter((v) => typeof v === "string")
+          : [...BULK_EMAIL_MERGE_TAG_DEFAULTS],
+      ),
       calendlyUrl: body.calendlyUrl ?? null,
       templateName: body.templateName?.trim(),
     });

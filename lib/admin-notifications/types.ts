@@ -21,6 +21,18 @@ export type RecipientUserRow = {
   referral_code: string | null;
   created_at: string;
   is_active: boolean;
+  total_lifetime_coins_earned?: number | null;
+  affiliate_earnings?: number | null;
+  other_earnings?: number | null;
+  advertisers_referred?: number | null;
+  creators_referred?: number | null;
+  total_money_won?: number | null;
+  withdrawable_balance?: number | null;
+  total_contests_won?: number | null;
+  total_contests_participated?: number | null;
+  total_money_spent?: number | null;
+  total_contests_run?: number | null;
+  available_deposit_balance?: number | null;
 };
 
 export const MAX_RECIPIENTS = 10_000;

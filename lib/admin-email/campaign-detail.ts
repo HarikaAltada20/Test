@@ -1,4 +1,5 @@
 import { createAdminClient } from "@/utils/supabase/admin";
+import { normalizeCampaignSenderIds } from "@/lib/admin-email/campaign-senders";
 
 export async function getEmailCampaignDetail(campaignId: string) {
   const db = createAdminClient();
@@ -108,6 +109,10 @@ export async function getEmailCampaignDetail(campaignId: string) {
     options: {
       fromEmail: campaign.from_email,
       fromSenderId: campaign.from_sender_id,
+      fromSenderIds: normalizeCampaignSenderIds(
+        campaign.from_sender_ids,
+        campaign.from_sender_id,
+      ),
       stopOnReply: campaign.stop_on_reply,
     },
   };

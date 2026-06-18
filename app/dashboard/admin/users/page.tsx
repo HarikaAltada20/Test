@@ -182,6 +182,15 @@ function getGeoField(
   return trimmed || null;
 }
 
+function getAdvertiserProfileFromRow(user: User): AdvertiserProfile | null {
+  if (!user.advertiser_profiles) return null;
+  return Array.isArray(user.advertiser_profiles)
+    ? user.advertiser_profiles.length > 0
+      ? user.advertiser_profiles[0]
+      : null
+    : user.advertiser_profiles;
+}
+
 function getCreatorProfileFromRow(user: User): CreatorProfile | null {
   if (!user.creator_profiles) return null;
   return Array.isArray(user.creator_profiles)
@@ -676,17 +685,50 @@ export default function AdminUsersPage() {
     );
   };
 
-  const userToRecipientRow = (u: User): RecipientUserRow => ({
-    id: u.id,
-    email: u.email,
-    full_name: u.full_name,
-    username: u.username ?? null,
-    user_type: u.user_type,
-    coins: u.coins,
-    referral_code: u.referral_code ?? null,
-    created_at: u.created_at,
-    is_active: u.is_active,
-  });
+  const userToRecipientRow = (u: User): RecipientUserRow => {
+    const creatorProfile = getCreatorProfileFromRow(u);
+    const advertiserProfile = getAdvertiserProfileFromRow(u);
+    const isCreator = u.user_type === "creator";
+    const isAdvertiser = u.user_type === "advertiser";
+
+    return {
+      id: u.id,
+      email: u.email,
+      full_name: u.full_name,
+      username: u.username ?? null,
+      user_type: u.user_type,
+      coins: u.coins,
+      referral_code: u.referral_code ?? null,
+      created_at: u.created_at,
+      is_active: u.is_active,
+      total_lifetime_coins_earned: u.total_lifetime_coins_earned ?? 0,
+      affiliate_earnings: u.affiliate_earnings ?? 0,
+      other_earnings: u.other_earnings ?? 0,
+      advertisers_referred: u.advertisers_referred ?? 0,
+      creators_referred: u.creators_referred ?? 0,
+      total_money_won: isCreator ? (creatorProfile?.total_money_won ?? 0) : 0,
+      withdrawable_balance: isCreator
+        ? (creatorProfile?.withdrawable_balance ?? 0)
+        : isAdvertiser
+          ? (advertiserProfile?.withdrawable_balance ?? 0)
+          : 0,
+      total_contests_won: isCreator
+        ? (creatorProfile?.total_contests_won ?? 0)
+        : 0,
+      total_contests_participated: isCreator
+        ? (creatorProfile?.total_contests_participated ?? 0)
+        : 0,
+      total_money_spent: isAdvertiser
+        ? (advertiserProfile?.total_money_spent ?? 0)
+        : 0,
+      total_contests_run: isAdvertiser
+        ? (advertiserProfile?.total_contests_run ?? 0)
+        : 0,
+      available_deposit_balance: isAdvertiser
+        ? (advertiserProfile?.available_deposit_balance ?? 0)
+        : 0,
+    };
+  };
 
   const [mapGroupBy, setMapGroupBy] = useState<
     "region" | "state" | "country" | "city"

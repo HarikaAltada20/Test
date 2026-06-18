@@ -1,6 +1,9 @@
 import { resolveNotificationTemplate } from "@/lib/admin-notifications/template";
 import type { RecipientUserRow } from "@/lib/admin-notifications/types";
-import type { ContestTemplateContext } from "@/lib/admin-notifications/template";
+import type {
+  CampaignTemplateContext,
+  ContestTemplateContext,
+} from "@/lib/admin-notifications/template";
 
 const APP_URL =
   process.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, "") ||
@@ -152,6 +155,7 @@ export function buildBulkEmailHtml(input: {
   user: RecipientUserRow;
   trackingId: string;
   contest?: ContestTemplateContext | null;
+  campaign?: CampaignTemplateContext | null;
   /** When true, prefer Primary-friendly delivery for simple notes only. */
   personalInbox?: boolean;
 }): {
@@ -165,7 +169,10 @@ export function buildBulkEmailHtml(input: {
     input.bodyTemplate,
     input.user,
     "UTC",
-    input.contest,
+    {
+      contest: input.contest,
+      campaign: input.campaign,
+    },
   );
   const bodyHtml = normalizeBodyHtml(resolvedBody);
   const personal = input.personalInbox !== false;
@@ -234,14 +241,20 @@ export function buildBulkEmailHtml(input: {
 export function buildBulkEmailSubject(
   subjectTemplate: string,
   user: RecipientUserRow,
-  contest?: ContestTemplateContext | null,
+  options?: {
+    contest?: ContestTemplateContext | null;
+    campaign?: CampaignTemplateContext | null;
+  },
 ): string {
   const resolved = resolveNotificationTemplate(
     subjectTemplate,
     user,
     "UTC",
-    contest,
-    `${user.id}:subject`,
+    {
+      contest: options?.contest,
+      campaign: options?.campaign,
+      spinSeed: `${user.id}:subject`,
+    },
   );
   return sanitizeEmailContent(resolved).replace(/  +/g, " ").trim();
 }
