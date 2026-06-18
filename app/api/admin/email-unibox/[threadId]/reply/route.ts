@@ -64,10 +64,7 @@ export async function POST(req: NextRequest, context: RouteContext) {
     .reverse()
     .find((m) => m.direction === "outbound" && m.sesMessageId);
 
-  const fromEmail =
-    campaign?.from_email ??
-    defaultSender?.email ??
-    process.env.SES_FROM_EMAIL?.trim();
+  const fromEmail = campaign?.from_email ?? defaultSender?.email ?? null;
 
   if (!fromEmail) {
     return NextResponse.json(

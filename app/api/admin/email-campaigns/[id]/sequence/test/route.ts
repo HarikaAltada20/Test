@@ -53,8 +53,7 @@ export async function POST(req: NextRequest, context: RouteContext) {
       .eq("project_id", campaign.project_id)
       .eq("is_default", true)
       .maybeSingle();
-    fromEmail =
-      sender?.email ?? process.env.SES_FROM_EMAIL?.trim() ?? null;
+    fromEmail = sender?.email ?? null;
   }
 
   if (!fromEmail) {

@@ -3,7 +3,8 @@ import { createAdminClient } from "@/utils/supabase/admin";
 import { requireAdminApi } from "@/lib/admin-email/api-auth";
 import { EMAIL_PROJECT_WITH_SENDERS_SELECT } from "@/lib/admin-email/project-options";
 
-const PLATFORM_SENDER = process.env.SES_FROM_EMAIL?.trim() || "noreply@gameofcreators.com";
+/** Default sender when a project uses the platform-wide verified address. */
+const DEFAULT_PLATFORM_SENDER = "noreply@gameofcreators.com";
 
 type EmailProjectRow = { id: string } & Record<string, unknown>;
 
@@ -69,7 +70,7 @@ export async function GET(req: NextRequest) {
     if (seeded) {
       await db.from("admin_email_project_senders").insert({
         project_id: seeded.id,
-        email: PLATFORM_SENDER,
+        email: DEFAULT_PLATFORM_SENDER,
         is_default: true,
         ses_verified: true,
       });
@@ -200,7 +201,7 @@ export async function POST(req: NextRequest) {
   if (usePlatformSender) {
     await db.from("admin_email_project_senders").insert({
       project_id: project.id,
-      email: PLATFORM_SENDER,
+      email: DEFAULT_PLATFORM_SENDER,
       is_default: true,
       ses_verified: true,
     });

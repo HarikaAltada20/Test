@@ -587,7 +587,6 @@ After step 3, API returns `{ campaignId }` → frontend redirects to `/dashboard
 AWS_REGION=us-east-1
 AWS_ACCESS_KEY_ID=
 AWS_SECRET_ACCESS_KEY=
-SES_FROM_EMAIL=noreply@gameofcreators.com
 SES_CONFIGURATION_SET=gameofcreators-bulk
 NEXT_PUBLIC_APP_URL=https://gameofcreators.com
 
