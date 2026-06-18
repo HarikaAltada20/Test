@@ -10,6 +10,7 @@ import {
 import {
   popAdminEmailDeliveryJob,
   removeAdminEmailDeliveryFromProcessing,
+  requeueAdminEmailDeliveryProcessingJob,
   recoverAdminEmailDeliveryProcessingToQueue,
   isAdminEmailDeliveryQueueEnabled,
 } from "@/lib/queue/admin-email-delivery-queue";
@@ -114,7 +115,12 @@ async function handleRequest(
     });
   } catch (err) {
     if (rawJobString) {
-      await removeAdminEmailDeliveryFromProcessing(rawJobString);
+      await requeueAdminEmailDeliveryProcessingJob(rawJobString);
+    } else if (campaignId && isAdminEmailDeliveryQueueEnabled()) {
+      const { enqueueAdminEmailDeliveryJob } = await import(
+        "@/lib/queue/admin-email-delivery-queue"
+      );
+      await enqueueAdminEmailDeliveryJob({ campaignId });
     }
     return NextResponse.json(
       {

@@ -9,6 +9,22 @@ import type {
 
 type RouteContext = { params: Promise<{ id: string }> };
 
+async function rollbackAttachedRecipients(
+  campaignId: string,
+  userIds: string[],
+): Promise<void> {
+  if (userIds.length === 0) return;
+  const db = createAdminClient();
+  const CHUNK = 500;
+  for (let i = 0; i < userIds.length; i += CHUNK) {
+    await db
+      .from("admin_email_campaign_recipients")
+      .delete()
+      .eq("campaign_id", campaignId)
+      .in("user_id", userIds.slice(i, i + CHUNK));
+  }
+}
+
 export async function POST(req: NextRequest, context: RouteContext) {
   const auth = await requireAdminApi();
   if (auth.response) return auth.response;
@@ -71,17 +87,21 @@ export async function POST(req: NextRequest, context: RouteContext) {
     updated_at: now,
   }));
 
+  const insertedUserIds: string[] = [];
   const CHUNK = 500;
   for (let i = 0; i < recipientRows.length; i += CHUNK) {
+    const chunk = recipientRows.slice(i, i + CHUNK);
     const { error: recipError } = await db
       .from("admin_email_campaign_recipients")
-      .insert(recipientRows.slice(i, i + CHUNK));
+      .insert(chunk);
     if (recipError) {
+      await rollbackAttachedRecipients(campaignId, insertedUserIds);
       return NextResponse.json({ error: recipError.message }, { status: 500 });
     }
+    insertedUserIds.push(...chunk.map((row) => row.user_id));
   }
 
-  await db
+  const { error: campaignUpdateError } = await db
     .from("admin_email_campaigns")
     .update({
       status: "configured",
@@ -91,6 +111,14 @@ export async function POST(req: NextRequest, context: RouteContext) {
         body.recipientMode === "select_all_filtered" ? filterSnapshot : null,
     })
     .eq("id", campaignId);
+
+  if (campaignUpdateError) {
+    await rollbackAttachedRecipients(campaignId, insertedUserIds);
+    return NextResponse.json(
+      { error: campaignUpdateError.message },
+      { status: 500 },
+    );
+  }
 
   return NextResponse.json({
     campaignId,

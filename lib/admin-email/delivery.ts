@@ -63,42 +63,35 @@ function isRecipientReadyForSend(
   return row.next_email_scheduled_at <= now;
 }
 
-/** Reset stuck recipient rows so delivery can pick them up. */
+/** Clear stuck partial sends and schedule gaps without resetting healthy pending rows. */
 export async function repairRecipientsForDelivery(
   campaignId: string,
 ): Promise<void> {
   const db = createAdminClient();
   const now = new Date().toISOString();
 
-  const { data: pendingRows } = await db
-    .from("admin_email_campaign_recipients")
+  const { data: stuckSends } = await db
+    .from("admin_email_sequence_step_sends")
     .select("user_id")
     .eq("campaign_id", campaignId)
-    .eq("email_delivery_status", "pending");
+    .is("ses_message_id", null);
 
-  const pendingUserIds = (pendingRows ?? []).map((row) => row.user_id);
-  if (pendingUserIds.length > 0) {
+  const stuckUserIds = [
+    ...new Set((stuckSends ?? []).map((row) => row.user_id).filter(Boolean)),
+  ];
+
+  if (stuckUserIds.length > 0) {
     const CHUNK = 100;
-    for (let i = 0; i < pendingUserIds.length; i += CHUNK) {
-      const chunk = pendingUserIds.slice(i, i + CHUNK);
+    for (let i = 0; i < stuckUserIds.length; i += CHUNK) {
+      const chunk = stuckUserIds.slice(i, i + CHUNK);
       await db
         .from("admin_email_sequence_step_sends")
         .delete()
         .eq("campaign_id", campaignId)
-        .eq("step_number", 1)
+        .is("ses_message_id", null)
         .in("user_id", chunk);
     }
   }
-
-  await db
-    .from("admin_email_campaign_recipients")
-    .update({
-      current_step_number: 1,
-      next_email_scheduled_at: null,
-      updated_at: now,
-    })
-    .eq("campaign_id", campaignId)
-    .eq("email_delivery_status", "pending");
 
   await db
     .from("admin_email_campaign_recipients")
@@ -165,27 +158,21 @@ export async function countPendingEmailRecipients(
 ): Promise<number> {
   const db = createAdminClient();
   const now = new Date().toISOString();
-  const { data } = await db
-    .from("admin_email_campaign_recipients")
-    .select("user_id, email_delivery_status, next_email_scheduled_at")
-    .eq("campaign_id", campaignId)
-    .in("email_delivery_status", ["pending", "in_sequence"]);
 
-  return (data ?? []).filter((row) => {
-    if (
-      row.email_delivery_status === "pending" &&
-      !row.next_email_scheduled_at
-    ) {
-      return true;
-    }
-    if (row.next_email_scheduled_at && row.next_email_scheduled_at <= now) {
-      return true;
-    }
-    if (row.email_delivery_status === "in_sequence") {
-      return true;
-    }
-    return false;
-  }).length;
+  const { count: pendingCount } = await db
+    .from("admin_email_campaign_recipients")
+    .select("user_id", { count: "exact", head: true })
+    .eq("campaign_id", campaignId)
+    .eq("email_delivery_status", "pending");
+
+  const { count: dueSequenceCount } = await db
+    .from("admin_email_campaign_recipients")
+    .select("user_id", { count: "exact", head: true })
+    .eq("campaign_id", campaignId)
+    .eq("email_delivery_status", "in_sequence")
+    .or(`next_email_scheduled_at.is.null,next_email_scheduled_at.lte.${now}`);
+
+  return (pendingCount ?? 0) + (dueSequenceCount ?? 0);
 }
 
 /** Earliest future send time for leads waiting between sequence steps. */
@@ -246,15 +233,27 @@ export async function deliverEmailCampaignBatch(
     throw new Error("Campaign has no sender accounts configured");
   }
 
-  const { data: suppressed } = await db
-    .from("email_suppressions")
-    .select("email");
-
-  const suppressedSet = new Set(
-    (suppressed ?? []).map((s) => s.email.toLowerCase()),
-  );
-
   const users = await loadUsersByIds(userIds);
+  const recipientEmails = [
+    ...new Set(
+      users
+        .map((user) => user.email?.trim().toLowerCase())
+        .filter((email): email is string => Boolean(email)),
+    ),
+  ];
+
+  let suppressedSet = new Set<string>();
+  if (recipientEmails.length > 0) {
+    const { data: suppressed } = await db
+      .from("email_suppressions")
+      .select("email")
+      .in("email", recipientEmails);
+
+    suppressedSet = new Set(
+      (suppressed ?? []).map((s) => s.email.toLowerCase()),
+    );
+  }
+
   const campaignContext: CampaignTemplateContext | null = campaign.name?.trim()
     ? { name: campaign.name.trim() }
     : null;

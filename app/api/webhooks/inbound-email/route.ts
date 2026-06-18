@@ -6,6 +6,11 @@ import {
   processInboundS3Object,
   processSesInboundNotification,
 } from "@/lib/email/inbound-s3";
+import {
+  handleSnsSubscriptionConfirmation,
+  isAuthorizedSnsTopic,
+  type SnsEnvelope,
+} from "@/lib/aws/sns-webhook";
 
 type InboundPayload = {
   fromEmail?: string;
@@ -24,19 +29,6 @@ type InboundPayload = {
   }>;
 };
 
-type SnsEnvelope = {
-  Type?: string;
-  TopicArn?: string;
-  Message?: string;
-  SubscribeURL?: string;
-};
-
-function isAuthorizedSns(body: SnsEnvelope): boolean {
-  const expectedArn = process.env.INBOUND_SNS_TOPIC_ARN?.trim();
-  if (!expectedArn) return true;
-  return body.TopicArn === expectedArn;
-}
-
 function isAuthorizedToken(req: NextRequest): boolean {
   const token = req.headers.get("x-inbound-token")?.trim();
   const expected = process.env.INBOUND_LAMBDA_TOKEN?.trim();
@@ -53,15 +45,15 @@ export async function POST(req: NextRequest) {
   }
 
   if (body.Type === "SubscriptionConfirmation" && body.SubscribeURL) {
-    if (!isAuthorizedSns(body)) {
-      return NextResponse.json({ error: "Unauthorized SNS topic" }, { status: 401 });
+    const subscription = await handleSnsSubscriptionConfirmation(body);
+    if (subscription.error) {
+      return NextResponse.json({ error: subscription.error }, { status: 401 });
     }
-    await fetch(body.SubscribeURL);
-    return NextResponse.json({ ok: true, subscribed: true });
+    return NextResponse.json({ ok: true, subscribed: subscription.subscribed });
   }
 
   if (body.Type === "Notification" && typeof body.Message === "string") {
-    if (!isAuthorizedSns(body)) {
+    if (!isAuthorizedSnsTopic(body.TopicArn)) {
       return NextResponse.json({ error: "Unauthorized SNS topic" }, { status: 401 });
     }
 

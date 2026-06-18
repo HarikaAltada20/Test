@@ -79,6 +79,20 @@ export async function removeAdminEmailDeliveryFromProcessing(
   }
 }
 
+/** Move a failed processing job back to the queue tail for retry. */
+export async function requeueAdminEmailDeliveryProcessingJob(
+  rawJobString: string,
+): Promise<void> {
+  const redis = getRedis();
+  if (!redis) return;
+  try {
+    await redis.lrem(REDIS_PROCESSING_KEY, 1, rawJobString);
+    await redis.rpush(REDIS_QUEUE_KEY, rawJobString);
+  } catch {
+    // ignore
+  }
+}
+
 export async function recoverAdminEmailDeliveryProcessingToQueue(options?: {
   maxToMove?: number;
 }): Promise<{ moved: number }> {

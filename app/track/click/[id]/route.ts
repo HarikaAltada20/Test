@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/utils/supabase/admin";
 import { getEmailTrackingBaseUrl } from "@/lib/email/admin-bulk-email";
+import { resolveSafeRedirectUrl } from "@/lib/email/safe-redirect-url";
 
 type RouteContext = { params: Promise<{ id: string }> };
 
@@ -13,13 +14,7 @@ export async function GET(req: NextRequest, context: RouteContext) {
     return NextResponse.redirect(appUrl);
   }
 
-  let decodedUrl: string;
-  try {
-    decodedUrl = decodeURIComponent(targetUrl);
-    new URL(decodedUrl);
-  } catch {
-    return NextResponse.redirect(appUrl);
-  }
+  const decodedUrl = resolveSafeRedirectUrl(targetUrl, appUrl);
 
   const now = new Date().toISOString();
 
