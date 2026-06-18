@@ -1,15 +1,21 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/utils/supabase/admin";
 import { requireAdminApi } from "@/lib/admin-email/api-auth";
-import { listEmailCampaigns } from "@/lib/admin-email/campaign-list";
+import { listEmailCampaigns, listEmailCampaignsMinimal } from "@/lib/admin-email/campaign-list";
 
 export async function GET(req: NextRequest) {
   const auth = await requireAdminApi();
   if (auth.response) return auth.response;
 
   const projectId = req.nextUrl.searchParams.get("projectId");
+  const minimal = req.nextUrl.searchParams.get("minimal") === "1";
 
   try {
+    if (minimal) {
+      const campaigns = await listEmailCampaignsMinimal(projectId);
+      return NextResponse.json({ campaigns });
+    }
+
     const campaigns = await listEmailCampaigns(projectId);
     return NextResponse.json({ campaigns });
   } catch (e) {

@@ -231,10 +231,10 @@ export function LeadTab({ campaignId, onRecipientsChange }: Props) {
           </SelectContent>
         </Select>
 
-        <Button variant="outline" className="h-11 border-gray-300">
+        {/* <Button variant="outline" className="h-11 border-gray-300">
           <SlidersHorizontal className="h-4 w-4 mr-2" />
           Manage Table
-        </Button>
+        </Button> */}
 
         {selected.size > 0 && (
           <>

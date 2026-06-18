@@ -5,6 +5,43 @@ export function normalizeSesMessageId(id: string | null | undefined): string | n
   return base || stripped;
 }
 
+/** Stable Message-ID for storage and deduplication. */
+export function canonicalMessageId(id: string | null | undefined): string | null {
+  if (!id?.trim()) return null;
+  return id.trim().replace(/^<|>$/g, "").toLowerCase();
+}
+
+/** Strip quoted reply history so duplicate imports match the same user text. */
+export function extractReplyBodyForDedup(text: string | null | undefined): string {
+  return extractReplyBodyText(text).toLowerCase();
+}
+
+/** Visible reply text without quoted history (preserves casing). */
+export function extractReplyBodyText(text: string | null | undefined): string {
+  if (!text?.trim()) return "";
+  let decoded = decodeInboundBodyText(text).trim();
+
+  const cutPatterns = [
+    /\nOn .+wrote:\s*\n/i,
+    /\n-{2,}\s*Original Message\s*-{2,}/i,
+    /\nFrom:\s*.+\nSent:\s*.+/i,
+    /\n_{5,}\n/,
+  ];
+  let cutAt = decoded.length;
+  for (const pattern of cutPatterns) {
+    const index = decoded.search(pattern);
+    if (index > 0) cutAt = Math.min(cutAt, index);
+  }
+
+  const quotedLine = decoded.split("\n").findIndex((line) => line.trimStart().startsWith(">"));
+  if (quotedLine > 0) {
+    const index = decoded.split("\n").slice(0, quotedLine).join("\n").length;
+    if (index > 0) cutAt = Math.min(cutAt, index);
+  }
+
+  return decoded.slice(0, cutAt).trim();
+}
+
 function unfoldHeaders(raw: string): string {
   return raw.replace(/\r?\n[ \t]+/g, " ");
 }
@@ -197,7 +234,17 @@ export type ParsedInboundEmail = {
   messageId: string | null;
   inReplyTo: string | null;
   references: string | null;
+  date: string | null;
 };
+
+export function parseEmailDateHeader(
+  value: string | null | undefined,
+): string | null {
+  if (!value?.trim()) return null;
+  const parsed = new Date(value.trim());
+  if (Number.isNaN(parsed.getTime())) return null;
+  return parsed.toISOString();
+}
 
 export function parseRawEmail(raw: string): ParsedInboundEmail {
   const normalized = raw.replace(/\r\n/g, "\n");
@@ -218,6 +265,9 @@ export function parseRawEmail(raw: string): ParsedInboundEmail {
   const messageId = getHeader(headerBlock, "Message-ID");
   const inReplyTo = getHeader(headerBlock, "In-Reply-To");
   const references = getHeader(headerBlock, "References");
+  const date =
+    parseEmailDateHeader(getHeader(headerBlock, "Date")) ??
+    parseEmailDateHeader(getHeader(headerBlock, "Received"));
 
   const contentType = getHeader(headerBlock, "Content-Type") ?? "";
   const boundary = contentType.match(/boundary="?([^";\s]+)"?/i)?.[1];
@@ -255,6 +305,7 @@ export function parseRawEmail(raw: string): ParsedInboundEmail {
     messageId,
     inReplyTo,
     references,
+    date,
   };
 }
 

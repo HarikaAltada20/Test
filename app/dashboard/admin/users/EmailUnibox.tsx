@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -24,7 +24,7 @@ import type {
   UniboxMessage,
   UniboxThreadListItem,
 } from "@/lib/admin-email/unibox";
-import { decodeInboundBodyText } from "@/lib/email/inbound-email-parse";
+import { decodeInboundBodyText, extractReplyBodyText } from "@/lib/email/inbound-email-parse";
 import { useToast } from "@/hooks/use-toast";
 import {
   EmailUniboxDetailSkeleton,
@@ -44,10 +44,14 @@ import {
 type Props = {
   campaigns: EmailCampaignListItem[];
   isDark?: boolean;
+  isActive?: boolean;
 };
 
 type Folder = "all" | "sent" | "replies";
 type ReadFilter = "all" | "read" | "unread";
+
+const LIST_REFRESH_MS = 10_000;
+const INBOUND_SYNC_MS = 20_000;
 
 function formatDate(iso: string): string {
   const d = new Date(iso);
@@ -75,7 +79,8 @@ function formatEmailAddress(email: string, name?: string | null): string {
 }
 
 function MessageBody({ message }: { message: UniboxMessage }) {
-  const bodyText = decodeInboundBodyText(message.bodyText ?? message.snippet ?? "");
+  const rawText = message.bodyText ?? message.snippet ?? "";
+  const bodyText = extractReplyBodyText(decodeInboundBodyText(rawText));
   if (message.bodyHtml?.trim()) {
     const bodyHtml = decodeInboundBodyText(message.bodyHtml);
     return (
@@ -94,7 +99,7 @@ function MessageBody({ message }: { message: UniboxMessage }) {
   );
 }
 
-export function EmailUnibox({ campaigns, isDark }: Props) {
+export function EmailUnibox({ campaigns, isDark, isActive = true }: Props) {
   const { toast } = useToast();
   const [threads, setThreads] = useState<UniboxThreadListItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -113,6 +118,20 @@ export function EmailUnibox({ campaigns, isDark }: Props) {
   const [sendingReply, setSendingReply] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
   const [syncingInbound, setSyncingInbound] = useState(false);
+  const [deletingSelected, setDeletingSelected] = useState(false);
+  const hasLoadedOnceRef = useRef(false);
+
+  const buildListParams = useCallback(() => {
+    const params = new URLSearchParams({
+      folder,
+      status: readFilter,
+      limit: "50",
+      offset: "0",
+    });
+    if (campaignId !== "all") params.set("campaignId", campaignId);
+    if (search.trim()) params.set("search", search.trim());
+    return params;
+  }, [folder, readFilter, campaignId, search]);
 
   const syncInbound = useCallback(
     async (options?: { silent?: boolean; full?: boolean }) => {
@@ -157,40 +176,60 @@ export function EmailUnibox({ campaigns, isDark }: Props) {
     [toast],
   );
 
-  const loadThreads = useCallback(async () => {
-    setLoading(true);
+  const syncInboundInBackground = useCallback(async () => {
     try {
-      const params = new URLSearchParams({
-        folder,
-        status: readFilter,
-        limit: "50",
-        offset: "0",
+      const res = await fetch("/api/admin/email-unibox/sync-inbound?recent=1", {
+        method: "POST",
       });
-      if (campaignId !== "all") params.set("campaignId", campaignId);
-      if (search.trim()) params.set("search", search.trim());
-
-      const [listRes, unreadRes] = await Promise.all([
-        fetch(`/api/admin/email-unibox?${params}`),
-        fetch("/api/admin/email-unibox?unreadCount=1"),
-      ]);
-
-      const listData = await listRes.json();
-      const unreadData = await unreadRes.json();
-
-      if (!listRes.ok)
-        throw new Error(listData.error ?? "Failed to load mails");
-      setThreads(listData.threads ?? []);
-      setUnreadCount(unreadData.unreadCount ?? 0);
-    } catch (err) {
-      toast({
-        title: "Failed to load Unibox",
-        description: err instanceof Error ? err.message : "Unknown error",
-        variant: "destructive",
-      });
-    } finally {
-      setLoading(false);
+      const data = await res.json();
+      if (!res.ok) return null;
+      return data as { processed?: number };
+    } catch {
+      return null;
     }
-  }, [folder, readFilter, campaignId, search, toast]);
+  }, []);
+
+  const loadThreads = useCallback(
+    async (options?: { silent?: boolean }) => {
+      const silent = options?.silent ?? hasLoadedOnceRef.current;
+      const firstLoad = !hasLoadedOnceRef.current;
+      if (!silent) setLoading(true);
+      try {
+        const params = buildListParams();
+        const [threadsRes, unreadRes] = await Promise.all([
+          fetch(`/api/admin/email-unibox?${params}`),
+          firstLoad
+            ? fetch("/api/admin/email-unibox?unreadCount=1")
+            : Promise.resolve(null),
+        ]);
+        const data = await threadsRes.json();
+
+        if (!threadsRes.ok) {
+          throw new Error(data.error ?? "Failed to load mails");
+        }
+
+        setThreads(data.threads ?? []);
+
+        if (unreadRes) {
+          const unreadData = await unreadRes.json();
+          if (unreadRes.ok) {
+            setUnreadCount(unreadData.unreadCount ?? 0);
+          }
+        }
+
+        hasLoadedOnceRef.current = true;
+      } catch (err) {
+        toast({
+          title: "Failed to load Unibox",
+          description: err instanceof Error ? err.message : "Unknown error",
+          variant: "destructive",
+        });
+      } finally {
+        if (!silent) setLoading(false);
+      }
+    },
+    [buildListParams, toast],
+  );
 
   const loadThreadDetail = useCallback(
     async (threadId: string) => {
@@ -219,34 +258,58 @@ export function EmailUnibox({ campaigns, isDark }: Props) {
   );
 
   useEffect(() => {
-    void loadThreads();
-  }, [loadThreads]);
+    if (!isActive) return;
+    void loadThreads({ silent: hasLoadedOnceRef.current });
+  }, [isActive, loadThreads]);
 
   useEffect(() => {
+    if (!isActive) return;
+
     let cancelled = false;
-    (async () => {
-      const result = await syncInbound({ silent: true });
-      if (!cancelled && (result?.processed ?? 0) > 0) {
-        await loadThreads();
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [syncInbound, loadThreads]);
 
-  useEffect(() => {
-    const interval = setInterval(async () => {
-      const result = await syncInbound({ silent: true });
+    const syncAndRefresh = async () => {
+      if (document.visibilityState !== "visible") return;
+      const result = await syncInboundInBackground();
+      if (cancelled) return;
       if ((result?.processed ?? 0) > 0) {
-        await loadThreads();
+        await loadThreads({ silent: true });
         if (selectedId) await loadThreadDetail(selectedId);
       }
-    }, 60000);
-    return () => clearInterval(interval);
-  }, [syncInbound, loadThreads, loadThreadDetail, selectedId]);
+    };
+
+    const firstSync = setTimeout(() => {
+      if (!cancelled) void syncAndRefresh();
+    }, 2500);
+    const syncInterval = setInterval(syncAndRefresh, INBOUND_SYNC_MS);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(firstSync);
+      clearInterval(syncInterval);
+    };
+  }, [isActive, syncInboundInBackground, loadThreads, loadThreadDetail, selectedId]);
 
   useEffect(() => {
+    if (!isActive) return;
+
+    const refreshList = () => {
+      if (document.visibilityState === "visible") {
+        void loadThreads({ silent: true });
+      }
+    };
+
+    const listInterval = setInterval(refreshList, LIST_REFRESH_MS);
+    document.addEventListener("visibilitychange", refreshList);
+
+    return () => {
+      clearInterval(listInterval);
+      document.removeEventListener("visibilitychange", refreshList);
+    };
+  }, [isActive, loadThreads]);
+
+  useEffect(() => {
+    if (!isActive) return;
+
     if (threads.length === 0) {
       setSelectedId(null);
       return;
@@ -255,16 +318,18 @@ export function EmailUnibox({ campaigns, isDark }: Props) {
     if (!stillVisible) {
       setSelectedId(threads[0].id);
     }
-  }, [threads, selectedId]);
+  }, [isActive, threads, selectedId]);
 
   useEffect(() => {
+    if (!isActive) return;
+
     if (selectedId) {
       loadThreadDetail(selectedId);
     } else {
       setSelectedThread(null);
       setMessages([]);
     }
-  }, [selectedId, loadThreadDetail]);
+  }, [isActive, selectedId, loadThreadDetail]);
 
   const toggleCheck = (id: string) => {
     setCheckedIds((prev) => {
@@ -309,11 +374,38 @@ export function EmailUnibox({ campaigns, isDark }: Props) {
         description: data.error,
         variant: "destructive",
       });
-      return;
+      return false;
     }
     setThreads((prev) => prev.filter((t) => t.id !== threadId));
+    setCheckedIds((prev) => {
+      if (!prev.has(threadId)) return prev;
+      const next = new Set(prev);
+      next.delete(threadId);
+      return next;
+    });
     if (selectedId === threadId) setSelectedId(null);
-    toast({ title: "Deleted" });
+    return true;
+  };
+
+  const handleDeleteSelected = async () => {
+    const ids = Array.from(checkedIds);
+    if (!ids.length) return;
+
+    setDeletingSelected(true);
+    try {
+      let deleted = 0;
+      for (const id of ids) {
+        const ok = await handleDelete(id);
+        if (ok) deleted += 1;
+      }
+      if (deleted > 0) {
+        toast({
+          title: deleted === 1 ? "Deleted" : `${deleted} messages deleted`,
+        });
+      }
+    } finally {
+      setDeletingSelected(false);
+    }
   };
 
   const handleSendReply = async () => {
@@ -402,13 +494,33 @@ export function EmailUnibox({ campaigns, isDark }: Props) {
             {unreadCount}
           </span>
         )}
+        {checkedIds.size > 0 && (
+          <>
+            <span className="text-sm text-muted-foreground">
+              {checkedIds.size} selected
+            </span>
+            <Button
+              variant="destructive"
+              className="h-10"
+              disabled={deletingSelected}
+              onClick={() => void handleDeleteSelected()}
+            >
+              {deletingSelected ? (
+                <Loader2 className="h-4 w-4 animate-spin mr-1" />
+              ) : (
+                <Trash2 className="h-4 w-4 mr-1" />
+              )}
+              Delete
+            </Button>
+          </>
+        )}
         <Button
           variant="outline"
           className="h-10 border-gray-200"
           disabled={syncingInbound}
           onClick={async () => {
-            await syncInbound({ full: true });
-            await loadThreads();
+            await syncInbound({ full: true, silent: false });
+            await loadThreads({ silent: true });
             if (selectedId) await loadThreadDetail(selectedId);
           }}
         >
@@ -444,7 +556,7 @@ export function EmailUnibox({ campaigns, isDark }: Props) {
             <h3 className="text-lg font-bold tracking-tight">Mails</h3>
           </div>
 
-          {loading ? (
+          {loading && threads.length === 0 ? (
             <EmailUniboxThreadSkeleton isDark={isDark} />
           ) : threads.length === 0 ? (
             <div className="py-20 text-center text-sm text-gray-500 px-6">
@@ -481,14 +593,27 @@ export function EmailUnibox({ campaigns, isDark }: Props) {
                       />
                       <div className="flex-1 min-w-0 space-y-1.5">
                         <div className="flex items-center justify-between gap-2">
-                          <span
-                            className={cn(
-                              "text-sm text-gray-900 truncate",
-                              !thread.isRead ? "font-semibold" : "font-medium",
+                          <div className="flex items-center gap-2 min-w-0">
+                            {!thread.isRead && (
+                              <span
+                                className="h-2 w-2 shrink-0 rounded-full bg-blue-500"
+                                aria-hidden
+                              />
                             )}
-                          >
-                            {label}
-                          </span>
+                            <span
+                              className={cn(
+                                "text-sm text-gray-900 truncate",
+                                !thread.isRead ? "font-semibold" : "font-medium",
+                              )}
+                            >
+                              {label}
+                            </span>
+                            {!thread.isRead && (
+                              <span className="shrink-0 rounded bg-green-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-green-700">
+                                New
+                              </span>
+                            )}
+                          </div>
                           <span className="text-[11px] text-gray-500 shrink-0 whitespace-nowrap">
                             {formatDate(thread.lastMessageAt)}
                           </span>
@@ -525,7 +650,9 @@ export function EmailUnibox({ campaigns, isDark }: Props) {
                             className="text-red-500 hover:text-red-600"
                             onClick={(e) => {
                               e.stopPropagation();
-                              handleDelete(thread.id);
+                              void handleDelete(thread.id).then((ok) => {
+                                if (ok) toast({ title: "Deleted" });
+                              });
                             }}
                           >
                             <Trash2 className="h-4 w-4" />
@@ -591,7 +718,11 @@ export function EmailUnibox({ campaigns, isDark }: Props) {
                     </DropdownMenuItem>
                     <DropdownMenuItem
                       className="text-red-600"
-                      onClick={() => handleDelete(selectedThread.id)}
+                      onClick={() => {
+                        void handleDelete(selectedThread.id).then((ok) => {
+                          if (ok) toast({ title: "Deleted" });
+                        });
+                      }}
                     >
                       Delete
                     </DropdownMenuItem>
@@ -630,7 +761,11 @@ export function EmailUnibox({ campaigns, isDark }: Props) {
                   <button
                     type="button"
                     className="rounded-md p-2 text-gray-500 hover:bg-gray-100 hover:text-red-600"
-                    onClick={() => handleDelete(selectedThread.id)}
+                    onClick={() => {
+                      void handleDelete(selectedThread.id).then((ok) => {
+                        if (ok) toast({ title: "Deleted" });
+                      });
+                    }}
                   >
                     <Trash2 className="h-5 w-5" />
                   </button>

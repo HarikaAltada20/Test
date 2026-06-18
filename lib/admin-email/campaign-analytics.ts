@@ -49,6 +49,7 @@ type RecipientRow = {
   user_id: string;
   email_delivery_status: string;
   current_step_number: number | null;
+  skipped_reason?: string | null;
 };
 
 export type VariantAnalyticsRow = {
@@ -186,7 +187,7 @@ export async function getCampaignStepAnalytics(
     return [];
   }
 
-  const [{ data: stepSends }, { data: allTracking }, { data: recipients }] =
+  const [{ data: stepSends }, { data: allTracking }, { data: recipients }, { data: inboundReplies }] =
     await Promise.all([
       db
         .from("admin_email_sequence_step_sends")
@@ -200,8 +201,15 @@ export async function getCampaignStepAnalytics(
         .eq("campaign_id", campaignId),
       db
         .from("admin_email_campaign_recipients")
-        .select("user_id, email_delivery_status, current_step_number")
+        .select("user_id, email_delivery_status, current_step_number, skipped_reason")
         .eq("campaign_id", campaignId),
+      db
+        .from("admin_email_unibox_messages")
+        .select("user_id")
+        .eq("campaign_id", campaignId)
+        .eq("direction", "inbound")
+        .not("from_email", "ilike", "mailer-daemon@%")
+        .not("from_email", "ilike", "postmaster@%"),
     ]);
 
   const trackingByUserStep = new Map<string, TrackingRow>();
@@ -228,6 +236,27 @@ export async function getCampaignStepAnalytics(
   ).length;
 
   const stepSendRows = (stepSends ?? []) as StepSendRow[];
+
+  const repliedUserIds = new Set<string>();
+  for (const row of inboundReplies ?? []) {
+    if (row.user_id) repliedUserIds.add(row.user_id);
+  }
+  for (const row of (recipients ?? []) as RecipientRow[]) {
+    if (row.skipped_reason === "replied") {
+      repliedUserIds.add(row.user_id);
+    }
+  }
+
+  const replyStepByUser = new Map<string, number>();
+  for (const userId of repliedUserIds) {
+    const sends = stepSendRows.filter((send) => send.user_id === userId);
+    replyStepByUser.set(
+      userId,
+      sends.length > 0
+        ? Math.max(...sends.map((send) => send.step_number))
+        : 1,
+    );
+  }
 
   return steps.map((step) => {
     const stepVariants = [...(step.variants ?? [])].sort((a, b) =>
@@ -280,6 +309,9 @@ export async function getCampaignStepAnalytics(
       stepCounts.sent += 1;
       if (openCount > 0 || clickCount > 0) stepCounts.opened += 1;
       if (clickCount > 0) stepCounts.clicked += 1;
+      if (replyStepByUser.get(userId) === step.step_number) {
+        stepCounts.replied += 1;
+      }
 
       const variantId = resolveVariantIdForUser(
         userId,
@@ -296,6 +328,9 @@ export async function getCampaignStepAnalytics(
       counts.sent += 1;
       if (openCount > 0 || clickCount > 0) counts.opened += 1;
       if (clickCount > 0) counts.clicked += 1;
+      if (replyStepByUser.get(userId) === step.step_number) {
+        counts.replied += 1;
+      }
     }
 
     if (step.step_number === 1) {

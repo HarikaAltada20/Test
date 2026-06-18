@@ -196,6 +196,18 @@ export function AnalyticsTab({ campaignId, detail }: Props) {
   }, [campaignId]);
 
   const hasStepData = stepAnalytics.some((s) => s.sent > 0);
+  const totalOpened = stepAnalytics.reduce((sum, step) => sum + step.opened, 0);
+  const totalClicked = stepAnalytics.reduce((sum, step) => sum + step.clicked, 0);
+  const totalReplied = stepAnalytics.reduce((sum, step) => sum + step.replied, 0);
+  const totalSent = stepAnalytics.reduce((sum, step) => sum + step.sent, 0);
+  const totalOpenRate = totalSent > 0 ? totalOpened / totalSent : 0;
+  const totalClickRate = totalSent > 0 ? totalClicked / totalSent : 0;
+  const totalReplyRate = totalSent > 0 ? totalReplied / totalSent : 0;
+
+  const openRateDisplay = hasStepData ? totalOpenRate : detail.summary.openRate;
+  const openCountDisplay = hasStepData ? totalOpened : detail.summary.openCount;
+  const clickRateDisplay = hasStepData ? totalClickRate : detail.summary.clickRate;
+  const clickCountDisplay = hasStepData ? totalClicked : detail.summary.clickCount;
 
   return (
     <div className="space-y-4">
@@ -257,19 +269,19 @@ export function AnalyticsTab({ campaignId, detail }: Props) {
         />
         <MetricCard
           label="Open Rate"
-          value={`${(detail.summary.openRate * 100).toFixed(1)}% | ${detail.summary.openCount}`}
+          value={`${(openRateDisplay * 100).toFixed(1)}% | ${openCountDisplay}`}
           icon={<Eye className="h-5 w-5 text-orange-500" />}
           iconBg="bg-orange-100"
         />
         <MetricCard
           label="Click Rate"
-          value={`${(detail.summary.clickRate * 100).toFixed(1)}% | ${detail.summary.clickCount}`}
+          value={`${(clickRateDisplay * 100).toFixed(1)}% | ${clickCountDisplay}`}
           icon={<MousePointerClick className="h-5 w-5 text-green-600" />}
           iconBg="bg-green-100"
         />
         <MetricCard
           label="Reply"
-          value="0.0% | 0"
+          value={`${(totalReplyRate * 100).toFixed(1)}% | ${totalReplied}`}
           icon={<MessageCircle className="h-5 w-5 text-blue-600" />}
           iconBg="bg-blue-100"
         />

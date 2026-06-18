@@ -43,37 +43,39 @@ export async function getEmailCampaignDetail(campaignId: string) {
 
   if (error || !campaign) return null;
 
-  const [
-    { count: pendingCount },
-    { count: bounceCount },
-    { count: openCount },
-    { count: clickCount },
-  ] = await Promise.all([
-    db
-      .from("admin_email_campaign_recipients")
-      .select("user_id", { count: "exact", head: true })
-      .eq("campaign_id", campaignId)
-      .eq("email_delivery_status", "pending"),
-    db
-      .from("admin_email_campaign_recipients")
-      .select("user_id", { count: "exact", head: true })
-      .eq("campaign_id", campaignId)
-      .eq("email_delivery_status", "bounced"),
-    db
-      .from("admin_email_tracking")
-      .select("tracking_id", { count: "exact", head: true })
-      .eq("campaign_id", campaignId)
-      .or("open_count.gt.0,click_count.gt.0"),
-    db
-      .from("admin_email_tracking")
-      .select("tracking_id", { count: "exact", head: true })
-      .eq("campaign_id", campaignId)
-      .gt("click_count", 0),
-  ]);
-
   const recipientCount = campaign.recipient_count ?? 0;
   const sentCount = campaign.sent_count ?? 0;
-  const remainingCount = pendingCount ?? 0;
+  const remainingCount = Math.max(0, recipientCount - sentCount);
+
+  const { data: trackingRows } = await db
+    .from("admin_email_tracking")
+    .select("open_count, click_count")
+    .eq("campaign_id", campaignId);
+
+  let openCount = 0;
+  let clickCount = 0;
+  for (const row of trackingRows ?? []) {
+    const opens = row.open_count ?? 0;
+    const clicks = row.click_count ?? 0;
+    if (opens > 0 || clicks > 0) openCount += 1;
+    if (clicks > 0) clickCount += 1;
+  }
+
+  const { count: stepSendCount } = await db
+    .from("admin_email_sequence_step_sends")
+    .select("id", { count: "exact", head: true })
+    .eq("campaign_id", campaignId)
+    .not("ses_message_id", "is", null);
+
+  const deliveredCount =
+    (stepSendCount ?? 0) > 0 ? (stepSendCount ?? 0) : sentCount;
+
+  const { count: bounceCount } = await db
+    .from("admin_email_campaign_recipients")
+    .select("user_id", { count: "exact", head: true })
+    .eq("campaign_id", campaignId)
+    .eq("email_delivery_status", "bounced");
+
   const effectiveStatus =
     remainingCount > 0 && ["completed", "partial"].includes(campaign.status)
       ? "configured"
@@ -110,11 +112,11 @@ export async function getEmailCampaignDetail(campaignId: string) {
     createdAt: campaign.created_at,
     contestId: campaign.contest_id,
     summary: {
-      openRate: sentCount > 0 ? (openCount ?? 0) / sentCount : 0,
-      openCount: openCount ?? 0,
-      clickRate: sentCount > 0 ? (clickCount ?? 0) / sentCount : 0,
-      clickCount: clickCount ?? 0,
-      bounceRate: sentCount > 0 ? (bounceCount ?? 0) / sentCount : 0,
+      openRate: deliveredCount > 0 ? openCount / deliveredCount : 0,
+      openCount,
+      clickRate: deliveredCount > 0 ? clickCount / deliveredCount : 0,
+      clickCount,
+      bounceRate: deliveredCount > 0 ? (bounceCount ?? 0) / deliveredCount : 0,
       bounceCount: bounceCount ?? 0,
     },
     schedule: {

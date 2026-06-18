@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
@@ -20,7 +20,6 @@ import { Loader2, Plus } from "lucide-react";
 import {
   EmailCampaignListSkeleton,
   EmailProjectCardsSkeleton,
-  EmailTabSkeleton,
 } from "./EmailSkeletons";
 import { CreateEmailProjectForm } from "./CreateEmailProjectForm";
 import { CreateEmailCampaignModal } from "./CreateEmailCampaignModal";
@@ -52,7 +51,8 @@ export function AdminEmailView({
   const [projects, setProjects] = useState<EmailProjectCardData[]>([]);
   const [campaigns, setCampaigns] = useState<EmailCampaignListItem[]>([]);
   const [createCampaignOpen, setCreateCampaignOpen] = useState(false);
-  const [loading, setLoading] = useState(true);
+  const [projectsLoading, setProjectsLoading] = useState(true);
+  const [campaignsLoading, setCampaignsLoading] = useState(true);
   const [viewMode, setViewMode] = useState<ViewMode>("list");
   const [listTab, setListTab] = useState<ListTab>(() => {
     if (typeof window !== "undefined") {
@@ -92,10 +92,17 @@ export function AdminEmailView({
   const [warmUpTabVisited, setWarmUpTabVisited] = useState(
     () => listTab === "warmup",
   );
+  const [uniboxTabVisited, setUniboxTabVisited] = useState(
+    () => listTab === "unibox",
+  );
+  const hasLoadedOnceRef = useRef(false);
 
   useEffect(() => {
     if (listTab === "warmup") {
       setWarmUpTabVisited(true);
+    }
+    if (listTab === "unibox") {
+      setUniboxTabVisited(true);
     }
   }, [listTab]);
 
@@ -125,26 +132,46 @@ export function AdminEmailView({
     }
   }, []);
 
-  const loadData = useCallback(async () => {
-    setLoading(true);
-    try {
-      const [projectsRes, campaignsRes] = await Promise.all([
-        fetch("/api/admin/email-projects"),
-        fetch("/api/admin/email-campaigns"),
-      ]);
-      const projectsData = await projectsRes.json();
-      const campaignsData = await campaignsRes.json();
-      setProjects(projectsData.projects ?? []);
-      setCampaigns(campaignsData.campaigns ?? []);
-      await loadUnreadCount();
-    } finally {
-      setLoading(false);
-    }
+  const loadData = useCallback(async (options?: { silent?: boolean }) => {
+    const silent = options?.silent ?? hasLoadedOnceRef.current;
+
+    const fetchProjects = async () => {
+      if (!silent) setProjectsLoading(true);
+      try {
+        const res = await fetch("/api/admin/email-projects");
+        const data = await res.json();
+        if (res.ok) setProjects(data.projects ?? []);
+      } finally {
+        if (!silent) setProjectsLoading(false);
+      }
+    };
+
+    const fetchCampaigns = async () => {
+      if (!silent) setCampaignsLoading(true);
+      try {
+        const res = await fetch("/api/admin/email-campaigns");
+        const data = await res.json();
+        if (res.ok) setCampaigns(data.campaigns ?? []);
+      } finally {
+        if (!silent) setCampaignsLoading(false);
+      }
+    };
+
+    await Promise.all([fetchProjects(), fetchCampaigns(), loadUnreadCount()]);
+    hasLoadedOnceRef.current = true;
   }, [loadUnreadCount]);
 
   useEffect(() => {
     loadData();
   }, [loadData]);
+
+  useEffect(() => {
+    if (listTab !== "unibox") return;
+    const interval = setInterval(() => {
+      if (document.visibilityState === "visible") void loadUnreadCount();
+    }, 5000);
+    return () => clearInterval(interval);
+  }, [listTab, loadUnreadCount]);
 
   useEffect(() => {
     if (highlightCampaignId) {
@@ -232,10 +259,6 @@ export function AdminEmailView({
         </CardContent>
       </Card>
     );
-  }
-
-  if (loading && viewMode === "list") {
-    return <EmailTabSkeleton isDark={isDark} />;
   }
 
   if (viewMode === "create") {
@@ -365,9 +388,9 @@ export function AdminEmailView({
           fillWidth={false}
         />
 
-        {listTab === "projects" && (
+        <div className={cn(listTab !== "projects" && "hidden")}>
           <div className="space-y-4">
-            {loading ? (
+            {projectsLoading && projects.length === 0 ? (
               <EmailProjectCardsSkeleton isDark={isDark} />
             ) : (
               <>
@@ -394,10 +417,10 @@ export function AdminEmailView({
               </>
             )}
           </div>
-        )}
+        </div>
 
-        {listTab === "campaigns" && (
-          loading ? (
+        <div className={cn(listTab !== "campaigns" && "hidden")}>
+          {campaignsLoading && campaigns.length === 0 ? (
             <EmailCampaignListSkeleton isDark={isDark} />
           ) : (
             <EmailCampaignsList
@@ -406,10 +429,10 @@ export function AdminEmailView({
               isDark={isDark}
               onCampaignClick={setSelectedCampaignId}
               onAddNew={() => setCreateCampaignOpen(true)}
-              onRefresh={loadData}
+              onRefresh={() => loadData({ silent: true })}
             />
-          )
-        )}
+          )}
+        </div>
 
         {warmUpTabVisited && (
           <div className={cn(listTab !== "warmup" && "hidden")}>
@@ -423,9 +446,18 @@ export function AdminEmailView({
           </div>
         )}
 
-        {listTab === "unibox" && (
-          <div className="flex flex-col flex-1 min-h-0">
-            <EmailUnibox campaigns={campaigns} isDark={isDark} />
+        {uniboxTabVisited && (
+          <div
+            className={cn(
+              "flex flex-col flex-1 min-h-0",
+              listTab !== "unibox" && "hidden",
+            )}
+          >
+            <EmailUnibox
+              campaigns={campaigns}
+              isDark={isDark}
+              isActive={listTab === "unibox"}
+            />
           </div>
         )}
       </div>

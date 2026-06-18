@@ -2,17 +2,32 @@ import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/utils/supabase/admin";
 import { requireAdminApi } from "@/lib/admin-email/api-auth";
 import { EMAIL_PROJECT_WITH_SENDERS_SELECT } from "@/lib/admin-email/project-options";
-import { countProjectsSentToday } from "@/lib/admin-email/schedule";
 
 const PLATFORM_SENDER = process.env.SES_FROM_EMAIL?.trim() || "noreply@gameofcreators.com";
 
 type EmailProjectRow = { id: string } & Record<string, unknown>;
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   const auth = await requireAdminApi();
   if (auth.response) return auth.response;
 
+  const minimal = req.nextUrl.searchParams.get("minimal") === "1";
   const db = createAdminClient();
+
+  if (minimal) {
+    const { data, error } = await db
+      .from("admin_email_projects")
+      .select("id, name, ses_verification_status")
+      .order("created_at", { ascending: false });
+
+    if (error) {
+      console.error("[email-projects] GET minimal failed:", error.message);
+      return NextResponse.json({ error: error.message }, { status: 500 });
+    }
+
+    return NextResponse.json({ projects: data ?? [] });
+  }
+
   let projects: EmailProjectRow[] | null = null;
   let fetchError: { message: string } | null = null;
 
@@ -113,17 +128,6 @@ async function attachProjectStats(
     s.sentTotal += c.sent_count ?? 0;
   }
 
-  const sentTodayByProject = await countProjectsSentToday(
-    projects.map((project) => ({
-      projectId: project.id,
-      timezone:
-        typeof project.schedule_timezone === "string" &&
-        project.schedule_timezone
-          ? project.schedule_timezone
-          : "UTC",
-    })),
-  );
-
   return projects.map((p) => ({
     ...p,
     stats: {
@@ -132,7 +136,7 @@ async function attachProjectStats(
         recipientTotal: 0,
         sentTotal: 0,
       }),
-      sentToday: sentTodayByProject.get(p.id) ?? 0,
+      sentToday: 0,
     },
   }));
 }

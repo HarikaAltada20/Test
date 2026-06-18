@@ -30,6 +30,7 @@ export type EmailCampaignListItem = {
     openCount: number;
     clickCount: number;
     clickRate: number;
+    replyCount: number;
     progressPercent: number;
   };
 };
@@ -59,17 +60,34 @@ export async function listEmailCampaigns(projectId?: string | null) {
   if (rows.length === 0) return [] as EmailCampaignListItem[];
 
   const campaignIds = rows.map((c) => c.id);
-  const { data: trackingRows } = await db
-    .from("admin_email_tracking")
-    .select("campaign_id, open_count, click_count")
-    .in("campaign_id", campaignIds);
+  const [{ data: trackingRows }, { data: inboundRows }, { data: skippedRows }] =
+    await Promise.all([
+      db
+        .from("admin_email_tracking")
+        .select("campaign_id, open_count, click_count")
+        .in("campaign_id", campaignIds),
+      db
+        .from("admin_email_unibox_messages")
+        .select("campaign_id, user_id, from_email")
+        .in("campaign_id", campaignIds)
+        .eq("direction", "inbound")
+        .not("from_email", "ilike", "mailer-daemon@%")
+        .not("from_email", "ilike", "postmaster@%"),
+      db
+        .from("admin_email_campaign_recipients")
+        .select("campaign_id, user_id")
+        .in("campaign_id", campaignIds)
+        .eq("skipped_reason", "replied"),
+    ]);
 
   const trackingByCampaign = new Map<
     string,
     { openCount: number; clickCount: number }
   >();
+  const repliersByCampaign = new Map<string, Set<string>>();
   for (const id of campaignIds) {
     trackingByCampaign.set(id, { openCount: 0, clickCount: 0 });
+    repliersByCampaign.set(id, new Set());
   }
   for (const row of trackingRows ?? []) {
     const agg = trackingByCampaign.get(row.campaign_id);
@@ -78,6 +96,18 @@ export async function listEmailCampaigns(projectId?: string | null) {
     const clicks = row.click_count ?? 0;
     if (opens > 0 || clicks > 0) agg.openCount += 1;
     if (clicks > 0) agg.clickCount += 1;
+  }
+  for (const row of inboundRows ?? []) {
+    if (!row.campaign_id) continue;
+    const key =
+      row.user_id ??
+      (row.from_email ? `email:${row.from_email.toLowerCase()}` : null);
+    if (!key) continue;
+    repliersByCampaign.get(row.campaign_id)?.add(key);
+  }
+  for (const row of skippedRows ?? []) {
+    if (!row.campaign_id || !row.user_id) continue;
+    repliersByCampaign.get(row.campaign_id)?.add(row.user_id);
   }
 
   return rows.map((c) => {
@@ -110,9 +140,37 @@ export async function listEmailCampaigns(projectId?: string | null) {
         openCount: tracking.openCount,
         clickCount: tracking.clickCount,
         clickRate: sentCount > 0 ? tracking.clickCount / sentCount : 0,
+        replyCount: repliersByCampaign.get(c.id)?.size ?? 0,
         progressPercent:
           recipientCount > 0 ? (sentCount / recipientCount) * 100 : 0,
       },
     };
   });
+}
+
+export type EmailCampaignMinimal = {
+  id: string;
+  project_id: string;
+  name: string;
+  status: string;
+};
+
+/** Lightweight list for pickers (attach modal, dropdowns) — no tracking stats. */
+export async function listEmailCampaignsMinimal(
+  projectId?: string | null,
+): Promise<EmailCampaignMinimal[]> {
+  const db = createAdminClient();
+
+  let query = db
+    .from("admin_email_campaigns")
+    .select("id, project_id, name, status")
+    .order("created_at", { ascending: false });
+
+  if (projectId) {
+    query = query.eq("project_id", projectId);
+  }
+
+  const { data, error } = await query;
+  if (error) throw new Error(error.message);
+  return data ?? [];
 }

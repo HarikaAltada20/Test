@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Dialog,
   DialogContent,
@@ -18,8 +18,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Loader2 } from "lucide-react";
-import { EmailModalSkeleton } from "./EmailSkeletons";
 import type { NotificationSelectionState } from "./SendNotificationModal";
 
 type EmailProject = {
@@ -42,6 +42,27 @@ type Props = {
   onSuccess: (campaignId: string) => void;
 };
 
+const PROJECTS_CACHE_TTL_MS = 60_000;
+let cachedProjects: EmailProject[] | null = null;
+let projectsCacheAt = 0;
+
+async function loadProjects(): Promise<EmailProject[]> {
+  const now = Date.now();
+  if (cachedProjects && now - projectsCacheAt < PROJECTS_CACHE_TTL_MS) {
+    return cachedProjects;
+  }
+
+  const res = await fetch("/api/admin/email-projects?minimal=1");
+  const data = await res.json();
+  if (!res.ok) {
+    throw new Error(data.error || "Failed to load projects");
+  }
+
+  cachedProjects = data.projects ?? [];
+  projectsCacheAt = now;
+  return cachedProjects;
+}
+
 export function AttachEmailCampaignModal({
   open,
   onOpenChange,
@@ -53,10 +74,11 @@ export function AttachEmailCampaignModal({
   const [campaigns, setCampaigns] = useState<EmailCampaign[]>([]);
   const [projectId, setProjectId] = useState("");
   const [campaignId, setCampaignId] = useState("");
-  const [loading, setLoading] = useState(false);
+  const [projectsLoading, setProjectsLoading] = useState(false);
   const [campaignsLoading, setCampaignsLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const prefetchedRef = useRef(false);
 
   const typeCounts = useMemo(() => {
     if (!selection) return { creator: 0, advertiser: 0, admin: 0 };
@@ -77,20 +99,41 @@ export function AttachEmailCampaignModal({
   );
 
   useEffect(() => {
+    if (prefetchedRef.current) return;
+    prefetchedRef.current = true;
+    void loadProjects().catch(() => {
+      /* warm cache in background */
+    });
+  }, []);
+
+  useEffect(() => {
     if (!open) return;
-    setLoading(true);
+
+    let cancelled = false;
+    setProjectsLoading(true);
     setError(null);
     setCampaignId("");
     setCampaigns([]);
 
-    fetch("/api/admin/email-projects")
-      .then((r) => r.json())
-      .then((data) => {
-        const list: EmailProject[] = data.projects ?? [];
+    loadProjects()
+      .then((list) => {
+        if (cancelled) return;
         setProjects(list);
-        setProjectId(list[0]?.id ?? "");
+        setProjectId((prev) =>
+          prev && list.some((p) => p.id === prev) ? prev : (list[0]?.id ?? ""),
+        );
       })
-      .finally(() => setLoading(false));
+      .catch((err: unknown) => {
+        if (cancelled) return;
+        setError(err instanceof Error ? err.message : "Failed to load projects");
+      })
+      .finally(() => {
+        if (!cancelled) setProjectsLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
   }, [open]);
 
   useEffect(() => {
@@ -105,15 +148,22 @@ export function AttachEmailCampaignModal({
     setCampaignId("");
 
     fetch(
-      `/api/admin/email-campaigns?projectId=${encodeURIComponent(projectId)}`,
+      `/api/admin/email-campaigns?minimal=1&projectId=${encodeURIComponent(projectId)}`,
     )
       .then((r) => r.json())
       .then((data) => {
         if (cancelled) return;
+        if (data.error) {
+          setError(data.error);
+          return;
+        }
         const list: EmailCampaign[] = data.campaigns ?? [];
         setCampaigns(list);
         const drafts = list.filter((c) => c.status === "draft");
         setCampaignId(drafts[0]?.id ?? "");
+      })
+      .catch(() => {
+        if (!cancelled) setError("Failed to load campaigns");
       })
       .finally(() => {
         if (!cancelled) setCampaignsLoading(false);
@@ -166,6 +216,10 @@ export function AttachEmailCampaignModal({
   if (typeCounts.advertiser) parts.push(`${typeCounts.advertiser} brands`);
   if (typeCounts.admin) parts.push(`${typeCounts.admin} admins`);
 
+  const selectSkeleton = (
+    <Skeleton className={isDark ? "h-10 w-full bg-white/10" : "h-10 w-full"} />
+  );
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className={isDark ? "text-white" : ""}>
@@ -177,20 +231,20 @@ export function AttachEmailCampaignModal({
           </DialogDescription>
         </DialogHeader>
 
-        {loading ? (
-          <EmailModalSkeleton isDark={isDark} />
-        ) : (
-          <div className="space-y-4">
-            <div className="rounded-md border p-3 text-sm">
-              <p className="font-medium">Recipients</p>
-              <p className="text-muted-foreground">
-                Sending to {selection?.userIds.length ?? 0} users
-                {parts.length > 0 ? ` (${parts.join(", ")})` : ""}
-              </p>
-            </div>
+        <div className="space-y-4">
+          <div className="rounded-md border p-3 text-sm">
+            <p className="font-medium">Recipients</p>
+            <p className="text-muted-foreground">
+              Sending to {selection?.userIds.length ?? 0} users
+              {parts.length > 0 ? ` (${parts.join(", ")})` : ""}
+            </p>
+          </div>
 
-            <div className="space-y-2">
-              <Label>Project *</Label>
+          <div className="space-y-2">
+            <Label>Project *</Label>
+            {projectsLoading ? (
+              selectSkeleton
+            ) : (
               <Select
                 value={projectId || undefined}
                 onValueChange={(id) => {
@@ -209,23 +263,21 @@ export function AttachEmailCampaignModal({
                   ))}
                 </SelectContent>
               </Select>
-            </div>
+            )}
+          </div>
 
-            <div className="space-y-2">
-              <Label>Campaign *</Label>
+          <div className="space-y-2">
+            <Label>Campaign *</Label>
+            {campaignsLoading ? (
+              selectSkeleton
+            ) : (
               <Select
                 value={campaignId || undefined}
                 onValueChange={setCampaignId}
-                disabled={!projectId || campaignsLoading}
+                disabled={!projectId || projectsLoading}
               >
                 <SelectTrigger>
-                  <SelectValue
-                    placeholder={
-                      campaignsLoading
-                        ? "Loading campaigns..."
-                        : "Select draft campaign"
-                    }
-                  />
+                  <SelectValue placeholder="Select draft campaign" />
                 </SelectTrigger>
                 <SelectContent>
                   {draftCampaigns.map((c) => (
@@ -235,11 +287,19 @@ export function AttachEmailCampaignModal({
                   ))}
                 </SelectContent>
               </Select>
-            </div>
-
-            {error && <p className="text-sm text-red-500">{error}</p>}
+            )}
+            {!campaignsLoading &&
+              projectId &&
+              draftCampaigns.length === 0 && (
+                <p className="text-xs text-muted-foreground">
+                  No draft campaigns in this project. Create one on the Email
+                  tab first.
+                </p>
+              )}
           </div>
-        )}
+
+          {error && <p className="text-sm text-red-500">{error}</p>}
+        </div>
 
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>
@@ -247,7 +307,13 @@ export function AttachEmailCampaignModal({
           </Button>
           <Button
             onClick={handleSubmit}
-            disabled={submitting || !campaignId || !selection}
+            disabled={
+              submitting ||
+              !campaignId ||
+              !selection ||
+              projectsLoading ||
+              campaignsLoading
+            }
           >
             {submitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
             Send →

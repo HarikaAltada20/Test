@@ -5,7 +5,7 @@ import {
 } from "@aws-sdk/client-s3";
 import { createAdminClient } from "@/utils/supabase/admin";
 import {
-  normalizeSesMessageId,
+  canonicalMessageId,
   parseRawEmail,
   pickInReplyToId,
   collectReferenceMessageIds,
@@ -30,6 +30,11 @@ function getS3Client(): S3Client | null {
 
 export function getInboundBucket(): string | null {
   return process.env.INBOUND_SHARED_BUCKET?.trim() || null;
+}
+
+/** SES stores received messages under inbound/<domain>/<id> — not bucket root. */
+export function getInboundPrefix(): string {
+  return process.env.INBOUND_S3_PREFIX?.trim() || "inbound/";
 }
 
 async function streamToString(body: unknown): Promise<string> {
@@ -63,10 +68,10 @@ export async function isInboundS3KeyProcessed(key: string): Promise<boolean> {
   const db = createAdminClient();
   const { data } = await db
     .from("admin_email_inbound_processed")
-    .select("s3_key")
+    .select("thread_id, ses_message_id")
     .eq("s3_key", key)
     .maybeSingle();
-  return !!data;
+  return !!(data?.thread_id || data?.ses_message_id);
 }
 
 export async function markInboundS3KeyProcessed(
@@ -83,28 +88,45 @@ export async function markInboundS3KeyProcessed(
   });
 }
 
+async function getSuccessfullyProcessedS3Keys(
+  keys: string[],
+): Promise<Set<string>> {
+  if (keys.length === 0) return new Set();
+
+  const db = createAdminClient();
+  const processed = new Set<string>();
+
+  for (let i = 0; i < keys.length; i += 100) {
+    const chunk = keys.slice(i, i + 100);
+    const { data } = await db
+      .from("admin_email_inbound_processed")
+      .select("s3_key, thread_id, ses_message_id")
+      .in("s3_key", chunk);
+
+    for (const row of data ?? []) {
+      if (row.thread_id || row.ses_message_id) {
+        processed.add(row.s3_key);
+      }
+    }
+  }
+
+  return processed;
+}
+
 export async function processInboundRawEmail(
   raw: string,
-  meta?: { s3Key?: string },
-): Promise<{ threadId?: string; messageId?: string; skipped?: boolean }> {
+): Promise<{
+  threadId?: string;
+  messageId?: string;
+  skipped?: boolean;
+  sesMessageId?: string | null;
+}> {
   const parsed = parseRawEmail(raw);
   if (!parsed.fromEmail || !parsed.toEmail) {
     return { skipped: true };
   }
 
   const inReplyTo = pickInReplyToId(parsed.inReplyTo, parsed.references);
-  const normalizedInboundId = normalizeSesMessageId(parsed.messageId);
-
-  if (normalizedInboundId) {
-    const db = createAdminClient();
-    const { data: existing } = await db
-      .from("admin_email_unibox_messages")
-      .select("id")
-      .ilike("ses_message_id", `%${normalizedInboundId}%`)
-      .eq("direction", "inbound")
-      .maybeSingle();
-    if (existing) return { skipped: true, messageId: existing.id };
-  }
 
   const result = await ingestInboundUniboxMessage({
     fromEmail: parsed.fromEmail,
@@ -119,18 +141,11 @@ export async function processInboundRawEmail(
       parsed.inReplyTo,
       parsed.references,
     ),
+    receivedAt: parsed.date,
     stopOnReply: true,
   });
 
-  if (meta?.s3Key && result.threadId) {
-    await markInboundS3KeyProcessed(
-      meta.s3Key,
-      parsed.messageId,
-      result.threadId,
-    );
-  }
-
-  return result;
+  return { ...result, sesMessageId: canonicalMessageId(parsed.messageId) ?? parsed.messageId, skipped: result.skipped };
 }
 
 export async function processInboundS3Object(
@@ -142,10 +157,10 @@ export async function processInboundS3Object(
   }
 
   const raw = await fetchInboundEmailFromS3(bucket, key);
-  const result = await processInboundRawEmail(raw, { s3Key: key });
+  const result = await processInboundRawEmail(raw);
 
-  if (!result.skipped && result.threadId) {
-    await markInboundS3KeyProcessed(key, null, result.threadId);
+  if (result.skipped || result.messageId) {
+    await markInboundS3KeyProcessed(key, result.sesMessageId ?? null, result.threadId);
   }
 
   return result;
@@ -177,7 +192,8 @@ export async function processSesInboundNotification(
       action.objectKey,
     );
     if (result.skipped) return { processed: 0, skipped: 1, errors: 0 };
-    return { processed: 1, skipped: 0, errors: 0 };
+    if (result.messageId) return { processed: 1, skipped: 0, errors: 0 };
+    return { processed: 0, skipped: 1, errors: 0 };
   } catch (err) {
     console.error("[inbound-s3] process failed:", err);
     return { processed: 0, skipped: 0, errors: 1 };
@@ -187,7 +203,8 @@ export async function processSesInboundNotification(
 export async function syncInboundEmailsFromBucket(options?: {
   maxKeys?: number;
   prefix?: string;
-  maxScan?: number;
+  /** Max S3 objects to list (paginated under prefix, then sorted by date). */
+  maxObjects?: number;
 }): Promise<{
   processed: number;
   skipped: number;
@@ -201,21 +218,19 @@ export async function syncInboundEmailsFromBucket(options?: {
   if (!client) throw new Error("AWS S3 is not configured");
 
   const processLimit = options?.maxKeys ?? 15;
-  const maxScan = options?.maxScan ?? 80;
-  const prefix = options?.prefix ?? "";
-  const pageSize = 100;
-  const maxConsecutiveSkips = 20;
+  const maxObjects = options?.maxObjects ?? 1000;
+  const prefix = options?.prefix ?? getInboundPrefix();
 
   type ListedObject = { Key: string; LastModified?: Date };
   const collected: ListedObject[] = [];
   let continuationToken: string | undefined;
 
-  while (collected.length < maxScan) {
+  while (collected.length < maxObjects) {
     const list = await client.send(
       new ListObjectsV2Command({
         Bucket: bucket,
         Prefix: prefix || undefined,
-        MaxKeys: Math.min(pageSize, maxScan - collected.length),
+        MaxKeys: Math.min(1000, maxObjects - collected.length),
         ContinuationToken: continuationToken,
       }),
     );
@@ -226,39 +241,65 @@ export async function syncInboundEmailsFromBucket(options?: {
       }
     }
 
-    if (!list.IsTruncated || collected.length >= maxScan) break;
+    if (!list.IsTruncated) break;
     continuationToken = list.NextContinuationToken;
   }
 
   const objects = collected.sort(
-    (a, b) => (b.LastModified?.getTime() ?? 0) - (a.LastModified?.getTime() ?? 0),
+    (a, b) =>
+      (b.LastModified?.getTime() ?? 0) - (a.LastModified?.getTime() ?? 0),
   );
+
+  const processedKeys = await getSuccessfullyProcessedS3Keys(
+    objects.map((obj) => obj.Key),
+  );
+  const pending = objects.filter((obj) => !processedKeys.has(obj.Key));
 
   let processed = 0;
   let skipped = 0;
   let errors = 0;
   let scanned = 0;
-  let consecutiveSkips = 0;
 
-  for (const obj of objects) {
+  for (const obj of pending) {
     scanned += 1;
     try {
       const result = await processInboundS3Object(bucket, obj.Key);
       if (result.skipped) {
         skipped += 1;
-        consecutiveSkips += 1;
-        if (consecutiveSkips >= maxConsecutiveSkips) break;
-      } else {
+      } else if (result.messageId) {
         processed += 1;
-        consecutiveSkips = 0;
         if (processed >= processLimit) break;
+      } else {
+        skipped += 1;
       }
     } catch (err) {
       console.error("[inbound-s3] sync key failed:", obj.Key, err);
       errors += 1;
-      consecutiveSkips = 0;
     }
   }
 
   return { processed, skipped, errors, scanned };
+}
+
+let lastRecentSyncAt = 0;
+const RECENT_SYNC_MIN_INTERVAL_MS = 12_000;
+
+/** Lightweight sync for live polling — checks newest inbound objects first. */
+export async function syncRecentInboundEmails(): Promise<{
+  processed: number;
+  skipped: number;
+  errors: number;
+  scanned: number;
+  throttled?: boolean;
+}> {
+  const now = Date.now();
+  if (now - lastRecentSyncAt < RECENT_SYNC_MIN_INTERVAL_MS) {
+    return { processed: 0, skipped: 0, errors: 0, scanned: 0, throttled: true };
+  }
+  lastRecentSyncAt = now;
+
+  return syncInboundEmailsFromBucket({
+    maxKeys: 5,
+    maxObjects: 100,
+  });
 }

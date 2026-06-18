@@ -48,7 +48,6 @@ import {
 } from "./SendNotificationModal";
 import { AdminNotificationsView } from "./AdminNotificationsView";
 import { AttachEmailCampaignModal } from "./AttachEmailCampaignModal";
-import { EmailTabSkeleton } from "./EmailSkeletons";
 import type { RecipientUserRow } from "@/lib/admin-notifications/types";
 import { cn } from "@/lib/utils";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -83,7 +82,7 @@ const AdminEmailView = dynamic(
   () => import("./AdminEmailView").then((m) => ({ default: m.AdminEmailView })),
   {
     ssr: false,
-    loading: () => <EmailTabSkeleton />,
+    loading: () => null,
   },
 );
 
@@ -624,6 +623,9 @@ export default function AdminUsersPage() {
     }
     return "table";
   });
+  const [emailTabVisited, setEmailTabVisited] = useState(
+    () => viewMode === "email",
+  );
   const { toast } = useToast();
   const [selectedUserIds, setSelectedUserIds] = useState<Set<string>>(
     () => new Set(),
@@ -664,10 +666,17 @@ export default function AdminUsersPage() {
     mode: "table" | "map" | "notifications" | "email",
   ) => {
     setViewMode(mode);
+    if (mode === "email") {
+      setEmailTabVisited(true);
+    }
     if (typeof window !== "undefined") {
       localStorage.setItem("users-management-view-mode", mode);
     }
   };
+
+  useEffect(() => {
+    void import("./AdminEmailView");
+  }, []);
 
   // Warm-up selection mode: listen for event dispatched from WarmUpManualSendModal
   useEffect(() => {
@@ -5168,12 +5177,14 @@ export default function AdminUsersPage() {
         />
       )}
 
-      {viewMode === "email" && (
-        <AdminEmailView
-          isDark={isDark}
-          highlightCampaignId={highlightEmailCampaignId}
-          onHighlightConsumed={() => setHighlightEmailCampaignId(null)}
-        />
+      {emailTabVisited && (
+        <div className={cn(viewMode !== "email" && "hidden")}>
+          <AdminEmailView
+            isDark={isDark}
+            highlightCampaignId={highlightEmailCampaignId}
+            onHighlightConsumed={() => setHighlightEmailCampaignId(null)}
+          />
+        </div>
       )}
 
       <AttachEmailCampaignModal

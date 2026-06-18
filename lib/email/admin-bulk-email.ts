@@ -5,13 +5,41 @@ import type {
   ContestTemplateContext,
 } from "@/lib/admin-notifications/template";
 
-const APP_URL =
-  process.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, "") ||
-  "https://gameofcreators.com";
+const DEFAULT_TRACKING_BASE_URL = "https://gameofcreators.com";
 
 const DEFAULT_FROM_NAME = "Game of Creators";
 const DEFAULT_REPLY_TO =
   process.env.SES_REPLY_TO?.trim() || "support@gameofcreators.com";
+
+/** Public base URL embedded in open pixels and click redirects (must be reachable from email clients). */
+export function getEmailTrackingBaseUrl(): string {
+  const candidates = [
+    process.env.EMAIL_TRACKING_BASE_URL,
+    process.env.QSTASH_CALLBACK_URL,
+    process.env.NEXT_PUBLIC_APP_URL,
+  ];
+
+  for (const raw of candidates) {
+    const trimmed = raw?.trim();
+    if (!trimmed) continue;
+    try {
+      const origin = new URL(
+        trimmed.includes("://") ? trimmed : `https://${trimmed}`,
+      ).origin;
+      if (origin && !/^https?:\/\/(localhost|127\.)/i.test(origin)) {
+        return origin.replace(/\/$/, "");
+      }
+    } catch {
+      // try next candidate
+    }
+  }
+
+  return DEFAULT_TRACKING_BASE_URL;
+}
+
+function getAppUrl(): string {
+  return getEmailTrackingBaseUrl();
+}
 
 const MINIMAL_EMAIL_WRAPPER = `<!DOCTYPE html>
 <html lang="en">
@@ -112,19 +140,31 @@ export function wrapEmailHtml(bodyHtml: string, trackingPixelUrl: string): strin
 
 export function wrapClickUrl(trackingId: string, targetUrl: string): string {
   const encoded = encodeURIComponent(targetUrl);
-  return `${APP_URL}/track/click/${trackingId}?url=${encoded}`;
+  return `${getAppUrl()}/track/click/${trackingId}?url=${encoded}`;
 }
+
+const LINK_HREF_RE =
+  /<a\b([^>]*?\s)?href\s*=\s*(["'])(https?:\/\/[^"']+)\2([^>]*)>/gi;
 
 export function injectTrackedLinks(
   html: string,
   trackingId: string,
 ): string {
-  return html.replace(
-    /<a\b([^>]*?)\shref=(["'])(https?:\/\/[^"']+)\2([^>]*)>/gi,
+  const withAnchorLinks = html.replace(
+    LINK_HREF_RE,
     (_match, before, _quote, url, after) => {
       if (url.includes("/track/click/")) return _match;
       const tracked = wrapClickUrl(trackingId, url);
-      return `<a${before} href="${tracked}"${after}>`;
+      return `<a${before ?? ""} href="${tracked}"${after}>`;
+    },
+  );
+
+  // Wrap bare https URLs in text (editor sometimes leaves them unlinked).
+  return withAnchorLinks.replace(
+    /(^|[\s>])((https?:\/\/)[^\s<>"']+)/gi,
+    (match, prefix, url) => {
+      if (url.includes("/track/click/")) return match;
+      return `${prefix}${wrapClickUrl(trackingId, url)}`;
     },
   );
 }
@@ -147,7 +187,7 @@ export function htmlToPlainText(html: string): string {
 }
 
 export function getMarketingUnsubscribeUrl(userId: string): string {
-  return `${APP_URL}/dashboard/settings?unsubscribe=marketing&user=${encodeURIComponent(userId)}`;
+  return `${getAppUrl()}/dashboard/settings?unsubscribe=marketing&user=${encodeURIComponent(userId)}`;
 }
 
 export function buildBulkEmailHtml(input: {
@@ -176,7 +216,7 @@ export function buildBulkEmailHtml(input: {
   );
   const bodyHtml = normalizeBodyHtml(resolvedBody);
   const personal = input.personalInbox !== false;
-  const trackingPixelUrl = `${APP_URL}/track/open/${input.trackingId}`;
+  const trackingPixelUrl = `${getAppUrl()}/track/open/${input.trackingId}`;
   const fullTemplate = isFullHtmlEmailTemplate(bodyHtml);
 
   // Full HTML templates: preserve design, inject tracking + link wrapping.
@@ -195,19 +235,7 @@ export function buildBulkEmailHtml(input: {
     };
   }
 
-  // Simple personal notes: plain-text MIME lands in Gmail Primary more reliably.
-  if (personal && isSimplePersonalContent(bodyHtml)) {
-    const text = htmlToPlainText(bodyHtml);
-    return {
-      subject: "",
-      html: text.replace(/\n/g, "<br />"),
-      text,
-      plainTextOnly: true,
-      useRaw: true,
-    };
-  }
-
-  // Rich editor HTML (headings, links, emojis): keep formatting, minimal wrapper.
+  // Personal notes: minimal HTML wrapper with open pixel + tracked links.
   if (personal) {
     const html = injectTrackedLinks(
       wrapEmailHtml(bodyHtml, trackingPixelUrl),

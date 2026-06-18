@@ -1,9 +1,12 @@
 import { createAdminClient } from "@/utils/supabase/admin";
 import { htmlToPlainText } from "@/lib/email/admin-bulk-email";
 import {
+  canonicalMessageId,
   decodeInboundBodyText,
+  extractReplyBodyForDedup,
   normalizeSesMessageId,
   parseMailbox,
+  extractReplyBodyText,
 } from "@/lib/email/inbound-email-parse";
 
 export type UniboxFolder = "all" | "sent" | "replies";
@@ -63,9 +66,61 @@ function formatStoredSnippet(text: string | null | undefined): string | null {
 }
 
 function makeSnippet(text: string, maxLen = 200): string {
-  const plain = decodeInboundBodyText(text).replace(/\s+/g, " ").trim();
+  const plain = extractReplyBodyText(text).replace(/\s+/g, " ").trim();
   if (plain.length <= maxLen) return plain;
   return `${plain.slice(0, maxLen)}…`;
+}
+
+async function findExistingInboundMessage(
+  messageId: string | null | undefined,
+  input: {
+    threadId?: string;
+    fromEmail: string;
+    bodyText: string;
+  },
+): Promise<{ id: string; thread_id: string | null } | null> {
+  const db = createAdminClient();
+  const canonical = canonicalMessageId(messageId);
+
+  if (canonical) {
+    const normalized = normalizeSesMessageId(messageId);
+    if (normalized) {
+      const { data: candidates } = await db
+        .from("admin_email_unibox_messages")
+        .select("id, thread_id, ses_message_id")
+        .eq("direction", "inbound")
+        .ilike("ses_message_id", `%${normalized}%`)
+        .limit(10);
+
+      for (const row of candidates ?? []) {
+        if (canonicalMessageId(row.ses_message_id) === canonical) {
+          return { id: row.id, thread_id: row.thread_id };
+        }
+      }
+    }
+  }
+
+  const replyFingerprint = extractReplyBodyForDedup(input.bodyText);
+  if (!input.fromEmail || !replyFingerprint) return null;
+
+  let contentQuery = db
+    .from("admin_email_unibox_messages")
+    .select("id, thread_id, body_text")
+    .eq("direction", "inbound")
+    .eq("from_email", input.fromEmail);
+
+  if (input.threadId) {
+    contentQuery = contentQuery.eq("thread_id", input.threadId);
+  }
+
+  const { data: candidates } = await contentQuery.limit(50);
+  for (const row of candidates ?? []) {
+    if (extractReplyBodyForDedup(row.body_text) === replyFingerprint) {
+      return { id: row.id, thread_id: row.thread_id };
+    }
+  }
+
+  return null;
 }
 
 async function findThreadBySesReference(
@@ -363,6 +418,7 @@ export async function ingestInboundUniboxMessage(input: {
   sesMessageId?: string | null;
   inReplyToMessageId?: string | null;
   referenceMessageIds?: string[];
+  receivedAt?: string | null;
   stopOnReply?: boolean;
   attachments?: Array<{
     filename: string;
@@ -370,9 +426,10 @@ export async function ingestInboundUniboxMessage(input: {
     sizeBytes?: number | null;
     storagePath?: string | null;
   }>;
-}): Promise<{ threadId?: string; messageId?: string }> {
+}): Promise<{ threadId?: string; messageId?: string; skipped?: boolean }> {
   const db = createAdminClient();
   const now = new Date().toISOString();
+  const messageAt = input.receivedAt ?? now;
 
   const fromParsed = parseMailbox(input.fromEmail);
   const fromEmail = (fromParsed.email || input.fromEmail).toLowerCase().trim();
@@ -389,20 +446,18 @@ export async function ingestInboundUniboxMessage(input: {
     ? decodeInboundBodyText(input.bodyHtml)
     : null;
   const snippet = makeSnippet(bodyText);
+  const storedMessageId = canonicalMessageId(input.sesMessageId);
 
-  if (input.sesMessageId) {
-    const normalizedInbound = normalizeSesMessageId(input.sesMessageId);
-    if (normalizedInbound) {
-      const { data: duplicate } = await db
-        .from("admin_email_unibox_messages")
-        .select("id, thread_id")
-        .eq("direction", "inbound")
-        .ilike("ses_message_id", `%${normalizedInbound}%`)
-        .maybeSingle();
-      if (duplicate) {
-        return { threadId: duplicate.thread_id, messageId: duplicate.id };
-      }
-    }
+  const existingMessage = await findExistingInboundMessage(input.sesMessageId, {
+    fromEmail,
+    bodyText,
+  });
+  if (existingMessage) {
+    return {
+      threadId: existingMessage.thread_id ?? undefined,
+      messageId: existingMessage.id,
+      skipped: true,
+    };
   }
 
   let threadId: string | undefined;
@@ -457,6 +512,19 @@ export async function ingestInboundUniboxMessage(input: {
     return {};
   }
 
+  const duplicateInThread = await findExistingInboundMessage(input.sesMessageId, {
+    threadId,
+    fromEmail,
+    bodyText,
+  });
+  if (duplicateInThread) {
+    return {
+      threadId,
+      messageId: duplicateInThread.id,
+      skipped: true,
+    };
+  }
+
   if (threadId && existingReplyCount === 0) {
     const { data: thread } = await createAdminClient()
       .from("admin_email_unibox_threads")
@@ -466,11 +534,39 @@ export async function ingestInboundUniboxMessage(input: {
     existingReplyCount = thread?.reply_count ?? 0;
   }
 
+  const { data: message, error: messageError } = await db
+    .from("admin_email_unibox_messages")
+    .insert({
+      thread_id: threadId,
+      direction: "inbound",
+      project_id: projectId,
+      campaign_id: campaignId,
+      user_id: userId,
+      from_email: fromEmail,
+      from_name: fromName ?? null,
+      to_email: toEmail,
+      to_name: null,
+      subject: input.subject,
+      body_text: bodyText,
+      body_html: bodyHtml,
+      snippet,
+      ses_message_id: storedMessageId,
+      in_reply_to_message_id: input.inReplyToMessageId ?? null,
+      created_at: messageAt,
+    })
+    .select("id")
+    .single();
+
+  if (messageError || !message) {
+    console.error("[unibox] inbound message insert failed:", messageError?.message);
+    return { threadId };
+  }
+
   await db
     .from("admin_email_unibox_threads")
     .update({
       subject: input.subject,
-      last_message_at: now,
+      last_message_at: messageAt,
       latest_snippet: snippet,
       latest_direction: "inbound",
       reply_count: existingReplyCount + 1,
@@ -499,55 +595,6 @@ export async function ingestInboundUniboxMessage(input: {
         .eq("user_id", userId)
         .in("email_delivery_status", ["pending", "in_sequence"]);
     }
-  }
-
-  if (fromEmail && bodyText) {
-    const since = new Date(Date.now() - 10 * 60 * 1000).toISOString();
-    let dupQuery = db
-      .from("admin_email_unibox_messages")
-      .select("id, thread_id")
-      .eq("direction", "inbound")
-      .eq("from_email", fromEmail)
-      .eq("subject", input.subject)
-      .eq("body_text", bodyText)
-      .gte("created_at", since);
-
-    if (threadId) {
-      dupQuery = dupQuery.eq("thread_id", threadId);
-    }
-
-    const { data: contentDup } = await dupQuery.maybeSingle();
-    if (contentDup) {
-      return { threadId: contentDup.thread_id, messageId: contentDup.id };
-    }
-  }
-
-  const { data: message, error: messageError } = await db
-    .from("admin_email_unibox_messages")
-    .insert({
-      thread_id: threadId,
-      direction: "inbound",
-      project_id: projectId,
-      campaign_id: campaignId,
-      user_id: userId,
-      from_email: fromEmail,
-      from_name: fromName ?? null,
-      to_email: toEmail,
-      to_name: null,
-      subject: input.subject,
-      body_text: bodyText,
-      body_html: bodyHtml,
-      snippet,
-      ses_message_id: input.sesMessageId ?? null,
-      in_reply_to_message_id: input.inReplyToMessageId ?? null,
-      created_at: now,
-    })
-    .select("id")
-    .single();
-
-  if (messageError || !message) {
-    console.error("[unibox] inbound message insert failed:", messageError?.message);
-    return { threadId };
   }
 
   if (input.attachments?.length) {
@@ -597,7 +644,6 @@ export async function listUniboxThreads(params: {
       latest_direction,
       admin_email_campaigns ( name )
     `,
-      { count: "exact" },
     )
     .eq("is_deleted", false)
     .eq("is_archived", false)
@@ -628,7 +674,7 @@ export async function listUniboxThreads(params: {
     );
   }
 
-  const { data, count, error } = await query;
+  const { data, error } = await query;
   if (error) {
     throw new Error(error.message);
   }
@@ -655,7 +701,7 @@ export async function listUniboxThreads(params: {
     latestFromName: row.contact_name,
   }));
 
-  return { threads, total: count ?? threads.length };
+  return { threads, total: threads.length };
 }
 
 export async function getUniboxThreadDetail(
@@ -690,7 +736,6 @@ export async function getUniboxThreadDetail(
         to_name,
         subject,
         body_text,
-        body_html,
         snippet,
         ses_message_id,
         in_reply_to_message_id,
@@ -721,7 +766,6 @@ export async function getUniboxThreadDetail(
     to_name: string | null;
     subject: string;
     body_text: string | null;
-    body_html: string | null;
     snippet: string | null;
     ses_message_id: string | null;
     in_reply_to_message_id: string | null;
@@ -740,7 +784,17 @@ export async function getUniboxThreadDetail(
         new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
     );
 
-  const latest = messages[messages.length - 1];
+  const seenMessageKeys = new Set<string>();
+  const dedupedMessages = messages.filter((m) => {
+    const key =
+      canonicalMessageId(m.ses_message_id) ??
+      `${m.direction}:${m.from_email}:${extractReplyBodyForDedup(m.body_text ?? "")}`;
+    if (!key || seenMessageKeys.has(key)) return false;
+    seenMessageKeys.add(key);
+    return true;
+  });
+
+  const latest = dedupedMessages[dedupedMessages.length - 1];
 
   const thread: UniboxThreadListItem = {
     id: row.id,
@@ -765,7 +819,7 @@ export async function getUniboxThreadDetail(
 
   return {
     thread,
-    messages: messages.map((m) => ({
+    messages: dedupedMessages.map((m) => ({
       id: m.id,
       threadId: m.thread_id,
       direction: m.direction,
@@ -775,7 +829,7 @@ export async function getUniboxThreadDetail(
       toName: m.to_name,
       subject: m.subject,
       bodyText: m.body_text,
-      bodyHtml: m.body_html,
+      bodyHtml: null,
       snippet: formatStoredSnippet(m.snippet),
       sesMessageId: m.ses_message_id,
       inReplyToMessageId: m.in_reply_to_message_id,

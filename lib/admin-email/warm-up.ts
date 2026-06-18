@@ -207,10 +207,19 @@ async function queryWarmUpAccountRows(projectId?: string | null) {
   return (data ?? []) as WarmUpAccountRow[];
 }
 
-/** Single round-trip: sync senders once, one DB read, accounts + overview. */
-export async function getWarmUpDashboard(projectId?: string | null) {
+/** Single round-trip: optional background sender sync, one DB read, accounts + overview. */
+export async function getWarmUpDashboard(
+  projectId?: string | null,
+  options?: { sync?: boolean },
+) {
   if (projectId) {
-    await syncWarmUpAccountsForProject(projectId);
+    if (options?.sync) {
+      await syncWarmUpAccountsForProject(projectId);
+    } else {
+      void syncWarmUpAccountsForProject(projectId).catch((err) => {
+        console.warn("[warm-up] background sender sync failed:", err);
+      });
+    }
   }
   const rows = await queryWarmUpAccountRows(projectId);
   return {

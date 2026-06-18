@@ -173,7 +173,7 @@ export function OptionTab({ campaignId, onSaved }: Props) {
         </CardContent>
       </Card>
 
-      <Card className="rounded-xl border border-gray-200 bg-white shadow-sm">
+      {/* <Card className="rounded-xl border border-gray-200 bg-white shadow-sm">
         <CardContent className="p-5 flex flex-wrap items-center justify-between gap-4">
           <div>
             <Label className="text-gray-900 font-semibold">
@@ -210,16 +210,16 @@ export function OptionTab({ campaignId, onSaved }: Props) {
             </button>
           </div>
         </CardContent>
-      </Card>
+      </Card> */}
 
       <div className="flex justify-end gap-3">
-        <Button
+        {/* <Button
           variant="outline"
           className="border-[#662EBD] text-[#662EBD] hover:bg-purple-50"
           onClick={resetAutoselect}
         >
           Reset to Autoselect
-        </Button>
+        </Button> */}
         <Button
           className="bg-[#662EBD] hover:bg-[#5524a8]"
           onClick={saveOptions}

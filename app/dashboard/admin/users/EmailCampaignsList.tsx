@@ -381,7 +381,9 @@ export function EmailCampaignsList({
                       ? `${(c.stats.clickRate * 100).toFixed(1)}%`
                       : "—"}
                   </td>
-                  <td className="p-4 align-middle text-muted-foreground">—</td>
+                  <td className="p-4 align-middle text-muted-foreground">
+                    {c.stats.replyCount > 0 ? c.stats.replyCount : "—"}
+                  </td>
                   <td className="p-4 align-middle">
                     <div className="flex items-center justify-end gap-1">
                       {["paused", "draft", "configured", "scheduled"].includes(

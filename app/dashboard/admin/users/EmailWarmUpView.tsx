@@ -214,6 +214,7 @@ export function EmailWarmUpView({
 
       try {
         const params = new URLSearchParams({ project_id: resolvedProjectId });
+        if (opts?.force) params.set("sync", "1");
         const res = await fetch(`/api/admin/warm-up/dashboard?${params}`);
         const data = await res.json();
 
