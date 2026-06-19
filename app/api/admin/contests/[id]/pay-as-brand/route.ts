@@ -2,11 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { verifyAdminAccess } from "@/utils/admin-auth";
 import { createAdminClient } from "@/utils/supabase/admin";
 import {
-  createInitialPaymentDetails,
-  deductFromDepositBalanceAsAdmin,
-  getAdvertiserDepositBalanceAsAdmin,
-  markPaymentAsCompleted,
+  creditDepositBalanceAsAdmin,
   PaymentDetails,
+  processContestPaymentAsAdmin,
 } from "@/lib/payment-utils";
 import { canCreateNewContestAsAdmin } from "@/lib/contest-utils";
 import {
@@ -76,14 +74,30 @@ export async function POST(
       expectedPayment,
     );
 
-    const { prizePoolInCents, commissionPercentage: serverCommission, totalAmountInCents } =
-      expectedPayment;
+    const {
+      prizePoolInCents,
+      commissionPercentage: serverCommission,
+      totalAmountInCents,
+      changeType,
+    } = expectedPayment;
 
-    const existingPaymentDetails =
-      contest.payment_details as PaymentDetails | null;
+    const existingPaymentDetails = contest.payment_details as
+      | PaymentDetails
+      | string
+      | null;
+    const parsedExistingPayment =
+      typeof existingPaymentDetails === "string"
+        ? (() => {
+            try {
+              return JSON.parse(existingPaymentDetails) as PaymentDetails;
+            } catch {
+              return null;
+            }
+          })()
+        : existingPaymentDetails;
     const isInitialPayment =
-      !existingPaymentDetails ||
-      existingPaymentDetails.payment_status !== "completed";
+      !parsedExistingPayment ||
+      parsedExistingPayment.payment_status !== "completed";
 
     if (isInitialPayment) {
       const snapshotProductId = (
@@ -118,72 +132,76 @@ export async function POST(
       }
     }
 
-    const balanceCheck = await getAdvertiserDepositBalanceAsAdmin(brandUserId);
-    if (!balanceCheck.success) {
-      return NextResponse.json(
-        { error: "Failed to check brand wallet balance" },
-        { status: 500 },
-      );
-    }
-
-    if (balanceCheck.balance < totalAmountInCents) {
-      return NextResponse.json(
-        {
-          error: "Brand needs to top up wallet.",
-          details: {
-            requiredCents: totalAmountInCents,
-            availableCents: balanceCheck.balance,
-            commissionPercentage: serverCommission,
-          },
-        },
-        { status: 400 },
-      );
-    }
-
     const description = `Contest payment for "${contest.title}" (ID: ${contestId})`;
-    const deductResult = await deductFromDepositBalanceAsAdmin(
+    const adminPaymentMetadata = {
+      paid_by_admin: true,
+      admin_user_id: adminUser.id,
+      contest_id: contestId,
+    };
+
+    const paymentResult = await processContestPaymentAsAdmin(
       brandUserId,
-      totalAmountInCents,
-      description,
-      {
-        paymentMethod: "wallet",
-        metadata: {
-          paid_by_admin: true,
-          admin_user_id: adminUser.id,
-          contest_id: contestId,
-        },
-      },
-    );
-
-    if (!deductResult.success) {
-      return NextResponse.json(
-        {
-          error: deductResult.error?.includes("Insufficient")
-            ? "Brand needs to top up wallet."
-            : deductResult.error || "Wallet payment failed",
-        },
-        { status: 400 },
-      );
-    }
-
-    let paymentDetails = createInitialPaymentDetails(
       prizePoolInCents,
       serverCommission,
-      totalAmountInCents,
-      0,
-      null,
+      description,
+      existingPaymentDetails,
+      changeType,
+      adminPaymentMetadata,
     );
-    paymentDetails = markPaymentAsCompleted(paymentDetails);
+
+    if (!paymentResult.success || !paymentResult.paymentDetails) {
+      const err = paymentResult.error || "Wallet payment failed";
+      return NextResponse.json(
+        {
+          error: err.includes("Insufficient")
+            ? "Brand needs to top up wallet."
+            : err,
+          details: err.includes("Insufficient")
+            ? {
+                requiredCents: totalAmountInCents,
+                commissionPercentage: serverCommission,
+              }
+            : undefined,
+        },
+        { status: 400 },
+      );
+    }
 
     const { error: updateError } = await supabase
       .from("contests")
-      .update({ payment_details: paymentDetails })
+      .update({ payment_details: paymentResult.paymentDetails })
       .eq("id", contestId);
 
     if (updateError) {
       console.error("Error storing payment details:", updateError);
+
+      const walletAmount = paymentResult.amountFromWallet ?? totalAmountInCents;
+      const rollback = await creditDepositBalanceAsAdmin(
+        brandUserId,
+        walletAmount,
+        `Rollback: failed to save payment for contest ${contestId}`,
+        {
+          ...adminPaymentMetadata,
+          rollback_reason: "contest_payment_details_update_failed",
+        },
+      );
+
+      if (!rollback.success) {
+        console.error(
+          "CRITICAL: pay-as-brand rollback failed after contest update error:",
+          rollback.error,
+        );
+        return NextResponse.json(
+          {
+            error:
+              "Payment was deducted but saving failed, and automatic rollback also failed. Contact support immediately.",
+          },
+          { status: 500 },
+        );
+      }
+
       return NextResponse.json(
-        { error: "Failed to store payment details" },
+        { error: "Failed to store payment details. Wallet charge was reversed." },
         { status: 500 },
       );
     }
@@ -191,8 +209,8 @@ export async function POST(
     return NextResponse.json({
       success: true,
       paymentMethod: "wallet",
-      paymentDetails,
-      amountFromWallet: totalAmountInCents / 100,
+      paymentDetails: paymentResult.paymentDetails,
+      amountFromWallet: (paymentResult.amountFromWallet ?? totalAmountInCents) / 100,
     });
   } catch (error) {
     console.error("Error in pay-as-brand:", error);

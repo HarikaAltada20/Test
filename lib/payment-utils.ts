@@ -377,6 +377,59 @@ export async function deductFromDepositBalanceAsAdmin(
   }
 }
 
+/** Restore brand wallet after a failed pay-as-brand contest update. */
+export async function creditDepositBalanceAsAdmin(
+  userId: string,
+  amountInCents: number,
+  description: string,
+  metadata?: Record<string, unknown>,
+): Promise<DepositBalanceResponse> {
+  try {
+    const currentBalance = await getAdvertiserDepositBalanceAsAdmin(userId);
+    if (!currentBalance.success) {
+      return currentBalance;
+    }
+
+    const newBalance = (currentBalance.balance || 0) + amountInCents;
+    const supabase = createAdminClient();
+    const { data, error } = await supabase
+      .from("advertiser_profiles")
+      .update({ available_deposit_balance: newBalance })
+      .eq("id", userId)
+      .select("available_deposit_balance")
+      .single();
+
+    if (error) {
+      return {
+        success: false,
+        balance: currentBalance.balance,
+        error: error.message,
+      };
+    }
+
+    await logTransactionAsAdmin(
+      userId,
+      "refund",
+      amountInCents,
+      "success",
+      description,
+      {
+        remarks: "Pay-as-brand payment rollback",
+        paymentMethod: "wallet",
+        metadata,
+      },
+    );
+
+    return {
+      success: true,
+      balance: data?.available_deposit_balance || 0,
+    };
+  } catch (error) {
+    console.error("Error in creditDepositBalanceAsAdmin:", error);
+    return { success: false, balance: 0, error: "Unknown error occurred" };
+  }
+}
+
 // Create Stripe payment intent for wallet top-up
 export async function createTopUpPaymentIntent(
   userId: string,
@@ -1566,6 +1619,123 @@ export function markPaymentAsCompleted(
     last_updated: new Date().toISOString(),
     payment_status: "completed",
   };
+}
+
+function parseStoredPaymentDetails(
+  raw: PaymentDetails | string | null | undefined,
+): PaymentDetails | null {
+  if (!raw) return null;
+  if (typeof raw === "string") {
+    try {
+      return JSON.parse(raw) as PaymentDetails;
+    } catch {
+      return null;
+    }
+  }
+  return raw;
+}
+
+/** Wallet-only contest payment for admin pay-as-brand (initial + budget increases). */
+export async function processContestPaymentAsAdmin(
+  userId: string,
+  prizePoolInCents: number,
+  commissionPercentage: number,
+  description: string,
+  existingPaymentDetails?: PaymentDetails | string | null,
+  changeType?: "increase" | "decrease",
+  adminMetadata?: Record<string, unknown>,
+): Promise<
+  PaymentProcessingResult & {
+    paymentDetails?: PaymentDetails;
+    amountFromWallet?: number;
+  }
+> {
+  try {
+    const totalAmount =
+      prizePoolInCents +
+      Math.round(prizePoolInCents * (commissionPercentage / 100));
+
+    const currentBalance = await getAdvertiserDepositBalanceAsAdmin(userId);
+    if (!currentBalance.success) {
+      return {
+        success: false,
+        paymentMethod: "wallet",
+        error: "Failed to check wallet balance",
+      };
+    }
+
+    if (currentBalance.balance < totalAmount) {
+      return {
+        success: false,
+        paymentMethod: "wallet",
+        error: `Insufficient balance. Required: $${(
+          totalAmount / 100
+        ).toFixed(2)}, Available: $${(currentBalance.balance / 100).toFixed(2)}`,
+      };
+    }
+
+    const deductResult = await deductFromDepositBalanceAsAdmin(
+      userId,
+      totalAmount,
+      description,
+      {
+        paymentMethod: "wallet",
+        metadata: adminMetadata,
+      },
+    );
+
+    if (!deductResult.success) {
+      return {
+        success: false,
+        paymentMethod: "wallet",
+        error: deductResult.error || "Failed to deduct from wallet",
+      };
+    }
+
+    const parsedExisting = parseStoredPaymentDetails(existingPaymentDetails);
+    let paymentDetails: PaymentDetails;
+
+    if (
+      parsedExisting &&
+      parsedExisting.payment_status === "completed" &&
+      changeType
+    ) {
+      const prizePoolChange =
+        changeType === "increase" ? prizePoolInCents : -prizePoolInCents;
+      paymentDetails = addBudgetChangeToPaymentDetails(
+        parsedExisting,
+        prizePoolChange,
+        changeType,
+        totalAmount,
+        0,
+        null,
+      );
+    } else {
+      paymentDetails = createInitialPaymentDetails(
+        prizePoolInCents,
+        commissionPercentage,
+        totalAmount,
+        0,
+        null,
+      );
+    }
+
+    paymentDetails = markPaymentAsCompleted(paymentDetails);
+
+    return {
+      success: true,
+      paymentMethod: "wallet",
+      amountFromWallet: totalAmount,
+      paymentDetails,
+    };
+  } catch (error) {
+    console.error("Error in processContestPaymentAsAdmin:", error);
+    return {
+      success: false,
+      paymentMethod: "wallet",
+      error: "Unknown error occurred",
+    };
+  }
 }
 
 // 🚀 NEW: Enhanced contest payment processing with new schema
