@@ -272,7 +272,7 @@ export function SequenceStepEditor({
                     Variables
                   </Button>
                 </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
+                <DropdownMenuContent align="end" className="max-h-60 overflow-y-auto">
                   {BULK_EMAIL_MERGE_VARIABLES.map((v) => (
                     <DropdownMenuItem
                       key={v.key}

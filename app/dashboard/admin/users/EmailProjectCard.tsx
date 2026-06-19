@@ -2,6 +2,12 @@
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import {
   AlertCircle,
@@ -15,6 +21,7 @@ import {
   Settings,
   Users,
 } from "lucide-react";
+import type { ReactNode } from "react";
 
 export type EmailProjectCardData = {
   id: string;
@@ -52,6 +59,28 @@ type Props = {
   onManageSenders: () => void;
   onScheduleSettings: () => void;
 };
+
+function StatWithTooltip({
+  label,
+  value,
+  icon,
+}: {
+  label: string;
+  value: number;
+  icon: ReactNode;
+}) {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <span className="inline-flex items-center gap-1.5 cursor-default">
+          {icon}
+          {value}
+        </span>
+      </TooltipTrigger>
+      <TooltipContent>{label}</TooltipContent>
+    </Tooltip>
+  );
+}
 
 export function EmailProjectCard({
   project,
@@ -102,40 +131,50 @@ export function EmailProjectCard({
           </p>
         )}
 
-        <div className="flex flex-wrap gap-x-5 gap-y-2 text-sm">
-          {project.website_url && (
-            <a
-              href={project.website_url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-1.5 text-blue-600 hover:underline"
-            >
-              <Globe className="h-4 w-4 shrink-0" />
-              {project.website_url}
-            </a>
-          )}
-          {project.target_audience && (
-            <span className="inline-flex items-center gap-1.5 text-muted-foreground">
-              <Users className="h-4 w-4 shrink-0" />
-              {project.target_audience}
-            </span>
-          )}
-        </div>
+        <TooltipProvider>
+          <div className="flex flex-wrap gap-x-5 gap-y-2 text-sm">
+            {project.website_url && (
+              <a
+                href={project.website_url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1.5 text-blue-600 hover:underline"
+              >
+                <Globe className="h-4 w-4 shrink-0" />
+                {project.website_url}
+              </a>
+            )}
+            {project.target_audience && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span className="inline-flex items-center gap-1.5 text-muted-foreground cursor-default">
+                    <Users className="h-4 w-4 shrink-0" />
+                    {project.target_audience}
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent>Target audience</TooltipContent>
+              </Tooltip>
+            )}
+          </div>
 
-        <div className="flex flex-wrap gap-4 pt-1 text-sm text-muted-foreground">
-          <span className="inline-flex items-center gap-1.5">
-            <Mail className="h-4 w-4" />
-            {stats.sentTotal}
-          </span>
-          <span className="inline-flex items-center gap-1.5">
-            <Users className="h-4 w-4" />
-            {stats.recipientTotal}
-          </span>
-          <span className="inline-flex items-center gap-1.5">
-            <BarChart3 className="h-4 w-4" />
-            {stats.campaignCount}
-          </span>
-        </div>
+          <div className="flex flex-wrap gap-4 pt-1 text-sm text-muted-foreground">
+            <StatWithTooltip
+              label="Total emails sent across all campaigns"
+              value={stats.sentTotal}
+              icon={<Mail className="h-4 w-4" />}
+            />
+            <StatWithTooltip
+              label="Total recipients across all campaigns"
+              value={stats.recipientTotal}
+              icon={<Users className="h-4 w-4" />}
+            />
+            <StatWithTooltip
+              label="Number of email campaigns"
+              value={stats.campaignCount}
+              icon={<BarChart3 className="h-4 w-4" />}
+            />
+          </div>
+        </TooltipProvider>
       </div>
 
       <div

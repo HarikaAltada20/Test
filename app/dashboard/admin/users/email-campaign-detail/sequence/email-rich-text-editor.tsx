@@ -686,7 +686,7 @@ export function EmailRichTextEditor({
                 <Braces className="h-4 w-4" />
               </button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="start">
+            <DropdownMenuContent align="start" className="max-h-60 overflow-y-auto">
               {MERGE_TAGS.map((tag) => (
                 <DropdownMenuItem
                   key={tag.value}
