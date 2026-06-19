@@ -1,7 +1,7 @@
 "use client";
 
 import type React from "react";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
@@ -55,12 +55,31 @@ import {
   isCreatorTrustSubmissionBlocked,
 } from "@/lib/trust-score";
 
-function formatSubmissionInsertError(error: { message?: string }): string {
+function formatSubmissionInsertError(error: {
+  message?: string;
+  code?: string;
+}): string {
+  if (error?.code === "23505") {
+    return "This video has already been submitted to this campaign.";
+  }
   const msg = error?.message || "";
   if (msg.includes("trust_score_too_low")) {
     return "Trust score too low to submit to this campaign.";
   }
   return msg || "Failed to submit content";
+}
+
+function throwIfBatchInsertErrors(
+  results: Array<{ error?: { code?: string; message?: string } | null } | undefined>,
+): void {
+  const errors = results.filter((result) => result?.error);
+  if (errors.length === 0) return;
+  const firstError = errors[0]?.error;
+  throw new Error(
+    firstError
+      ? formatSubmissionInsertError(firstError)
+      : `Failed to submit ${errors.length} videos. Please try again.`,
+  );
 }
 
 /** Refresh persisted creator_profiles.trust_score_metrics after a new submission. */
@@ -302,6 +321,7 @@ export default function SubmitContentPage({
   const [mode, setMode] = useState<"light" | "dark">("light");
   const router = useRouter();
   const supabase = createClient();
+  const isSubmittingRef = useRef(false);
   const [isFetchingVideo, setIsFetchingVideo] = useState(false);
   const [videoPreview, setVideoPreview] = useState<YouTubeVideo | null>(null);
   const [submissionType, setSubmissionType] = useState<
@@ -2546,13 +2566,7 @@ export default function SubmitContentPage({
 
     const results = await Promise.all(submissionPromises);
 
-    // Check for errors
-    const errors = results.filter((result) => result?.error);
-    if (errors.length > 0) {
-      throw new Error(
-        `Failed to submit ${errors.length} videos. Please try again.`,
-      );
-    }
+    throwIfBatchInsertErrors(results);
 
     await bustLeaderboardCache(contestId);
 
@@ -2661,6 +2675,11 @@ export default function SubmitContentPage({
       }
     }
 
+    if (isSubmittingRef.current) {
+      return;
+    }
+    isSubmittingRef.current = true;
+
     setIsLoading(true);
     setError(null);
     setMessage(null);
@@ -2739,6 +2758,7 @@ export default function SubmitContentPage({
       });
       setError(err.message || "Failed to submit content. Please try again.");
     } finally {
+      isSubmittingRef.current = false;
       setIsLoading(false);
       setMessage(null);
     }
@@ -2826,13 +2846,7 @@ export default function SubmitContentPage({
       }
     }
 
-    // Check for errors
-    const errors = results.filter((result) => result?.error);
-    if (errors.length > 0) {
-      throw new Error(
-        `Failed to submit ${errors.length} videos. Please try again.`,
-      );
-    }
+    throwIfBatchInsertErrors(results);
 
     // Update state
     const newSubmittedCount = currentSubmitted + totalSubmissions;
