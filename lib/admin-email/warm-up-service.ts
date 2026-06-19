@@ -3,8 +3,13 @@
  * daily counter reset, recipients/templates CRUD, daily metrics.
  */
 
+import { randomUUID } from "crypto";
 import { createAdminClient } from "@/utils/supabase/admin";
 import { sendSesEmail } from "@/lib/email/ses-client";
+import {
+  getEmailTrackingBaseUrl,
+  injectTrackingPixel,
+} from "@/lib/email/admin-bulk-email";
 import type { WarmUpAccountRow, WarmUpStage } from "./warm-up";
 
 // ---------------------------------------------------------------------------
@@ -49,8 +54,22 @@ export type WarmUpSendRow = {
   is_delivered: boolean;
   opened_at: string | null;
   clicked_at: string | null;
+  replied_at: string | null;
   is_bounced: boolean;
   is_complained: boolean;
+};
+
+export type WarmUpWeeklySummary = {
+  emailsReceived: number;
+  emailsSent: number;
+  replyRate: number;
+  openRate: number;
+};
+
+export type WarmUpDailyChartPoint = {
+  label: string;
+  date: string;
+  count: number;
 };
 
 export type WarmUpMetricsRow = {
@@ -465,12 +484,34 @@ We host a short podcast on {industry_topic} and {company}'s story stood out.
 // ---------------------------------------------------------------------------
 
 const HEALTH_SCORE_WINDOW_DAYS = 30;
-const DEFAULT_HEALTH_SCORE = 30;
+const DEFAULT_HEALTH_SCORE = 0;
 
 type SendMetricsInput = Pick<
   WarmUpSendRow,
-  "is_delivered" | "opened_at" | "clicked_at" | "is_bounced" | "is_complained"
+  | "is_delivered"
+  | "opened_at"
+  | "clicked_at"
+  | "replied_at"
+  | "is_bounced"
+  | "is_complained"
 >;
+
+function buildWarmUpSendHtml(body: string, sendId: string): string {
+  const html = body.replace(/\n/g, "<br>");
+  const pixelUrl = `${getEmailTrackingBaseUrl()}/track/warm-up-open/${sendId}`;
+  return injectTrackingPixel(`<div>${html}</div>`, pixelUrl);
+}
+
+function sesMessageIdFromResult(result: {
+  messageId?: string;
+  sesMessageId?: string;
+}): string | null {
+  return result.sesMessageId ?? result.messageId ?? null;
+}
+
+function isSendOpened(send: Pick<WarmUpSendRow, "opened_at" | "clicked_at" | "replied_at">) {
+  return Boolean(send.opened_at || send.clicked_at || send.replied_at);
+}
 
 function healthScoreWindowSince(): string {
   const since = new Date();
@@ -478,30 +519,107 @@ function healthScoreWindowSince(): string {
   return since.toISOString();
 }
 
+function utcTodayDate(): string {
+  return new Date().toISOString().slice(0, 10);
+}
+
+/** Health score uses sends before today unless closing out the day at 23:59. */
+function healthScoreWindowEndExclusive(closeOutDay: boolean): string | null {
+  if (closeOutDay) return null;
+  return `${utcTodayDate()}T00:00:00.000Z`;
+}
+
+async function queryHealthScoreSends(
+  accountId: string,
+  closeOutDay: boolean,
+): Promise<SendMetricsInput[]> {
+  const db = createAdminClient();
+  const endExclusive = healthScoreWindowEndExclusive(closeOutDay);
+
+  let query = db
+    .from("admin_email_warm_up_sends")
+    .select(
+      "is_delivered,opened_at,clicked_at,replied_at,is_bounced,is_complained",
+    )
+    .eq("account_id", accountId)
+    .gte("sent_at", healthScoreWindowSince());
+
+  if (endExclusive) {
+    query = query.lt("sent_at", endExclusive);
+  }
+
+  const { data, error } = await query;
+  if (error) throw new Error(error.message);
+  return (data ?? []) as SendMetricsInput[];
+}
+
 function aggregateSendMetrics(sends: SendMetricsInput[]) {
   return {
     sendsCount: sends.length,
     deliveredCount: sends.filter((s) => s.is_delivered).length,
-    openedCount: sends.filter((s) => s.opened_at).length,
+    openedCount: sends.filter((s) => isSendOpened(s)).length,
     bouncedCount: sends.filter((s) => s.is_bounced).length,
     complainedCount: sends.filter((s) => s.is_complained).length,
   };
 }
 
-export function calculateHealthScore(
-  metrics: {
-    sendsCount: number;
-    deliveredCount: number;
-    openedCount: number;
-    bouncedCount: number;
-    complainedCount: number;
-  },
-  opts?: { defaultWhenEmpty?: number },
-): number {
+/** Live health for dashboard display (30-day window, excludes today unless closeOutDay). */
+export async function computeDisplayHealthScoresByAccountId(
+  accountIds: string[],
+  options?: { closeOutDay?: boolean },
+): Promise<Map<string, number>> {
+  const scores = new Map<string, number>();
+  if (accountIds.length === 0) return scores;
+
+  const closeOutDay = options?.closeOutDay ?? false;
+  const since = healthScoreWindowSince();
+  const endExclusive = healthScoreWindowEndExclusive(closeOutDay);
+  const db = createAdminClient();
+
+  let query = db
+    .from("admin_email_warm_up_sends")
+    .select(
+      "account_id, is_delivered, opened_at, clicked_at, replied_at, is_bounced, is_complained",
+    )
+    .in("account_id", accountIds)
+    .gte("sent_at", since);
+
+  if (endExclusive) {
+    query = query.lt("sent_at", endExclusive);
+  }
+
+  const { data, error } = await query;
+  if (error) throw new Error(error.message);
+
+  const sendsByAccount = new Map<string, SendMetricsInput[]>();
+  for (const row of data ?? []) {
+    const { account_id, ...send } = row as SendMetricsInput & {
+      account_id: string;
+    };
+    const list = sendsByAccount.get(account_id) ?? [];
+    list.push(send);
+    sendsByAccount.set(account_id, list);
+  }
+
+  for (const accountId of accountIds) {
+    const sends = sendsByAccount.get(accountId) ?? [];
+    scores.set(accountId, calculateHealthScore(aggregateSendMetrics(sends)));
+  }
+
+  return scores;
+}
+
+export function calculateHealthScore(metrics: {
+  sendsCount: number;
+  deliveredCount: number;
+  openedCount: number;
+  bouncedCount: number;
+  complainedCount: number;
+}): number {
   const { sendsCount, deliveredCount, openedCount, bouncedCount, complainedCount } =
     metrics;
 
-  if (sendsCount === 0) return opts?.defaultWhenEmpty ?? DEFAULT_HEALTH_SCORE;
+  if (sendsCount === 0) return DEFAULT_HEALTH_SCORE;
 
   const deliveryRate = (deliveredCount / sendsCount) * 100;
   const openRate = (openedCount / Math.max(deliveredCount, 1)) * 100;
@@ -513,11 +631,14 @@ export function calculateHealthScore(
   return Math.min(100, Math.max(0, Math.round(score)));
 }
 
+/** Used only by calculateDailyMetrics (23:59 cron) and manual admin recalc — not on send/events. */
 export async function recalculateAccountHealthScore(
   accountId: string,
   account?: WarmUpAccountRow,
+  options?: { closeOutDay?: boolean },
 ): Promise<number> {
   const db = createAdminClient();
+  const closeOutDay = options?.closeOutDay ?? false;
 
   let accountRow = account;
   if (!accountRow) {
@@ -530,18 +651,9 @@ export async function recalculateAccountHealthScore(
     accountRow = data as WarmUpAccountRow;
   }
 
-  const { data: sends } = await db
-    .from("admin_email_warm_up_sends")
-    .select("is_delivered,opened_at,clicked_at,is_bounced,is_complained")
-    .eq("account_id", accountId)
-    .gte("sent_at", healthScoreWindowSince());
-
-  const metrics = aggregateSendMetrics((sends ?? []) as SendMetricsInput[]);
-  const defaultWhenEmpty =
-    accountRow.total_emails_sent > 0 && accountRow.current_health_score > 0
-      ? accountRow.current_health_score
-      : DEFAULT_HEALTH_SCORE;
-  const healthScore = calculateHealthScore(metrics, { defaultWhenEmpty });
+  const sends = await queryHealthScoreSends(accountId, closeOutDay);
+  const metrics = aggregateSendMetrics(sends);
+  const healthScore = calculateHealthScore(metrics);
 
   const now = new Date().toISOString();
   await db
@@ -860,12 +972,15 @@ export async function sendWarmUpEmails(
       { first_name: recipientName, from_name: senderName, company },
     );
 
+    const sendId = randomUUID();
+    const html = buildWarmUpSendHtml(body, sendId);
+
     const result = await sendSesEmail({
       from: account.email,
       fromName: senderName,
       to: recipient.email,
       subject,
-      html: body.replace(/\n/g, "<br>"),
+      html,
       text: body,
     });
 
@@ -876,6 +991,7 @@ export async function sendWarmUpEmails(
 
       await Promise.all([
         db.from("admin_email_warm_up_sends").insert({
+          id: sendId,
           account_id: accountId,
           project_id: account.project_id,
           recipient_email: recipient.email,
@@ -883,7 +999,7 @@ export async function sendWarmUpEmails(
           template_id: template.id,
           subject,
           body,
-          message_id: result.messageId ?? null,
+          message_id: sesMessageIdFromResult(result),
           is_delivered: true,
         }),
         db
@@ -917,14 +1033,6 @@ export async function sendWarmUpEmails(
     })
     .eq("id", accountId);
 
-  if (sent > 0) {
-    await recalculateAccountHealthScore(accountId, {
-      ...account,
-      emails_sent_today: account.emails_sent_today + sent,
-      total_emails_sent: account.total_emails_sent + sent,
-    });
-  }
-
   return { accountId, attempted: targetCount, sent, errors };
 }
 
@@ -935,33 +1043,28 @@ export async function sendWarmUpEmails(
 export async function resetDailyCounters() {
   const db = createAdminClient();
   const now = new Date().toISOString();
-  const { data: accounts, error } = await db
+  const { error } = await db
     .from("admin_email_warm_up_accounts")
     .update({
       emails_sent_today: 0,
       campaign_sent_today: 0,
       updated_at: now,
     })
-    .neq("warm_up_status", "failed")
-    .select("id");
+    .neq("warm_up_status", "failed");
   if (error) throw new Error(error.message);
-
-  for (const account of accounts ?? []) {
-    try {
-      await recalculateAccountHealthScore(account.id);
-    } catch {
-      // Continue recalculating other accounts
-    }
-  }
 }
 
 // ---------------------------------------------------------------------------
 // Calculate daily metrics + health score + stage progression
 // ---------------------------------------------------------------------------
 
-export async function calculateDailyMetrics(projectId?: string) {
+export async function calculateDailyMetrics(
+  projectId?: string,
+  options?: { closeOutDay?: boolean },
+) {
   const db = createAdminClient();
-  const today = new Date().toISOString().slice(0, 10);
+  const today = utcTodayDate();
+  const closeOutDay = options?.closeOutDay ?? false;
 
   let query = db
     .from("admin_email_warm_up_accounts")
@@ -980,27 +1083,21 @@ export async function calculateDailyMetrics(projectId?: string) {
     const account = accountData as WarmUpAccountRow;
     try {
       const sendFields =
-        "is_delivered,opened_at,clicked_at,is_bounced,is_complained" as const;
+        "is_delivered,opened_at,clicked_at,replied_at,is_bounced,is_complained" as const;
 
-      const [{ data: todaySends }, { data: windowSends }] = await Promise.all([
+      const [{ data: todaySends }, healthScoreSends] = await Promise.all([
         db
           .from("admin_email_warm_up_sends")
           .select(sendFields)
           .eq("account_id", account.id)
           .gte("sent_at", `${today}T00:00:00.000Z`),
-        db
-          .from("admin_email_warm_up_sends")
-          .select(sendFields)
-          .eq("account_id", account.id)
-          .gte("sent_at", healthScoreWindowSince()),
+        queryHealthScoreSends(account.id, closeOutDay),
       ]);
 
       const todayMetrics = aggregateSendMetrics(
         (todaySends ?? []) as SendMetricsInput[],
       );
-      const windowMetrics = aggregateSendMetrics(
-        (windowSends ?? []) as SendMetricsInput[],
-      );
+      const windowMetrics = aggregateSendMetrics(healthScoreSends);
       const {
         sendsCount,
         deliveredCount,
@@ -1010,13 +1107,7 @@ export async function calculateDailyMetrics(projectId?: string) {
       } = todayMetrics;
       const clickedCount = (todaySends ?? []).filter((s) => s.clicked_at).length;
 
-      const defaultWhenEmpty =
-        account.total_emails_sent > 0 && account.current_health_score > 0
-          ? account.current_health_score
-          : DEFAULT_HEALTH_SCORE;
-      const healthScore = calculateHealthScore(windowMetrics, {
-        defaultWhenEmpty,
-      });
+      const healthScore = calculateHealthScore(windowMetrics);
 
       let stageProgressionTriggered = false;
 
@@ -1232,12 +1323,15 @@ export async function sendManualWarmUpEmailRich(
       company,
     });
 
+    const sendId = randomUUID();
+    const html = buildWarmUpSendHtml(body, sendId);
+
     const result = await sendSesEmail({
       from: sendFrom,
       fromName: senderName,
       to: recipientEmail,
       subject,
-      html: body.replace(/\n/g, "<br>"),
+      html,
       text: body,
     });
 
@@ -1247,6 +1341,7 @@ export async function sendManualWarmUpEmailRich(
       sent++;
 
       await db.from("admin_email_warm_up_sends").insert({
+        id: sendId,
         account_id: accountId,
         project_id: account.project_id,
         recipient_email: recipientEmail,
@@ -1254,7 +1349,7 @@ export async function sendManualWarmUpEmailRich(
         template_id: templateRow.id,
         subject,
         body,
-        message_id: result.messageId ?? null,
+        message_id: sesMessageIdFromResult(result),
         is_delivered: true,
       });
 
@@ -1287,14 +1382,6 @@ export async function sendManualWarmUpEmailRich(
       updated_at: now,
     })
     .eq("id", accountId);
-
-  if (sent > 0) {
-    await recalculateAccountHealthScore(accountId, {
-      ...account,
-      emails_sent_today: account.emails_sent_today + sent,
-      total_emails_sent: account.total_emails_sent + sent,
-    });
-  }
 
   return {
     attempted: toSend.length,
@@ -1382,15 +1469,112 @@ export async function getWarmUpAccountStatus(accountId: string) {
   };
 }
 
+function lastSevenDayKeys(): { date: string; label: string }[] {
+  const days: { date: string; label: string }[] = [];
+  const labels = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+  for (let i = 6; i >= 0; i--) {
+    const d = new Date();
+    d.setDate(d.getDate() - i);
+    days.push({
+      date: d.toISOString().slice(0, 10),
+      label: labels[d.getDay()] ?? "",
+    });
+  }
+  return days;
+}
+
+async function getWeeklyWarmUpSummary(
+  accountId: string,
+): Promise<WarmUpWeeklySummary> {
+  const db = createAdminClient();
+  const since = new Date();
+  since.setDate(since.getDate() - 7);
+  const sinceIso = since.toISOString();
+
+  const [{ data: sends }, receivedResult] = await Promise.all([
+    db
+      .from("admin_email_warm_up_sends")
+      .select("is_delivered, opened_at, clicked_at, replied_at")
+      .eq("account_id", accountId)
+      .gte("sent_at", sinceIso),
+    db
+      .from("admin_email_warm_up_received")
+      .select("id", { count: "exact", head: true })
+      .eq("account_id", accountId)
+      .gte("received_at", sinceIso),
+  ]);
+
+  const rows = sends ?? [];
+  const emailsSent = rows.length;
+  const delivered = rows.filter((s) => s.is_delivered).length;
+  const opened = rows.filter((s) => isSendOpened(s)).length;
+  const replied = rows.filter((s) => s.replied_at).length;
+  const emailsReceived = receivedResult.error
+    ? 0
+    : (receivedResult.count ?? 0);
+
+  return {
+    emailsReceived,
+    emailsSent,
+    replyRate:
+      emailsSent > 0 ? Math.round((replied / emailsSent) * 1000) / 10 : 0,
+    openRate:
+      delivered > 0 ? Math.round((opened / delivered) * 1000) / 10 : 0,
+  };
+}
+
+async function getWeeklySendChart(
+  accountId: string,
+): Promise<WarmUpDailyChartPoint[]> {
+  const db = createAdminClient();
+  const dayKeys = lastSevenDayKeys();
+  const since = `${dayKeys[0]?.date ?? ""}T00:00:00.000Z`;
+
+  const { data: sends } = await db
+    .from("admin_email_warm_up_sends")
+    .select("sent_at")
+    .eq("account_id", accountId)
+    .gte("sent_at", since);
+
+  const counts = new Map<string, number>();
+  for (const key of dayKeys) counts.set(key.date, 0);
+
+  for (const send of sends ?? []) {
+    const date = send.sent_at.slice(0, 10);
+    if (counts.has(date)) {
+      counts.set(date, (counts.get(date) ?? 0) + 1);
+    }
+  }
+
+  return dayKeys.map(({ date, label }) => ({
+    date,
+    label,
+    count: counts.get(date) ?? 0,
+  }));
+}
+
 export async function getWarmUpSidebarDetails(accountId: string) {
-  const status = await getWarmUpAccountStatus(accountId);
-  const metrics = await getWarmUpDailyStats(accountId, 14);
-  const sends = await getWarmUpSends(accountId, 20);
+  const [status, metrics, sends, weeklySummary, weeklyChart] =
+    await Promise.all([
+      getWarmUpAccountStatus(accountId),
+      getWarmUpDailyStats(accountId, 14),
+      getWarmUpSends(accountId, 20),
+      getWeeklyWarmUpSummary(accountId),
+      getWeeklySendChart(accountId),
+    ]);
+
+  const account = status.account;
 
   return {
     ...status,
     metricsChart: metrics,
     sendLog: sends,
+    weeklySummary,
+    weeklyChart,
+    warmUpProgress: {
+      current: account.emails_sent_today,
+      total: account.daily_limit,
+    },
   };
 }
 
@@ -1461,7 +1645,7 @@ export async function checkWarmUpHealth(projectId?: string) {
   const db = createAdminClient();
   let query = db
     .from("admin_email_warm_up_accounts")
-    .select("id, email, current_health_score, emails_sent_today, daily_limit, warm_up_status")
+    .select("id, email, current_health_score, total_emails_sent, emails_sent_today, daily_limit, warm_up_status")
     .in("warm_up_status", ["active", "paused"]);
   if (projectId) query = query.eq("project_id", projectId);
 
@@ -1473,7 +1657,7 @@ export async function checkWarmUpHealth(projectId?: string) {
   const now = new Date().toISOString();
 
   for (const account of accounts) {
-    if (account.current_health_score < 30) {
+    if (account.total_emails_sent > 0 && account.current_health_score < 30) {
       lowHealth++;
       console.warn(
         `[warm-up health] Low health score for ${account.email}: ${account.current_health_score}`,

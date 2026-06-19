@@ -31,6 +31,7 @@ import type { WarmUpAccountListItem, WarmUpOverview } from "@/lib/admin-email/wa
 import { isHealthyAccount } from "@/lib/admin-email/warm-up";
 import type { EmailProjectCardData } from "./EmailProjectCard";
 import WarmUpManualSendModal from "./WarmUpManualSendModal";
+import { WarmUpAccountDetailSheet } from "./WarmUpAccountDetailSheet";
 import {
   Activity,
   Flame,
@@ -141,6 +142,9 @@ export function EmailWarmUpView({
   const [manualSendOpen, setManualSendOpen] = useState(false);
   const [prefillEmails, setPrefillEmails] = useState<string[]>([]);
   const [prefillAccountId, setPrefillAccountId] = useState("");
+  const [detailAccount, setDetailAccount] = useState<WarmUpAccountListItem | null>(
+    null,
+  );
 
   const enterSelectMode = () => {
     if (typeof window === "undefined") return;
@@ -344,6 +348,16 @@ export function EmailWarmUpView({
 
   return (
     <>
+    <WarmUpAccountDetailSheet
+      accountId={detailAccount?.id ?? null}
+      accountPreview={detailAccount}
+      open={!!detailAccount}
+      onOpenChange={(open) => {
+        if (!open) setDetailAccount(null);
+      }}
+      onUpdated={() => { void load({ force: true }); }}
+      isDark={isDark}
+    />
     <WarmUpManualSendModal
       isOpen={manualSendOpen}
       onClose={() => {
@@ -440,13 +454,13 @@ export function EmailWarmUpView({
         </div>
 
         <div className="flex flex-wrap gap-2 ml-auto">
-          <Button
+          {/* <Button
             variant="outline"
             className="h-11"
             onClick={openSenderManagement}
           >
             Manage Sender Emails
-          </Button>
+          </Button> */}
           <Button
             className="h-11 bg-green-600 hover:bg-green-700"
             onClick={enterSelectMode}
@@ -505,7 +519,11 @@ export function EmailWarmUpView({
               </TableHeader>
               <TableBody>
                 {filtered.map((account) => (
-                  <TableRow key={account.id}>
+                  <TableRow
+                    key={account.id}
+                    className="cursor-pointer hover:bg-muted/30"
+                    onClick={() => setDetailAccount(account)}
+                  >
                     <TableCell>
                       <div>
                         <p className="font-medium text-sm">{account.email}</p>
@@ -549,7 +567,10 @@ export function EmailWarmUpView({
                             size="icon"
                             className="h-8 w-8 text-orange-500"
                             disabled={actionId === account.id}
-                            onClick={() => handlePause(account.id)}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handlePause(account.id);
+                            }}
                             title="Pause warm-up"
                           >
                             {actionId === account.id ? (
@@ -564,7 +585,10 @@ export function EmailWarmUpView({
                             size="icon"
                             className="h-8 w-8"
                             disabled={actionId === account.id}
-                            onClick={() => handleStart(account.id)}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleStart(account.id);
+                            }}
                             title="Start warm-up"
                           >
                             {actionId === account.id ? (
@@ -576,18 +600,41 @@ export function EmailWarmUpView({
                         )}
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" size="icon" className="h-8 w-8">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8"
+                              onClick={(e) => e.stopPropagation()}
+                            >
                               <MoreHorizontal className="h-4 w-4" />
                             </Button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end">
+                            <DropdownMenuItem
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setDetailAccount(account);
+                              }}
+                            >
+                              View details
+                            </DropdownMenuItem>
                             {account.warm_up_status === "active" ? (
-                              <DropdownMenuItem onClick={() => handlePause(account.id)}>
+                              <DropdownMenuItem
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handlePause(account.id);
+                                }}
+                              >
                                 <Pause className="h-4 w-4 mr-2" />
                                 Pause
                               </DropdownMenuItem>
                             ) : (
-                              <DropdownMenuItem onClick={() => handleStart(account.id)}>
+                              <DropdownMenuItem
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleStart(account.id);
+                                }}
+                              >
                                 <Play className="h-4 w-4 mr-2" />
                                 Start warm-up
                               </DropdownMenuItem>

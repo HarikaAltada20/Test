@@ -1,6 +1,11 @@
 import { createAdminClient } from "@/utils/supabase/admin";
 
-export type WarmUpStatus = "pending" | "active" | "paused" | "completed" | "failed";
+export type WarmUpStatus =
+  | "pending"
+  | "active"
+  | "paused"
+  | "completed"
+  | "failed";
 export type WarmUpStage = "foundation" | "growth" | "expansion" | "ready";
 
 export type WarmUpAccountRow = {
@@ -63,26 +68,103 @@ function displayName(row: WarmUpAccountRow): string {
   return local.replace(/[._-]/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
-export function isHealthyAccount(row: WarmUpAccountRow): boolean {
+function clampHealthScore(score: number): number {
+  return Math.max(0, Math.min(100, Math.round(score)));
+}
+
+function utcTodayDate(): string {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function isWarmUpDayClosed(): boolean {
+  const now = new Date();
+  return now.getUTCHours() === 23 && now.getUTCMinutes() >= 59;
+}
+
+export type WarmUpMetricSnapshot = {
+  latest: { health_score: number; date: string } | null;
+  priorToToday: { health_score: number; date: string } | null;
+};
+
+/**
+ * Health % during the day is computed live from send records (pre-today only).
+ * Tonight's 23:59 job (closeOutDay) finalizes today's score in metrics.
+ */
+export function resolveDisplayHealthScore(opts: {
+  preTodaySendCount: number;
+  metrics: WarmUpMetricSnapshot;
+  liveScore?: number | null;
+}): number {
+  const today = utcTodayDate();
+
+  if (
+    isWarmUpDayClosed() &&
+    opts.metrics.latest?.date === today
+  ) {
+    return clampHealthScore(opts.metrics.latest.health_score);
+  }
+
+  if (opts.preTodaySendCount === 0) {
+    return 0;
+  }
+
+  if (opts.liveScore != null) {
+    return clampHealthScore(opts.liveScore);
+  }
+
+  if (opts.metrics.priorToToday) {
+    return clampHealthScore(opts.metrics.priorToToday.health_score);
+  }
+
+  return 0;
+}
+
+export function isHealthyAccount(
+  row: WarmUpAccountRow,
+  displayHealthScore?: number,
+): boolean {
+  const health =
+    displayHealthScore ??
+    resolveDisplayHealthScore({
+      preTodaySendCount: 0,
+      metrics: { latest: null, priorToToday: null },
+    });
   return (
-    row.current_health_score >= 80 ||
+    health >= 80 ||
     (row.warm_up_status === "completed" && row.is_ready_for_sending)
   );
 }
 
-export function mapWarmUpAccount(row: WarmUpAccountRow): WarmUpAccountListItem {
+export function mapWarmUpAccount(
+  row: WarmUpAccountRow,
+  context?: {
+    metrics?: WarmUpMetricSnapshot;
+    preTodaySendCount?: number;
+    liveScore?: number | null;
+  },
+): WarmUpAccountListItem {
+  const healthScore = resolveDisplayHealthScore({
+    preTodaySendCount: context?.preTodaySendCount ?? 0,
+    metrics: context?.metrics ?? { latest: null, priorToToday: null },
+    liveScore: context?.liveScore,
+  });
   return {
     ...row,
+    current_health_score: healthScore,
     display_name: displayName(row),
-    status_label: statusLabel(row.warm_up_status, row.current_health_score),
+    status_label: statusLabel(row.warm_up_status, healthScore),
   };
 }
 
 export function computeWarmUpOverview(
-  accounts: WarmUpAccountRow[],
+  accounts: WarmUpAccountListItem[],
 ): WarmUpOverview {
-  const healthy = accounts.filter(isHealthyAccount).length;
-  const warmingUp = accounts.filter((a) => a.warm_up_status === "active").length;
+  const healthy = accounts.filter((a) =>
+    isHealthyAccount(a, a.current_health_score),
+  ).length;
+  const warmingUp = accounts.filter(
+    (a) => a.warm_up_status === "active",
+  ).length;
   const paused = accounts.filter(
     (a) => a.warm_up_status === "paused" || a.warm_up_status === "pending",
   ).length;
@@ -105,6 +187,115 @@ export function computeWarmUpOverview(
     paused,
     emailsSentToday,
     avgHealthScore,
+  };
+}
+
+async function fetchMetricsSnapshotsByAccountId(
+  accountIds: string[],
+): Promise<Map<string, WarmUpMetricSnapshot>> {
+  const map = new Map<string, WarmUpMetricSnapshot>();
+  if (accountIds.length === 0) return map;
+
+  const today = utcTodayDate();
+  const db = createAdminClient();
+  const { data, error } = await db
+    .from("admin_email_warm_up_metrics")
+    .select("account_id, health_score, date")
+    .in("account_id", accountIds)
+    .order("date", { ascending: false });
+
+  if (error) throw new Error(error.message);
+
+  for (const row of data ?? []) {
+    const existing = map.get(row.account_id) ?? {
+      latest: null,
+      priorToToday: null,
+    };
+
+    if (!existing.latest) {
+      existing.latest = {
+        health_score: row.health_score,
+        date: row.date,
+      };
+    }
+
+    if (!existing.priorToToday && row.date < today) {
+      existing.priorToToday = {
+        health_score: row.health_score,
+        date: row.date,
+      };
+    }
+
+    map.set(row.account_id, existing);
+  }
+
+  return map;
+}
+
+async function fetchPreTodaySendCounts(
+  accountIds: string[],
+): Promise<Map<string, number>> {
+  const counts = new Map<string, number>();
+  if (accountIds.length === 0) return counts;
+
+  const today = utcTodayDate();
+  const db = createAdminClient();
+  const { data, error } = await db
+    .from("admin_email_warm_up_sends")
+    .select("account_id")
+    .in("account_id", accountIds)
+    .lt("sent_at", `${today}T00:00:00.000Z`);
+
+  if (error) throw new Error(error.message);
+
+  for (const row of data ?? []) {
+    counts.set(row.account_id, (counts.get(row.account_id) ?? 0) + 1);
+  }
+
+  return counts;
+}
+
+async function mapWarmUpAccountsWithMetrics(
+  rows: WarmUpAccountRow[],
+): Promise<WarmUpAccountListItem[]> {
+  const accountIds = rows.map((row) => row.id);
+  const { computeDisplayHealthScoresByAccountId } = await import(
+    "./warm-up-service"
+  );
+  const [metricsByAccount, preTodayCounts, liveScores] = await Promise.all([
+    fetchMetricsSnapshotsByAccountId(accountIds),
+    fetchPreTodaySendCounts(accountIds),
+    computeDisplayHealthScoresByAccountId(accountIds, { closeOutDay: false }),
+  ]);
+
+  return rows.map((row) =>
+    mapWarmUpAccount(row, {
+      metrics: metricsByAccount.get(row.id) ?? {
+        latest: null,
+        priorToToday: null,
+      },
+      preTodaySendCount: preTodayCounts.get(row.id) ?? 0,
+      liveScore: liveScores.get(row.id) ?? null,
+    }),
+  );
+}
+
+async function fetchAccountDisplayContext(accountId: string) {
+  const { computeDisplayHealthScoresByAccountId } = await import(
+    "./warm-up-service"
+  );
+  const [metricsByAccount, preTodayCounts, liveScores] = await Promise.all([
+    fetchMetricsSnapshotsByAccountId([accountId]),
+    fetchPreTodaySendCounts([accountId]),
+    computeDisplayHealthScoresByAccountId([accountId], { closeOutDay: false }),
+  ]);
+  return {
+    metrics: metricsByAccount.get(accountId) ?? {
+      latest: null,
+      priorToToday: null,
+    },
+    preTodaySendCount: preTodayCounts.get(accountId) ?? 0,
+    liveScore: liveScores.get(accountId) ?? null,
   };
 }
 
@@ -148,10 +339,11 @@ export async function syncWarmUpAccountsForProject(projectId: string) {
       project_id: projectId,
       sender_id: sender.id,
       email: sender.email,
-      first_name: sender.first_name ?? sender.display_name?.split(" ")[0] ?? null,
+      first_name:
+        sender.first_name ?? sender.display_name?.split(" ")[0] ?? null,
       last_name: sender.last_name ?? null,
       warm_up_status: "paused",
-      current_health_score: 30,
+      current_health_score: 0,
     });
   }
 
@@ -188,7 +380,7 @@ export async function listWarmUpAccounts(projectId?: string | null) {
     await syncWarmUpAccountsForProject(projectId);
   }
   const rows = await queryWarmUpAccountRows(projectId);
-  return rows.map((row) => mapWarmUpAccount(row));
+  return mapWarmUpAccountsWithMetrics(rows);
 }
 
 async function queryWarmUpAccountRows(projectId?: string | null) {
@@ -222,15 +414,16 @@ export async function getWarmUpDashboard(
     }
   }
   const rows = await queryWarmUpAccountRows(projectId);
+  const accounts = await mapWarmUpAccountsWithMetrics(rows);
   return {
-    accounts: rows.map((row) => mapWarmUpAccount(row)),
-    overview: computeWarmUpOverview(rows),
+    accounts,
+    overview: computeWarmUpOverview(accounts),
   };
 }
 
 export async function getWarmUpOverview(projectId?: string | null) {
-  const rows = await queryWarmUpAccountRows(projectId);
-  return computeWarmUpOverview(rows);
+  const accounts = await listWarmUpAccounts(projectId);
+  return computeWarmUpOverview(accounts);
 }
 
 export async function startWarmUpAccount(accountId: string) {
@@ -263,7 +456,10 @@ export async function startWarmUpAccount(accountId: string) {
     })
     .eq("id", data.project_id);
 
-  return mapWarmUpAccount(data as WarmUpAccountRow);
+  return mapWarmUpAccount(
+    data as WarmUpAccountRow,
+    await fetchAccountDisplayContext(accountId),
+  );
 }
 
 export async function pauseWarmUpAccount(accountId: string) {
@@ -279,7 +475,10 @@ export async function pauseWarmUpAccount(accountId: string) {
     .single();
 
   if (error) throw new Error(error.message);
-  return mapWarmUpAccount(data as WarmUpAccountRow);
+  return mapWarmUpAccount(
+    data as WarmUpAccountRow,
+    await fetchAccountDisplayContext(accountId),
+  );
 }
 
 export async function getWarmUpAccount(accountId: string) {
@@ -290,7 +489,10 @@ export async function getWarmUpAccount(accountId: string) {
     .eq("id", accountId)
     .single();
   if (error || !data) throw new Error("Warm-up account not found");
-  return mapWarmUpAccount(data as WarmUpAccountRow);
+  return mapWarmUpAccount(
+    data as WarmUpAccountRow,
+    await fetchAccountDisplayContext(accountId),
+  );
 }
 
 export async function updateWarmUpAccount(
@@ -318,7 +520,10 @@ export async function updateWarmUpAccount(
     .select("*")
     .single();
   if (error) throw new Error(error.message);
-  return mapWarmUpAccount(data as WarmUpAccountRow);
+  return mapWarmUpAccount(
+    data as WarmUpAccountRow,
+    await fetchAccountDisplayContext(accountId),
+  );
 }
 
 export async function deleteWarmUpAccount(accountId: string) {
@@ -342,7 +547,10 @@ export async function resumeWarmUpAccount(accountId: string) {
     .select("*")
     .single();
   if (error) throw new Error(error.message);
-  return mapWarmUpAccount(data as WarmUpAccountRow);
+  return mapWarmUpAccount(
+    data as WarmUpAccountRow,
+    await fetchAccountDisplayContext(accountId),
+  );
 }
 
 export async function markReadyForSending(accountId: string) {
@@ -370,7 +578,10 @@ export async function markReadyForSending(accountId: string) {
     .select("*")
     .single();
   if (error) throw new Error(error.message);
-  return mapWarmUpAccount(data as WarmUpAccountRow);
+  return mapWarmUpAccount(
+    data as WarmUpAccountRow,
+    await fetchAccountDisplayContext(accountId),
+  );
 }
 
 export async function markNotReadyForSending(accountId: string) {
@@ -385,7 +596,10 @@ export async function markNotReadyForSending(accountId: string) {
     .select("*")
     .single();
   if (error) throw new Error(error.message);
-  return mapWarmUpAccount(data as WarmUpAccountRow);
+  return mapWarmUpAccount(
+    data as WarmUpAccountRow,
+    await fetchAccountDisplayContext(accountId),
+  );
 }
 
 export async function listReadyForSendingAccounts(projectId?: string | null) {
@@ -399,14 +613,16 @@ export async function listReadyForSendingAccounts(projectId?: string | null) {
 
   const { data, error } = await query.order("email", { ascending: true });
   if (error) throw new Error(error.message);
-  return (data ?? []).map((row) => mapWarmUpAccount(row as WarmUpAccountRow));
+  return mapWarmUpAccountsWithMetrics((data ?? []) as WarmUpAccountRow[]);
 }
 
 export async function createWarmUpAccountFromSender(senderId: string) {
   const db = createAdminClient();
   const { data: sender } = await db
     .from("admin_email_project_senders")
-    .select("id, project_id, email, first_name, last_name, display_name, ses_verified")
+    .select(
+      "id, project_id, email, first_name, last_name, display_name, ses_verified",
+    )
     .eq("id", senderId)
     .single();
   if (!sender) throw new Error("Verified sender not found");
@@ -519,7 +735,7 @@ export async function createWarmUpAccount(input: {
       first_name: input.firstName?.trim() || null,
       last_name: input.lastName?.trim() || null,
       warm_up_status: "paused",
-      current_health_score: 30,
+      current_health_score: 0,
     })
     .select("*")
     .single();
@@ -529,5 +745,8 @@ export async function createWarmUpAccount(input: {
   const { seedDefaultTemplates } = await import("./warm-up-service");
   await seedDefaultTemplates(input.projectId);
 
-  return mapWarmUpAccount(data as WarmUpAccountRow);
+  return mapWarmUpAccount(data as WarmUpAccountRow, {
+    metrics: { latest: null, priorToToday: null },
+    preTodaySendCount: 0,
+  });
 }

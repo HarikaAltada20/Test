@@ -15,7 +15,7 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const result = await calculateDailyMetrics(projectId);
+    const result = await calculateDailyMetrics(projectId, { closeOutDay: false });
     return NextResponse.json(result);
   } catch (err) {
     const message = err instanceof Error ? err.message : "Failed to calculate metrics";

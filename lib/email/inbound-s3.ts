@@ -11,6 +11,7 @@ import {
   collectReferenceMessageIds,
 } from "@/lib/email/inbound-email-parse";
 import { ingestInboundUniboxMessage } from "@/lib/admin-email/unibox";
+import { handleWarmUpInbound } from "@/lib/admin-email/warm-up-inbound";
 
 let s3Client: S3Client | null = null;
 
@@ -127,6 +128,19 @@ export async function processInboundRawEmail(
   }
 
   const inReplyTo = pickInReplyToId(parsed.inReplyTo, parsed.references);
+  const referenceMessageIds = collectReferenceMessageIds(
+    parsed.inReplyTo,
+    parsed.references,
+  );
+
+  await handleWarmUpInbound({
+    fromEmail: parsed.fromEmail,
+    toEmail: parsed.toEmail,
+    inReplyToMessageId: inReplyTo,
+    referenceMessageIds,
+    sesMessageId: parsed.messageId,
+    receivedAt: parsed.date,
+  });
 
   const result = await ingestInboundUniboxMessage({
     fromEmail: parsed.fromEmail,
@@ -137,10 +151,7 @@ export async function processInboundRawEmail(
     bodyHtml: parsed.bodyHtml,
     sesMessageId: parsed.messageId,
     inReplyToMessageId: inReplyTo,
-    referenceMessageIds: collectReferenceMessageIds(
-      parsed.inReplyTo,
-      parsed.references,
-    ),
+    referenceMessageIds,
     receivedAt: parsed.date,
     stopOnReply: true,
   });

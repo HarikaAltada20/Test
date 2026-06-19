@@ -1,8 +1,8 @@
 /**
  * Cron: daily warm-up sends, counter reset, metrics, health checks.
  *
- * Scheduling: QStash (recommended) — POST /api/admin/warm-up/admin/setup-schedules
- * Authorization: QStash Upstash-Signature or Bearer ${CRON_SECRET}
+ * Scheduling: Vercel Cron (vercel.json) — see lib/admin-email/warm-up-cron.ts
+ * Authorization: x-vercel-cron header, QStash signature, or Bearer CRON_SECRET
  */
 
 import { NextResponse } from "next/server";
@@ -55,7 +55,7 @@ async function handleRequest(action: string): Promise<NextResponse> {
     }
 
     if (action === "metrics") {
-      const result = await calculateDailyMetrics();
+      const result = await calculateDailyMetrics(undefined, { closeOutDay: true });
       return NextResponse.json({ action: "metrics", ...result });
     }
 

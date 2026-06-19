@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { ingestInboundUniboxMessage } from "@/lib/admin-email/unibox";
+import { handleWarmUpInbound } from "@/lib/admin-email/warm-up-inbound";
 import { parseMailbox } from "@/lib/email/inbound-email-parse";
 import {
   processInboundRawEmail,
@@ -87,6 +88,12 @@ export async function POST(req: NextRequest) {
       if (fromRaw && toRaw && inner.subject) {
         const from = parseMailbox(fromRaw);
         const to = parseMailbox(toRaw);
+        await handleWarmUpInbound({
+          fromEmail: from.email || fromRaw,
+          toEmail: to.email || toRaw,
+          inReplyToMessageId: inner.inReplyToMessageId as string | undefined,
+          sesMessageId: inner.sesMessageId as string | undefined,
+        });
         const result = await ingestInboundUniboxMessage({
           fromEmail: from.email || fromRaw,
           fromName:
@@ -132,6 +139,13 @@ export async function POST(req: NextRequest) {
   }
 
   try {
+    await handleWarmUpInbound({
+      fromEmail,
+      toEmail,
+      inReplyToMessageId: body.inReplyToMessageId,
+      sesMessageId: body.sesMessageId,
+    });
+
     const result = await ingestInboundUniboxMessage({
       fromEmail,
       fromName: body.fromName ?? fromParsed.name,

@@ -292,19 +292,19 @@ export function EmailCampaignsList({
 
   return (
     <div className="space-y-4">
-      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
         <StatCard
           label="Total Campaigns"
           value={listSummary.total}
           icon={<Briefcase className="h-5 w-5 text-purple-600" />}
           iconBg="bg-purple-100"
         />
-        <StatCard
+        {/* <StatCard
           label="Active Campaigns"
           value={listSummary.active}
           icon={<UserPlus className="h-5 w-5 text-green-600" />}
           iconBg="bg-green-100"
-        />
+        /> */}
         <StatCard
           label="Opens"
           value={pageStats.totalOpens}
