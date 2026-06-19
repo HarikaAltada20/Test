@@ -1,4 +1,5 @@
 import { createClient } from "@/utils/supabase/server";
+import { createAdminClient } from "@/utils/supabase/admin";
 
 export interface Submission {
   id: string;
@@ -91,6 +92,56 @@ export async function getActiveContestCount(
   }
 }
 
+export async function getActiveContestCountAsAdmin(
+  userId: string,
+): Promise<ActiveContestCountResult> {
+  try {
+    const supabase = createAdminClient();
+    const { data: contests, error } = await supabase
+      .from("contests_with_status")
+      .select("id, moderation_status, status")
+      .eq("advertiser_id", userId);
+
+    if (error) {
+      console.error("Error fetching contests for active count (admin):", error);
+      return {
+        success: false,
+        activeCount: 0,
+        error: "Failed to fetch contests",
+      };
+    }
+
+    if (!contests) {
+      return { success: true, activeCount: 0 };
+    }
+
+    const activeContests = contests.filter((contest) => {
+      if (
+        contest.moderation_status === "pending_approval" ||
+        contest.moderation_status === "approved"
+      ) {
+        return true;
+      }
+      if (contest.moderation_status === "published") {
+        return contest.status === "upcoming" || contest.status === "active";
+      }
+      return false;
+    });
+
+    return {
+      success: true,
+      activeCount: activeContests.length,
+    };
+  } catch (error) {
+    console.error("Error in getActiveContestCountAsAdmin:", error);
+    return {
+      success: false,
+      activeCount: 0,
+      error: "Unknown error occurred",
+    };
+  }
+}
+
 /**
  * Check if user can create a new contest based on their plan limits
  * @param userId - The user's ID
@@ -144,6 +195,54 @@ export async function canCreateNewContest(
     error: canCreate
       ? undefined
       : `You have reached your plan limit of ${maxActiveContests} active contests. You currently have ${adjustedCount} active contests.`,
+  };
+}
+
+export async function canCreateNewContestAsAdmin(
+  userId: string,
+  maxActiveContests: number,
+  excludeContestId?: string,
+): Promise<{ canCreate: boolean; currentCount: number; error?: string }> {
+  const result = await getActiveContestCountAsAdmin(userId);
+
+  if (!result.success) {
+    return {
+      canCreate: false,
+      currentCount: 0,
+      error: result.error,
+    };
+  }
+
+  let adjustedCount = result.activeCount;
+  if (excludeContestId) {
+    const supabase = createAdminClient();
+    const { data: contest } = await supabase
+      .from("contests_with_status")
+      .select("id, moderation_status, status")
+      .eq("id", excludeContestId)
+      .maybeSingle();
+
+    if (contest) {
+      const isCurrentlyActive =
+        contest.moderation_status === "pending_approval" ||
+        contest.moderation_status === "approved" ||
+        (contest.moderation_status === "published" &&
+          (contest.status === "upcoming" || contest.status === "active"));
+
+      if (isCurrentlyActive) {
+        adjustedCount = Math.max(0, adjustedCount - 1);
+      }
+    }
+  }
+
+  const canCreate = adjustedCount < maxActiveContests;
+
+  return {
+    canCreate,
+    currentCount: adjustedCount,
+    error: canCreate
+      ? undefined
+      : `This brand has reached their plan limit of ${maxActiveContests} active campaigns (${adjustedCount} active).`,
   };
 }
 

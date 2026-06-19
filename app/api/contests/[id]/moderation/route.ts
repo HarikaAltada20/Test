@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
+import { createAdminClient } from '@/utils/supabase/admin';
 import { getContestBudgetPaymentMismatch } from '@/lib/contest-payment-validation';
 
 // POST: Brand submit contest for approval or publish approved contest
@@ -114,8 +115,10 @@ export async function POST(
 
       console.log('✅ Payment validation passed - proceeding with submission');
 
+      const writeClient = isAdmin ? createAdminClient() : supabase;
+
       // Update to pending approval (keep rejection_reason as history/log)
-      const { error } = await supabase
+      const { error } = await writeClient
         .from('contests')
         .update({
           moderation_status: 'pending_approval',
@@ -133,19 +136,37 @@ export async function POST(
       });
 
     } else if (action === 'publish') {
-      if (contest.moderation_status !== 'approved') {
+      const publishableStatuses = isAdmin
+        ? ['approved', 'pending_approval']
+        : ['approved'];
+
+      if (!publishableStatuses.includes(contest.moderation_status)) {
         return NextResponse.json({ 
-          error: 'Contest must be approved before publishing' 
+          error: isAdmin
+            ? 'Campaign must be approved or pending approval before publishing'
+            : 'Contest must be approved before publishing'
         }, { status: 400 });
       }
 
-      // Publish the contest
-      const { error } = await supabase
+      const writeClient = isAdmin ? createAdminClient() : supabase;
+      const now = new Date().toISOString();
+      const updatePayload: Record<string, string> = {
+        moderation_status: 'published',
+        published_at: now,
+      };
+
+      if (
+        isAdmin &&
+        contest.moderation_status === 'pending_approval' &&
+        !(contest as { approved_at?: string | null }).approved_at
+      ) {
+        updatePayload.approved_at = now;
+        updatePayload.approved_by = user.id;
+      }
+
+      const { error } = await writeClient
         .from('contests')
-        .update({
-          moderation_status: 'published',
-          published_at: new Date().toISOString()
-        })
+        .update(updatePayload)
         .eq('id', contestId);
 
       if (error) {

@@ -265,6 +265,118 @@ export async function deductFromDepositBalance(
   }
 }
 
+export async function getAdvertiserDepositBalanceAsAdmin(
+  userId: string,
+): Promise<DepositBalanceResponse> {
+  try {
+    const supabase = createAdminClient();
+    const { data, error } = await supabase
+      .from("advertiser_profiles")
+      .select("available_deposit_balance")
+      .eq("id", userId)
+      .single();
+
+    if (error) {
+      return { success: false, balance: 0, error: error.message };
+    }
+
+    return {
+      success: true,
+      balance: data?.available_deposit_balance || 0,
+    };
+  } catch (error) {
+    console.error("Error in getAdvertiserDepositBalanceAsAdmin:", error);
+    return { success: false, balance: 0, error: "Unknown error occurred" };
+  }
+}
+
+export async function deductFromDepositBalanceAsAdmin(
+  userId: string,
+  amountInCents: number,
+  description: string,
+  extra?: {
+    metadata?: Record<string, unknown>;
+    paymentMethod?: "wallet" | "split";
+  },
+): Promise<DepositBalanceResponse> {
+  try {
+    const currentBalance = await getAdvertiserDepositBalanceAsAdmin(userId);
+    if (!currentBalance.success) {
+      return {
+        success: false,
+        balance: currentBalance.balance,
+        error: "Failed to check wallet balance",
+      };
+    }
+
+    if (currentBalance.balance < amountInCents) {
+      return {
+        success: false,
+        balance: currentBalance.balance,
+        error: `Insufficient balance. Required: $${(
+          amountInCents / 100
+        ).toFixed(2)}, Available: $${(currentBalance.balance / 100).toFixed(2)}`,
+      };
+    }
+
+    const newBalance = currentBalance.balance - amountInCents;
+    if (newBalance < 0) {
+      return {
+        success: false,
+        balance: currentBalance.balance,
+        error: "Operation would create negative balance",
+      };
+    }
+
+    const supabase = createAdminClient();
+    const { data, error } = await supabase
+      .from("advertiser_profiles")
+      .update({ available_deposit_balance: newBalance })
+      .eq("id", userId)
+      .select("available_deposit_balance")
+      .single();
+
+    if (error) {
+      return {
+        success: false,
+        balance: currentBalance.balance,
+        error: error.message,
+      };
+    }
+
+    const paymentMethod = extra?.paymentMethod || "wallet";
+    const enhancedDescription =
+      paymentMethod === "wallet"
+        ? `${description} (Wallet Payment)`
+        : `${description} (Wallet Portion)`;
+    const remarks =
+      paymentMethod === "wallet"
+        ? "Paid from wallet balance"
+        : "Wallet portion of split payment";
+
+    await logTransactionAsAdmin(
+      userId,
+      "contest_payment",
+      amountInCents,
+      "success",
+      enhancedDescription,
+      {
+        remarks,
+        paymentMethod,
+        metadata: extra?.metadata,
+      },
+    );
+
+    return {
+      success: true,
+      balance: data?.available_deposit_balance || 0,
+    };
+  } catch (error) {
+    console.error("Error in deductFromDepositBalanceAsAdmin:", error);
+    return { success: false, balance: 0, error: "Unknown error occurred" };
+  }
+}
+
 // Create Stripe payment intent for wallet top-up
 export async function createTopUpPaymentIntent(
   userId: string,
