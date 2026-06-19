@@ -32,6 +32,8 @@ interface ContestPaymentSelectionProps {
   disabled?: boolean;
   isIncrease?: boolean;
   isDecrease?: boolean;
+  isAdminPayAsBrand?: boolean;
+  targetAdvertiserId?: string;
 }
 
 export function ContestPaymentSelection({
@@ -47,6 +49,8 @@ export function ContestPaymentSelection({
   disabled = false,
   isIncrease = false,
   isDecrease = false,
+  isAdminPayAsBrand = false,
+  targetAdvertiserId,
 }: ContestPaymentSelectionProps) {
   const baseBudgetInCents = Math.round(contestAmount * 100);
   const prizePoolInCents = Math.round((prizePoolAmount ?? contestAmount) * 100);
@@ -119,7 +123,9 @@ export function ContestPaymentSelection({
   useEffect(() => {
     const fetchBalance = async () => {
       try {
-        const response = await fetch("/api/payments/balance");
+        const response = isAdminPayAsBrand && targetAdvertiserId
+          ? await fetch(`/api/admin/advertisers/${targetAdvertiserId}/balance`)
+          : await fetch("/api/payments/balance");
         const data = await response.json();
         if (data.balance !== undefined) {
           setWalletBalance(data.balance);
@@ -132,13 +138,15 @@ export function ContestPaymentSelection({
     };
 
     fetchBalance();
-  }, []);
+  }, [isAdminPayAsBrand, targetAdvertiserId]);
 
   useEffect(() => {
     if (!isLoadingBalance && !defaultMethodSet) {
       let defaultMethod: "wallet" | "stripe" | "split" = "stripe";
 
-      if (walletBalance >= totalAmountInCents) {
+      if (isAdminPayAsBrand) {
+        defaultMethod = "wallet";
+      } else if (walletBalance >= totalAmountInCents) {
         defaultMethod = "wallet";
       } else if (walletBalance > 0) {
         defaultMethod = "split";
@@ -147,7 +155,13 @@ export function ContestPaymentSelection({
       setPaymentMethod(defaultMethod);
       setDefaultMethodSet(true);
     }
-  }, [isLoadingBalance, walletBalance, totalAmountInCents, defaultMethodSet]);
+  }, [
+    isLoadingBalance,
+    walletBalance,
+    totalAmountInCents,
+    defaultMethodSet,
+    isAdminPayAsBrand,
+  ]);
 
   useEffect(() => {
     if (paymentMethod === "split") {
@@ -196,7 +210,12 @@ export function ContestPaymentSelection({
     setIsProcessingWallet(true);
 
     try {
-      const response = await fetch("/api/payments/contest", {
+      const endpoint =
+        isAdminPayAsBrand && contestId
+          ? `/api/admin/contests/${contestId}/pay-as-brand`
+          : "/api/payments/contest";
+
+      const response = await fetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -284,7 +303,9 @@ export function ContestPaymentSelection({
   };
 
   const canUseWallet = walletBalance >= totalAmountInCents;
-  const needsStripe = paymentMethod === "stripe" || paymentMethod === "split";
+  const needsStripe =
+    !isAdminPayAsBrand &&
+    (paymentMethod === "stripe" || paymentMethod === "split");
   const stripeAmount = needsStripe
     ? totalAmountInCents - (paymentMethod === "split" ? walletAmount : 0)
     : 0;
@@ -434,7 +455,7 @@ export function ContestPaymentSelection({
             isDark ? "text-white" : "text-gray-900",
           )}
         >
-          Payment method
+          {isAdminPayAsBrand ? "Pay as brand (wallet only)" : "Payment method"}
         </Label>
 
         {isLoadingBalance && (
@@ -487,7 +508,7 @@ export function ContestPaymentSelection({
                       variant="secondary"
                       className="h-5 px-2 text-[10px] font-semibold uppercase tracking-wide"
                     >
-                      Instant
+                      {isAdminPayAsBrand ? "Brand wallet" : "Instant"}
                     </Badge>
                   )}
                 </div>
@@ -511,8 +532,12 @@ export function ContestPaymentSelection({
                 )}
               >
                 {canUseWallet
-                  ? "Deduct from your wallet balance immediately"
-                  : `Insufficient balance — need ${formatCurrencyFromCents(totalAmountInCents - walletBalance)} more`}
+                  ? isAdminPayAsBrand
+                    ? "Deduct from brand wallet balance immediately"
+                    : "Deduct from your wallet balance immediately"
+                  : isAdminPayAsBrand
+                    ? "Brand needs to top up wallet."
+                    : `Insufficient balance — need ${formatCurrencyFromCents(totalAmountInCents - walletBalance)} more`}
               </p>
             </div>
             {paymentMethod === "wallet" && canUseWallet && (
@@ -520,6 +545,8 @@ export function ContestPaymentSelection({
             )}
           </label>
 
+          {!isAdminPayAsBrand && (
+          <>
           <label
             htmlFor="stripe"
             className={methodCardClass(paymentMethod === "stripe", disabled)}
@@ -642,6 +669,8 @@ export function ContestPaymentSelection({
               )}
             </label>
           )}
+          </>
+          )}
         </RadioGroup>
       </div>
 
@@ -752,7 +781,9 @@ export function ContestPaymentSelection({
         {paymentMethod === "wallet" ? (
           <>
             <Wallet className="mr-2 h-4 w-4" />
-            Pay {formatCurrencyFromCents(totalAmountInCents)} from wallet
+            {isAdminPayAsBrand
+              ? `Pay ${formatCurrencyFromCents(totalAmountInCents)} as brand`
+              : `Pay ${formatCurrencyFromCents(totalAmountInCents)} from wallet`}
           </>
         ) : (
           <>

@@ -271,12 +271,27 @@ const extractRegionsAndCountries = (
 
 export default function CreateContestPage({
   user,
+  isAdmin = false,
+  targetAdvertiserId,
+  targetBrandCompanyName,
+  initialBrandPlanProductId,
+  initialBrandSubscriptionInfo,
 }: {
   user: UserResponse["data"]["user"];
+  isAdmin?: boolean;
+  targetAdvertiserId?: string;
+  targetBrandCompanyName?: string | null;
+  initialBrandPlanProductId?: string;
+  initialBrandSubscriptionInfo?: Record<string, unknown>;
 }) {
   // Add debugging logs at component initialization
   console.log("=== CreateContestPage Component Initialized ===");
   console.log("User:", user?.id);
+
+  const effectiveAdvertiserId = isAdmin ? targetAdvertiserId! : user!.id;
+  const contestsListPath = isAdmin
+    ? "/dashboard/admin/contests"
+    : "/dashboard/contests";
 
   const [step, setStep] = useState<Step>("basics");
   const [trackingLinksOpen, setTrackingLinksOpen] = useState(false);
@@ -567,7 +582,31 @@ export default function CreateContestPage({
   const searchParams = useSearchParams();
   const processedContestPaymentRef = useRef<string | null>(null);
   const supabase = createClient();
-  const [userPlan, setUserPlan] = useState<string | null>(null);
+
+  const adminUpdateContest = async (
+    contestIdToUpdate: string,
+    updateObj: Record<string, unknown>,
+  ) => {
+    const resp = await fetch(
+      `/api/admin/contests/${contestIdToUpdate}/update`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(updateObj),
+      },
+    );
+    if (!resp.ok) {
+      const j = await resp.json().catch(() => ({}));
+      throw new Error(j.error || "Admin update failed");
+    }
+  };
+
+  const [userPlan, setUserPlan] = useState<string | null>(
+    initialBrandPlanProductId ?? null,
+  );
+  const [brandSubscriptionInfo, setBrandSubscriptionInfo] = useState<
+    Record<string, unknown> | null
+  >(initialBrandSubscriptionInfo ?? null);
   const [totalPrizePool, setTotalPrizePool] = useState<number>(
     DEFAULT_TOTAL_PRIZE_POOL,
   ); // Default total prize pool
@@ -1132,14 +1171,12 @@ export default function CreateContestPage({
 
   // Helper function to create a draft contest in DB
   const createDraftContest = async (): Promise<string | null> => {
-    if (!user?.id) return null;
+    if (!effectiveAdvertiserId) return null;
 
     try {
-      const { data, error } = await supabase
-        .from("contests")
-        .insert({
-          advertiser_id: user.id,
-          title: title || "No Title - Draft",
+      const draftPayload = {
+        advertiserId: effectiveAdvertiserId,
+        title: title || "No Title - Draft",
           brief_html: "",
           brief_json: null,
           rules_html: "",
@@ -1215,6 +1252,28 @@ export default function CreateContestPage({
           content_type: null,
           bonus_details: null,
           max_earnings_per_creator: null,
+      };
+
+      if (isAdmin) {
+        const response = await fetch("/api/admin/contests", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(draftPayload),
+        });
+        const json = await response.json();
+        if (!response.ok) {
+          console.error("Error creating admin draft contest:", json);
+          return null;
+        }
+        return json.id;
+      }
+
+      const { advertiserId: _advertiserId, ...insertFields } = draftPayload;
+      const { data, error } = await supabase
+        .from("contests")
+        .insert({
+          advertiser_id: effectiveAdvertiserId,
+          ...insertFields,
         })
         .select()
         .single();
@@ -1253,14 +1312,19 @@ export default function CreateContestPage({
     }>,
   ) => {
     const currentContestId = contestId || draftId;
-    if (!user?.id || !currentContestId) return;
+    if (!effectiveAdvertiserId || !currentContestId) return;
 
     try {
+      if (isAdmin) {
+        await adminUpdateContest(currentContestId, updateObj);
+        return;
+      }
+
       const { error } = await supabase
         .from("contests")
         .update(updateObj)
         .eq("id", currentContestId)
-        .eq("advertiser_id", user.id);
+        .eq("advertiser_id", effectiveAdvertiserId);
 
       if (error) {
         console.error("Error updating contest in DB:", error);
@@ -2305,6 +2369,7 @@ export default function CreateContestPage({
           },
           body: JSON.stringify({
             maxActiveContests: planFeatures.maxActiveContests,
+            ...(isAdmin ? { advertiserId: effectiveAdvertiserId } : {}),
           }),
         });
 
@@ -2365,7 +2430,7 @@ export default function CreateContestPage({
         return;
       }
 
-      const userId = user?.id;
+      const userId = effectiveAdvertiserId;
       if (!isDraft && !userId) {
         setFormFeedback(
           "User information not available. Please refresh the page and try again.",
@@ -3466,10 +3531,30 @@ export default function CreateContestPage({
         region: buildRegionData(selectedRegions, selectedCountries),
         subscription_info_of_user: await (async () => {
           try {
+            if (isAdmin && brandSubscriptionInfo) {
+              return brandSubscriptionInfo;
+            }
+
+            if (isAdmin && userPlan) {
+              const { subscriptionPlans } =
+                await import("@/constants/subscriptionPlans");
+              const plan =
+                subscriptionPlans.find((p) => p.id === userPlan) ||
+                subscriptionPlans[0];
+              return {
+                product_id: plan.id,
+                price_id: plan.prices.monthly.id,
+                subscription_id: "no-subscription",
+                last_synced: new Date().toISOString(),
+              };
+            }
+
             // Get user's subscription info using new system
             const { getUserSubscription } =
               await import("@/lib/subscription-utils-client");
-            const subscription = await getUserSubscription(user?.id || "");
+            const subscription = await getUserSubscription(
+              effectiveAdvertiserId || "",
+            );
 
             if (subscription && subscription.subscription_info) {
               return subscription.subscription_info;
@@ -3543,24 +3628,56 @@ export default function CreateContestPage({
         console.log(
           `Updating existing contest: ${existingContestId} (contestId: ${contestId}, draftId: ${draftId})`,
         );
-        const response = await supabase
-          .from("contests")
-          .update(contestData)
-          .eq("id", existingContestId)
-          .select();
-        responseData = response.data;
-        responseError = response.error;
+        if (isAdmin) {
+          const {
+            advertiser_id: _advertiserId,
+            submitted_for_approval_at: _submitted,
+            ...adminUpdatePayload
+          } = contestData;
+          await adminUpdateContest(existingContestId!, adminUpdatePayload);
+          responseData = [{ id: existingContestId }];
+        } else {
+          const response = await supabase
+            .from("contests")
+            .update(contestData)
+            .eq("id", existingContestId)
+            .select();
+          responseData = response.data;
+          responseError = response.error;
+        }
         console.log("Update response:", responseData);
       } else {
         console.log(
           "Creating new campaign (no existing contestId or draftId found)",
         );
-        const response = await supabase
-          .from("contests")
-          .insert([contestData])
-          .select(); // insert expects an array
-        responseData = response.data;
-        responseError = response.error;
+        if (isAdmin) {
+          const {
+            advertiser_id: _advertiserId,
+            submitted_for_approval_at: _submitted,
+            ...createPayload
+          } = contestData;
+          const resp = await fetch("/api/admin/contests", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              advertiserId: effectiveAdvertiserId,
+              ...createPayload,
+            }),
+          });
+          const json = await resp.json();
+          if (!resp.ok) {
+            responseError = { message: json.error || "Admin create failed" };
+          } else {
+            responseData = [{ id: json.id }];
+          }
+        } else {
+          const response = await supabase
+            .from("contests")
+            .insert([contestData])
+            .select(); // insert expects an array
+          responseData = response.data;
+          responseError = response.error;
+        }
         console.log("Insert response:", responseData);
       }
 
@@ -3612,7 +3729,7 @@ export default function CreateContestPage({
           description: "Your campaign draft has been saved successfully!",
         });
         // Redirect to contests list page to see the draft among all contests
-        router.push("/dashboard/contests");
+        router.push(contestsListPath);
       }
     } catch (err: any) {
       console.error("Error submitting contest:", err);
@@ -3702,7 +3819,11 @@ export default function CreateContestPage({
           title: "Campaign submitted!",
           description: "Your campaign is now pending for admin review.",
         });
-        router.push(`/dashboard/contests/${contestId}`);
+        router.push(
+          isAdmin
+            ? `/dashboard/admin/contests/${contestId}`
+            : `/dashboard/contests/${contestId}`,
+        );
       } catch (error: any) {
         console.error("Fatal error submitting contest for approval:", error);
         setPaymentProcessingPhase(null);
@@ -3713,7 +3834,11 @@ export default function CreateContestPage({
           duration: TOAST_DURATION_LONG,
         });
         // Still redirect to campaign page so user can retry submission manually
-        router.push(`/dashboard/contests/${contestId}`);
+        router.push(
+          isAdmin
+            ? `/dashboard/admin/contests/${contestId}`
+            : `/dashboard/contests/${contestId}`,
+        );
         setIsLoading(false);
       }
     };
@@ -4119,7 +4244,7 @@ export default function CreateContestPage({
       // Prepare basics data - only include fields that have actual values
       // to prevent overwriting existing data with empty values
       const basicsData: Record<string, any> = {
-        advertiser_id: user?.id,
+        advertiser_id: effectiveAdvertiserId,
         title,
         platform,
         category: category || null,
@@ -4388,7 +4513,26 @@ export default function CreateContestPage({
       }
 
       if (!currentContestId) {
-        // Create new draft contest
+        if (isAdmin) {
+          const { advertiser_id: _a, ...createPayload } = basicsData;
+          const resp = await fetch("/api/admin/contests", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              advertiserId: effectiveAdvertiserId,
+              ...createPayload,
+            }),
+          });
+          const json = await resp.json();
+          if (!resp.ok) {
+            console.error("Error creating admin basics draft:", json);
+            return;
+          }
+          setContestId(json.id);
+          setDraftId(json.id);
+          return json.id;
+        }
+
         const { data, error } = await supabase
           .from("contests")
           .insert(basicsData)
@@ -4408,7 +4552,7 @@ export default function CreateContestPage({
           .from("contests")
           .select("contest_based_details")
           .eq("id", currentContestId)
-          .eq("advertiser_id", user?.id)
+          .eq("advertiser_id", effectiveAdvertiserId)
           .maybeSingle();
 
         // Preserve existing contest_based_details when updating
@@ -4422,13 +4566,18 @@ export default function CreateContestPage({
           };
         }
 
-        const { error } = await supabase
-          .from("contests")
-          .update(basicsData)
-          .eq("id", currentContestId)
-          .eq("advertiser_id", user?.id);
-        if (error) {
-          console.error("Error updating basics draft:", error);
+        const { advertiser_id: _a, ...updatePayload } = basicsData;
+        if (isAdmin) {
+          await adminUpdateContest(currentContestId, updatePayload);
+        } else {
+          const { error } = await supabase
+            .from("contests")
+            .update(basicsData)
+            .eq("id", currentContestId)
+            .eq("advertiser_id", effectiveAdvertiserId);
+          if (error) {
+            console.error("Error updating basics draft:", error);
+          }
         }
         return currentContestId;
       }
@@ -4473,7 +4622,7 @@ export default function CreateContestPage({
         .from("contests")
         .select("contest_based_details")
         .eq("id", currentContestId)
-        .eq("advertiser_id", user?.id)
+        .eq("advertiser_id", effectiveAdvertiserId)
         .maybeSingle();
 
       const existingDetails = existingContest?.contest_based_details || {};
@@ -4664,17 +4813,26 @@ export default function CreateContestPage({
           twitter_campaign: updatedTwitterCampaign,
         };
 
-        const { error } = await supabase
-          .from("contests")
-          .update({
+        if (!currentContestId) return;
+
+        if (isAdmin) {
+          await adminUpdateContest(currentContestId, {
             contest_based_details: updatedDetails,
             moderation_status: "draft",
-          })
-          .eq("id", currentContestId)
-          .eq("advertiser_id", user?.id);
+          });
+        } else {
+          const { error } = await supabase
+            .from("contests")
+            .update({
+              contest_based_details: updatedDetails,
+              moderation_status: "draft",
+            })
+            .eq("id", currentContestId)
+            .eq("advertiser_id", effectiveAdvertiserId);
 
-        if (error) {
-          console.error("Error saving CPM draft:", error);
+          if (error) {
+            console.error("Error saving CPM draft:", error);
+          }
         }
       }
     } catch (error) {
@@ -4875,26 +5033,37 @@ export default function CreateContestPage({
 
   // New function to get the current user's subscription plan
   const getUserPlan = async () => {
-    if (!user) return;
+    if (!user && !isAdmin) return;
 
     try {
-      // Use getUser() instead of relying on session data
-      const { data: authData, error: authError } =
-        await supabase.auth.getUser();
-
-      if (authError || !authData.user) {
-        console.error("Authentication error in getUserPlan:", authError);
-        setUserPlan(subscriptionPlans[0].id); // Default to EXPLORER plan
+      const planUserId = isAdmin ? effectiveAdvertiserId : user?.id;
+      if (!planUserId) {
+        setUserPlan(subscriptionPlans[0].id);
         return;
       }
 
-      const userId = authData.user.id;
+      if (isAdmin) {
+        const res = await fetch(`/api/admin/advertisers/${planUserId}/summary`);
+        const json = await res.json();
+        if (res.ok && json.plan?.productId) {
+          setUserPlan(json.plan.productId);
+          if (json.subscriptionInfo) {
+            setBrandSubscriptionInfo(json.subscriptionInfo);
+          }
+          return;
+        }
+        console.warn("Admin brand plan fetch failed, using server-provided plan");
+        if (initialBrandPlanProductId) {
+          setUserPlan(initialBrandPlanProductId);
+          return;
+        }
+      }
 
       // Use new subscription utilities to get user's subscription
       try {
         const { getUserSubscription } =
           await import("@/lib/subscription-utils-client");
-        const subscription = await getUserSubscription(userId);
+        const subscription = await getUserSubscription(planUserId);
 
         if (subscription && subscription.product_id) {
           // Map real Stripe product ID to plan name for UI compatibility
@@ -4970,8 +5139,12 @@ export default function CreateContestPage({
     setStep("prize");
   };
 
-  const buildDraftReturnUrl = (contestIdToLoad: string) =>
-    `${window.location.pathname}?draft=${contestIdToLoad}&step=prize`;
+  const buildDraftReturnUrl = (contestIdToLoad: string) => {
+    if (isAdmin && targetAdvertiserId) {
+      return `${window.location.pathname}?advertiserId=${targetAdvertiserId}&draft=${contestIdToLoad}&step=prize`;
+    }
+    return `${window.location.pathname}?draft=${contestIdToLoad}&step=prize`;
+  };
 
   const reloadContestById = async (contestIdToLoad: string) => {
     try {
@@ -4984,7 +5157,7 @@ export default function CreateContestPage({
         .from("contests")
         .select("*")
         .eq("id", contestIdToLoad)
-        .eq("advertiser_id", authData.user.id)
+        .eq("advertiser_id", effectiveAdvertiserId)
         .single();
 
       if (error || !contest) {
@@ -5010,7 +5183,7 @@ export default function CreateContestPage({
         return;
       }
 
-      const userId = authData.user.id;
+      const userId = isAdmin ? effectiveAdvertiserId : authData.user.id;
 
       // Allow pre-selecting campaign type from URL.
       const urlParams = new URLSearchParams(window.location.search);
@@ -5359,7 +5532,7 @@ export default function CreateContestPage({
               },
             })
             .eq("id", draft.id)
-            .eq("advertiser_id", user?.id);
+            .eq("advertiser_id", effectiveAdvertiserId);
         }
       }
 
@@ -6923,8 +7096,9 @@ export default function CreateContestPage({
                       </div>
 
                       {/* Enhanced Upgrade CTA for lower tier plans */}
-                      {(currentPlan.price === 0 ||
-                        planFeatures.commissionPercentage >= 20) && (
+                      {!isAdmin &&
+                        (currentPlan.price === 0 ||
+                          planFeatures.commissionPercentage >= 20) && (
                         <div className="rounded-2xl py-6 px-4 mt-4 border border-gray-300">
                           <div className="flex items-start justify-between gap-6">
                             <div className="flex-1 min-w-0">
@@ -9377,13 +9551,13 @@ export default function CreateContestPage({
   // Handler for Save as Draft in modal
   const handleSaveDraftAndBack = async () => {
     await handleSaveDraft();
-    router.push("/dashboard/contests");
+    router.push(contestsListPath);
   };
 
   // Handler for Delete in modal
   const handleDeleteAndBack = async () => {
     if (!contestId) {
-      router.push("/dashboard/contests");
+      router.push(contestsListPath);
       return;
     }
     setIsDeleting(true);
@@ -9395,7 +9569,7 @@ export default function CreateContestPage({
       console.error("Error deleting campaign and assets:", err);
     } finally {
       setIsDeleting(false);
-      router.push("/dashboard/contests");
+      router.push(contestsListPath);
     }
   };
 
@@ -9697,8 +9871,14 @@ export default function CreateContestPage({
           </Button>
         </div>
         <div className="text-center">
+          {isAdmin && (
+            <div className="mb-3 inline-flex items-center rounded-full border border-amber-500/40 bg-amber-500/10 px-4 py-1.5 text-sm font-medium text-amber-700 dark:text-amber-300">
+              ADMIN MODE — creating for{" "}
+              {targetBrandCompanyName || "selected brand"}
+            </div>
+          )}
           <h1 className="text-3xl md:text-4xl font-bold text-foreground mb-2">
-            Create New Campaign
+            {isAdmin ? "Create Campaign for Brand" : "Create New Campaign"}
           </h1>
           <p className="text-muted-foreground text-lg">
             Build your campaign in 4 simple steps
@@ -10132,7 +10312,7 @@ export default function CreateContestPage({
                           )}
                           {!hasCpmAccess && !isDisabledForFormat && (
                             <div className="mt-2 flex items-center gap-2">
-                              {isFreePlan && (
+                              {isFreePlan && !isAdmin && (
                                 <button
                                   className={cn(
                                     "text-white text-md px-3 rounded-full py-1 h-8",
@@ -10214,7 +10394,7 @@ export default function CreateContestPage({
                             </p>
                             {!hasCpmAccess && (
                               <div className="mt-2 flex items-center gap-2">
-                                {isFreePlan && (
+                                {isFreePlan && !isAdmin && (
                                   <button
                                     className={cn(
                                       "text-white text-md px-3 rounded-full py-1 h-8",
@@ -10291,7 +10471,7 @@ export default function CreateContestPage({
                             </p>
                             {!hasCpmAccess && (
                               <div className="mt-2 flex items-center gap-2">
-                                {isFreePlan && (
+                                {isFreePlan && !isAdmin && (
                                   <button
                                     type="button"
                                     className={cn(
@@ -13438,10 +13618,16 @@ export default function CreateContestPage({
                 }
                 contestTitle={title || "Untitled Campaign"}
                 contestId={draftId || undefined}
-                returnPath="/dashboard/contests/create"
+                returnPath={
+                  isAdmin && targetAdvertiserId
+                    ? `/dashboard/admin/contests/create/wizard?advertiserId=${targetAdvertiserId}`
+                    : "/dashboard/contests/create"
+                }
                 commissionPercentage={
                   getPlanFeatures(userPlan).commissionPercentage
                 }
+                isAdminPayAsBrand={isAdmin}
+                targetAdvertiserId={targetAdvertiserId}
           onPaymentSuccess={handlePaymentSuccess}
           onPaymentError={handlePaymentError}
           disabled={isLoading}

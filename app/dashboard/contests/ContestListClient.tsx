@@ -408,6 +408,14 @@ function brandListFilterPhrase(
   return brandTabFilterPhrase(tab);
 }
 
+function canPublishContestFromList(
+  moderationStatus: string,
+  isAdminView: boolean,
+): boolean {
+  if (moderationStatus === "approved") return true;
+  return isAdminView && moderationStatus === "pending_approval";
+}
+
 const getBudgetTrackerValues = (
   totalBudget: number,
   budgetSpent?: number | null,
@@ -2157,7 +2165,10 @@ export function ContestListClient({
             </div>
 
             <div className="pointer-events-auto relative z-[2] flex gap-2 items-center">
-              {contest.moderation_status === "approved" ? (
+              {canPublishContestFromList(
+                contest.moderation_status,
+                isAdminView,
+              ) ? (
                 <>
                   <button
                     className={cn(
@@ -2990,7 +3001,10 @@ export function ContestListClient({
               : "flex-col w-32 sm:w-40",
           )}
         >
-          {contest.moderation_status === "approved" ? (
+          {canPublishContestFromList(
+            contest.moderation_status,
+            isAdminView,
+          ) ? (
             <>
               <button
                 className={cn(

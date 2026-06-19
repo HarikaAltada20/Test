@@ -55,6 +55,9 @@ export async function POST(
       "payout_adjustment_percentage",
       "payout_adjustment_mode",
       "trust_score",
+      "platform",
+      "contest_format",
+      "subscription_info_of_user",
     ]);
 
     const updateData: Record<string, any> = {};

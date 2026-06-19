@@ -259,6 +259,38 @@ const plan = getSubscriptionPlanById(subscription.product_id);
   return plan?.features || null;
 }
 
+/** Admin/service-role plan lookup for operating on another user's account. */
+export async function getUserPlanFeaturesAsAdmin(
+  userId: string,
+): Promise<SubscriptionPlan["features"] | null> {
+  const supabase = createAdminClient();
+  const { data, error } = await supabase
+    .from("advertiser_profiles")
+    .select("subscription_info")
+    .eq("id", userId)
+    .maybeSingle();
+
+  if (error) {
+    console.error("Error fetching brand subscription (admin):", error);
+  }
+
+  const productId = data?.subscription_info?.product_id;
+  if (productId) {
+    const plan = getSubscriptionPlanById(productId);
+    if (plan?.features) return plan.features;
+  }
+
+  const explorerPlan = getSubscriptionPlanByName("EXPLORER");
+  return explorerPlan?.features || null;
+}
+
+export function getPlanFeaturesFromProductId(
+  productId: string | null | undefined,
+): SubscriptionPlan["features"] | null {
+  if (!productId) return null;
+  return getSubscriptionPlanById(productId)?.features ?? null;
+}
+
 function getStripeCustomerErrorMessage(error: unknown): string | null {
   if (typeof error !== "object" || error === null) {
     return null;

@@ -4,7 +4,12 @@ import {
   type ContestForChargeableBudget,
 } from "@/lib/contest-chargeable-budget";
 import type { PaymentDetails } from "@/lib/payment-utils";
-import { getUserPlanFeatures } from "@/lib/subscription-utils";
+import {
+  getPlanFeaturesFromProductId,
+  getUserPlanFeatures,
+  getUserPlanFeaturesAsAdmin,
+} from "@/lib/subscription-utils";
+import type { SubscriptionPlan } from "./subscription-types";
 
 export { getChargeableBudgetCents };
 
@@ -30,7 +35,27 @@ export type ExpectedContestPayment = {
 export type ResolveExpectedContestPaymentOptions = {
   isIncrease?: boolean;
   isDecrease?: boolean;
+  /** Use admin client when resolving plan (pay-as-brand / cross-user). */
+  planLookup?: "session" | "admin";
 };
+
+async function resolvePlanFeaturesForPayment(
+  contest: ContestForPaymentValidation,
+  userId: string,
+  planLookup: "session" | "admin" = "session",
+): Promise<SubscriptionPlan["features"] | null> {
+  if (planLookup === "admin") {
+    return getUserPlanFeaturesAsAdmin(userId);
+  }
+
+  const snapshotProductId = (
+    contest.subscription_info_of_user as { product_id?: string } | null
+  )?.product_id;
+  const fromSnapshot = getPlanFeaturesFromProductId(snapshotProductId);
+  if (fromSnapshot) return fromSnapshot;
+
+  return getUserPlanFeatures(userId);
+}
 
 export class ContestPaymentValidationError extends Error {
   constructor(message: string) {
@@ -93,7 +118,11 @@ export async function resolveExpectedContestPayment(
       );
     }
 
-    const planFeatures = await getUserPlanFeatures(userId);
+    const planFeatures = await resolvePlanFeaturesForPayment(
+      contest,
+      userId,
+      options.planLookup ?? "session",
+    );
     if (!planFeatures) {
       throw new ContestPaymentValidationError(
         "Failed to resolve subscription plan for payment",
