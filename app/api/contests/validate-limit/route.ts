@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/utils/supabase/server";
-import { canCreateNewContest } from "@/lib/contest-utils";
+import { canCreateNewContest, canCreateNewContestAsAdmin } from "@/lib/contest-utils";
+import { verifyAdminAccess } from "@/utils/admin-auth";
 
 export async function POST(request: NextRequest) {
   try {
@@ -20,7 +21,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { maxActiveContests, contestId } = body;
+    const { maxActiveContests, contestId, advertiserId } = body;
 
     if (!maxActiveContests || typeof maxActiveContests !== 'number') {
       return NextResponse.json(
@@ -29,9 +30,27 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    let targetUserId = user.id;
+    if (advertiserId) {
+      const { isAdmin } = await verifyAdminAccess();
+      if (!isAdmin) {
+        return NextResponse.json(
+          { error: "Admin access required" },
+          { status: 403 }
+        );
+      }
+      targetUserId = advertiserId;
+    }
+
     // Check if user can create a new contest
     // If contestId is provided (for edit), exclude it from the active count
-    const result = await canCreateNewContest(user.id, maxActiveContests, contestId);
+    const result = advertiserId
+      ? await canCreateNewContestAsAdmin(
+          targetUserId,
+          maxActiveContests,
+          contestId,
+        )
+      : await canCreateNewContest(targetUserId, maxActiveContests, contestId);
 
     return NextResponse.json(result);
   } catch (error: any) {

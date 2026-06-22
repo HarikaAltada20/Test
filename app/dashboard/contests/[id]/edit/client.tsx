@@ -13968,6 +13968,8 @@ export default function EditContestPage({
                     ? contestCommissionRate
                     : (getPlanFeatures(userPlan).commissionPercentage ?? 0)
                 }
+                isAdminPayAsBrand={isAdmin}
+                targetAdvertiserId={contest?.advertiser_id}
             onPaymentSuccess={handlePaymentSuccess}
             onPaymentError={handlePaymentError}
             disabled={isSubmitting}
