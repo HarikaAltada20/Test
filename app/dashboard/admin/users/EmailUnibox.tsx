@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   Select,
@@ -23,12 +22,16 @@ import type {
   UniboxMessage,
   UniboxThreadListItem,
 } from "@/lib/admin-email/unibox";
-import { decodeInboundBodyText, extractReplyBodyText } from "@/lib/email/inbound-email-parse";
+import {
+  decodeInboundBodyText,
+  extractReplyBodyText,
+} from "@/lib/email/inbound-email-parse";
 import { useToast } from "@/hooks/use-toast";
 import {
   EmailUniboxDetailSkeleton,
   EmailUniboxThreadSkeleton,
 } from "./EmailSkeletons";
+import { EmailReplyComposer } from "./EmailReplyComposer";
 import {
   Loader2,
   Mail,
@@ -36,7 +39,6 @@ import {
   RefreshCw,
   Reply,
   Search,
-  Send,
   Trash2,
 } from "lucide-react";
 
@@ -286,7 +288,13 @@ export function EmailUnibox({ campaigns, isDark, isActive = true }: Props) {
       clearTimeout(firstSync);
       clearInterval(syncInterval);
     };
-  }, [isActive, syncInboundInBackground, loadThreads, loadThreadDetail, selectedId]);
+  }, [
+    isActive,
+    syncInboundInBackground,
+    loadThreads,
+    loadThreadDetail,
+    selectedId,
+  ]);
 
   useEffect(() => {
     if (!isActive) return;
@@ -408,7 +416,8 @@ export function EmailUnibox({ campaigns, isDark, isActive = true }: Props) {
   };
 
   const handleSendReply = async () => {
-    if (!selectedId || !replyText.trim()) return;
+    const plain = replyText.replace(/<[^>]*>/g, "").trim();
+    if (!selectedId || !plain) return;
     setSendingReply(true);
     try {
       const res = await fetch(`/api/admin/email-unibox/${selectedId}/reply`, {
@@ -438,6 +447,16 @@ export function EmailUnibox({ campaigns, isDark, isActive = true }: Props) {
   const displayMessages =
     messages.length > 0 ? messages : latestMessage ? [latestMessage] : [];
   const headerMessage = latestMessage ?? displayMessages[0] ?? null;
+
+  const replyFromEmail =
+    [...messages].reverse().find((m) => m.direction === "outbound")
+      ?.fromEmail ??
+    messages.find((m) => m.direction === "inbound")?.toEmail ??
+    "";
+
+  const replySubject = selectedThread?.subject?.startsWith("Re:")
+    ? (selectedThread.subject ?? "No subject")
+    : `Re: ${selectedThread?.subject ?? "No subject"}`;
 
   return (
     <div className="flex flex-col gap-4 min-h-0 flex-1 h-full">
@@ -602,7 +621,9 @@ export function EmailUnibox({ campaigns, isDark, isActive = true }: Props) {
                             <span
                               className={cn(
                                 "text-sm text-gray-900 truncate",
-                                !thread.isRead ? "font-semibold" : "font-medium",
+                                !thread.isRead
+                                  ? "font-semibold"
+                                  : "font-medium",
                               )}
                             >
                               {label}
@@ -677,14 +698,8 @@ export function EmailUnibox({ campaigns, isDark, isActive = true }: Props) {
           ) : detailLoading ? (
             <EmailUniboxDetailSkeleton isDark={isDark} />
           ) : selectedThread ? (
-            <div
-              className={cn(
-                "min-h-0 h-full max-h-full overflow-hidden grid",
-                replyOpen
-                  ? "grid-rows-[auto_auto_minmax(0,1fr)_auto]"
-                  : "grid-rows-[auto_auto_minmax(0,1fr)]",
-              )}
-            >
+            <div className="relative min-h-0 h-full max-h-full overflow-hidden">
+              <div className="min-h-0 h-full max-h-full overflow-hidden grid grid-rows-[auto_auto_minmax(0,1fr)]">
               <div className="flex items-center justify-between border-b border-gray-100 px-6 py-3">
                 <div className="flex items-center gap-3 min-w-0">
                   <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-purple-600 text-sm font-semibold text-white">
@@ -771,7 +786,10 @@ export function EmailUnibox({ campaigns, isDark, isActive = true }: Props) {
                   <button
                     type="button"
                     className="rounded-md p-2 text-gray-500 hover:bg-gray-100 hover:text-gray-700"
-                    onClick={() => setReplyOpen(true)}
+                    onClick={() => {
+                      setReplyText("");
+                      setReplyOpen(true);
+                    }}
                   >
                     <Reply className="h-5 w-5" />
                   </button>
@@ -779,100 +797,86 @@ export function EmailUnibox({ campaigns, isDark, isActive = true }: Props) {
               </div>
 
               <div className="min-h-0 overflow-y-auto overflow-x-hidden px-6 py-5 pb-24 unibox-scrollbar space-y-8">
-                {displayMessages.map((message, index) => (
-                  <div
-                    key={message.id}
-                    className={cn(
-                      "space-y-3",
-                      index > 0 && "border-t border-gray-100 pt-6",
-                    )}
-                  >
-                    {headerMessage && message.id !== headerMessage.id && (
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="text-md text-gray-500 space-y-1 min-w-0">
-                          <p className="truncate">
-                            <span className="font-medium text-gray-800">
-                              From:
-                            </span>{" "}
-                            {formatEmailAddress(
-                              message.fromEmail,
-                              message.fromName,
-                            )}
-                          </p>
-                          <p className="truncate">
-                            <span className="font-medium text-gray-800">To:</span>{" "}
-                            {formatEmailAddress(
-                              message.toEmail,
-                              message.toName,
-                            )}
-                          </p>
-                        </div>
-                        <div className="flex items-center gap-2 shrink-0">
-                          {message.direction === "inbound" && (
-                            <span className="rounded-full bg-green-100 px-2 py-0.5 text-[10px] font-semibold uppercase text-green-700">
-                              Reply
-                            </span>
-                          )}
-                          <span className="text-xs text-gray-400 whitespace-nowrap">
-                            {formatDate(message.createdAt)}
-                          </span>
-                        </div>
-                      </div>
-                    )}
-                    <MessageBody message={message} />
-                    {message.attachments.length > 0 && (
-                      <div className="space-y-2 pt-2">
-                        {message.attachments.map((att) => (
-                          <div
-                            key={att.id}
-                            className="flex items-center justify-between rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 text-sm"
-                          >
-                            <span className="font-medium text-gray-800">
-                              {att.filename}
-                            </span>
-                            {att.sizeBytes != null && (
-                              <span className="text-xs text-gray-500">
-                                {(att.sizeBytes / 1024 / 1024).toFixed(1)} MB
+                  {displayMessages.map((message, index) => (
+                    <div
+                      key={message.id}
+                      className={cn(
+                        "space-y-3",
+                        index > 0 && "border-t border-gray-100 pt-6",
+                      )}
+                    >
+                      {headerMessage && message.id !== headerMessage.id && (
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="text-md text-gray-500 space-y-1 min-w-0">
+                            <p className="truncate">
+                              <span className="font-medium text-gray-800">
+                                From:
+                              </span>{" "}
+                              {formatEmailAddress(
+                                message.fromEmail,
+                                message.fromName,
+                              )}
+                            </p>
+                            <p className="truncate">
+                              <span className="font-medium text-gray-800">
+                                To:
+                              </span>{" "}
+                              {formatEmailAddress(
+                                message.toEmail,
+                                message.toName,
+                              )}
+                            </p>
+                          </div>
+                          <div className="flex items-center gap-2 shrink-0">
+                            {message.direction === "inbound" && (
+                              <span className="rounded-full bg-green-100 px-2 py-0.5 text-[10px] font-semibold uppercase text-green-700">
+                                Reply
                               </span>
                             )}
+                            <span className="text-xs text-gray-400 whitespace-nowrap">
+                              {formatDate(message.createdAt)}
+                            </span>
                           </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                ))}
+                        </div>
+                      )}
+                      <MessageBody message={message} />
+                      {message.attachments.length > 0 && (
+                        <div className="space-y-2 pt-2">
+                          {message.attachments.map((att) => (
+                            <div
+                              key={att.id}
+                              className="flex items-center justify-between rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 text-sm"
+                            >
+                              <span className="font-medium text-gray-800">
+                                {att.filename}
+                              </span>
+                              {att.sizeBytes != null && (
+                                <span className="text-xs text-gray-500">
+                                  {(att.sizeBytes / 1024 / 1024).toFixed(1)} MB
+                                </span>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+              </div>
               </div>
 
               {replyOpen && (
-                <div className="border-t border-gray-100 bg-gray-50 px-6 py-4 space-y-3">
-                  <Textarea
-                    className="min-h-[120px] resize-none border-gray-200 bg-white"
-                    placeholder="Write your reply..."
-                    value={replyText}
-                    onChange={(e) => setReplyText(e.target.value)}
-                    rows={4}
-                  />
-                  <div className="flex justify-end gap-2">
-                    <Button
-                      variant="outline"
-                      onClick={() => setReplyOpen(false)}
-                    >
-                      Cancel
-                    </Button>
-                    <Button
-                      className="bg-purple-600 hover:bg-purple-700"
-                      disabled={sendingReply || !replyText.trim()}
-                      onClick={handleSendReply}
-                    >
-                      {sendingReply ? (
-                        <Loader2 className="h-4 w-4 animate-spin mr-1" />
-                      ) : (
-                        <Send className="h-4 w-4 mr-1" />
-                      )}
-                      Send Reply
-                    </Button>
-                  </div>
-                </div>
+                <EmailReplyComposer
+                  className="absolute inset-0 z-10"
+                  toEmail={selectedThread.contactEmail}
+                  toName={selectedThread.contactName}
+                  fromEmail={replyFromEmail}
+                  subject={replySubject}
+                  value={replyText}
+                  onChange={setReplyText}
+                  onClose={() => setReplyOpen(false)}
+                  onSend={() => void handleSendReply()}
+                  sending={sendingReply}
+                />
               )}
             </div>
           ) : null}

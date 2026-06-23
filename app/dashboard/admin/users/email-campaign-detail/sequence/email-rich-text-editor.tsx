@@ -42,6 +42,8 @@ import {
   ListOrdered,
   Loader2,
   Paperclip,
+  Send,
+  Type,
   Underline,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -74,19 +76,29 @@ type EditorMode = "visual" | "source" | "preview";
 type Props = {
   value: string;
   onChange: (html: string) => void;
-  onSave: () => void;
+  onSave?: () => void;
+  onSend?: () => void;
   saving?: boolean;
+  sending?: boolean;
+  sendDisabled?: boolean;
   minHeight?: number;
   readOnly?: boolean;
+  layout?: "campaign" | "reply";
+  placeholder?: string;
 };
 
 export function EmailRichTextEditor({
   value,
   onChange,
   onSave,
+  onSend,
   saving = false,
+  sending = false,
+  sendDisabled = false,
   minHeight = 280,
   readOnly = false,
+  layout = "campaign",
+  placeholder = "Write your email content...",
 }: Props) {
   const editorRef = useRef<HTMLDivElement>(null);
   const savedRangeRef = useRef<Range | null>(null);
@@ -97,7 +109,7 @@ export function EmailRichTextEditor({
   const imageInputRef = useRef<HTMLInputElement>(null);
   const [mode, setMode] = useState<EditorMode>("visual");
   const [fontFamily, setFontFamily] = useState(FONTS[0].value);
-  const [fontSize, setFontSize] = useState("14");
+  const [fontSize, setFontSize] = useState(layout === "reply" ? "16" : "14");
   const [sourceHtml, setSourceHtml] = useState(value);
   const [linkModalOpen, setLinkModalOpen] = useState(false);
   const [linkDefaultText, setLinkDefaultText] = useState("");
@@ -466,9 +478,17 @@ export function EmailRichTextEditor({
     value.includes("<") ? value : `<p>${value.replace(/\n/g, "<br/>")}</p>`;
 
   const toolbarDisabled = readOnly || mode === "preview";
+  const isReply = layout === "reply";
 
   return (
-    <div className="rounded-lg border border-gray-300 overflow-hidden flex flex-col flex-1 min-h-[320px]">
+    <div
+      className={cn(
+        "flex h-full min-h-0 flex-col overflow-hidden",
+        isReply
+          ? "rounded-lg border border-gray-200"
+          : "rounded-lg border border-gray-300 min-h-[320px] flex-1",
+      )}
+    >
       <input
         ref={fileInputRef}
         type="file"
@@ -510,20 +530,21 @@ export function EmailRichTextEditor({
             setSourceHtml(e.target.value);
             onChange(e.target.value);
           }}
-          className="border-0 rounded-none resize-none focus-visible:ring-0 flex-1 font-mono text-sm"
-          style={{ minHeight }}
+          className="min-h-0 flex-1 border-0 rounded-none resize-none focus-visible:ring-0 font-mono text-sm"
+          style={{ minHeight: isReply ? undefined : minHeight }}
           spellCheck={false}
           readOnly={readOnly}
         />
       )}
 
       {mode === "visual" && (
-        <>
+        <div className="flex min-h-0 flex-1 flex-col">
           <style>{`
             .email-rich-editor:empty::before {
               content: attr(data-placeholder);
               color: #9ca3af;
               pointer-events: none;
+              ${isReply ? "font-style: italic;" : ""}
             }
             .email-rich-editor ul {
               list-style-type: disc;
@@ -569,14 +590,21 @@ export function EmailRichTextEditor({
                 e.preventDefault();
               }
             }}
-            className="email-rich-editor flex-1 overflow-y-auto p-4 text-sm text-gray-800 outline-none focus:ring-0"
-            style={{ minHeight, fontFamily, fontSize: `${fontSize}px` }}
-            data-placeholder="Write your email content..."
+            className={cn(
+              "email-rich-editor min-h-0 flex-1 overflow-y-auto p-4 text-sm text-gray-800 outline-none focus:ring-0",
+              isReply && "px-4 py-3",
+            )}
+            style={{
+              minHeight: isReply ? undefined : minHeight,
+              fontFamily,
+              fontSize: `${fontSize}px`,
+            }}
+            data-placeholder={placeholder}
           />
-        </>
+        </div>
       )}
 
-      <div className="border-t border-gray-200 bg-white px-2 py-2 space-y-1.5">
+      <div className="shrink-0 border-t border-gray-200 bg-white px-2 py-2 space-y-1.5">
         <div className="flex flex-wrap items-center gap-0.5">
           <ToolbarBtn
             icon={<Bold className="h-4 w-4" />}
@@ -670,34 +698,59 @@ export function EmailRichTextEditor({
         </div>
 
         <div className="flex flex-wrap items-center gap-0.5">
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <button
-                type="button"
-                disabled={toolbarDisabled}
-                className={cn(
-                  "h-8 w-8 rounded flex items-center justify-center text-gray-600",
-                  toolbarDisabled
-                    ? "opacity-40 cursor-not-allowed"
-                    : "hover:bg-gray-100",
-                )}
-                title="Insert variable"
-              >
-                <Braces className="h-4 w-4" />
-              </button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="start" className="max-h-60 overflow-y-auto">
-              {MERGE_TAGS.map((tag) => (
-                <DropdownMenuItem
-                  key={tag.value}
-                  onClick={() => insertHtml(tag.value)}
+          {isReply && onSend && (
+            <Button
+              type="button"
+              className="mr-2 h-9 rounded-full bg-[#B794F4] px-5 text-white hover:bg-[#9F7AEA]"
+              onClick={onSend}
+              disabled={sending || sendDisabled}
+            >
+              {sending ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <Send className="mr-2 h-4 w-4" />
+              )}
+              Send
+            </Button>
+          )}
+
+          {isReply ? (
+            <ToolbarBtn
+              icon={<Type className="h-4 w-4" />}
+              onClick={() => editorRef.current?.focus()}
+              disabled={toolbarDisabled}
+              title="Text formatting"
+            />
+          ) : (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button
+                  type="button"
+                  disabled={toolbarDisabled}
+                  className={cn(
+                    "h-8 w-8 rounded flex items-center justify-center text-gray-600",
+                    toolbarDisabled
+                      ? "opacity-40 cursor-not-allowed"
+                      : "hover:bg-gray-100",
+                  )}
+                  title="Insert variable"
                 >
-                  {tag.label}{" "}
-                  <span className="text-muted-foreground ml-1">{tag.value}</span>
-                </DropdownMenuItem>
-              ))}
-            </DropdownMenuContent>
-          </DropdownMenu>
+                  <Braces className="h-4 w-4" />
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start" className="max-h-60 overflow-y-auto">
+                {MERGE_TAGS.map((tag) => (
+                  <DropdownMenuItem
+                    key={tag.value}
+                    onClick={() => insertHtml(tag.value)}
+                  >
+                    {tag.label}{" "}
+                    <span className="text-muted-foreground ml-1">{tag.value}</span>
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
 
           <ToolbarBtn
             icon={<Paperclip className="h-4 w-4" />}
@@ -743,39 +796,41 @@ export function EmailRichTextEditor({
             title="HTML source"
           />
 
-          <div className="ml-auto flex items-center gap-1">
-            {mode !== "preview" && (
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-8 text-xs text-[#8B5CF6]"
-                onClick={() => switchMode("preview")}
-              >
-                Preview
-              </Button>
-            )}
-            {mode === "preview" && (
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-8 text-xs"
-                onClick={() => switchMode("visual")}
-              >
-                Edit
-              </Button>
-            )}
-            {!readOnly && (
-              <Button
-                type="button"
-                className="bg-[#8B5CF6] hover:bg-[#7C3AED] h-8 rounded-md px-4"
-                onClick={onSave}
-                disabled={saving}
-              >
-                {saving && <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />}
-                Save
-              </Button>
-            )}
-          </div>
+          {!isReply && (
+            <div className="ml-auto flex items-center gap-1">
+              {mode !== "preview" && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-8 text-xs text-[#8B5CF6]"
+                  onClick={() => switchMode("preview")}
+                >
+                  Preview
+                </Button>
+              )}
+              {mode === "preview" && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-8 text-xs"
+                  onClick={() => switchMode("visual")}
+                >
+                  Edit
+                </Button>
+              )}
+              {!readOnly && onSave && (
+                <Button
+                  type="button"
+                  className="bg-[#8B5CF6] hover:bg-[#7C3AED] h-8 rounded-md px-4"
+                  onClick={onSave}
+                  disabled={saving}
+                >
+                  {saving && <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />}
+                  Save
+                </Button>
+              )}
+            </div>
+          )}
         </div>
       </div>
 
