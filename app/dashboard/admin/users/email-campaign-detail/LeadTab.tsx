@@ -103,10 +103,31 @@ function LeadStatusBadges({ recipient }: { recipient: RecipientRow }) {
 
 type Props = {
   campaignId: string;
+  campaignName?: string;
   onRecipientsChange?: () => void;
 };
 
-export function LeadTab({ campaignId, onRecipientsChange }: Props) {
+function enterLeadSelectMode(campaignId: string, campaignName?: string) {
+  if (typeof window === "undefined") return;
+  sessionStorage.setItem("email_lead_mode", "1");
+  sessionStorage.setItem("email_lead_campaign_id", campaignId);
+  if (campaignName) {
+    sessionStorage.setItem("email_lead_campaign_name", campaignName);
+  } else {
+    sessionStorage.removeItem("email_lead_campaign_name");
+  }
+  window.dispatchEvent(
+    new CustomEvent("email:enter-lead-select-mode", {
+      detail: { campaignId, campaignName },
+    }),
+  );
+}
+
+export function LeadTab({
+  campaignId,
+  campaignName,
+  onRecipientsChange,
+}: Props) {
   const { toast } = useToast();
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
@@ -257,13 +278,7 @@ export function LeadTab({ campaignId, onRecipientsChange }: Props) {
 
         <Button
           className="h-11 bg-[#662EBD] hover:bg-[#5524a8]"
-          onClick={() =>
-            toast({
-              title: "Add leads",
-              description:
-                "Select users on the Table tab and use Send email to attach recipients to this campaign.",
-            })
-          }
+          onClick={() => enterLeadSelectMode(campaignId, campaignName)}
         >
           <Plus className="h-4 w-4 mr-1" />
           Add Leads

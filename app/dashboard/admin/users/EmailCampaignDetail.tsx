@@ -233,6 +233,7 @@ export function EmailCampaignDetail({ campaignId, onBack }: Props) {
       <TabPanel tab="lead" activeTab={activeTab} visited={visitedTabs.has("lead")}>
         <LeadTab
           campaignId={campaignId}
+          campaignName={detail.name}
           onRecipientsChange={() => loadDetail({ silent: true })}
         />
       </TabPanel>

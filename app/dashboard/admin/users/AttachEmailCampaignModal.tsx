@@ -34,11 +34,29 @@ type EmailCampaign = {
   status: string;
 };
 
+const ATTACHABLE_CAMPAIGN_STATUSES = new Set([
+  "draft",
+  "configured",
+  "scheduled",
+  "active",
+  "paused",
+  "completed",
+  "partial",
+]);
+
+function campaignOptionLabel(c: EmailCampaign) {
+  if (c.status === "draft") return c.name;
+  const statusLabel =
+    c.status.charAt(0).toUpperCase() + c.status.slice(1).replace(/_/g, " ");
+  return `${c.name} (${statusLabel})`;
+}
+
 type Props = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   selection: NotificationSelectionState | null;
   isDark?: boolean;
+  presetCampaignId?: string | null;
   onSuccess: (campaignId: string) => void;
 };
 
@@ -68,6 +86,7 @@ export function AttachEmailCampaignModal({
   onOpenChange,
   selection,
   isDark = false,
+  presetCampaignId = null,
   onSuccess,
 }: Props) {
   const [projects, setProjects] = useState<EmailProject[]>([]);
@@ -78,7 +97,15 @@ export function AttachEmailCampaignModal({
   const [campaignsLoading, setCampaignsLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [presetCampaignName, setPresetCampaignName] = useState<string | null>(
+    null,
+  );
+  const [presetProjectName, setPresetProjectName] = useState<string | null>(
+    null,
+  );
   const prefetchedRef = useRef(false);
+
+  const usingPresetCampaign = Boolean(presetCampaignId);
 
   const typeCounts = useMemo(() => {
     if (!selection) return { creator: 0, advertiser: 0, admin: 0 };
@@ -93,10 +120,16 @@ export function AttachEmailCampaignModal({
     );
   }, [selection]);
 
-  const draftCampaigns = useMemo(
-    () => campaigns.filter((c) => c.status === "draft"),
-    [campaigns],
-  );
+  const attachableCampaigns = useMemo(() => {
+    const attachable = campaigns.filter((c) =>
+      ATTACHABLE_CAMPAIGN_STATUSES.has(c.status),
+    );
+    return attachable.sort((a, b) => {
+      if (a.status === "draft" && b.status !== "draft") return -1;
+      if (b.status === "draft" && a.status !== "draft") return 1;
+      return a.name.localeCompare(b.name);
+    });
+  }, [campaigns]);
 
   useEffect(() => {
     if (prefetchedRef.current) return;
@@ -110,8 +143,40 @@ export function AttachEmailCampaignModal({
     if (!open) return;
 
     let cancelled = false;
-    setProjectsLoading(true);
     setError(null);
+
+    if (presetCampaignId) {
+      setCampaignId(presetCampaignId);
+      setProjectsLoading(false);
+      setCampaignsLoading(true);
+      setPresetCampaignName(null);
+      setPresetProjectName(null);
+
+      fetch(`/api/admin/email-campaigns/${presetCampaignId}`)
+        .then((r) => r.json())
+        .then((data) => {
+          if (cancelled) return;
+          if (data.error) {
+            setError(data.error);
+            return;
+          }
+          setPresetCampaignName(data.name ?? null);
+          setPresetProjectName(data.projectName ?? null);
+          if (data.projectId) setProjectId(data.projectId);
+        })
+        .catch(() => {
+          if (!cancelled) setError("Failed to load campaign");
+        })
+        .finally(() => {
+          if (!cancelled) setCampaignsLoading(false);
+        });
+
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    setProjectsLoading(true);
     setCampaignId("");
     setCampaigns([]);
 
@@ -134,12 +199,14 @@ export function AttachEmailCampaignModal({
     return () => {
       cancelled = true;
     };
-  }, [open]);
+  }, [open, presetCampaignId]);
 
   useEffect(() => {
-    if (!open || !projectId) {
-      setCampaigns([]);
-      setCampaignId("");
+    if (!open || !projectId || usingPresetCampaign) {
+      if (!usingPresetCampaign) {
+        setCampaigns([]);
+        setCampaignId("");
+      }
       return;
     }
 
@@ -159,8 +226,10 @@ export function AttachEmailCampaignModal({
         }
         const list: EmailCampaign[] = data.campaigns ?? [];
         setCampaigns(list);
-        const drafts = list.filter((c) => c.status === "draft");
-        setCampaignId(drafts[0]?.id ?? "");
+        const attachable = list.filter((c) =>
+          ATTACHABLE_CAMPAIGN_STATUSES.has(c.status),
+        );
+        setCampaignId(attachable[0]?.id ?? "");
       })
       .catch(() => {
         if (!cancelled) setError("Failed to load campaigns");
@@ -172,7 +241,7 @@ export function AttachEmailCampaignModal({
     return () => {
       cancelled = true;
     };
-  }, [open, projectId]);
+  }, [open, projectId, usingPresetCampaign]);
 
   const projectLabel = (p: EmailProject) =>
     p.ses_verification_status === "verified"
@@ -180,7 +249,8 @@ export function AttachEmailCampaignModal({
       : p.name;
 
   const handleSubmit = async () => {
-    if (!selection || !campaignId) {
+    const targetCampaignId = presetCampaignId ?? campaignId;
+    if (!selection || !targetCampaignId) {
       setError("Select a campaign");
       return;
     }
@@ -188,7 +258,7 @@ export function AttachEmailCampaignModal({
     setError(null);
     try {
       const res = await fetch(
-        `/api/admin/email-campaigns/${campaignId}/attach-recipients`,
+        `/api/admin/email-campaigns/${targetCampaignId}/attach-recipients`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -224,10 +294,13 @@ export function AttachEmailCampaignModal({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className={isDark ? "text-white" : ""}>
         <DialogHeader>
-          <DialogTitle>Attach users to campaign</DialogTitle>
+          <DialogTitle>
+            {presetCampaignId ? "Add leads to campaign" : "Attach users to campaign"}
+          </DialogTitle>
           <DialogDescription>
-            Select a project and draft campaign. Configure template and schedule
-            on the campaign detail page.
+            {presetCampaignId
+              ? "Confirm attaching the selected users to this campaign."
+              : "Select a project and campaign. You can add leads to draft or completed campaigns."}
           </DialogDescription>
         </DialogHeader>
 
@@ -240,6 +313,22 @@ export function AttachEmailCampaignModal({
             </p>
           </div>
 
+          {presetCampaignId ? (
+            <div className="rounded-md border p-3 text-sm space-y-1">
+              <p className="font-medium">Campaign</p>
+              {campaignsLoading ? (
+                selectSkeleton
+              ) : (
+                <>
+                  <p>{presetCampaignName ?? "Selected campaign"}</p>
+                  {presetProjectName && (
+                    <p className="text-muted-foreground">{presetProjectName}</p>
+                  )}
+                </>
+              )}
+            </div>
+          ) : (
+            <>
           <div className="space-y-2">
             <Label>Project *</Label>
             {projectsLoading ? (
@@ -277,12 +366,12 @@ export function AttachEmailCampaignModal({
                 disabled={!projectId || projectsLoading}
               >
                 <SelectTrigger>
-                  <SelectValue placeholder="Select draft campaign" />
+                  <SelectValue placeholder="Select campaign" />
                 </SelectTrigger>
                 <SelectContent>
-                  {draftCampaigns.map((c) => (
+                  {attachableCampaigns.map((c) => (
                     <SelectItem key={c.id} value={c.id}>
-                      {c.name}
+                      {campaignOptionLabel(c)}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -290,13 +379,15 @@ export function AttachEmailCampaignModal({
             )}
             {!campaignsLoading &&
               projectId &&
-              draftCampaigns.length === 0 && (
+              attachableCampaigns.length === 0 && (
                 <p className="text-xs text-muted-foreground">
-                  No draft campaigns in this project. Create one on the Email
-                  tab first.
+                  No campaigns in this project. Create one on the Email tab
+                  first.
                 </p>
               )}
           </div>
+            </>
+          )}
 
           {error && <p className="text-sm text-red-500">{error}</p>}
         </div>
@@ -309,14 +400,15 @@ export function AttachEmailCampaignModal({
             onClick={handleSubmit}
             disabled={
               submitting ||
-              !campaignId ||
+              !(presetCampaignId ?? campaignId) ||
               !selection ||
-              projectsLoading ||
-              campaignsLoading
+              (usingPresetCampaign
+                ? campaignsLoading
+                : projectsLoading || campaignsLoading)
             }
           >
             {submitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-            Send →
+            {presetCampaignId ? "Add leads →" : "Send →"}
           </Button>
         </DialogFooter>
       </DialogContent>

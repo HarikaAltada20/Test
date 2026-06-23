@@ -613,6 +613,7 @@ export default function AdminUsersPage() {
   >(() => {
     if (typeof window !== "undefined") {
       if (sessionStorage.getItem("wu_mode") === "1") return "table";
+      if (sessionStorage.getItem("email_lead_mode") === "1") return "table";
       const params = new URLSearchParams(window.location.search);
       if (params.get("tab") === "email") return "email";
       const saved = localStorage.getItem("users-management-view-mode");
@@ -639,7 +640,40 @@ export default function AdminUsersPage() {
     }
     return false;
   });
+  const [emailLeadSelectMode, setEmailLeadSelectMode] = useState(() => {
+    if (typeof window !== "undefined") {
+      return sessionStorage.getItem("email_lead_mode") === "1";
+    }
+    return false;
+  });
+  const [emailLeadCampaignId, setEmailLeadCampaignId] = useState<string | null>(
+    () => {
+      if (typeof window !== "undefined") {
+        return sessionStorage.getItem("email_lead_campaign_id");
+      }
+      return null;
+    },
+  );
+  const [emailLeadCampaignName, setEmailLeadCampaignName] = useState<
+    string | null
+  >(() => {
+    if (typeof window !== "undefined") {
+      return sessionStorage.getItem("email_lead_campaign_name");
+    }
+    return null;
+  });
   const [wuMaxRecipients, setWuMaxRecipients] = useState<number | null>(null);
+
+  const clearEmailLeadSelectMode = () => {
+    setEmailLeadSelectMode(false);
+    setEmailLeadCampaignId(null);
+    setEmailLeadCampaignName(null);
+    if (typeof window !== "undefined") {
+      sessionStorage.removeItem("email_lead_mode");
+      sessionStorage.removeItem("email_lead_campaign_id");
+      sessionStorage.removeItem("email_lead_campaign_name");
+    }
+  };
 
   useEffect(() => {
     if (!warmupSelectMode) {
@@ -688,6 +722,31 @@ export default function AdminUsersPage() {
     };
     window.addEventListener("wu:enter-select-mode", handleEnterSelect);
     return () => window.removeEventListener("wu:enter-select-mode", handleEnterSelect);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Email lead selection mode: dispatched from campaign Lead tab "Add Leads"
+  useEffect(() => {
+    const handleEnterLeadSelect = (event: Event) => {
+      const detail = (event as CustomEvent<{ campaignId?: string; campaignName?: string }>)
+        .detail;
+      const campaignId =
+        detail?.campaignId ??
+        sessionStorage.getItem("email_lead_campaign_id");
+      const campaignName =
+        detail?.campaignName ??
+        sessionStorage.getItem("email_lead_campaign_name");
+
+      setSelectedUserIds(new Set());
+      setSelectAllFiltered(false);
+      setEmailLeadSelectMode(true);
+      setEmailLeadCampaignId(campaignId);
+      setEmailLeadCampaignName(campaignName);
+      setViewModePersisted("table");
+    };
+    window.addEventListener("email:enter-lead-select-mode", handleEnterLeadSelect);
+    return () =>
+      window.removeEventListener("email:enter-lead-select-mode", handleEnterLeadSelect);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -2634,7 +2693,9 @@ export default function AdminUsersPage() {
                   onClick={() => setEmailSendModalOpen(true)}
                 >
                   <Mail className="h-4 w-4" />
-                  <span className="hidden sm:inline">Send email</span>
+                  <span className="hidden sm:inline">
+                    {emailLeadSelectMode ? "Add to campaign" : "Send email"}
+                  </span>
                   {selectedCount > 0 && (
                     <Badge
                       variant="secondary"
@@ -2900,6 +2961,68 @@ export default function AdminUsersPage() {
             >
               <Send className="h-3.5 w-3.5 mr-1.5" />
               Add {selectedCount > 0 ? selectedCount : ""} to Warm-Up Send
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {/* Email lead selection mode banner */}
+      {viewMode === "table" && emailLeadSelectMode && (
+        <div className="rounded-xl border-2 border-[#662EBD] bg-purple-50 px-5 py-4 flex items-center justify-between gap-4 shadow-sm">
+          <div className="flex items-center gap-3">
+            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-[#662EBD] text-white shrink-0">
+              <Mail className="h-4 w-4" />
+            </div>
+            <div>
+              <p className="font-semibold text-purple-900 text-sm">
+                Add leads to campaign
+                {emailLeadCampaignName ? `: ${emailLeadCampaignName}` : ""}
+              </p>
+              <p className="text-xs text-purple-700 mt-0.5">
+                Select users below using the checkboxes, then click &quot;Add to
+                campaign&quot;.
+                {selectedCount > 0 && (
+                  <span className="font-semibold">
+                    {" "}
+                    {selectedCount} user{selectedCount !== 1 ? "s" : ""}{" "}
+                    selected.
+                  </span>
+                )}
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <Button
+              size="sm"
+              variant="outline"
+              className="border-purple-300 text-purple-700 hover:bg-purple-100"
+              onClick={() => {
+                const returnCampaignId = emailLeadCampaignId;
+                setSelectedUserIds(new Set());
+                setSelectAllFiltered(false);
+                clearEmailLeadSelectMode();
+                if (returnCampaignId) {
+                  setHighlightEmailCampaignId(returnCampaignId);
+                }
+                setViewModePersisted("email");
+                if (typeof window !== "undefined" && returnCampaignId) {
+                  const url = new URL(window.location.href);
+                  url.searchParams.set("tab", "email");
+                  url.searchParams.set("campaignId", returnCampaignId);
+                  window.history.replaceState({}, "", url.toString());
+                }
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              size="sm"
+              disabled={selectedCount === 0}
+              className="bg-[#662EBD] hover:bg-[#5524a8] text-white"
+              onClick={() => setEmailSendModalOpen(true)}
+            >
+              <Mail className="h-3.5 w-3.5 mr-1.5" />
+              Add {selectedCount > 0 ? selectedCount : ""} to campaign
             </Button>
           </div>
         </div>
@@ -5192,9 +5315,11 @@ export default function AdminUsersPage() {
         onOpenChange={setEmailSendModalOpen}
         selection={notificationSelection}
         isDark={isDark}
+        presetCampaignId={emailLeadSelectMode ? emailLeadCampaignId : null}
         onSuccess={(campaignId) => {
           setSelectedUserIds(new Set());
           setSelectAllFiltered(false);
+          clearEmailLeadSelectMode();
           toast({
             title: "Users attached",
             description: "Configure template and schedule on the campaign page.",
