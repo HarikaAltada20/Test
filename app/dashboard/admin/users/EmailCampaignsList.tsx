@@ -36,6 +36,7 @@ import { getCampaignStartReadiness } from "@/lib/admin-email/campaign-readiness"
 import type { EmailProjectCardData } from "./EmailProjectCard";
 import {
   Briefcase,
+  Copy,
   Eye,
   MoreHorizontal,
   Play,
@@ -140,6 +141,7 @@ export function EmailCampaignsList({
     null,
   );
   const [deleting, setDeleting] = useState(false);
+  const [duplicatingId, setDuplicatingId] = useState<string | null>(null);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -248,6 +250,36 @@ export function EmailCampaignsList({
       method: "POST",
     });
     onRefresh();
+  };
+
+  const handleDuplicate = async (campaign: EmailCampaignListItem) => {
+    setDuplicatingId(campaign.id);
+    try {
+      const res = await fetch(
+        `/api/admin/email-campaigns/${campaign.id}/duplicate`,
+        { method: "POST" },
+      );
+      const data = await res.json();
+      if (!res.ok) {
+        toast({
+          title: "Could not duplicate campaign",
+          description: data.error || "Duplicate failed",
+          variant: "destructive",
+        });
+        return;
+      }
+      onRefresh();
+      toast({
+        title: "Campaign duplicated",
+        description:
+          data.copiedRecipientCount > 0
+            ? `"${data.campaign.name}" was created with ${data.copiedRecipientCount} leads.`
+            : `"${data.campaign.name}" was created as a copy.`,
+      });
+      onCampaignClick(data.campaign.id);
+    } finally {
+      setDuplicatingId(null);
+    }
   };
 
   const handleDelete = async () => {
@@ -489,6 +521,13 @@ export function EmailCampaignsList({
                             onClick={() => onCampaignClick(c.id)}
                           >
                             View details
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            disabled={duplicatingId === c.id}
+                            onClick={() => void handleDuplicate(c)}
+                          >
+                            <Copy className="h-4 w-4 mr-2" />
+                            {duplicatingId === c.id ? "Duplicating..." : "Duplicate"}
                           </DropdownMenuItem>
                           {c.status === "active" && (
                             <DropdownMenuItem
