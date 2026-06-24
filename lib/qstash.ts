@@ -1076,6 +1076,7 @@ async function verifyQStashSignatureWarmUp(
 
 /**
  * Authorize process-warm-up-sends: QStash signature or Bearer CRON_SECRET.
+ * Vercel Cron sends CRON_SECRET as Authorization Bearer when configured.
  */
 export async function authorizeProcessWarmUpSends(
   request: Request,
@@ -1088,11 +1089,16 @@ export async function authorizeProcessWarmUpSends(
   }
 
   if (request.headers.get("Upstash-Signature")) {
-    return verifyQStashSignatureWarmUp(request, rawBody);
+    const verified = await verifyQStashSignatureWarmUp(request, rawBody);
+    if (!verified) {
+      console.warn("[qstash] warm-up sends signature rejected", {
+        forwardedOrigin: getForwardedOrigin(request),
+        bodyLength: rawBody.length,
+      });
+    }
+    return verified;
   }
 
-  // Vercel Cron (legacy) or local dev
-  if (request.headers.get("x-vercel-cron")) return true;
   if (cronSecret) return false;
   return process.env.NODE_ENV === "development";
 }

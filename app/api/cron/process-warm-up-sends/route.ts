@@ -2,7 +2,7 @@
  * Cron: daily warm-up sends, counter reset, metrics, health checks.
  *
  * Scheduling: Vercel Cron (vercel.json) — see lib/admin-email/warm-up-cron.ts
- * Authorization: x-vercel-cron header, QStash signature, or Bearer CRON_SECRET
+ * Authorization: QStash signature or Bearer CRON_SECRET (Vercel Cron uses CRON_SECRET)
  */
 
 import { NextResponse } from "next/server";
