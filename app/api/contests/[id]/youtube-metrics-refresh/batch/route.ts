@@ -9,6 +9,7 @@ import type { YouTubeRefreshScope } from "@/lib/queue/youtube-metrics-queue";
 import {
   updateYouTubeSubmissionForScope,
   fetchYouTubeBasicStatsByVideoId,
+  isYouTubeAllLikeScope,
   type PrefetchedBasic,
 } from "@/lib/youtube-submission-refresh-by-scope";
 import { insightsRefreshInsightsStatusOrFilter } from "@/lib/insights-refresh-eligibility";
@@ -293,7 +294,7 @@ export async function POST(
       (sub) => !skippedCreatorIds.has(sub.creator_id)
     );
 
-    const prefetchBasic = scope === "basic" || scope === "all";
+    const prefetchBasic = scope === "basic" || isYouTubeAllLikeScope(scope);
     const basicByCreator = new Map<string, Map<string, PrefetchedBasic>>();
 
     if (prefetchBasic) {

@@ -19,7 +19,8 @@ export type YouTubeRefreshScope =
   | "core"
   | "traffic"
   | "demographics"
-  | "all";
+  | "all"
+  | "all_standard";
 
 export interface YouTubeMetricsJobCursor {
   id: string;
