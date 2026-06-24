@@ -29,6 +29,7 @@ const SCOPES: YouTubeRefreshScope[] = [
   "traffic",
   "demographics",
   "all",
+  "all_standard",
 ];
 
 function isAnalyticsScope(scope: YouTubeRefreshScope): boolean {
@@ -61,7 +62,7 @@ export async function POST(
       return NextResponse.json(
         {
           error:
-            "scope is required and must be one of: basic, core, traffic, demographics, all",
+            "scope is required and must be one of: basic, core, traffic, demographics, all, all_standard",
         },
         { status: 400 }
       );

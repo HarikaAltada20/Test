@@ -416,14 +416,21 @@ export async function getVideoDeviceBreakdown(
   return { device_types, operating_systems };
 }
 
+export type GetVideoDemographicsOptions = {
+  /** When false, skip city and US province API calls. Default true. */
+  includeGeoDetail?: boolean;
+};
+
 /**
  * Demographics: age/gender, countries, cities (top countries), US provinces.
  */
 export async function getVideoDemographics(
   accessToken: string,
   videoId: string,
-  startDate: string
+  startDate: string,
+  options?: GetVideoDemographicsOptions
 ): Promise<Demographics | null> {
+  const includeGeoDetail = options?.includeGeoDetail !== false;
   const youtubeAnalytics = createAnalyticsClient(accessToken);
   const today = todayIso();
 
@@ -469,27 +476,30 @@ export async function getVideoDemographics(
     Object.assign(countries, rowsToGeoMetrics(countryResult.value.data.rows));
   }
 
-  const topCountryCodes = Object.entries(countries)
-    .sort((a, b) => geoSortScore(b[1]) - geoSortScore(a[1]))
-    .slice(0, YT_GEO_TOP_COUNTRIES_FOR_CITIES)
-    .map(([code]) => code);
-
-  const cityResults = await Promise.allSettled(
-    topCountryCodes.map((code) =>
-      getVideoCitiesForCountry(accessToken, videoId, startDate, code)
-    )
-  );
-
   const cities: Record<string, GeoMetricRow> = {};
-  for (const result of cityResults) {
-    if (result.status === 'fulfilled') {
-      Object.assign(cities, result.value);
-    }
-  }
-
   let provinces: Record<string, GeoMetricRow> = {};
-  if (topCountryCodes.includes('US')) {
-    provinces = await getVideoUsProvinces(accessToken, videoId, startDate);
+
+  if (includeGeoDetail) {
+    const topCountryCodes = Object.entries(countries)
+      .sort((a, b) => geoSortScore(b[1]) - geoSortScore(a[1]))
+      .slice(0, YT_GEO_TOP_COUNTRIES_FOR_CITIES)
+      .map(([code]) => code);
+
+    const cityResults = await Promise.allSettled(
+      topCountryCodes.map((code) =>
+        getVideoCitiesForCountry(accessToken, videoId, startDate, code)
+      )
+    );
+
+    for (const result of cityResults) {
+      if (result.status === 'fulfilled') {
+        Object.assign(cities, result.value);
+      }
+    }
+
+    if (topCountryCodes.includes('US')) {
+      provinces = await getVideoUsProvinces(accessToken, videoId, startDate);
+    }
   }
 
   const hasData =

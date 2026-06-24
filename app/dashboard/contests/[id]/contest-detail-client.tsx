@@ -1572,6 +1572,7 @@ export default function ContestDetailClient({
     useState(false);
   const [isRefreshingCore, setIsRefreshingCore] = useState(false);
   const [isRefreshingAll, setIsRefreshingAll] = useState(false);
+  const [isRefreshingAllStandard, setIsRefreshingAllStandard] = useState(false);
   const RUN_DISABLE_WINDOW_MS = 5 * 60 * 1000;
   const isRunWithinDisableWindow = (
     run:
@@ -1597,7 +1598,8 @@ export default function ContestDetailClient({
     isRefreshingCore ||
     isRefreshingTraffic ||
     isRefreshingDemographics ||
-    isRefreshingAll;
+    isRefreshingAll ||
+    isRefreshingAllStandard;
   // Admin controls modal (YouTube analytics visibility for brand)
   const [adminControlsModalOpen, setAdminControlsModalOpen] = useState(false);
   const [adminControlsSaving, setAdminControlsSaving] = useState(false);
@@ -7128,9 +7130,13 @@ export default function ContestDetailClient({
   };
 
   // YouTube admin: refresh basic + core + traffic + demographics in one go, then reload once
-  const handleRefreshAllMetrics = async () => {
+  const handleYoutubeContestFullRefresh = async (
+    scope: "all" | "all_standard",
+    setRefreshing: (value: boolean) => void,
+  ) => {
     if (
       isRefreshingAll ||
+      isRefreshingAllStandard ||
       isRefreshingMetrics ||
       isRefreshingCore ||
       isRefreshingTraffic ||
@@ -7138,7 +7144,8 @@ export default function ContestDetailClient({
       !cooldownInfo.canRefresh
     )
       return;
-    setIsRefreshingAll(true);
+    setRefreshing(true);
+    const isStandard = scope === "all_standard";
     let queuedYoutubeFull = false;
     try {
       const eres = await fetch(
@@ -7146,7 +7153,7 @@ export default function ContestDetailClient({
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ scope: "all" }),
+          body: JSON.stringify({ scope }),
         },
       );
       const ej = await eres.json().catch(() => ({}));
@@ -7166,7 +7173,7 @@ export default function ContestDetailClient({
         const pollTimer = setInterval(async () => {
           if (Date.now() - started > maxMs) {
             clearInterval(pollTimer);
-            setIsRefreshingAll(false);
+            setRefreshing(false);
             return;
           }
           try {
@@ -7182,19 +7189,23 @@ export default function ContestDetailClient({
               clearInterval(pollTimer);
               if (run) setYoutubeRun(run);
               setYoutubeRunCompleted(true);
-              setIsRefreshingAll(false);
+              setRefreshing(false);
               if (run?.id && !notifiedYoutubeRunIds.current.has(run.id)) {
                 notifiedYoutubeRunIds.current.add(run.id);
                 if (st === "completed") {
                   toast({
-                    title: "All metrics updated",
-                    description: `Scope: ${run?.scope ?? "all"} · Success ${run?.success_count ?? 0} · Temporary Failure ${run?.temporary_failure_count ?? 0} · Permanent Failure ${run?.permanent_failure_count ?? 0} · Skipped ${run?.skipped_recent_count ?? 0}`,
+                    title: isStandard
+                      ? "Standard metrics updated"
+                      : "All metrics updated",
+                    description: `Scope: ${run?.scope ?? scope} · Success ${run?.success_count ?? 0} · Temporary Failure ${run?.temporary_failure_count ?? 0} · Permanent Failure ${run?.permanent_failure_count ?? 0} · Skipped ${run?.skipped_recent_count ?? 0}`,
                     duration: 10000,
                     variant: "success",
                   });
                 } else if (st === "failed") {
                   toast({
-                    title: "Full refresh failed",
+                    title: isStandard
+                      ? "Standard refresh failed"
+                      : "Full refresh failed",
                     description:
                       run?.error_message?.slice(0, 400) ??
                       "The refresh run ended with an error.",
@@ -7212,7 +7223,10 @@ export default function ContestDetailClient({
         return;
       }
       if (eres.status !== 503) {
-        throw new Error(ej.error || "Failed to queue full YouTube refresh");
+        throw new Error(
+          ej.error ||
+            `Failed to queue YouTube ${isStandard ? "standard" : "full"} refresh`,
+        );
       }
 
       const res1 = await fetch(`/api/contests/${contestId}/refresh-metrics`, {
@@ -7224,12 +7238,12 @@ export default function ContestDetailClient({
       const res2 = await fetch("/api/youtube/refresh-detailed-analytics", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ type: "all", contestId }),
+        body: JSON.stringify({ type: scope, contestId }),
       });
       const data2 = await res2.json();
       if (!res2.ok) throw new Error(data2?.error || "Analytics refresh failed");
       toast({
-        title: "All metrics updated",
+        title: isStandard ? "Standard metrics updated" : "All metrics updated",
         description:
           data2?.message || "Basic and detailed analytics refreshed.",
         variant: "success",
@@ -7238,15 +7252,23 @@ export default function ContestDetailClient({
     } catch (e: any) {
       toast({
         title: "Refresh failed",
-        description: e?.message || "Could not refresh all metrics.",
+        description:
+          e?.message ||
+          `Could not refresh ${isStandard ? "standard" : "all"} metrics.`,
         variant: "destructive",
       });
     } finally {
       if (!queuedYoutubeFull) {
-        setIsRefreshingAll(false);
+        setRefreshing(false);
       }
     }
   };
+
+  const handleRefreshAllMetrics = () =>
+    handleYoutubeContestFullRefresh("all", setIsRefreshingAll);
+
+  const handleRefreshAllMetricsStandard = () =>
+    handleYoutubeContestFullRefresh("all_standard", setIsRefreshingAllStandard);
 
   const handleMarkMilestoneMostVerifiedBonus = useCallback(
     async (creatorId: string, track: "views" | "reels") => {
@@ -14656,7 +14678,8 @@ export default function ContestDetailClient({
                             isRefreshingCore ||
                             isRefreshingTraffic ||
                             isRefreshingDemographics ||
-                            isRefreshingAll;
+                            isRefreshingAll ||
+                            isRefreshingAllStandard;
                           const anyRefreshInProgress =
                             isRefreshingMetrics ||
                             disabledDetail ||
@@ -14760,7 +14783,7 @@ export default function ContestDetailClient({
                                           ? "Metrics are locked after campaign review begins"
                                           : cooldownDisabled
                                             ? disabledReason
-                                            : "Refresh basic metrics, core analytics, traffic sources, and demographics for all submissions"
+                                            : "Basic, core, retention, traffic details, demographics with cities/states, devices"
                                       }
                                     >
                                       {isRefreshingAll ? (
@@ -14778,6 +14801,49 @@ export default function ContestDetailClient({
                                     <span className={muteClass}>
                                       Last full:{" "}
                                       {oldest ? formatTimeAgo(oldest) : "Never"}
+                                    </span>
+                                  </div>
+                                  <div className="flex flex-col items-start gap-1">
+                                    <button
+                                      type="button"
+                                      onClick={handleRefreshAllMetricsStandard}
+                                      disabled={
+                                        anyRefreshInProgress ||
+                                        !cooldownInfo.canRefresh ||
+                                        ytPostContestLocked
+                                      }
+                                      className={cn(
+                                        btnClass,
+                                        "bg-slate-700 text-white border-slate-700 hover:bg-slate-600",
+                                        isDark &&
+                                          "bg-slate-600 border-slate-500 hover:bg-slate-500",
+                                        (anyRefreshInProgress ||
+                                          !cooldownInfo.canRefresh ||
+                                          ytPostContestLocked) &&
+                                          "opacity-60 cursor-not-allowed",
+                                      )}
+                                      title={
+                                        ytPostContestLocked
+                                          ? "Metrics are locked after campaign review begins"
+                                          : cooldownDisabled
+                                            ? disabledReason
+                                            : "Basic, core, traffic sources, age/gender/countries — faster; skips cities, states, devices, retention, and traffic details"
+                                      }
+                                    >
+                                      {isRefreshingAllStandard ? (
+                                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                      ) : (
+                                        <RefreshCw className="h-3.5 w-3.5" />
+                                      )}
+                                      {isRefreshingAllStandard ||
+                                      postRefreshReloadPending
+                                        ? reloadPendingLabel
+                                        : cooldownDisabled
+                                          ? cooldownLabel
+                                          : "Refresh all (standard)"}
+                                    </button>
+                                    <span className={muteClass}>
+                                      Lower API usage for large campaigns
                                     </span>
                                   </div>
                                 </div>

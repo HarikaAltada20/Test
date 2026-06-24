@@ -34,13 +34,101 @@ export type PrefetchedBasic = {
 
 type InsightsFailureType = "temporary_failure" | "permanent_failure";
 
-function effectiveDetailedType(
+export type YouTubeScopeProfile = {
+  needsBasic: boolean;
+  core: boolean;
+  retention: boolean;
+  traffic: boolean;
+  trafficDetails: boolean;
+  subscribed: boolean;
+  demographics: boolean;
+  geoDetail: boolean;
+  devices: boolean;
+};
+
+export function getYouTubeScopeProfile(
   scope: YouTubeRefreshScope
-): "core" | "traffic" | "demographics" | "all" | null {
-  if (scope === "basic") return null;
-  if (scope === "all") return "all";
-  if (scope === "core" || scope === "traffic" || scope === "demographics") return scope;
-  return null;
+): YouTubeScopeProfile | null {
+  switch (scope) {
+    case "basic":
+      return {
+        needsBasic: true,
+        core: false,
+        retention: false,
+        traffic: false,
+        trafficDetails: false,
+        subscribed: false,
+        demographics: false,
+        geoDetail: false,
+        devices: false,
+      };
+    case "core":
+      return {
+        needsBasic: false,
+        core: true,
+        retention: true,
+        traffic: false,
+        trafficDetails: false,
+        subscribed: false,
+        demographics: false,
+        geoDetail: false,
+        devices: false,
+      };
+    case "traffic":
+      return {
+        needsBasic: false,
+        core: false,
+        retention: false,
+        traffic: true,
+        trafficDetails: true,
+        subscribed: true,
+        demographics: false,
+        geoDetail: false,
+        devices: false,
+      };
+    case "demographics":
+      return {
+        needsBasic: false,
+        core: false,
+        retention: false,
+        traffic: false,
+        trafficDetails: false,
+        subscribed: false,
+        demographics: true,
+        geoDetail: true,
+        devices: true,
+      };
+    case "all":
+      return {
+        needsBasic: true,
+        core: true,
+        retention: true,
+        traffic: true,
+        trafficDetails: true,
+        subscribed: true,
+        demographics: true,
+        geoDetail: true,
+        devices: true,
+      };
+    case "all_standard":
+      return {
+        needsBasic: true,
+        core: true,
+        retention: false,
+        traffic: true,
+        trafficDetails: false,
+        subscribed: false,
+        demographics: true,
+        geoDetail: false,
+        devices: false,
+      };
+    default:
+      return null;
+  }
+}
+
+export function isYouTubeAllLikeScope(scope: YouTubeRefreshScope): boolean {
+  return scope === "all" || scope === "all_standard";
 }
 
 async function fetchBasicFromDataApi(
@@ -229,8 +317,19 @@ export async function updateYouTubeSubmissionForScope(
   const isShort = isYouTubeShort(sub.content_link);
   const startDate = getDefaultAnalyticsStartDate();
 
-  const needsBasic = scope === "basic" || scope === "all";
-  const detailedType = effectiveDetailedType(scope);
+  const profile = getYouTubeScopeProfile(scope);
+  if (!profile) {
+    const msg = `Unknown YouTube refresh scope: ${scope}`;
+    await markFailure("temporary_failure", msg, false);
+    return {
+      ok: false,
+      authError: false,
+      failureType: "temporary_failure",
+      errorMessage: msg,
+    };
+  }
+
+  const needsBasic = profile.needsBasic;
 
   let basic: PrefetchedBasic | null | undefined = options?.prefetchedBasic;
   let basicFetchRes: { stats?: PrefetchedBasic; error?: any; notFound?: boolean; isPrivate?: boolean } | undefined;
@@ -294,9 +393,14 @@ export async function updateYouTubeSubmissionForScope(
     };
   }
 
-  if (detailedType) {
+  const hasDetailedWork =
+    profile.core ||
+    profile.traffic ||
+    profile.demographics;
+
+  if (hasDetailedWork) {
     try {
-      if (detailedType === "core" || detailedType === "all") {
+      if (profile.core) {
         try {
           const analytics = await getVideoAnalytics(accessToken, videoId, startDate);
           if (analytics) {
@@ -323,26 +427,49 @@ export async function updateYouTubeSubmissionForScope(
           console.error(`[youtube-refresh] Core analytics error for ${sub.id}:`, (err as Error)?.message);
         }
 
-        try {
-          const retention = await getVideoAudienceRetention(accessToken, videoId, startDate);
-          if (retention && retention.length > 0) {
-            updates.audience_retention = retention;
+        if (profile.retention) {
+          try {
+            const retention = await getVideoAudienceRetention(accessToken, videoId, startDate);
+            if (retention && retention.length > 0) {
+              updates.audience_retention = retention;
+            }
+          } catch (err: unknown) {
+            console.error(
+              `[youtube-refresh] Audience retention error for ${sub.id}:`,
+              (err as Error)?.message
+            );
           }
-        } catch (err: unknown) {
-          console.error(
-            `[youtube-refresh] Audience retention error for ${sub.id}:`,
-            (err as Error)?.message
-          );
         }
       }
 
-      if (detailedType === "traffic" || detailedType === "all") {
+      if (profile.traffic) {
         try {
-          const [trafficSources, trafficDetails, subscribedStatus] = await Promise.all([
+          const trafficPromises: Promise<unknown>[] = [
             getVideoTrafficSources(accessToken, videoId, startDate),
-            getVideoTrafficDetails(accessToken, videoId, startDate),
-            getVideoSubscribedStatus(accessToken, videoId, startDate),
-          ]);
+          ];
+          if (profile.trafficDetails) {
+            trafficPromises.push(
+              getVideoTrafficDetails(accessToken, videoId, startDate)
+            );
+          }
+          if (profile.subscribed) {
+            trafficPromises.push(
+              getVideoSubscribedStatus(accessToken, videoId, startDate)
+            );
+          }
+
+          const trafficResults = await Promise.all(trafficPromises);
+          const trafficSources = trafficResults[0] as Record<string, number> | null;
+          let resultIdx = 1;
+          const trafficDetails = profile.trafficDetails
+            ? (trafficResults[resultIdx++] as Awaited<
+                ReturnType<typeof getVideoTrafficDetails>
+              >)
+            : null;
+          const subscribedStatus = profile.subscribed
+            ? (trafficResults[resultIdx] as Record<string, number> | null)
+            : null;
+
           if (trafficSources) updates.traffic_sources = trafficSources;
           if (trafficDetails) {
             updates.traffic_source_details = {
@@ -365,13 +492,24 @@ export async function updateYouTubeSubmissionForScope(
           console.error(`[youtube-refresh] Traffic sources error for ${sub.id}:`, (err as Error)?.message);
         }
       }
-  
-      if (detailedType === "demographics" || detailedType === "all") {
+
+      if (profile.demographics) {
         try {
+          const demographicsPromise = getVideoDemographics(
+            accessToken,
+            videoId,
+            startDate,
+            { includeGeoDetail: profile.geoDetail }
+          );
+          const devicesPromise = profile.devices
+            ? getVideoDeviceBreakdown(accessToken, videoId, startDate)
+            : Promise.resolve(null);
+
           const [demographics, devices] = await Promise.all([
-            getVideoDemographics(accessToken, videoId, startDate),
-            getVideoDeviceBreakdown(accessToken, videoId, startDate),
+            demographicsPromise,
+            devicesPromise,
           ]);
+
           if (demographics) {
             const prevDemo = (existingStats.demographics as Record<string, unknown>) ?? {};
             updates.demographics = { ...prevDemo, ...demographics };
@@ -435,19 +573,30 @@ export async function updateYouTubeSubmissionForScope(
     videos_removed_from_playlists: Number(merged.videos_removed_from_playlists) || 0,
   };
 
+  const botContext =
+    profile.retention || profile.subscribed || profile.devices
+      ? {
+          trafficSources:
+            (merged.traffic_sources as Record<string, number> | null) || null,
+          subscribedStatus: profile.subscribed
+            ? ((merged.subscribed_status as Record<string, number> | null) || null)
+            : null,
+          devices: profile.devices
+            ? ((merged.devices as DeviceBreakdown | null) || null)
+            : null,
+          audienceRetention: profile.retention
+            ? ((merged.audience_retention as AudienceRetentionPoint[] | null) ||
+              null)
+            : null,
+        }
+      : undefined;
+
   const { score, flags } = computeBotScore(
     coreForScore,
     sub.views || 0,
     (merged.traffic_sources as Record<string, number> | null) || null,
     isShort,
-    {
-      trafficSources: (merged.traffic_sources as Record<string, number> | null) || null,
-      subscribedStatus:
-        (merged.subscribed_status as Record<string, number> | null) || null,
-      devices: (merged.devices as DeviceBreakdown | null) || null,
-      audienceRetention:
-        (merged.audience_retention as AudienceRetentionPoint[] | null) || null,
-    }
+    botContext
   );
   updates.bot_score = score;
   updates.bot_flags = flags;

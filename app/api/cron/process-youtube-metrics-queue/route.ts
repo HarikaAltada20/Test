@@ -19,6 +19,7 @@ import {
 } from "@/lib/queue/youtube-metrics-queue";
 import { updateYouTubeCpmContestBudgets } from "@/lib/youtube-cpm-contest-budgets";
 import { revalidateLeaderboardCache } from "@/lib/leaderboard-cache";
+import { isYouTubeAllLikeScope } from "@/lib/youtube-submission-refresh-by-scope";
 import {
   authorizeProcessYouTubeMetricsQueue,
   isQStashEnabled,
@@ -57,10 +58,10 @@ async function finalizeContestAfterYoutubeRun(
     const existingYt =
       (existing.youtube_metrics_last_updated as Record<string, string>) || {};
     const nextYt = { ...existingYt };
-    if (scope === "core" || scope === "all") nextYt.core = now;
-    if (scope === "traffic" || scope === "all")
+    if (scope === "core" || isYouTubeAllLikeScope(scope)) nextYt.core = now;
+    if (scope === "traffic" || isYouTubeAllLikeScope(scope))
       nextYt.traffic = now;
-    if (scope === "demographics" || scope === "all")
+    if (scope === "demographics" || isYouTubeAllLikeScope(scope))
       nextYt.demographics = now;
 
     await supabaseAdmin
@@ -71,7 +72,7 @@ async function finalizeContestAfterYoutubeRun(
       .eq("id", contestId);
   }
 
-  if (scope === "basic" || scope === "all") {
+  if (scope === "basic" || isYouTubeAllLikeScope(scope)) {
     await updateYouTubeCpmContestBudgets(supabaseAdmin, contestId);
   }
 }
