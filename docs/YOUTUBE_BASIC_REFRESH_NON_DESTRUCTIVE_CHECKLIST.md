@@ -18,6 +18,10 @@ Ensure **basic metrics refresh** does not erase previously fetched detailed anal
 For a sample submission before and after basic refresh, verify these keys under `other_stats.youtube` are preserved:
 - `traffic_sources`
 - `demographics`
+- `devices`
+- `traffic_source_details`
+- `subscribed_status`
+- `audience_retention`
 - `estimated_minutes_watched`
 - `avg_view_duration_seconds`
 - `avg_view_percentage`

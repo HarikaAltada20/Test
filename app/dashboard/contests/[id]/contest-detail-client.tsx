@@ -7564,7 +7564,11 @@ export default function ContestDetailClient({
         avg_view_percentage: youtubeStats.avg_view_percentage || 0,
         engaged_views: youtubeStats.engaged_views || 0,
         traffic_sources: youtubeStats.traffic_sources || null,
+        traffic_source_details: youtubeStats.traffic_source_details || null,
+        subscribed_status: youtubeStats.subscribed_status || null,
         demographics: youtubeStats.demographics || null,
+        devices: youtubeStats.devices || null,
+        audience_retention: youtubeStats.audience_retention || null,
         bot_score: youtubeStats.bot_score ?? null,
         bot_flags: youtubeStats.bot_flags || [],
         analytics_needs_reauth: youtubeStats.analytics_needs_reauth || false,
@@ -14840,7 +14844,7 @@ export default function ContestDetailClient({
                                       )}
                                       title={
                                         detailedRefreshTitle ||
-                                        "Watch time, avg view %, shares, subscribers, bot score"
+                                        "Watch time, engagement, retention curve"
                                       }
                                     >
                                       {isRefreshingCore ? (
@@ -14885,7 +14889,7 @@ export default function ContestDetailClient({
                                       )}
                                       title={
                                         detailedRefreshTitle ||
-                                        "Traffic source breakdown (used for bot detection)"
+                                        "Sources, search terms, referrers, subscriber split"
                                       }
                                     >
                                       {isRefreshingTraffic ? (
@@ -14930,7 +14934,7 @@ export default function ContestDetailClient({
                                       )}
                                       title={
                                         detailedRefreshTitle ||
-                                        "Audience age/gender breakdown"
+                                        "Age, gender, countries, cities, devices"
                                       }
                                     >
                                       {isRefreshingDemographics ? (
@@ -18997,59 +19001,7 @@ export default function ContestDetailClient({
                                         ) && (
                                           <TableCell className="text-center">
                                             <YouTubeAnalyticsPanel
-                                              metrics={{
-                                                views: (metrics as any).views,
-                                                likes: (metrics as any).likes,
-                                                dislikes: (metrics as any)
-                                                  .dislikes,
-                                                comments: (metrics as any)
-                                                  .comments,
-                                                shares: (metrics as any).shares,
-                                                subscribers_gained: (
-                                                  metrics as any
-                                                ).subscribers_gained,
-                                                subscribers_lost: (
-                                                  metrics as any
-                                                ).subscribers_lost,
-                                                videos_added_to_playlists: (
-                                                  metrics as any
-                                                ).videos_added_to_playlists,
-                                                videos_removed_from_playlists: (
-                                                  metrics as any
-                                                ).videos_removed_from_playlists,
-                                                estimated_minutes_watched: (
-                                                  metrics as any
-                                                ).estimated_minutes_watched,
-                                                avg_view_duration_seconds: (
-                                                  metrics as any
-                                                ).avg_view_duration_seconds,
-                                                avg_view_percentage: (
-                                                  metrics as any
-                                                ).avg_view_percentage,
-                                                engaged_views: (metrics as any)
-                                                  .engaged_views,
-                                                traffic_sources: (
-                                                  metrics as any
-                                                ).traffic_sources,
-                                                demographics: (metrics as any)
-                                                  .demographics,
-                                                bot_score: (metrics as any)
-                                                  .bot_score,
-                                                bot_flags: (metrics as any)
-                                                  .bot_flags,
-                                                analytics_needs_reauth: (
-                                                  metrics as any
-                                                ).analytics_needs_reauth,
-                                                last_basic_update: (
-                                                  metrics as any
-                                                ).last_basic_update,
-                                                last_traffic_update: (
-                                                  metrics as any
-                                                ).last_traffic_update,
-                                                last_demographics_update: (
-                                                  metrics as any
-                                                ).last_demographics_update,
-                                              }}
+                                              metrics={metrics as import("@/components/youtube/YouTubeAnalyticsPanel").YouTubeMetrics}
                                               isDark={isDark}
                                               showCore={canSeeCore}
                                               showTraffic={canSeeTraffic}

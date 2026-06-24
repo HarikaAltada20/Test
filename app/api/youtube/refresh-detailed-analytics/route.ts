@@ -5,10 +5,16 @@ import { refreshAccessToken, extractYoutubeId } from "@/lib/youtube-api";
 import {
   getVideoAnalytics,
   getVideoTrafficSources,
+  getVideoTrafficDetails,
+  getVideoSubscribedStatus,
   getVideoDemographics,
+  getVideoDeviceBreakdown,
+  getVideoAudienceRetention,
   computeBotScore,
   isYouTubeShort,
   getDefaultAnalyticsStartDate,
+  type DeviceBreakdown,
+  type AudienceRetentionPoint,
 } from "@/lib/youtube-analytics";
 import { METRICS_REFRESH_COOLDOWN_MS_ADMIN } from "@/lib/constants";
 import { fetchYouTubeBasicStatsByVideoId } from "@/lib/youtube-submission-refresh-by-scope";
@@ -292,6 +298,10 @@ export async function POST(request: Request) {
               updates.last_basic_update = now;
             }
           }
+          const retention = await getVideoAudienceRetention(accessToken, videoId, startDate);
+          if (retention && retention.length > 0) {
+            updates.audience_retention = retention;
+          }
         } catch (err: any) {
           const code = err?.code ?? err?.status;
           if (code === 403 || code === 401) {
@@ -305,8 +315,19 @@ export async function POST(request: Request) {
       // ── Call 2: Traffic sources ──────────────────────────────────────────────
       if (type === "traffic" || type === "all") {
         try {
-          const trafficSources = await getVideoTrafficSources(accessToken, videoId, startDate);
-          updates.traffic_sources = trafficSources;
+          const [trafficSources, trafficDetails, subscribedStatus] = await Promise.all([
+            getVideoTrafficSources(accessToken, videoId, startDate),
+            getVideoTrafficDetails(accessToken, videoId, startDate),
+            getVideoSubscribedStatus(accessToken, videoId, startDate),
+          ]);
+          if (trafficSources) updates.traffic_sources = trafficSources;
+          if (trafficDetails) {
+            updates.traffic_source_details = {
+              ...(existingStats.traffic_source_details ?? {}),
+              ...trafficDetails,
+            };
+          }
+          if (subscribedStatus) updates.subscribed_status = subscribedStatus;
           updates.last_traffic_update = now;
         } catch (err: any) {
           const code = err?.code ?? err?.status;
@@ -321,8 +342,17 @@ export async function POST(request: Request) {
       // ── Call 3: Demographics ─────────────────────────────────────────────────
       if (type === "demographics" || type === "all") {
         try {
-          const demographics = await getVideoDemographics(accessToken, videoId, startDate);
-          updates.demographics = demographics;
+          const [demographics, devices] = await Promise.all([
+            getVideoDemographics(accessToken, videoId, startDate),
+            getVideoDeviceBreakdown(accessToken, videoId, startDate),
+          ]);
+          if (demographics) {
+            updates.demographics = {
+              ...(existingStats.demographics ?? {}),
+              ...demographics,
+            };
+          }
+          if (devices) updates.devices = devices;
           updates.last_demographics_update = now;
         } catch (err: any) {
           const code = err?.code ?? err?.status;
@@ -386,7 +416,14 @@ export async function POST(request: Request) {
         coreForScore,
         sub.views || 0,
         merged.traffic_sources || null,
-        isShort
+        isShort,
+        {
+          trafficSources: merged.traffic_sources || null,
+          subscribedStatus: merged.subscribed_status || null,
+          devices: (merged.devices as DeviceBreakdown | null) || null,
+          audienceRetention:
+            (merged.audience_retention as AudienceRetentionPoint[] | null) || null,
+        }
       );
       updates.bot_score = score;
       updates.bot_flags = flags;

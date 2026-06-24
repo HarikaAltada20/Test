@@ -4,10 +4,16 @@ import { extractYoutubeId } from "@/lib/youtube-api";
 import {
   getVideoAnalytics,
   getVideoTrafficSources,
+  getVideoTrafficDetails,
+  getVideoSubscribedStatus,
   getVideoDemographics,
+  getVideoDeviceBreakdown,
+  getVideoAudienceRetention,
   computeBotScore,
   isYouTubeShort,
   getDefaultAnalyticsStartDate,
+  type DeviceBreakdown,
+  type AudienceRetentionPoint,
 } from "@/lib/youtube-analytics";
 import type { YouTubeRefreshScope } from "@/lib/queue/youtube-metrics-queue";
 
@@ -96,8 +102,12 @@ function buildYoutubeMetricsFromBasic(
     videos_added_to_playlists: existingYT.videos_added_to_playlists || undefined,
     videos_removed_from_playlists: existingYT.videos_removed_from_playlists || undefined,
     traffic_sources: existingYT.traffic_sources || undefined,
+    traffic_source_details: existingYT.traffic_source_details || undefined,
+    subscribed_status: existingYT.subscribed_status || undefined,
     last_traffic_update: existingYT.last_traffic_update || undefined,
     demographics: existingYT.demographics || undefined,
+    devices: existingYT.devices || undefined,
+    audience_retention: existingYT.audience_retention || undefined,
     last_demographics_update: existingYT.last_demographics_update || undefined,
     bot_score: existingYT.bot_score ?? undefined,
     bot_flags: existingYT.bot_flags || undefined,
@@ -294,8 +304,6 @@ export async function updateYouTubeSubmissionForScope(
             updates.avg_view_duration_seconds = analytics.avg_view_duration_seconds;
             updates.avg_view_percentage = analytics.avg_view_percentage;
             updates.engaged_views = analytics.engaged_views;
-            // Likes/comments/dislikes from Analytics API are windowed (startDate→today), not
-            // lifetime totals. Use Data API (basic/all) or preserve existing via merge.
             updates.shares = analytics.shares;
             updates.subscribers_gained = analytics.subscribers_gained;
             updates.subscribers_lost = analytics.subscribers_lost;
@@ -314,12 +322,35 @@ export async function updateYouTubeSubmissionForScope(
             (err as Error)?.message ?? lastErrorMessage ?? "Core analytics fetch failed";
           console.error(`[youtube-refresh] Core analytics error for ${sub.id}:`, (err as Error)?.message);
         }
+
+        try {
+          const retention = await getVideoAudienceRetention(accessToken, videoId, startDate);
+          if (retention && retention.length > 0) {
+            updates.audience_retention = retention;
+          }
+        } catch (err: unknown) {
+          console.error(
+            `[youtube-refresh] Audience retention error for ${sub.id}:`,
+            (err as Error)?.message
+          );
+        }
       }
 
       if (detailedType === "traffic" || detailedType === "all") {
         try {
-          const trafficSources = await getVideoTrafficSources(accessToken, videoId, startDate);
-          updates.traffic_sources = trafficSources;
+          const [trafficSources, trafficDetails, subscribedStatus] = await Promise.all([
+            getVideoTrafficSources(accessToken, videoId, startDate),
+            getVideoTrafficDetails(accessToken, videoId, startDate),
+            getVideoSubscribedStatus(accessToken, videoId, startDate),
+          ]);
+          if (trafficSources) updates.traffic_sources = trafficSources;
+          if (trafficDetails) {
+            updates.traffic_source_details = {
+              ...((existingStats.traffic_source_details as Record<string, unknown>) ?? {}),
+              ...trafficDetails,
+            };
+          }
+          if (subscribedStatus) updates.subscribed_status = subscribedStatus;
           updates.last_traffic_update = now;
         } catch (err: unknown) {
           const code = (err as { code?: number; status?: number })?.code ?? (err as { status?: number })?.status;
@@ -337,8 +368,15 @@ export async function updateYouTubeSubmissionForScope(
   
       if (detailedType === "demographics" || detailedType === "all") {
         try {
-          const demographics = await getVideoDemographics(accessToken, videoId, startDate);
-          updates.demographics = demographics;
+          const [demographics, devices] = await Promise.all([
+            getVideoDemographics(accessToken, videoId, startDate),
+            getVideoDeviceBreakdown(accessToken, videoId, startDate),
+          ]);
+          if (demographics) {
+            const prevDemo = (existingStats.demographics as Record<string, unknown>) ?? {};
+            updates.demographics = { ...prevDemo, ...demographics };
+          }
+          if (devices) updates.devices = devices;
           updates.last_demographics_update = now;
         } catch (err: unknown) {
           const code = (err as { code?: number; status?: number })?.code ?? (err as { status?: number })?.status;
@@ -401,7 +439,15 @@ export async function updateYouTubeSubmissionForScope(
     coreForScore,
     sub.views || 0,
     (merged.traffic_sources as Record<string, number> | null) || null,
-    isShort
+    isShort,
+    {
+      trafficSources: (merged.traffic_sources as Record<string, number> | null) || null,
+      subscribedStatus:
+        (merged.subscribed_status as Record<string, number> | null) || null,
+      devices: (merged.devices as DeviceBreakdown | null) || null,
+      audienceRetention:
+        (merged.audience_retention as AudienceRetentionPoint[] | null) || null,
+    }
   );
   updates.bot_score = score;
   updates.bot_flags = flags;
