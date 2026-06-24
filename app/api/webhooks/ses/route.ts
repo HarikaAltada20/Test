@@ -3,7 +3,6 @@ import { createAdminClient } from "@/utils/supabase/admin";
 import { handleWarmUpSesEvent } from "@/lib/admin-email/warm-up-events";
 import {
   handleSnsSubscriptionConfirmation,
-  isDirectWebhookAllowed,
   isSnsEnvelope,
   parseAuthorizedSnsNotification,
   type SnsEnvelope,
@@ -194,13 +193,8 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true });
   }
 
-  if (!isDirectWebhookAllowed()) {
-    return NextResponse.json(
-      { error: "Direct SES notifications are disabled; use SNS" },
-      { status: 401 },
-    );
-  }
-
-  await applySesNotification(body);
-  return NextResponse.json({ ok: true });
+  return NextResponse.json(
+    { error: "Direct SES notifications are disabled; use SNS" },
+    { status: 401 },
+  );
 }

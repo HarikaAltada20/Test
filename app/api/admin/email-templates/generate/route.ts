@@ -45,10 +45,7 @@ export async function POST(req: NextRequest) {
   } catch (err) {
     const message =
       err instanceof Error ? err.message : "Failed to generate template";
-    const status =
-      message.includes("GOOGLE_API_KEY") || message.includes("GEMINI_API_KEY")
-        ? 503
-        : 500;
+    const status = message.includes("GOOGLE_API_KEY") ? 503 : 500;
     return NextResponse.json({ success: false, error: message }, { status });
   }
 }

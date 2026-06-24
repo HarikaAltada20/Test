@@ -70,9 +70,3 @@ export function parseAuthorizedSnsNotification<T extends Record<string, unknown>
     return null;
   }
 }
-
-/** Reject direct (non-SNS) webhook posts in production unless explicitly allowed. */
-export function isDirectWebhookAllowed(): boolean {
-  if (process.env.NODE_ENV !== "production") return true;
-  return process.env.SES_ALLOW_DIRECT_NOTIFICATIONS === "true";
-}

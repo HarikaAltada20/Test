@@ -5,36 +5,22 @@ import type {
   ContestTemplateContext,
 } from "@/lib/admin-notifications/template";
 
-const DEFAULT_TRACKING_BASE_URL = "https://gameofcreators.com";
-
 const DEFAULT_FROM_NAME = "Game of Creators";
 const DEFAULT_REPLY_TO =
   process.env.SES_REPLY_TO?.trim() || "support@gameofcreators.com";
 
 /** Public base URL embedded in open pixels and click redirects (must be reachable from email clients). */
 export function getEmailTrackingBaseUrl(): string {
-  const candidates = [
-    process.env.EMAIL_TRACKING_BASE_URL,
-    process.env.QSTASH_CALLBACK_URL,
-    process.env.NEXT_PUBLIC_APP_URL,
-  ];
-
-  for (const raw of candidates) {
-    const trimmed = raw?.trim();
-    if (!trimmed) continue;
-    try {
-      const origin = new URL(
-        trimmed.includes("://") ? trimmed : `https://${trimmed}`,
-      ).origin;
-      if (origin && !/^https?:\/\/(localhost|127\.)/i.test(origin)) {
-        return origin.replace(/\/$/, "");
-      }
-    } catch {
-      // try next candidate
-    }
+  const raw = process.env.NEXT_PUBLIC_APP_URL?.trim();
+  if (!raw) return "";
+  try {
+    const origin = new URL(
+      raw.includes("://") ? raw : `https://${raw}`,
+    ).origin;
+    return origin.replace(/\/$/, "");
+  } catch {
+    return "";
   }
-
-  return DEFAULT_TRACKING_BASE_URL;
 }
 
 function getAppUrl(): string {
