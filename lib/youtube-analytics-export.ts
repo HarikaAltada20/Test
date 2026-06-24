@@ -1,75 +1,24 @@
 /** Flatten YouTube analytics (popover) into export cells. */
 
 import { Country } from "country-state-city";
-
-const TRAFFIC_LABELS: Record<string, string> = {
-  SHORTS: "Shorts Feed",
-  YT_SEARCH: "YouTube Search",
-  RELATED_VIDEO: "Related Videos",
-  YT_CHANNEL: "Channel Page",
-  SUBSCRIBER: "Subscriber Feed",
-  EXT_URL: "External Links",
-  NO_LINK_OTHER: "Direct / Other",
-  NO_LINK_EMBEDDED: "Embedded",
-  YT_OTHER_PAGE: "Other YouTube",
-  HASHTAGS: "Hashtags",
-  PLAYLIST: "Playlist",
-  SOUND_PAGE: "Sound Page",
-  NOTIFICATION: "Notifications",
-  END_SCREEN: "End Screen",
-};
-
-const AGE_LABELS: Record<string, string> = {
-  age13_17: "13-17",
-  age18_24: "18-24",
-  age25_34: "25-34",
-  age35_44: "35-44",
-  age45_54: "45-54",
-  age55_64: "55-64",
-  age65_: "65+",
-};
-
-/** ISO-3166-1 alpha-2 → display name (matches YouTube analytics panel). */
-const COUNTRY_NAMES: Record<string, string> = {
-  US: "United States",
-  IN: "India",
-  GB: "United Kingdom",
-  BR: "Brazil",
-  CA: "Canada",
-  AU: "Australia",
-  DE: "Germany",
-  FR: "France",
-  MX: "Mexico",
-  PH: "Philippines",
-  ID: "Indonesia",
-  NG: "Nigeria",
-  PK: "Pakistan",
-  BD: "Bangladesh",
-  TR: "Turkey",
-  VN: "Vietnam",
-  KR: "South Korea",
-  JP: "Japan",
-  EG: "Egypt",
-  TH: "Thailand",
-  IT: "Italy",
-  ES: "Spain",
-  CO: "Colombia",
-  AR: "Argentina",
-  SA: "Saudi Arabia",
-  MY: "Malaysia",
-  RU: "Russia",
-  ZA: "South Africa",
-  NL: "Netherlands",
-  PL: "Poland",
-  UA: "Ukraine",
-  KE: "Kenya",
-  GH: "Ghana",
-  AE: "United Arab Emirates",
-  SG: "Singapore",
-  NZ: "New Zealand",
-  NP: "Nepal",
-  LK: "Sri Lanka",
-};
+import {
+  COUNTRY_NAMES,
+  formatAgeGroupLabel,
+  formatDeviceLabel,
+  formatGenderLabel,
+  formatOsLabel,
+  formatProvinceLabel,
+  parseCityKey,
+  SUBSCRIBED_LABELS,
+  TRAFFIC_LABELS,
+} from "@/lib/youtube-analytics-labels";
+import { YT_AUDIENCE_GEO_DETAIL_LIMIT } from "@/lib/youtube-constants";
+import {
+  formatGeoRowForExport,
+  geoSortScore,
+  normalizeGeoMetric,
+  type GeoMetricValue,
+} from "@/lib/youtube-geo-metrics";
 
 function formatCountryName(code: string): string {
   const normalized = String(code ?? "")
@@ -118,8 +67,18 @@ function num(metrics: Record<string, unknown>, key: string): number {
 type DemographicsShape = {
   age_groups?: Record<string, number>;
   gender?: Record<string, number>;
-  countries?: Record<string, number>;
+  countries?: Record<string, GeoMetricValue>;
+  cities?: Record<string, GeoMetricValue>;
+  provinces?: Record<string, GeoMetricValue>;
 };
+
+function sortGeoEntries(
+  map: Record<string, GeoMetricValue> | undefined,
+): [string, GeoMetricValue][] {
+  return Object.entries(map ?? {}).sort(
+    (a, b) => geoSortScore(b[1]) - geoSortScore(a[1]),
+  );
+}
 
 function getDemographics(
   metrics: Record<string, unknown>,
@@ -139,7 +98,9 @@ export function hasDemographicsData(metrics: Record<string, unknown>): boolean {
   return (
     Object.keys(demo.age_groups ?? {}).length > 0 ||
     Object.keys(demo.gender ?? {}).length > 0 ||
-    Object.keys(demo.countries ?? {}).length > 0
+    Object.keys(demo.countries ?? {}).length > 0 ||
+    Object.keys(demo.cities ?? {}).length > 0 ||
+    Object.keys(demo.provinces ?? {}).length > 0
   );
 }
 
@@ -191,9 +152,25 @@ export function parseYouTubeAnalyticsMetrics(
       (base.traffic_sources as Record<string, number> | null | undefined) ??
       (yt.traffic_sources as Record<string, number> | null | undefined) ??
       null,
+    traffic_source_details:
+      (base.traffic_source_details as Record<string, unknown> | null | undefined) ??
+      (yt.traffic_source_details as Record<string, unknown> | null | undefined) ??
+      null,
+    subscribed_status:
+      (base.subscribed_status as Record<string, number> | null | undefined) ??
+      (yt.subscribed_status as Record<string, number> | null | undefined) ??
+      null,
     demographics:
       (base.demographics as Record<string, unknown> | null | undefined) ??
       (yt.demographics as Record<string, unknown> | null | undefined) ??
+      null,
+    devices:
+      (base.devices as Record<string, unknown> | null | undefined) ??
+      (yt.devices as Record<string, unknown> | null | undefined) ??
+      null,
+    audience_retention:
+      (base.audience_retention as unknown[] | null | undefined) ??
+      (yt.audience_retention as unknown[] | null | undefined) ??
       null,
     bot_score:
       base.bot_score != null
@@ -227,7 +204,9 @@ function hasMeaningfulCoreAnalytics(metrics: Record<string, unknown>): boolean {
     num(metrics, "comments") > 0 ||
     num(metrics, "subscribers_gained") > 0 ||
     num(metrics, "subscribers_lost") > 0 ||
-    num(metrics, "videos_added_to_playlists") > 0
+    num(metrics, "videos_added_to_playlists") > 0 ||
+    Array.isArray(metrics.audience_retention) &&
+      (metrics.audience_retention as unknown[]).length > 0
   );
 }
 
@@ -288,22 +267,68 @@ function buildCoreSection(metrics: Record<string, unknown>): string[] {
     lines.push(`Added to Playlists: ${fmtNum(addedPlaylists)}`);
   }
 
+  const retention = metrics.audience_retention as
+    | Array<{ elapsed_ratio: number; watch_ratio: number }>
+    | null
+    | undefined;
+  if (retention && retention.length > 0) {
+    const midpoint = retention.find((p) => p.elapsed_ratio >= 0.5);
+    if (midpoint) {
+      lines.push(
+        `Retention at midpoint: ${Math.round(midpoint.watch_ratio * 100)}%`,
+      );
+    }
+  }
+
   return lines;
 }
 
 export function buildTrafficSection(metrics: Record<string, unknown>): string[] {
+  const lines: string[] = [];
   const sources = metrics.traffic_sources as Record<string, number> | null;
-  if (!sources || Object.keys(sources).length === 0) {
-    return [];
-  }
-  const lines = Object.entries(sources)
-    .sort((a, b) => b[1] - a[1])
-    .map(
-      ([key, pct]) =>
-        `${TRAFFIC_LABELS[key] ?? key}: ${Number(pct).toFixed(1)}%`,
+  if (sources && Object.keys(sources).length > 0) {
+    lines.push(
+      ...Object.entries(sources)
+        .sort((a, b) => b[1] - a[1])
+        .map(
+          ([key, pct]) =>
+            `${TRAFFIC_LABELS[key] ?? key}: ${Number(pct).toFixed(1)}%`,
+        ),
     );
+  }
+
+  const subscribed = metrics.subscribed_status as Record<string, number> | null;
+  if (subscribed && Object.keys(subscribed).length > 0) {
+    for (const [key, pct] of Object.entries(subscribed).sort(
+      (a, b) => b[1] - a[1],
+    )) {
+      lines.push(
+        `${SUBSCRIBED_LABELS[key] ?? key}: ${Number(pct).toFixed(1)}%`,
+      );
+    }
+  }
+
+  const details = metrics.traffic_source_details as
+    | Record<string, Record<string, number>>
+    | null
+    | undefined;
+  if (details?.YT_SEARCH) {
+    for (const [term, pct] of Object.entries(details.YT_SEARCH).sort(
+      (a, b) => b[1] - a[1],
+    )) {
+      lines.push(`Search "${term}": ${Number(pct).toFixed(1)}%`);
+    }
+  }
+  if (details?.EXT_URL) {
+    for (const [url, pct] of Object.entries(details.EXT_URL).sort(
+      (a, b) => b[1] - a[1],
+    )) {
+      lines.push(`Referrer ${url}: ${Number(pct).toFixed(1)}%`);
+    }
+  }
+
   const updated = metrics.last_traffic_update;
-  if (updated) lines.push(`Updated: ${String(updated)}`);
+  if (lines.length > 0 && updated) lines.push(`Updated: ${String(updated)}`);
   return lines;
 }
 
@@ -316,12 +341,11 @@ export function buildDemographicsSection(
   const lines: string[] = [];
   const ages = demo.age_groups ?? {};
   for (const [age, pct] of Object.entries(ages).sort((a, b) => b[1] - a[1])) {
-    lines.push(`${AGE_LABELS[age] ?? age}: ${Number(pct).toFixed(1)}%`);
+    lines.push(`${formatAgeGroupLabel(age)}: ${Number(pct).toFixed(1)}%`);
   }
   const gender = demo.gender ?? {};
   for (const [g, pct] of Object.entries(gender)) {
-    const label = g.charAt(0).toUpperCase() + g.slice(1);
-    lines.push(`${label}: ${Number(pct).toFixed(1)}%`);
+    lines.push(`${formatGenderLabel(g)}: ${Number(pct).toFixed(1)}%`);
   }
   const updated = metrics.last_demographics_update;
   if (lines.length > 0 && updated) {
@@ -337,15 +361,79 @@ export function buildTopCountriesSection(
   const countries = demo?.countries ?? {};
   if (Object.keys(countries).length === 0) return [];
 
-  const lines = Object.entries(countries)
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 15)
-    .map(
-      ([code, pct]) =>
-        `${formatCountryName(code)}: ${Number(pct).toFixed(1)}%`,
-    );
+  const lines = sortGeoEntries(countries)
+    .slice(0, YT_AUDIENCE_GEO_DETAIL_LIMIT)
+    .map(([code, value]) => {
+      const row = normalizeGeoMetric(value);
+      if (!row) return "";
+      return formatGeoRowForExport(formatCountryName(code), row);
+    })
+    .filter(Boolean);
   const updated = metrics.last_demographics_update;
   if (updated) lines.push(`Updated: ${String(updated)}`);
+  return lines;
+}
+
+export function buildTopCitiesSection(
+  metrics: Record<string, unknown>,
+): string[] {
+  const demo = getDemographics(metrics);
+  const cities = demo?.cities ?? {};
+  if (Object.keys(cities).length === 0) return [];
+
+  return sortGeoEntries(cities)
+    .slice(0, YT_AUDIENCE_GEO_DETAIL_LIMIT)
+    .map(([key, value]) => {
+      const { country, city } = parseCityKey(key);
+      const countryLabel = country ? formatCountryName(country) : "";
+      const label = `${city}${countryLabel ? `, ${countryLabel}` : ""}`;
+      const row = normalizeGeoMetric(value);
+      if (!row) return "";
+      return formatGeoRowForExport(label, row);
+    })
+    .filter(Boolean);
+}
+
+export function buildProvincesSection(
+  metrics: Record<string, unknown>,
+): string[] {
+  const demo = getDemographics(metrics);
+  const provinces = demo?.provinces ?? {};
+  if (Object.keys(provinces).length === 0) return [];
+
+  return sortGeoEntries(provinces)
+    .slice(0, YT_AUDIENCE_GEO_DETAIL_LIMIT)
+    .map(([code, value]) => {
+      const row = normalizeGeoMetric(value);
+      if (!row) return "";
+      return formatGeoRowForExport(formatProvinceLabel(code), row);
+    })
+    .filter(Boolean);
+}
+
+export function buildDevicesSection(
+  metrics: Record<string, unknown>,
+): string[] {
+  const devices = metrics.devices as
+    | {
+        device_types?: Record<string, number>;
+        operating_systems?: Record<string, number>;
+      }
+    | null
+    | undefined;
+  if (!devices) return [];
+
+  const lines: string[] = [];
+  for (const [type, pct] of Object.entries(devices.device_types ?? {}).sort(
+    (a, b) => b[1] - a[1],
+  )) {
+    lines.push(`${formatDeviceLabel(type)}: ${Number(pct).toFixed(1)}%`);
+  }
+  for (const [os, pct] of Object.entries(
+    devices.operating_systems ?? {},
+  ).sort((a, b) => b[1] - a[1])) {
+    lines.push(`${formatOsLabel(os)}: ${Number(pct).toFixed(1)}%`);
+  }
   return lines;
 }
 
@@ -420,6 +508,18 @@ export function formatYouTubeAnalyticsForExport(
     const countries = buildTopCountriesSection(metrics);
     if (countries.length > 0) {
       blocks.push(joinBlock("TOP COUNTRIES", countries));
+    }
+    const cities = buildTopCitiesSection(metrics);
+    if (cities.length > 0) {
+      blocks.push(joinBlock("TOP CITIES", cities));
+    }
+    const provinces = buildProvincesSection(metrics);
+    if (provinces.length > 0) {
+      blocks.push(joinBlock("US STATES", provinces));
+    }
+    const deviceLines = buildDevicesSection(metrics);
+    if (deviceLines.length > 0) {
+      blocks.push(joinBlock("DEVICES", deviceLines));
     }
   }
 

@@ -3786,8 +3786,16 @@ export function CreatorSubmissionsModal({
                                           youtubeStats.engaged_views ?? 0,
                                         traffic_sources:
                                           youtubeStats.traffic_sources ?? null,
+                                        traffic_source_details:
+                                          youtubeStats.traffic_source_details ??
+                                          null,
+                                        subscribed_status:
+                                          youtubeStats.subscribed_status ?? null,
                                         demographics:
                                           youtubeStats.demographics ?? null,
+                                        devices: youtubeStats.devices ?? null,
+                                        audience_retention:
+                                          youtubeStats.audience_retention ?? null,
                                         bot_score:
                                           youtubeStats.bot_score ?? null,
                                         bot_flags: youtubeStats.bot_flags ?? [],

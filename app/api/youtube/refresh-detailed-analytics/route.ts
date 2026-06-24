@@ -3,15 +3,11 @@ import { createClient as createAdminSupabaseClient } from "@supabase/supabase-js
 import { verifyAdminAccess } from "@/utils/admin-auth";
 import { refreshAccessToken, extractYoutubeId } from "@/lib/youtube-api";
 import {
-  getVideoAnalytics,
-  getVideoTrafficSources,
-  getVideoDemographics,
-  computeBotScore,
-  isYouTubeShort,
-  getDefaultAnalyticsStartDate,
-} from "@/lib/youtube-analytics";
+  updateYouTubeSubmissionForScope,
+  isYouTubeAllLikeScope,
+} from "@/lib/youtube-submission-refresh-by-scope";
+import type { YouTubeRefreshScope } from "@/lib/queue/youtube-metrics-queue";
 import { METRICS_REFRESH_COOLDOWN_MS_ADMIN } from "@/lib/constants";
-import { fetchYouTubeBasicStatsByVideoId } from "@/lib/youtube-submission-refresh-by-scope";
 
 /**
  * POST /api/youtube/refresh-detailed-analytics
@@ -37,15 +33,26 @@ export async function POST(request: Request) {
     creatorId,
     contestId,
   }: {
-    type: "core" | "traffic" | "demographics" | "all";
+    type: YouTubeRefreshScope;
     submissionId?: string;
     creatorId?: string;
     contestId?: string;
   } = body;
 
-  if (!type || !["core", "traffic", "demographics", "all"].includes(type)) {
+  const ANALYTICS_TYPES: YouTubeRefreshScope[] = [
+    "core",
+    "traffic",
+    "demographics",
+    "all",
+    "all_standard",
+  ];
+
+  if (!type || !ANALYTICS_TYPES.includes(type)) {
     return NextResponse.json(
-      { error: "type must be 'core', 'traffic', 'demographics', or 'all'" },
+      {
+        error:
+          "type must be 'core', 'traffic', 'demographics', 'all', or 'all_standard'",
+      },
       { status: 400 }
     );
   }
@@ -251,165 +258,34 @@ export async function POST(request: Request) {
       continue;
     }
 
-    // Use the shared default rolling window (see YT_ANALYTICS_DEFAULT_WINDOW_DAYS)
-    // so admins can change it once and affect all analytics queries.
-    const startDate = getDefaultAnalyticsStartDate();
-
-    const existingStats = (sub.other_stats?.youtube || sub.other_stats || {}) as Record<string, any>;
-    const isShort = isYouTubeShort(sub.content_link);
-
     try {
-      const updates: Record<string, any> = {};
-      let hadAuthError = false;
-
-      if (type === "all") {
-        const basicMap = await fetchYouTubeBasicStatsByVideoId(accessToken, [videoId]);
-        const basic = basicMap.get(videoId);
-        if (basic) {
-          updates.views = basic.viewCount;
-          updates.likes = basic.likeCount;
-          updates.comments = basic.commentCount;
-          updates.last_basic_update = now;
-        }
-      }
-
-      // ── Call 1: Core analytics (on-demand) ──────────────────────────────────
-      if (type === "core" || type === "all") {
-        try {
-          const analytics = await getVideoAnalytics(accessToken, videoId, startDate);
-          if (analytics) {
-            updates.estimated_minutes_watched = analytics.estimated_minutes_watched;
-            updates.avg_view_duration_seconds = analytics.avg_view_duration_seconds;
-            updates.avg_view_percentage = analytics.avg_view_percentage;
-            updates.engaged_views = analytics.engaged_views;
-            // Lifetime likes/comments come from Data API, not windowed Analytics metrics.
-            updates.shares = analytics.shares;
-            updates.subscribers_gained = analytics.subscribers_gained;
-            updates.subscribers_lost = analytics.subscribers_lost;
-            updates.videos_added_to_playlists = analytics.videos_added_to_playlists;
-            updates.videos_removed_from_playlists = analytics.videos_removed_from_playlists;
-            if (type !== "all") {
-              updates.last_basic_update = now;
-            }
-          }
-        } catch (err: any) {
-          const code = err?.code ?? err?.status;
-          if (code === 403 || code === 401) {
-            hadAuthError = true;
-          } else {
-            console.error(`Core analytics error for ${sub.id}:`, err.message);
-          }
-        }
-      }
-
-      // ── Call 2: Traffic sources ──────────────────────────────────────────────
-      if (type === "traffic" || type === "all") {
-        try {
-          const trafficSources = await getVideoTrafficSources(accessToken, videoId, startDate);
-          updates.traffic_sources = trafficSources;
-          updates.last_traffic_update = now;
-        } catch (err: any) {
-          const code = err?.code ?? err?.status;
-          if (code === 403 || code === 401) {
-            hadAuthError = true;
-          } else {
-            console.error(`Traffic sources error for ${sub.id}:`, err.message);
-          }
-        }
-      }
-
-      // ── Call 3: Demographics ─────────────────────────────────────────────────
-      if (type === "demographics" || type === "all") {
-        try {
-          const demographics = await getVideoDemographics(accessToken, videoId, startDate);
-          updates.demographics = demographics;
-          updates.last_demographics_update = now;
-        } catch (err: any) {
-          const code = err?.code ?? err?.status;
-          if (code === 403 || code === 401) {
-            hadAuthError = true;
-          } else {
-            console.error(`Demographics error for ${sub.id}:`, err.message);
-          }
-        }
-      }
-
-      if (hadAuthError) {
-        reauthNeeded.push(sub.id);
-        await supabaseAdmin
-          .from("submissions")
-          .update({
-            insights_status: "permanent_failure",
-            last_insights_update: now,
-            other_stats: {
-              ...sub.other_stats,
-              youtube: { ...existingStats, analytics_needs_reauth: true },
-            },
-            updated_at: now,
-          })
-          .eq("id", sub.id);
-        failed++;
-        continue;
-      }
-
-      if (Object.keys(updates).length === 0) {
-        await supabaseAdmin
-          .from("submissions")
-          .update({
-            insights_status: "temporary_failure",
-            last_insights_update: now,
-            updated_at: now,
-          })
-          .eq("id", sub.id);
-        failed++;
-        continue;
-      }
-
-      // ── Recompute bot score from all available analytics ─────────────────────
-      const merged = { ...existingStats, ...updates };
-      const coreForScore = {
-        estimated_minutes_watched: merged.estimated_minutes_watched || 0,
-        avg_view_duration_seconds: merged.avg_view_duration_seconds || 0,
-        avg_view_percentage: merged.avg_view_percentage || 0,
-        engaged_views: merged.engaged_views || 0,
-        likes: merged.likes || 0,
-        dislikes: merged.dislikes || 0,
-        comments: merged.comments || 0,
-        shares: merged.shares || 0,
-        subscribers_gained: merged.subscribers_gained || 0,
-        subscribers_lost: merged.subscribers_lost || 0,
-        videos_added_to_playlists: merged.videos_added_to_playlists || 0,
-        videos_removed_from_playlists: merged.videos_removed_from_playlists || 0,
-      };
-
-      const { score, flags } = computeBotScore(
-        coreForScore,
-        sub.views || 0,
-        merged.traffic_sources || null,
-        isShort
+      const result = await updateYouTubeSubmissionForScope(
+        supabaseAdmin,
+        {
+          id: sub.id,
+          creator_id: sub.creator_id,
+          content_link: sub.content_link,
+          views: sub.views,
+          other_stats: (sub.other_stats as Record<string, unknown> | null) ?? null,
+        },
+        accessToken,
+        type,
+        now
       );
-      updates.bot_score = score;
-      updates.bot_flags = flags;
-      updates.analytics_needs_reauth = false;
 
-      const patch: Record<string, unknown> = {
-        insights_status: "ok",
-        last_insights_update: now,
-        other_stats: { ...sub.other_stats, youtube: { ...existingStats, ...updates } },
-        updated_at: now,
-      };
-      if (type === "all" && typeof updates.views === "number") {
-        patch.views = updates.views;
+      if (result.ok) {
+        updated++;
+      } else {
+        if (result.authError) {
+          reauthNeeded.push(sub.id);
+        }
+        failed++;
       }
-
-      await supabaseAdmin
-        .from("submissions")
-        .update(patch)
-        .eq("id", sub.id);
-
-      updated++;
-    } catch (err: any) {
-      console.error(`Failed for submission ${sub.id}:`, err.message);
+    } catch (err: unknown) {
+      console.error(
+        `Failed for submission ${sub.id}:`,
+        (err as Error)?.message
+      );
       await supabaseAdmin
         .from("submissions")
         .update({
@@ -434,9 +310,10 @@ export async function POST(request: Request) {
     const existingYt = (existing.youtube_metrics_last_updated as Record<string, string>) || {};
     const now = new Date().toISOString();
     const nextYt = { ...existingYt };
-    if (type === "core" || type === "all") nextYt.core = now;
-    if (type === "traffic" || type === "all") nextYt.traffic = now;
-    if (type === "demographics" || type === "all") nextYt.demographics = now;
+    if (type === "core" || isYouTubeAllLikeScope(type)) nextYt.core = now;
+    if (type === "traffic" || isYouTubeAllLikeScope(type)) nextYt.traffic = now;
+    if (type === "demographics" || isYouTubeAllLikeScope(type))
+      nextYt.demographics = now;
     await supabaseAdmin
       .from("contests")
       .update({
