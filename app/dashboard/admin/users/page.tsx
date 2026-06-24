@@ -31,7 +31,7 @@ import {
   Plus,
   Trash2,
   Clock,
-  Map,
+  Map as MapIcon,
   List,
   Bell,
   Mail,
@@ -346,6 +346,9 @@ const ALL_COUNTRIES: string[] = Array.from(
   ),
 ).sort((a, b) => a.localeCompare(b));
 
+const USERS_INITIAL_LIMIT = 25;
+const USERS_BACKGROUND_CHUNK = 500;
+
 const isTableFilterColumn = (column: { id: string }) =>
   column.id !== "profile" && column.id !== "support_chat";
 
@@ -438,7 +441,16 @@ export default function AdminUsersPage() {
   };
 
   const [rows, setRows] = useState<User[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [initialLoadDone, setInitialLoadDone] = useState(false);
+  const [backgroundLoading, setBackgroundLoading] = useState(false);
+  const [userCounts, setUserCounts] = useState({
+    all: 0,
+    advertisers: 0,
+    creators: 0,
+  });
+  const usersLoadAbortRef = useRef<AbortController | null>(null);
+  const usersLoadGenerationRef = useRef(0);
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(25);
   const [activeTab, setActiveTab] = useState("all");
@@ -2389,11 +2401,12 @@ export default function AdminUsersPage() {
   }, [rows, activeTab, sortOrder, sortColumn, filters]);
 
   // Calculate counts for each tab
-  const allUsersCount = rows.length;
-  const advertisersCount = rows.filter(
-    (r) => r.user_type === "advertiser",
-  ).length;
-  const creatorsCount = rows.filter((r) => r.user_type === "creator").length;
+  const allUsersCount = userCounts.all || rows.length;
+  const advertisersCount =
+    userCounts.advertisers ||
+    rows.filter((r) => r.user_type === "advertiser").length;
+  const creatorsCount =
+    userCounts.creators || rows.filter((r) => r.user_type === "creator").length;
 
   // Paginated data
   const paginatedData = useMemo(() => {
@@ -2621,21 +2634,95 @@ export default function AdminUsersPage() {
   }, [filters]);
 
   const load = async () => {
+    usersLoadAbortRef.current?.abort();
+    const generation = ++usersLoadGenerationRef.current;
+    const abort = new AbortController();
+    usersLoadAbortRef.current = abort;
+
+    const isStale = () => generation !== usersLoadGenerationRef.current;
+
+    setLoading(true);
+    setBackgroundLoading(false);
+    setInitialLoadDone(false);
+    setRows([]);
+
+    const mergeUsers = (incoming: User[]) => {
+      if (isStale()) return;
+      setRows((prev) => {
+        const byId = new Map(prev.map((user) => [user.id, user]));
+        for (const user of incoming) {
+          byId.set(user.id, user);
+        }
+        return Array.from(byId.values()).sort(
+          (a, b) =>
+            new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
+        );
+      });
+    };
+
     try {
-      setLoading(true);
-      const res = await fetch(`/api/admin/users`);
-      const json = await res.json();
-      if (!res.ok) throw new Error(json.error || "Failed to fetch");
-      setRows(json.items || []);
-    } catch (e) {
-      console.error("Error loading users:", e);
-    } finally {
+      const firstRes = await fetch(
+        `/api/admin/users?offset=0&limit=${USERS_INITIAL_LIMIT}&includeCounts=1`,
+        { signal: abort.signal },
+      );
+      if (isStale() || abort.signal.aborted) return;
+
+      const firstJson = await firstRes.json();
+      if (!firstRes.ok) {
+        throw new Error(firstJson.error || "Failed to fetch");
+      }
+
+      setRows(firstJson.items ?? []);
+      if (firstJson.counts) {
+        setUserCounts(firstJson.counts);
+      }
+
+      const total = firstJson.total ?? firstJson.items?.length ?? 0;
       setLoading(false);
+      setInitialLoadDone(true);
+
+      if (total <= USERS_INITIAL_LIMIT) return;
+
+      setBackgroundLoading(true);
+      let offset = USERS_INITIAL_LIMIT;
+
+      while (offset < total) {
+        if (abort.signal.aborted || isStale()) return;
+
+        const res = await fetch(
+          `/api/admin/users?offset=${offset}&limit=${USERS_BACKGROUND_CHUNK}`,
+          { signal: abort.signal },
+        );
+        if (isStale() || abort.signal.aborted) return;
+
+        const json = await res.json();
+        if (!res.ok) {
+          throw new Error(json.error || "Failed to fetch users");
+        }
+
+        const batch: User[] = json.items ?? [];
+        if (batch.length === 0) break;
+
+        mergeUsers(batch);
+        offset += batch.length;
+        if (batch.length < USERS_BACKGROUND_CHUNK) break;
+      }
+    } catch (e) {
+      if (abort.signal.aborted || isStale()) return;
+      console.error("Error loading users:", e);
+      setInitialLoadDone(true);
+    } finally {
+      if (abort.signal.aborted || isStale()) return;
+      setLoading(false);
+      setBackgroundLoading(false);
     }
   };
 
   useEffect(() => {
-    load();
+    void load();
+    return () => {
+      usersLoadAbortRef.current?.abort();
+    };
   }, []);
 
   // Watch for theme changes from parent layout
@@ -2684,6 +2771,23 @@ export default function AdminUsersPage() {
             >
               Users Management
             </CardTitle>
+            {/* {backgroundLoading && (
+              <Badge
+                variant="outline"
+                className={cn(
+                  "shrink-0 text-xs font-normal gap-1",
+                  isDark
+                    ? "border-purple-700/50 text-purple-200"
+                    : "border-purple-200 text-purple-700",
+                )}
+              >
+                <Loader2 className="h-3 w-3 animate-spin" />
+                Loading users {rows.length.toLocaleString()}
+                {allUsersCount > 0
+                  ? ` / ${allUsersCount.toLocaleString()}`
+                  : ""}
+              </Badge>
+            )} */}
             {viewMode === "table" && (
               <div className="flex shrink-0 items-center gap-2">
                 <Button
@@ -2758,7 +2862,7 @@ export default function AdminUsersPage() {
                 className="h-8 gap-1.5 rounded-none px-2 sm:px-3"
                 onClick={() => setViewModePersisted("map")}
               >
-                <Map className="h-4 w-4" />
+                <MapIcon className="h-4 w-4" />
                 <span className="hidden sm:inline">Map</span>
               </Button>
               <Button
@@ -3073,6 +3177,12 @@ export default function AdminUsersPage() {
                         <Checkbox
                           aria-label={`Select all matching filters (${tabFiltered.length})`}
                           checked={headerSelectChecked}
+                          disabled={backgroundLoading}
+                          title={
+                            backgroundLoading
+                              ? "Wait until all users finish loading"
+                              : undefined
+                          }
                           onCheckedChange={(c) =>
                             toggleSelectAllFiltered(!!c)
                           }
@@ -4235,7 +4345,7 @@ export default function AdminUsersPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {loading ? (
+                  {loading || !initialLoadDone ? (
                     <>
                       {Array.from({ length: limit }).map((_, index) => (
                         <TableRow key={`skeleton-${index}`}>
@@ -5186,7 +5296,7 @@ export default function AdminUsersPage() {
                 </TableBody>
               </Table>
             </div>
-            {!loading && tabFiltered.length > 0 && (
+            {initialLoadDone && !loading && tabFiltered.length > 0 && (
               <div className="mt-4">
                 <PaginationControls
                   page={page}

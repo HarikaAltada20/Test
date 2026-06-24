@@ -93,7 +93,7 @@ function UserPickerDialog({
   useEffect(() => {
     if (!open || users.length > 0) return;
     setLoading(true);
-    fetch("/api/admin/users")
+    fetch("/api/admin/users?all=1")
       .then((r) => r.json())
       .then((d) => setUsers((d.items ?? []) as UserRow[]))
       .catch(() => {})

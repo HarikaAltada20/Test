@@ -121,6 +121,7 @@ export async function processInboundRawEmail(
   messageId?: string;
   skipped?: boolean;
   sesMessageId?: string | null;
+  warmUpHandled?: boolean;
 }> {
   const parsed = parseRawEmail(raw);
   if (!parsed.fromEmail || !parsed.toEmail) {
@@ -133,7 +134,7 @@ export async function processInboundRawEmail(
     parsed.references,
   );
 
-  await handleWarmUpInbound({
+  const warmUp = await handleWarmUpInbound({
     fromEmail: parsed.fromEmail,
     toEmail: parsed.toEmail,
     inReplyToMessageId: inReplyTo,
@@ -156,13 +157,23 @@ export async function processInboundRawEmail(
     stopOnReply: true,
   });
 
-  return { ...result, sesMessageId: canonicalMessageId(parsed.messageId) ?? parsed.messageId, skipped: result.skipped };
+  return {
+    ...result,
+    sesMessageId: canonicalMessageId(parsed.messageId) ?? parsed.messageId,
+    skipped: result.skipped,
+    warmUpHandled: warmUp.handled,
+  };
 }
 
 export async function processInboundS3Object(
   bucket: string,
   key: string,
-): Promise<{ threadId?: string; messageId?: string; skipped?: boolean }> {
+): Promise<{
+  threadId?: string;
+  messageId?: string;
+  skipped?: boolean;
+  warmUpHandled?: boolean;
+}> {
   if (await isInboundS3KeyProcessed(key)) {
     return { skipped: true };
   }
@@ -170,8 +181,12 @@ export async function processInboundS3Object(
   const raw = await fetchInboundEmailFromS3(bucket, key);
   const result = await processInboundRawEmail(raw);
 
-  if (result.skipped || result.messageId) {
-    await markInboundS3KeyProcessed(key, result.sesMessageId ?? null, result.threadId);
+  if (result.skipped || result.messageId || result.warmUpHandled) {
+    await markInboundS3KeyProcessed(
+      key,
+      result.sesMessageId ?? null,
+      result.threadId,
+    );
   }
 
   return result;
@@ -211,67 +226,135 @@ export async function processSesInboundNotification(
   }
 }
 
-export async function syncInboundEmailsFromBucket(options?: {
-  maxKeys?: number;
-  prefix?: string;
-  /** Max S3 objects to list (paginated under prefix, then sorted by date). */
-  maxObjects?: number;
-}): Promise<{
-  processed: number;
-  skipped: number;
-  errors: number;
-  scanned: number;
-}> {
-  const bucket = getInboundBucket();
-  if (!bucket) throw new Error("INBOUND_SHARED_BUCKET is not configured");
+type ListedObject = { Key: string; LastModified?: Date };
 
-  const client = getS3Client();
-  if (!client) throw new Error("AWS S3 is not configured");
+function emailDomain(email: string | null | undefined): string | null {
+  const domain = email?.trim().toLowerCase().split("@")[1];
+  if (!domain || domain.includes("amazonaws.com")) return null;
+  return domain;
+}
 
-  const processLimit = options?.maxKeys ?? 15;
-  const maxObjects = options?.maxObjects ?? 1000;
-  const prefix = options?.prefix ?? getInboundPrefix();
+function retainNewest(
+  buffer: ListedObject[],
+  candidate: ListedObject,
+  limit: number,
+): void {
+  buffer.push(candidate);
+  buffer.sort(
+    (a, b) =>
+      (b.LastModified?.getTime() ?? 0) - (a.LastModified?.getTime() ?? 0),
+  );
+  if (buffer.length > limit) buffer.length = limit;
+}
 
-  type ListedObject = { Key: string; LastModified?: Date };
-  const collected: ListedObject[] = [];
+/** Domains we receive mail on — campaign senders, warm-up inboxes, outbound recipients. */
+async function getInboundReceivingDomains(): Promise<string[]> {
+  const db = createAdminClient();
+  const domains = new Set<string>();
+
+  const addEmail = (email: string | null | undefined) => {
+    const domain = emailDomain(email);
+    if (domain) domains.add(domain);
+  };
+
+  const [warmUpRes, campaignRes, outboundRes, recipientRes] = await Promise.all([
+    db.from("admin_email_warm_up_accounts").select("email"),
+    db
+      .from("admin_email_campaigns")
+      .select("from_email")
+      .not("from_email", "is", null),
+    db
+      .from("admin_email_unibox_messages")
+      .select("to_email")
+      .eq("direction", "outbound")
+      .not("to_email", "is", null)
+      .order("created_at", { ascending: false })
+      .limit(150),
+    db
+      .from("admin_email_campaign_recipients")
+      .select("from_email")
+      .not("from_email", "is", null)
+      .order("updated_at", { ascending: false })
+      .limit(150),
+  ]);
+
+  for (const row of warmUpRes.data ?? []) addEmail(row.email);
+  for (const row of campaignRes.data ?? []) addEmail(row.from_email);
+  for (const row of outboundRes.data ?? []) addEmail(row.to_email);
+  for (const row of recipientRes.data ?? []) addEmail(row.from_email);
+
+  return Array.from(domains).slice(0, 25);
+}
+
+async function listNewestUnderPrefix(
+  client: S3Client,
+  bucket: string,
+  prefix: string,
+  options: {
+    maxObjects: number;
+    maxPages: number;
+    deadline: number | null;
+  },
+): Promise<{ objects: ListedObject[]; listed: number }> {
+  const newest: ListedObject[] = [];
   let continuationToken: string | undefined;
+  let listed = 0;
 
-  while (collected.length < maxObjects) {
+  for (let page = 0; page < options.maxPages; page++) {
+    if (options.deadline && Date.now() > options.deadline) break;
+
     const list = await client.send(
       new ListObjectsV2Command({
         Bucket: bucket,
-        Prefix: prefix || undefined,
-        MaxKeys: Math.min(1000, maxObjects - collected.length),
+        Prefix: prefix,
+        MaxKeys: 200,
         ContinuationToken: continuationToken,
       }),
     );
 
     for (const obj of list.Contents ?? []) {
-      if (obj.Key) {
-        collected.push({ Key: obj.Key, LastModified: obj.LastModified });
-      }
+      if (!obj.Key) continue;
+      listed += 1;
+      retainNewest(
+        newest,
+        { Key: obj.Key, LastModified: obj.LastModified },
+        options.maxObjects,
+      );
     }
 
     if (!list.IsTruncated) break;
     continuationToken = list.NextContinuationToken;
   }
 
-  const objects = collected.sort(
-    (a, b) =>
-      (b.LastModified?.getTime() ?? 0) - (a.LastModified?.getTime() ?? 0),
-  );
+  return { objects: newest, listed };
+}
 
-  const processedKeys = await getSuccessfullyProcessedS3Keys(
-    objects.map((obj) => obj.Key),
-  );
-  const pending = objects.filter((obj) => !processedKeys.has(obj.Key));
+export type InboundSyncResult = {
+  processed: number;
+  warmUpHandled: number;
+  skipped: number;
+  errors: number;
+  scanned: number;
+  listed: number;
+  throttled?: boolean;
+};
 
+async function processPendingObjects(
+  bucket: string,
+  pending: ListedObject[],
+  processLimit: number,
+  deadline: number | null,
+): Promise<Pick<InboundSyncResult, "processed" | "warmUpHandled" | "skipped" | "errors" | "scanned">> {
   let processed = 0;
+  let warmUpHandled = 0;
   let skipped = 0;
   let errors = 0;
   let scanned = 0;
 
   for (const obj of pending) {
+    if (deadline && Date.now() > deadline) break;
+    if (processed + warmUpHandled >= processLimit) break;
+
     scanned += 1;
     try {
       const result = await processInboundS3Object(bucket, obj.Key);
@@ -279,7 +362,8 @@ export async function syncInboundEmailsFromBucket(options?: {
         skipped += 1;
       } else if (result.messageId) {
         processed += 1;
-        if (processed >= processLimit) break;
+      } else if (result.warmUpHandled) {
+        warmUpHandled += 1;
       } else {
         skipped += 1;
       }
@@ -289,28 +373,110 @@ export async function syncInboundEmailsFromBucket(options?: {
     }
   }
 
-  return { processed, skipped, errors, scanned };
+  return { processed, warmUpHandled, skipped, errors, scanned };
+}
+
+export async function syncInboundEmailsFromBucket(options?: {
+  maxKeys?: number;
+  prefix?: string;
+  maxObjects?: number;
+  timeBudgetMs?: number;
+  maxPagesPerPrefix?: number;
+}): Promise<InboundSyncResult> {
+  const bucket = getInboundBucket();
+  if (!bucket) throw new Error("INBOUND_SHARED_BUCKET is not configured");
+
+  const client = getS3Client();
+  if (!client) throw new Error("AWS S3 is not configured");
+
+  const processLimit = options?.maxKeys ?? 15;
+  const maxObjects = options?.maxObjects ?? 50;
+  const maxPagesPerPrefix = options?.maxPagesPerPrefix ?? 2;
+  const basePrefix = options?.prefix ?? getInboundPrefix();
+  const deadline = options?.timeBudgetMs
+    ? Date.now() + options.timeBudgetMs
+    : null;
+
+  const domains = await getInboundReceivingDomains();
+  const prefixes =
+    domains.length > 0
+      ? domains.map((domain) => `${basePrefix}${domain}/`)
+      : [basePrefix];
+
+  const candidates: ListedObject[] = [];
+  let listed = 0;
+
+  for (const prefix of prefixes) {
+    if (deadline && Date.now() > deadline) break;
+
+    const { objects, listed: prefixListed } = await listNewestUnderPrefix(
+      client,
+      bucket,
+      prefix,
+      {
+        maxObjects,
+        maxPages: maxPagesPerPrefix,
+        deadline,
+      },
+    );
+    listed += prefixListed;
+    candidates.push(...objects);
+  }
+
+  candidates.sort(
+    (a, b) =>
+      (b.LastModified?.getTime() ?? 0) - (a.LastModified?.getTime() ?? 0),
+  );
+  const newest = candidates.slice(0, maxObjects);
+
+  const processedKeys = await getSuccessfullyProcessedS3Keys(
+    newest.map((obj) => obj.Key),
+  );
+  const pending = newest.filter((obj) => !processedKeys.has(obj.Key));
+
+  const stats = await processPendingObjects(
+    bucket,
+    pending,
+    processLimit,
+    deadline,
+  );
+
+  return { ...stats, listed };
 }
 
 let lastRecentSyncAt = 0;
 const RECENT_SYNC_MIN_INTERVAL_MS = 12_000;
 
 /** Lightweight sync for live polling — checks newest inbound objects first. */
-export async function syncRecentInboundEmails(): Promise<{
-  processed: number;
-  skipped: number;
-  errors: number;
-  scanned: number;
-  throttled?: boolean;
-}> {
+export async function syncRecentInboundEmails(): Promise<InboundSyncResult> {
   const now = Date.now();
   if (now - lastRecentSyncAt < RECENT_SYNC_MIN_INTERVAL_MS) {
-    return { processed: 0, skipped: 0, errors: 0, scanned: 0, throttled: true };
+    return {
+      processed: 0,
+      warmUpHandled: 0,
+      skipped: 0,
+      errors: 0,
+      scanned: 0,
+      listed: 0,
+      throttled: true,
+    };
   }
   lastRecentSyncAt = now;
 
   return syncInboundEmailsFromBucket({
     maxKeys: 5,
-    maxObjects: 100,
+    maxObjects: 40,
+    maxPagesPerPrefix: 1,
+    timeBudgetMs: 8_000,
+  });
+}
+
+/** User-triggered sync — scoped to campaign/project/warm-up domains, finishes quickly. */
+export async function syncManualInboundEmails(): Promise<InboundSyncResult> {
+  return syncInboundEmailsFromBucket({
+    maxKeys: 15,
+    maxObjects: 60,
+    maxPagesPerPrefix: 2,
+    timeBudgetMs: 18_000,
   });
 }

@@ -121,6 +121,17 @@ export function EmailUnibox({ campaigns, isDark, isActive = true }: Props) {
   const [syncingInbound, setSyncingInbound] = useState(false);
   const [deletingSelected, setDeletingSelected] = useState(false);
   const hasLoadedOnceRef = useRef(false);
+  const manualSyncInFlightRef = useRef(0);
+  const selectedIdRef = useRef<string | null>(null);
+  selectedIdRef.current = selectedId;
+
+  const updateManualSyncLoading = useCallback((delta: number) => {
+    manualSyncInFlightRef.current = Math.max(
+      0,
+      manualSyncInFlightRef.current + delta,
+    );
+    setSyncingInbound(manualSyncInFlightRef.current > 0);
+  }, []);
 
   const buildListParams = useCallback(() => {
     const params = new URLSearchParams({
@@ -135,13 +146,21 @@ export function EmailUnibox({ campaigns, isDark, isActive = true }: Props) {
   }, [folder, readFilter, campaignId, search]);
 
   const syncInbound = useCallback(
-    async (options?: { silent?: boolean; full?: boolean }) => {
+    async (options?: {
+      silent?: boolean;
+      full?: boolean;
+      recent?: boolean;
+      manual?: boolean;
+      trackLoading?: boolean;
+    }) => {
       const silent = options?.silent ?? false;
-      const full = options?.full ?? false;
-      setSyncingInbound(true);
+      const trackLoading = options?.trackLoading ?? false;
+      if (trackLoading) updateManualSyncLoading(1);
       try {
         const params = new URLSearchParams();
-        if (full) params.set("full", "1");
+        if (options?.full) params.set("full", "1");
+        if (options?.recent) params.set("recent", "1");
+        if (options?.manual) params.set("manual", "1");
         const query = params.toString();
         const res = await fetch(
           `/api/admin/email-unibox/sync-inbound${query ? `?${query}` : ""}`,
@@ -154,41 +173,56 @@ export function EmailUnibox({ campaigns, isDark, isActive = true }: Props) {
           }
           return null;
         }
-        if (!silent && (data.processed ?? 0) > 0) {
-          toast({
-            title: "Replies synced",
-            description: `${data.processed} new reply(s) imported`,
-          });
+        if (!silent) {
+          const processed = data.processed ?? 0;
+          const warmUpHandled = data.warmUpHandled ?? 0;
+          const listed = data.listed ?? 0;
+          const imported = processed + warmUpHandled;
+          if (imported > 0) {
+            const parts: string[] = [];
+            if (processed > 0) {
+              parts.push(`${processed} campaign reply(s)`);
+            }
+            if (warmUpHandled > 0) {
+              parts.push(`${warmUpHandled} warm-up reply(s)`);
+            }
+            toast({
+              title: "Replies synced",
+              description: parts.join(", "),
+            });
+          } else if (!data.throttled) {
+            toast({
+              title: "Sync complete",
+              description:
+                listed > 0
+                  ? `No new replies to import`
+                  : "No inbound emails found for your campaigns or warm-up inboxes",
+            });
+          }
         }
-        return data as { processed?: number };
+        return data as {
+          processed?: number;
+          warmUpHandled?: number;
+          throttled?: boolean;
+          listed?: number;
+          scanned?: number;
+        };
       } catch (err) {
         if (!silent) {
           toast({
             title: "Sync failed",
-            description: err instanceof Error ? err.message : "Unknown error",
+            description:
+              err instanceof Error ? err.message : "Unknown error",
             variant: "destructive",
           });
         }
         return null;
       } finally {
-        setSyncingInbound(false);
+        if (trackLoading) updateManualSyncLoading(-1);
       }
     },
-    [toast],
+    [toast, updateManualSyncLoading],
   );
-
-  const syncInboundInBackground = useCallback(async () => {
-    try {
-      const res = await fetch("/api/admin/email-unibox/sync-inbound?recent=1", {
-        method: "POST",
-      });
-      const data = await res.json();
-      if (!res.ok) return null;
-      return data as { processed?: number };
-    } catch {
-      return null;
-    }
-  }, []);
 
   const loadThreads = useCallback(
     async (options?: { silent?: boolean }) => {
@@ -270,11 +304,13 @@ export function EmailUnibox({ campaigns, isDark, isActive = true }: Props) {
 
     const syncAndRefresh = async () => {
       if (document.visibilityState !== "visible") return;
-      const result = await syncInboundInBackground();
+      if (manualSyncInFlightRef.current > 0) return;
+      const result = await syncInbound({ recent: true, silent: true });
       if (cancelled) return;
       if ((result?.processed ?? 0) > 0) {
         await loadThreads({ silent: true });
-        if (selectedId) await loadThreadDetail(selectedId);
+        const activeId = selectedIdRef.current;
+        if (activeId) await loadThreadDetail(activeId);
       }
     };
 
@@ -288,13 +324,7 @@ export function EmailUnibox({ campaigns, isDark, isActive = true }: Props) {
       clearTimeout(firstSync);
       clearInterval(syncInterval);
     };
-  }, [
-    isActive,
-    syncInboundInBackground,
-    loadThreads,
-    loadThreadDetail,
-    selectedId,
-  ]);
+  }, [isActive, syncInbound, loadThreads, loadThreadDetail]);
 
   useEffect(() => {
     if (!isActive) return;
@@ -537,9 +567,10 @@ export function EmailUnibox({ campaigns, isDark, isActive = true }: Props) {
           className="h-10 border-gray-200"
           disabled={syncingInbound}
           onClick={async () => {
-            await syncInbound({ full: true, silent: false });
+            await syncInbound({ manual: true, silent: false, trackLoading: true });
             await loadThreads({ silent: true });
-            if (selectedId) await loadThreadDetail(selectedId);
+            const activeId = selectedIdRef.current;
+            if (activeId) await loadThreadDetail(activeId);
           }}
         >
           {syncingInbound ? (

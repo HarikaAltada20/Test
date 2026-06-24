@@ -235,7 +235,7 @@ async function findThreadByRecentOutboundTo(
     .from("admin_email_unibox_messages")
     .select("thread_id, project_id, campaign_id, user_id")
     .eq("direction", "outbound")
-    .eq("to_email", fromEmail)
+    .ilike("to_email", fromEmail)
     .order("created_at", { ascending: false })
     .limit(1)
     .maybeSingle();
@@ -274,7 +274,7 @@ async function findThreadByContactEmail(
   const { data: thread } = await db
     .from("admin_email_unibox_threads")
     .select("id, project_id, campaign_id, user_id, reply_count")
-    .eq("contact_email", fromEmail)
+    .ilike("contact_email", fromEmail)
     .eq("is_deleted", false)
     .order("last_message_at", { ascending: false })
     .limit(1)
