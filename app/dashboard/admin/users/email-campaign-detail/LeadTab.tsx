@@ -24,9 +24,10 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Filter, Plus, Search, Trash2 } from "lucide-react";
+import { Filter, Layers, Plus, Search, Trash2 } from "lucide-react";
 import { PaginationControls } from "@/components/ui/pagination-controls";
 import { useToast } from "@/hooks/use-toast";
+import { AddLeadsToCampaignModal } from "../AddLeadsToCampaignModal";
 
 const DEFAULT_PAGE_SIZE = 50;
 
@@ -107,22 +108,6 @@ type Props = {
   onRecipientsChange?: () => void;
 };
 
-function enterLeadSelectMode(campaignId: string, campaignName?: string) {
-  if (typeof window === "undefined") return;
-  sessionStorage.setItem("email_lead_mode", "1");
-  sessionStorage.setItem("email_lead_campaign_id", campaignId);
-  if (campaignName) {
-    sessionStorage.setItem("email_lead_campaign_name", campaignName);
-  } else {
-    sessionStorage.removeItem("email_lead_campaign_name");
-  }
-  window.dispatchEvent(
-    new CustomEvent("email:enter-lead-select-mode", {
-      detail: { campaignId, campaignName },
-    }),
-  );
-}
-
 export function LeadTab({
   campaignId,
   campaignName,
@@ -141,6 +126,7 @@ export function LeadTab({
   const [deleting, setDeleting] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [addLeadsModalOpen, setAddLeadsModalOpen] = useState(false);
 
   useEffect(() => {
     const timer = window.setTimeout(() => setDebouncedSearch(search), 300);
@@ -277,8 +263,17 @@ export function LeadTab({
         )}
 
         <Button
+          variant="outline"
+          className="h-11 border-gray-300"
+          onClick={() => setAddLeadsModalOpen(true)}
+        >
+          <Layers className="h-4 w-4 mr-2" />
+          Get selected bundles
+        </Button>
+
+        <Button
           className="h-11 bg-[#662EBD] hover:bg-[#5524a8]"
-          onClick={() => enterLeadSelectMode(campaignId, campaignName)}
+          onClick={() => setAddLeadsModalOpen(true)}
         >
           <Plus className="h-4 w-4 mr-1" />
           Add Leads
@@ -411,6 +406,17 @@ export function LeadTab({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <AddLeadsToCampaignModal
+        open={addLeadsModalOpen}
+        onOpenChange={setAddLeadsModalOpen}
+        campaignId={campaignId}
+        campaignName={campaignName}
+        onSuccess={() => {
+          void loadRecipients();
+          onRecipientsChange?.();
+        }}
+      />
     </div>
   );
 }

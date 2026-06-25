@@ -19,21 +19,28 @@ export async function GET(req: NextRequest, context: RouteContext) {
   const offset = (page - 1) * limit;
 
   const db = createAdminClient();
-  const userRelation = search
-    ? "user:users!inner (email, full_name, username, user_type)"
-    : "user:users (email, full_name, username, user_type)";
+  const userRelation = "user:users (email, full_name, username, user_type)";
 
   let query = db
     .from("admin_email_campaign_recipients")
     .select(
       `
-      user_id, email_delivery_status, from_email, opened_at, clicked_at,
+      id,
+      user_id,
+      recipient_email,
+      full_name,
+      username,
+      user_type_at_send,
+      email_delivery_status,
+      from_email,
+      opened_at,
+      clicked_at,
       ${userRelation}
     `,
       { count: "exact" },
     )
     .eq("campaign_id", id)
-    .order("user_id", { ascending: true });
+    .order("created_at", { ascending: true });
 
   if (status && status !== "all") {
     if (status === "not_opened") {
@@ -46,8 +53,7 @@ export async function GET(req: NextRequest, context: RouteContext) {
   if (search) {
     const pattern = `%${search}%`;
     query = query.or(
-      `email.ilike.${pattern},full_name.ilike.${pattern},username.ilike.${pattern}`,
-      { referencedTable: "users" },
+      `recipient_email.ilike.${pattern},full_name.ilike.${pattern},username.ilike.${pattern}`,
     );
   }
 
@@ -70,11 +76,11 @@ export async function GET(req: NextRequest, context: RouteContext) {
     const user = Array.isArray(rawUser) ? rawUser[0] ?? null : rawUser;
     return {
       index: offset + idx + 1,
-      userId: r.user_id,
-      email: user?.email ?? "",
-      fullName: user?.full_name ?? "",
-      username: user?.username ?? "",
-      userType: user?.user_type ?? "",
+      userId: r.user_id ?? r.id,
+      email: user?.email ?? r.recipient_email ?? "",
+      fullName: user?.full_name ?? r.full_name ?? "",
+      username: user?.username ?? r.username ?? "",
+      userType: user?.user_type ?? r.user_type_at_send ?? "",
       country: "",
       status: r.email_delivery_status,
       fromEmail: r.from_email,
@@ -171,7 +177,7 @@ export async function DELETE(req: NextRequest, context: RouteContext) {
 
   const { count: remainingCount } = await db
     .from("admin_email_campaign_recipients")
-    .select("user_id", { count: "exact", head: true })
+    .select("id", { count: "exact", head: true })
     .eq("campaign_id", campaignId);
 
   const recipientCount = remainingCount ?? 0;

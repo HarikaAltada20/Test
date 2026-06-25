@@ -37,6 +37,7 @@ import {
   Mail,
   Send,
   Loader2,
+  Layers,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import {
@@ -48,6 +49,7 @@ import {
 } from "./SendNotificationModal";
 import { AdminNotificationsView } from "./AdminNotificationsView";
 import { AttachEmailCampaignModal } from "./AttachEmailCampaignModal";
+import { AddLeadsToCampaignModal } from "./AddLeadsToCampaignModal";
 import type { RecipientUserRow } from "@/lib/admin-notifications/types";
 import { cn } from "@/lib/utils";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -346,8 +348,8 @@ const ALL_COUNTRIES: string[] = Array.from(
   ),
 ).sort((a, b) => a.localeCompare(b));
 
-const USERS_INITIAL_LIMIT = 25;
-const USERS_BACKGROUND_CHUNK = 500;
+const USERS_INITIAL_LIMIT = 200;
+const USERS_BACKGROUND_CHUNK = 2000;
 
 const isTableFilterColumn = (column: { id: string }) =>
   column.id !== "profile" && column.id !== "support_chat";
@@ -646,6 +648,7 @@ export default function AdminUsersPage() {
   const [selectAllFiltered, setSelectAllFiltered] = useState(false);
   const [sendModalOpen, setSendModalOpen] = useState(false);
   const [emailSendModalOpen, setEmailSendModalOpen] = useState(false);
+  const [emailBundlesModalOpen, setEmailBundlesModalOpen] = useState(false);
   const [warmupSelectMode, setWarmupSelectMode] = useState(() => {
     if (typeof window !== "undefined") {
       return sessionStorage.getItem("wu_mode") === "1";
@@ -2792,6 +2795,16 @@ export default function AdminUsersPage() {
               <div className="flex shrink-0 items-center gap-2">
                 <Button
                   size="sm"
+                  variant="outline"
+                  className="h-8 gap-1.5 px-2 sm:px-3"
+                  disabled={!hasNotificationSelection && !emailLeadSelectMode}
+                  onClick={() => setEmailBundlesModalOpen(true)}
+                >
+                  <Layers className="h-4 w-4" />
+                  <span className="hidden sm:inline">Select bundles</span>
+                </Button>
+                <Button
+                  size="sm"
                   className="h-8 gap-1.5 px-2 sm:px-3"
                   disabled={!hasNotificationSelection}
                   onClick={() => setEmailSendModalOpen(true)}
@@ -3118,6 +3131,15 @@ export default function AdminUsersPage() {
               }}
             >
               Cancel
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              className="border-purple-300 text-purple-700 hover:bg-purple-100"
+              onClick={() => setEmailBundlesModalOpen(true)}
+            >
+              <Layers className="h-3.5 w-3.5 mr-1.5" />
+              Get selected bundles
             </Button>
             <Button
               size="sm"
@@ -5442,6 +5464,42 @@ export default function AdminUsersPage() {
             url.searchParams.set("campaignId", campaignId);
             window.history.replaceState({}, "", url.toString());
           }
+        }}
+      />
+
+      <AddLeadsToCampaignModal
+        open={emailBundlesModalOpen}
+        onOpenChange={setEmailBundlesModalOpen}
+        campaignId={emailLeadSelectMode ? emailLeadCampaignId : null}
+        campaignName={emailLeadCampaignName ?? undefined}
+        selection={notificationSelection}
+        onSuccess={(campaignId) => {
+          if (emailLeadSelectMode) clearEmailLeadSelectMode();
+          toast({
+            title: "Bundles added",
+            description: "Leads from selected bundles were added to the campaign.",
+          });
+          setHighlightEmailCampaignId(campaignId);
+          setViewModePersisted("email");
+          if (typeof window !== "undefined") {
+            const url = new URL(window.location.href);
+            url.searchParams.set("tab", "email");
+            url.searchParams.set("campaignId", campaignId);
+            window.history.replaceState({}, "", url.toString());
+          }
+        }}
+        onBundleCreated={() => {
+          setSelectedUserIds(new Set());
+          setSelectAllFiltered(false);
+          setViewModePersisted("email");
+          if (typeof window !== "undefined") {
+            sessionStorage.setItem("email_open_leads_tab", "1");
+            const url = new URL(window.location.href);
+            url.searchParams.set("tab", "email");
+            url.searchParams.delete("campaignId");
+            window.history.replaceState({}, "", url.toString());
+          }
+          window.dispatchEvent(new CustomEvent("email:open-leads-tab"));
         }}
       />
 

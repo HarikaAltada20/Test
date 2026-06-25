@@ -1,3 +1,4 @@
+import { randomUUID } from "crypto";
 import { createAdminClient } from "@/utils/supabase/admin";
 import {
   buildBulkEmailHtml,
@@ -232,26 +233,26 @@ async function countIncompleteRecipients(campaignId: string): Promise<number> {
   const db = createAdminClient();
   const { count } = await db
     .from("admin_email_campaign_recipients")
-    .select("user_id", { count: "exact", head: true })
+    .select("id", { count: "exact", head: true })
     .eq("campaign_id", campaignId)
     .in("email_delivery_status", ["pending", "in_sequence"]);
   return count ?? 0;
 }
 
-async function loadPendingRecipientUserIds(
+async function loadPendingRecipientIds(
   campaignId: string,
   limit = EMAIL_DELIVERY_BATCH_SIZE,
 ): Promise<string[]> {
   const db = createAdminClient();
   const { data } = await db
     .from("admin_email_campaign_recipients")
-    .select("user_id")
+    .select("id")
     .eq("campaign_id", campaignId)
     .eq("email_delivery_status", "pending")
-    .order("user_id", { ascending: true })
+    .order("created_at", { ascending: true })
     .limit(limit);
 
-  return (data ?? []).map((row) => row.user_id);
+  return (data ?? []).map((row) => row.id);
 }
 
 async function loadUsersByIds(userIds: string[]): Promise<RecipientUserRow[]> {
@@ -266,15 +267,15 @@ export async function loadNextPendingEmailRecipients(
   const now = new Date().toISOString();
   const { data } = await db
     .from("admin_email_campaign_recipients")
-    .select("user_id, email_delivery_status, next_email_scheduled_at")
+    .select("id, email_delivery_status, next_email_scheduled_at")
     .eq("campaign_id", campaignId)
     .in("email_delivery_status", ["pending", "in_sequence"])
-    .order("user_id", { ascending: true })
+    .order("created_at", { ascending: true })
     .limit(Math.max(limit * 4, limit));
 
   const ready = (data ?? []).filter((row) => isRecipientReadyForSend(row, now));
 
-  return ready.slice(0, limit).map((r) => r.user_id);
+  return ready.slice(0, limit).map((r) => r.id);
 }
 
 export async function countPendingEmailRecipients(
@@ -321,13 +322,13 @@ export async function getNextSequenceScheduledAt(
 
 export async function deliverEmailCampaignBatch(
   campaignId: string,
-  userIds: string[],
+  recipientIds: string[],
 ): Promise<{
   successCount: number;
   failureCount: number;
   skippedCount: number;
 }> {
-  if (userIds.length === 0) {
+  if (recipientIds.length === 0) {
     return { successCount: 0, failureCount: 0, skippedCount: 0 };
   }
 
@@ -357,12 +358,34 @@ export async function deliverEmailCampaignBatch(
     throw new Error("Campaign has no sender accounts configured");
   }
 
-  const users = await loadUsersByIds(userIds);
+  const { data: recipientRows } = await db
+    .from("admin_email_campaign_recipients")
+    .select(
+      "id, user_id, recipient_email, full_name, username, user_type_at_send, email_delivery_status, current_step_number, next_email_scheduled_at, from_email",
+    )
+    .eq("campaign_id", campaignId)
+    .in("id", recipientIds);
+
+  const platformUserIds = [
+    ...new Set(
+      (recipientRows ?? [])
+        .map((row) => row.user_id)
+        .filter((id): id is string => Boolean(id)),
+    ),
+  ];
+
+  const users = await loadUsersByIds(platformUserIds);
   const recipientEmails = [
     ...new Set(
-      users
-        .map((user) => user.email?.trim().toLowerCase())
-        .filter((email): email is string => Boolean(email)),
+      [
+        ...users
+          .map((user) => user.email?.trim().toLowerCase())
+          .filter((email): email is string => Boolean(email)),
+        ...(recipientRows ?? [])
+          .filter((row) => !row.user_id)
+          .map((row) => row.recipient_email?.trim().toLowerCase())
+          .filter((email): email is string => Boolean(email)),
+      ],
     ),
   ];
 
@@ -393,6 +416,8 @@ export async function deliverEmailCampaignBatch(
   const sequence = campaign.sequence_data as StoredSequence | null;
   const sequenceSteps = sequence?.steps ?? [];
   const useSequenceSteps = sequenceSteps.length > 0;
+
+  const externalRows = (recipientRows ?? []).filter((row) => !row.user_id);
 
   for (const user of users) {
     const { data: recipientRow } = await db
@@ -660,6 +685,102 @@ export async function deliverEmailCampaignBatch(
     }
   }
 
+  for (const row of externalRows) {
+    if (
+      !["pending", "in_sequence"].includes(row.email_delivery_status) ||
+      useSequenceSteps
+    ) {
+      skippedCount += 1;
+      continue;
+    }
+
+    const email = row.recipient_email?.trim().toLowerCase();
+    if (!email) {
+      skippedCount += 1;
+      continue;
+    }
+
+    if (suppressedSet.has(email)) {
+      await db
+        .from("admin_email_campaign_recipients")
+        .update({
+          email_delivery_status: "skipped",
+          skipped_reason: "suppressed",
+          updated_at: now,
+        })
+        .eq("id", row.id)
+        .in("email_delivery_status", ["pending", "in_sequence"]);
+      skippedCount += 1;
+      continue;
+    }
+
+    const externalUser: RecipientUserRow = {
+      id: row.id,
+      email,
+      full_name: row.full_name,
+      username: row.username,
+      user_type: row.user_type_at_send || "lead",
+      coins: null,
+      referral_code: null,
+      created_at: now,
+      is_active: true,
+    };
+
+    const subject = buildBulkEmailSubject(campaign.email_subject || "", externalUser, {
+      campaign: campaignContext,
+    });
+    const trackingId = randomUUID();
+    const { html, text, plainTextOnly, useRaw } = buildBulkEmailHtml({
+      bodyTemplate: campaign.message_template || "",
+      user: externalUser,
+      trackingId,
+      campaign: campaignContext,
+      personalInbox: true,
+    });
+
+    const sendFromEmail =
+      row.from_email?.trim() ||
+      pickSenderForRecipient(row.id, campaignSenders).email;
+
+    const sendResult = await sendSesEmail({
+      from: sendFromEmail,
+      fromName: getBulkEmailFromName(sendFromEmail),
+      to: email,
+      subject,
+      html,
+      text,
+      replyTo: getBulkEmailReplyTo(sendFromEmail),
+      plainTextOnly,
+      useRaw,
+    });
+
+    if (sendResult.messageId) {
+      await db
+        .from("admin_email_campaign_recipients")
+        .update({
+          email_delivery_status: "sent",
+          ses_message_id: sendResult.messageId,
+          from_email: sendFromEmail,
+          next_email_scheduled_at: null,
+          updated_at: now,
+        })
+        .eq("id", row.id)
+        .in("email_delivery_status", ["pending", "in_sequence"]);
+      successCount += 1;
+    } else {
+      await db
+        .from("admin_email_campaign_recipients")
+        .update({
+          email_delivery_status: "failed",
+          skipped_reason: sendResult.error ?? "send failed",
+          updated_at: now,
+        })
+        .eq("id", row.id)
+        .in("email_delivery_status", ["pending", "in_sequence"]);
+      failureCount += 1;
+    }
+  }
+
   await refreshEmailCampaignSentCount(campaignId);
   return { successCount, failureCount, skippedCount };
 }
@@ -670,7 +791,7 @@ async function refreshEmailCampaignSentCount(
   const db = createAdminClient();
   const { count: totalSent } = await db
     .from("admin_email_campaign_recipients")
-    .select("user_id", { count: "exact", head: true })
+    .select("id", { count: "exact", head: true })
     .eq("campaign_id", campaignId)
     .in("email_delivery_status", ["sent", "delivered", "opened", "clicked"]);
 
@@ -690,7 +811,7 @@ async function finalizeEmailCampaignDelivery(
   if (incomplete === 0) {
     const { count: failedCount } = await db
       .from("admin_email_campaign_recipients")
-      .select("user_id", { count: "exact", head: true })
+      .select("id", { count: "exact", head: true })
       .eq("campaign_id", campaignId)
       .in("email_delivery_status", ["failed", "bounced"]);
 
@@ -914,11 +1035,11 @@ export async function processEmailCampaignDeliveryJob(
   }
 
   const jobBatchLimit = emailsPerJob ?? gate.batchLimit;
-  let userIds = await loadNextPendingEmailRecipients(campaignId, jobBatchLimit);
-  if (userIds.length === 0) {
-    userIds = await loadPendingRecipientUserIds(campaignId, jobBatchLimit);
+  let recipientIds = await loadNextPendingEmailRecipients(campaignId, jobBatchLimit);
+  if (recipientIds.length === 0) {
+    recipientIds = await loadPendingRecipientIds(campaignId, jobBatchLimit);
   }
-  if (userIds.length === 0) {
+  if (recipientIds.length === 0) {
     const stillIncomplete = await countIncompleteRecipients(campaignId);
     if (stillIncomplete > 0) {
       const nextAt = await getNextSequenceScheduledAt(campaignId);
@@ -950,7 +1071,7 @@ export async function processEmailCampaignDeliveryJob(
   }
 
   const { successCount, failureCount, skippedCount } =
-    await deliverEmailCampaignBatch(campaignId, userIds);
+    await deliverEmailCampaignBatch(campaignId, recipientIds);
   const batchDelivered = successCount + failureCount + skippedCount;
 
   const stillPending = await countIncompleteRecipients(campaignId);

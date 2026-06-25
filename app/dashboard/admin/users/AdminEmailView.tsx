@@ -30,10 +30,11 @@ import { EmailCampaignDetail } from "./EmailCampaignDetail";
 import { EmailCampaignsList } from "./EmailCampaignsList";
 import { EmailUnibox } from "./EmailUnibox";
 import { EmailWarmUpView } from "./EmailWarmUpView";
+import { EmailLeadsView } from "./EmailLeadsView";
 import { MAX_PROJECT_DESCRIPTION_LENGTH } from "@/lib/admin-email/project-options";
 
 type ViewMode = "list" | "create" | "project";
-type ListTab = "projects" | "campaigns" | "warmup" | "unibox";
+type ListTab = "projects" | "campaigns" | "warmup" | "leads" | "unibox";
 
 type Props = {
   isDark?: boolean;
@@ -96,6 +97,10 @@ export function AdminEmailView({
   const [uniboxTabVisited, setUniboxTabVisited] = useState(
     () => listTab === "unibox",
   );
+  const [leadsTabVisited, setLeadsTabVisited] = useState(
+    () => listTab === "leads",
+  );
+  const [leadBundleStats, setLeadBundleStats] = useState({ groupCount: 0 });
   const hasLoadedOnceRef = useRef(false);
 
   useEffect(() => {
@@ -105,7 +110,23 @@ export function AdminEmailView({
     if (listTab === "unibox") {
       setUniboxTabVisited(true);
     }
+    if (listTab === "leads") {
+      setLeadsTabVisited(true);
+    }
   }, [listTab]);
+
+  useEffect(() => {
+    const loadBundleStats = async () => {
+      try {
+        const res = await fetch("/api/admin/email-lead-bundles?stats=1");
+        const data = await res.json();
+        if (res.ok) setLeadBundleStats(data);
+      } catch {
+        // ignore
+      }
+    };
+    void loadBundleStats();
+  }, [listTab, leadsTabVisited]);
 
   const selectedProject = projects.find((p) => p.id === selectedProjectId);
 
@@ -121,6 +142,18 @@ export function AdminEmailView({
     const handler = () => setListTab("warmup");
     window.addEventListener("wu:open-warmup-tab", handler);
     return () => window.removeEventListener("wu:open-warmup-tab", handler);
+  }, []);
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      if (sessionStorage.getItem("email_open_leads_tab") === "1") {
+        sessionStorage.removeItem("email_open_leads_tab");
+        setListTab("leads");
+      }
+    }
+    const handler = () => setListTab("leads");
+    window.addEventListener("email:open-leads-tab", handler);
+    return () => window.removeEventListener("email:open-leads-tab", handler);
   }, []);
 
   const loadUnreadCount = useCallback(async () => {
@@ -344,7 +377,7 @@ export function AdminEmailView({
             : "space-y-6",
         )}
       >
-        {listTab !== "unibox" && listTab !== "warmup" && (
+        {listTab !== "unibox" && listTab !== "warmup" && listTab !== "leads" && (
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div>
               <h2 className={cn("text-2xl font-bold", isDark ? "text-white" : "text-gray-900")}>
@@ -372,6 +405,10 @@ export function AdminEmailView({
             { id: "campaigns", label: `Campaigns (${campaignTotal})` },
             { id: "warmup", label: "Warm Up" },
             {
+              id: "leads",
+              label: `Leads (${leadBundleStats.groupCount})`,
+            },
+            {
               id: "unibox",
               label: (
                 <span className="inline-flex items-center gap-1.5">
@@ -387,7 +424,7 @@ export function AdminEmailView({
           ]}
           activeTab={listTab}
           onTabChange={(id) => setListTab(id as ListTab)}
-          className="w-full max-w-2xl overflow-x-auto"
+          className="w-full max-w-3xl overflow-x-auto"
           isDark={isDark}
           light
           fillWidth={false}
@@ -444,6 +481,16 @@ export function AdminEmailView({
               refreshKey={warmUpRefreshKey}
               isActive={listTab === "warmup"}
               onManageSenders={openManageSenders}
+            />
+          </div>
+        )}
+
+        {leadsTabVisited && (
+          <div className={cn(listTab !== "leads" && "hidden")}>
+            <EmailLeadsView
+              projects={projects}
+              isDark={isDark}
+              isActive={listTab === "leads"}
             />
           </div>
         )}
