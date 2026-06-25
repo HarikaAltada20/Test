@@ -1,12 +1,11 @@
 -- Scale creator-wise pending badges: compute pending count in the same pass as
 -- contest_sorted_creator_aggregates (no second query per page load).
 --
--- Postgres cannot change RETURNS TABLE columns via CREATE OR REPLACE alone;
--- drop the old signature first, then recreate with pending_submission_count.
+-- Postgres cannot change RETURNS TABLE columns via CREATE OR REPLACE alone.
+-- Create the replacement under a temporary name, drop the old function, then rename
+-- so the swap is a single migration transaction (no window without the function).
 
-DROP FUNCTION IF EXISTS public.contest_sorted_creator_aggregates(uuid);
-
-CREATE FUNCTION public.contest_sorted_creator_aggregates(p_contest_id uuid)
+CREATE OR REPLACE FUNCTION public.contest_sorted_creator_aggregates__pending_v2(p_contest_id uuid)
 RETURNS TABLE (
   creator_id uuid,
   total_views bigint,
@@ -76,7 +75,12 @@ AS $$
   ORDER BY a.total_views DESC, a.best_submission_rank ASC;
 $$;
 
-GRANT EXECUTE ON FUNCTION public.contest_sorted_creator_aggregates(uuid) TO anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.contest_sorted_creator_aggregates__pending_v2(uuid) TO anon, authenticated;
+
+DROP FUNCTION IF EXISTS public.contest_sorted_creator_aggregates(uuid);
+
+ALTER FUNCTION public.contest_sorted_creator_aggregates__pending_v2(uuid)
+  RENAME TO contest_sorted_creator_aggregates;
 
 -- Supports pending count lookups by contest + creator (creator-wise page slice).
 CREATE INDEX IF NOT EXISTS idx_submissions_contest_creator_pending

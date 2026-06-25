@@ -31,10 +31,12 @@ import {
   Plus,
   Trash2,
   Clock,
-  Map,
+  Map as MapIcon,
   List,
   Bell,
+  Mail,
   Send,
+  Loader2,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import {
@@ -45,6 +47,7 @@ import {
   type NotificationSelectionState,
 } from "./SendNotificationModal";
 import { AdminNotificationsView } from "./AdminNotificationsView";
+import { AttachEmailCampaignModal } from "./AttachEmailCampaignModal";
 import type { RecipientUserRow } from "@/lib/admin-notifications/types";
 import { cn } from "@/lib/utils";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -73,6 +76,14 @@ import { SupportChatToggle } from "@/components/admin/SupportChatToggle";
 const UsersMap = dynamic(
   () => import("./UsersMap").then((m) => ({ default: m.UsersMap })),
   { ssr: false },
+);
+
+const AdminEmailView = dynamic(
+  () => import("./AdminEmailView").then((m) => ({ default: m.AdminEmailView })),
+  {
+    ssr: false,
+    loading: () => null,
+  },
 );
 
 type AdvertiserProfile = {
@@ -177,6 +188,15 @@ function getGeoField(
   if (typeof value !== "string") return null;
   const trimmed = value.trim();
   return trimmed || null;
+}
+
+function getAdvertiserProfileFromRow(user: User): AdvertiserProfile | null {
+  if (!user.advertiser_profiles) return null;
+  return Array.isArray(user.advertiser_profiles)
+    ? user.advertiser_profiles.length > 0
+      ? user.advertiser_profiles[0]
+      : null
+    : user.advertiser_profiles;
 }
 
 function getCreatorProfileFromRow(user: User): CreatorProfile | null {
@@ -326,6 +346,9 @@ const ALL_COUNTRIES: string[] = Array.from(
   ),
 ).sort((a, b) => a.localeCompare(b));
 
+const USERS_INITIAL_LIMIT = 25;
+const USERS_BACKGROUND_CHUNK = 500;
+
 const isTableFilterColumn = (column: { id: string }) =>
   column.id !== "profile" && column.id !== "support_chat";
 
@@ -418,7 +441,16 @@ export default function AdminUsersPage() {
   };
 
   const [rows, setRows] = useState<User[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [initialLoadDone, setInitialLoadDone] = useState(false);
+  const [backgroundLoading, setBackgroundLoading] = useState(false);
+  const [userCounts, setUserCounts] = useState({
+    all: 0,
+    advertisers: 0,
+    creators: 0,
+  });
+  const usersLoadAbortRef = useRef<AbortController | null>(null);
+  const usersLoadGenerationRef = useRef(0);
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(25);
   const [activeTab, setActiveTab] = useState("all");
@@ -588,16 +620,24 @@ export default function AdminUsersPage() {
   });
   const [showColumnSettings, setShowColumnSettings] = useState(false);
   const [stickyHeader, setStickyHeader] = useState(true);
-  const [viewMode, setViewMode] = useState<"table" | "map" | "notifications">(
-    () => {
-      if (typeof window !== "undefined") {
-        const saved = localStorage.getItem("users-management-view-mode");
-        if (saved === "table" || saved === "map" || saved === "notifications") {
-          return saved;
-        }
+  const [viewMode, setViewMode] = useState<
+    "table" | "map" | "notifications" | "email"
+  >(() => {
+    if (typeof window !== "undefined") {
+      if (sessionStorage.getItem("wu_mode") === "1") return "table";
+      if (sessionStorage.getItem("email_lead_mode") === "1") return "table";
+      const params = new URLSearchParams(window.location.search);
+      if (params.get("tab") === "email") return "email";
+      const saved = localStorage.getItem("users-management-view-mode");
+      // Restore table/map/notifications only — email data loads when user opens Email tab
+      if (saved === "table" || saved === "map" || saved === "notifications") {
+        return saved;
       }
-      return "table";
-    },
+    }
+    return "table";
+  });
+  const [emailTabVisited, setEmailTabVisited] = useState(
+    () => viewMode === "email",
   );
   const { toast } = useToast();
   const [selectedUserIds, setSelectedUserIds] = useState<Set<string>>(
@@ -605,16 +645,122 @@ export default function AdminUsersPage() {
   );
   const [selectAllFiltered, setSelectAllFiltered] = useState(false);
   const [sendModalOpen, setSendModalOpen] = useState(false);
+  const [emailSendModalOpen, setEmailSendModalOpen] = useState(false);
+  const [warmupSelectMode, setWarmupSelectMode] = useState(() => {
+    if (typeof window !== "undefined") {
+      return sessionStorage.getItem("wu_mode") === "1";
+    }
+    return false;
+  });
+  const [emailLeadSelectMode, setEmailLeadSelectMode] = useState(() => {
+    if (typeof window !== "undefined") {
+      return sessionStorage.getItem("email_lead_mode") === "1";
+    }
+    return false;
+  });
+  const [emailLeadCampaignId, setEmailLeadCampaignId] = useState<string | null>(
+    () => {
+      if (typeof window !== "undefined") {
+        return sessionStorage.getItem("email_lead_campaign_id");
+      }
+      return null;
+    },
+  );
+  const [emailLeadCampaignName, setEmailLeadCampaignName] = useState<
+    string | null
+  >(() => {
+    if (typeof window !== "undefined") {
+      return sessionStorage.getItem("email_lead_campaign_name");
+    }
+    return null;
+  });
+  const [wuMaxRecipients, setWuMaxRecipients] = useState<number | null>(null);
+
+  const clearEmailLeadSelectMode = () => {
+    setEmailLeadSelectMode(false);
+    setEmailLeadCampaignId(null);
+    setEmailLeadCampaignName(null);
+    if (typeof window !== "undefined") {
+      sessionStorage.removeItem("email_lead_mode");
+      sessionStorage.removeItem("email_lead_campaign_id");
+      sessionStorage.removeItem("email_lead_campaign_name");
+    }
+  };
+
+  useEffect(() => {
+    if (!warmupSelectMode) {
+      setWuMaxRecipients(null);
+      return;
+    }
+    const raw = sessionStorage.getItem("wu_max_recipients");
+    const parsed = raw ? parseInt(raw, 10) : NaN;
+    setWuMaxRecipients(Number.isFinite(parsed) ? parsed : null);
+  }, [warmupSelectMode]);
   const [highlightCampaignId, setHighlightCampaignId] = useState<string | null>(
     null,
   );
+  const [highlightEmailCampaignId, setHighlightEmailCampaignId] = useState<
+    string | null
+  >(() => {
+    if (typeof window !== "undefined") {
+      return new URLSearchParams(window.location.search).get("campaignId");
+    }
+    return null;
+  });
 
-  const setViewModePersisted = (mode: "table" | "map" | "notifications") => {
+  const setViewModePersisted = (
+    mode: "table" | "map" | "notifications" | "email",
+  ) => {
     setViewMode(mode);
+    if (mode === "email") {
+      setEmailTabVisited(true);
+    }
     if (typeof window !== "undefined") {
       localStorage.setItem("users-management-view-mode", mode);
     }
   };
+
+  useEffect(() => {
+    void import("./AdminEmailView");
+  }, []);
+
+  // Warm-up selection mode: listen for event dispatched from WarmUpManualSendModal
+  useEffect(() => {
+    const handleEnterSelect = () => {
+      setSelectedUserIds(new Set());
+      setSelectAllFiltered(false);
+      setWarmupSelectMode(true);
+      setViewModePersisted("table");
+    };
+    window.addEventListener("wu:enter-select-mode", handleEnterSelect);
+    return () => window.removeEventListener("wu:enter-select-mode", handleEnterSelect);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Email lead selection mode: dispatched from campaign Lead tab "Add Leads"
+  useEffect(() => {
+    const handleEnterLeadSelect = (event: Event) => {
+      const detail = (event as CustomEvent<{ campaignId?: string; campaignName?: string }>)
+        .detail;
+      const campaignId =
+        detail?.campaignId ??
+        sessionStorage.getItem("email_lead_campaign_id");
+      const campaignName =
+        detail?.campaignName ??
+        sessionStorage.getItem("email_lead_campaign_name");
+
+      setSelectedUserIds(new Set());
+      setSelectAllFiltered(false);
+      setEmailLeadSelectMode(true);
+      setEmailLeadCampaignId(campaignId);
+      setEmailLeadCampaignName(campaignName);
+      setViewModePersisted("table");
+    };
+    window.addEventListener("email:enter-lead-select-mode", handleEnterLeadSelect);
+    return () =>
+      window.removeEventListener("email:enter-lead-select-mode", handleEnterLeadSelect);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const syncSupportChatEnabled = (userId: string, enabled: boolean) => {
     setRows((prev) =>
@@ -624,17 +770,50 @@ export default function AdminUsersPage() {
     );
   };
 
-  const userToRecipientRow = (u: User): RecipientUserRow => ({
-    id: u.id,
-    email: u.email,
-    full_name: u.full_name,
-    username: u.username ?? null,
-    user_type: u.user_type,
-    coins: u.coins,
-    referral_code: u.referral_code ?? null,
-    created_at: u.created_at,
-    is_active: u.is_active,
-  });
+  const userToRecipientRow = (u: User): RecipientUserRow => {
+    const creatorProfile = getCreatorProfileFromRow(u);
+    const advertiserProfile = getAdvertiserProfileFromRow(u);
+    const isCreator = u.user_type === "creator";
+    const isAdvertiser = u.user_type === "advertiser";
+
+    return {
+      id: u.id,
+      email: u.email,
+      full_name: u.full_name,
+      username: u.username ?? null,
+      user_type: u.user_type,
+      coins: u.coins,
+      referral_code: u.referral_code ?? null,
+      created_at: u.created_at,
+      is_active: u.is_active,
+      total_lifetime_coins_earned: u.total_lifetime_coins_earned ?? 0,
+      affiliate_earnings: u.affiliate_earnings ?? 0,
+      other_earnings: u.other_earnings ?? 0,
+      advertisers_referred: u.advertisers_referred ?? 0,
+      creators_referred: u.creators_referred ?? 0,
+      total_money_won: isCreator ? (creatorProfile?.total_money_won ?? 0) : 0,
+      withdrawable_balance: isCreator
+        ? (creatorProfile?.withdrawable_balance ?? 0)
+        : isAdvertiser
+          ? (advertiserProfile?.withdrawable_balance ?? 0)
+          : 0,
+      total_contests_won: isCreator
+        ? (creatorProfile?.total_contests_won ?? 0)
+        : 0,
+      total_contests_participated: isCreator
+        ? (creatorProfile?.total_contests_participated ?? 0)
+        : 0,
+      total_money_spent: isAdvertiser
+        ? (advertiserProfile?.total_money_spent ?? 0)
+        : 0,
+      total_contests_run: isAdvertiser
+        ? (advertiserProfile?.total_contests_run ?? 0)
+        : 0,
+      available_deposit_balance: isAdvertiser
+        ? (advertiserProfile?.available_deposit_balance ?? 0)
+        : 0,
+    };
+  };
 
   const [mapGroupBy, setMapGroupBy] = useState<
     "region" | "state" | "country" | "city"
@@ -2222,11 +2401,12 @@ export default function AdminUsersPage() {
   }, [rows, activeTab, sortOrder, sortColumn, filters]);
 
   // Calculate counts for each tab
-  const allUsersCount = rows.length;
-  const advertisersCount = rows.filter(
-    (r) => r.user_type === "advertiser",
-  ).length;
-  const creatorsCount = rows.filter((r) => r.user_type === "creator").length;
+  const allUsersCount = userCounts.all || rows.length;
+  const advertisersCount =
+    userCounts.advertisers ||
+    rows.filter((r) => r.user_type === "advertiser").length;
+  const creatorsCount =
+    userCounts.creators || rows.filter((r) => r.user_type === "creator").length;
 
   // Paginated data
   const paginatedData = useMemo(() => {
@@ -2454,21 +2634,95 @@ export default function AdminUsersPage() {
   }, [filters]);
 
   const load = async () => {
+    usersLoadAbortRef.current?.abort();
+    const generation = ++usersLoadGenerationRef.current;
+    const abort = new AbortController();
+    usersLoadAbortRef.current = abort;
+
+    const isStale = () => generation !== usersLoadGenerationRef.current;
+
+    setLoading(true);
+    setBackgroundLoading(false);
+    setInitialLoadDone(false);
+    setRows([]);
+
+    const mergeUsers = (incoming: User[]) => {
+      if (isStale()) return;
+      setRows((prev) => {
+        const byId = new Map(prev.map((user) => [user.id, user]));
+        for (const user of incoming) {
+          byId.set(user.id, user);
+        }
+        return Array.from(byId.values()).sort(
+          (a, b) =>
+            new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
+        );
+      });
+    };
+
     try {
-      setLoading(true);
-      const res = await fetch(`/api/admin/users`);
-      const json = await res.json();
-      if (!res.ok) throw new Error(json.error || "Failed to fetch");
-      setRows(json.items || []);
-    } catch (e) {
-      console.error("Error loading users:", e);
-    } finally {
+      const firstRes = await fetch(
+        `/api/admin/users?offset=0&limit=${USERS_INITIAL_LIMIT}&includeCounts=1`,
+        { signal: abort.signal },
+      );
+      if (isStale() || abort.signal.aborted) return;
+
+      const firstJson = await firstRes.json();
+      if (!firstRes.ok) {
+        throw new Error(firstJson.error || "Failed to fetch");
+      }
+
+      setRows(firstJson.items ?? []);
+      if (firstJson.counts) {
+        setUserCounts(firstJson.counts);
+      }
+
+      const total = firstJson.total ?? firstJson.items?.length ?? 0;
       setLoading(false);
+      setInitialLoadDone(true);
+
+      if (total <= USERS_INITIAL_LIMIT) return;
+
+      setBackgroundLoading(true);
+      let offset = USERS_INITIAL_LIMIT;
+
+      while (offset < total) {
+        if (abort.signal.aborted || isStale()) return;
+
+        const res = await fetch(
+          `/api/admin/users?offset=${offset}&limit=${USERS_BACKGROUND_CHUNK}`,
+          { signal: abort.signal },
+        );
+        if (isStale() || abort.signal.aborted) return;
+
+        const json = await res.json();
+        if (!res.ok) {
+          throw new Error(json.error || "Failed to fetch users");
+        }
+
+        const batch: User[] = json.items ?? [];
+        if (batch.length === 0) break;
+
+        mergeUsers(batch);
+        offset += batch.length;
+        if (batch.length < USERS_BACKGROUND_CHUNK) break;
+      }
+    } catch (e) {
+      if (abort.signal.aborted || isStale()) return;
+      console.error("Error loading users:", e);
+      setInitialLoadDone(true);
+    } finally {
+      if (abort.signal.aborted || isStale()) return;
+      setLoading(false);
+      setBackgroundLoading(false);
     }
   };
 
   useEffect(() => {
-    load();
+    void load();
+    return () => {
+      usersLoadAbortRef.current?.abort();
+    };
   }, []);
 
   // Watch for theme changes from parent layout
@@ -2507,153 +2761,193 @@ export default function AdminUsersPage() {
           isDark ? "bg-[#020817]" : "bg-white",
         )}
       >
-        <CardHeader className="py-3 px-3 sm:px-6">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-0">
+        <CardHeader className="py-3 px-3 sm:px-6 space-y-3">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <CardTitle
               className={cn(
-                "text-xl sm:text-2xl",
+                "text-xl sm:text-2xl shrink-0",
                 isDark ? "text-white" : "text-black",
               )}
             >
               Users Management
             </CardTitle>
-            <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
-              <div className="flex items-center gap-1.5 sm:gap-2 px-2 sm:px-3 py-1.5 rounded-md border border-input">
-                <Checkbox
-                  id="sticky-header"
-                  checked={stickyHeader}
-                  onCheckedChange={(checked) =>
-                    setStickyHeader(checked as boolean)
-                  }
-                  className={cn(
-                    isDark
-                      ? "border-gray-400 data-[state=checked]:bg-purple-600 data-[state=checked]:text-white"
-                      : "border-gray-400 data-[state=checked]:bg-purple-600",
-                  )}
-                />
-                <label
-                  htmlFor="sticky-header"
-                  className={cn(
-                    "text-xs sm:text-sm font-normal cursor-pointer select-none hidden sm:inline",
-                    isDark ? "text-gray-300" : "text-gray-700",
-                  )}
-                >
-                  Sticky Header
-                </label>
-              </div>
-              <div className="flex items-center rounded-md border border-input overflow-hidden">
-                <Button
-                  variant={viewMode === "table" ? "secondary" : "ghost"}
-                  size="sm"
-                  className="rounded-none h-8 px-2 sm:px-3 gap-1.5"
-                  onClick={() => setViewModePersisted("table")}
-                >
-                  <List className="w-4 h-4" />
-                  <span className="hidden sm:inline">Table</span>
-                </Button>
-                <Button
-                  variant={viewMode === "map" ? "secondary" : "ghost"}
-                  size="sm"
-                  className="rounded-none h-8 px-2 sm:px-3 gap-1.5"
-                  onClick={() => setViewModePersisted("map")}
-                >
-                  <Map className="w-4 h-4" />
-                  <span className="hidden sm:inline">Map</span>
-                </Button>
-                <Button
-                  variant={viewMode === "notifications" ? "secondary" : "ghost"}
-                  size="sm"
-                  className="rounded-none h-8 px-2 sm:px-3 gap-1.5"
-                  onClick={() => setViewModePersisted("notifications")}
-                >
-                  <Bell className="w-4 h-4" />
-                  <span className="hidden sm:inline">Notifications</span>
-                </Button>
-              </div>
-              <Button
+            {/* {backgroundLoading && (
+              <Badge
                 variant="outline"
-                onClick={() => {
-                  if (filters.length === 0) {
-                    const availableColumns = allColumns[
-                      activeTab as keyof typeof allColumns
-                    ].filter(isTableFilterColumn);
-                    setFilters([
-                      {
-                        id: `filter-${Date.now()}-${Math.random()}`,
-                        column: availableColumns[0]?.id || "",
-                        value: "",
-                      },
-                    ]);
-                  }
-                  setShowFilterModal(true);
-                }}
-                className="flex items-center gap-1.5 sm:gap-2 px-2 sm:px-3"
-                size="sm"
-              >
-                <Filter className="w-4 h-4" />
-                <span className="hidden sm:inline">Filter</span>
-                {filters.filter((f) => f.value.trim()).length > 0 && (
-                  <Badge
-                    variant="secondary"
-                    className="h-5 min-w-5 rounded-full px-1.5 text-xs"
-                  >
-                    {filters.filter((f) => f.value.trim()).length}
-                  </Badge>
+                className={cn(
+                  "shrink-0 text-xs font-normal gap-1",
+                  isDark
+                    ? "border-purple-700/50 text-purple-200"
+                    : "border-purple-200 text-purple-700",
                 )}
-              </Button>
-              <Button
-                variant="outline"
-                onClick={() => setShowColumnSettings(true)}
-                className="flex items-center gap-1.5 sm:gap-2 px-2 sm:px-3"
-                size="sm"
               >
-                <Settings className="w-4 h-4" />
-                <span className="hidden sm:inline">Customize Tiles</span>
-              </Button>
-              {viewMode === "table" && (
+                <Loader2 className="h-3 w-3 animate-spin" />
+                Loading users {rows.length.toLocaleString()}
+                {allUsersCount > 0
+                  ? ` / ${allUsersCount.toLocaleString()}`
+                  : ""}
+              </Badge>
+            )} */}
+            {viewMode === "table" && (
+              <div className="flex shrink-0 items-center gap-2">
                 <Button
                   size="sm"
-                  className="gap-1.5 px-2 sm:px-3"
+                  className="h-8 gap-1.5 px-2 sm:px-3"
                   disabled={!hasNotificationSelection}
-                  onClick={() => setSendModalOpen(true)}
+                  onClick={() => setEmailSendModalOpen(true)}
                 >
-                  <Send className="w-4 h-4" />
-                  <span className="hidden sm:inline">Send notification</span>
+                  <Mail className="h-4 w-4" />
+                  <span className="hidden sm:inline">
+                    {emailLeadSelectMode ? "Add to campaign" : "Send email"}
+                  </span>
                   {selectedCount > 0 && (
                     <Badge
                       variant="secondary"
-                      className="h-5 min-w-5 rounded-full px-1.5 text-xs bg-white/20 text-inherit"
+                      className="h-5 min-w-5 rounded-full bg-white/20 px-1.5 text-xs text-inherit"
                     >
                       {selectedCount}
                     </Badge>
                   )}
                 </Button>
-              )}
-              <Button
-                variant="outline"
-                onClick={() => {
-                  const newTimezone = timezone === "UTC" ? "local" : "UTC";
-                  setTimezone(newTimezone);
-                  localStorage.setItem(
-                    "users-management-timezone",
-                    newTimezone,
-                  );
-                }}
-                className="flex items-center gap-1.5 sm:gap-2 px-2 sm:px-3"
-                size="sm"
-                title={`Current timezone: ${
-                  timezone === "UTC" ? "UTC" : "Local"
-                }. Click to switch.`}
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-8 gap-1.5 px-2 sm:px-3"
+                  disabled={!hasNotificationSelection}
+                  onClick={() => setSendModalOpen(true)}
+                >
+                  <Send className="h-4 w-4" />
+                  <span className="hidden sm:inline">Send notification</span>
+                </Button>
+              </div>
+            )}
+          </div>
+          <div className="flex items-center gap-2 overflow-x-auto pb-0.5 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+            <div className="flex h-8 shrink-0 items-center gap-1.5 rounded-md border border-input px-2 sm:px-3">
+              <Checkbox
+                id="sticky-header"
+                checked={stickyHeader}
+                onCheckedChange={(checked) =>
+                  setStickyHeader(checked as boolean)
+                }
+                className={cn(
+                  isDark
+                    ? "border-gray-400 data-[state=checked]:bg-purple-600 data-[state=checked]:text-white"
+                    : "border-gray-400 data-[state=checked]:bg-purple-600",
+                )}
+              />
+              <label
+                htmlFor="sticky-header"
+                className={cn(
+                  "hidden cursor-pointer select-none text-xs font-normal sm:inline sm:text-sm",
+                  isDark ? "text-gray-300" : "text-gray-700",
+                )}
               >
-                <Clock className="w-4 h-4" />
-                <span className="text-xs font-medium hidden sm:inline">
-                  {timezone === "UTC" ? "UTC" : "Local"}
-                </span>
+                Sticky Header
+              </label>
+            </div>
+            <div className="flex h-8 shrink-0 items-center overflow-hidden rounded-md border border-input">
+              <Button
+                variant={viewMode === "table" ? "secondary" : "ghost"}
+                size="sm"
+                className="h-8 gap-1.5 rounded-none px-2 sm:px-3"
+                onClick={() => setViewModePersisted("table")}
+              >
+                <List className="h-4 w-4" />
+                <span className="hidden sm:inline">Table</span>
+              </Button>
+              <Button
+                variant={viewMode === "map" ? "secondary" : "ghost"}
+                size="sm"
+                className="h-8 gap-1.5 rounded-none px-2 sm:px-3"
+                onClick={() => setViewModePersisted("map")}
+              >
+                <MapIcon className="h-4 w-4" />
+                <span className="hidden sm:inline">Map</span>
+              </Button>
+              <Button
+                variant={viewMode === "notifications" ? "secondary" : "ghost"}
+                size="sm"
+                className="h-8 gap-1.5 rounded-none px-2 sm:px-3"
+                onClick={() => setViewModePersisted("notifications")}
+              >
+                <Bell className="h-4 w-4" />
+                <span className="hidden sm:inline">Notifications</span>
+              </Button>
+              <Button
+                variant={viewMode === "email" ? "secondary" : "ghost"}
+                size="sm"
+                className="h-8 gap-1.5 rounded-none px-2 sm:px-3"
+                onClick={() => setViewModePersisted("email")}
+              >
+                <Mail className="h-4 w-4" />
+                <span className="hidden sm:inline">Email</span>
               </Button>
             </div>
+            <Button
+              variant="outline"
+              onClick={() => {
+                if (filters.length === 0) {
+                  const availableColumns = allColumns[
+                    activeTab as keyof typeof allColumns
+                  ].filter(isTableFilterColumn);
+                  setFilters([
+                    {
+                      id: `filter-${Date.now()}-${Math.random()}`,
+                      column: availableColumns[0]?.id || "",
+                      value: "",
+                    },
+                  ]);
+                }
+                setShowFilterModal(true);
+              }}
+              className="h-8 shrink-0 gap-1.5 px-2 sm:px-3"
+              size="sm"
+            >
+              <Filter className="h-4 w-4" />
+              <span className="hidden sm:inline">Filter</span>
+              {filters.filter((f) => f.value.trim()).length > 0 && (
+                <Badge
+                  variant="secondary"
+                  className="h-5 min-w-5 rounded-full px-1.5 text-xs"
+                >
+                  {filters.filter((f) => f.value.trim()).length}
+                </Badge>
+              )}
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => setShowColumnSettings(true)}
+              className="h-8 shrink-0 gap-1.5 px-2 sm:px-3"
+              size="sm"
+            >
+              <Settings className="h-4 w-4" />
+              <span className="hidden sm:inline">Customize Tiles</span>
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => {
+                const newTimezone = timezone === "UTC" ? "local" : "UTC";
+                setTimezone(newTimezone);
+                localStorage.setItem(
+                  "users-management-timezone",
+                  newTimezone,
+                );
+              }}
+              className="h-8 shrink-0 gap-1.5 px-2 sm:px-3"
+              size="sm"
+              title={`Current timezone: ${
+                timezone === "UTC" ? "UTC" : "Local"
+              }. Click to switch.`}
+            >
+              <Clock className="h-4 w-4" />
+              <span className="hidden text-xs font-medium sm:inline">
+                {timezone === "UTC" ? "UTC" : "Local"}
+              </span>
+            </Button>
           </div>
         </CardHeader>
-        {viewMode !== "notifications" && (
+        {viewMode !== "notifications" && viewMode !== "email" && (
           <CardContent className="py-2 px-6">
             <EnhancedTabs
               tabs={[
@@ -2672,6 +2966,171 @@ export default function AdminUsersPage() {
           </CardContent>
         )}
       </Card>
+
+      {/* Warm-up selection mode banner */}
+      {viewMode === "table" && warmupSelectMode && (
+        <div className="rounded-xl border-2 border-indigo-400 bg-indigo-50 px-5 py-4 flex items-center justify-between gap-4 shadow-sm">
+          <div className="flex items-center gap-3">
+            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-indigo-600 text-white shrink-0">
+              <Send className="h-4 w-4" />
+            </div>
+            <div>
+              <p className="font-semibold text-indigo-900 text-sm">
+                Warm-Up Recipient Selection
+              </p>
+              <p className="text-xs text-indigo-700 mt-0.5">
+                Select users below using the checkboxes, then click "Add to Warm-Up Send".
+                {wuMaxRecipients != null && (
+                  <span>
+                    {" "}
+                    Daily limit: select up to{" "}
+                    <span className="font-semibold">{wuMaxRecipients}</span> recipient
+                    {wuMaxRecipients !== 1 ? "s" : ""}.
+                  </span>
+                )}
+                {selectedCount > 0 && (
+                  <span className="font-semibold"> {selectedCount} user{selectedCount !== 1 ? "s" : ""} selected.</span>
+                )}
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <Button
+              size="sm"
+              variant="outline"
+              className="border-indigo-300 text-indigo-700 hover:bg-indigo-100"
+              onClick={() => {
+                setSelectedUserIds(new Set());
+                setSelectAllFiltered(false);
+                setWarmupSelectMode(false);
+                sessionStorage.removeItem("wu_mode");
+                // Set tab flag in sessionStorage
+                if (typeof window !== "undefined") {
+                  sessionStorage.setItem("wu_open_tab", "1");
+                }
+                setViewModePersisted("email");
+                window.dispatchEvent(new CustomEvent("wu:open-warmup-tab"));
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              size="sm"
+              disabled={selectedCount === 0}
+              className="bg-indigo-600 hover:bg-indigo-700 text-white"
+              onClick={() => {
+                // Collect emails from selected users
+                const emails: string[] = [];
+                if (selectAllFiltered) {
+                  tabFiltered.forEach((u) => emails.push(u.email));
+                } else {
+                  selectedUserIds.forEach((id) => {
+                    const user = rows.find((r) => r.id === id);
+                    if (user?.email) emails.push(user.email);
+                  });
+                }
+
+                const maxRaw = sessionStorage.getItem("wu_max_recipients");
+                const maxRecipients = maxRaw ? parseInt(maxRaw, 10) : NaN;
+                let finalEmails = emails;
+                if (Number.isFinite(maxRecipients) && maxRecipients >= 0) {
+                  if (emails.length > maxRecipients) {
+                    finalEmails = emails.slice(0, maxRecipients);
+                    toast({
+                      title: "Daily send limit reached",
+                      description: `Only ${maxRecipients} warm-up recipient${maxRecipients !== 1 ? "s" : ""} can be sent today. The first ${maxRecipients} were added.`,
+                      variant: "destructive",
+                    });
+                  }
+                }
+
+                // Store emails and tab flag in sessionStorage
+                if (typeof window !== "undefined") {
+                  sessionStorage.setItem("wu_emails", JSON.stringify(finalEmails));
+                  sessionStorage.setItem("wu_open_tab", "1");
+                }
+                // Send emails back to the modal via custom event (fallback)
+                window.dispatchEvent(
+                  new CustomEvent("wu:users-selected", { detail: finalEmails }),
+                );
+                setSelectedUserIds(new Set());
+                setSelectAllFiltered(false);
+                setWarmupSelectMode(false);
+                sessionStorage.removeItem("wu_mode");
+                sessionStorage.removeItem("wu_max_recipients");
+                // Switch back to email → warmup tab
+                setViewModePersisted("email");
+                window.dispatchEvent(new CustomEvent("wu:open-warmup-tab"));
+              }}
+            >
+              <Send className="h-3.5 w-3.5 mr-1.5" />
+              Add {selectedCount > 0 ? selectedCount : ""} to Warm-Up Send
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {/* Email lead selection mode banner */}
+      {viewMode === "table" && emailLeadSelectMode && (
+        <div className="rounded-xl border-2 border-[#662EBD] bg-purple-50 px-5 py-4 flex items-center justify-between gap-4 shadow-sm">
+          <div className="flex items-center gap-3">
+            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-[#662EBD] text-white shrink-0">
+              <Mail className="h-4 w-4" />
+            </div>
+            <div>
+              <p className="font-semibold text-purple-900 text-sm">
+                Add leads to campaign
+                {emailLeadCampaignName ? `: ${emailLeadCampaignName}` : ""}
+              </p>
+              <p className="text-xs text-purple-700 mt-0.5">
+                Select users below using the checkboxes, then click &quot;Add to
+                campaign&quot;.
+                {selectedCount > 0 && (
+                  <span className="font-semibold">
+                    {" "}
+                    {selectedCount} user{selectedCount !== 1 ? "s" : ""}{" "}
+                    selected.
+                  </span>
+                )}
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <Button
+              size="sm"
+              variant="outline"
+              className="border-purple-300 text-purple-700 hover:bg-purple-100"
+              onClick={() => {
+                const returnCampaignId = emailLeadCampaignId;
+                setSelectedUserIds(new Set());
+                setSelectAllFiltered(false);
+                clearEmailLeadSelectMode();
+                if (returnCampaignId) {
+                  setHighlightEmailCampaignId(returnCampaignId);
+                }
+                setViewModePersisted("email");
+                if (typeof window !== "undefined" && returnCampaignId) {
+                  const url = new URL(window.location.href);
+                  url.searchParams.set("tab", "email");
+                  url.searchParams.set("campaignId", returnCampaignId);
+                  window.history.replaceState({}, "", url.toString());
+                }
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              size="sm"
+              disabled={selectedCount === 0}
+              className="bg-[#662EBD] hover:bg-[#5524a8] text-white"
+              onClick={() => setEmailSendModalOpen(true)}
+            >
+              <Mail className="h-3.5 w-3.5 mr-1.5" />
+              Add {selectedCount > 0 ? selectedCount : ""} to campaign
+            </Button>
+          </div>
+        </div>
+      )}
 
       {viewMode === "table" && (
         <Card
@@ -2718,6 +3177,12 @@ export default function AdminUsersPage() {
                         <Checkbox
                           aria-label={`Select all matching filters (${tabFiltered.length})`}
                           checked={headerSelectChecked}
+                          disabled={backgroundLoading}
+                          title={
+                            backgroundLoading
+                              ? "Wait until all users finish loading"
+                              : undefined
+                          }
                           onCheckedChange={(c) =>
                             toggleSelectAllFiltered(!!c)
                           }
@@ -3880,7 +4345,7 @@ export default function AdminUsersPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {loading ? (
+                  {loading || !initialLoadDone ? (
                     <>
                       {Array.from({ length: limit }).map((_, index) => (
                         <TableRow key={`skeleton-${index}`}>
@@ -4831,7 +5296,7 @@ export default function AdminUsersPage() {
                 </TableBody>
               </Table>
             </div>
-            {!loading && tabFiltered.length > 0 && (
+            {initialLoadDone && !loading && tabFiltered.length > 0 && (
               <div className="mt-4">
                 <PaginationControls
                   page={page}
@@ -4944,6 +5409,41 @@ export default function AdminUsersPage() {
           onHighlightConsumed={() => setHighlightCampaignId(null)}
         />
       )}
+
+      {emailTabVisited && (
+        <div className={cn(viewMode !== "email" && "hidden")}>
+          <AdminEmailView
+            isDark={isDark}
+            highlightCampaignId={highlightEmailCampaignId}
+            onHighlightConsumed={() => setHighlightEmailCampaignId(null)}
+          />
+        </div>
+      )}
+
+      <AttachEmailCampaignModal
+        open={emailSendModalOpen}
+        onOpenChange={setEmailSendModalOpen}
+        selection={notificationSelection}
+        isDark={isDark}
+        presetCampaignId={emailLeadSelectMode ? emailLeadCampaignId : null}
+        onSuccess={(campaignId) => {
+          setSelectedUserIds(new Set());
+          setSelectAllFiltered(false);
+          clearEmailLeadSelectMode();
+          toast({
+            title: "Users attached",
+            description: "Configure template and schedule on the campaign page.",
+          });
+          setHighlightEmailCampaignId(campaignId);
+          setViewModePersisted("email");
+          if (typeof window !== "undefined") {
+            const url = new URL(window.location.href);
+            url.searchParams.set("tab", "email");
+            url.searchParams.set("campaignId", campaignId);
+            window.history.replaceState({}, "", url.toString());
+          }
+        }}
+      />
 
       <SendNotificationModal
         open={sendModalOpen}

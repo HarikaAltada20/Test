@@ -12,6 +12,7 @@ import {
   type ContestTemplateContext,
 } from "./template";
 import type { RecipientUserRow } from "./types";
+import { loadRecipientUsersByIds } from "./recipients";
 import { DELIVERY_BATCH_SIZE, PUBLIC_ANNOUNCEMENT_TITLE } from "./types";
 import {
   campaignRecipientDeliveryStatusPatch,
@@ -71,23 +72,7 @@ export async function countPendingCampaignRecipients(
 }
 
 async function loadUsersByIds(userIds: string[]): Promise<RecipientUserRow[]> {
-  if (userIds.length === 0) return [];
-  const db = createAdminClient();
-  const users: RecipientUserRow[] = [];
-  const CHUNK = 500;
-
-  for (let i = 0; i < userIds.length; i += CHUNK) {
-    const chunk = userIds.slice(i, i + CHUNK);
-    const { data } = await db
-      .from("users")
-      .select(
-        "id, email, full_name, username, user_type, coins, referral_code, created_at, is_active",
-      )
-      .in("id", chunk);
-    users.push(...((data ?? []) as RecipientUserRow[]));
-  }
-
-  return users;
+  return loadRecipientUsersByIds(userIds);
 }
 
 /** Deliver one batch; only rows still `pending` are updated. */
@@ -154,7 +139,7 @@ export async function deliverCampaignBatch(
       campaign.message_template,
       user,
       tz,
-      contest,
+      { contest },
     );
 
     const { data: existingNotification } = await db

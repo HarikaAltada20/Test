@@ -35,6 +35,22 @@
     {
       "path": "/api/cron/process-admin-notification-delivery-queue",
       "schedule": "0 5 * * *"
+    },
+    {
+      "path": "/api/cron/process-admin-email-delivery-queue",
+      "schedule": "0 6 * * *"
+    },
+    {
+      "path": "/api/cron/process-warm-up-sends?action=reset",
+      "schedule": "0 0 * * *"
+    },
+    {
+      "path": "/api/cron/process-warm-up-sends?action=sends",
+      "schedule": "30 3 * * *"
+    },
+    {
+      "path": "/api/cron/process-warm-up-sends?action=metrics",
+      "schedule": "59 23 * * *"
     }
   ]
 }

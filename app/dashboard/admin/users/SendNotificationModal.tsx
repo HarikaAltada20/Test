@@ -112,12 +112,9 @@ export function SendNotificationModal({
 
   const previewText = useMemo(() => {
     if (!previewUser || !messageBody.trim()) return "";
-    return resolveNotificationTemplate(
-      messageBody,
-      previewUser,
-      timezone,
-      contestContext,
-    );
+    return resolveNotificationTemplate(messageBody, previewUser, timezone, {
+      contest: contestContext,
+    });
   }, [messageBody, previewUser, timezone, contestContext]);
 
   const minScheduleDatetime = useMemo(
