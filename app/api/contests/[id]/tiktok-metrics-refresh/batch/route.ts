@@ -6,6 +6,7 @@ import { NextResponse } from "next/server";
 import { createClient as createAdminSupabaseClient } from "@supabase/supabase-js";
 import { syncCreatorTikTokDisplayMetrics } from "@/lib/tiktok/sync-tiktok-display-metrics";
 import { insightsRefreshInsightsStatusOrFilter } from "@/lib/insights-refresh-eligibility";
+import { isContestEligibleForScheduledMetricsRefresh } from "@/lib/contest-metrics-refresh-eligibility";
 
 type SubmissionCandidate = {
   id: string;
@@ -82,6 +83,31 @@ export async function POST(
         hasMore: false,
         cancelled: run.status === "cancelled",
         runStatus: run.status,
+      });
+    }
+
+    const { data: contest } = await supabaseAdmin
+      .from("contests")
+      .select("id, views_locked_at, post_contest_status")
+      .eq("id", contestId)
+      .maybeSingle();
+
+    if (!contest || !isContestEligibleForScheduledMetricsRefresh(contest)) {
+      const now = new Date().toISOString();
+      await supabaseAdmin
+        .from("tiktok_metrics_refresh_runs")
+        .update({
+          status: "cancelled",
+          error_message: "Contest locked for review or finalized",
+          finished_at: now,
+          updated_at: now,
+        })
+        .eq("id", runId)
+        .eq("status", "running");
+      return NextResponse.json({
+        hasMore: false,
+        cancelled: true,
+        runStatus: "cancelled",
       });
     }
 

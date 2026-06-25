@@ -2,13 +2,16 @@ import { NextResponse } from "next/server";
 import { createClient as createAdminSupabaseClient } from "@supabase/supabase-js";
 import { google } from "googleapis";
 import { refreshAccessToken, extractYoutubeId } from "@/lib/youtube-api";
-import {
-  getVideoAnalytics,
-  computeBotScore,
-  isYouTubeShort,
-  getDefaultAnalyticsStartDate,
-} from "@/lib/youtube-analytics";
 import { updateYouTubeCpmContestBudgets } from "@/lib/youtube-cpm-contest-budgets";
+import {
+  isContestEligibleForScheduledMetricsRefresh,
+  isPostContestMetricsLocked,
+  SCHEDULED_METRICS_REFRESH_POST_CONTEST_OR_FILTER,
+} from "@/lib/contest-metrics-refresh-eligibility";
+import {
+  buildOtherStatsWithYoutube,
+  getExistingYouTubeStats,
+} from "@/lib/youtube-other-stats";
 
 // youtube_account JSON from creator_profiles (tokens + channel fields)
 type YouTubeAccountJson = Record<string, any>;
@@ -105,16 +108,12 @@ async function fetchYouTubeStats(
         );
 
         for (const sub of matchingSubmissions) {
-          // CRITICAL: Read existing other_stats.youtube so we never wipe on-demand data.
-          // Daily cron only updates views/likes/comments (Data API v3). Core analytics,
-          // traffic_sources, and demographics are fetched on-demand by admin; we must
-          // carry them forward so the daily run does not remove them.
-          const existingYT = (sub.other_stats?.youtube || sub.other_stats || {}) as Record<string, any>;
+          // CRITICAL: merge nested + legacy root YouTube fields so daily basic refresh
+          // never drops on-demand analytics (traffic, demographics, core, etc.).
+          const existingYT = getExistingYouTubeStats(sub.other_stats);
 
-          // Preserve every existing YouTube analytics key and only overwrite
-          // basic fields refreshed by Data API in this cron path.
           const cleanMetrics: Record<string, any> = {
-            ...(existingYT || {}),
+            ...existingYT,
             views: rawViews,
             likes: rawLikes,
             comments: rawComments,
@@ -125,11 +124,7 @@ async function fetchYouTubeStats(
           updates.push({
             id: sub.id,
             views: rawViews,
-            // Preserve non-YouTube root keys too (if any) while updating youtube branch.
-            newOtherStats: {
-              ...(sub.other_stats || {}),
-              youtube: cleanMetrics,
-            },
+            newOtherStats: buildOtherStatsWithYoutube(sub.other_stats, cleanMetrics),
             insightsStatus: "ok",
           });
         }
@@ -209,20 +204,23 @@ export async function GET(request: Request) {
     if (isContestSpecific) {
       const { data: c } = await supabaseAdmin
         .from("contests")
-        .select("id, views_locked_at")
+        .select("id, views_locked_at, post_contest_status")
         .eq("id", contestId)
         .single();
-      if (!c || c.views_locked_at) {
-        // Finalized or not found: skip submission updates entirely
+      if (!c || !isContestEligibleForScheduledMetricsRefresh(c)) {
+        const locked = c && isPostContestMetricsLocked(c.post_contest_status);
         return NextResponse.json({
-          message: `Contest ${contestId} is finalized or not found; nothing to update`,
+          message: locked
+            ? `Contest ${contestId} is locked for review; nothing to update`
+            : `Contest ${contestId} is finalized or not found; nothing to update`,
         });
       }
     } else {
       const { data: activeContests } = await supabaseAdmin
         .from("contests")
-        .select("id")
-        .is("views_locked_at", null);
+        .select("id, post_contest_status")
+        .is("views_locked_at", null)
+        .or(SCHEDULED_METRICS_REFRESH_POST_CONTEST_OR_FILTER);
       activeIds = (activeContests || []).map((c: any) => c.id);
       if (!activeIds.length) {
         return NextResponse.json({ message: "No active contests to update" });
