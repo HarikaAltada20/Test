@@ -16,6 +16,11 @@ import {
   type AudienceRetentionPoint,
 } from "@/lib/youtube-analytics";
 import type { YouTubeRefreshScope } from "@/lib/queue/youtube-metrics-queue";
+import {
+  buildOtherStatsWithYoutube,
+  getExistingYouTubeStats,
+  hasNonEmptyRecord,
+} from "@/lib/youtube-other-stats";
 
 type SubRow = {
   id: string;
@@ -274,7 +279,7 @@ export async function updateYouTubeSubmissionForScope(
     return "temporary_failure";
   };
 
-  const existingStats = (sub.other_stats?.youtube || sub.other_stats || {}) as Record<string, unknown>;
+  const existingStats = getExistingYouTubeStats(sub.other_stats);
 
   const markFailure = async (
     failureType: InsightsFailureType,
@@ -293,10 +298,7 @@ export async function updateYouTubeSubmissionForScope(
       .update({
         insights_status: failureType,
         last_insights_update: now,
-        other_stats: {
-          ...sub.other_stats,
-          youtube: nextYoutube,
-        },
+        other_stats: buildOtherStatsWithYoutube(sub.other_stats, nextYoutube),
         updated_at: now,
       })
       .eq("id", sub.id);
@@ -470,15 +472,25 @@ export async function updateYouTubeSubmissionForScope(
             ? (trafficResults[resultIdx] as Record<string, number> | null)
             : null;
 
-          if (trafficSources) updates.traffic_sources = trafficSources;
-          if (trafficDetails) {
+          if (hasNonEmptyRecord(trafficSources)) {
+            updates.traffic_sources = trafficSources;
+          }
+          if (trafficDetails && hasNonEmptyRecord(trafficDetails)) {
             updates.traffic_source_details = {
               ...((existingStats.traffic_source_details as Record<string, unknown>) ?? {}),
               ...trafficDetails,
             };
           }
-          if (subscribedStatus) updates.subscribed_status = subscribedStatus;
-          updates.last_traffic_update = now;
+          if (hasNonEmptyRecord(subscribedStatus)) {
+            updates.subscribed_status = subscribedStatus;
+          }
+          if (
+            hasNonEmptyRecord(trafficSources) ||
+            hasNonEmptyRecord(trafficDetails) ||
+            hasNonEmptyRecord(subscribedStatus)
+          ) {
+            updates.last_traffic_update = now;
+          }
         } catch (err: unknown) {
           const code = (err as { code?: number; status?: number })?.code ?? (err as { status?: number })?.status;
           if (code === 403 || code === 401) hadAuthError = true;
@@ -510,12 +522,19 @@ export async function updateYouTubeSubmissionForScope(
             devicesPromise,
           ]);
 
-          if (demographics) {
+          if (demographics && hasNonEmptyRecord(demographics)) {
             const prevDemo = (existingStats.demographics as Record<string, unknown>) ?? {};
             updates.demographics = { ...prevDemo, ...demographics };
           }
-          if (devices) updates.devices = devices;
-          updates.last_demographics_update = now;
+          if (devices && hasNonEmptyRecord(devices)) {
+            updates.devices = devices;
+          }
+          if (
+            hasNonEmptyRecord(demographics) ||
+            hasNonEmptyRecord(devices)
+          ) {
+            updates.last_demographics_update = now;
+          }
         } catch (err: unknown) {
           const code = (err as { code?: number; status?: number })?.code ?? (err as { status?: number })?.status;
           if (code === 403 || code === 401) hadAuthError = true;
@@ -606,7 +625,10 @@ export async function updateYouTubeSubmissionForScope(
     typeof updates.views === "number" ? updates.views : sub.views ?? 0;
 
   const patch: Record<string, unknown> = {
-    other_stats: { ...sub.other_stats, youtube: { ...existingStats, ...updates } },
+    other_stats: buildOtherStatsWithYoutube(sub.other_stats, {
+      ...existingStats,
+      ...updates,
+    }),
     insights_status: "ok",
     last_insights_update: now,
     updated_at: now,

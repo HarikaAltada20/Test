@@ -234,7 +234,7 @@ export async function getVideoTrafficSources(
   });
 
   const rows = response.data.rows;
-  if (!rows || rows.length === 0) return {};
+  if (!rows || rows.length === 0) return null;
   return rowsToViewPercentages(rows);
 }
 
