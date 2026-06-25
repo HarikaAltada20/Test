@@ -13,6 +13,11 @@ import {
   type PrefetchedBasic,
 } from "@/lib/youtube-submission-refresh-by-scope";
 import { insightsRefreshInsightsStatusOrFilter } from "@/lib/insights-refresh-eligibility";
+import { isContestEligibleForScheduledMetricsRefresh } from "@/lib/contest-metrics-refresh-eligibility";
+import {
+  buildOtherStatsWithYoutube,
+  getExistingYouTubeStats,
+} from "@/lib/youtube-other-stats";
 
 async function mapLimit<T, R>(
   items: readonly T[],
@@ -98,6 +103,31 @@ export async function POST(
 
     const scope = run.scope as YouTubeRefreshScope;
 
+    const { data: contest } = await supabaseAdmin
+      .from("contests")
+      .select("id, views_locked_at, post_contest_status")
+      .eq("id", contestId)
+      .maybeSingle();
+
+    if (!contest || !isContestEligibleForScheduledMetricsRefresh(contest)) {
+      const now = new Date().toISOString();
+      await supabaseAdmin
+        .from("youtube_metrics_refresh_runs")
+        .update({
+          status: "cancelled",
+          error_message: "Contest locked for review or finalized",
+          finished_at: now,
+          updated_at: now,
+        })
+        .eq("id", runId)
+        .eq("status", "running");
+      return NextResponse.json({
+        hasMore: false,
+        cancelled: true,
+        runStatus: "cancelled",
+      });
+    }
+
     let query = supabaseAdmin
       .from("submissions")
       .select("id, creator_id, content_link, views, other_stats")
@@ -161,24 +191,18 @@ export async function POST(
         const creatorSubs = byCreator[creator.id] ?? [];
         skippedRecentCount += creatorSubs.length;
         await mapLimit(creatorSubs, 8, async (sub) => {
+          const existingYoutube = getExistingYouTubeStats(sub.other_stats);
           await supabaseAdmin
             .from("submissions")
             .update({
               insights_status: "temporary_failure",
               last_insights_update: now,
               updated_at: now,
-              other_stats: {
-                ...(typeof sub.other_stats === "object" ? sub.other_stats : {}),
-                youtube: {
-                  ...(((typeof sub.other_stats === "object" &&
-                    sub.other_stats &&
-                    "youtube" in sub.other_stats
-                    ? (sub.other_stats as Record<string, unknown>).youtube
-                    : {}) as Record<string, unknown>) || {}),
-                  analytics_needs_reauth: true,
-                  insights_error: "Account disconnected or missing token",
-                },
-              },
+              other_stats: buildOtherStatsWithYoutube(sub.other_stats, {
+                ...existingYoutube,
+                analytics_needs_reauth: true,
+                insights_error: "Account disconnected or missing token",
+              }),
             })
             .eq("id", sub.id);
         });
@@ -198,23 +222,17 @@ export async function POST(
           const creatorSubs = byCreator[creator.id] ?? [];
           skippedRecentCount += creatorSubs.length;
           await mapLimit(creatorSubs, 8, async (sub) => {
+            const existingYoutube = getExistingYouTubeStats(sub.other_stats);
             await supabaseAdmin
               .from("submissions")
               .update({
                 insights_status: "temporary_failure",
                 last_insights_update: now,
                 updated_at: now,
-                other_stats: {
-                  ...(typeof sub.other_stats === "object" ? sub.other_stats : {}),
-                  youtube: {
-                    ...(((typeof sub.other_stats === "object" &&
-                      sub.other_stats &&
-                      "youtube" in sub.other_stats
-                      ? (sub.other_stats as Record<string, unknown>).youtube
-                      : {}) as Record<string, unknown>) || {}),
-                    analytics_needs_reauth: true,
-                  },
-                },
+                other_stats: buildOtherStatsWithYoutube(sub.other_stats, {
+                  ...existingYoutube,
+                  analytics_needs_reauth: true,
+                }),
               })
               .eq("id", sub.id);
           });
@@ -262,24 +280,18 @@ export async function POST(
           const creatorSubs = byCreator[creator.id] ?? [];
           skippedRecentCount += creatorSubs.length;
           await mapLimit(creatorSubs, 8, async (sub) => {
+            const existingYoutube = getExistingYouTubeStats(sub.other_stats);
             await supabaseAdmin
               .from("submissions")
               .update({
                 insights_status: "temporary_failure",
                 last_insights_update: now,
                 updated_at: now,
-                other_stats: {
-                  ...(typeof sub.other_stats === "object" ? sub.other_stats : {}),
-                  youtube: {
-                    ...(((typeof sub.other_stats === "object" &&
-                      sub.other_stats &&
-                      "youtube" in sub.other_stats
-                      ? (sub.other_stats as Record<string, unknown>).youtube
-                      : {}) as Record<string, unknown>) || {}),
-                    analytics_needs_reauth: true,
-                    insights_error: "Token refresh failed",
-                  },
-                },
+                other_stats: buildOtherStatsWithYoutube(sub.other_stats, {
+                  ...existingYoutube,
+                  analytics_needs_reauth: true,
+                  insights_error: "Token refresh failed",
+                }),
               })
               .eq("id", sub.id);
           });
@@ -315,24 +327,18 @@ export async function POST(
       if (!token) {
         // Fallback for any creators who didn't even have a record in creators list
         // Update DB so it turns yellow
+        const existingYoutube = getExistingYouTubeStats(sub.other_stats);
         await supabaseAdmin
           .from("submissions")
           .update({
             insights_status: "temporary_failure",
             last_insights_update: now,
             updated_at: now,
-            other_stats: {
-              ...(typeof sub.other_stats === "object" ? sub.other_stats : {}),
-              youtube: {
-                ...(((typeof sub.other_stats === "object" &&
-                  sub.other_stats &&
-                  "youtube" in sub.other_stats
-                  ? (sub.other_stats as Record<string, unknown>).youtube
-                  : {}) as Record<string, unknown>) || {}),
-                analytics_needs_reauth: true,
-                insights_error: "Missing creator profile or token",
-              },
-            },
+            other_stats: buildOtherStatsWithYoutube(sub.other_stats, {
+              ...existingYoutube,
+              analytics_needs_reauth: true,
+              insights_error: "Missing creator profile or token",
+            }),
           })
           .eq("id", sub.id);
         return {

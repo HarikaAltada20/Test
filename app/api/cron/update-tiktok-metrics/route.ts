@@ -2,6 +2,11 @@ import { NextResponse } from "next/server";
 import { createClient as createAdminSupabaseClient } from "@supabase/supabase-js";
 import { syncCreatorTikTokDisplayMetrics } from "@/lib/tiktok/sync-tiktok-display-metrics";
 import { isTikTokMetricsQueueEnabled } from "@/lib/queue/tiktok-metrics-queue";
+import {
+  isContestEligibleForScheduledMetricsRefresh,
+  isPostContestMetricsLocked,
+  SCHEDULED_METRICS_REFRESH_POST_CONTEST_OR_FILTER,
+} from "@/lib/contest-metrics-refresh-eligibility";
 
 // Extract TikTok video ID from a content link
 function extractTikTokVideoId(contentLink: string): string | null {
@@ -191,21 +196,25 @@ export async function GET(request: Request) {
     if (isContestSpecific) {
       const { data: c } = await supabaseAdmin
         .from("contests")
-        .select("id, views_locked_at")
+        .select("id, views_locked_at, post_contest_status")
         .eq("id", contestId)
         .single();
-      if (!c || c.views_locked_at) {
+      if (!c || !isContestEligibleForScheduledMetricsRefresh(c)) {
+        const locked = c && isPostContestMetricsLocked(c.post_contest_status);
         return NextResponse.json({
-          message: `Contest ${contestId} is finalized or not found; nothing to update`,
+          message: locked
+            ? `Contest ${contestId} is locked for review; nothing to update`
+            : `Contest ${contestId} is finalized or not found; nothing to update`,
         });
       }
     } else {
       // For non-contest-specific, get all active TikTok contests
       const { data: activeContests } = await supabaseAdmin
         .from("contests")
-        .select("id")
+        .select("id, post_contest_status")
         .eq("platform", "tiktok")
-        .is("views_locked_at", null);
+        .is("views_locked_at", null)
+        .or(SCHEDULED_METRICS_REFRESH_POST_CONTEST_OR_FILTER);
       activeIds = (activeContests || []).map((c: any) => c.id);
       console.log(`[TikTok Cron] Found ${activeIds.length} active TikTok contests.`);
       if (!activeIds.length) {
