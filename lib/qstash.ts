@@ -106,24 +106,9 @@ export function resolvePublicBaseUrl(request?: Request): string {
 }
 
 /**
- * Base URL QStash will POST to. Prefer QSTASH_CALLBACK_URL (set to your active
- * cloudflared/ngrok URL), then NEXT_PUBLIC_APP_URL, then the incoming request origin.
+ * Base URL QStash will POST to. Uses NEXT_PUBLIC_APP_URL, then the incoming request origin.
  */
 export function getQStashPublishBaseUrl(request?: Request): string {
-  const explicit = sanitizeEnvValue(process.env.QSTASH_CALLBACK_URL);
-  if (explicit) {
-    try {
-      const origin = new URL(
-        explicit.includes("://") ? explicit : `https://${explicit}`,
-      ).origin;
-      if (!isLoopbackUrl(origin)) {
-        return origin.replace(/\/$/, "");
-      }
-    } catch {
-      // fall through
-    }
-  }
-
   const fromEnv = getBaseUrl().replace(/\/$/, "");
   if (!isLoopbackUrl(fromEnv)) {
     return fromEnv;
@@ -958,7 +943,7 @@ export async function scheduleAdminNotificationCampaign(
   if (isLoopbackUrl(publishUrl)) {
     return {
       error:
-        "Loopback URL; set QSTASH_CALLBACK_URL or NEXT_PUBLIC_APP_URL to your public tunnel",
+        "Loopback URL; set NEXT_PUBLIC_APP_URL to your public tunnel",
       publishUrl,
     };
   }
@@ -1063,9 +1048,7 @@ async function verifyQStashSignatureWarmUp(
       forwardedOrigin
         ? `${forwardedOrigin}/api/cron/process-warm-up-sends`
         : null,
-      requestUrl
-        ? `${requestUrl.origin}/api/cron/process-warm-up-sends`
-        : null,
+      requestUrl ? `${requestUrl.origin}/api/cron/process-warm-up-sends` : null,
       requestUrl?.toString() ?? null,
     ]);
     return verifyQStashAgainstUrls(receiver, signature, rawBody, candidates);
@@ -1076,7 +1059,6 @@ async function verifyQStashSignatureWarmUp(
 
 /**
  * Authorize process-warm-up-sends: QStash signature or Bearer CRON_SECRET.
- * Vercel Cron sends CRON_SECRET as Authorization Bearer when configured.
  */
 export async function authorizeProcessWarmUpSends(
   request: Request,
@@ -1089,16 +1071,11 @@ export async function authorizeProcessWarmUpSends(
   }
 
   if (request.headers.get("Upstash-Signature")) {
-    const verified = await verifyQStashSignatureWarmUp(request, rawBody);
-    if (!verified) {
-      console.warn("[qstash] warm-up sends signature rejected", {
-        forwardedOrigin: getForwardedOrigin(request),
-        bodyLength: rawBody.length,
-      });
-    }
-    return verified;
+    return verifyQStashSignatureWarmUp(request, rawBody);
   }
 
+  // Vercel Cron (legacy) or local dev
+  if (request.headers.get("x-vercel-cron")) return true;
   if (cronSecret) return false;
   return process.env.NODE_ENV === "development";
 }

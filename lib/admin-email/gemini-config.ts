@@ -13,11 +13,9 @@ function env(name: string): string {
 }
 
 export function getGoogleGeminiConfig(): GoogleGeminiConfig {
-  const apiKey = env("GOOGLE_API_KEY") || env("GEMINI_API_KEY");
+  const apiKey = env("GOOGLE_API_KEY");
   if (!apiKey) {
-    throw new Error(
-      "GOOGLE_API_KEY (or GEMINI_API_KEY) is not configured",
-    );
+    throw new Error("GOOGLE_API_KEY is not configured");
   }
 
   const generateModel =

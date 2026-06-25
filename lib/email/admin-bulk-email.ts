@@ -5,10 +5,6 @@ import type {
   ContestTemplateContext,
 } from "@/lib/admin-notifications/template";
 
-const DEFAULT_FROM_NAME = "Game of Creators";
-const DEFAULT_REPLY_TO =
-  process.env.SES_REPLY_TO?.trim() || "support@gameofcreators.com";
-
 /** Public base URL embedded in open pixels and click redirects (must be reachable from email clients). */
 export function getEmailTrackingBaseUrl(): string {
   const raw = process.env.NEXT_PUBLIC_APP_URL?.trim();
@@ -283,27 +279,23 @@ export function getUnsubscribePlainTextFooter(unsubscribeUrl: string): string {
 }
 
 export function getBulkEmailFromName(_fromEmail?: string): string {
-  const envName = process.env.SES_FROM_DISPLAY_NAME?.trim();
-  if (envName) return envName;
-  return DEFAULT_FROM_NAME;
+  return process.env.SES_FROM_DISPLAY_NAME?.trim() ?? "";
 }
 
 /** Reply-To must share the From domain for DMARC alignment (avoids spam). */
 export function getBulkEmailReplyTo(fromEmail?: string): string {
   const envReply = process.env.SES_REPLY_TO?.trim();
   if (!fromEmail?.includes("@")) {
-    return envReply || fromEmail || DEFAULT_REPLY_TO;
+    return envReply || fromEmail || "";
   }
 
   const fromDomain = fromEmail.split("@")[1]?.toLowerCase();
-  if (!fromDomain) return envReply || fromEmail || DEFAULT_REPLY_TO;
+  if (!fromDomain) return envReply || fromEmail || "";
 
   if (envReply) {
     const replyDomain = envReply.split("@")[1]?.toLowerCase();
-    // Only use SES_REPLY_TO if it shares the same domain (DMARC alignment)
     if (replyDomain === fromDomain) return envReply;
   }
 
-  // Default: reply directly to the from address so replies reach the campaign inbox
   return fromEmail;
 }
