@@ -40,16 +40,21 @@ import {
   Layers,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import {
-  scheduleClientDelivery,
-} from "@/hooks/useAdminScheduledNotificationDelivery";
+import { scheduleClientDelivery } from "@/hooks/useAdminScheduledNotificationDelivery";
 import {
   SendNotificationModal,
   type NotificationSelectionState,
 } from "./SendNotificationModal";
 import { AdminNotificationsView } from "./AdminNotificationsView";
 import { AttachEmailCampaignModal } from "./AttachEmailCampaignModal";
-import { AddLeadsToCampaignModal, type AddLeadsModalVariant } from "./AddLeadsToCampaignModal";
+import {
+  AddLeadsToCampaignModal,
+  type AddLeadsModalVariant,
+} from "./AddLeadsToCampaignModal";
+import {
+  clearEmailLeadSelectModeStorage,
+  readEmailLeadPreselectedUserIds,
+} from "@/lib/admin-email/enter-lead-select-mode";
 import type { RecipientUserRow } from "@/lib/admin-notifications/types";
 import { cn } from "@/lib/utils";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -688,11 +693,7 @@ export default function AdminUsersPage() {
     setEmailLeadSelectMode(false);
     setEmailLeadCampaignId(null);
     setEmailLeadCampaignName(null);
-    if (typeof window !== "undefined") {
-      sessionStorage.removeItem("email_lead_mode");
-      sessionStorage.removeItem("email_lead_campaign_id");
-      sessionStorage.removeItem("email_lead_campaign_name");
-    }
+    clearEmailLeadSelectModeStorage();
   };
 
   useEffect(() => {
@@ -741,34 +742,58 @@ export default function AdminUsersPage() {
       setViewModePersisted("table");
     };
     window.addEventListener("wu:enter-select-mode", handleEnterSelect);
-    return () => window.removeEventListener("wu:enter-select-mode", handleEnterSelect);
+    return () =>
+      window.removeEventListener("wu:enter-select-mode", handleEnterSelect);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Email lead selection mode: dispatched from campaign Lead tab "Add Leads"
   useEffect(() => {
     const handleEnterLeadSelect = (event: Event) => {
-      const detail = (event as CustomEvent<{ campaignId?: string; campaignName?: string }>)
-        .detail;
+      const detail = (
+        event as CustomEvent<{
+          campaignId?: string;
+          campaignName?: string | null;
+          preselectedUserIds?: string[];
+        }>
+      ).detail;
       const campaignId =
-        detail?.campaignId ??
-        sessionStorage.getItem("email_lead_campaign_id");
+        detail?.campaignId ?? sessionStorage.getItem("email_lead_campaign_id");
       const campaignName =
         detail?.campaignName ??
         sessionStorage.getItem("email_lead_campaign_name");
+      const preselectedUserIds =
+        detail?.preselectedUserIds ?? readEmailLeadPreselectedUserIds();
 
-      setSelectedUserIds(new Set());
       setSelectAllFiltered(false);
       setEmailLeadSelectMode(true);
       setEmailLeadCampaignId(campaignId);
       setEmailLeadCampaignName(campaignName);
+      setSelectedUserIds(new Set(preselectedUserIds));
       setViewModePersisted("table");
     };
-    window.addEventListener("email:enter-lead-select-mode", handleEnterLeadSelect);
+    window.addEventListener(
+      "email:enter-lead-select-mode",
+      handleEnterLeadSelect,
+    );
     return () =>
-      window.removeEventListener("email:enter-lead-select-mode", handleEnterLeadSelect);
+      window.removeEventListener(
+        "email:enter-lead-select-mode",
+        handleEnterLeadSelect,
+      );
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Restore pre-selected users when returning via sessionStorage (e.g. page refresh)
+  useEffect(() => {
+    if (!emailLeadSelectMode) return;
+    const preselected = readEmailLeadPreselectedUserIds();
+    if (preselected.length === 0) return;
+    setSelectedUserIds((prev) => {
+      if (prev.size > 0) return prev;
+      return new Set(preselected);
+    });
+  }, [emailLeadSelectMode]);
 
   const syncSupportChatEnabled = (userId: string, enabled: boolean) => {
     setRows((prev) =>
@@ -2803,6 +2828,7 @@ export default function AdminUsersPage() {
                     size="sm"
                     variant="outline"
                     className="h-8 gap-1.5 px-2 sm:px-3"
+                    disabled={!hasNotificationSelection}
                     onClick={() => {
                       setWarmupSelectMode(false);
                       sessionStorage.removeItem("wu_mode");
@@ -2913,9 +2939,10 @@ export default function AdminUsersPage() {
               variant="outline"
               onClick={() => {
                 if (filters.length === 0) {
-                  const availableColumns = allColumns[
-                    activeTab as keyof typeof allColumns
-                  ].filter(isTableFilterColumn);
+                  const availableColumns =
+                    allColumns[activeTab as keyof typeof allColumns].filter(
+                      isTableFilterColumn,
+                    );
                   setFilters([
                     {
                       id: `filter-${Date.now()}-${Math.random()}`,
@@ -2954,10 +2981,7 @@ export default function AdminUsersPage() {
               onClick={() => {
                 const newTimezone = timezone === "UTC" ? "local" : "UTC";
                 setTimezone(newTimezone);
-                localStorage.setItem(
-                  "users-management-timezone",
-                  newTimezone,
-                );
+                localStorage.setItem("users-management-timezone", newTimezone);
               }}
               className="h-8 shrink-0 gap-1.5 px-2 sm:px-3"
               size="sm"
@@ -3004,17 +3028,25 @@ export default function AdminUsersPage() {
                 Warm-Up Recipient Selection
               </p>
               <p className="text-xs text-indigo-700 mt-0.5">
-                Select users below using the checkboxes, then click "Add to Warm-Up Send".
+                Select users below using the checkboxes, then click "Add to
+                Warm-Up Send".
                 {wuMaxRecipients != null && (
                   <span>
                     {" "}
                     Daily limit: select up to{" "}
-                    <span className="font-semibold">{wuMaxRecipients}</span> recipient
+                    <span className="font-semibold">
+                      {wuMaxRecipients}
+                    </span>{" "}
+                    recipient
                     {wuMaxRecipients !== 1 ? "s" : ""}.
                   </span>
                 )}
                 {selectedCount > 0 && (
-                  <span className="font-semibold"> {selectedCount} user{selectedCount !== 1 ? "s" : ""} selected.</span>
+                  <span className="font-semibold">
+                    {" "}
+                    {selectedCount} user{selectedCount !== 1 ? "s" : ""}{" "}
+                    selected.
+                  </span>
                 )}
               </p>
             </div>
@@ -3071,7 +3103,10 @@ export default function AdminUsersPage() {
 
                 // Store emails and tab flag in sessionStorage
                 if (typeof window !== "undefined") {
-                  sessionStorage.setItem("wu_emails", JSON.stringify(finalEmails));
+                  sessionStorage.setItem(
+                    "wu_emails",
+                    JSON.stringify(finalEmails),
+                  );
                   sessionStorage.setItem("wu_open_tab", "1");
                 }
                 // Send emails back to the modal via custom event (fallback)
@@ -3146,19 +3181,6 @@ export default function AdminUsersPage() {
             </Button>
             <Button
               size="sm"
-              variant="outline"
-              className="border-purple-300 text-purple-700 hover:bg-purple-100"
-              onClick={() => {
-                setBundlesModalVariant("campaign");
-                setBundlesModalDefaultTab("select");
-                setEmailBundlesModalOpen(true);
-              }}
-            >
-              <Layers className="h-3.5 w-3.5 mr-1.5" />
-              Get selected bundles
-            </Button>
-            <Button
-              size="sm"
               disabled={selectedCount === 0}
               className="bg-[#662EBD] hover:bg-[#5524a8] text-white"
               onClick={() => setEmailSendModalOpen(true)}
@@ -3221,9 +3243,7 @@ export default function AdminUsersPage() {
                               ? "Wait until all users finish loading"
                               : undefined
                           }
-                          onCheckedChange={(c) =>
-                            toggleSelectAllFiltered(!!c)
-                          }
+                          onCheckedChange={(c) => toggleSelectAllFiltered(!!c)}
                           className={cn(
                             selectionCheckboxClass,
                             isDark ? "bg-[#391A6A]" : "bg-[#F9FAFB]",
@@ -5470,7 +5490,8 @@ export default function AdminUsersPage() {
           clearEmailLeadSelectMode();
           toast({
             title: "Users attached",
-            description: "Configure template and schedule on the campaign page.",
+            description:
+              "Configure template and schedule on the campaign page.",
           });
           setHighlightEmailCampaignId(campaignId);
           setViewModePersisted("email");
@@ -5497,7 +5518,8 @@ export default function AdminUsersPage() {
           setSelectAllFiltered(false);
           toast({
             title: "Bundles added",
-            description: "Leads from selected bundles were added to the campaign.",
+            description:
+              "Leads from selected bundles were added to the campaign.",
           });
           setHighlightEmailCampaignId(campaignId);
           setViewModePersisted("email");
@@ -5535,9 +5557,7 @@ export default function AdminUsersPage() {
           if (result.status === "scheduled" && result.scheduledAt) {
             scheduleClientDelivery(result.campaignId, result.scheduledAt);
             const qstashNote =
-              "qstashScheduled" in result && result.qstashScheduled
-                ? ""
-                : "";
+              "qstashScheduled" in result && result.qstashScheduled ? "" : "";
             toast({
               title: "Notification scheduled",
               description: `Scheduled for ${new Date(result.scheduledAt).toLocaleString()} (your local time).${qstashNote}`,
@@ -5947,9 +5967,7 @@ export default function AdminUsersPage() {
                                     emptyFilterColumn ||
                                     allColumns[
                                       activeTab as keyof typeof allColumns
-                                    ].filter(
-                                      isTableFilterColumn,
-                                    )[0]?.id ||
+                                    ].filter(isTableFilterColumn)[0]?.id ||
                                     "";
                                   if (selectedColumn && value) {
                                     setFilters([
@@ -5985,9 +6003,7 @@ export default function AdminUsersPage() {
                                   emptyFilterColumn ||
                                   allColumns[
                                     activeTab as keyof typeof allColumns
-                                  ].filter(
-                                    isTableFilterColumn,
-                                  )[0]?.id ||
+                                  ].filter(isTableFilterColumn)[0]?.id ||
                                   "";
                                 if (selectedColumn && value) {
                                   setFilters([
@@ -6022,9 +6038,7 @@ export default function AdminUsersPage() {
                                   emptyFilterColumn ||
                                   allColumns[
                                     activeTab as keyof typeof allColumns
-                                  ].filter(
-                                    isTableFilterColumn,
-                                  )[0]?.id ||
+                                  ].filter(isTableFilterColumn)[0]?.id ||
                                   "";
                                 if (selectedColumn && value) {
                                   setFilters([
@@ -6064,8 +6078,7 @@ export default function AdminUsersPage() {
                             emptyFilterColumn ||
                             allColumns[
                               activeTab as keyof typeof allColumns
-                            ].filter(isTableFilterColumn)[0]
-                              ?.id ||
+                            ].filter(isTableFilterColumn)[0]?.id ||
                             "";
                           if (selectedColumn && value) {
                             setFilters([
@@ -6598,9 +6611,10 @@ export default function AdminUsersPage() {
             <Button
               variant="outline"
               onClick={() => {
-                const availableColumns = allColumns[
-                  activeTab as keyof typeof allColumns
-                ].filter(isTableFilterColumn);
+                const availableColumns =
+                  allColumns[activeTab as keyof typeof allColumns].filter(
+                    isTableFilterColumn,
+                  );
                 setFilters([
                   ...filters,
                   {

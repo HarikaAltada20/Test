@@ -28,6 +28,7 @@ import { Filter, Layers, Plus, Search, Trash2, X } from "lucide-react";
 import { PaginationControls } from "@/components/ui/pagination-controls";
 import { useToast } from "@/hooks/use-toast";
 import { AddLeadsToCampaignModal } from "../AddLeadsToCampaignModal";
+import { enterEmailLeadSelectMode } from "@/lib/admin-email/enter-lead-select-mode";
 
 const DEFAULT_PAGE_SIZE = 50;
 
@@ -58,12 +59,26 @@ const LEAD_STATUS_BADGE_CLASS: Record<string, string> = {
   Opened: "bg-purple-100 text-purple-800 hover:bg-purple-100",
   Clicked: "bg-purple-100 text-purple-800 hover:bg-purple-100",
   Pending: "bg-gray-100 text-gray-700 hover:bg-gray-100",
+  Skipped: "bg-gray-100 text-gray-700 hover:bg-gray-100",
   Bounced: "bg-red-100 text-red-800 hover:bg-red-100",
   Failed: "bg-red-100 text-red-800 hover:bg-red-100",
 };
 
 function leadStatusBadges(r: RecipientRow): string[] {
   const badges: string[] = [];
+
+  if (r.status === "bounced") {
+    badges.push("Bounced");
+    return badges;
+  }
+  if (r.status === "failed") {
+    badges.push("Failed");
+    return badges;
+  }
+  if (r.status === "skipped") {
+    badges.push("Skipped");
+    return badges;
+  }
 
   if (SENT_STATUSES.has(r.status) || r.status === "in_sequence") {
     badges.push("Sent");
@@ -76,10 +91,6 @@ function leadStatusBadges(r: RecipientRow): string[] {
   if (badges.length === 0) {
     if (r.status === "pending") {
       badges.push("Pending");
-    } else if (r.status === "bounced") {
-      badges.push("Bounced");
-    } else if (r.status === "failed") {
-      badges.push("Failed");
     } else if (r.status) {
       badges.push(
         r.status.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()),
@@ -92,7 +103,8 @@ function leadStatusBadges(r: RecipientRow): string[] {
 
 function LeadStatusBadges({ recipient }: { recipient: RecipientRow }) {
   const badges = leadStatusBadges(recipient);
-  if (badges.length === 0) return <span className="text-muted-foreground">—</span>;
+  if (badges.length === 0)
+    return <span className="text-muted-foreground">—</span>;
 
   return (
     <div className="flex flex-wrap gap-1.5">
@@ -143,10 +155,32 @@ export function LeadTab({
   const [deleting, setDeleting] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [addLeadsModalOpen, setAddLeadsModalOpen] = useState(false);
+  const [bundlesModalOpen, setBundlesModalOpen] = useState(false);
   const [attachedBundles, setAttachedBundles] = useState<AttachedBundle[]>([]);
   const [bundlesLoading, setBundlesLoading] = useState(true);
-  const [detachingBundleId, setDetachingBundleId] = useState<string | null>(null);
+  const [detachingBundleId, setDetachingBundleId] = useState<string | null>(
+    null,
+  );
+
+  const handleAddLeadsFromUsers = () => {
+    const preselectedUserIds =
+      selected.size > 0
+        ? recipients
+            .filter((row) => selected.has(row.recipientId))
+            .map((row) => row.userId)
+            .filter(Boolean)
+        : undefined;
+
+    enterEmailLeadSelectMode({
+      campaignId,
+      campaignName,
+      preselectedUserIds,
+    });
+  };
+
+  const handleOpenBundlesModal = () => {
+    setBundlesModalOpen(true);
+  };
 
   const loadAttachedBundles = () => {
     setBundlesLoading(true);
@@ -184,7 +218,9 @@ export function LeadTab({
       if (statusFilter !== "all") params.set("status", statusFilter);
       if (debouncedSearch.trim()) params.set("search", debouncedSearch.trim());
 
-      return fetch(`/api/admin/email-campaigns/${campaignId}/recipients?${params}`)
+      return fetch(
+        `/api/admin/email-campaigns/${campaignId}/recipients?${params}`,
+      )
         .then((r) => r.json())
         .then((d) => {
           setRecipients(d.recipients ?? []);
@@ -240,8 +276,12 @@ export function LeadTab({
       }
 
       const removedIds = new Set(recipientIds);
-      setRecipients((prev) => prev.filter((r) => !removedIds.has(r.recipientId)));
-      setTotal((prev) => Math.max(0, prev - (data.deletedCount ?? recipientIds.length)));
+      setRecipients((prev) =>
+        prev.filter((r) => !removedIds.has(r.recipientId)),
+      );
+      setTotal((prev) =>
+        Math.max(0, prev - (data.deletedCount ?? recipientIds.length)),
+      );
       setSelected(new Set());
       setConfirmDelete(false);
 
@@ -258,17 +298,19 @@ export function LeadTab({
     }
   };
 
-  const contactLabel = (r: RecipientRow) =>
-    r.fullName || r.username || "—";
+  const contactLabel = (r: RecipientRow) => r.fullName || r.username || "—";
 
   const handleDetachBundle = async (bundleId: string) => {
     setDetachingBundleId(bundleId);
     try {
-      const res = await fetch(`/api/admin/email-campaigns/${campaignId}/bundles`, {
-        method: "DELETE",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ bundleId }),
-      });
+      const res = await fetch(
+        `/api/admin/email-campaigns/${campaignId}/bundles`,
+        {
+          method: "DELETE",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ bundleId }),
+        },
+      );
       const data = await res.json();
       if (!res.ok) {
         toast({
@@ -279,7 +321,9 @@ export function LeadTab({
         return;
       }
 
-      setAttachedBundles((prev) => prev.filter((bundle) => bundle.id !== bundleId));
+      setAttachedBundles((prev) =>
+        prev.filter((bundle) => bundle.id !== bundleId),
+      );
       await loadRecipients();
       onRecipientsChange?.();
       toast({
@@ -296,8 +340,6 @@ export function LeadTab({
 
   return (
     <div className="space-y-4">
-   
-
       {!bundlesLoading && attachedBundles.length > 0 && (
         <div className="rounded-xl border border-blue-200 bg-blue-50/60 p-4 space-y-3">
           <div className="flex items-center gap-2 text-sm font-medium text-blue-900">
@@ -384,7 +426,7 @@ export function LeadTab({
         <Button
           variant="outline"
           className="h-11 border-gray-300"
-          onClick={() => setAddLeadsModalOpen(true)}
+          onClick={handleOpenBundlesModal}
         >
           <Layers className="h-4 w-4 mr-2" />
           Get selected bundles
@@ -392,7 +434,7 @@ export function LeadTab({
 
         <Button
           className="h-11 bg-[#662EBD] hover:bg-[#5524a8]"
-          onClick={() => setAddLeadsModalOpen(true)}
+          onClick={handleAddLeadsFromUsers}
         >
           <Plus className="h-4 w-4 mr-1" />
           Add Leads
@@ -437,7 +479,10 @@ export function LeadTab({
               )}
               {!loading &&
                 recipients.map((r) => (
-                  <tr key={r.recipientId} className="border-b last:border-0 hover:bg-muted/20">
+                  <tr
+                    key={r.recipientId}
+                    className="border-b last:border-0 hover:bg-muted/20"
+                  >
                     <td className="p-4">
                       <Checkbox
                         checked={selected.has(r.recipientId)}
@@ -476,8 +521,12 @@ export function LeadTab({
                 ))}
               {!loading && recipients.length === 0 && (
                 <tr>
-                  <td colSpan={7} className="p-12 text-center text-muted-foreground">
-                    No leads attached yet. Use Add Leads or send from the Users table.
+                  <td
+                    colSpan={7}
+                    className="p-12 text-center text-muted-foreground"
+                  >
+                    No leads attached yet. Use Add Leads or send from the Users
+                    table.
                   </td>
                 </tr>
               )}
@@ -508,8 +557,8 @@ export function LeadTab({
             <AlertDialogTitle>Remove selected leads?</AlertDialogTitle>
             <AlertDialogDescription>
               This will remove {selected.size} lead
-              {selected.size === 1 ? "" : "s"} from this campaign. This cannot be
-              undone.
+              {selected.size === 1 ? "" : "s"} from this campaign. This cannot
+              be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -529,11 +578,12 @@ export function LeadTab({
       </AlertDialog>
 
       <AddLeadsToCampaignModal
-        open={addLeadsModalOpen}
-        onOpenChange={setAddLeadsModalOpen}
+        open={bundlesModalOpen}
+        onOpenChange={setBundlesModalOpen}
         campaignId={campaignId}
         campaignName={campaignName}
         variant="campaign"
+        defaultTab="select"
         onSuccess={() => {
           void loadRecipients();
           void loadAttachedBundles();
