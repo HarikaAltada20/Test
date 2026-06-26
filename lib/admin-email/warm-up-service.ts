@@ -5,7 +5,7 @@
 
 import { randomUUID } from "crypto";
 import { createAdminClient } from "@/utils/supabase/admin";
-import { sendSesEmail } from "@/lib/email/ses-client";
+import { sendSesEmail, sesCorrelationMessageId } from "@/lib/email/ses-client";
 import {
   getEmailTrackingBaseUrl,
   injectTrackingPixel,
@@ -506,7 +506,7 @@ function sesMessageIdFromResult(result: {
   messageId?: string;
   sesMessageId?: string;
 }): string | null {
-  return result.sesMessageId ?? result.messageId ?? null;
+  return sesCorrelationMessageId(result);
 }
 
 function isSendOpened(send: Pick<WarmUpSendRow, "opened_at" | "clicked_at" | "replied_at">) {

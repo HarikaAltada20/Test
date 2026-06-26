@@ -1410,11 +1410,11 @@ export function EmailLeadsView({ projects, isDark, isActive = true }: Props) {
         }}
       >
         <DialogContent className="max-w-2xl max-h-[90vh] flex flex-col gap-0 p-0 overflow-hidden">
-          <DialogHeader className="px-6 pt-6 pb-4 border-b shrink-0">
+          <DialogHeader className="px-2 pt-4 pb-4 border-b shrink-0">
             <DialogTitle>Import CSV / Excel</DialogTitle>
           </DialogHeader>
 
-          <div className="overflow-y-auto flex-1 min-h-0 px-6 py-4">
+          <div className="overflow-y-auto flex-1 min-h-0 px-2 py-4">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-1.5">
                 <Label>

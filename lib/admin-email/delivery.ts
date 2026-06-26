@@ -6,7 +6,7 @@ import {
   getBulkEmailFromName,
   getBulkEmailReplyTo,
 } from "@/lib/email/admin-bulk-email";
-import { sendSesEmail } from "@/lib/email/ses-client";
+import { sendSesEmail, sesCorrelationMessageId, mimeThreadingMessageId } from "@/lib/email/ses-client";
 import {
   enqueueAdminEmailDeliveryJob,
   isAdminEmailDeliveryQueueEnabled,
@@ -117,6 +117,38 @@ async function releaseCampaignStepSendReservation(
     .is("ses_message_id", null);
 }
 
+type ExternalRecipientClaimRow = {
+  id: string;
+  recipient_email: string | null;
+  full_name: string | null;
+  username: string | null;
+  user_type_at_send: string | null;
+  from_email: string | null;
+};
+
+/** Atomically claim an external lead row so concurrent workers cannot double-send. */
+async function claimExternalRecipientForSend(
+  recipientId: string,
+  now: string,
+): Promise<ExternalRecipientClaimRow | null> {
+  const db = createAdminClient();
+  const { data } = await db
+    .from("admin_email_campaign_recipients")
+    .update({
+      email_delivery_status: "sending",
+      updated_at: now,
+    })
+    .eq("id", recipientId)
+    .is("user_id", null)
+    .eq("email_delivery_status", "pending")
+    .select(
+      "id, recipient_email, full_name, username, user_type_at_send, from_email",
+    )
+    .maybeSingle();
+
+  return data;
+}
+
 async function syncRecipientProgressAfterSentStep(
   campaignId: string,
   userId: string,
@@ -223,6 +255,16 @@ export async function repairRecipientsForDelivery(
   await db
     .from("admin_email_campaign_recipients")
     .update({
+      email_delivery_status: "pending",
+      updated_at: now,
+    })
+    .eq("campaign_id", campaignId)
+    .eq("email_delivery_status", "sending")
+    .lt("updated_at", staleBefore);
+
+  await db
+    .from("admin_email_campaign_recipients")
+    .update({
       next_email_scheduled_at: now,
       updated_at: now,
     })
@@ -237,7 +279,7 @@ async function countIncompleteRecipients(campaignId: string): Promise<number> {
     .from("admin_email_campaign_recipients")
     .select("id", { count: "exact", head: true })
     .eq("campaign_id", campaignId)
-    .in("email_delivery_status", ["pending", "in_sequence"]);
+    .in("email_delivery_status", ["pending", "in_sequence", "sending"]);
   return count ?? 0;
 }
 
@@ -604,11 +646,13 @@ export async function deliverEmailCampaignBatch(
       useRaw,
     });
 
-    if (sendResult.messageId) {
+    const storedSesMessageId = sesCorrelationMessageId(sendResult);
+
+    if (storedSesMessageId) {
       await db
         .from("admin_email_sequence_step_sends")
         .update({
-          ses_message_id: sendResult.messageId,
+          ses_message_id: storedSesMessageId,
           variant_id: variantId,
           email_delivery_status: "sent",
           sent_at: now,
@@ -631,7 +675,7 @@ export async function deliverEmailCampaignBatch(
             email_delivery_status: "in_sequence",
             current_step_number: nextStep.step_number,
             next_email_scheduled_at: nextScheduledAt,
-            ses_message_id: sendResult.messageId,
+            ses_message_id: storedSesMessageId,
             from_email: sendFromEmail,
             updated_at: now,
           })
@@ -643,7 +687,7 @@ export async function deliverEmailCampaignBatch(
           .from("admin_email_campaign_recipients")
           .update({
             email_delivery_status: "sent",
-            ses_message_id: sendResult.messageId,
+            ses_message_id: storedSesMessageId,
             from_email: sendFromEmail,
             next_email_scheduled_at: null,
             updated_at: now,
@@ -665,7 +709,7 @@ export async function deliverEmailCampaignBatch(
         subject,
         bodyHtml: html,
         bodyText: text,
-        sesMessageId: sendResult.messageId,
+        sesMessageId: mimeThreadingMessageId(sendResult) ?? undefined,
       });
 
       successCount += 1;
@@ -687,15 +731,30 @@ export async function deliverEmailCampaignBatch(
 
   for (const row of externalRows) {
     if (
-      !["pending", "in_sequence"].includes(row.email_delivery_status) ||
+      row.email_delivery_status !== "pending" ||
       useSequenceSteps
     ) {
       skippedCount += 1;
       continue;
     }
 
-    const email = row.recipient_email?.trim().toLowerCase();
+    const claimed = await claimExternalRecipientForSend(row.id, now);
+    if (!claimed) {
+      skippedCount += 1;
+      continue;
+    }
+
+    const email = claimed.recipient_email?.trim().toLowerCase();
     if (!email) {
+      await db
+        .from("admin_email_campaign_recipients")
+        .update({
+          email_delivery_status: "skipped",
+          skipped_reason: "missing email",
+          updated_at: now,
+        })
+        .eq("id", claimed.id)
+        .eq("email_delivery_status", "sending");
       skippedCount += 1;
       continue;
     }
@@ -708,18 +767,18 @@ export async function deliverEmailCampaignBatch(
           skipped_reason: "suppressed",
           updated_at: now,
         })
-        .eq("id", row.id)
-        .in("email_delivery_status", ["pending", "in_sequence"]);
+        .eq("id", claimed.id)
+        .eq("email_delivery_status", "sending");
       skippedCount += 1;
       continue;
     }
 
     const externalUser: RecipientUserRow = {
-      id: row.id,
+      id: claimed.id,
       email,
-      full_name: row.full_name,
-      username: row.username,
-      user_type: row.user_type_at_send || "lead",
+      full_name: claimed.full_name,
+      username: claimed.username,
+      user_type: claimed.user_type_at_send || "lead",
       coins: null,
       referral_code: null,
       created_at: now,
@@ -743,8 +802,8 @@ export async function deliverEmailCampaignBatch(
     });
 
     const sendFromEmail =
-      row.from_email?.trim() ||
-      pickSenderForRecipient(row.id, campaignSenders).email;
+      claimed.from_email?.trim() ||
+      pickSenderForRecipient(claimed.id, campaignSenders).email;
 
     const sendResult = await sendSesEmail({
       from: sendFromEmail,
@@ -758,18 +817,20 @@ export async function deliverEmailCampaignBatch(
       useRaw,
     });
 
-    if (sendResult.messageId) {
+    const storedSesMessageId = sesCorrelationMessageId(sendResult);
+
+    if (storedSesMessageId) {
       await db
         .from("admin_email_campaign_recipients")
         .update({
           email_delivery_status: "sent",
-          ses_message_id: sendResult.messageId,
+          ses_message_id: storedSesMessageId,
           from_email: sendFromEmail,
           next_email_scheduled_at: null,
           updated_at: now,
         })
-        .eq("id", row.id)
-        .in("email_delivery_status", ["pending", "in_sequence"]);
+        .eq("id", claimed.id)
+        .eq("email_delivery_status", "sending");
       successCount += 1;
     } else {
       await db
@@ -779,8 +840,8 @@ export async function deliverEmailCampaignBatch(
           skipped_reason: sendResult.error ?? "send failed",
           updated_at: now,
         })
-        .eq("id", row.id)
-        .in("email_delivery_status", ["pending", "in_sequence"]);
+        .eq("id", claimed.id)
+        .eq("email_delivery_status", "sending");
       failureCount += 1;
     }
   }

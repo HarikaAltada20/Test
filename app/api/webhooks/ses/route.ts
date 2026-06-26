@@ -245,10 +245,13 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: subscription.error }, { status: 401 });
     }
 
-    const notification = parseAuthorizedSnsNotification<SesNotification>(body);
+    const notification = await parseAuthorizedSnsNotification<SesNotification>(body);
     if (!notification) {
       if (body.Type === "Notification") {
-        return NextResponse.json({ error: "Unauthorized SNS topic" }, { status: 401 });
+        const signatureError = body.Signature
+          ? "Unauthorized SNS notification"
+          : "Unauthorized SNS topic";
+        return NextResponse.json({ error: signatureError }, { status: 401 });
       }
       return NextResponse.json({ ok: true, ignored: true });
     }

@@ -10,6 +10,7 @@ import {
 import {
   handleSnsSubscriptionConfirmation,
   isAuthorizedSnsTopic,
+  verifySnsEnvelopeSignature,
   type SnsEnvelope,
 } from "@/lib/aws/sns-webhook";
 
@@ -56,6 +57,11 @@ export async function POST(req: NextRequest) {
   if (body.Type === "Notification" && typeof body.Message === "string") {
     if (!isAuthorizedSnsTopic(body.TopicArn)) {
       return NextResponse.json({ error: "Unauthorized SNS topic" }, { status: 401 });
+    }
+
+    const signatureError = await verifySnsEnvelopeSignature(body);
+    if (signatureError) {
+      return NextResponse.json({ error: signatureError }, { status: 401 });
     }
 
     try {

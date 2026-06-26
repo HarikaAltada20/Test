@@ -676,7 +676,7 @@ export function AddLeadsToCampaignModal({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto p-0 gap-0">
-        <DialogHeader className="px-6 pt-6 pb-4 border-b">
+        <DialogHeader className="px-2 pt-4 pb-4 border-b">
           <div className="flex items-start gap-3">
             <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-blue-50 text-blue-600 shrink-0">
               <Users className="h-5 w-5" />
@@ -694,7 +694,7 @@ export function AddLeadsToCampaignModal({
           </div>
         </DialogHeader>
 
-        <div className="mx-6 mt-4 rounded-lg bg-[#E8ECF0] p-1 flex gap-1 overflow-x-auto">
+        <div className="mx-2 mt-4 rounded-lg bg-[#E8ECF0] p-1 flex gap-1 overflow-x-auto">
           {visibleTabs.has("select") && (
           <button
             type="button"
@@ -761,7 +761,7 @@ export function AddLeadsToCampaignModal({
           )}
         </div>
 
-        <div className="px-6 py-4">
+        <div className="px-2 py-4">
           {activeTab === "select" && (
             <div className="space-y-4">
               {!canUseSelectBundles && (
@@ -1175,7 +1175,7 @@ export function AddLeadsToCampaignModal({
           )}
         </div>
 
-        <DialogFooter className="px-6 py-4 border-t bg-gray-50/50 gap-2 sm:justify-end">
+        <DialogFooter className="px-2 py-4 border-t bg-gray-50/50 gap-2 sm:justify-end">
           <Button
             variant="outline"
             className="border-purple-300 text-purple-700 hover:bg-purple-50"

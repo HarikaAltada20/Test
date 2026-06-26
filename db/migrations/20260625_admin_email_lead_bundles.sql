@@ -48,3 +48,40 @@ CREATE POLICY admin_email_lead_bundles_admin_all ON public.admin_email_lead_bund
 DROP POLICY IF EXISTS admin_email_lead_bundle_members_admin_all ON public.admin_email_lead_bundle_members;
 CREATE POLICY admin_email_lead_bundle_members_admin_all ON public.admin_email_lead_bundle_members
   FOR ALL USING (true) WITH CHECK (true);
+
+-- In-flight claim status for external (email-only) recipients to prevent duplicate sends.
+-- Drops unused "delivered" status (campaign flow uses sent → opened → clicked).
+
+UPDATE public.admin_email_campaign_recipients
+SET email_delivery_status = 'sent'
+WHERE email_delivery_status = 'delivered';
+
+UPDATE public.admin_email_sequence_step_sends
+SET email_delivery_status = 'sent'
+WHERE email_delivery_status = 'delivered';
+
+ALTER TABLE public.admin_email_campaign_recipients
+  DROP CONSTRAINT IF EXISTS admin_email_campaign_recipients_status_check;
+
+ALTER TABLE public.admin_email_campaign_recipients
+  ADD CONSTRAINT admin_email_campaign_recipients_status_check
+  CHECK (email_delivery_status IN (
+    'pending',
+    'sending',
+    'in_sequence',
+    'sent',
+    'opened',
+    'clicked',
+    'bounced',
+    'skipped',
+    'failed'
+  ));
+
+ALTER TABLE public.admin_email_sequence_step_sends
+  DROP CONSTRAINT IF EXISTS admin_email_sequence_step_sends_status_check;
+
+ALTER TABLE public.admin_email_sequence_step_sends
+  ADD CONSTRAINT admin_email_sequence_step_sends_status_check
+  CHECK (email_delivery_status IN (
+    'sent', 'opened', 'clicked', 'bounced', 'failed'
+  ));

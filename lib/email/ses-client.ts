@@ -44,6 +44,25 @@ function configurationSetName(): string | undefined {
   return name || undefined;
 }
 
+/** SES MessageId for bounce/complaint correlation (not MIME Message-ID). */
+export function sesCorrelationMessageId(result: {
+  messageId?: string;
+  sesMessageId?: string;
+}): string | null {
+  return result.sesMessageId ?? result.messageId ?? null;
+}
+
+/** MIME Message-ID header value for email threading (In-Reply-To). */
+export function mimeThreadingMessageId(result: {
+  messageId?: string;
+  sesMessageId?: string;
+}): string | null {
+  if (result.sesMessageId && result.messageId) {
+    return result.messageId;
+  }
+  return result.messageId ?? null;
+}
+
 export async function sendSesEmail(input: {
   from: string;
   fromName?: string;

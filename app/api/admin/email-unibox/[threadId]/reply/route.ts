@@ -9,7 +9,7 @@ import {
   getBulkEmailReplyTo,
   htmlToPlainText,
 } from "@/lib/email/admin-bulk-email";
-import { sendSesEmail } from "@/lib/email/ses-client";
+import { sendSesEmail, sesCorrelationMessageId, mimeThreadingMessageId } from "@/lib/email/ses-client";
 
 type RouteContext = { params: Promise<{ threadId: string }> };
 
@@ -104,12 +104,16 @@ export async function POST(req: NextRequest, context: RouteContext) {
     plainTextOnly: !messageBody.includes("<"),
   });
 
-  if (!sendResult.messageId) {
+  const storedSesMessageId = sesCorrelationMessageId(sendResult);
+  if (!storedSesMessageId) {
     return NextResponse.json(
       { error: sendResult.error ?? "Failed to send reply" },
       { status: 500 },
     );
   }
+
+  const threadingMessageId =
+    mimeThreadingMessageId(sendResult) ?? storedSesMessageId;
 
   const now = new Date().toISOString();
   await db.from("admin_email_unibox_messages").insert({
@@ -126,7 +130,7 @@ export async function POST(req: NextRequest, context: RouteContext) {
     body_text: text,
     body_html: html,
     snippet: text.slice(0, 200),
-    ses_message_id: sendResult.messageId,
+    ses_message_id: threadingMessageId,
     in_reply_to_message_id: lastOutbound?.sesMessageId ?? null,
     created_at: now,
   });
@@ -143,5 +147,5 @@ export async function POST(req: NextRequest, context: RouteContext) {
     })
     .eq("id", threadId);
 
-  return NextResponse.json({ ok: true, messageId: sendResult.messageId });
+  return NextResponse.json({ ok: true, messageId: threadingMessageId });
 }
