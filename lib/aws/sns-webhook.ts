@@ -73,16 +73,6 @@ export function isSnsEnvelope(
   return typeof body.Type === "string";
 }
 
-function shouldVerifySnsSignature(): boolean {
-  if (
-    process.env.SNS_SKIP_SIGNATURE_VERIFICATION === "true" &&
-    process.env.NODE_ENV !== "production"
-  ) {
-    return false;
-  }
-  return true;
-}
-
 function isAllowedAmazonAwsUrl(url: string): boolean {
   try {
     const parsed = new URL(url);
@@ -162,10 +152,6 @@ async function fetchSigningCertificate(pemUrl: string): Promise<string | null> {
 export async function verifySnsEnvelopeSignature(
   envelope: SnsEnvelope,
 ): Promise<string | null> {
-  if (!shouldVerifySnsSignature()) {
-    return null;
-  }
-
   const type = envelope.Type;
   const signature = envelope.Signature?.trim();
   const signingCertUrl = envelope.SigningCertURL?.trim();
