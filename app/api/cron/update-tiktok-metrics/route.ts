@@ -7,6 +7,7 @@ import {
   isPostContestMetricsLocked,
   SCHEDULED_METRICS_REFRESH_POST_CONTEST_OR_FILTER,
 } from "@/lib/contest-metrics-refresh-eligibility";
+import { bumpContestLastMetricsUpdated } from "@/lib/contest-last-metrics-updated";
 
 // Extract TikTok video ID from a content link
 function extractTikTokVideoId(contentLink: string): string | null {
@@ -41,10 +42,11 @@ async function updateCpmContestBudgets(
   try {
     let contestsQuery = supabaseAdmin
       .from("contests")
-      .select("id, contest_based_details, views_locked_at")
+      .select("id, contest_based_details, views_locked_at, post_contest_status")
       .eq("contest_type", "cpm")
       .not("contest_based_details", "is", null)
-      .is("views_locked_at", null);
+      .is("views_locked_at", null)
+      .or(SCHEDULED_METRICS_REFRESH_POST_CONTEST_OR_FILTER);
 
     if (contestId) {
       contestsQuery = contestsQuery.eq("id", contestId);
@@ -56,7 +58,14 @@ async function updateCpmContestBudgets(
       return;
     }
 
-    for (const contest of contests) {
+    const eligibleContests = contests.filter(
+      isContestEligibleForScheduledMetricsRefresh,
+    );
+    if (!eligibleContests.length) {
+      return;
+    }
+
+    for (const contest of eligibleContests) {
       const cpmConfig = contest.contest_based_details?.cpm_contest;
       if (!cpmConfig?.cpm_rate_usd) continue;
 
@@ -211,17 +220,45 @@ export async function GET(request: Request) {
       // For non-contest-specific, get all active TikTok contests
       const { data: activeContests } = await supabaseAdmin
         .from("contests")
-        .select("id, post_contest_status")
+        .select("id, post_contest_status, views_locked_at")
         .eq("platform", "tiktok")
         .is("views_locked_at", null)
         .or(SCHEDULED_METRICS_REFRESH_POST_CONTEST_OR_FILTER);
-      activeIds = (activeContests || []).map((c: any) => c.id);
+      const eligibleContests = (activeContests || []).filter(
+        isContestEligibleForScheduledMetricsRefresh,
+      );
+      activeIds = eligibleContests.map((c: any) => c.id);
       console.log(`[TikTok Cron] Found ${activeIds.length} active TikTok contests.`);
       if (!activeIds.length) {
         return NextResponse.json({
           message: "No active TikTok contests to update",
         });
       }
+    }
+
+    const dryRun = url.searchParams.get("dryRun") === "1";
+
+    if (dryRun) {
+      const contestIdsToCheck = contestId ? [contestId] : (activeIds ?? []);
+      let submissionCount = 0;
+      if (contestIdsToCheck.length) {
+        const { count } = await supabaseAdmin
+          .from("submissions")
+          .select("id", { count: "exact", head: true })
+          .in("contest_id", contestIdsToCheck)
+          .in("status", ["verified", "pending"])
+          .eq("platform", "tiktok")
+          .not("content_link", "is", null);
+        submissionCount = count ?? 0;
+      }
+      return NextResponse.json({
+        message: "Dry run — no TikTok API calls, queue jobs, or DB writes",
+        dryRun: true,
+        queueEnabled: isTikTokMetricsQueueEnabled(),
+        activeContestCount: contestIdsToCheck.length,
+        activeContestIds: contestIdsToCheck,
+        submissionCount,
+      });
     }
 
     // NEW: If queue is enabled, enqueue for each contest instead of monolithic update (Same as Instagram)
@@ -295,6 +332,22 @@ export async function GET(request: Request) {
         message: `No TikTok submissions to update${
           isContestSpecific ? ` for contest ${contestId}` : ""
         }`,
+        dryRun,
+        activeContestCount: activeIds?.length ?? (isContestSpecific ? 1 : 0),
+      });
+    }
+
+    if (dryRun) {
+      const contestIdsInSubmissions = [
+        ...new Set(submissions.map((s) => s.contest_id)),
+      ];
+      return NextResponse.json({
+        message: "Dry run — no TikTok API calls or DB writes",
+        dryRun: true,
+        activeContestCount: activeIds?.length ?? 1,
+        activeContestIds: activeIds ?? [contestId],
+        submissionCount: submissions.length,
+        contestIdsWithSubmissions: contestIdsInSubmissions,
       });
     }
 
@@ -343,6 +396,7 @@ export async function GET(request: Request) {
     console.log(`[TikTok Cron] Processing ${creators.length} creators with connected TikTok accounts.`);
 
     let totalSyncedSubmissions = 0;
+    const contestIdsTouched = new Set<string>();
 
     for (const creator of creators) {
       const subs = submissionsByCreator[creator.id] || [];
@@ -357,12 +411,21 @@ export async function GET(request: Request) {
 
       if (result.success) {
         totalSyncedSubmissions += result.videosSynced || 0;
+        if (result.videosSynced && result.videosSynced > 0) {
+          for (const sub of subs) {
+            if (sub.contest_id) contestIdsTouched.add(sub.contest_id);
+          }
+        }
         console.log(
           `[TikTok Refresh] Synced ${result.videosSynced} submission(s) for ${creator.id}`,
         );
       } else {
         console.error(`[TikTok Refresh] Sync failed for ${creator.id}:`, result.error);
       }
+    }
+
+    if (contestIdsTouched.size > 0) {
+      await bumpContestLastMetricsUpdated(supabaseAdmin, [...contestIdsTouched]);
     }
 
     // Update CPM contest budgets for TikTok contests

@@ -2,6 +2,12 @@ import { NextResponse } from "next/server";
 import dayjs from "dayjs";
 import { createClient as createAdminSupabaseClient } from "@supabase/supabase-js";
 import { isInstagramInsightsQueueEnabled } from "@/lib/queue/instagram-insights-queue";
+import {
+  isContestEligibleForScheduledMetricsRefresh,
+  isPostContestMetricsLocked,
+  SCHEDULED_METRICS_REFRESH_POST_CONTEST_OR_FILTER,
+} from "@/lib/contest-metrics-refresh-eligibility";
+import { bumpContestLastMetricsUpdated } from "@/lib/contest-last-metrics-updated";
 import { instagramGraphFetch } from "@/lib/meta-graph/instagram-graph-fetch";
 import { insertMetaGraphUsageLogRow } from "@/lib/meta-graph/meta-graph-usage-log";
 import type { MetaGraphUsageAccumulator } from "@/lib/meta-graph/usage-accumulator";
@@ -17,6 +23,7 @@ interface InstagramAccount {
 interface Submission {
   id: string;
   creator_id: string;
+  contest_id: string;
   video_id: string;
   views: number | null;
   other_stats: any | null;
@@ -342,28 +349,24 @@ export async function GET(request: Request) {
         .select("id, views_locked_at, post_contest_status")
         .eq("id", contestId)
         .single();
-      if (!c || c.views_locked_at) {
+      if (!c || !isContestEligibleForScheduledMetricsRefresh(c)) {
+        const locked = c && isPostContestMetricsLocked(c.post_contest_status);
         return NextResponse.json({
-          message: `Contest ${contestId} is finalized or not found; nothing to update`,
-        });
-      }
-      if (
-        c.post_contest_status === "in_review" ||
-        c.post_contest_status === "verification_complete" ||
-        c.post_contest_status === "payouts_processed"
-      ) {
-        return NextResponse.json({
-          message: `Contest ${contestId} is locked for review; nothing to update`,
+          message: locked
+            ? `Contest ${contestId} is locked for review; nothing to update`
+            : `Contest ${contestId} is finalized or not found; nothing to update`,
         });
       }
     } else {
       const { data: activeContests } = await supabaseAdmin
         .from("contests")
-        .select("id, post_contest_status")
+        .select("id, post_contest_status, views_locked_at")
         .is("views_locked_at", null)
-        // Only refresh while pending_review (or unset)
-        .or("post_contest_status.is.null,post_contest_status.eq.pending_review");
-      activeIds = (activeContests || []).map((c: any) => c.id);
+        .or(SCHEDULED_METRICS_REFRESH_POST_CONTEST_OR_FILTER);
+      const eligibleContests = (activeContests || []).filter(
+        isContestEligibleForScheduledMetricsRefresh,
+      );
+      activeIds = eligibleContests.map((c: any) => c.id);
       if (!activeIds.length) {
         return NextResponse.json({ message: "No active contests to update" });
       }
@@ -407,7 +410,7 @@ export async function GET(request: Request) {
     // 📥 Fetch submissions (only from active contests)
     let submissionsQuery = supabaseAdmin
       .from("submissions")
-      .select("id, creator_id, video_id, views, other_stats")
+      .select("id, creator_id, contest_id, video_id, views, other_stats")
       .eq("platform", "instagram")
       .not("video_id", "is", null);
 
@@ -578,6 +581,17 @@ export async function GET(request: Request) {
             .eq("id", update.id)
         )
       );
+
+      const updatedIds = new Set(updates.map((u) => u.id));
+      const contestIdsUpdated = [
+        ...new Set(
+          submissions
+            .filter((s) => updatedIds.has(s.id))
+            .map((s) => s.contest_id)
+            .filter(Boolean),
+        ),
+      ];
+      await bumpContestLastMetricsUpdated(supabaseAdmin, contestIdsUpdated);
     }
 
     await updateCpmContestBudgets(supabaseAdmin, contestId || undefined);

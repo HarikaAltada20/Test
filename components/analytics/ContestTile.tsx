@@ -7,7 +7,6 @@ import {
   MessageCircle,
   Share,
   Calendar,
-  DollarSign,
   Users,
   Clock,
   TrendingUp,
@@ -17,7 +16,6 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { formatCurrencyFromCents } from "@/lib/currency-utils";
-import { getPoolBudgetCentsFromDetails } from "@/lib/contest-type";
 import { cn } from "@/lib/utils";
 import { useAnalyticsDarkMode } from "@/hooks/use-analytics-dark-mode";
 
@@ -35,6 +33,12 @@ interface ContestTileProps {
     moderation_status?: string;
     contest_based_details?: any;
     thumbnail_url?: string;
+    budgetTile?: {
+      mode: "filled" | "paid";
+      numeratorCents: number;
+      denominatorCents: number;
+      label: string;
+    } | null;
     submissions?: Array<{
       id: string;
       views: number;
@@ -319,37 +323,14 @@ export default function ContestTile({
   ).twitter_metrics;
   const isTwitter = platform === "twitter" || platform === "x";
 
-  // Calculate the headline money metric shown on the tile.
-  let moneyMetricCents = 0;
-  let moneyMetricLabel = "Prize Pool";
-  if (
-    contest.contest_type === "leaderboard" &&
-    contest.contest_based_details?.leaderboard_contest?.total_prize
-  ) {
-    moneyMetricCents = contest.contest_based_details.leaderboard_contest.total_prize;
-  } else if (
-    contest.contest_type === "cpm" &&
-    contest.contest_based_details?.cpm_contest?.total_budget
-  ) {
-    moneyMetricCents = contest.contest_based_details.cpm_contest.total_budget;
-    moneyMetricLabel = "Budget";
-  } else if (contest.contest_type === "milestone") {
-    moneyMetricCents =
-      Number(contest.contest_based_details?.milestone_contest?.budget_spent) ||
-      Number(contest.contest_based_details?.milestone_contest?.budget_spent_cents) ||
-      0;
-    moneyMetricLabel = "Budget Spent";
-  } else if (contest.contest_type === "dual_rewards") {
-    moneyMetricCents = getPoolBudgetCentsFromDetails(
-      "dual_rewards",
-      contest.contest_based_details,
-    );
-    moneyMetricLabel = "Prize Pool";
-  }
+  const budgetTile = contest.budgetTile;
+  const showBudgetRatio =
+    budgetTile != null && budgetTile.denominatorCents > 0;
 
   const daysRemaining = getDaysRemaining(contest.end_date);
   const isActive = daysRemaining > 0;
   const status = isActive ? "Active" : "Completed";
+
   // Platform-specific metrics
   const getPlatformMetrics = () => {
     const platform = contest.platform?.toLowerCase();
@@ -557,22 +538,48 @@ export default function ContestTile({
                 </div>
               </div>
               <div className="text-left sm:text-right flex-shrink-0">
-                <div
-                  className={cn(
-                    "text-xl sm:text-2xl font-bold mb-1",
-                    isDark ? "text-purple-400" : "text-purple-600",
-                  )}
-                >
-                  {formatCurrencyFromCents(moneyMetricCents)}
-                </div>
-                <div
-                  className={cn(
-                    "text-xs font-medium",
-                    isDark ? "text-gray-400" : "text-gray-500",
-                  )}
-                >
-                  {moneyMetricLabel}
-                </div>
+                {showBudgetRatio ? (
+                  <>
+                    <div
+                      className={cn(
+                        "text-lg sm:text-xl lg:text-2xl font-bold mb-1 flex flex-wrap items-baseline justify-start sm:justify-end gap-x-1",
+                        isDark ? "text-purple-400" : "text-purple-600",
+                      )}
+                    >
+                      <span>
+                        {formatCurrencyFromCents(budgetTile!.numeratorCents)}
+                      </span>
+                      <span
+                        className={cn(
+                          "text-sm sm:text-base font-semibold",
+                          isDark ? "text-gray-400" : "text-gray-500",
+                        )}
+                      >
+                        /
+                      </span>
+                      <span>
+                        {formatCurrencyFromCents(budgetTile!.denominatorCents)}
+                      </span>
+                    </div>
+                    <div
+                      className={cn(
+                        "text-xs font-medium max-w-[12rem] sm:max-w-none",
+                        isDark ? "text-gray-400" : "text-gray-500",
+                      )}
+                    >
+                      {budgetTile!.label}
+                    </div>
+                  </>
+                ) : (
+                  <div
+                    className={cn(
+                      "text-xs font-medium",
+                      isDark ? "text-gray-400" : "text-gray-500",
+                    )}
+                  >
+                    —
+                  </div>
+                )}
               </div>
             </div>
 

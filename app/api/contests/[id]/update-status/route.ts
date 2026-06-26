@@ -3,6 +3,7 @@ import { createClient } from "@/utils/supabase/server";
 import { createAdminClient } from "@/utils/supabase/admin";
 import { MetricsService } from "@/lib/metrics-service";
 import { POST_CONTEST_STATUS } from "@/lib/constants-status";
+import { postContestStatusLocksViews } from "@/lib/contest-metrics-refresh-eligibility";
 import { CONTEST_VIEWS_SYNC_FAILED_MESSAGE } from "@/lib/submission-credited-views";
 
 export async function POST(
@@ -153,7 +154,7 @@ export async function POST(
           post_contest_status: status,
           updated_at: nowIso,
         };
-        if (status === POST_CONTEST_STATUS.verification_complete) {
+        if (postContestStatusLocksViews(status)) {
           contestUpdate.views_locked_at = nowIso;
         }
 
@@ -192,12 +193,17 @@ export async function POST(
     }
 
     const nowIso = new Date().toISOString();
+    const contestUpdate: Record<string, unknown> = {
+      post_contest_status: status,
+      updated_at: nowIso,
+    };
+    if (postContestStatusLocksViews(status)) {
+      contestUpdate.views_locked_at = nowIso;
+    }
+
     const { error: updateError } = await supabase
       .from("contests")
-      .update({
-        post_contest_status: status,
-        updated_at: nowIso,
-      })
+      .update(contestUpdate)
       .eq("id", contestId);
 
     if (updateError) {

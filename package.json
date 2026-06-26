@@ -13,9 +13,13 @@
     "update:all": "node scripts/update_all.js",
     "convert-images": "node ./scripts/convert-images.mjs",
     "backfill-geo-data": "node scripts/backfill-geo-data.js",
-    "test": "npx --yes tsx --test lib/dual-rewards-pool-budget.test.ts lib/dual-rewards-creator-cap.test.ts lib/contest-type-pool.test.ts lib/dual-rewards-payout-milestone-pool.test.ts lib/fetch-contest-submissions.test.ts lib/report-export-metrics.test.ts lib/report-export-context.test.ts lib/report-export-excel.test.ts lib/contest-chargeable-budget.test.ts lib/contest-payment-validation.test.ts lib/status-badges.test.ts lib/email/safe-redirect-url.test.ts lib/youtube-other-stats.test.ts",
+    "test": "npx --yes tsx --test lib/dual-rewards-pool-budget.test.ts lib/dual-rewards-creator-cap.test.ts lib/contest-type-pool.test.ts lib/dual-rewards-payout-milestone-pool.test.ts lib/fetch-contest-submissions.test.ts lib/report-export-metrics.test.ts lib/report-export-context.test.ts lib/report-export-excel.test.ts lib/contest-chargeable-budget.test.ts lib/contest-payment-validation.test.ts lib/status-badges.test.ts lib/email/safe-redirect-url.test.ts lib/youtube-other-stats.test.ts lib/contest-last-metrics-updated.test.ts lib/contest-budget-tile-metrics.test.ts",
     "test-phantom-wallet": "node scripts/test-phantom-wallet-integration.js",
-    "download-ytdlp": "node scripts/download-ytdlp-binary.js"
+    "download-ytdlp": "node scripts/download-ytdlp-binary.js",
+    "debug:youtube-cron": "npx tsx scripts/debug-youtube-cron-eligibility.ts",
+    "audit:youtube-stats": "npx tsx scripts/audit-youtube-stripped-stats.ts",
+    "simulate:youtube-cron": "npx tsx scripts/simulate-youtube-nightly-cron.ts",
+    "verify:metrics-fix": "npx tsx scripts/debug-youtube-cron-eligibility.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1068.0",

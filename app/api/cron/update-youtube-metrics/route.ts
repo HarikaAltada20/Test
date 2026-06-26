@@ -4,7 +4,10 @@ import { google } from "googleapis";
 import { refreshAccessToken, extractYoutubeId } from "@/lib/youtube-api";
 import { updateYouTubeCpmContestBudgets } from "@/lib/youtube-cpm-contest-budgets";
 import {
+  isContestEligibleForScheduledMetricsCron,
   isContestEligibleForScheduledMetricsRefresh,
+  isContestLiveOrEnded,
+  isContestPublished,
   isPostContestMetricsLocked,
   SCHEDULED_METRICS_REFRESH_POST_CONTEST_OR_FILTER,
 } from "@/lib/contest-metrics-refresh-eligibility";
@@ -12,6 +15,10 @@ import {
   buildOtherStatsWithYoutube,
   getExistingYouTubeStats,
 } from "@/lib/youtube-other-stats";
+import {
+  bumpContestLastMetricsUpdated,
+  contestIdsForUpdatedSubmissions,
+} from "@/lib/contest-last-metrics-updated";
 
 // youtube_account JSON from creator_profiles (tokens + channel fields)
 type YouTubeAccountJson = Record<string, any>;
@@ -194,6 +201,8 @@ export async function GET(request: Request) {
   );
 
   try {
+    const nowIso = new Date().toISOString();
+
     // Check if this is a contest-specific refresh
     const url = new URL(request.url);
     const contestId = url.searchParams.get("contestId");
@@ -204,10 +213,27 @@ export async function GET(request: Request) {
     if (isContestSpecific) {
       const { data: c } = await supabaseAdmin
         .from("contests")
-        .select("id, views_locked_at, post_contest_status")
+        .select(
+          "id, views_locked_at, post_contest_status, platform, start_date, end_date, moderation_status",
+        )
         .eq("id", contestId)
         .single();
-      if (!c || !isContestEligibleForScheduledMetricsRefresh(c)) {
+      if (!c || c.platform?.toLowerCase() !== "youtube") {
+        return NextResponse.json({
+          message: `Contest ${contestId} is not a YouTube contest; nothing to update`,
+        });
+      }
+      if (!isContestPublished(c.moderation_status)) {
+        return NextResponse.json({
+          message: `Contest ${contestId} is not published; nothing to update`,
+        });
+      }
+      if (!isContestLiveOrEnded(c)) {
+        return NextResponse.json({
+          message: `Contest ${contestId} is not live or ended yet; nothing to update`,
+        });
+      }
+      if (!isContestEligibleForScheduledMetricsRefresh(c)) {
         const locked = c && isPostContestMetricsLocked(c.post_contest_status);
         return NextResponse.json({
           message: locked
@@ -218,14 +244,28 @@ export async function GET(request: Request) {
     } else {
       const { data: activeContests } = await supabaseAdmin
         .from("contests")
-        .select("id, post_contest_status")
+        .select(
+          "id, post_contest_status, views_locked_at, start_date, end_date, moderation_status",
+        )
+        .eq("platform", "youtube")
+        .eq("moderation_status", "published")
         .is("views_locked_at", null)
+        .not("start_date", "is", null)
+        .not("end_date", "is", null)
+        .lte("start_date", nowIso)
         .or(SCHEDULED_METRICS_REFRESH_POST_CONTEST_OR_FILTER);
-      activeIds = (activeContests || []).map((c: any) => c.id);
+      const eligibleContests = (activeContests || []).filter(
+        isContestEligibleForScheduledMetricsCron,
+      );
+      activeIds = eligibleContests.map((c: any) => c.id);
       if (!activeIds.length) {
-        return NextResponse.json({ message: "No active contests to update" });
+        return NextResponse.json({
+          message: "No active YouTube contests to update",
+        });
       }
     }
+
+    const dryRun = url.searchParams.get("dryRun") === "1";
 
     // Fetch submissions to update (only from active contests)
     let submissionsQuery = supabaseAdmin
@@ -254,6 +294,25 @@ export async function GET(request: Request) {
         message: `No submissions to update${
           isContestSpecific ? ` for contest ${contestId}` : ""
         }`,
+        dryRun,
+        activeContestCount: activeIds?.length ?? (isContestSpecific ? 1 : 0),
+      });
+    }
+
+    if (dryRun) {
+      const contestIdsInSubmissions = [
+        ...new Set(submissions.map((s) => s.contest_id)),
+      ];
+      return NextResponse.json({
+        message: "Dry run — no YouTube API calls or DB writes",
+        dryRun: true,
+        activeContestCount: activeIds?.length ?? 1,
+        activeContestIds: activeIds ?? [contestId],
+        submissionCount: submissions.length,
+        contestIdsWithSubmissions: contestIdsInSubmissions,
+        targetContestIncluded: contestId
+          ? contestIdsInSubmissions.includes(contestId)
+          : undefined,
       });
     }
 
@@ -309,6 +368,16 @@ export async function GET(request: Request) {
 
     // Batch update database
     await batchUpdateDatabase(supabaseAdmin, allUpdates, tokenUpdates);
+
+    if (allUpdates.length > 0) {
+      await bumpContestLastMetricsUpdated(
+        supabaseAdmin,
+        contestIdsForUpdatedSubmissions(
+          submissions,
+          allUpdates.map((u) => u.id),
+        ),
+      );
+    }
 
     // Update CPM contest budgets
     await updateYouTubeCpmContestBudgets(
