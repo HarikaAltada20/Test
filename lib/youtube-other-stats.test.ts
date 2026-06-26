@@ -7,7 +7,10 @@ import {
 } from "./youtube-other-stats";
 import {
   isContestEligibleForScheduledMetricsRefresh,
+  isContestLiveOrEnded,
+  isContestPublished,
   isPostContestMetricsLocked,
+  postContestStatusLocksViews,
 } from "./contest-metrics-refresh-eligibility";
 
 describe("youtube-other-stats", () => {
@@ -73,5 +76,41 @@ describe("contest-metrics-refresh-eligibility", () => {
       }),
       false,
     );
+  });
+
+  it("locks views from in_review onward", () => {
+    assert.equal(postContestStatusLocksViews("in_review"), true);
+    assert.equal(postContestStatusLocksViews("verification_complete"), true);
+    assert.equal(postContestStatusLocksViews("payouts_processed"), true);
+    assert.equal(postContestStatusLocksViews("pending_review"), false);
+    assert.equal(postContestStatusLocksViews(null), false);
+  });
+
+  it("rejects cron when views_locked_at is set even if status is pending_review", () => {
+    assert.equal(
+      isContestEligibleForScheduledMetricsRefresh({
+        views_locked_at: "2026-06-26T00:00:00.000Z",
+        post_contest_status: "pending_review",
+      }),
+      false,
+    );
+  });
+
+  it("includes live and ended contests with valid dates", () => {
+    const start = "2026-06-01T00:00:00.000Z";
+    const end = "2026-06-30T00:00:00.000Z";
+    const mid = new Date("2026-06-15T00:00:00.000Z");
+    const after = new Date("2026-07-01T00:00:00.000Z");
+    const before = new Date("2026-05-31T00:00:00.000Z");
+    assert.equal(isContestLiveOrEnded({ start_date: start, end_date: end }, mid), true);
+    assert.equal(isContestLiveOrEnded({ start_date: start, end_date: end }, after), true);
+    assert.equal(isContestLiveOrEnded({ start_date: start, end_date: end }, before), false);
+    assert.equal(isContestLiveOrEnded({ start_date: null, end_date: end }, mid), false);
+  });
+
+  it("requires published moderation_status for scheduled cron", () => {
+    assert.equal(isContestPublished("published"), true);
+    assert.equal(isContestPublished("draft"), false);
+    assert.equal(isContestPublished(null), false);
   });
 });
