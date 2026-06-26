@@ -103,6 +103,14 @@ export function EmailCampaignDetail({ campaignId, onBack }: Props) {
     return () => window.removeEventListener("focus", onFocus);
   }, [loadDetail]);
 
+  useEffect(() => {
+    if (detail?.status !== "active") return;
+    const timer = window.setInterval(() => {
+      loadDetail({ silent: true });
+    }, 5000);
+    return () => window.clearInterval(timer);
+  }, [detail?.status, loadDetail]);
+
   const handleTabChange = useCallback((tab: CampaignDetailTab) => {
     setActiveTab(tab);
     setVisitedTabs((prev) => {
@@ -234,6 +242,7 @@ export function EmailCampaignDetail({ campaignId, onBack }: Props) {
         <LeadTab
           campaignId={campaignId}
           campaignName={detail.name}
+          campaignStatus={detail.status}
           onRecipientsChange={() => loadDetail({ silent: true })}
         />
       </TabPanel>

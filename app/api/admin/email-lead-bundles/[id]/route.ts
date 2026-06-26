@@ -3,6 +3,7 @@ import { requireAdminApi } from "@/lib/admin-email/api-auth";
 import {
   deleteLeadBundle,
   getLeadBundle,
+  listBundleMemberIds,
   listBundleMembers,
 } from "@/lib/admin-email/lead-bundles";
 
@@ -23,6 +24,11 @@ export async function GET(_req: NextRequest, context: RouteContext) {
         search: sp.get("search") ?? undefined,
       });
       return NextResponse.json(result);
+    }
+
+    if (sp.get("memberIds") === "1") {
+      const ids = await listBundleMemberIds(id);
+      return NextResponse.json({ ids, total: ids.length });
     }
 
     const bundle = await getLeadBundle(id);

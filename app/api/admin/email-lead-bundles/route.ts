@@ -6,11 +6,14 @@ import type { UserManagementFilterSnapshot } from "@/lib/admin-notifications/typ
 import {
   addUsersToBundle,
   createLeadBundle,
+  deleteLeadBundles,
   getLeadBundle,
   getLeadBundleStats,
-  importEmailsToBundle,
+  importLeadsToBundle,
   listLeadBundles,
   parseCsvEmails,
+  parseCsvLeads,
+  parseLeadsFromUpload,
 } from "@/lib/admin-email/lead-bundles";
 
 export async function GET(req: NextRequest) {
@@ -50,17 +53,21 @@ export async function POST(req: NextRequest) {
 
   if (contentType.includes("multipart/form-data")) {
     const form = await req.formData();
+    const bundleId = String(form.get("bundleId") ?? "").trim() || null;
     const name = String(form.get("name") ?? "").trim();
     const description = String(form.get("description") ?? "").trim() || null;
     const projectId = String(form.get("projectId") ?? "").trim() || null;
     const file = form.get("file");
 
-    if (!name) {
-      return NextResponse.json({ error: "Bundle name is required" }, { status: 400 });
+    if (!bundleId && !name) {
+      return NextResponse.json(
+        { error: "Bundle name is required when creating a new bundle" },
+        { status: 400 },
+      );
     }
 
     if (!(file instanceof File)) {
-      return NextResponse.json({ error: "CSV file is required" }, { status: 400 });
+      return NextResponse.json({ error: "CSV or Excel file is required" }, { status: 400 });
     }
 
     if (file.size > 10 * 1024 * 1024) {
@@ -68,10 +75,38 @@ export async function POST(req: NextRequest) {
     }
 
     try {
-      const csvText = await file.text();
-      const emails = parseCsvEmails(csvText);
+      const buffer = await file.arrayBuffer();
+      const leads = await parseLeadsFromUpload(file.name, buffer);
+      if (leads.length === 0) {
+        return NextResponse.json(
+          { error: "No valid email addresses found in the file" },
+          { status: 400 },
+        );
+      }
+
+      if (bundleId) {
+        const existing = await getLeadBundle(bundleId);
+        if (!existing) {
+          return NextResponse.json({ error: "Bundle not found" }, { status: 404 });
+        }
+        if (projectId && existing.projectId && existing.projectId !== projectId) {
+          return NextResponse.json(
+            { error: "Selected bundle does not belong to this project" },
+            { status: 400 },
+          );
+        }
+
+        const importResult = await importLeadsToBundle(bundleId, leads);
+        const updated = (await getLeadBundle(bundleId)) ?? existing;
+
+        return NextResponse.json({
+          bundle: updated,
+          import: importResult,
+        });
+      }
+
       const bundle = await createLeadBundle({ name, description, projectId });
-      const importResult = await importEmailsToBundle(bundle.id, emails);
+      const importResult = await importLeadsToBundle(bundle.id, leads);
       const created = (await getLeadBundle(bundle.id)) ?? bundle;
 
       return NextResponse.json({
@@ -115,13 +150,17 @@ export async function POST(req: NextRequest) {
       sourceCampaignId: body.sourceCampaignId,
     });
 
-    const emails =
-      body.emails ??
-      (body.csvText ? parseCsvEmails(body.csvText) : []);
+    const leads =
+      body.emails?.map((email) => ({
+        email,
+        fullName: null,
+        username: null,
+        userType: null,
+      })) ?? (body.csvText ? parseCsvLeads(body.csvText) : []);
 
     let importResult = { matched: 0, failed: 0, total: 0 };
-    if (emails.length > 0) {
-      importResult = await importEmailsToBundle(bundle.id, emails);
+    if (leads.length > 0) {
+      importResult = await importLeadsToBundle(bundle.id, leads);
     }
 
     let addedUserCount = 0;
@@ -156,6 +195,31 @@ export async function POST(req: NextRequest) {
     });
   } catch (e) {
     const message = e instanceof Error ? e.message : "Failed to create bundle";
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
+}
+
+export async function DELETE(req: NextRequest) {
+  const auth = await requireAdminApi();
+  if (auth.response) return auth.response;
+
+  let body: { bundleIds?: string[] };
+  try {
+    body = await req.json();
+  } catch {
+    return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
+  }
+
+  const bundleIds = body.bundleIds ?? [];
+  if (bundleIds.length === 0) {
+    return NextResponse.json({ error: "bundleIds required" }, { status: 400 });
+  }
+
+  try {
+    const deletedCount = await deleteLeadBundles(bundleIds);
+    return NextResponse.json({ deletedCount });
+  } catch (e) {
+    const message = e instanceof Error ? e.message : "Failed to delete bundles";
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }

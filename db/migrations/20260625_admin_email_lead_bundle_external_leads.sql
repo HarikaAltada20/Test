@@ -40,3 +40,28 @@ ALTER TABLE public.admin_email_lead_bundle_members
     user_id IS NOT NULL
     OR (email IS NOT NULL AND length(trim(email)) > 0)
   );
+
+-- Keep total_leads and processed_count aligned with actual member rows.
+UPDATE public.admin_email_lead_bundles b
+SET
+  total_leads = counts.member_count,
+  processed_count = counts.member_count
+FROM (
+  SELECT bundle_id, COUNT(*)::int AS member_count
+  FROM public.admin_email_lead_bundle_members
+  GROUP BY bundle_id
+) counts
+WHERE b.id = counts.bundle_id
+  AND (
+    b.total_leads IS DISTINCT FROM counts.member_count
+    OR b.processed_count IS DISTINCT FROM counts.member_count
+  );
+
+UPDATE public.admin_email_lead_bundles b
+SET total_leads = 0, processed_count = 0
+WHERE NOT EXISTS (
+  SELECT 1
+  FROM public.admin_email_lead_bundle_members m
+  WHERE m.bundle_id = b.id
+)
+AND (b.total_leads <> 0 OR b.processed_count <> 0);

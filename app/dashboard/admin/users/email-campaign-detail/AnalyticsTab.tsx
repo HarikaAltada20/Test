@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
@@ -177,23 +177,32 @@ export function AnalyticsTab({ campaignId, detail }: Props) {
   const [stepAnalytics, setStepAnalytics] = useState<StepAnalyticsRow[]>([]);
   const [loadingSteps, setLoadingSteps] = useState(true);
 
-  useEffect(() => {
-    let cancelled = false;
-    setLoadingSteps(true);
-    fetch(`/api/admin/email-campaigns/${campaignId}/analytics`)
-      .then((r) => r.json())
-      .then((data) => {
-        if (!cancelled) {
+  const loadStepAnalytics = useCallback(
+    (opts?: { silent?: boolean }) => {
+      if (!opts?.silent) setLoadingSteps(true);
+      return fetch(`/api/admin/email-campaigns/${campaignId}/analytics`)
+        .then((r) => r.json())
+        .then((data) => {
           setStepAnalytics(data.stepAnalytics ?? []);
-        }
-      })
-      .finally(() => {
-        if (!cancelled) setLoadingSteps(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [campaignId]);
+        })
+        .finally(() => {
+          if (!opts?.silent) setLoadingSteps(false);
+        });
+    },
+    [campaignId],
+  );
+
+  useEffect(() => {
+    loadStepAnalytics();
+  }, [loadStepAnalytics]);
+
+  useEffect(() => {
+    if (!active) return;
+    const timer = window.setInterval(() => {
+      loadStepAnalytics({ silent: true });
+    }, 5000);
+    return () => window.clearInterval(timer);
+  }, [active, loadStepAnalytics]);
 
   const hasStepData = stepAnalytics.some((s) => s.sent > 0);
   const totalOpened = stepAnalytics.reduce((sum, step) => sum + step.opened, 0);

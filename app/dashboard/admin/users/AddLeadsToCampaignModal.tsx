@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Dialog,
   DialogContent,
@@ -23,8 +23,19 @@ import {
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
+import { buildLeadImportCsvTemplate } from "@/lib/admin-email/lead-bundles";
 import type { NotificationSelectionState } from "./SendNotificationModal";
-import { Layers, Loader2, Plus, Search, Users } from "lucide-react";
+import {
+  Download,
+  FileUp,
+  Layers,
+  Loader2,
+  Plus,
+  Search,
+  Upload,
+  UserPlus,
+  Users,
+} from "lucide-react";
 
 type BundleItem = {
   id: string;
@@ -35,7 +46,14 @@ type BundleItem = {
 
 type EmailProject = { id: string; name: string };
 
-type ModalTab = "select" | "create";
+type ModalTab = "select" | "create" | "add" | "import";
+
+export type AddLeadsModalVariant = "bundle" | "campaign";
+
+const VARIANT_TABS: Record<AddLeadsModalVariant, ModalTab[]> = {
+  bundle: ["select", "create"],
+  campaign: ["select", "add", "import"],
+};
 
 type Props = {
   open: boolean;
@@ -43,6 +61,8 @@ type Props = {
   campaignId?: string | null;
   campaignName?: string;
   selection?: NotificationSelectionState | null;
+  variant?: AddLeadsModalVariant;
+  defaultTab?: ModalTab;
   onSuccess?: (campaignId: string) => void;
   onBundleCreated?: (bundleId: string) => void;
 };
@@ -72,9 +92,18 @@ export function AddLeadsToCampaignModal({
   campaignId: presetCampaignId = null,
   campaignName: presetCampaignName,
   selection = null,
+  variant: variantProp,
+  defaultTab,
   onSuccess,
   onBundleCreated,
 }: Props) {
+  const modalVariant: AddLeadsModalVariant =
+    variantProp ?? (presetCampaignId ? "campaign" : "bundle");
+  const visibleTabs = useMemo(
+    () => new Set(VARIANT_TABS[modalVariant]),
+    [modalVariant],
+  );
+  const isBundleVariant = modalVariant === "bundle";
   const { toast } = useToast();
   const [activeTab, setActiveTab] = useState<ModalTab>("select");
   const [bundles, setBundles] = useState<BundleItem[]>([]);
@@ -86,12 +115,26 @@ export function AddLeadsToCampaignModal({
   );
   const [attaching, setAttaching] = useState(false);
 
-  const [bundleName, setBundleName] = useState("");
-  const [bundleDescription, setBundleDescription] = useState("");
-  const [creating, setCreating] = useState(false);
+  const [createBundleProjectId, setCreateBundleProjectId] = useState("");
+  const [createBundleName, setCreateBundleName] = useState("");
+  const [createBundleDescription, setCreateBundleDescription] = useState("");
+  const [creatingBundle, setCreatingBundle] = useState(false);
+
+  const [addProjectId, setAddProjectId] = useState("");
+  const [addBundleName, setAddBundleName] = useState("");
+  const [leadFullName, setLeadFullName] = useState("");
+  const [leadEmail, setLeadEmail] = useState("");
+  const [leadUsername, setLeadUsername] = useState("");
+  const [leadUserType, setLeadUserType] = useState("");
+  const [addingLead, setAddingLead] = useState(false);
 
   const [projects, setProjects] = useState<EmailProject[]>([]);
-  const [projectId, setProjectId] = useState("");
+  const [importBundleName, setImportBundleName] = useState("");
+  const [importDescription, setImportDescription] = useState("");
+  const [importProjectId, setImportProjectId] = useState("");
+  const [importFile, setImportFile] = useState<File | null>(null);
+  const [importing, setImporting] = useState(false);
+  const importFileInputRef = useRef<HTMLInputElement>(null);
 
   const typeCounts = useMemo(() => recipientTypeCounts(selection), [selection]);
   const hasSelection = (selection?.userIds.length ?? 0) > 0;
@@ -130,27 +173,49 @@ export function AddLeadsToCampaignModal({
       setActiveTab("select");
       setSelectedBundleIds(new Set());
       setBundleSearch("");
-      setBundleName("");
-      setBundleDescription("");
-      setProjectId("");
+      setAddProjectId("");
+      setAddBundleName("");
+      setCreateBundleProjectId("");
+      setCreateBundleName("");
+      setCreateBundleDescription("");
+      setLeadFullName("");
+      setLeadEmail("");
+      setLeadUsername("");
+      setLeadUserType("");
+      setImportBundleName("");
+      setImportDescription("");
+      setImportProjectId("");
+      setImportFile(null);
+      if (importFileInputRef.current) {
+        importFileInputRef.current.value = "";
+      }
       setBundlesError(null);
       return;
     }
 
-    if (hasSelection) {
-      setActiveTab("create");
-    } else if (!presetCampaignId) {
-      setActiveTab("create");
-    } else {
+    if (defaultTab && visibleTabs.has(defaultTab)) {
+      setActiveTab(defaultTab);
+    } else if (visibleTabs.has("select") && (presetCampaignId || (selection?.userIds.length ?? 0) > 0)) {
       setActiveTab("select");
+    } else {
+      const firstTab = VARIANT_TABS[modalVariant][0];
+      setActiveTab(firstTab);
     }
-  }, [open, hasSelection, presetCampaignId]);
+  }, [open, presetCampaignId, defaultTab, selection?.userIds.length, modalVariant, visibleTabs]);
 
   useEffect(() => {
-    if (!canUseSelectBundles && activeTab === "select") {
-      setActiveTab("create");
+    if (!visibleTabs.has(activeTab)) {
+      setActiveTab(VARIANT_TABS[modalVariant][0]);
+    } else if (activeTab === "select" && !canUseSelectBundles) {
+      if (visibleTabs.has("create") && hasSelection) {
+        setActiveTab("create");
+      } else if (visibleTabs.has("add")) {
+        setActiveTab("add");
+      }
+    } else if (activeTab === "create" && !hasSelection) {
+      setActiveTab(visibleTabs.has("select") ? "select" : "add");
     }
-  }, [canUseSelectBundles, activeTab]);
+  }, [canUseSelectBundles, activeTab, hasSelection, visibleTabs, modalVariant]);
 
   useEffect(() => {
     if (!open) return;
@@ -193,6 +258,88 @@ export function AddLeadsToCampaignModal({
       totalAdded += data.addedCount ?? 0;
     }
     return totalAdded;
+  };
+
+  const handleCreateBundleFromUsers = async () => {
+    if (!createBundleProjectId) {
+      toast({ title: "Project required", variant: "destructive" });
+      return;
+    }
+    if (!createBundleName.trim()) {
+      toast({ title: "Bundle name required", variant: "destructive" });
+      return;
+    }
+    if (!hasSelection || !selection) {
+      toast({
+        title: "No users selected",
+        description: "Select users in the table first.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setCreatingBundle(true);
+    try {
+      const createRes = await fetch("/api/admin/email-lead-bundles", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: createBundleName.trim(),
+          description: createBundleDescription.trim() || null,
+          projectId: createBundleProjectId,
+        }),
+      });
+      const createData = await createRes.json();
+      if (!createRes.ok) {
+        toast({
+          title: "Could not create bundle",
+          description: createData.error || "Create failed",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      const bundleId = createData.bundle?.id as string | undefined;
+      if (!bundleId) {
+        toast({
+          title: "Could not create bundle",
+          description: "Bundle was not returned from the server.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      const membersRes = await fetch(
+        `/api/admin/email-lead-bundles/${bundleId}/members`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            recipientMode: selection.mode,
+            userIds: selection.userIds,
+            filters: selection.filterSnapshot,
+          }),
+        },
+      );
+      const membersData = await membersRes.json();
+      if (!membersRes.ok) {
+        toast({
+          title: "Bundle created, add users failed",
+          description: membersData.error || "Could not add users to bundle",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      toast({
+        title: "Bundle created",
+        description: `Created "${createBundleName.trim()}" with ${membersData.addedCount ?? typeCounts.total} user(s).`,
+      });
+      onOpenChange(false);
+      onBundleCreated?.(bundleId);
+    } finally {
+      setCreatingBundle(false);
+    }
   };
 
   const handleAttachBundles = async () => {
@@ -257,60 +404,268 @@ export function AddLeadsToCampaignModal({
     }
   };
 
-  const handleCreateBundle = async () => {
-    if (!projectId) {
-      toast({ title: "Select a project", variant: "destructive" });
+  const attachBundleToCampaign = async (bundleId: string) => {
+    if (!presetCampaignId) return null;
+    const attachRes = await fetch(
+      `/api/admin/email-campaigns/${presetCampaignId}/attach-bundles`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ bundleIds: [bundleId] }),
+      },
+    );
+    const attachData = await attachRes.json();
+    if (!attachRes.ok) {
+      throw new Error(attachData.error || "Failed to add bundle to campaign");
+    }
+    return attachData as { attachedCount?: number };
+  };
+
+  const attachLeadToCampaign = async (lead: {
+    email: string;
+    fullName: string;
+    username?: string | null;
+    userType?: string | null;
+  }) => {
+    if (!presetCampaignId) return null;
+    const attachRes = await fetch(
+      `/api/admin/email-campaigns/${presetCampaignId}/attach-leads`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ lead }),
+      },
+    );
+    const attachData = await attachRes.json();
+    if (!attachRes.ok) {
+      throw new Error(attachData.error || "Failed to add lead to campaign");
+    }
+    return attachData as { attachedCount?: number; skippedCount?: number };
+  };
+
+  const handleAddLead = async () => {
+    if (!addProjectId) {
+      toast({ title: "Project required", variant: "destructive" });
       return;
     }
-    if (!bundleName.trim()) {
-      toast({ title: "Bundle name required", variant: "destructive" });
-      return;
-    }
-    if (!hasSelection) {
+    if (!addBundleName.trim()) {
       toast({
-        title: "No recipients selected",
-        description: "Select users in the table before creating a bundle.",
+        title: "Bundle name required",
+        description: "Enter a name for the bundle.",
         variant: "destructive",
       });
       return;
     }
+    if (!leadFullName.trim()) {
+      toast({ title: "Full name required", variant: "destructive" });
+      return;
+    }
+    if (!leadEmail.trim()) {
+      toast({ title: "Email required", variant: "destructive" });
+      return;
+    }
 
-    setCreating(true);
+    const leadPayload = {
+      email: leadEmail.trim(),
+      fullName: leadFullName.trim(),
+      username: leadUsername.trim() || null,
+      userType: leadUserType || null,
+    };
+
+    setAddingLead(true);
     try {
-      const res = await fetch("/api/admin/email-lead-bundles", {
+      const bundleName = addBundleName.trim();
+      let bundleId: string | undefined;
+      let createdNewBundle = false;
+
+      const lookupParams = new URLSearchParams({
+        projectId: addProjectId,
+        search: bundleName,
+        limit: "100",
+      });
+      const lookupRes = await fetch(`/api/admin/email-lead-bundles?${lookupParams}`);
+      const lookupData = await lookupRes.json();
+      if (lookupRes.ok) {
+        const existing = (lookupData.bundles ?? []).find(
+          (bundle: { name: string }) =>
+            bundle.name.trim().toLowerCase() === bundleName.toLowerCase(),
+        );
+        bundleId = existing?.id;
+      }
+
+      if (!bundleId) {
+        const createRes = await fetch("/api/admin/email-lead-bundles", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            name: bundleName,
+            projectId: addProjectId,
+          }),
+        });
+        const createData = await createRes.json();
+        if (!createRes.ok) {
+          toast({
+            title: "Could not create bundle",
+            description: createData.error || "Create failed",
+            variant: "destructive",
+          });
+          return;
+        }
+        bundleId = createData.bundle?.id as string | undefined;
+        createdNewBundle = true;
+        if (!bundleId) {
+          toast({
+            title: "Could not create bundle",
+            description: "Bundle was not returned from the server.",
+            variant: "destructive",
+          });
+          return;
+        }
+      }
+
+      const res = await fetch(`/api/admin/email-lead-bundles/${bundleId}/members`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name: bundleName.trim(),
-          description: bundleDescription.trim() || null,
-          projectId,
-          recipientMode: selection?.mode ?? "selected_user_ids",
-          userIds: selection?.userIds ?? [],
-          filters: selection?.filterSnapshot,
-        }),
+        body: JSON.stringify({ lead: leadPayload }),
       });
       const data = await res.json();
       if (!res.ok) {
         toast({
-          title: "Could not create bundle",
-          description: data.error || "Create failed",
+          title: "Could not add lead",
+          description: data.error || "Add failed",
           variant: "destructive",
         });
         return;
       }
 
-      const added = data.addedUserCount ?? data.bundle?.totalLeads ?? 0;
-      toast({
-        title: "Bundle created",
-        description: `Added ${added} lead(s) to "${data.bundle?.name ?? bundleName}".`,
-      });
-
-      onOpenChange(false);
-      if (data.bundle?.id) {
-        onBundleCreated?.(data.bundle.id);
+      if (presetCampaignId) {
+        try {
+          const attachData = await attachLeadToCampaign(leadPayload);
+          toast({
+            title: "Lead added to campaign",
+            description: createdNewBundle
+              ? `Created "${bundleName}" and added the lead to the campaign.`
+              : attachData?.attachedCount
+                ? "Added lead to bundle and campaign."
+                : "Lead is already in this campaign.",
+          });
+          onOpenChange(false);
+          onSuccess?.(presetCampaignId);
+          return;
+        } catch (e) {
+          toast({
+            title: "Lead saved, campaign attach failed",
+            description: e instanceof Error ? e.message : "Attach failed",
+            variant: "destructive",
+          });
+          onBundleCreated?.(bundleId);
+          return;
+        }
       }
+
+      toast({
+        title: createdNewBundle ? "Bundle created" : "Lead added",
+        description: createdNewBundle
+          ? `Created "${bundleName}" and added the lead.`
+          : data.addedCount > 0
+            ? `Added ${data.addedCount} lead(s) to the bundle.`
+            : "Lead is already in this bundle.",
+      });
+      onOpenChange(false);
+      onBundleCreated?.(bundleId);
     } finally {
-      setCreating(false);
+      setAddingLead(false);
+    }
+  };
+
+  const downloadImportTemplate = () => {
+    const csv = buildLeadImportCsvTemplate();
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "lead-import-template.csv";
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const handleImportBundle = async () => {
+    if (!importProjectId) {
+      toast({ title: "Select a project", variant: "destructive" });
+      return;
+    }
+    if (!importBundleName.trim()) {
+      toast({ title: "Bundle name required", variant: "destructive" });
+      return;
+    }
+    if (!importFile) {
+      toast({
+        title: "File required",
+        description: "Upload a CSV or Excel file with an email column.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setImporting(true);
+    try {
+      const form = new FormData();
+      form.append("name", importBundleName.trim());
+      if (importDescription.trim()) {
+        form.append("description", importDescription.trim());
+      }
+      form.append("projectId", importProjectId);
+      form.append("file", importFile);
+
+      const res = await fetch("/api/admin/email-lead-bundles", {
+        method: "POST",
+        body: form,
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        toast({
+          title: "Import failed",
+          description: data.error || "Could not import bundle",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      const bundleId = data.bundle?.id as string | undefined;
+      const importedCount = data.import?.matched ?? 0;
+
+      if (presetCampaignId && bundleId) {
+        try {
+          const attachData = await attachBundleToCampaign(bundleId);
+          toast({
+            title: "Leads imported to campaign",
+            description: `Imported ${importedCount} lead(s) and added ${attachData?.attachedCount ?? importedCount} to the campaign.`,
+          });
+          onOpenChange(false);
+          onSuccess?.(presetCampaignId);
+          return;
+        } catch (e) {
+          toast({
+            title: "Bundle imported, campaign attach failed",
+            description:
+              e instanceof Error
+                ? e.message
+                : `Imported ${importedCount} lead(s) but could not add them to the campaign.`,
+            variant: "destructive",
+          });
+          if (bundleId) onBundleCreated?.(bundleId);
+          return;
+        }
+      }
+
+      toast({
+        title: "Bundle imported",
+        description: `Imported ${importedCount} lead(s) into "${data.bundle?.name ?? importBundleName}".`,
+      });
+      onOpenChange(false);
+      if (bundleId) onBundleCreated?.(bundleId);
+    } finally {
+      setImporting(false);
     }
   };
 
@@ -327,44 +682,83 @@ export function AddLeadsToCampaignModal({
               <Users className="h-5 w-5" />
             </div>
             <div>
-              <DialogTitle className="text-lg">Add Leads to Campaign</DialogTitle>
+              <DialogTitle className="text-lg">
+                {isBundleVariant ? "Select bundle" : "Add Leads to Campaign"}
+              </DialogTitle>
               <DialogDescription className="mt-1">
-                Choose how you want to add leads
-                {presetCampaignName ? ` to ${presetCampaignName}` : ""}
+                {isBundleVariant
+                  ? "Choose an existing bundle or create a new one with selected users."
+                  : `Choose how you want to add leads${presetCampaignName ? ` to ${presetCampaignName}` : ""}`}
               </DialogDescription>
             </div>
           </div>
         </DialogHeader>
 
-        <div className="mx-6 mt-4 rounded-lg bg-[#E8ECF0] p-1 flex gap-1">
+        <div className="mx-6 mt-4 rounded-lg bg-[#E8ECF0] p-1 flex gap-1 overflow-x-auto">
+          {visibleTabs.has("select") && (
           <button
             type="button"
             disabled={!canUseSelectBundles}
             onClick={() => canUseSelectBundles && setActiveTab("select")}
             className={cn(
-              "flex flex-1 items-center justify-center gap-2 px-4 py-2.5 text-sm font-medium rounded-md transition-all",
+              "flex flex-1 min-w-[7.5rem] items-center justify-center gap-1.5 px-3 py-2.5 text-sm font-medium rounded-md transition-all whitespace-nowrap",
               !canUseSelectBundles && "opacity-50 cursor-not-allowed",
               activeTab === "select"
                 ? "bg-white text-blue-600 shadow-sm"
                 : "text-gray-600 hover:text-gray-900",
             )}
           >
-            <Layers className="h-4 w-4" />
+            <Layers className="h-4 w-4 shrink-0" />
             Select Bundles
           </button>
+          )}
+          {visibleTabs.has("create") && (
           <button
             type="button"
-            onClick={() => setActiveTab("create")}
+            disabled={!hasSelection}
+            onClick={() => hasSelection && setActiveTab("create")}
             className={cn(
-              "flex flex-1 items-center justify-center gap-2 px-4 py-2.5 text-sm font-medium rounded-md transition-all",
+              "flex flex-1 min-w-[7.5rem] items-center justify-center gap-1.5 px-3 py-2.5 text-sm font-medium rounded-md transition-all whitespace-nowrap",
+              !hasSelection && "opacity-50 cursor-not-allowed",
               activeTab === "create"
                 ? "bg-white text-blue-600 shadow-sm"
                 : "text-gray-600 hover:text-gray-900",
             )}
           >
-            <Plus className="h-4 w-4" />
+            <Plus className="h-4 w-4 shrink-0" />
             Create Bundle
           </button>
+          )}
+          {visibleTabs.has("add") && (
+          <button
+            type="button"
+            onClick={() => setActiveTab("add")}
+            className={cn(
+              "flex flex-1 min-w-[7.5rem] items-center justify-center gap-1.5 px-3 py-2.5 text-sm font-medium rounded-md transition-all whitespace-nowrap",
+              activeTab === "add"
+                ? "bg-white text-blue-600 shadow-sm"
+                : "text-gray-600 hover:text-gray-900",
+            )}
+          >
+            <UserPlus className="h-4 w-4 shrink-0" />
+            Add Lead
+          </button>
+          )}
+          {visibleTabs.has("import") && (
+          <button
+            type="button"
+            onClick={() => setActiveTab("import")}
+            className={cn(
+              "flex flex-1 min-w-[7.5rem] items-center justify-center gap-1.5 px-3 py-2.5 text-sm font-medium rounded-md transition-all whitespace-nowrap",
+              activeTab === "import"
+                ? "bg-white text-blue-600 shadow-sm"
+                : "text-gray-600 hover:text-gray-900",
+            )}
+          >
+            <Upload className="h-4 w-4 shrink-0" />
+            Import CSV/Excel
+          </button>
+          )}
         </div>
 
         <div className="px-6 py-4">
@@ -437,9 +831,19 @@ export function AddLeadsToCampaignModal({
                   <Button
                     variant="link"
                     className="text-blue-600 mt-2"
-                    onClick={() => setActiveTab("create")}
+                    onClick={() =>
+                      setActiveTab(
+                        visibleTabs.has("create")
+                          ? "create"
+                          : visibleTabs.has("add")
+                            ? "add"
+                            : "select",
+                      )
+                    }
                   >
-                    Create your first bundle
+                    {visibleTabs.has("create")
+                      ? "Create your first bundle"
+                      : "Add your first lead"}
                   </Button>
                 </div>
               ) : (
@@ -494,10 +898,16 @@ export function AddLeadsToCampaignModal({
 
           {activeTab === "create" && (
             <div className="space-y-4">
-              {hasSelection ? (
-                <div className="rounded-xl border border-purple-200 bg-purple-50/60 px-4 py-3 space-y-2">
-                  <p className="text-sm font-medium text-purple-900">
-                    Selected recipients: {typeCounts.total.toLocaleString()}
+              {!hasSelection ? (
+                <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+                  Select users in the table first, then create a bundle with those
+                  users.
+                </div>
+              ) : (
+                <div className="rounded-xl border border-emerald-200 bg-emerald-50/60 px-4 py-3 space-y-2">
+                  <p className="text-sm font-medium text-emerald-900">
+                    Creating bundle with {typeCounts.total.toLocaleString()}{" "}
+                    selected user{typeCounts.total !== 1 ? "s" : ""}
                   </p>
                   <div className="flex flex-wrap gap-2">
                     {typeCounts.creator > 0 && (
@@ -517,10 +927,165 @@ export function AddLeadsToCampaignModal({
                     )}
                   </div>
                 </div>
+              )}
+
+              <div className="space-y-1.5">
+                <Label>
+                  Project <span className="text-red-500">*</span>
+                </Label>
+                <Select
+                  value={createBundleProjectId || undefined}
+                  onValueChange={setCreateBundleProjectId}
+                >
+                  <SelectTrigger className="h-11">
+                    <SelectValue placeholder="Select project..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {projects.map((p) => (
+                      <SelectItem key={p.id} value={p.id}>
+                        {p.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label>
+                  Bundle Name <span className="text-red-500">*</span>
+                </Label>
+                <Input
+                  value={createBundleName}
+                  onChange={(e) => setCreateBundleName(e.target.value)}
+                  placeholder="Enter bundle name..."
+                  className="h-11"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <Label>Description (optional)</Label>
+                <Textarea
+                  value={createBundleDescription}
+                  onChange={(e) => setCreateBundleDescription(e.target.value)}
+                  placeholder="Optional description..."
+                  rows={3}
+                />
+              </div>
+            </div>
+          )}
+
+          {activeTab === "add" && (
+            <div className="space-y-4">
+              {presetCampaignId && (
+                <div className="rounded-xl border border-blue-200 bg-blue-50/60 px-4 py-3 text-sm text-blue-900">
+                  Add a lead to a bundle and include it in this campaign
+                  {presetCampaignName ? `: ${presetCampaignName}` : ""}.
+                </div>
+              )}
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-1.5 sm:col-span-2">
+                  <Label>
+                    Project <span className="text-red-500">*</span>
+                  </Label>
+                  <Select
+                    value={addProjectId || undefined}
+                    onValueChange={(value) => {
+                      setAddProjectId(value);
+                      setAddBundleName("");
+                    }}
+                  >
+                    <SelectTrigger className="h-11">
+                      <SelectValue placeholder="Select project..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {projects.map((p) => (
+                        <SelectItem key={p.id} value={p.id}>
+                          {p.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-1.5 sm:col-span-2">
+                  <Label>
+                    Bundle Name <span className="text-red-500">*</span>
+                  </Label>
+                  <Input
+                    value={addBundleName}
+                    onChange={(e) => setAddBundleName(e.target.value)}
+                    placeholder="Enter bundle name..."
+                    disabled={!addProjectId}
+                    className="h-11"
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label>
+                    Full Name <span className="text-red-500">*</span>
+                  </Label>
+                  <Input
+                    value={leadFullName}
+                    onChange={(e) => setLeadFullName(e.target.value)}
+                    placeholder="Enter full name..."
+                    className="h-11"
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label>
+                    Email <span className="text-red-500">*</span>
+                  </Label>
+                  <Input
+                    type="email"
+                    value={leadEmail}
+                    onChange={(e) => setLeadEmail(e.target.value)}
+                    placeholder="Enter email..."
+                    className="h-11"
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label>Username (optional)</Label>
+                  <Input
+                    value={leadUsername}
+                    onChange={(e) => setLeadUsername(e.target.value)}
+                    placeholder="Enter username..."
+                    className="h-11"
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label>User Type (optional)</Label>
+                  <Select
+                    value={leadUserType || undefined}
+                    onValueChange={setLeadUserType}
+                  >
+                    <SelectTrigger className="h-11">
+                      <SelectValue placeholder="Any user type" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="creator">Creator</SelectItem>
+                      <SelectItem value="advertiser">Advertiser</SelectItem>
+                      <SelectItem value="admin">Admin</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {activeTab === "import" && (
+            <div className="space-y-4">
+              {presetCampaignId ? (
+                <div className="rounded-xl border border-blue-200 bg-blue-50/60 px-4 py-3 text-sm text-blue-900">
+                  Import a file to create a bundle and add those leads to this
+                  campaign{presetCampaignName ? `: ${presetCampaignName}` : ""}.
+                </div>
               ) : (
-                <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-                  Select users in the table first, then create a bundle with those
-                  leads.
+                <div className="rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-700">
+                  Import leads from a CSV or Excel file into a new bundle.
                 </div>
               )}
 
@@ -528,7 +1093,7 @@ export function AddLeadsToCampaignModal({
                 <Label>
                   Project <span className="text-red-500">*</span>
                 </Label>
-                <Select value={projectId} onValueChange={setProjectId}>
+                <Select value={importProjectId} onValueChange={setImportProjectId}>
                   <SelectTrigger className="h-11">
                     <SelectValue placeholder="Select project" />
                   </SelectTrigger>
@@ -541,25 +1106,70 @@ export function AddLeadsToCampaignModal({
                   </SelectContent>
                 </Select>
               </div>
+
               <div className="space-y-1.5">
                 <Label>
                   Bundle Name <span className="text-red-500">*</span>
                 </Label>
                 <Input
                   placeholder="Enter bundle name..."
-                  value={bundleName}
-                  onChange={(e) => setBundleName(e.target.value)}
+                  value={importBundleName}
+                  onChange={(e) => setImportBundleName(e.target.value)}
                   className="h-11"
                 />
               </div>
+
               <div className="space-y-1.5">
                 <Label>Description</Label>
                 <Textarea
                   placeholder="Enter bundle description (optional)..."
-                  value={bundleDescription}
-                  onChange={(e) => setBundleDescription(e.target.value)}
-                  rows={4}
+                  value={importDescription}
+                  onChange={(e) => setImportDescription(e.target.value)}
+                  rows={3}
                 />
+              </div>
+
+              <div className="space-y-1.5">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <Label>
+                    CSV / Excel File <span className="text-red-500">*</span>
+                  </Label>
+                  <Button
+                    type="button"
+                    variant="link"
+                    className="h-auto p-0 text-blue-600 hover:text-blue-700"
+                    onClick={downloadImportTemplate}
+                  >
+                    <Download className="h-4 w-4 mr-1" />
+                    Download CSV template
+                  </Button>
+                </div>
+                <input
+                  ref={importFileInputRef}
+                  type="file"
+                  accept=".csv,.xlsx,.xls,text/csv,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                  className="hidden"
+                  onChange={(e) => setImportFile(e.target.files?.[0] ?? null)}
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="w-full h-24 flex flex-col gap-2"
+                  onClick={() => importFileInputRef.current?.click()}
+                >
+                  <FileUp className="h-6 w-6 text-muted-foreground" />
+                  <span className="text-sm text-center px-2">
+                    {importFile
+                      ? importFile.name
+                      : "Upload CSV or Excel (email, full name…)"}
+                  </span>
+                </Button>
+                <p className="text-xs text-muted-foreground">
+                  Required: <span className="font-medium">email</span>. Optional:{" "}
+                  <span className="font-medium">full name</span>,{" "}
+                  <span className="font-medium">username</span>,{" "}
+                  <span className="font-medium">user type</span>.
+                </p>
               </div>
             </div>
           )}
@@ -596,20 +1206,60 @@ export function AddLeadsToCampaignModal({
                   ? ` (${selectedLeadCount} leads)`
                   : ""}
             </Button>
-          ) : (
+          ) : activeTab === "create" ? (
             <Button
-              className="bg-blue-600 hover:bg-blue-700"
+              className="bg-emerald-600 hover:bg-emerald-700"
               disabled={
-                creating || !bundleName.trim() || !projectId || !hasSelection
+                creatingBundle ||
+                !createBundleProjectId ||
+                !createBundleName.trim() ||
+                !hasSelection
               }
-              onClick={handleCreateBundle}
+              onClick={() => void handleCreateBundleFromUsers()}
             >
-              {creating ? (
+              {creatingBundle ? (
                 <Loader2 className="h-4 w-4 mr-2 animate-spin" />
               ) : (
                 <Plus className="h-4 w-4 mr-2" />
               )}
-              Create Bundle
+              Create bundle
+            </Button>
+          ) : activeTab === "add" ? (
+            <Button
+              className="bg-blue-600 hover:bg-blue-700"
+              disabled={
+                addingLead ||
+                !addProjectId ||
+                !addBundleName.trim() ||
+                !leadFullName.trim() ||
+                !leadEmail.trim()
+              }
+              onClick={() => void handleAddLead()}
+            >
+              {addingLead ? (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              ) : (
+                <UserPlus className="h-4 w-4 mr-2" />
+              )}
+              {presetCampaignId ? "Add Lead to Campaign" : "Add Lead"}
+            </Button>
+          ) : (
+            <Button
+              className="bg-blue-600 hover:bg-blue-700"
+              disabled={
+                importing ||
+                !importProjectId ||
+                !importBundleName.trim() ||
+                !importFile
+              }
+              onClick={() => void handleImportBundle()}
+            >
+              {importing ? (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              ) : (
+                <Upload className="h-4 w-4 mr-2" />
+              )}
+              {presetCampaignId ? "Import & Add to Campaign" : "Import & Create Bundle"}
             </Button>
           )}
         </DialogFooter>

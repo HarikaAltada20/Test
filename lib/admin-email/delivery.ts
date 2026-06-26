@@ -106,7 +106,9 @@ async function reserveCampaignStepSend(
   return { action: "reserved", sendRowId: inserted.id };
 }
 
-async function releaseCampaignStepSendReservation(sendRowId: string): Promise<void> {
+async function releaseCampaignStepSendReservation(
+  sendRowId: string,
+): Promise<void> {
   const db = createAdminClient();
   await db
     .from("admin_email_sequence_step_sends")
@@ -376,17 +378,15 @@ export async function deliverEmailCampaignBatch(
 
   const users = await loadUsersByIds(platformUserIds);
   const recipientEmails = [
-    ...new Set(
-      [
-        ...users
-          .map((user) => user.email?.trim().toLowerCase())
-          .filter((email): email is string => Boolean(email)),
-        ...(recipientRows ?? [])
-          .filter((row) => !row.user_id)
-          .map((row) => row.recipient_email?.trim().toLowerCase())
-          .filter((email): email is string => Boolean(email)),
-      ],
-    ),
+    ...new Set([
+      ...users
+        .map((user) => user.email?.trim().toLowerCase())
+        .filter((email): email is string => Boolean(email)),
+      ...(recipientRows ?? [])
+        .filter((row) => !row.user_id)
+        .map((row) => row.recipient_email?.trim().toLowerCase())
+        .filter((email): email is string => Boolean(email)),
+    ]),
   ];
 
   let suppressedSet = new Set<string>();
@@ -726,9 +726,13 @@ export async function deliverEmailCampaignBatch(
       is_active: true,
     };
 
-    const subject = buildBulkEmailSubject(campaign.email_subject || "", externalUser, {
-      campaign: campaignContext,
-    });
+    const subject = buildBulkEmailSubject(
+      campaign.email_subject || "",
+      externalUser,
+      {
+        campaign: campaignContext,
+      },
+    );
     const trackingId = randomUUID();
     const { html, text, plainTextOnly, useRaw } = buildBulkEmailHtml({
       bodyTemplate: campaign.message_template || "",
@@ -789,15 +793,25 @@ async function refreshEmailCampaignSentCount(
   campaignId: string,
 ): Promise<void> {
   const db = createAdminClient();
-  const { count: totalSent } = await db
+  const { count: pendingCount } = await db
     .from("admin_email_campaign_recipients")
     .select("id", { count: "exact", head: true })
     .eq("campaign_id", campaignId)
-    .in("email_delivery_status", ["sent", "delivered", "opened", "clicked"]);
+    .eq("email_delivery_status", "pending");
+
+  const { count: recipientCount } = await db
+    .from("admin_email_campaign_recipients")
+    .select("id", { count: "exact", head: true })
+    .eq("campaign_id", campaignId);
+
+  const dispatchedCount = Math.max(
+    0,
+    (recipientCount ?? 0) - (pendingCount ?? 0),
+  );
 
   await db
     .from("admin_email_campaigns")
-    .update({ sent_count: totalSent ?? 0 })
+    .update({ sent_count: dispatchedCount })
     .eq("id", campaignId);
 }
 
@@ -1035,7 +1049,10 @@ export async function processEmailCampaignDeliveryJob(
   }
 
   const jobBatchLimit = emailsPerJob ?? gate.batchLimit;
-  let recipientIds = await loadNextPendingEmailRecipients(campaignId, jobBatchLimit);
+  let recipientIds = await loadNextPendingEmailRecipients(
+    campaignId,
+    jobBatchLimit,
+  );
   if (recipientIds.length === 0) {
     recipientIds = await loadPendingRecipientIds(campaignId, jobBatchLimit);
   }

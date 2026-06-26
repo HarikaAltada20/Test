@@ -6,6 +6,7 @@ import type { UserManagementFilterSnapshot } from "@/lib/admin-notifications/typ
 import {
   addManualLeadToBundle,
   addUsersToBundle,
+  deleteBundleMembers,
   getLeadBundle,
 } from "@/lib/admin-email/lead-bundles";
 
@@ -87,6 +88,38 @@ export async function POST(req: NextRequest, context: RouteContext) {
     });
   } catch (e) {
     const message = e instanceof Error ? e.message : "Failed to add leads";
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
+}
+
+export async function DELETE(req: NextRequest, context: RouteContext) {
+  const auth = await requireAdminApi();
+  if (auth.response) return auth.response;
+
+  const { id: bundleId } = await context.params;
+
+  let body: { memberIds?: string[] };
+  try {
+    body = await req.json();
+  } catch {
+    return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
+  }
+
+  const memberIds = body.memberIds ?? [];
+  if (memberIds.length === 0) {
+    return NextResponse.json({ error: "memberIds required" }, { status: 400 });
+  }
+
+  const bundle = await getLeadBundle(bundleId);
+  if (!bundle) {
+    return NextResponse.json({ error: "Bundle not found" }, { status: 404 });
+  }
+
+  try {
+    const result = await deleteBundleMembers(bundleId, memberIds);
+    return NextResponse.json(result);
+  } catch (e) {
+    const message = e instanceof Error ? e.message : "Failed to delete leads";
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }

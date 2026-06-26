@@ -49,7 +49,7 @@ import {
 } from "./SendNotificationModal";
 import { AdminNotificationsView } from "./AdminNotificationsView";
 import { AttachEmailCampaignModal } from "./AttachEmailCampaignModal";
-import { AddLeadsToCampaignModal } from "./AddLeadsToCampaignModal";
+import { AddLeadsToCampaignModal, type AddLeadsModalVariant } from "./AddLeadsToCampaignModal";
 import type { RecipientUserRow } from "@/lib/admin-notifications/types";
 import { cn } from "@/lib/utils";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -649,6 +649,11 @@ export default function AdminUsersPage() {
   const [sendModalOpen, setSendModalOpen] = useState(false);
   const [emailSendModalOpen, setEmailSendModalOpen] = useState(false);
   const [emailBundlesModalOpen, setEmailBundlesModalOpen] = useState(false);
+  const [bundlesModalVariant, setBundlesModalVariant] =
+    useState<AddLeadsModalVariant>("bundle");
+  const [bundlesModalDefaultTab, setBundlesModalDefaultTab] = useState<
+    "select" | "create" | "add" | "import"
+  >("select");
   const [warmupSelectMode, setWarmupSelectMode] = useState(() => {
     if (typeof window !== "undefined") {
       return sessionStorage.getItem("wu_mode") === "1";
@@ -2793,16 +2798,23 @@ export default function AdminUsersPage() {
             )} */}
             {viewMode === "table" && (
               <div className="flex shrink-0 items-center gap-2">
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="h-8 gap-1.5 px-2 sm:px-3"
-                  disabled={!hasNotificationSelection && !emailLeadSelectMode}
-                  onClick={() => setEmailBundlesModalOpen(true)}
-                >
-                  <Layers className="h-4 w-4" />
-                  <span className="hidden sm:inline">Select bundles</span>
-                </Button>
+                {!emailLeadSelectMode && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-8 gap-1.5 px-2 sm:px-3"
+                    onClick={() => {
+                      setWarmupSelectMode(false);
+                      sessionStorage.removeItem("wu_mode");
+                      setBundlesModalVariant("bundle");
+                      setBundlesModalDefaultTab("select");
+                      setEmailBundlesModalOpen(true);
+                    }}
+                  >
+                    <Layers className="h-4 w-4" />
+                    <span className="hidden sm:inline">Select bundle</span>
+                  </Button>
+                )}
                 <Button
                   size="sm"
                   className="h-8 gap-1.5 px-2 sm:px-3"
@@ -3136,7 +3148,11 @@ export default function AdminUsersPage() {
               size="sm"
               variant="outline"
               className="border-purple-300 text-purple-700 hover:bg-purple-100"
-              onClick={() => setEmailBundlesModalOpen(true)}
+              onClick={() => {
+                setBundlesModalVariant("campaign");
+                setBundlesModalDefaultTab("select");
+                setEmailBundlesModalOpen(true);
+              }}
             >
               <Layers className="h-3.5 w-3.5 mr-1.5" />
               Get selected bundles
@@ -5473,8 +5489,12 @@ export default function AdminUsersPage() {
         campaignId={emailLeadSelectMode ? emailLeadCampaignId : null}
         campaignName={emailLeadCampaignName ?? undefined}
         selection={notificationSelection}
+        variant={bundlesModalVariant}
+        defaultTab={bundlesModalDefaultTab}
         onSuccess={(campaignId) => {
           if (emailLeadSelectMode) clearEmailLeadSelectMode();
+          setSelectedUserIds(new Set());
+          setSelectAllFiltered(false);
           toast({
             title: "Bundles added",
             description: "Leads from selected bundles were added to the campaign.",
