@@ -321,7 +321,7 @@ async function findThreadByContactEmail(
 export async function logOutboundUniboxMessage(input: {
   projectId: string;
   campaignId: string;
-  userId: string;
+  userId?: string | null;
   contactEmail: string;
   contactName?: string | null;
   fromEmail: string;
@@ -337,13 +337,19 @@ export async function logOutboundUniboxMessage(input: {
   const bodyText = input.bodyText?.trim() || htmlToPlainText(input.bodyHtml);
   const snippet = makeSnippet(bodyText);
 
-  const { data: existingThread } = await db
+  let threadQuery = db
     .from("admin_email_unibox_threads")
     .select("id, reply_count")
     .eq("campaign_id", input.campaignId)
-    .eq("user_id", input.userId)
-    .eq("is_deleted", false)
-    .maybeSingle();
+    .eq("is_deleted", false);
+
+  if (input.userId) {
+    threadQuery = threadQuery.eq("user_id", input.userId);
+  } else {
+    threadQuery = threadQuery.is("user_id", null).eq("contact_email", contactEmail);
+  }
+
+  const { data: existingThread } = await threadQuery.maybeSingle();
 
   let threadId = existingThread?.id as string | undefined;
 
@@ -353,7 +359,7 @@ export async function logOutboundUniboxMessage(input: {
       .insert({
         project_id: input.projectId,
         campaign_id: input.campaignId,
-        user_id: input.userId,
+        user_id: input.userId ?? null,
         contact_email: contactEmail,
         contact_name: input.contactName ?? null,
         subject: input.subject,
@@ -390,7 +396,7 @@ export async function logOutboundUniboxMessage(input: {
     direction: "outbound",
     project_id: input.projectId,
     campaign_id: input.campaignId,
-    user_id: input.userId,
+    user_id: input.userId ?? null,
     from_email: input.fromEmail,
     from_name: input.fromName ?? null,
     to_email: contactEmail,

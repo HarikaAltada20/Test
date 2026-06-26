@@ -1,4 +1,5 @@
 import { createAdminClient } from "@/utils/supabase/admin";
+import type { StoredSequence } from "@/lib/admin-email/sequence-types";
 
 export type LeadBundleStatus = "active" | "completed" | "archived";
 
@@ -730,44 +731,53 @@ export async function getBundleMembersForAttach(
   if (bundleIds.length === 0) return [];
 
   const db = createAdminClient();
-  const { data, error } = await db
-    .from("admin_email_lead_bundle_members")
-    .select(
-      `
-      user_id,
-      email,
-      full_name,
-      username,
-      user_type,
-      users (
-        id,
+  const POSTGREST_MAX = 1000;
+  const byKey = new Map<string, BundleMemberForAttach>();
+  let offset = 0;
+
+  while (true) {
+    const { data, error } = await db
+      .from("admin_email_lead_bundle_members")
+      .select(
+        `
+        user_id,
         email,
         full_name,
         username,
-        user_type
+        user_type,
+        users (
+          id,
+          email,
+          full_name,
+          username,
+          user_type
+        )
+      `,
       )
-    `,
-    )
-    .in("bundle_id", bundleIds);
+      .in("bundle_id", bundleIds)
+      .range(offset, offset + POSTGREST_MAX - 1);
 
-  if (error) throw new Error(error.message);
+    if (error) throw new Error(error.message);
 
-  const byKey = new Map<string, BundleMemberForAttach>();
-  for (const row of data ?? []) {
-    const user = Array.isArray(row.users) ? row.users[0] : row.users;
-    const email = (user?.email ?? row.email ?? "").trim().toLowerCase();
-    if (!email.includes("@")) continue;
+    for (const row of data ?? []) {
+      const user = Array.isArray(row.users) ? row.users[0] : row.users;
+      const email = (user?.email ?? row.email ?? "").trim().toLowerCase();
+      if (!email.includes("@")) continue;
 
-    const member: BundleMemberForAttach = {
-      userId: user?.id ?? row.user_id ?? null,
-      email,
-      fullName: row.full_name ?? user?.full_name ?? null,
-      username: row.username ?? user?.username ?? null,
-      userType: row.user_type ?? user?.user_type ?? null,
-    };
+      const member: BundleMemberForAttach = {
+        userId: user?.id ?? row.user_id ?? null,
+        email,
+        fullName: row.full_name ?? user?.full_name ?? null,
+        username: row.username ?? user?.username ?? null,
+        userType: row.user_type ?? user?.user_type ?? null,
+      };
 
-    const key = member.userId ?? member.email;
-    byKey.set(key, member);
+      const key = member.userId ?? member.email;
+      byKey.set(key, member);
+    }
+
+    if ((data ?? []).length < POSTGREST_MAX) break;
+    offset += POSTGREST_MAX;
   }
 
   return Array.from(byKey.values());
@@ -842,6 +852,7 @@ async function rollbackAttachedRecipients(
 export async function attachLeadsToCampaign(
   campaignId: string,
   members: BundleMemberForAttach[],
+  options?: { bundleIds?: string[] },
 ): Promise<{
   attachedCount: number;
   skippedCount: number;
@@ -851,7 +862,7 @@ export async function attachLeadsToCampaign(
   const db = createAdminClient();
   const { data: campaign, error: campaignError } = await db
     .from("admin_email_campaigns")
-    .select("id, status")
+    .select("id, status, sequence_data")
     .eq("id", campaignId)
     .single();
 
@@ -870,6 +881,15 @@ export async function attachLeadsToCampaign(
   ];
   if (!attachableStatuses.includes(campaign.status)) {
     throw new Error(`Cannot attach leads to campaign in status: ${campaign.status}`);
+  }
+
+  const sequence = campaign.sequence_data as StoredSequence | null;
+  const hasSequenceSteps = (sequence?.steps?.length ?? 0) > 0;
+  const externalMembers = members.filter((member) => !member.userId);
+  if (hasSequenceSteps && externalMembers.length > 0) {
+    throw new Error(
+      "Email-only leads cannot be added to campaigns with multi-step sequences. Link them to platform users or use a single-email campaign.",
+    );
   }
 
   if (members.length === 0) {
@@ -919,8 +939,8 @@ export async function attachLeadsToCampaign(
 
   const { data: users } =
     platformUserIds.length > 0
-      ? await db.from("users").select("id, user_type").in("id", platformUserIds)
-      : { data: [] as Array<{ id: string; user_type: string }> };
+      ? await db.from("users").select("id, user_type, email").in("id", platformUserIds)
+      : { data: [] as Array<{ id: string; user_type: string; email: string }> };
 
   const usersById = new Map((users ?? []).map((user) => [user.id, user]));
 
@@ -932,6 +952,9 @@ export async function attachLeadsToCampaign(
       if (existingUserIds.has(member.userId)) continue;
       const user = usersById.get(member.userId);
       if (!user) continue;
+
+      const userEmail = user.email?.trim().toLowerCase();
+      if (userEmail && existingEmails.has(userEmail)) continue;
 
       recipientRows.push({
         campaign_id: campaignId,
@@ -1010,12 +1033,43 @@ export async function attachLeadsToCampaign(
     }
   }
 
+  const bundleIds = options?.bundleIds ?? [];
+  if (bundleIds.length > 0 && insertedRecipientIds.length > 0) {
+    try {
+      await recordCampaignBundleAttachments(campaignId, bundleIds);
+    } catch (error) {
+      await rollbackAttachedRecipients(campaignId, insertedRecipientIds);
+      throw error;
+    }
+  } else if (bundleIds.length > 0) {
+    await recordCampaignBundleAttachments(campaignId, bundleIds);
+  }
+
   return {
     attachedCount: recipientRows.length,
     skippedCount: members.length - recipientRows.length,
     recipientCount: totalRecipientCount ?? 0,
     status: campaignUpdates.status ?? campaign.status,
   };
+}
+
+export async function attachBundlesToCampaign(
+  campaignId: string,
+  bundleIds: string[],
+): Promise<{
+  attachedCount: number;
+  skippedCount: number;
+  recipientCount: number;
+  status: string;
+  bundleCount: number;
+}> {
+  const members = await getBundleMembersForAttach(bundleIds);
+  if (members.length === 0) {
+    throw new Error("Selected bundles have no leads");
+  }
+
+  const result = await attachLeadsToCampaign(campaignId, members, { bundleIds });
+  return { ...result, bundleCount: bundleIds.length };
 }
 
 export type CampaignAttachedBundle = {
@@ -1236,24 +1290,22 @@ export async function listBundleMembers(
     )
     .eq("bundle_id", bundleId);
 
-  const { data, count, error } = await query.range(from, to);
-  if (error) throw new Error(error.message);
-
-  let members: LeadBundleMember[] = (data ?? []).map((row) =>
-    mapBundleMemberRow(row),
-  );
-
   const searchLower = params?.search?.trim().toLowerCase();
   if (searchLower) {
-    members = members.filter(
-      (m) =>
-        m.email.toLowerCase().includes(searchLower) ||
-        (m.fullName?.toLowerCase().includes(searchLower) ?? false) ||
-        (m.username?.toLowerCase().includes(searchLower) ?? false),
+    const pattern = `%${searchLower}%`;
+    query = query.or(
+      `email.ilike.${pattern},full_name.ilike.${pattern},username.ilike.${pattern},user.email.ilike.${pattern},user.full_name.ilike.${pattern},user.username.ilike.${pattern}`,
     );
   }
 
-  const total = searchLower ? members.length : (count ?? 0);
+  const { data, count, error } = await query.range(from, to);
+  if (error) throw new Error(error.message);
+
+  const members: LeadBundleMember[] = (data ?? []).map((row) =>
+    mapBundleMemberRow(row),
+  );
+
+  const total = count ?? 0;
   return {
     members,
     total,

@@ -730,10 +730,23 @@ export async function deliverEmailCampaignBatch(
   }
 
   for (const row of externalRows) {
-    if (
-      row.email_delivery_status !== "pending" ||
-      useSequenceSteps
-    ) {
+    if (useSequenceSteps) {
+      if (row.email_delivery_status === "pending") {
+        await db
+          .from("admin_email_campaign_recipients")
+          .update({
+            email_delivery_status: "skipped",
+            skipped_reason: "multi-step sequences require platform users",
+            updated_at: now,
+          })
+          .eq("id", row.id)
+          .eq("email_delivery_status", "pending");
+      }
+      skippedCount += 1;
+      continue;
+    }
+
+    if (row.email_delivery_status !== "pending") {
       skippedCount += 1;
       continue;
     }
@@ -831,6 +844,22 @@ export async function deliverEmailCampaignBatch(
         })
         .eq("id", claimed.id)
         .eq("email_delivery_status", "sending");
+
+      const { logOutboundUniboxMessage } = await import("./unibox");
+      await logOutboundUniboxMessage({
+        projectId: campaign.project_id,
+        campaignId,
+        userId: null,
+        contactEmail: email,
+        contactName: externalUser.full_name ?? externalUser.username,
+        fromEmail: sendFromEmail,
+        fromName: getBulkEmailFromName(sendFromEmail),
+        subject,
+        bodyHtml: html,
+        bodyText: text,
+        sesMessageId: mimeThreadingMessageId(sendResult) ?? undefined,
+      });
+
       successCount += 1;
     } else {
       await db
@@ -854,20 +883,21 @@ async function refreshEmailCampaignSentCount(
   campaignId: string,
 ): Promise<void> {
   const db = createAdminClient();
-  const { count: pendingCount } = await db
-    .from("admin_email_campaign_recipients")
-    .select("id", { count: "exact", head: true })
-    .eq("campaign_id", campaignId)
-    .eq("email_delivery_status", "pending");
 
   const { count: recipientCount } = await db
     .from("admin_email_campaign_recipients")
     .select("id", { count: "exact", head: true })
     .eq("campaign_id", campaignId);
 
+  const { count: incompleteCount } = await db
+    .from("admin_email_campaign_recipients")
+    .select("id", { count: "exact", head: true })
+    .eq("campaign_id", campaignId)
+    .in("email_delivery_status", ["pending", "in_sequence", "sending"]);
+
   const dispatchedCount = Math.max(
     0,
-    (recipientCount ?? 0) - (pendingCount ?? 0),
+    (recipientCount ?? 0) - (incompleteCount ?? 0),
   );
 
   await db

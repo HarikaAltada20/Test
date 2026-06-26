@@ -35,7 +35,7 @@ const DEFAULT_PAGE_SIZE = 50;
 type RecipientRow = {
   index: number;
   recipientId: string;
-  userId: string;
+  userId: string | null;
   email: string;
   fullName: string;
   username: string;
@@ -166,9 +166,11 @@ export function LeadTab({
     const preselectedUserIds =
       selected.size > 0
         ? recipients
-            .filter((row) => selected.has(row.recipientId))
+            .filter(
+              (row): row is RecipientRow & { userId: string } =>
+                selected.has(row.recipientId) && Boolean(row.userId),
+            )
             .map((row) => row.userId)
-            .filter(Boolean)
         : undefined;
 
     enterEmailLeadSelectMode({

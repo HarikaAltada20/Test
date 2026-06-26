@@ -45,13 +45,13 @@ export async function getEmailCampaignDetail(campaignId: string) {
 
   const recipientCount = campaign.recipient_count ?? 0;
 
-  const { count: pendingCount } = await db
+  const { count: incompleteCount } = await db
     .from("admin_email_campaign_recipients")
     .select("id", { count: "exact", head: true })
     .eq("campaign_id", campaignId)
-    .eq("email_delivery_status", "pending");
+    .in("email_delivery_status", ["pending", "in_sequence", "sending"]);
 
-  const remainingCount = pendingCount ?? 0;
+  const remainingCount = incompleteCount ?? 0;
   const sentCount = Math.max(0, recipientCount - remainingCount);
 
   const { data: trackingRows } = await db

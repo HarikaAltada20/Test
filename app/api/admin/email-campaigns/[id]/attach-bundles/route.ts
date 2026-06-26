@@ -2,9 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/utils/supabase/admin";
 import { requireAdminApi } from "@/lib/admin-email/api-auth";
 import {
-  attachLeadsToCampaign,
+  attachBundlesToCampaign,
   getBundleMembersForAttach,
-  recordCampaignBundleAttachments,
 } from "@/lib/admin-email/lead-bundles";
 import type { AdminEmailCampaignStatus } from "@/lib/admin-email/types";
 
@@ -68,16 +67,20 @@ export async function POST(req: NextRequest, context: RouteContext) {
   }
 
   try {
-    const result = await attachLeadsToCampaign(campaignId, members);
-    await recordCampaignBundleAttachments(campaignId, bundleIds);
+    const result = await attachBundlesToCampaign(campaignId, bundleIds);
 
     return NextResponse.json({
       campaignId,
       ...result,
-      bundleCount: bundleIds.length,
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Attach failed";
-    return NextResponse.json({ error: message }, { status: 500 });
+    const status =
+      message === "Selected bundles have no leads" ||
+      message.includes("Cannot attach") ||
+      message.includes("Email-only leads")
+        ? 400
+        : 500;
+    return NextResponse.json({ error: message }, { status });
   }
 }

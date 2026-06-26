@@ -53,7 +53,7 @@ export async function GET(req: NextRequest, context: RouteContext) {
   if (search) {
     const pattern = `%${search}%`;
     query = query.or(
-      `recipient_email.ilike.${pattern},full_name.ilike.${pattern},username.ilike.${pattern}`,
+      `recipient_email.ilike.${pattern},full_name.ilike.${pattern},username.ilike.${pattern},user.email.ilike.${pattern},user.full_name.ilike.${pattern},user.username.ilike.${pattern}`,
     );
   }
 
@@ -83,7 +83,7 @@ export async function GET(req: NextRequest, context: RouteContext) {
     return {
       index: offset + idx + 1,
       recipientId: r.id,
-      userId: r.user_id ?? r.id,
+      userId: r.user_id ?? null,
       email: user?.email ?? r.recipient_email ?? "",
       fullName: user?.full_name ?? r.full_name ?? "",
       username: user?.username ?? r.username ?? "",
