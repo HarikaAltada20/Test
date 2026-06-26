@@ -4480,28 +4480,17 @@ export default function ContestDetailClient({
       const mvKey = milestoneMvCreatorIdKey(group?.creator?.id);
       if (currentContest?.contest_type === "milestone") {
         const row = milestoneReelsBonusByCreator.get(mvKey);
-        totalBonusExpected +=
-          (Number(row?.viewsExpectedCents ?? 0) || 0) +
-          (Number(row?.expectedCents ?? 0) || 0);
+        const viewsExpected = Number(row?.viewsExpectedCents ?? 0) || 0;
+        const reelsExpected = Number(row?.expectedCents ?? 0) || 0;
+        totalBonusExpected += viewsExpected + reelsExpected;
         totalBonusGranted +=
           (Number(row?.viewsPaidCents ?? 0) || 0) +
           (Number(row?.paidCents ?? 0) || 0);
+        totalMostVerifiedViewsBonusExpected += viewsExpected;
+        totalMostVerifiedReelsBonusExpected += reelsExpected;
       } else {
         totalBonusExpected += Number(group.bonus?.expected ?? 0);
         totalBonusGranted += Number(group.bonus?.granted ?? 0);
-      }
-
-      if (mvKey && milestoneReelsBonusByCreator) {
-        const row = milestoneReelsBonusByCreator.get(mvKey);
-        if (row) {
-          totalMostVerifiedViewsBonusExpected += Number(
-            row.viewsExpectedCents || 0,
-          );
-          totalMostVerifiedReelsBonusExpected += Number(row.expectedCents || 0);
-          totalBonusExpected +=
-            Number(row.viewsExpectedCents || 0) +
-            Number(row.expectedCents || 0);
-        }
       }
     });
     return {

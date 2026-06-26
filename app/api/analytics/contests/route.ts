@@ -1,6 +1,11 @@
 import { createClient } from "@/utils/supabase/server";
 import { NextRequest, NextResponse } from "next/server";
 import { getPoolBudgetCentsFromDetails } from "@/lib/contest-type";
+import {
+  mapTwitterTweetsToBudgetSubmissions,
+  resolveBudgetTileMetrics,
+  type BudgetTileSubmission,
+} from "@/lib/contest-budget-tile-metrics";
 
 export async function GET(request: NextRequest) {
   try {
@@ -209,7 +214,8 @@ export async function GET(request: NextRequest) {
           live_submission_count,
           post_contest_status,
           moderation_status,
-          thumbnail_url
+          thumbnail_url,
+          max_earnings_per_creator
         `,
         )
         .eq("advertiser_id", user.id)
@@ -305,7 +311,7 @@ export async function GET(request: NextRequest) {
           let pageQuery = supabase
             .from("submissions")
             .select(
-              "id, views, created_at, platform, contest_id, other_stats, status",
+              "id, views, created_at, platform, contest_id, other_stats, status, creator_id, paid, earnings, bonus_paid, bonus_amount, paid_at",
             )
             .in("contest_id", contestIdsToFetch)
             .range(from, to)
@@ -334,11 +340,12 @@ export async function GET(request: NextRequest) {
       const twitterRepliesByContest: Record<string, number> = {};
       const twitterRetweetsByContest: Record<string, number> = {};
       const twitterQuoteRepostsByContest: Record<string, number> = {};
+      const twitterTweetsByContest: Record<string, ReturnType<typeof mapTwitterTweetsToBudgetSubmissions>> = {};
       if (twitterContestIds.length > 0) {
         let tweetsQuery = supabase
           .from("twitter_campaign_tweets")
           .select(
-            "contest_id, impressions, likes, replies, retweets, quote_reposts",
+            "id, contest_id, creator_id, tweet_created_at, created_at, moderation_status, points, manual_points_adjustment, earnings, impressions, likes, replies, retweets, quote_reposts, is_eligible, deleted_at",
           )
           .in("contest_id", twitterContestIds);
         if (notRejected) {
@@ -357,12 +364,22 @@ export async function GET(request: NextRequest) {
         const list = tweets || [];
         list.forEach(
           (row: {
+            id?: string;
             contest_id?: string;
+            creator_id?: string | null;
+            tweet_created_at?: string | null;
+            created_at?: string | null;
+            moderation_status?: string | null;
+            points?: number | null;
+            manual_points_adjustment?: number | null;
+            earnings?: number | null;
             impressions?: number;
             likes?: number;
             replies?: number;
             retweets?: number;
             quote_reposts?: number;
+            is_eligible?: boolean | null;
+            deleted_at?: string | null;
           }) => {
             const cid = row.contest_id;
             if (cid) {
@@ -382,6 +399,27 @@ export async function GET(request: NextRequest) {
               twitterQuoteRepostsByContest[cid] =
                 (twitterQuoteRepostsByContest[cid] || 0) +
                 (Number(row.quote_reposts) || 0);
+
+              if (!twitterTweetsByContest[cid]) {
+                twitterTweetsByContest[cid] = [];
+              }
+              twitterTweetsByContest[cid].push(
+                ...mapTwitterTweetsToBudgetSubmissions([
+                  {
+                    id: row.id || `tweet-${twitterTweetsByContest[cid].length}`,
+                    creator_id: row.creator_id,
+                    tweet_created_at: row.tweet_created_at,
+                    created_at: row.created_at,
+                    moderation_status: row.moderation_status,
+                    points: row.points,
+                    manual_points_adjustment: row.manual_points_adjustment,
+                    earnings: row.earnings,
+                    impressions: row.impressions,
+                    is_eligible: row.is_eligible,
+                    deleted_at: row.deleted_at,
+                  },
+                ]),
+              );
             }
           },
         );
@@ -401,9 +439,12 @@ export async function GET(request: NextRequest) {
             status?: string;
           }[];
 
+          let budgetSubmissions: BudgetTileSubmission[];
+
           if (isTwitter) {
             totalSubmissions = twitterCountByContest[contest.id] || 0;
             totalViews = twitterViewsByContest[contest.id] || 0;
+            budgetSubmissions = twitterTweetsByContest[contest.id] || [];
             const twitterMetrics =
               totalSubmissions > 0
                 ? {
@@ -433,7 +474,7 @@ export async function GET(request: NextRequest) {
               allSubmissions?.filter((s) => s.contest_id === contest.id) || [];
             totalSubmissions = subs.length;
             totalViews = subs.reduce((sum, s) => sum + (s.views || 0), 0);
-            submissions = subs.map(
+            budgetSubmissions = subs.map(
               (s: {
                 id: string;
                 views?: number;
@@ -441,34 +482,51 @@ export async function GET(request: NextRequest) {
                 platform?: string;
                 other_stats?: unknown;
                 status?: string;
+                creator_id?: string;
+                paid?: boolean;
+                earnings?: number | null;
+                bonus_paid?: boolean;
+                bonus_amount?: number | null;
+                paid_at?: string | null;
               }) => ({
                 id: s.id,
+                creator_id: s.creator_id || "",
                 views: s.views || 0,
-                created_at: s.created_at,
+                created_at: s.created_at || new Date(0).toISOString(),
                 platform: s.platform,
                 other_stats: s.other_stats,
                 status: s.status,
+                paid: s.paid ?? false,
+                earnings: s.earnings ?? null,
+                bonus_paid: s.bonus_paid ?? false,
+                bonus_amount: s.bonus_amount ?? undefined,
+                paid_at: s.paid_at,
               }),
             );
+            submissions = budgetSubmissions.map((s) => ({
+              id: s.id || "",
+              views: s.views || 0,
+              created_at: s.created_at,
+              platform: s.platform,
+              other_stats: s.other_stats,
+              status: s.status,
+            }));
           }
 
-          let totalSpent = 0;
-          const details = contest.contest_based_details;
-          if (
-            contest.contest_type === "leaderboard" &&
-            details?.leaderboard_contest?.total_prize
-          ) {
-            totalSpent = details.leaderboard_contest.total_prize;
-          } else if (
-            contest.contest_type === "cpm" &&
-            details?.cpm_contest?.total_budget
-          ) {
-            totalSpent = details.cpm_contest.total_budget;
-          } else if (contest.contest_type === "milestone") {
-            totalSpent = getPoolBudgetCentsFromDetails("milestone", details);
-          } else if (contest.contest_type === "dual_rewards") {
-            totalSpent = getPoolBudgetCentsFromDetails("dual_rewards", details);
-          }
+          const budgetTile = resolveBudgetTileMetrics(
+            {
+              contest_type: contest.contest_type,
+              post_contest_status: contest.post_contest_status,
+              max_earnings_per_creator: contest.max_earnings_per_creator,
+              contest_based_details: contest.contest_based_details as Record<
+                string,
+                unknown
+              > | null,
+            },
+            budgetSubmissions,
+          );
+
+          const totalSpent = budgetTile?.numeratorCents ?? 0;
 
           const avgViewsPerSubmission =
             totalSubmissions > 0 ? totalViews / totalSubmissions : 0;
@@ -482,6 +540,7 @@ export async function GET(request: NextRequest) {
             ...contest,
             submissions,
             live_submission_count: totalSubmissions,
+            budgetTile,
             metrics: {
               totalViews,
               totalSubmissions,

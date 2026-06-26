@@ -33,6 +33,12 @@ interface Contest {
   post_contest_status?: string;
   moderation_status?: string;
   contest_based_details?: any;
+  budgetTile?: {
+    mode: "filled" | "paid";
+    numeratorCents: number;
+    denominatorCents: number;
+    label: string;
+  } | null;
   submissions?: Array<{
     id: string;
     views: number;
@@ -135,29 +141,7 @@ export default function ContestAnalytics({
     );
 
     const totalSpent = filteredContests.reduce((sum, contest) => {
-      const details = contest.contest_based_details;
-      if (
-        contest.contest_type === "leaderboard" &&
-        details?.leaderboard_contest?.total_prize
-      ) {
-        return sum + details.leaderboard_contest.total_prize;
-      } else if (
-        contest.contest_type === "cpm" &&
-        details?.cpm_contest?.total_budget
-      ) {
-        return sum + details.cpm_contest.total_budget;
-      } else if (
-        contest.contest_type === "milestone" &&
-        (details?.milestone_contest?.budget_spent ||
-          details?.milestone_contest?.budget_spent_cents)
-      ) {
-        return (
-          sum +
-          (details.milestone_contest.budget_spent ||
-            details.milestone_contest.budget_spent_cents)
-        );
-      }
-      return sum;
+      return sum + (contest.budgetTile?.numeratorCents ?? 0);
     }, 0);
 
     const avgCostPerView = totalViews > 0 ? totalSpent / totalViews : 0;
