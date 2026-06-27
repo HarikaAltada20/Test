@@ -1,27 +1,31 @@
 /**
  * End-to-end simulation of the nightly YouTube metrics cron.
  *
- * Use this AFTER you restore full analytics on the target contest (admin refresh).
- * Compares submission state before vs after a real local cron run.
+ * Invokes the same route Vercel runs at 1 AM: GET /api/cron/update-youtube-metrics
  *
  * Workflow:
- *   1. Restore metrics on the contest (admin UI or refresh-detailed-analytics API)
- *   2. Terminal A: npm run dev
- *   3. Terminal B:
- *        npm run simulate:youtube-cron -- --dry-run          # safe: no DB writes
- *        npm run simulate:youtube-cron -- --confirm           # full nightly cron simulation
+ *   1. Restore detailed analytics on the target contest (admin UI or refresh-detailed-analytics)
+ *   2. npm run simulate:youtube-cron -- --baseline --contest-id=<uuid>
+ *   3. npm run simulate:youtube-cron -- --confirm --contest-id=<uuid> --contest-only
+ *   4. After code fix, repeat step 3 and expect detailed keys lost: 0
  *
  * Options:
- *   --contest-id=<uuid>   Contest to watch (default: Finance with Sharan)
+ *   --contest-id=<uuid>   Contest to watch in before/after diff
+ *   --contest-only        Pass ?contestId= to cron (only update that contest; recommended)
  *   --http                Call cron via HTTP (needs `npm run dev`)
- *   --invoke-local        Call route handler directly (default, no dev server)
- *   --base-url=<url>      Dev server for --http (default: http://localhost:3000)
+ *   --invoke-local        Call route handler directly (default)
  *   --dry-run             Call cron with ?dryRun=1 only (no writes)
+ *   --baseline            Snapshot only, no cron
  */
 
 import { config } from "dotenv";
-import { createClient } from "@supabase/supabase-js";
+import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { getExistingYouTubeStats } from "../lib/youtube-other-stats";
+import {
+  detailedAnalyticsKeysPresent,
+  isYoutubeStatsBasicOnly,
+  YOUTUBE_DETAILED_ANALYTICS_KEYS,
+} from "../lib/youtube-detailed-stats-keys";
 import { writeFileSync, mkdirSync } from "fs";
 import { join } from "path";
 
@@ -30,14 +34,11 @@ config();
 
 const DEFAULT_CONTEST_ID = "58e8c4be-303c-46a9-8fa8-22288d9e6016";
 
-const RICH_KEYS = [
-  "traffic_sources",
-  "demographics",
-  "watch_time",
-  "average_view_duration",
-  "average_view_percentage",
-  "core",
-] as const;
+type ContestRow = {
+  id: string;
+  title: string | null;
+  post_contest_status: string | null;
+};
 
 type SubmissionRow = {
   id: string;
@@ -50,7 +51,7 @@ type SubmissionSnapshot = {
   id: string;
   views: number | null;
   updated_at: string | null;
-  richKeys: string[];
+  detailedKeys: string[];
   youtubeStats: Record<string, unknown>;
 };
 
@@ -62,7 +63,7 @@ type ContestSnapshot = {
   submissions: SubmissionSnapshot[];
   summary: {
     total: number;
-    withRichAnalytics: number;
+    withDetailedAnalytics: number;
     basicOnly: number;
   };
 };
@@ -75,6 +76,7 @@ function parseArgs() {
   let confirm = false;
   let baselineOnly = false;
   let useHttp = false;
+  let contestOnly = false;
 
   for (const arg of args) {
     if (arg === "--dry-run") dryRunOnly = true;
@@ -82,44 +84,36 @@ function parseArgs() {
     else if (arg === "--baseline") baselineOnly = true;
     else if (arg === "--http") useHttp = true;
     else if (arg === "--invoke-local") useHttp = false;
+    else if (arg === "--contest-only") contestOnly = true;
     else if (arg.startsWith("--contest-id="))
       contestId = arg.slice("--contest-id=".length);
     else if (arg.startsWith("--base-url="))
       baseUrl = arg.slice("--base-url=".length).replace(/\/$/, "");
   }
 
-  return { contestId, baseUrl, dryRunOnly, confirm, baselineOnly, useHttp };
-}
-
-function richKeysPresent(stats: Record<string, unknown>): string[] {
-  return RICH_KEYS.filter((k) => stats[k] != null);
-}
-
-function isBasicOnly(stats: Record<string, unknown>): boolean {
-  const keys = Object.keys(stats);
-  const rich = richKeysPresent(stats);
-  return (
-    keys.length > 0 &&
-    rich.length === 0 &&
-    keys.every((k) =>
-      ["views", "likes", "comments", "analytics_needs_reauth", "last_basic_update"].includes(
-        k,
-      ),
-    )
-  );
+  return {
+    contestId,
+    baseUrl,
+    dryRunOnly,
+    confirm,
+    baselineOnly,
+    useHttp,
+    contestOnly,
+  };
 }
 
 async function captureContestSnapshot(
-  supabase: ReturnType<typeof createClient>,
+  supabase: SupabaseClient,
   contestId: string,
 ): Promise<ContestSnapshot> {
-  const { data: contest, error: contestError } = await supabase
+  const { data: contestData, error: contestError } = await supabase
     .from("contests")
     .select("id, title, post_contest_status")
     .eq("id", contestId)
     .maybeSingle();
 
   if (contestError) throw new Error(contestError.message);
+  const contest = contestData as ContestRow | null;
   if (!contest) throw new Error(`Contest ${contestId} not found`);
 
   const { data: rows, error: subError } = await supabase
@@ -138,13 +132,17 @@ async function captureContestSnapshot(
       id: r.id,
       views: r.views,
       updated_at: r.updated_at,
-      richKeys: richKeysPresent(yt),
+      detailedKeys: detailedAnalyticsKeysPresent(yt),
       youtubeStats: yt,
     };
   });
 
-  const withRichAnalytics = submissions.filter((s) => s.richKeys.length > 0).length;
-  const basicOnly = submissions.filter((s) => isBasicOnly(s.youtubeStats)).length;
+  const withDetailedAnalytics = submissions.filter(
+    (s) => s.detailedKeys.length > 0,
+  ).length;
+  const basicOnly = submissions.filter((s) =>
+    isYoutubeStatsBasicOnly(s.youtubeStats),
+  ).length;
 
   return {
     capturedAt: new Date().toISOString(),
@@ -154,7 +152,7 @@ async function captureContestSnapshot(
     submissions,
     summary: {
       total: submissions.length,
-      withRichAnalytics,
+      withDetailedAnalytics,
       basicOnly,
     },
   };
@@ -171,11 +169,22 @@ function saveSnapshot(label: string, snapshot: ContestSnapshot) {
   return file;
 }
 
+function buildCronPath(
+  dryRun: boolean,
+  contestOnly: boolean,
+  watchContestId: string,
+): string {
+  const params = new URLSearchParams();
+  if (dryRun) params.set("dryRun", "1");
+  if (contestOnly) params.set("contestId", watchContestId);
+  const qs = params.toString();
+  return `/api/cron/update-youtube-metrics${qs ? `?${qs}` : ""}`;
+}
+
 async function invokeCronLocal(
   secret: string,
-  dryRun: boolean,
+  path: string,
 ): Promise<Record<string, unknown>> {
-  const path = `/api/cron/update-youtube-metrics${dryRun ? "?dryRun=1" : ""}`;
   console.log(`\nInvoking route handler directly: GET ${path}`);
 
   const { GET } = await import("../app/api/cron/update-youtube-metrics/route");
@@ -183,7 +192,10 @@ async function invokeCronLocal(
     headers: { Authorization: `Bearer ${secret}` },
   });
   const response = await GET(request);
-  const body = (await response.json().catch(() => ({}))) as Record<string, unknown>;
+  const body = (await response.json().catch(() => ({}))) as Record<
+    string,
+    unknown
+  >;
   console.log(`Cron response (${response.status}):`, JSON.stringify(body, null, 2));
   if (!response.ok) {
     throw new Error(`Cron failed (${response.status}): ${JSON.stringify(body)}`);
@@ -194,13 +206,13 @@ async function invokeCronLocal(
 async function callCron(
   baseUrl: string,
   secret: string,
-  dryRun: boolean,
+  path: string,
 ): Promise<Record<string, unknown>> {
-  const url = `${baseUrl}/api/cron/update-youtube-metrics${dryRun ? "?dryRun=1" : ""}`;
+  const url = `${baseUrl}${path}`;
   console.log(`\nCalling cron: ${url}`);
 
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 120_000);
+  const timeout = setTimeout(() => controller.abort(), 300_000);
   try {
     const res = await fetch(url, {
       headers: { Authorization: `Bearer ${secret}` },
@@ -220,15 +232,17 @@ async function callCron(
 type CompareResult = {
   updatedCount: number;
   viewsChangedCount: number;
-  richKeysLostCount: number;
-  richKeysGainedCount: number;
+  detailedKeysLostCount: number;
+  detailedKeysGainedCount: number;
+  becameBasicOnlyCount: number;
   unchangedCount: number;
   changedSamples: Array<{
     id: string;
     beforeUpdatedAt: string | null;
     afterUpdatedAt: string | null;
-    richKeysBefore: string[];
-    richKeysAfter: string[];
+    detailedKeysBefore: string[];
+    detailedKeysAfter: string[];
+    lostKeys: string[];
     viewsBefore: number | null;
     viewsAfter: number | null;
   }>;
@@ -242,8 +256,9 @@ function compareSnapshots(
   const result: CompareResult = {
     updatedCount: 0,
     viewsChangedCount: 0,
-    richKeysLostCount: 0,
-    richKeysGainedCount: 0,
+    detailedKeysLostCount: 0,
+    detailedKeysGainedCount: 0,
+    becameBasicOnlyCount: 0,
     unchangedCount: 0,
     changedSamples: [],
   };
@@ -254,26 +269,37 @@ function compareSnapshots(
 
     const updatedAtChanged = beforeSub.updated_at !== afterSub.updated_at;
     const viewsChanged = beforeSub.views !== afterSub.views;
-    const richBefore = new Set(beforeSub.richKeys);
-    const richAfter = new Set(afterSub.richKeys);
-    const lostRich = beforeSub.richKeys.filter((k) => !richAfter.has(k));
-    const gainedRich = afterSub.richKeys.filter((k) => !richBefore.has(k));
+    const detailedBefore = new Set(beforeSub.detailedKeys);
+    const detailedAfter = new Set(afterSub.detailedKeys);
+    const lostKeys = beforeSub.detailedKeys.filter((k) => !detailedAfter.has(k));
+    const gainedKeys = afterSub.detailedKeys.filter((k) => !detailedBefore.has(k));
 
     if (updatedAtChanged) result.updatedCount++;
     else result.unchangedCount++;
 
     if (viewsChanged) result.viewsChangedCount++;
-    if (lostRich.length) result.richKeysLostCount++;
-    if (gainedRich.length) result.richKeysGainedCount++;
+    if (lostKeys.length) result.detailedKeysLostCount++;
+    if (gainedKeys.length) result.detailedKeysGainedCount++;
 
-    if (updatedAtChanged || viewsChanged || lostRich.length || gainedRich.length) {
-      if (result.changedSamples.length < 8) {
+    const wasBasicOnly = isYoutubeStatsBasicOnly(beforeSub.youtubeStats);
+    const isBasicOnlyNow = isYoutubeStatsBasicOnly(afterSub.youtubeStats);
+    if (!wasBasicOnly && isBasicOnlyNow) result.becameBasicOnlyCount++;
+
+    if (
+      updatedAtChanged ||
+      viewsChanged ||
+      lostKeys.length ||
+      gainedKeys.length ||
+      (!wasBasicOnly && isBasicOnlyNow)
+    ) {
+      if (result.changedSamples.length < 10) {
         result.changedSamples.push({
           id: afterSub.id,
           beforeUpdatedAt: beforeSub.updated_at,
           afterUpdatedAt: afterSub.updated_at,
-          richKeysBefore: beforeSub.richKeys,
-          richKeysAfter: afterSub.richKeys,
+          detailedKeysBefore: beforeSub.detailedKeys,
+          detailedKeysAfter: afterSub.detailedKeys,
+          lostKeys,
           viewsBefore: beforeSub.views,
           viewsAfter: afterSub.views,
         });
@@ -289,8 +315,10 @@ function printSnapshotSummary(label: string, snap: ContestSnapshot) {
   console.log(`Contest: ${snap.contestTitle}`);
   console.log(`post_contest_status: ${snap.postContestStatus ?? "(null)"}`);
   console.log(`Submissions: ${snap.summary.total}`);
-  console.log(`  with rich analytics: ${snap.summary.withRichAnalytics}`);
-  console.log(`  basic-only: ${snap.summary.basicOnly}`);
+  console.log(
+    `  with detailed analytics (${YOUTUBE_DETAILED_ANALYTICS_KEYS.length} tracked keys): ${snap.summary.withDetailedAnalytics}`,
+  );
+  console.log(`  basic-only (likely stripped): ${snap.summary.basicOnly}`);
 }
 
 function printVerdict(
@@ -309,10 +337,12 @@ function printVerdict(
     snap.postContestStatus === "payouts_processed";
 
   if (mode === "baseline") {
-    console.log("Baseline captured only. Restore analytics if needed, then re-run with --dry-run or --confirm.");
-    if (snap.summary.withRichAnalytics === 0) {
+    console.log(
+      "Baseline captured only. Run with --confirm --contest-only to invoke the real cron route.",
+    );
+    if (snap.summary.withDetailedAnalytics === 0) {
       console.log(
-        "\n⚠️  No submissions have rich analytics yet. Restore first via:",
+        "\n⚠️  No submissions have detailed analytics yet. Restore first via:",
       );
       console.log(
         '  POST /api/youtube/refresh-detailed-analytics  { "type": "all", "contestId": "..." }',
@@ -325,41 +355,34 @@ function printVerdict(
     const activeIds = (cronBody?.activeContestIds as string[] | undefined) ?? [];
     const included = activeIds.includes(snap.contestId);
     if (isLocked && !included) {
-      console.log("✅ PASS (dry-run): in_review contest is NOT in cron activeContestIds.");
+      console.log("✅ PASS (dry-run): locked contest is NOT in activeContestIds.");
     } else if (isLocked && included) {
-      console.log("❌ FAIL (dry-run): in_review contest WOULD be refreshed by cron.");
+      console.log("❌ FAIL (dry-run): locked contest WOULD be refreshed by cron.");
     } else if (!isLocked && included) {
-      console.log("ℹ️  Contest is eligible; it appears in activeContestIds (expected if not locked).");
+      console.log("ℹ️  Contest is eligible and appears in activeContestIds.");
     }
-    console.log("\nDry-run does not write DB. Run with --confirm after rich analytics are restored.");
+    console.log(
+      `\nTracked detailed keys: ${YOUTUBE_DETAILED_ANALYTICS_KEYS.join(", ")}`,
+    );
     return;
   }
 
   if (!compare) return;
 
-  if (isLocked) {
-    if (compare.updatedCount === 0) {
-      console.log(
-        "✅ PASS (lock): Nightly cron did NOT update any submissions on this in_review contest.",
-      );
-    } else {
-      console.log(
-        `❌ FAIL (lock): Cron updated ${compare.updatedCount} submission(s) on in_review contest.`,
-      );
-    }
-  }
-
-  if (compare.richKeysLostCount > 0) {
+  if (compare.detailedKeysLostCount > 0 || compare.becameBasicOnlyCount > 0) {
     console.log(
-      `❌ FAIL (preserve): ${compare.richKeysLostCount} submission(s) lost rich analytics keys.`,
+      `❌ FAIL (preserve): ${compare.detailedKeysLostCount} submission(s) lost detailed keys; ${compare.becameBasicOnlyCount} became basic-only.`,
     );
-  } else if (compare.updatedCount > 0 && snap.summary.withRichAnalytics > 0) {
+  } else if (compare.updatedCount > 0 && snap.summary.withDetailedAnalytics > 0) {
     console.log(
-      "✅ PASS (preserve): Submissions were updated but rich analytics keys were not stripped.",
+      "✅ PASS (preserve): Cron updated submissions without stripping detailed analytics.",
     );
-  } else if (compare.updatedCount === 0 && snap.summary.withRichAnalytics > 0) {
+  } else if (
+    compare.updatedCount === 0 &&
+    snap.summary.withDetailedAnalytics > 0
+  ) {
     console.log(
-      "✅ PASS (preserve): Rich analytics unchanged (no cron touch on this contest).",
+      "✅ PASS (preserve): Detailed analytics unchanged (cron did not touch this contest).",
     );
   }
 
@@ -367,15 +390,22 @@ function printVerdict(
     console.log("\nChanged submission samples:");
     for (const s of compare.changedSamples) {
       console.log(
-        `  ${s.id}\n    updated_at: ${s.beforeUpdatedAt} → ${s.afterUpdatedAt}\n    rich keys: [${s.richKeysBefore.join(", ")}] → [${s.richKeysAfter.join(", ")}]\n    views: ${s.viewsBefore} → ${s.viewsAfter}`,
+        `  ${s.id}\n    updated_at: ${s.beforeUpdatedAt} → ${s.afterUpdatedAt}\n    detailed keys: [${s.detailedKeysBefore.join(", ")}] → [${s.detailedKeysAfter.join(", ")}]${s.lostKeys.length ? `\n    LOST: [${s.lostKeys.join(", ")}]` : ""}\n    views: ${s.viewsBefore} → ${s.viewsAfter}`,
       );
     }
   }
 }
 
 async function main() {
-  const { contestId, baseUrl, dryRunOnly, confirm, baselineOnly, useHttp } =
-    parseArgs();
+  const {
+    contestId,
+    baseUrl,
+    dryRunOnly,
+    confirm,
+    baselineOnly,
+    useHttp,
+    contestOnly,
+  } = parseArgs();
 
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -385,9 +415,16 @@ async function main() {
     process.exit(1);
   }
 
+  const cronPath = buildCronPath(dryRunOnly, contestOnly, contestId);
+
   console.log("=== YouTube nightly cron simulation ===");
   console.log(`Watch contest: ${contestId}`);
-  console.log(`Cron mode: ${useHttp ? `HTTP → ${baseUrl}` : "direct route invoke (same code as Vercel)"}`);
+  console.log(
+    `Cron invoke: GET ${cronPath}${contestOnly ? " (contest-scoped — same as ?contestId=)" : " (FULL nightly — all eligible contests)"}`,
+  );
+  console.log(
+    `Mode: ${useHttp ? `HTTP → ${baseUrl}` : "direct route import (identical handler code)"}`,
+  );
 
   const supabase = createClient(url, key);
 
@@ -408,18 +445,28 @@ async function main() {
 
   if (!dryRunOnly && !confirm) {
     console.error(
-      "\nRefusing to run REAL cron without --confirm (it updates eligible contests in your DB).",
+      "\nRefusing to run REAL cron without --confirm (writes to DB).",
     );
-    console.error("  Safe check:  npm run simulate:youtube-cron -- --dry-run");
-    console.error("  Full test:   npm run simulate:youtube-cron -- --confirm");
+    console.error(
+      "  Safe:   npm run simulate:youtube-cron -- --dry-run --contest-id=<id> --contest-only",
+    );
+    console.error(
+      "  Full:   npm run simulate:youtube-cron -- --confirm --contest-id=<id> --contest-only",
+    );
     process.exit(1);
+  }
+
+  if (!dryRunOnly && !contestOnly) {
+    console.warn(
+      "\n⚠️  Running FULL nightly cron (all eligible YouTube contests). Prefer --contest-only for local tests.\n",
+    );
   }
 
   let cronBody: Record<string, unknown>;
   try {
     cronBody = useHttp
-      ? await callCron(baseUrl, cronSecret, dryRunOnly)
-      : await invokeCronLocal(cronSecret, dryRunOnly);
+      ? await callCron(baseUrl, cronSecret, cronPath)
+      : await invokeCronLocal(cronSecret, cronPath);
   } catch (e) {
     if (useHttp) {
       console.error(
@@ -448,9 +495,12 @@ async function main() {
   console.log("\n--- Diff on watched contest ---");
   console.log(`  submissions unchanged (updated_at): ${compare.unchangedCount}`);
   console.log(`  submissions updated (updated_at):   ${compare.updatedCount}`);
-  console.log(`  views changed:                    ${compare.viewsChangedCount}`);
-  console.log(`  rich keys lost:                   ${compare.richKeysLostCount}`);
-  console.log(`  rich keys gained:                 ${compare.richKeysGainedCount}`);
+  console.log(`  views changed:                      ${compare.viewsChangedCount}`);
+  console.log(`  detailed keys lost (submissions):   ${compare.detailedKeysLostCount}`);
+  console.log(`  became basic-only:                  ${compare.becameBasicOnlyCount}`);
+  console.log(
+    `  with detailed analytics:            ${before.summary.withDetailedAnalytics} → ${after.summary.withDetailedAnalytics}`,
+  );
 
   printVerdict(before, compare, cronBody, "full");
 }
