@@ -2,7 +2,7 @@
   "crons": [
     {
       "path": "/api/cron/update-youtube-metrics",
-      "schedule": "07 14 * * *"
+      "schedule": "15 14 * * *"
     },
     {
       "path": "/api/cron/trigger-instagram-refresh",
