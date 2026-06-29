@@ -28,6 +28,7 @@ import { Filter, Layers, Plus, Search, Trash2, X } from "lucide-react";
 import { PaginationControls } from "@/components/ui/pagination-controls";
 import { useToast } from "@/hooks/use-toast";
 import { AddLeadsToCampaignModal } from "../AddLeadsToCampaignModal";
+import { CAMPAIGN_RECIPIENTS_CHANGED_EVENT } from "@/lib/admin-email/campaign-recipients-events";
 import { enterEmailLeadSelectMode } from "@/lib/admin-email/enter-lead-select-mode";
 
 const DEFAULT_PAGE_SIZE = 50;
@@ -239,6 +240,19 @@ export function LeadTab({
   useEffect(() => {
     loadRecipients();
   }, [loadRecipients]);
+
+  useEffect(() => {
+    const handler = (event: Event) => {
+      const detail = (event as CustomEvent<{ campaignId?: string }>).detail;
+      if (detail?.campaignId !== campaignId) return;
+      void loadRecipients();
+      void loadAttachedBundles();
+      onRecipientsChange?.();
+    };
+    window.addEventListener(CAMPAIGN_RECIPIENTS_CHANGED_EVENT, handler);
+    return () =>
+      window.removeEventListener(CAMPAIGN_RECIPIENTS_CHANGED_EVENT, handler);
+  }, [campaignId, loadRecipients, onRecipientsChange]);
 
   useEffect(() => {
     if (campaignStatus !== "active") return;

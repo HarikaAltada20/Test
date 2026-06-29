@@ -23,6 +23,7 @@ import {
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
+import { notifyCampaignRecipientsChanged } from "@/lib/admin-email/campaign-recipients-events";
 import { buildLeadImportCsvTemplate } from "@/lib/admin-email/lead-bundles";
 import type { NotificationSelectionState } from "./SendNotificationModal";
 import {
@@ -105,6 +106,12 @@ export function AddLeadsToCampaignModal({
   );
   const isBundleVariant = modalVariant === "bundle";
   const { toast } = useToast();
+
+  const notifyCampaignSuccess = (campaignId: string) => {
+    notifyCampaignRecipientsChanged(campaignId);
+    onSuccess?.(campaignId);
+  };
+
   const [activeTab, setActiveTab] = useState<ModalTab>("select");
   const [bundles, setBundles] = useState<BundleItem[]>([]);
   const [bundlesLoading, setBundlesLoading] = useState(false);
@@ -372,7 +379,7 @@ export function AddLeadsToCampaignModal({
           description: `Added ${data.attachedCount} lead(s) from ${data.bundleCount} bundle(s) to the campaign.`,
         });
         onOpenChange(false);
-        onSuccess?.(presetCampaignId);
+        notifyCampaignSuccess(presetCampaignId);
         return;
       }
 
@@ -550,7 +557,7 @@ export function AddLeadsToCampaignModal({
                 : "Lead is already in this campaign.",
           });
           onOpenChange(false);
-          onSuccess?.(presetCampaignId);
+          notifyCampaignSuccess(presetCampaignId);
           return;
         } catch (e) {
           toast({
@@ -642,7 +649,7 @@ export function AddLeadsToCampaignModal({
             description: `Imported ${importedCount} lead(s) and added ${attachData?.attachedCount ?? importedCount} to the campaign.`,
           });
           onOpenChange(false);
-          onSuccess?.(presetCampaignId);
+          notifyCampaignSuccess(presetCampaignId);
           return;
         } catch (e) {
           toast({
