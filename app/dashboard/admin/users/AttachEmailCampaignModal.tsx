@@ -76,9 +76,10 @@ async function loadProjects(): Promise<EmailProject[]> {
     throw new Error(data.error || "Failed to load projects");
   }
 
-  cachedProjects = data.projects ?? [];
+  const projects: EmailProject[] = data.projects ?? [];
+  cachedProjects = projects;
   projectsCacheAt = now;
-  return cachedProjects;
+  return projects;
 }
 
 export function AttachEmailCampaignModal({

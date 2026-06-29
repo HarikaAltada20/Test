@@ -16,13 +16,14 @@ import { Textarea } from "@/components/ui/textarea";
 import { EnhancedTabs } from "@/components/ui/enhancedTabs";
 import { cn } from "@/lib/utils";
 import { Loader2, Plus } from "lucide-react";
-import {
-  EmailProjectCardsSkeleton,
-} from "./EmailSkeletons";
+import { EmailProjectCardsSkeleton } from "./EmailSkeletons";
 import { CreateEmailProjectForm } from "./CreateEmailProjectForm";
 import { CreateEmailCampaignModal } from "./CreateEmailCampaignModal";
 import { EmailProjectConfigWizard } from "./EmailProjectConfigWizard";
-import { EmailProjectCard, type EmailProjectCardData } from "./EmailProjectCard";
+import {
+  EmailProjectCard,
+  type EmailProjectCardData,
+} from "./EmailProjectCard";
 import { EmailProjectDetail } from "./EmailProjectDetail";
 import { EmailSchedulingDialog } from "./EmailSchedulingDialog";
 import { SenderEmailManagementDialog } from "./SenderEmailManagementDialog";
@@ -65,7 +66,9 @@ export function AdminEmailView({
     }
     return "projects";
   });
-  const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
+  const [selectedProjectId, setSelectedProjectId] = useState<string | null>(
+    null,
+  );
   const [selectedCampaignId, setSelectedCampaignId] = useState<string | null>(
     highlightCampaignId ?? null,
   );
@@ -170,34 +173,41 @@ export function AdminEmailView({
     setCampaignsRefreshKey((k) => k + 1);
   }, []);
 
-  const loadData = useCallback(async (options?: { silent?: boolean }) => {
-    const silent = options?.silent ?? hasLoadedOnceRef.current;
+  const loadData = useCallback(
+    async (options?: { silent?: boolean }) => {
+      const silent = options?.silent ?? hasLoadedOnceRef.current;
 
-    const fetchProjects = async () => {
-      if (!silent) setProjectsLoading(true);
-      try {
-        const res = await fetch("/api/admin/email-projects");
-        const data = await res.json();
-        if (res.ok) setProjects(data.projects ?? []);
-      } finally {
-        if (!silent) setProjectsLoading(false);
-      }
-    };
+      const fetchProjects = async () => {
+        if (!silent) setProjectsLoading(true);
+        try {
+          const res = await fetch("/api/admin/email-projects");
+          const data = await res.json();
+          if (res.ok) setProjects(data.projects ?? []);
+        } finally {
+          if (!silent) setProjectsLoading(false);
+        }
+      };
 
-    const fetchUniboxCampaigns = async () => {
-      try {
-        const res = await fetch("/api/admin/email-campaigns?minimal=1");
-        const data = await res.json();
-        if (res.ok) setUniboxCampaigns(data.campaigns ?? []);
-      } catch {
-        // ignore
-      }
-    };
+      const fetchUniboxCampaigns = async () => {
+        try {
+          const res = await fetch("/api/admin/email-campaigns?minimal=1");
+          const data = await res.json();
+          if (res.ok) setUniboxCampaigns(data.campaigns ?? []);
+        } catch {
+          // ignore
+        }
+      };
 
-    await Promise.all([fetchProjects(), fetchUniboxCampaigns(), loadUnreadCount()]);
-    refreshCampaignsList();
-    hasLoadedOnceRef.current = true;
-  }, [loadUnreadCount, refreshCampaignsList]);
+      await Promise.all([
+        fetchProjects(),
+        fetchUniboxCampaigns(),
+        loadUnreadCount(),
+      ]);
+      refreshCampaignsList();
+      hasLoadedOnceRef.current = true;
+    },
+    [loadUnreadCount, refreshCampaignsList],
+  );
 
   useEffect(() => {
     loadData();
@@ -287,7 +297,12 @@ export function AdminEmailView({
 
   if (selectedCampaignId) {
     return (
-      <Card className={cn("rounded-xl shadow", isDark ? "bg-[#170337]" : "bg-white")}>
+      <Card
+        className={cn(
+          "rounded-xl shadow",
+          isDark ? "bg-[#170337]" : "bg-white",
+        )}
+      >
         <CardContent className="p-6">
           <EmailCampaignDetail
             campaignId={selectedCampaignId}
@@ -303,10 +318,17 @@ export function AdminEmailView({
     return (
       <div className="space-y-4">
         <div>
-          <h2 className={cn("text-2xl font-bold", isDark ? "text-white" : "text-gray-900")}>
+          <h2
+            className={cn(
+              "text-2xl font-bold",
+              isDark ? "text-white" : "text-gray-900",
+            )}
+          >
             Projects
           </h2>
-          <p className="text-sm text-muted-foreground">Manage your marketing projects</p>
+          <p className="text-sm text-muted-foreground">
+            Manage your marketing projects
+          </p>
         </div>
         <CreateEmailProjectForm
           isDark={isDark}
@@ -373,31 +395,38 @@ export function AdminEmailView({
       <div
         className={cn(
           listTab === "unibox"
-            ? "flex flex-col min-h-0 h-[calc(100vh-5rem)]"
+            ? "flex flex-col min-h-[500px] h-[calc(100vh-11rem)] sm:h-[calc(100vh-8rem)] lg:h-[calc(100vh-5rem)]"
             : "space-y-6",
         )}
       >
-        {listTab !== "unibox" && listTab !== "warmup" && listTab !== "leads" && (
-          <div className="flex flex-wrap items-start justify-between gap-4">
-            <div>
-              <h2 className={cn("text-2xl font-bold", isDark ? "text-white" : "text-gray-900")}>
-                Projects
-              </h2>
-              <p className="text-sm text-muted-foreground">
-                Manage your marketing projects and campaigns
-              </p>
+        {listTab !== "unibox" &&
+          listTab !== "warmup" &&
+          listTab !== "leads" && (
+            <div className="flex flex-wrap items-start justify-between gap-4">
+              <div>
+                <h2
+                  className={cn(
+                    "text-2xl font-bold",
+                    isDark ? "text-white" : "text-gray-900",
+                  )}
+                >
+                  Projects
+                </h2>
+                <p className="text-sm text-muted-foreground">
+                  Manage your marketing projects and campaigns
+                </p>
+              </div>
+              {listTab === "projects" && (
+                <Button
+                  className="bg-purple-600 hover:bg-purple-700"
+                  onClick={() => setViewMode("create")}
+                >
+                  <Plus className="h-4 w-4 mr-1" />
+                  Create Project
+                </Button>
+              )}
             </div>
-            {listTab === "projects" && (
-              <Button
-                className="bg-purple-600 hover:bg-purple-700"
-                onClick={() => setViewMode("create")}
-              >
-                <Plus className="h-4 w-4 mr-1" />
-                Create Project
-              </Button>
-            )}
-          </div>
-        )}
+          )}
 
         <EnhancedTabs
           tabs={[
@@ -514,7 +543,10 @@ export function AdminEmailView({
       <EmailProjectConfigWizard
         open={configOpen}
         projectId={configProjectId}
-        projectName={projects.find((p) => p.id === configProjectId)?.name ?? selectedProject?.name}
+        projectName={
+          projects.find((p) => p.id === configProjectId)?.name ??
+          selectedProject?.name
+        }
         onOpenChange={setConfigOpen}
         onComplete={loadData}
       />
@@ -541,7 +573,10 @@ export function AdminEmailView({
           <div className="grid gap-4">
             <div className="space-y-1">
               <Label>Project Name</Label>
-              <Input value={editName} onChange={(e) => setEditName(e.target.value)} />
+              <Input
+                value={editName}
+                onChange={(e) => setEditName(e.target.value)}
+              />
             </div>
             <div className="space-y-1">
               <Label>Website URL</Label>
@@ -559,7 +594,8 @@ export function AdminEmailView({
             </div>
             <div className="space-y-1">
               <Label>
-                Description ({editDescription.length}/{MAX_PROJECT_DESCRIPTION_LENGTH})
+                Description ({editDescription.length}/
+                {MAX_PROJECT_DESCRIPTION_LENGTH})
               </Label>
               <Textarea
                 value={editDescription}
@@ -590,7 +626,6 @@ export function AdminEmailView({
         onOpenChange={setSendersOpen}
         onUpdated={handleSendersUpdated}
       />
-
     </>
   );
 }

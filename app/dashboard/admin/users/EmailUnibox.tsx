@@ -33,6 +33,7 @@ import {
 } from "./EmailSkeletons";
 import { EmailReplyComposer } from "./EmailReplyComposer";
 import {
+  ArrowLeft,
   Loader2,
   Mail,
   MoreVertical,
@@ -120,6 +121,7 @@ export function EmailUnibox({ campaigns, isDark, isActive = true }: Props) {
   const [unreadCount, setUnreadCount] = useState(0);
   const [syncingInbound, setSyncingInbound] = useState(false);
   const [deletingSelected, setDeletingSelected] = useState(false);
+  const [mobileShowDetail, setMobileShowDetail] = useState(false);
   const hasLoadedOnceRef = useRef(false);
   const manualSyncInFlightRef = useRef(0);
   const selectedIdRef = useRef<string | null>(null);
@@ -420,7 +422,10 @@ export function EmailUnibox({ campaigns, isDark, isActive = true }: Props) {
       next.delete(threadId);
       return next;
     });
-    if (selectedId === threadId) setSelectedId(null);
+    if (selectedId === threadId) {
+      setSelectedId(null);
+      setMobileShowDetail(false);
+    }
     return true;
   };
 
@@ -490,8 +495,13 @@ export function EmailUnibox({ campaigns, isDark, isActive = true }: Props) {
 
   return (
     <div className="flex flex-col gap-4 min-h-0 flex-1 h-full">
-      <div className="flex flex-wrap items-center gap-3 rounded-xl border border-gray-200 bg-white px-4 py-3 shadow-sm shrink-0">
-        <div className="relative flex-1 min-w-[240px]">
+      <div
+        className={cn(
+          "flex flex-wrap items-center gap-3 rounded-xl border border-gray-200 bg-white px-4 py-3 shadow-sm shrink-0",
+          mobileShowDetail ? "hidden lg:flex" : "flex",
+        )}
+      >
+        <div className="relative flex-1 min-w-[240px] w-full lg:w-auto">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
           <Input
             className="h-10 border-gray-200 bg-gray-50 pl-9 shadow-none focus-visible:ring-blue-500"
@@ -505,7 +515,7 @@ export function EmailUnibox({ campaigns, isDark, isActive = true }: Props) {
           value={readFilter}
           onValueChange={(v) => setReadFilter(v as ReadFilter)}
         >
-          <SelectTrigger className="h-10 w-[140px] border-gray-200 bg-white">
+          <SelectTrigger className="h-10 w-full sm:w-[140px] border-gray-200 bg-white">
             <SelectValue placeholder="All Status" />
           </SelectTrigger>
           <SelectContent>
@@ -515,7 +525,7 @@ export function EmailUnibox({ campaigns, isDark, isActive = true }: Props) {
           </SelectContent>
         </Select>
         <Select value={campaignId} onValueChange={setCampaignId}>
-          <SelectTrigger className="h-10 w-[170px] border-gray-200 bg-white">
+          <SelectTrigger className="h-10 w-full sm:w-[170px] border-gray-200 bg-white">
             <SelectValue placeholder="All Campaigns" />
           </SelectTrigger>
           <SelectContent>
@@ -528,7 +538,7 @@ export function EmailUnibox({ campaigns, isDark, isActive = true }: Props) {
           </SelectContent>
         </Select>
         <Select value={folder} onValueChange={(v) => setFolder(v as Folder)}>
-          <SelectTrigger className="h-10 w-[120px] border-gray-200 bg-white">
+          <SelectTrigger className="h-10 w-full sm:w-[120px] border-gray-200 bg-white">
             <SelectValue placeholder="All" />
           </SelectTrigger>
           <SelectContent>
@@ -549,7 +559,7 @@ export function EmailUnibox({ campaigns, isDark, isActive = true }: Props) {
             </span>
             <Button
               variant="destructive"
-              className="h-10"
+              className="h-10 w-full sm:w-auto"
               disabled={deletingSelected}
               onClick={() => void handleDeleteSelected()}
             >
@@ -564,7 +574,7 @@ export function EmailUnibox({ campaigns, isDark, isActive = true }: Props) {
         )}
         <Button
           variant="outline"
-          className="h-10 border-gray-200"
+          className="h-10 w-full sm:w-auto border-gray-200"
           disabled={syncingInbound}
           onClick={async () => {
             await syncInbound({ manual: true, silent: false, trackLoading: true });
@@ -592,6 +602,7 @@ export function EmailUnibox({ campaigns, isDark, isActive = true }: Props) {
           className={cn(
             "flex flex-col min-h-0 h-full max-h-full border-b lg:border-b-0 lg:border-r overflow-hidden",
             isDark ? "border-purple-900/40" : "border-gray-200",
+            mobileShowDetail ? "hidden lg:flex" : "flex",
           )}
         >
           <div
@@ -631,7 +642,10 @@ export function EmailUnibox({ campaigns, isDark, isActive = true }: Props) {
                         : "hover:bg-gray-50/80",
                       !thread.isRead && !isSelected && "bg-white",
                     )}
-                    onClick={() => setSelectedId(thread.id)}
+                    onClick={() => {
+                      setSelectedId(thread.id);
+                      setMobileShowDetail(true);
+                    }}
                   >
                     <div className="flex items-start gap-3 pl-1">
                       <Checkbox
@@ -718,7 +732,12 @@ export function EmailUnibox({ campaigns, isDark, isActive = true }: Props) {
           )}
         </div>
 
-        <div className="relative min-h-0 h-full max-h-full overflow-hidden bg-white grid grid-rows-[auto_1fr]">
+        <div
+          className={cn(
+            "relative min-h-0 h-full max-h-full overflow-hidden bg-white grid grid-rows-[auto_1fr] w-full min-w-0",
+            mobileShowDetail ? "grid" : "hidden lg:grid",
+          )}
+        >
           {!selectedId ? (
             <div className="flex items-center justify-center text-gray-400 text-sm min-h-[320px]">
               <div className="text-center">
@@ -729,10 +748,18 @@ export function EmailUnibox({ campaigns, isDark, isActive = true }: Props) {
           ) : detailLoading ? (
             <EmailUniboxDetailSkeleton isDark={isDark} />
           ) : selectedThread ? (
-            <div className="relative min-h-0 h-full max-h-full overflow-hidden">
-              <div className="min-h-0 h-full max-h-full overflow-hidden grid grid-rows-[auto_auto_minmax(0,1fr)]">
+            <div className="relative min-h-0 h-full max-h-full overflow-hidden w-full min-w-0">
+              <div className="min-h-0 h-full max-h-full overflow-hidden w-full min-w-0 grid grid-rows-[auto_auto_minmax(0,1fr)]">
               <div className="flex items-center justify-between border-b border-gray-100 px-6 py-3">
                 <div className="flex items-center gap-3 min-w-0">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="lg:hidden -ml-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 shrink-0"
+                    onClick={() => setMobileShowDetail(false)}
+                  >
+                    <ArrowLeft className="h-5 w-5" />
+                  </Button>
                   <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-purple-600 text-sm font-semibold text-white">
                     {displayName(
                       selectedThread.contactEmail,
@@ -776,12 +803,12 @@ export function EmailUnibox({ campaigns, isDark, isActive = true }: Props) {
               </div>
 
               <div className="border-b border-gray-100 px-6 py-5">
-                <h3 className="text-2xl font-bold leading-tight text-gray-900">
+                <h3 className="text-xl sm:text-2xl font-bold leading-tight text-gray-900">
                   {selectedThread.subject ?? "(No subject)"}
                 </h3>
                 {headerMessage && (
-                  <div className="mt-3 flex items-start justify-between gap-4">
-                    <div className="text-md text-gray-500 space-y-1 min-w-0">
+                  <div className="mt-3 flex flex-col sm:flex-row sm:items-start justify-between gap-2 sm:gap-4">
+                    <div className="text-sm sm:text-md text-gray-500 space-y-1 min-w-0">
                       <p className="truncate">
                         <span className="font-medium text-gray-800">From:</span>{" "}
                         {formatEmailAddress(
@@ -797,37 +824,39 @@ export function EmailUnibox({ campaigns, isDark, isActive = true }: Props) {
                         )}
                       </p>
                     </div>
-                    <span className="shrink-0 text-sm text-gray-500 whitespace-nowrap pt-0.5">
-                      {formatDate(headerMessage.createdAt)}
-                    </span>
+                    <div className="flex flex-wrap items-center gap-2 sm:shrink-0">
+                      <span className="text-xs sm:text-sm text-gray-500 whitespace-nowrap">
+                        {formatDate(headerMessage.createdAt)}
+                      </span>
+                      <div className="flex items-center gap-1">
+                        <button
+                          type="button"
+                          className="rounded-md p-1.5 text-gray-500 hover:bg-gray-100 hover:text-red-600"
+                          onClick={() => {
+                            void handleDelete(selectedThread.id).then((ok) => {
+                              if (ok) toast({ title: "Deleted" });
+                            });
+                          }}
+                        >
+                          <Trash2 className="h-5 w-5" />
+                        </button>
+                        <button
+                          type="button"
+                          className="rounded-md p-1.5 text-gray-500 hover:bg-gray-100 hover:text-gray-700"
+                          onClick={() => {
+                            setReplyText("");
+                            setReplyOpen(true);
+                          }}
+                        >
+                          <Reply className="h-5 w-5" />
+                        </button>
+                      </div>
+                    </div>
                   </div>
                 )}
-                <div className="mt-4 flex items-center justify-end gap-1">
-                  <button
-                    type="button"
-                    className="rounded-md p-2 text-gray-500 hover:bg-gray-100 hover:text-red-600"
-                    onClick={() => {
-                      void handleDelete(selectedThread.id).then((ok) => {
-                        if (ok) toast({ title: "Deleted" });
-                      });
-                    }}
-                  >
-                    <Trash2 className="h-5 w-5" />
-                  </button>
-                  <button
-                    type="button"
-                    className="rounded-md p-2 text-gray-500 hover:bg-gray-100 hover:text-gray-700"
-                    onClick={() => {
-                      setReplyText("");
-                      setReplyOpen(true);
-                    }}
-                  >
-                    <Reply className="h-5 w-5" />
-                  </button>
-                </div>
               </div>
 
-              <div className="min-h-0 overflow-y-auto overflow-x-hidden px-6 py-5 pb-24 unibox-scrollbar space-y-8">
+              <div className="min-h-0 overflow-y-auto overflow-x-auto px-6 py-5 pb-24 unibox-scrollbar space-y-8 w-full min-w-0">
                   {displayMessages.map((message, index) => (
                     <div
                       key={message.id}
@@ -837,8 +866,8 @@ export function EmailUnibox({ campaigns, isDark, isActive = true }: Props) {
                       )}
                     >
                       {headerMessage && message.id !== headerMessage.id && (
-                        <div className="flex items-start justify-between gap-3">
-                          <div className="text-md text-gray-500 space-y-1 min-w-0">
+                        <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-2 sm:gap-3">
+                          <div className="text-sm sm:text-md text-gray-500 space-y-1 min-w-0">
                             <p className="truncate">
                               <span className="font-medium text-gray-800">
                                 From:
@@ -858,7 +887,7 @@ export function EmailUnibox({ campaigns, isDark, isActive = true }: Props) {
                               )}
                             </p>
                           </div>
-                          <div className="flex items-center gap-2 shrink-0">
+                          <div className="flex flex-wrap items-center gap-2 sm:shrink-0">
                             {message.direction === "inbound" && (
                               <span className="rounded-full bg-green-100 px-2 py-0.5 text-[10px] font-semibold uppercase text-green-700">
                                 Reply

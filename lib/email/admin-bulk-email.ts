@@ -151,8 +151,15 @@ export function injectTrackedLinks(
   );
 }
 
+function stripHiddenEmailHtml(html: string): string {
+  return html.replace(
+    /<(?:div|span|p|td)[^>]*style="[^"]*display:\s*none[^"]*"[^>]*>[\s\S]*?<\/(?:div|span|p|td)>/gi,
+    "",
+  );
+}
+
 export function htmlToPlainText(html: string): string {
-  return html
+  return stripHiddenEmailHtml(html)
     .replace(/<style[\s\S]*?<\/style>/gi, "")
     .replace(/<script[\s\S]*?<\/script>/gi, "")
     .replace(/<br\s*\/?>/gi, "\n")

@@ -2,7 +2,6 @@ import { formatCurrencyFromCents } from "@/lib/currency-utils";
 import type { RecipientUserRow } from "./types";
 
 const PLACEHOLDER_RE = /\{([a-z_]+)\}/g;
-const SPIN_RE = /\{([^{}|]+(?:\|[^{}|]+)+)\}/g;
 
 export type ContestTemplateContext = {
   id: string;
@@ -60,16 +59,81 @@ function pickSpinOption(options: string[], seed: string): string {
   return options[index] ?? options[0] ?? "";
 }
 
+function isSimplePlaceholder(inner: string): boolean {
+  return /^[a-z_]+$/.test(inner.trim());
+}
+
+function findMatchingBrace(text: string, openIndex: number): number {
+  if (text[openIndex] !== "{") return -1;
+  let depth = 0;
+  for (let i = openIndex; i < text.length; i += 1) {
+    if (text[i] === "{") depth += 1;
+    else if (text[i] === "}") {
+      depth -= 1;
+      if (depth === 0) return i;
+    }
+  }
+  return -1;
+}
+
+/** Split spin options on `|` at brace depth 0 (supports `{first_name}` inside options). */
+function splitSpinOptions(inner: string): string[] {
+  const options: string[] = [];
+  let current = "";
+  let depth = 0;
+  for (let i = 0; i < inner.length; i += 1) {
+    const ch = inner[i];
+    if (ch === "{") {
+      depth += 1;
+      current += ch;
+    } else if (ch === "}") {
+      depth -= 1;
+      current += ch;
+    } else if (ch === "|" && depth === 0) {
+      const trimmed = current.trim();
+      if (trimmed) options.push(trimmed);
+      current = "";
+    } else {
+      current += ch;
+    }
+  }
+  const trimmed = current.trim();
+  if (trimmed) options.push(trimmed);
+  return options;
+}
+
 /** Resolve `{option A|option B|option C}` spin syntax (one option per recipient). */
 export function resolveSpinSyntax(template: string, seed: string): string {
-  return template.replace(SPIN_RE, (match, inner: string) => {
-    const options = inner
-      .split("|")
-      .map((part) => part.replace(/\s+/g, " ").trim())
-      .filter(Boolean);
-    if (options.length < 2) return match;
-    return pickSpinOption(options, `${seed}:${inner}`);
-  });
+  let result = "";
+  let i = 0;
+  while (i < template.length) {
+    if (template[i] === "{") {
+      const close = findMatchingBrace(template, i);
+      if (close === -1) {
+        result += template[i];
+        i += 1;
+        continue;
+      }
+
+      const inner = template.slice(i + 1, close);
+      if (inner.includes("|") && !isSimplePlaceholder(inner)) {
+        const options = splitSpinOptions(inner);
+        if (options.length >= 2) {
+          result += pickSpinOption(options, `${seed}:${inner}`);
+          i = close + 1;
+          continue;
+        }
+      }
+
+      result += template.slice(i, close + 1);
+      i = close + 1;
+      continue;
+    }
+
+    result += template[i];
+    i += 1;
+  }
+  return result;
 }
 
 function formatCoins(coins: number | null | undefined): string {

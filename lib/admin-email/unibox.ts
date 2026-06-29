@@ -742,6 +742,7 @@ export async function getUniboxThreadDetail(
         to_name,
         subject,
         body_text,
+        body_html,
         snippet,
         ses_message_id,
         in_reply_to_message_id,
@@ -772,6 +773,7 @@ export async function getUniboxThreadDetail(
     to_name: string | null;
     subject: string;
     body_text: string | null;
+    body_html: string | null;
     snippet: string | null;
     ses_message_id: string | null;
     in_reply_to_message_id: string | null;
@@ -835,7 +837,7 @@ export async function getUniboxThreadDetail(
       toName: m.to_name,
       subject: m.subject,
       bodyText: m.body_text,
-      bodyHtml: null,
+      bodyHtml: m.body_html,
       snippet: formatStoredSnippet(m.snippet),
       sesMessageId: m.ses_message_id,
       inReplyToMessageId: m.in_reply_to_message_id,
