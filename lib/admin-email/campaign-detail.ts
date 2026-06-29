@@ -44,8 +44,15 @@ export async function getEmailCampaignDetail(campaignId: string) {
   if (error || !campaign) return null;
 
   const recipientCount = campaign.recipient_count ?? 0;
-  const sentCount = campaign.sent_count ?? 0;
-  const remainingCount = Math.max(0, recipientCount - sentCount);
+
+  const { count: incompleteCount } = await db
+    .from("admin_email_campaign_recipients")
+    .select("id", { count: "exact", head: true })
+    .eq("campaign_id", campaignId)
+    .in("email_delivery_status", ["pending", "in_sequence", "sending"]);
+
+  const remainingCount = incompleteCount ?? 0;
+  const sentCount = Math.max(0, recipientCount - remainingCount);
 
   const { data: trackingRows } = await db
     .from("admin_email_tracking")
@@ -83,12 +90,15 @@ export async function getEmailCampaignDetail(campaignId: string) {
   const progressPercent =
     recipientCount > 0 ? (sentCount / recipientCount) * 100 : 0;
 
-  const project = campaign.project as {
+  type CampaignProject = {
     id: string;
     name: string;
     full_domain: string | null;
     use_platform_sender: boolean;
-  } | null;
+  };
+
+  const rawProject = campaign.project as CampaignProject | CampaignProject[] | null;
+  const project = Array.isArray(rawProject) ? (rawProject[0] ?? null) : rawProject;
 
   return {
     id: campaign.id,

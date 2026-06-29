@@ -19,21 +19,28 @@ export async function GET(req: NextRequest, context: RouteContext) {
   const offset = (page - 1) * limit;
 
   const db = createAdminClient();
-  const userRelation = search
-    ? "user:users!inner (email, full_name, username, user_type)"
-    : "user:users (email, full_name, username, user_type)";
+  const userRelation = "user:users (email, full_name, username, user_type)";
 
   let query = db
     .from("admin_email_campaign_recipients")
     .select(
       `
-      user_id, email_delivery_status, from_email, opened_at, clicked_at,
+      id,
+      user_id,
+      recipient_email,
+      full_name,
+      username,
+      user_type_at_send,
+      email_delivery_status,
+      from_email,
+      opened_at,
+      clicked_at,
       ${userRelation}
     `,
       { count: "exact" },
     )
     .eq("campaign_id", id)
-    .order("user_id", { ascending: true });
+    .order("created_at", { ascending: true });
 
   if (status && status !== "all") {
     if (status === "not_opened") {
@@ -46,8 +53,7 @@ export async function GET(req: NextRequest, context: RouteContext) {
   if (search) {
     const pattern = `%${search}%`;
     query = query.or(
-      `email.ilike.${pattern},full_name.ilike.${pattern},username.ilike.${pattern}`,
-      { referencedTable: "users" },
+      `recipient_email.ilike.${pattern},full_name.ilike.${pattern},username.ilike.${pattern},user.email.ilike.${pattern},user.full_name.ilike.${pattern},user.username.ilike.${pattern}`,
     );
   }
 
@@ -65,16 +71,23 @@ export async function GET(req: NextRequest, context: RouteContext) {
     user_type: string;
   };
 
+  const displayUserType = (value: string | null | undefined) => {
+    const normalized = value?.trim();
+    if (!normalized || normalized.toLowerCase() === "lead") return "";
+    return normalized;
+  };
+
   let rows = (data ?? []).map((r, idx) => {
     const rawUser = r.user as RecipientUser | RecipientUser[] | null;
     const user = Array.isArray(rawUser) ? rawUser[0] ?? null : rawUser;
     return {
       index: offset + idx + 1,
-      userId: r.user_id,
-      email: user?.email ?? "",
-      fullName: user?.full_name ?? "",
-      username: user?.username ?? "",
-      userType: user?.user_type ?? "",
+      recipientId: r.id,
+      userId: r.user_id ?? null,
+      email: user?.email ?? r.recipient_email ?? "",
+      fullName: user?.full_name ?? r.full_name ?? "",
+      username: user?.username ?? r.username ?? "",
+      userType: displayUserType(user?.user_type ?? r.user_type_at_send),
       country: "",
       status: r.email_delivery_status,
       fromEmail: r.from_email,
@@ -96,16 +109,21 @@ export async function DELETE(req: NextRequest, context: RouteContext) {
   if (auth.response) return auth.response;
 
   const { id: campaignId } = await context.params;
-  let body: { userIds?: string[] };
+  let body: { userIds?: string[]; recipientIds?: string[] };
   try {
     body = await req.json();
   } catch {
     return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
   }
 
-  const userIds = body.userIds?.filter(Boolean) ?? [];
-  if (userIds.length === 0) {
-    return NextResponse.json({ error: "userIds is required" }, { status: 400 });
+  const requestedIds = Array.from(
+    new Set([...(body.recipientIds ?? []), ...(body.userIds ?? [])].filter(Boolean)),
+  );
+  if (requestedIds.length === 0) {
+    return NextResponse.json(
+      { error: "recipientIds or userIds is required" },
+      { status: 400 },
+    );
   }
 
   const db = createAdminClient();
@@ -126,42 +144,62 @@ export async function DELETE(req: NextRequest, context: RouteContext) {
     );
   }
 
-  let idsToDelete = userIds;
+  const { data: campaignRecipients, error: recipientsError } = await db
+    .from("admin_email_campaign_recipients")
+    .select("id, user_id, email_delivery_status")
+    .eq("campaign_id", campaignId);
 
-  if (campaign.status === "active") {
-    const { data: recipients } = await db
-      .from("admin_email_campaign_recipients")
-      .select("user_id, email_delivery_status")
-      .eq("campaign_id", campaignId)
-      .in("user_id", userIds);
-
-    idsToDelete = (recipients ?? [])
-      .filter((r) => r.email_delivery_status === "pending")
-      .map((r) => r.user_id);
-
-    if (idsToDelete.length === 0) {
-      return NextResponse.json(
-        { error: "No pending leads to remove from an active campaign" },
-        { status: 400 },
-      );
-    }
+  if (recipientsError) {
+    return NextResponse.json({ error: recipientsError.message }, { status: 500 });
   }
 
-  await db
-    .from("admin_email_tracking")
-    .delete()
-    .eq("campaign_id", campaignId)
-    .in("user_id", idsToDelete);
+  const requestedIdSet = new Set(requestedIds);
+  let recipientsToDelete = (campaignRecipients ?? []).filter(
+    (recipient) =>
+      requestedIdSet.has(recipient.id) ||
+      (recipient.user_id && requestedIdSet.has(recipient.user_id)),
+  );
+
+  if (campaign.status === "active") {
+    recipientsToDelete = recipientsToDelete.filter(
+      (recipient) => recipient.email_delivery_status === "pending",
+    );
+  }
+
+  if (recipientsToDelete.length === 0) {
+    return NextResponse.json(
+      {
+        error:
+          campaign.status === "active"
+            ? "No pending leads to remove from an active campaign"
+            : "No matching leads found to remove",
+      },
+      { status: 400 },
+    );
+  }
+
+  const recipientIdsToDelete = recipientsToDelete.map((recipient) => recipient.id);
+  const userIdsForTracking = recipientsToDelete
+    .map((recipient) => recipient.user_id)
+    .filter((id): id is string => Boolean(id));
+
+  if (userIdsForTracking.length > 0) {
+    await db
+      .from("admin_email_tracking")
+      .delete()
+      .eq("campaign_id", campaignId)
+      .in("user_id", userIdsForTracking);
+  }
 
   let deletedTotal = 0;
   const CHUNK = 100;
-  for (let i = 0; i < idsToDelete.length; i += CHUNK) {
-    const chunk = idsToDelete.slice(i, i + CHUNK);
+  for (let i = 0; i < recipientIdsToDelete.length; i += CHUNK) {
+    const chunk = recipientIdsToDelete.slice(i, i + CHUNK);
     const { error: deleteError, count } = await db
       .from("admin_email_campaign_recipients")
       .delete({ count: "exact" })
       .eq("campaign_id", campaignId)
-      .in("user_id", chunk);
+      .in("id", chunk);
 
     if (deleteError) {
       return NextResponse.json({ error: deleteError.message }, { status: 500 });
@@ -171,7 +209,7 @@ export async function DELETE(req: NextRequest, context: RouteContext) {
 
   const { count: remainingCount } = await db
     .from("admin_email_campaign_recipients")
-    .select("user_id", { count: "exact", head: true })
+    .select("id", { count: "exact", head: true })
     .eq("campaign_id", campaignId);
 
   const recipientCount = remainingCount ?? 0;

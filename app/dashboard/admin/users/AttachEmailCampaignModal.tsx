@@ -20,6 +20,7 @@ import {
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Loader2 } from "lucide-react";
+import { notifyCampaignRecipientsChanged } from "@/lib/admin-email/campaign-recipients-events";
 import type { NotificationSelectionState } from "./SendNotificationModal";
 
 type EmailProject = {
@@ -76,9 +77,10 @@ async function loadProjects(): Promise<EmailProject[]> {
     throw new Error(data.error || "Failed to load projects");
   }
 
-  cachedProjects = data.projects ?? [];
+  const projects: EmailProject[] = data.projects ?? [];
+  cachedProjects = projects;
   projectsCacheAt = now;
-  return cachedProjects;
+  return projects;
 }
 
 export function AttachEmailCampaignModal({
@@ -274,6 +276,7 @@ export function AttachEmailCampaignModal({
         setError(data.error || "Failed to attach recipients");
         return;
       }
+      notifyCampaignRecipientsChanged(data.campaignId);
       onSuccess(data.campaignId);
       onOpenChange(false);
     } finally {

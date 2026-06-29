@@ -304,10 +304,15 @@ async function attachCampaignListStats(
   });
 }
 
-function applyCampaignListFilters<
-  T extends { eq: (...args: unknown[]) => T; ilike: (...args: unknown[]) => T },
->(query: T, params: ListEmailCampaignsPaginatedParams): T {
-  let next = query;
+function applyCampaignListFilters<T>(
+  query: T,
+  params: ListEmailCampaignsPaginatedParams,
+): T {
+  type Filterable = {
+    eq: (column: string, value: string) => Filterable;
+    ilike: (column: string, pattern: string) => Filterable;
+  };
+  let next = query as unknown as Filterable;
   if (params.projectId) {
     next = next.eq("project_id", params.projectId);
   }
@@ -317,7 +322,7 @@ function applyCampaignListFilters<
   if (params.search?.trim()) {
     next = next.ilike("name", `%${params.search.trim()}%`);
   }
-  return next;
+  return next as unknown as T;
 }
 
 export async function listEmailCampaignsPaginated(

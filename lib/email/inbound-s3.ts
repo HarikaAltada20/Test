@@ -38,6 +38,17 @@ export function getInboundPrefix(): string {
   return process.env.INBOUND_S3_PREFIX?.trim() || "inbound/";
 }
 
+/** Restrict inbound fetches to the configured shared bucket and key prefix. */
+export function isAllowedInboundS3Location(
+  bucket: string,
+  key: string,
+): boolean {
+  const allowedBucket = getInboundBucket();
+  if (!allowedBucket || bucket !== allowedBucket) return false;
+  const prefix = getInboundPrefix();
+  return key.startsWith(prefix);
+}
+
 async function streamToString(body: unknown): Promise<string> {
   if (!body) return "";
   if (typeof body === "string") return body;
@@ -174,6 +185,10 @@ export async function processInboundS3Object(
   skipped?: boolean;
   warmUpHandled?: boolean;
 }> {
+  if (!isAllowedInboundS3Location(bucket, key)) {
+    throw new Error("Inbound S3 location is not allowed");
+  }
+
   if (await isInboundS3KeyProcessed(key)) {
     return { skipped: true };
   }

@@ -113,27 +113,44 @@ export async function listAdminUsersPaginated(options: {
 }) {
   const db = createAdminClient();
   const offset = Math.max(0, options.offset);
-  const limit = Math.min(Math.max(1, options.limit), 1000);
-  const end = offset + limit - 1;
+  const limit = Math.min(Math.max(1, options.limit), 2000);
 
-  const { data: users, error, count } = await db
-    .from("users")
-    .select(USERS_SELECT, { count: "exact" })
-    .order("created_at", { ascending: false })
-    .range(offset, end);
+  // PostgREST/Supabase returns at most 1000 rows per request.
+  const POSTGREST_MAX = 1000;
+  let userRows: Record<string, unknown>[] = [];
+  let total = 0;
+  let fetched = 0;
 
-  if (error) {
-    throw new Error(error.message);
+  while (fetched < limit) {
+    const chunkLimit = Math.min(POSTGREST_MAX, limit - fetched);
+    const chunkStart = offset + fetched;
+    const chunkEnd = chunkStart + chunkLimit - 1;
+
+    const { data: users, error, count } = await db
+      .from("users")
+      .select(USERS_SELECT, { count: fetched === 0 ? "exact" : undefined })
+      .order("created_at", { ascending: false })
+      .range(chunkStart, chunkEnd);
+
+    if (error) {
+      throw new Error(error.message);
+    }
+
+    if (fetched === 0 && count != null) {
+      total = count;
+    }
+
+    const chunk = (users ?? []) as Record<string, unknown>[];
+    userRows = userRows.concat(chunk);
+    fetched += chunk.length;
+
+    if (chunk.length < chunkLimit) break;
   }
 
-  const userRows = users ?? [];
   const userIds = userRows.map((user) => String(user.id));
   const creatorProfilesMap = await fetchCreatorProfilesForUserIds(userIds);
 
-  const items = mergeUsersWithCreatorProfiles(
-    userRows as Record<string, unknown>[],
-    creatorProfilesMap,
-  );
+  const items = mergeUsersWithCreatorProfiles(userRows, creatorProfilesMap);
 
   const result: {
     items: typeof items;
@@ -143,7 +160,7 @@ export async function listAdminUsersPaginated(options: {
     counts?: AdminUserCounts;
   } = {
     items,
-    total: count ?? items.length,
+    total: total || items.length,
     offset,
     limit,
   };

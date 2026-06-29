@@ -29,7 +29,7 @@ export async function GET(req: NextRequest) {
 
     const limit = Math.min(
       Math.max(parseInt(limitParam ?? "25", 10) || 25, 1),
-      1000,
+      2000,
     );
     const offset = pageParam
       ? (Math.max(parseInt(pageParam, 10) || 1, 1) - 1) * limit

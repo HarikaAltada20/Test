@@ -23,7 +23,8 @@ type SesNotification = {
 
 type CampaignRecipientRef = {
   campaign_id: string;
-  user_id: string;
+  user_id: string | null;
+  recipient_id: string | null;
 };
 
 function dedupeCampaignRecipients(
@@ -32,7 +33,8 @@ function dedupeCampaignRecipients(
   const seen = new Set<string>();
   const out: CampaignRecipientRef[] = [];
   for (const row of rows) {
-    const key = `${row.campaign_id}:${row.user_id}`;
+    const key = `${row.campaign_id}:${row.user_id ?? row.recipient_id}`;
+    if (!row.user_id && !row.recipient_id) continue;
     if (seen.has(key)) continue;
     seen.add(key);
     out.push(row);
@@ -55,30 +57,67 @@ async function resolveBouncedCampaignRecipients(
         .eq("ses_message_id", messageId),
       db
         .from("admin_email_campaign_recipients")
-        .select("campaign_id, user_id")
+        .select("campaign_id, user_id, id")
         .eq("ses_message_id", messageId),
     ]);
 
-    matches.push(...((fromSends ?? []) as CampaignRecipientRef[]));
-    matches.push(...((fromRecipients ?? []) as CampaignRecipientRef[]));
+    for (const row of fromRecipients ?? []) {
+      matches.push({
+        campaign_id: row.campaign_id,
+        user_id: row.user_id,
+        recipient_id: row.id,
+      });
+    }
+
+    for (const row of fromSends ?? []) {
+      if (!row.user_id) continue;
+      matches.push({
+        campaign_id: row.campaign_id,
+        user_id: row.user_id,
+        recipient_id: null,
+      });
+    }
 
     if (matches.length > 0) {
       return dedupeCampaignRecipients(matches);
     }
   }
 
+  const normalizedEmail = email.toLowerCase();
+
   const { data: users } = await db
     .from("users")
     .select("id")
-    .eq("email", email);
+    .eq("email", normalizedEmail);
 
   const userIds = users?.map((user) => user.id) ?? [];
-  if (userIds.length === 0) return [];
+  if (userIds.length > 0) {
+    const { data: activeRecipients } = await db
+      .from("admin_email_campaign_recipients")
+      .select("campaign_id, user_id, id")
+      .in("user_id", userIds)
+      .in("email_delivery_status", [
+        "sent",
+        "delivered",
+        "opened",
+        "clicked",
+        "in_sequence",
+      ]);
 
-  const { data: activeRecipients } = await db
+    return dedupeCampaignRecipients(
+      (activeRecipients ?? []).map((row) => ({
+        campaign_id: row.campaign_id,
+        user_id: row.user_id,
+        recipient_id: row.id,
+      })),
+    );
+  }
+
+  const { data: externalRecipients } = await db
     .from("admin_email_campaign_recipients")
-    .select("campaign_id, user_id")
-    .in("user_id", userIds)
+    .select("campaign_id, user_id, id")
+    .is("user_id", null)
+    .eq("recipient_email", normalizedEmail)
     .in("email_delivery_status", [
       "sent",
       "delivered",
@@ -88,8 +127,49 @@ async function resolveBouncedCampaignRecipients(
     ]);
 
   return dedupeCampaignRecipients(
-    (activeRecipients ?? []) as CampaignRecipientRef[],
+    (externalRecipients ?? []).map((row) => ({
+      campaign_id: row.campaign_id,
+      user_id: null,
+      recipient_id: row.id,
+    })),
   );
+}
+
+async function markCampaignRecipientBounced(
+  ref: CampaignRecipientRef,
+  messageId: string | undefined,
+  now: string,
+): Promise<void> {
+  const db = createAdminClient();
+
+  let recipientQuery = db
+    .from("admin_email_campaign_recipients")
+    .update({
+      email_delivery_status: "bounced",
+      updated_at: now,
+    })
+    .eq("campaign_id", ref.campaign_id);
+
+  if (ref.user_id) {
+    recipientQuery = recipientQuery.eq("user_id", ref.user_id);
+  } else if (ref.recipient_id) {
+    recipientQuery = recipientQuery
+      .eq("id", ref.recipient_id)
+      .is("user_id", null);
+  } else {
+    return;
+  }
+
+  await recipientQuery;
+
+  if (messageId && ref.user_id) {
+    await db
+      .from("admin_email_sequence_step_sends")
+      .update({ email_delivery_status: "bounced" })
+      .eq("campaign_id", ref.campaign_id)
+      .eq("user_id", ref.user_id)
+      .eq("ses_message_id", messageId);
+  }
 }
 
 async function applySesNotification(notification: SesNotification): Promise<void> {
@@ -122,24 +202,8 @@ async function applySesNotification(notification: SesNotification): Promise<void
         email,
       );
 
-      for (const { campaign_id, user_id } of campaignRecipients) {
-        await db
-          .from("admin_email_campaign_recipients")
-          .update({
-            email_delivery_status: "bounced",
-            updated_at: now,
-          })
-          .eq("campaign_id", campaign_id)
-          .eq("user_id", user_id);
-
-        if (messageId) {
-          await db
-            .from("admin_email_sequence_step_sends")
-            .update({ email_delivery_status: "bounced" })
-            .eq("campaign_id", campaign_id)
-            .eq("user_id", user_id)
-            .eq("ses_message_id", messageId);
-        }
+      for (const ref of campaignRecipients) {
+        await markCampaignRecipientBounced(ref, messageId, now);
       }
     }
   }
@@ -181,10 +245,13 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: subscription.error }, { status: 401 });
     }
 
-    const notification = parseAuthorizedSnsNotification<SesNotification>(body);
+    const notification = await parseAuthorizedSnsNotification<SesNotification>(body);
     if (!notification) {
       if (body.Type === "Notification") {
-        return NextResponse.json({ error: "Unauthorized SNS topic" }, { status: 401 });
+        const signatureError = body.Signature
+          ? "Unauthorized SNS notification"
+          : "Unauthorized SNS topic";
+        return NextResponse.json({ error: signatureError }, { status: 401 });
       }
       return NextResponse.json({ ok: true, ignored: true });
     }
