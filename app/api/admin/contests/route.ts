@@ -71,6 +71,7 @@ export async function POST(request: NextRequest) {
         draftFields.multiple_submissions_enabled ?? false,
       max_submissions_per_creator: draftFields.max_submissions_per_creator ?? 1,
       trust_score: draftFields.trust_score ?? null,
+      trust_number: draftFields.trust_number ?? null,
       content_type: draftFields.content_type ?? null,
       bonus_details: draftFields.bonus_details ?? null,
       max_earnings_per_creator: draftFields.max_earnings_per_creator ?? null,

@@ -427,6 +427,8 @@ interface Contest {
   payout_adjustment_mode?: string | null;
   /** Optional campaign minimum creator trust score (0–100). NULL = no requirement. */
   trust_score?: number | null;
+  /** Optional campaign minimum trust number (verified − rejected). NULL = no requirement. */
+  trust_number?: number | null;
 }
 
 interface Submission {
@@ -1224,9 +1226,20 @@ export default function ContestDetailClient({
     return value;
   }, [currentContest.trust_score, isVideoContestFormat]);
 
+  const contestMinTrustNumber = useMemo(() => {
+    if (!isVideoContestFormat) return null;
+    const raw = currentContest.trust_number;
+    if (raw === null || raw === undefined) return null;
+    const value = Number(raw);
+    if (!Number.isFinite(value)) return null;
+    return value;
+  }, [currentContest.trust_number, isVideoContestFormat]);
+
   /** Contest minimum trust score card on overview; shown when brand set a threshold. */
   const showContestTrustScoreRequiredCard =
     isVideoContestFormat && contestMinTrustScore !== null;
+  const showContestTrustNumberRequiredCard =
+    isVideoContestFormat && contestMinTrustNumber !== null;
 
   /** Per-creator trust score in creator-wise table — admin only, video campaigns with a trust requirement. */
   const showCreatorWiseTrustScoreColumn =
@@ -10619,10 +10632,42 @@ export default function ContestDetailClient({
                           </div>
                           <div className="flex-1">
                             <p className="text-sm font-medium tracking-wide">
-                              Trust Score 
+                              Trust Score %
                             </p>
                             <p className="text-lg font-bold">
                               {formatTrustScoreWithMax(contestMinTrustScore!)}
+                            </p>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </div>
+                  )}
+
+                  {showContestTrustNumberRequiredCard && (
+                    <div
+                      className={cn(
+                        "border rounded-xl transition-all duration-300",
+                        isDark ? "border-gray-600" : "border-gray-300",
+                      )}
+                    >
+                      <CardContent className="p-4">
+                        <div className="flex items-center gap-3">
+                          <div
+                            className={cn(
+                              "w-10 h-10 flex items-center justify-center rounded-full ",
+                              isDark
+                                ? "bg-[#FFFFFF42] text-white"
+                                : "bg-purple-100 text-[#4A00BE]",
+                            )}
+                          >
+                            <CheckCheck className="h-5 w-5" />
+                          </div>
+                          <div className="flex-1">
+                            <p className="text-sm font-medium tracking-wide">
+                              Trust Number
+                            </p>
+                            <p className="text-lg font-bold">
+                              {contestMinTrustNumber}
                             </p>
                           </div>
                         </div>

@@ -1,5 +1,6 @@
 export type TrustScoreMetrics = {
   trust_score: number;
+  trust_number: number;
   rejected_pct: number;
   verified_pct: number;
   pending_pct: number;
@@ -11,19 +12,36 @@ export type TrustScoreMetrics = {
 
 type PersistedTrustMetrics = Pick<
   TrustScoreMetrics,
-  "trust_score" | "total_reels" | "verified_reels" | "rejected_reels" | "pending_reels"
+  | "trust_score"
+  | "trust_number"
+  | "total_reels"
+  | "verified_reels"
+  | "rejected_reels"
+  | "pending_reels"
 > & { updated_at: string };
 
 type SubmissionStatus = "pending" | "verified" | "rejected" | "paid";
 
 const roundToNearestInt = (value: number): number => Math.round(value);
 
-export function computeTrustScore(totalReels: number, rejectedReels: number): number {
-  if (totalReels <= 0) return 100;
+/** Trust Score % = 100 − (rejected ÷ verified × 100). No verified reels → 100. */
+export function computeTrustScore(
+  verifiedReels: number,
+  rejectedReels: number,
+): number {
+  if (verifiedReels <= 0) return 100;
 
-  const rejectedPct = (rejectedReels / totalReels) * 100;
+  const rejectedPct = (rejectedReels / verifiedReels) * 100;
   const rawScore = 100 - rejectedPct;
   return Math.max(0, Math.min(100, roundToNearestInt(rawScore)));
+}
+
+/** Net track record: verified reels minus rejected reels. */
+export function computeTrustNumber(
+  verifiedReels: number,
+  rejectedReels: number,
+): number {
+  return verifiedReels - rejectedReels;
 }
 
 export function buildTrustScoreMetricsFromCounts(input: {
@@ -40,7 +58,8 @@ export function buildTrustScoreMetricsFromCounts(input: {
   const pct = (value: number) => (total > 0 ? roundToNearestInt((value / total) * 100) : 0);
 
   return {
-    trust_score: computeTrustScore(total, rejected),
+    trust_score: computeTrustScore(verified, rejected),
+    trust_number: computeTrustNumber(verified, rejected),
     rejected_pct: pct(rejected),
     verified_pct: pct(verified),
     pending_pct: pct(pending),
@@ -73,6 +92,7 @@ export function getTrustMetricsFromStatuses(statuses: SubmissionStatus[]): Trust
 
 export type StoredCreatorTrustMetrics = {
   trust_score: number | null;
+  trust_number: number | null;
   total_reels: number | null;
   verified_reels: number | null;
   rejected_reels: number | null;
@@ -103,6 +123,10 @@ export function parseStoredCreatorTrustMetrics(
       parsed.trust_score === null || parsed.trust_score === undefined
         ? null
         : Number(parsed.trust_score),
+    trust_number:
+      parsed.trust_number === null || parsed.trust_number === undefined
+        ? null
+        : Number(parsed.trust_number),
     total_reels:
       parsed.total_reels === null || parsed.total_reels === undefined
         ? null
@@ -160,6 +184,31 @@ export function getCreatorTrustScoreFromMetrics(
   const raw = metrics?.trust_score;
   if (raw === null || raw === undefined || Number.isNaN(raw)) return null;
   return Number.isFinite(raw) ? raw : null;
+}
+
+export function getCreatorTrustNumberFromMetrics(
+  creatorProfile: { trust_score_metrics?: unknown } | null | undefined,
+  creatorId?: string | null,
+  liveByCreatorId?: Record<string, StoredCreatorTrustMetrics | null | undefined>,
+): number | null {
+  const metrics = resolveCreatorTrustMetrics(
+    creatorProfile,
+    creatorId,
+    liveByCreatorId,
+  );
+  if (metrics?.trust_number !== null && metrics?.trust_number !== undefined) {
+    const raw = metrics.trust_number;
+    if (!Number.isNaN(raw) && Number.isFinite(raw)) return raw;
+  }
+  if (
+    metrics?.verified_reels !== null &&
+    metrics?.verified_reels !== undefined &&
+    metrics?.rejected_reels !== null &&
+    metrics?.rejected_reels !== undefined
+  ) {
+    return computeTrustNumber(metrics.verified_reels, metrics.rejected_reels);
+  }
+  return null;
 }
 
 export async function fetchLiveTrustMetricsByCreatorIds(
@@ -222,6 +271,7 @@ export async function fetchLiveTrustMetricsByCreatorIds(
     const metrics = buildTrustScoreMetricsFromCounts(counts);
     liveByCreatorId[creatorId] = {
       trust_score: metrics.trust_score,
+      trust_number: metrics.trust_number,
       total_reels: metrics.total_reels,
       verified_reels: metrics.verified_reels,
       rejected_reels: metrics.rejected_reels,
@@ -247,6 +297,13 @@ export function parseContestMinTrustScore(trustScore: unknown): number | null {
   return value;
 }
 
+export function parseContestMinTrustNumber(trustNumber: unknown): number | null {
+  if (trustNumber === null || trustNumber === undefined) return null;
+  const value = Number(trustNumber);
+  if (!Number.isFinite(value)) return null;
+  return value;
+}
+
 export function getContestMinTrustScoreForGate(contest: {
   contest_format?: string | null;
   trust_score?: unknown;
@@ -255,11 +312,23 @@ export function getContestMinTrustScoreForGate(contest: {
   return parseContestMinTrustScore(contest.trust_score);
 }
 
+export function getContestMinTrustNumberForGate(contest: {
+  contest_format?: string | null;
+  trust_number?: unknown;
+}): number | null {
+  if (!isVideoContestFormat(contest.contest_format)) return null;
+  return parseContestMinTrustNumber(contest.trust_number);
+}
+
 export function isVideoContestTrustGateActive(contest: {
   contest_format?: string | null;
   trust_score?: unknown;
+  trust_number?: unknown;
 }): boolean {
-  return getContestMinTrustScoreForGate(contest) !== null;
+  return (
+    getContestMinTrustScoreForGate(contest) !== null ||
+    getContestMinTrustNumberForGate(contest) !== null
+  );
 }
 
 /** Fail-closed: block while loading, on load failure, or when score is below minimum. */
@@ -275,6 +344,19 @@ export function isCreatorTrustSubmissionBlocked(input: {
   return input.creatorScore < input.minScore;
 }
 
+/** Fail-closed: block while loading, on load failure, or when trust number is below minimum. */
+export function isCreatorTrustNumberSubmissionBlocked(input: {
+  minTrustNumber: number | null;
+  creatorTrustNumber: number | null;
+  trustNumberLoaded: boolean;
+  trustNumberLoading: boolean;
+}): boolean {
+  if (input.minTrustNumber === null) return false;
+  if (input.trustNumberLoading || !input.trustNumberLoaded) return true;
+  if (input.creatorTrustNumber === null) return true;
+  return input.creatorTrustNumber < input.minTrustNumber;
+}
+
 export function getTrustSubmissionBlockedMessage(input: {
   minScore: number;
   creatorScore: number | null;
@@ -282,12 +364,27 @@ export function getTrustSubmissionBlockedMessage(input: {
   scoreLoaded: boolean;
 }): string {
   if (input.scoreLoading) {
-    return `Loading trust score… This campaign requires at least ${input.minScore}.`;
+    return `Loading trust score… This campaign requires at least ${input.minScore}%.`;
   }
   if (!input.scoreLoaded || input.creatorScore === null) {
-    return `Unable to verify your trust score. This campaign requires at least ${input.minScore}. Please refresh or try again later.`;
+    return `Unable to verify your trust score. This campaign requires at least ${input.minScore}%. Please refresh or try again later.`;
   }
-  return `Trust score too low to submit. Your trust score is ${input.creatorScore}. This campaign requires at least ${input.minScore}. You can still view this campaign and your existing submissions. Submit new content after your score reaches ${input.minScore} or higher.`;
+  return `Trust score too low to submit. Your trust score is ${input.creatorScore}%. This campaign requires at least ${input.minScore}%. You can still view this campaign and your existing submissions. Submit new content after your score reaches ${input.minScore}% or higher.`;
+}
+
+export function getTrustNumberSubmissionBlockedMessage(input: {
+  minTrustNumber: number;
+  creatorTrustNumber: number | null;
+  trustNumberLoading: boolean;
+  trustNumberLoaded: boolean;
+}): string {
+  if (input.trustNumberLoading) {
+    return `Loading trust number… This campaign requires at least ${input.minTrustNumber}.`;
+  }
+  if (!input.trustNumberLoaded || input.creatorTrustNumber === null) {
+    return `Unable to verify your trust number. This campaign requires at least ${input.minTrustNumber}. Please refresh or try again later.`;
+  }
+  return `Trust number too low to submit. Your trust number is ${input.creatorTrustNumber}. This campaign requires at least ${input.minTrustNumber}. You can still view this campaign and your existing submissions. Submit new content after your trust number reaches ${input.minTrustNumber} or higher.`;
 }
 
 /** Live metrics from all submissions (matches DB enforce_submission_trust_score). */
@@ -316,6 +413,13 @@ export async function getCreatorTrustScoreForUser(
   return (await getCreatorTrustMetricsLive(supabase, creatorId)).trust_score;
 }
 
+export async function getCreatorTrustNumberForUser(
+  supabase: any,
+  creatorId: string,
+): Promise<number> {
+  return (await getCreatorTrustMetricsLive(supabase, creatorId)).trust_number;
+}
+
 export async function assertCreatorMeetsContestTrustRequirement(
   supabase: any,
   contestId: string,
@@ -323,7 +427,7 @@ export async function assertCreatorMeetsContestTrustRequirement(
 ): Promise<{ ok: true } | { ok: false; error: string; status: number }> {
   const { data: contest, error: contestError } = await supabase
     .from("contests")
-    .select("trust_score, contest_format")
+    .select("trust_score, trust_number, contest_format")
     .eq("id", contestId)
     .maybeSingle();
 
@@ -336,19 +440,30 @@ export async function assertCreatorMeetsContestTrustRequirement(
   }
 
   const minScore = getContestMinTrustScoreForGate(contest);
-  if (minScore === null) {
+  const minTrustNumber = getContestMinTrustNumberForGate(contest);
+  if (minScore === null && minTrustNumber === null) {
     return { ok: true };
   }
 
   try {
-    const creatorScore = await getCreatorTrustScoreForUser(supabase, creatorId);
-    if (creatorScore < minScore) {
+    const metrics = await getCreatorTrustMetricsLive(supabase, creatorId);
+
+    if (minScore !== null && metrics.trust_score < minScore) {
       return {
         ok: false,
-        error: `Trust score too low to submit. Your trust score is ${creatorScore}. This campaign requires at least ${minScore}.`,
+        error: `Trust score too low to submit. Your trust score is ${metrics.trust_score}%. This campaign requires at least ${minScore}%.`,
         status: 403,
       };
     }
+
+    if (minTrustNumber !== null && metrics.trust_number < minTrustNumber) {
+      return {
+        ok: false,
+        error: `Trust number too low to submit. Your trust number is ${metrics.trust_number}. This campaign requires at least ${minTrustNumber}.`,
+        status: 403,
+      };
+    }
+
     return { ok: true };
   } catch (err: unknown) {
     const message =
@@ -395,6 +510,7 @@ export async function recomputeCreatorTrustMetrics(
     .update({
       trust_score_metrics: {
         trust_score: metrics.trust_score,
+        trust_number: metrics.trust_number,
         total_reels: metrics.total_reels,
         verified_reels: metrics.verified_reels,
         rejected_reels: metrics.rejected_reels,

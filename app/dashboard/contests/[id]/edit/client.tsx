@@ -373,6 +373,7 @@ type ContestData = {
   multiple_submissions_enabled?: boolean;
   max_submissions_per_creator?: number;
   trust_score?: number | null;
+  trust_number?: number | null;
   content_type?: "ugc" | "clipping" | "other" | null;
   contest_format?: string | null; // Text/image vs video campaign format
   bonus_details?: { description_html?: string; description_json?: any } | null;
@@ -644,6 +645,8 @@ export default function EditContestPage({
   // New features state (2025-10-01)
   const [trustScoreEnabled, setTrustScoreEnabled] = useState(false);
   const [contestTrustScore, setContestTrustScore] = useState<number | "">("");
+  const [trustNumberEnabled, setTrustNumberEnabled] = useState(false);
+  const [contestTrustNumber, setContestTrustNumber] = useState<number | "">("");
   const [multipleSubmissionsEnabled, setMultipleSubmissionsEnabled] =
     useState(false);
   const [maxSubmissionsPerCreator, setMaxSubmissionsPerCreator] =
@@ -1490,6 +1493,13 @@ export default function EditContestPage({
             } else {
               setTrustScoreEnabled(false);
               setContestTrustScore("");
+            }
+            if (typeof data.trust_number === "number") {
+              setTrustNumberEnabled(true);
+              setContestTrustNumber(data.trust_number);
+            } else {
+              setTrustNumberEnabled(false);
+              setContestTrustNumber("");
             }
             setContentType(data.content_type || "other");
             setCategory(data.category || "technology");
@@ -3394,6 +3404,12 @@ export default function EditContestPage({
         trustScoreEnabled &&
         contestTrustScore !== ""
           ? Number(contestTrustScore)
+          : null;
+      updatePayload.trust_number =
+        isVideoContestFormat(contest?.contest_format) &&
+        trustNumberEnabled &&
+        contestTrustNumber !== ""
+          ? Number(contestTrustNumber)
           : null;
       updatePayload.content_type = contentType || null;
       updatePayload.category = category || null;
@@ -5531,6 +5547,12 @@ export default function EditContestPage({
             contestTrustScore !== ""
               ? Number(contestTrustScore)
               : null,
+          trust_number:
+            isVideoContestFormat(contest?.contest_format) &&
+            trustNumberEnabled &&
+            contestTrustNumber !== ""
+              ? Number(contestTrustNumber)
+              : null,
           content_type: contentType || null,
           category: category || null,
           moderation_status: "draft", // Save as draft after successful payment
@@ -6174,6 +6196,12 @@ export default function EditContestPage({
             trustScoreEnabled &&
             contestTrustScore !== ""
               ? Number(contestTrustScore)
+              : null,
+          trust_number:
+            isVideoContestFormat(contest?.contest_format) &&
+            trustNumberEnabled &&
+            contestTrustNumber !== ""
+              ? Number(contestTrustNumber)
               : null,
           content_type: contentType || null,
           category: category || null,
@@ -7880,6 +7908,12 @@ export default function EditContestPage({
         trustScoreEnabled &&
         contestTrustScore !== ""
           ? Number(contestTrustScore)
+          : null;
+      updatePayload.trust_number =
+        isVideoContestFormat(contest?.contest_format) &&
+        trustNumberEnabled &&
+        contestTrustNumber !== ""
+          ? Number(contestTrustNumber)
           : null;
       updatePayload.content_type = contentType || null;
       updatePayload.category = category || null;
@@ -12824,12 +12858,12 @@ export default function EditContestPage({
                       htmlFor="trust-score-enabled"
                       className="text-base font-semibold cursor-pointer"
                     >
-                      Trust Score
+                      Trust Score %
                     </Label>
                     <p className="text-sm text-muted-foreground mt-1">
-                      Require a minimum trust score so only reliable creators can
-                      participate. Scores may decrease for rejected submissions,
-                      low-quality content, spam, or policy violations.
+                      Require a minimum trust score (0–100). Score = 100 −
+                      (rejected ÷ verified × 100). Verified = approved or paid
+                      submissions.
                     </p>
                   </div>
                 </div>
@@ -12841,7 +12875,7 @@ export default function EditContestPage({
                       isDark ? "border-slate-700" : "border-slate-200",
                     )}
                   >
-                    <Label htmlFor="trust-score-input">Trust Score</Label>
+                    <Label htmlFor="trust-score-input">Minimum Trust Score %</Label>
                     <Input
                       id="trust-score-input"
                       type="number"
@@ -12864,7 +12898,68 @@ export default function EditContestPage({
                           ? "bg-purple-900/20 border border-gray-600 text-white"
                           : "bg-white text-black",
                       )}
-                      placeholder="Enter trust score between 0-100"
+                      placeholder="Enter minimum trust score (0–100)"
+                    />
+                  </div>
+                )}
+
+                <div className="flex items-start gap-3 pt-3 border-t">
+                  <Checkbox
+                    id="trust-number-enabled"
+                    checked={trustNumberEnabled}
+                    onCheckedChange={(checked) => {
+                      setTrustNumberEnabled(checked as boolean);
+                      if (!checked) {
+                        setContestTrustNumber("");
+                      } else if (contestTrustNumber === "") {
+                        setContestTrustNumber(5);
+                      }
+                    }}
+                    className="mt-0.5 h-5 w-5 shrink-0 data-[state=checked]:bg-[#7F39EC] data-[state=checked]:border-[#7F39EC] data-[state=checked]:text-white"
+                  />
+                  <div className="min-w-0 flex-1">
+                    <Label
+                      htmlFor="trust-number-enabled"
+                      className="text-base font-semibold cursor-pointer"
+                    >
+                      Trust Number
+                    </Label>
+                    <p className="text-sm text-muted-foreground mt-1">
+                      Require a minimum trust number (net track record).
+                      Trust Number = verified reels − rejected reels.
+                    </p>
+                  </div>
+                </div>
+
+                {trustNumberEnabled && (
+                  <div
+                    className={cn(
+                      "space-y-2 pt-3 border-t",
+                      isDark ? "border-slate-700" : "border-slate-200",
+                    )}
+                  >
+                    <Label htmlFor="trust-number-input">Minimum Trust Number</Label>
+                    <Input
+                      id="trust-number-input"
+                      type="number"
+                      value={contestTrustNumber}
+                      onChange={(e) => {
+                        const raw = e.target.value;
+                        if (raw === "") {
+                          setContestTrustNumber("");
+                          return;
+                        }
+                        const value = Number.parseInt(raw, 10);
+                        if (!Number.isNaN(value)) {
+                          setContestTrustNumber(value);
+                        }
+                      }}
+                      className={cn(
+                        isDark
+                          ? "bg-purple-900/20 border border-gray-600 text-white"
+                          : "bg-white text-black",
+                      )}
+                      placeholder="Enter minimum trust number"
                     />
                   </div>
                 )}

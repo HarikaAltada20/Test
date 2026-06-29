@@ -439,6 +439,8 @@ export default function CreateContestPage({
   // New features state (2025-10-01)
   const [trustScoreEnabled, setTrustScoreEnabled] = useState(false);
   const [contestTrustScore, setContestTrustScore] = useState<number | "">("");
+  const [trustNumberEnabled, setTrustNumberEnabled] = useState(false);
+  const [contestTrustNumber, setContestTrustNumber] = useState<number | "">("");
   const [multipleSubmissionsEnabled, setMultipleSubmissionsEnabled] =
     useState(false);
   const [maxSubmissionsPerCreator, setMaxSubmissionsPerCreator] =
@@ -1249,6 +1251,7 @@ export default function CreateContestPage({
           multiple_submissions_enabled: false,
           max_submissions_per_creator: 1,
           trust_score: null,
+          trust_number: null,
           content_type: null,
           bonus_details: null,
           max_earnings_per_creator: null,
@@ -3599,6 +3602,12 @@ export default function CreateContestPage({
           trustScoreEnabled &&
           contestTrustScore !== ""
             ? Number(contestTrustScore)
+            : null,
+        trust_number:
+          isVideoContestFormat(contestFormat) &&
+          trustNumberEnabled &&
+          contestTrustNumber !== ""
+            ? Number(contestTrustNumber)
             : null,
         content_type: contentType || null,
         bonus_details:
@@ -10630,7 +10639,7 @@ export default function CreateContestPage({
                         htmlFor="trustScoreRequirement"
                         className="text-base font-semibold"
                       >
-                        Trust Score
+                        Trust Score %
                       </Label>
                       <p
                         className={cn(
@@ -10688,7 +10697,73 @@ export default function CreateContestPage({
                             ? "bg-[#C9A7FF26] border border-gray-400 text-white"
                             : "bg-white text-black",
                         )}
-                        placeholder="Enter trust score between 0-100"
+                        placeholder="Enter minimum trust score (0–100)"
+                      />
+                    </div>
+                  )}
+
+                  <div className="flex items-center justify-between pt-2 border-t">
+                    <div>
+                      <Label
+                        htmlFor="trustNumberRequirement"
+                        className="text-base font-semibold"
+                      >
+                        Trust Number
+                      </Label>
+                      <p
+                        className={cn(
+                          "text-sm mt-1",
+                          isDark ? "text-gray-300" : "text-gray-600",
+                        )}
+                      >
+                        Enable trust number requirements to allow only creators with a strong track record to participate.
+                        Creators below the required number cannot submit to this campaign.
+                      </p>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <Checkbox
+                        id="trustNumberRequirement"
+                        checked={trustNumberEnabled}
+                        onCheckedChange={(checked: any) => {
+                          setTrustNumberEnabled(Boolean(checked));
+                          if (!checked) {
+                            setContestTrustNumber("");
+                          } else if (contestTrustNumber === "") {
+                            setContestTrustNumber(5);
+                          }
+                        }}
+                        className={cn(
+                          "border h-5 w-5",
+                          isDark ? "border-gray-300" : "border-gray-500",
+                        )}
+                      />
+                    </div>
+                  </div>
+
+                  {trustNumberEnabled && (
+                    <div className="space-y-2 pt-2 border-t">
+                      <Label htmlFor="trustNumberInput">Minimum Trust Number</Label>
+                      <Input
+                        id="trustNumberInput"
+                        type="number"
+                        value={contestTrustNumber}
+                        onChange={(e) => {
+                          const raw = e.target.value;
+                          if (raw === "") {
+                            setContestTrustNumber("");
+                            return;
+                          }
+                          const value = parseInt(raw, 10);
+                          if (!Number.isNaN(value)) {
+                            setContestTrustNumber(value);
+                          }
+                        }}
+                        className={cn(
+                          isDark
+                            ? "bg-[#C9A7FF26] border border-gray-400 text-white"
+                            : "bg-white text-black",
+                        )}
+                        placeholder="Enter minimum trust number"
                       />
                     </div>
                   )}

@@ -50,8 +50,11 @@ import {
   getSettingsUrlWithReturnTo,
 } from "@/lib/oauth-return-to";
 import {
+  getContestMinTrustNumberForGate,
   getContestMinTrustScoreForGate,
+  getTrustNumberSubmissionBlockedMessage,
   getTrustSubmissionBlockedMessage,
+  isCreatorTrustNumberSubmissionBlocked,
   isCreatorTrustSubmissionBlocked,
 } from "@/lib/trust-score";
 
@@ -65,6 +68,9 @@ function formatSubmissionInsertError(error: {
   const msg = error?.message || "";
   if (msg.includes("trust_score_too_low")) {
     return "Trust score too low to submit to this campaign.";
+  }
+  if (msg.includes("trust_number_too_low")) {
+    return "Trust number too low to submit to this campaign.";
   }
   return msg || "Failed to submit content";
 }
@@ -346,6 +352,9 @@ export default function SubmitContentPage({
   const [creatorTrustScore, setCreatorTrustScore] = useState<number | null>(null);
   const [creatorTrustScoreLoaded, setCreatorTrustScoreLoaded] = useState(false);
   const [creatorTrustScoreLoading, setCreatorTrustScoreLoading] = useState(false);
+  const [creatorTrustNumber, setCreatorTrustNumber] = useState<number | null>(null);
+  const [creatorTrustNumberLoaded, setCreatorTrustNumberLoaded] = useState(false);
+  const [creatorTrustNumberLoading, setCreatorTrustNumberLoading] = useState(false);
 
   const { toast } = useToast();
 
@@ -373,13 +382,24 @@ export default function SubmitContentPage({
   const contestMinTrustScore = contest
     ? getContestMinTrustScoreForGate(contest)
     : null;
-  const isTrustGateEnabled = contestMinTrustScore !== null;
+  const contestMinTrustNumber = contest
+    ? getContestMinTrustNumberForGate(contest)
+    : null;
+  const isTrustGateEnabled =
+    contestMinTrustScore !== null || contestMinTrustNumber !== null;
   const isTrustScoreBlocked = isCreatorTrustSubmissionBlocked({
     minScore: contestMinTrustScore,
     creatorScore: creatorTrustScore,
     scoreLoaded: creatorTrustScoreLoaded,
     scoreLoading: creatorTrustScoreLoading,
   });
+  const isTrustNumberBlocked = isCreatorTrustNumberSubmissionBlocked({
+    minTrustNumber: contestMinTrustNumber,
+    creatorTrustNumber,
+    trustNumberLoaded: creatorTrustNumberLoaded,
+    trustNumberLoading: creatorTrustNumberLoading,
+  });
+  const isTrustBlocked = isTrustScoreBlocked || isTrustNumberBlocked;
   const trustScoreWarning =
     isTrustScoreBlocked && contestMinTrustScore !== null
       ? getTrustSubmissionBlockedMessage({
@@ -389,6 +409,16 @@ export default function SubmitContentPage({
           scoreLoaded: creatorTrustScoreLoaded,
         })
       : null;
+  const trustNumberWarning =
+    isTrustNumberBlocked && contestMinTrustNumber !== null
+      ? getTrustNumberSubmissionBlockedMessage({
+          minTrustNumber: contestMinTrustNumber,
+          creatorTrustNumber,
+          trustNumberLoading: creatorTrustNumberLoading,
+          trustNumberLoaded: creatorTrustNumberLoaded,
+        })
+      : null;
+  const trustGateWarning = trustScoreWarning || trustNumberWarning;
 
   // Helper function for 2-hour validation
   const isContentTooOld = (publishedAt: string): boolean => {
@@ -1170,7 +1200,7 @@ export default function SubmitContentPage({
       const { data: contestData, error: contestError } = await supabase
         .from("contests")
         .select(
-          "id, title, platform, contest_type, contest_format, multiple_submissions_enabled, max_submissions_per_creator, content_type, bonus_details, contest_based_details, trust_score",
+          "id, title, platform, contest_type, contest_format, multiple_submissions_enabled, max_submissions_per_creator, content_type, bonus_details, contest_based_details, trust_score, trust_number",
         ) // Include new feature fields
         .eq("id", contestId)
         .single();
@@ -1192,33 +1222,62 @@ export default function SubmitContentPage({
       setContest(contestData);
 
       const minTrustScore = getContestMinTrustScoreForGate(contestData);
-      if (minTrustScore === null) {
+      const minTrustNumber = getContestMinTrustNumberForGate(contestData);
+      if (minTrustScore === null && minTrustNumber === null) {
         setCreatorTrustScore(null);
         setCreatorTrustScoreLoaded(true);
         setCreatorTrustScoreLoading(false);
+        setCreatorTrustNumber(null);
+        setCreatorTrustNumberLoaded(true);
+        setCreatorTrustNumberLoading(false);
       } else {
-        setCreatorTrustScoreLoading(true);
-        setCreatorTrustScoreLoaded(false);
+        setCreatorTrustScoreLoading(minTrustScore !== null);
+        setCreatorTrustScoreLoaded(minTrustScore === null);
+        setCreatorTrustNumberLoading(minTrustNumber !== null);
+        setCreatorTrustNumberLoaded(minTrustNumber === null);
         try {
           const trustRes = await fetch("/api/creators/trust-score");
           if (trustRes.ok) {
             const trustData = await trustRes.json();
-            setCreatorTrustScore(
-              typeof trustData?.trust_score === "number"
-                ? trustData.trust_score
-                : null,
-            );
-            setCreatorTrustScoreLoaded(true);
+            if (minTrustScore !== null) {
+              setCreatorTrustScore(
+                typeof trustData?.trust_score === "number"
+                  ? trustData.trust_score
+                  : null,
+              );
+              setCreatorTrustScoreLoaded(true);
+            }
+            if (minTrustNumber !== null) {
+              setCreatorTrustNumber(
+                typeof trustData?.trust_number === "number"
+                  ? trustData.trust_number
+                  : null,
+              );
+              setCreatorTrustNumberLoaded(true);
+            }
           } else {
+            if (minTrustScore !== null) {
+              setCreatorTrustScore(null);
+              setCreatorTrustScoreLoaded(false);
+            }
+            if (minTrustNumber !== null) {
+              setCreatorTrustNumber(null);
+              setCreatorTrustNumberLoaded(false);
+            }
+          }
+        } catch (trustError) {
+          console.warn("Failed to fetch trust metrics:", trustError);
+          if (minTrustScore !== null) {
             setCreatorTrustScore(null);
             setCreatorTrustScoreLoaded(false);
           }
-        } catch (trustError) {
-          console.warn("Failed to fetch trust score:", trustError);
-          setCreatorTrustScore(null);
-          setCreatorTrustScoreLoaded(false);
+          if (minTrustNumber !== null) {
+            setCreatorTrustNumber(null);
+            setCreatorTrustNumberLoaded(false);
+          }
         } finally {
           setCreatorTrustScoreLoading(false);
+          setCreatorTrustNumberLoading(false);
         }
       }
 
@@ -2631,11 +2690,11 @@ export default function SubmitContentPage({
       return;
     }
 
-    if (isTrustScoreBlocked) {
-      setError(trustScoreWarning || "Trust score too low to submit.");
+    if (isTrustBlocked) {
+      setError(trustGateWarning || "Trust requirements not met to submit.");
       toast({
-        title: "Trust score too low to submit",
-        description: trustScoreWarning || "Trust score too low to submit.",
+        title: "Trust requirements not met",
+        description: trustGateWarning || "Trust requirements not met to submit.",
         variant: "destructive",
       });
       return;
@@ -2663,8 +2722,8 @@ export default function SubmitContentPage({
         }
       } catch {
         const msg =
-          trustScoreWarning ||
-          "Unable to verify trust score. Please try again.";
+          trustGateWarning ||
+          "Unable to verify trust requirements. Please try again.";
         setError(msg);
         toast({
           title: "Cannot submit",
@@ -3169,7 +3228,7 @@ export default function SubmitContentPage({
               <AlertDescription>{message}</AlertDescription>
             </Alert>
           )}
-          {trustScoreWarning && (
+          {trustGateWarning && (
             <Alert
               variant="default"
               className="mb-4 rounded-xl border border-[#7F39EC] bg-[#D9C0FF26]"
@@ -3180,7 +3239,7 @@ export default function SubmitContentPage({
                   isDark ? "text-gray-200" : "text-[#4A00BE]",
                 )}
               >
-                {trustScoreWarning}
+                {trustGateWarning}
               </AlertDescription>
             </Alert>
           )}
@@ -3213,7 +3272,7 @@ export default function SubmitContentPage({
                 type="button"
                 onClick={handleSubmit}
                 disabled={
-                  isTrustScoreBlocked ||
+                  isTrustBlocked ||
                   isLoading ||
                   isFetchingVideo ||
                   isFetchingInstagramMedia ||
@@ -3240,7 +3299,7 @@ export default function SubmitContentPage({
                 {isLoading ? (
                   <RefreshCw className="animate-spin mr-2 h-4 w-4" />
                 ) : null}
-                {isTrustScoreBlocked ? "Trust Score Too Low" : "Submit Content"}
+                {isTrustBlocked ? "Trust Requirements Not Met" : "Submit Content"}
               </Button>
             </div>
           </div>

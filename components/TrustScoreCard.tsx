@@ -68,7 +68,15 @@ export function TrustScoreCard({
           </div>
         ) : (
           <>
-            <div className={cn("text-4xl font-bold", toneClass)}>{score} / 100</div>
+            <div className={cn("text-4xl font-bold", toneClass)}>{score}%</div>
+            <div
+              className={cn(
+                "text-lg font-semibold",
+                isDark ? "text-slate-200" : "text-slate-700",
+              )}
+            >
+              Trust Number: {metrics?.trust_number ?? 0}
+            </div>
 
             <div className="overflow-x-auto">
               <div className="grid min-w-[720px] grid-cols-4 gap-3">
@@ -105,8 +113,9 @@ export function TrustScoreCard({
             </div>
 
             <p className="text-xs text-muted-foreground">
-              Your score starts at 100 and goes down when submissions are rejected. Brands may
-              require a minimum score to submit to campaigns.
+              Trust Score % = 100 − (rejected ÷ verified × 100). Trust Number =
+              verified reels − rejected reels. Brands may require minimums to
+              submit to campaigns.
             </p>
           </>
         )}

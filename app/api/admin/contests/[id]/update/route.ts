@@ -55,6 +55,7 @@ export async function POST(
       "payout_adjustment_percentage",
       "payout_adjustment_mode",
       "trust_score",
+      "trust_number",
       "platform",
       "contest_format",
       "subscription_info_of_user",
@@ -121,9 +122,25 @@ export async function POST(
       }
     }
 
+    if (updateData.trust_number !== undefined && updateData.trust_number != null) {
+      const trustNumber =
+        typeof updateData.trust_number === "number"
+          ? updateData.trust_number
+          : parseInt(String(updateData.trust_number), 10);
+      if (Number.isNaN(trustNumber)) {
+        return NextResponse.json(
+          { error: "trust_number must be a valid integer, or null" },
+          { status: 400 },
+        );
+      }
+    }
+
     const admin = createAdminClient();
 
-    if (updateData.trust_score !== undefined && updateData.trust_score != null) {
+    if (
+      (updateData.trust_score !== undefined && updateData.trust_score != null) ||
+      (updateData.trust_number !== undefined && updateData.trust_number != null)
+    ) {
       const { data: contestRow } = await admin
         .from("contests")
         .select("contest_format")
@@ -134,7 +151,7 @@ export async function POST(
         return NextResponse.json(
           {
             error:
-              "trust_score is only supported for video campaigns (contest_format video)",
+              "trust_score and trust_number are only supported for video campaigns (contest_format video)",
           },
           { status: 400 },
         );
