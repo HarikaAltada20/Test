@@ -5,6 +5,10 @@
 
 import dayjs from "dayjs";
 import { fetchContestSubmissionsAllPages } from "@/lib/fetch-contest-submissions";
+import {
+  isContestEligibleForScheduledMetricsRefresh,
+  SCHEDULED_METRICS_REFRESH_POST_CONTEST_OR_FILTER,
+} from "@/lib/contest-metrics-refresh-eligibility";
 
 type CpmBudgetSubmissionRow = {
   creator_id: string;
@@ -223,15 +227,21 @@ export async function updateCpmContestBudgets(supabaseAdmin: any, contestId?: st
   try {
     let query = supabaseAdmin
       .from("contests")
-      .select("id, contest_based_details, views_locked_at")
+      .select("id, contest_based_details, views_locked_at, post_contest_status")
       .eq("contest_type", "cpm")
       .not("contest_based_details", "is", null)
-      .is("views_locked_at", null);
+      .is("views_locked_at", null)
+      .or(SCHEDULED_METRICS_REFRESH_POST_CONTEST_OR_FILTER);
     if (contestId) query = query.eq("id", contestId);
     const { data: contests, error } = await query;
     if (error || !contests?.length) return;
 
-    for (const contest of contests) {
+    const eligibleContests = contests.filter(
+      isContestEligibleForScheduledMetricsRefresh,
+    );
+    if (!eligibleContests.length) return;
+
+    for (const contest of eligibleContests) {
       const cpmConfig = contest.contest_based_details?.cpm_contest;
       if (!cpmConfig?.cpm_rate_usd) continue;
       const { data: contestDetails } = await supabaseAdmin

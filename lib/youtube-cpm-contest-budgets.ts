@@ -1,4 +1,8 @@
 import { fetchContestSubmissionsAllPages } from "@/lib/fetch-contest-submissions";
+import {
+  isContestEligibleForScheduledMetricsCron,
+  SCHEDULED_METRICS_REFRESH_POST_CONTEST_OR_FILTER,
+} from "@/lib/contest-metrics-refresh-eligibility";
 
 type CpmBudgetSubmissionRow = {
   creator_id: string;
@@ -20,10 +24,18 @@ export async function updateYouTubeCpmContestBudgets(
   try {
     let contestsQuery = supabaseAdmin
       .from("contests")
-      .select("id, contest_based_details, views_locked_at")
+      .select(
+        "id, contest_based_details, views_locked_at, post_contest_status, start_date, end_date, moderation_status",
+      )
+      .eq("platform", "youtube")
+      .eq("moderation_status", "published")
       .eq("contest_type", "cpm")
       .not("contest_based_details", "is", null)
-      .is("views_locked_at", null);
+      .is("views_locked_at", null)
+      .not("start_date", "is", null)
+      .not("end_date", "is", null)
+      .lte("start_date", new Date().toISOString())
+      .or(SCHEDULED_METRICS_REFRESH_POST_CONTEST_OR_FILTER);
 
     if (contestId) {
       contestsQuery = contestsQuery.eq("id", contestId);
@@ -36,7 +48,15 @@ export async function updateYouTubeCpmContestBudgets(
       return;
     }
 
-    for (const contest of contests) {
+    const eligibleContests = contests.filter(
+      isContestEligibleForScheduledMetricsCron,
+    );
+    if (!eligibleContests.length) {
+      console.log("No eligible CPM contests to update (post-contest locked)");
+      return;
+    }
+
+    for (const contest of eligibleContests) {
       const cpmConfig = contest.contest_based_details?.cpm_contest;
       if (!cpmConfig?.cpm_rate_usd) continue;
 

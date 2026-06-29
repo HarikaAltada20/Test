@@ -2,19 +2,19 @@
   "crons": [
     {
       "path": "/api/cron/update-youtube-metrics",
-      "schedule": "0 1 * * *"
+      "schedule": "50 7 * * *"
     },
     {
       "path": "/api/cron/trigger-instagram-refresh",
-      "schedule": "0 2 * * *"
+      "schedule": "50 9 * * *"
     },
     {
       "path": "/api/cron/update-tiktok-metrics",
-      "schedule": "0 3 * * *"
+      "schedule": "50 11 * * *"
     },
     {
       "path": "/api/cron/refresh-all-tokens",
-      "schedule": "0 0 * * *"
+      "schedule": "0 6 * * *"
     },
     {
       "path": "/api/cron/snapshot-daily-challenge-winners",
