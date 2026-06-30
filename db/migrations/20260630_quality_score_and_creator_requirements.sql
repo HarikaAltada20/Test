@@ -1,4 +1,13 @@
 -- Quality scores, creator profile caches, and expanded campaign minimums.
+--
+-- Quality rules (sync_creator_quality_metrics):
+--   0 verified, 0 rejected → default 1/3 (new creator or only pending)
+--   0 verified, rejected > 0 → null (cannot calculate)
+--   verified > 0 → avg/max from scored verified submissions
+--
+-- Trust rules (sync_creator_trust_score_metrics):
+--   Trust Number = verified − rejected
+--   Trust Score % = (trust_number ÷ verified) × 100; 100 if no verified/rejected, 0 if rejected only
 
 ALTER TABLE public.submissions
   ADD COLUMN IF NOT EXISTS quality_score integer NULL;
@@ -20,8 +29,8 @@ ALTER TABLE public.creator_profiles
   ADD COLUMN IF NOT EXISTS avg_quality_score numeric(6,2) NULL,
   ADD COLUMN IF NOT EXISTS best_quality_score integer NULL;
 
-COMMENT ON COLUMN public.creator_profiles.avg_quality_score IS 'Average quality_score across verified/paid submissions.';
-COMMENT ON COLUMN public.creator_profiles.best_quality_score IS 'Max quality_score across verified/paid submissions.';
+COMMENT ON COLUMN public.creator_profiles.avg_quality_score IS 'Average quality_score across verified/paid submissions. Default 1 when no verified/rejected reels; null when rejected but none verified.';
+COMMENT ON COLUMN public.creator_profiles.best_quality_score IS 'Max quality_score across verified/paid submissions. Default 1 when no verified/rejected reels; null when rejected but none verified.';
 
 ALTER TABLE public.contests
   ADD COLUMN IF NOT EXISTS min_avg_quality_score numeric(4,2) NULL,
@@ -58,19 +67,36 @@ SECURITY DEFINER
 SET search_path = public
 AS $$
 DECLARE
+  v_verified integer;
+  v_rejected integer;
   v_avg numeric;
   v_best integer;
 BEGIN
   IF p_creator_id IS NULL THEN RETURN; END IF;
 
   SELECT
-    ROUND(AVG(s.quality_score)::numeric, 2),
-    MAX(s.quality_score)::integer
-  INTO v_avg, v_best
+    COUNT(*) FILTER (WHERE s.status IN ('verified', 'paid'))::integer,
+    COUNT(*) FILTER (WHERE s.status = 'rejected')::integer
+  INTO v_verified, v_rejected
   FROM public.submissions s
-  WHERE s.creator_id = p_creator_id
-    AND s.status IN ('verified', 'paid')
-    AND s.quality_score IS NOT NULL;
+  WHERE s.creator_id = p_creator_id;
+
+  IF COALESCE(v_verified, 0) > 0 THEN
+    SELECT
+      ROUND(AVG(s.quality_score)::numeric, 2),
+      MAX(s.quality_score)::integer
+    INTO v_avg, v_best
+    FROM public.submissions s
+    WHERE s.creator_id = p_creator_id
+      AND s.status IN ('verified', 'paid')
+      AND s.quality_score IS NOT NULL;
+  ELSIF COALESCE(v_rejected, 0) > 0 THEN
+    v_avg := NULL;
+    v_best := NULL;
+  ELSE
+    v_avg := 1;
+    v_best := 1;
+  END IF;
 
   UPDATE public.creator_profiles
   SET
@@ -108,11 +134,18 @@ BEGIN
   v_trust_number := COALESCE(v_verified, 0) - COALESCE(v_rejected, 0);
 
   IF COALESCE(v_verified, 0) = 0 THEN
-    v_score := 100;
+    IF COALESCE(v_rejected, 0) > 0 THEN
+      v_score := 0;
+    ELSE
+      v_score := 100;
+    END IF;
   ELSE
     v_score := GREATEST(
       0,
-      LEAST(100, ROUND(100 - (v_rejected::numeric / v_verified::numeric) * 100))
+      LEAST(
+        100,
+        ROUND((v_trust_number::numeric / v_verified::numeric) * 100)
+      )
     )::integer;
   END IF;
 
@@ -211,12 +244,20 @@ BEGIN
     WHERE s.creator_id = NEW.creator_id;
 
     v_creator_trust_number := COALESCE(v_verified, 0) - COALESCE(v_rejected, 0);
+
     IF COALESCE(v_verified, 0) = 0 THEN
-      v_creator_score := 100;
+      IF COALESCE(v_rejected, 0) > 0 THEN
+        v_creator_score := 0;
+      ELSE
+        v_creator_score := 100;
+      END IF;
     ELSE
       v_creator_score := GREATEST(
         0,
-        LEAST(100, ROUND(100 - (v_rejected::numeric / v_verified::numeric) * 100))
+        LEAST(
+          100,
+          ROUND((v_creator_trust_number::numeric / v_verified::numeric) * 100)
+        )
       )::integer;
     END IF;
   END IF;
@@ -249,15 +290,17 @@ BEGIN
       COALESCE(v_creator_avg_quality, 0), v_min_avg_quality USING ERRCODE = 'check_violation';
   END IF;
 
-  IF v_min_earnings IS NOT NULL AND v_creator_earnings < v_min_earnings THEN
+  IF v_min_earnings IS NOT NULL AND v_min_earnings > 0
+     AND v_creator_earnings < v_min_earnings THEN
     RAISE EXCEPTION
-      'platform_earnings_too_low: Creator platform earnings (%) below campaign minimum (%)',
+      'platform_earnings_too_low: Creator platform earnings (%) are below campaign minimum (%)',
       v_creator_earnings, v_min_earnings USING ERRCODE = 'check_violation';
   END IF;
 
-  IF v_min_views IS NOT NULL AND v_creator_views < v_min_views THEN
+  IF v_min_views IS NOT NULL AND v_min_views > 0
+     AND v_creator_views < v_min_views THEN
     RAISE EXCEPTION
-      'platform_views_too_low: Creator platform views (%) below campaign minimum (%)',
+      'platform_views_too_low: Creator platform views (%) are below campaign minimum (%)',
       v_creator_views, v_min_views USING ERRCODE = 'check_violation';
   END IF;
 

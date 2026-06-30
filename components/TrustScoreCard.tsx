@@ -113,8 +113,8 @@ export function TrustScoreCard({
             </div>
 
             <p className="text-xs text-muted-foreground">
-              Trust Score % = 100 − (rejected ÷ verified × 100). Trust Number =
-              verified reels − rejected reels. Brands may require minimums to
+              Trust Score % = (Trust Number ÷ Verified Reels) × 100. Trust Number =
+              Verified Reels − Rejected Reels. Brands may require minimums to
               submit to campaigns.
             </p>
           </>

@@ -3,9 +3,11 @@ import {
   getContestMinTrustScoreForGate,
   getCreatorTrustMetricsLive,
   isVideoContestFormat,
+  parseStoredCreatorTrustMetrics,
 } from "@/lib/trust-score";
 import {
   getCreatorQualityMetricsLive,
+  resolveCreatorQualityMetrics,
   type CreatorQualityMetrics,
 } from "@/lib/quality-score";
 
@@ -216,6 +218,57 @@ export function isCreatorEligibleForContest(input: {
   return evaluateCreatorRequirements(input).length === 0;
 }
 
+export function resolveCreatorEligibilityProfileFields(
+  creatorProfile: {
+    trust_score_metrics?: unknown;
+    avg_quality_score?: unknown;
+    best_quality_score?: unknown;
+    total_money_won?: unknown;
+    total_views?: unknown;
+  } | null
+  | undefined,
+  liveQuality?: CreatorQualityMetrics | null,
+): Pick<
+  CreatorRequirementsSnapshot,
+  | "avgQualityScore"
+  | "bestQualityScore"
+  | "totalPlatformEarningsCents"
+  | "totalViews"
+> {
+  const storedTrust = parseStoredCreatorTrustMetrics(
+    creatorProfile?.trust_score_metrics,
+  );
+  const verifiedReels = storedTrust?.verified_reels ?? 0;
+  const rejectedReels = storedTrust?.rejected_reels ?? 0;
+
+  const profileAvg = parseStoredQualityNumber(creatorProfile?.avg_quality_score);
+  const profileBest = parseStoredQualityNumber(creatorProfile?.best_quality_score);
+  const rawAvg =
+    profileAvg !== null ? profileAvg : liveQuality?.avg_quality_score ?? null;
+  const rawBest =
+    profileBest !== null ? profileBest : liveQuality?.best_quality_score ?? null;
+
+  const resolved = resolveCreatorQualityMetrics({
+    verifiedReels,
+    rejectedReels,
+    avgQualityScore: rawAvg,
+    bestQualityScore: rawBest,
+  });
+
+  return {
+    avgQualityScore: resolved.avg_quality_score,
+    bestQualityScore: resolved.best_quality_score,
+    totalPlatformEarningsCents: Number(creatorProfile?.total_money_won ?? 0),
+    totalViews: Number(creatorProfile?.total_views ?? 0),
+  };
+}
+
+function parseStoredQualityNumber(value: unknown): number | null {
+  if (value === null || value === undefined || value === "") return null;
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
+}
+
 export async function getCreatorRequirementsSnapshot(
   supabase: any,
   creatorId: string,
@@ -231,14 +284,18 @@ export async function getCreatorRequirementsSnapshot(
   ]);
 
   const profile = profileRow?.data;
+  const resolvedQuality = resolveCreatorQualityMetrics({
+    verifiedReels: trustMetrics.verified_reels,
+    rejectedReels: trustMetrics.rejected_reels,
+    avgQualityScore: profile?.avg_quality_score ?? qualityMetrics.avg_quality_score,
+    bestQualityScore: profile?.best_quality_score ?? qualityMetrics.best_quality_score,
+  });
 
   return {
     trustScorePct: trustMetrics.trust_score,
     trustNumber: trustMetrics.trust_number,
-    avgQualityScore:
-      profile?.avg_quality_score ?? qualityMetrics.avg_quality_score,
-    bestQualityScore:
-      profile?.best_quality_score ?? qualityMetrics.best_quality_score,
+    avgQualityScore: resolvedQuality.avg_quality_score,
+    bestQualityScore: resolvedQuality.best_quality_score,
     totalPlatformEarningsCents: Number(profile?.total_money_won ?? 0),
     totalViews: Number(profile?.total_views ?? 0),
     verifiedReels: trustMetrics.verified_reels,

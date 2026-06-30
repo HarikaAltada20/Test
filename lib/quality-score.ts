@@ -1,10 +1,59 @@
 export type QualityScore = 1 | 2 | 3;
 
+export const CREATOR_DEFAULT_QUALITY_SCORE: QualityScore = 1;
+
 export type CreatorQualityMetrics = {
   avg_quality_score: number | null;
   best_quality_score: number | null;
   scored_verified_reels: number;
 };
+
+function parseStoredQualityNumber(value: unknown): number | null {
+  if (value === null || value === undefined || value === "") return null;
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
+}
+
+/**
+ * Quality display / gate rules:
+ * - 0 verified, 0 rejected → default 1/3 (new creator or only pending)
+ * - 0 verified, rejected > 0 → null (cannot calculate)
+ * - verified > 0 → stored scores from verified reels
+ */
+export function resolveCreatorQualityMetrics(input: {
+  verifiedReels: number;
+  rejectedReels: number;
+  avgQualityScore?: unknown;
+  bestQualityScore?: unknown;
+}): CreatorQualityMetrics {
+  const verifiedReels = Math.max(0, Number(input.verifiedReels) || 0);
+  const rejectedReels = Math.max(0, Number(input.rejectedReels) || 0);
+  const storedAvg = parseStoredQualityNumber(input.avgQualityScore);
+  const storedBest = parseStoredQualityNumber(input.bestQualityScore);
+
+  if (verifiedReels > 0) {
+    return {
+      avg_quality_score: storedAvg,
+      best_quality_score: storedBest,
+      scored_verified_reels:
+        storedAvg !== null || storedBest !== null ? verifiedReels : 0,
+    };
+  }
+
+  if (rejectedReels > 0) {
+    return {
+      avg_quality_score: null,
+      best_quality_score: null,
+      scored_verified_reels: 0,
+    };
+  }
+
+  return {
+    avg_quality_score: CREATOR_DEFAULT_QUALITY_SCORE,
+    best_quality_score: CREATOR_DEFAULT_QUALITY_SCORE,
+    scored_verified_reels: 0,
+  };
+}
 
 export function parseQualityScore(value: unknown): QualityScore | null {
   const n = Number(value);
@@ -55,6 +104,46 @@ export async function getCreatorQualityMetricsLive(
   return computeQualityMetricsFromScores(
     (rows || []).map((row: { quality_score: number }) => Number(row.quality_score)),
   );
+}
+
+export async function fetchLiveQualityMetricsByCreatorIds(
+  supabaseAdmin: any,
+  creatorIds: string[],
+): Promise<Record<string, CreatorQualityMetrics>> {
+  if (creatorIds.length === 0) return {};
+
+  const { data: rows, error } = await supabaseAdmin
+    .from("submissions")
+    .select("creator_id, quality_score")
+    .in("creator_id", creatorIds)
+    .in("status", ["verified", "paid"])
+    .not("quality_score", "is", null);
+
+  if (error) {
+    console.error(
+      "[quality-score] Failed to fetch submissions for live quality metrics:",
+      error,
+    );
+    return {};
+  }
+
+  const scoresByCreator: Record<string, number[]> = {};
+  (rows || []).forEach((row: { creator_id?: string; quality_score?: number }) => {
+    const creatorId =
+      typeof row?.creator_id === "string" ? row.creator_id.trim() : "";
+    if (!creatorId) return;
+    const score = Number(row.quality_score);
+    if (!Number.isFinite(score)) return;
+    if (!scoresByCreator[creatorId]) scoresByCreator[creatorId] = [];
+    scoresByCreator[creatorId].push(score);
+  });
+
+  const liveByCreatorId: Record<string, CreatorQualityMetrics> = {};
+  Object.entries(scoresByCreator).forEach(([creatorId, scores]) => {
+    liveByCreatorId[creatorId] = computeQualityMetricsFromScores(scores);
+  });
+
+  return liveByCreatorId;
 }
 
 export async function recomputeCreatorQualityMetrics(

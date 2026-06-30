@@ -2,6 +2,10 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import type { TrustScoreMetrics } from "@/lib/trust-score";
 import type { CreatorQualityMetrics } from "@/lib/quality-score";
+import {
+  formatQualityScoreDisplay,
+  formatTrustScoreDisplay,
+} from "@/lib/creator-profile-stats";
 import { formatCurrencyFromCents } from "@/lib/currency-utils";
 import { CheckCircle2, Clock3, ListChecks, Star, XCircle } from "lucide-react";
 
@@ -84,7 +88,9 @@ export function CreatorStatsCard({
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
               <div className={cn("rounded-xl border px-4 py-3", isDark ? "border-white/10 bg-[#1f0a46]" : "border-slate-200 bg-white")}>
                 <p className="text-sm text-muted-foreground">Trust Score</p>
-                <p className={cn("text-3xl font-bold", trustTone)}>{trustScore}%</p>
+                <p className={cn("text-3xl font-bold", trustTone)}>
+                  {formatTrustScoreDisplay(trustScore)}
+                </p>
               </div>
               <div className={cn("rounded-xl border px-4 py-3", isDark ? "border-white/10 bg-[#1f0a46]" : "border-slate-200 bg-white")}>
                 <p className="text-sm text-muted-foreground">Trust Number</p>
@@ -97,13 +103,13 @@ export function CreatorStatsCard({
                   <Star className="h-3.5 w-3.5" /> Best Quality
                 </div>
                 <p className="text-3xl font-bold">
-                  {qualityMetrics?.best_quality_score ?? "—"}
+                  {formatQualityScoreDisplay(qualityMetrics?.best_quality_score)}
                 </p>
               </div>
               <div className={cn("rounded-xl border px-4 py-3", isDark ? "border-white/10 bg-[#1f0a46]" : "border-slate-200 bg-white")}>
                 <p className="text-sm text-muted-foreground">Avg Quality</p>
                 <p className="text-3xl font-bold">
-                  {qualityMetrics?.avg_quality_score ?? "—"}
+                  {formatQualityScoreDisplay(qualityMetrics?.avg_quality_score)}
                 </p>
               </div>
               <div className={cn("rounded-xl border px-4 py-3", isDark ? "border-white/10 bg-[#1f0a46]" : "border-slate-200 bg-white")}>
@@ -146,8 +152,8 @@ export function CreatorStatsCard({
             </div>
 
             <p className="text-xs text-muted-foreground">
-              Trust Score % = 100 − (rejected ÷ verified × 100). Trust Number = verified − rejected.
-              Quality scores (1–3) are assigned when submissions are verified.
+              Trust Score % = (Trust Number ÷ Verified Reels) × 100. Trust Number =
+              Verified Reels − Rejected Reels. Quality is out of 3 — new creators default to 1/3 until verified.
             </p>
           </>
         )}

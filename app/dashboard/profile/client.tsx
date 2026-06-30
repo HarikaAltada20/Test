@@ -45,6 +45,7 @@ import { PageLoadingSpinner } from "@/components/loading/LoadingSpinner";
 import { cn } from "@/lib/utils";
 import { EmailChangeModal } from "@/components/EmailChangeModal";
 import { CreatorStatsCard } from "@/components/CreatorStatsCard";
+import { getCreatorStatsFromProfile } from "@/lib/creator-profile-stats";
 import type { TrustScoreMetrics } from "@/lib/trust-score";
 import type { CreatorQualityMetrics } from "@/lib/quality-score";
 // import PhoneInput from "react-phone-number-input";
@@ -91,7 +92,11 @@ interface CreatorProfile {
   total_contests_participated: number;
   total_contests_won: number;
   total_money_won: number;
+  total_views?: number;
   withdrawable_balance: number;
+  trust_score_metrics?: unknown;
+  avg_quality_score?: number | null;
+  best_quality_score?: number | null;
   phone_number?: string | null;
   date_of_birth?: string | null;
   gender?: string | null;
@@ -157,7 +162,6 @@ export default function ProfilePage({
   const [qualityMetrics, setQualityMetrics] = useState<CreatorQualityMetrics | null>(null);
   const [creatorStatsEarningsCents, setCreatorStatsEarningsCents] = useState(0);
   const [creatorStatsViews, setCreatorStatsViews] = useState(0);
-  const [trustMetricsLoading, setTrustMetricsLoading] = useState(false);
   const supabase = createClient();
   const { toast } = useToast();
 
@@ -382,21 +386,11 @@ export default function ProfilePage({
 
             if (!profileError && profile) {
               setCreatorProfile(profile as CreatorProfile);
-              setTrustMetricsLoading(true);
-              try {
-                const statsRes = await fetch("/api/creators/stats");
-                if (statsRes.ok) {
-                  const statsData = await statsRes.json();
-                  setTrustMetrics(statsData.trust_metrics as TrustScoreMetrics);
-                  setQualityMetrics(statsData.quality_metrics as CreatorQualityMetrics);
-                  setCreatorStatsEarningsCents(Number(statsData.totalPlatformEarningsCents ?? 0));
-                  setCreatorStatsViews(Number(statsData.totalViews ?? 0));
-                }
-              } catch (trustError) {
-                console.warn("Error fetching creator stats:", trustError);
-              } finally {
-                setTrustMetricsLoading(false);
-              }
+              const stats = getCreatorStatsFromProfile(profile);
+              setTrustMetrics(stats.trustMetrics);
+              setQualityMetrics(stats.qualityMetrics);
+              setCreatorStatsEarningsCents(stats.totalEarningsCents);
+              setCreatorStatsViews(stats.totalViews);
               // Initialize the new profile fields
               // setEditedPhone(profile.phone_number || "");
               setEditedDateOfBirth(profile.date_of_birth || "");
@@ -1867,7 +1861,7 @@ export default function ProfilePage({
           qualityMetrics={qualityMetrics}
           totalEarningsCents={creatorStatsEarningsCents}
           totalViews={creatorStatsViews}
-          loading={trustMetricsLoading}
+          loading={isLoading}
           isDark={isDark}
         />
       )}

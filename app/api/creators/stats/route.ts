@@ -7,8 +7,7 @@ import {
   evaluateCreatorRequirements,
   recomputeCreatorProfileMetrics,
 } from "@/lib/creator-requirements";
-import { getCreatorTrustMetricsLive } from "@/lib/trust-score";
-import { getCreatorQualityMetricsLive } from "@/lib/quality-score";
+import { getCreatorStatsFromProfile } from "@/lib/creator-profile-stats";
 
 export const dynamic = "force-dynamic";
 
@@ -25,16 +24,32 @@ export async function GET() {
       return NextResponse.json({ error: "Authentication required" }, { status: 401 });
     }
 
-    const snapshot = await getCreatorRequirementsSnapshot(supabase, user.id);
-    const [trustMetrics, qualityMetrics] = await Promise.all([
-      getCreatorTrustMetricsLive(supabase, user.id),
-      getCreatorQualityMetricsLive(supabase, user.id),
-    ]);
+    const { data: profile, error: profileError } = await supabase
+      .from("creator_profiles")
+      .select(
+        "trust_score_metrics, avg_quality_score, best_quality_score, total_money_won, total_views",
+      )
+      .eq("id", user.id)
+      .maybeSingle();
+
+    if (profileError) {
+      return NextResponse.json({ error: profileError.message }, { status: 500 });
+    }
+
+    const stats = getCreatorStatsFromProfile(profile);
 
     return NextResponse.json({
-      ...snapshot,
-      trust_metrics: trustMetrics,
-      quality_metrics: qualityMetrics,
+      trustScorePct: stats.trustMetrics.trust_score,
+      trustNumber: stats.trustMetrics.trust_number,
+      avgQualityScore: stats.qualityMetrics.avg_quality_score,
+      bestQualityScore: stats.qualityMetrics.best_quality_score,
+      totalPlatformEarningsCents: stats.totalEarningsCents,
+      totalViews: stats.totalViews,
+      verifiedReels: stats.trustMetrics.verified_reels,
+      rejectedReels: stats.trustMetrics.rejected_reels,
+      pendingReels: stats.trustMetrics.pending_reels,
+      trust_metrics: stats.trustMetrics,
+      quality_metrics: stats.qualityMetrics,
     });
   } catch (error: unknown) {
     const message =

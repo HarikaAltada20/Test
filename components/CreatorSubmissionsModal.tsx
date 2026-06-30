@@ -76,6 +76,8 @@ import {
   getBulkPaymentToastMeta,
 } from "@/lib/bulk-payment-toast";
 import { buildFlatFeeBonusExpectedCentsBySubmissionId } from "@/lib/twitter-cpm-bonus-expected";
+import { parseQualityScore } from "@/lib/quality-score";
+import { formatQualityScoreDisplay } from "@/lib/creator-profile-stats";
 import { YouTubeAnalyticsPanel } from "@/components/youtube/YouTubeAnalyticsPanel";
 import {
   formatMetadataTimestamp,
@@ -117,6 +119,7 @@ interface Submission {
   insights_status?: "ok" | "temporary_failure" | "permanent_failure" | null;
   metadata?: any;
   dual_rewards_payout?: unknown;
+  quality_score?: number | null;
 }
 
 /** TikTok Display API uses *_count; older rows may only have views/likes/comments/shares. */
@@ -135,6 +138,45 @@ function effectiveSubmissionViewsForSort(sub: Submission): number {
     return effectiveTikTokSubmissionViews(sub);
   }
   return Number(sub.views ?? 0);
+}
+
+function qualityScoreBadgeClass(score: number): string {
+  if (score >= 3) return "bg-green-100 text-green-700 border-green-300";
+  if (score >= 2) return "bg-amber-100 text-amber-700 border-amber-300";
+  return "bg-orange-100 text-orange-700 border-orange-300";
+}
+
+function SubmissionQualityScoreCell({
+  submission,
+  isDark,
+}: {
+  submission: Submission;
+  isDark: boolean;
+}) {
+  const parsed = parseQualityScore(submission.quality_score);
+  if (parsed === null) {
+    return (
+      <span
+        className={cn(
+          "text-xs",
+          isDark ? "text-slate-500" : "text-slate-400",
+        )}
+      >
+        —
+      </span>
+    );
+  }
+
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold border",
+        qualityScoreBadgeClass(parsed),
+      )}
+    >
+      {formatQualityScoreDisplay(parsed)}
+    </span>
+  );
 }
 
 interface CreatorSubmissionsModalProps {
@@ -1092,6 +1134,7 @@ export function CreatorSubmissionsModal({
 
   const isYouTubeContest =
     contest?.platform?.toLowerCase().includes("youtube") ?? false;
+  const isVideoContest = contest?.contest_format !== "text_image";
   const ytVisibleColumnsEffective =
     ytVisibleColumns && ytVisibleColumns.length > 0
       ? ytVisibleColumns
@@ -2385,6 +2428,16 @@ export function CreatorSubmissionsModal({
                     {/* Hide reward columns for Twitter text_image contests */}
                     {!isTwitterTextImageContest && (
                       <>
+                        {isVideoContest && (
+                          <TableHead
+                            className={cn(
+                              "text-center",
+                              isDark ? "bg-[#391A6A] " : "bg-gray-50",
+                            )}
+                          >
+                            Quality Score
+                          </TableHead>
+                        )}
                         {(!isYouTubeContest ||
                           showYtColumn("expected_reward")) && (
                           <TableHead
@@ -2636,6 +2689,7 @@ export function CreatorSubmissionsModal({
                                 ? 1
                                 : 0) + // Milestone
                               (hasFlatFeeBonus ? 2 : 0) + // Bonus Expected, Bonus Granted
+                              (isVideoContest ? 1 : 0) + // Quality Score
                               (isAdminView &&
                               (isInstagramContest ||
                                 isTikTokContest ||
@@ -3937,6 +3991,14 @@ export function CreatorSubmissionsModal({
                               {/* Expected Reward and Reward Granted (only for non-Twitter) */}
                               {!isTwitterTextImageContest && (
                                 <>
+                                  {isVideoContest && (
+                                    <TableCell className="text-center">
+                                      <SubmissionQualityScoreCell
+                                        submission={submission}
+                                        isDark={isDark}
+                                      />
+                                    </TableCell>
+                                  )}
                                   {(!isYouTubeContest ||
                                     showYtColumn("expected_reward")) && (
                                     <TableCell className="text-center font-medium">

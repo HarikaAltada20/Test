@@ -122,6 +122,7 @@ import {
   hasAnyContestCreatorRequirement,
   parseContestCreatorRequirements,
 } from "@/lib/creator-requirements";
+import { computeTrustScore } from "@/lib/trust-score";
 import {
   selectionIncludesPaidRow,
   submissionIsPaidRow,
@@ -354,6 +355,48 @@ function EligibilityRequirementCard({
   );
 }
 
+function CreatorWiseEligibilityText({
+  value,
+  belowThreshold,
+  tooltip,
+  isDark,
+}: {
+  value: React.ReactNode;
+  belowThreshold: boolean;
+  tooltip: React.ReactNode;
+  isDark: boolean;
+}) {
+  return (
+    <div className="flex justify-center">
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <span
+            className={cn(
+              "font-semibold text-sm whitespace-nowrap cursor-default",
+              belowThreshold
+                ? isDark
+                  ? "text-red-400"
+                  : "text-red-600"
+                : isDark
+                  ? "text-green-400"
+                  : "text-green-600",
+            )}
+          >
+            {value}
+          </span>
+        </TooltipTrigger>
+        <TooltipContent>{tooltip}</TooltipContent>
+      </Tooltip>
+    </div>
+  );
+}
+
+function parseCreatorMetricNumber(value: unknown): number | null {
+  if (value === null || value === undefined || value === "") return null;
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
+}
+
 function parseTrustMetricsValue(raw: unknown): Record<string, unknown> | null {
   if (raw && typeof raw === "object") {
     return raw as Record<string, unknown>;
@@ -416,14 +459,24 @@ function resolveTrustScoreForDisplay(
     if (Number.isFinite(parsed)) return parsed;
   }
 
-  if (fallbackCounts.total === 0) return 100;
+  return computeTrustScore(fallbackCounts.verified, fallbackCounts.rejected);
+}
 
-  return Math.max(
-    0,
-    Math.round(
-      100 - (fallbackCounts.rejected / fallbackCounts.total) * 100,
-    ),
-  );
+function resolveTrustNumberForDisplay(
+  trustMetrics: Record<string, unknown> | null,
+  fallbackCounts: { verified: number; rejected: number },
+): number {
+  const storedNumber = trustMetrics?.trust_number;
+  if (
+    storedNumber !== null &&
+    storedNumber !== undefined &&
+    storedNumber !== ""
+  ) {
+    const parsed = Number(storedNumber);
+    if (Number.isFinite(parsed)) return parsed;
+  }
+
+  return fallbackCounts.verified - fallbackCounts.rejected;
 }
 
 // --- Local Type Definitions ---
@@ -547,6 +600,7 @@ interface Submission {
   bonus_paid?: boolean;
   bonus_paid_at?: string | null;
   bonus_amount?: number | null;
+  quality_score?: number | null;
 }
 // --- End Local Type Definitions ---
 
@@ -1368,9 +1422,32 @@ export default function ContestDetailClient({
     return items;
   }, [parsedCreatorRequirements]);
 
-  /** Per-creator trust score in creator-wise table — admin only, video campaigns with a trust requirement. */
+  /** Per-creator eligibility columns in creator-wise table — admin only, when contest sets a minimum. */
+  const contestMinBestQuality = parsedCreatorRequirements.minBestQuality;
+  const contestMinAvgQuality = parsedCreatorRequirements.minAvgQuality;
+  const contestMinPlatformEarnings =
+    parsedCreatorRequirements.minPlatformEarningsCents;
+  const contestMinPlatformViews = parsedCreatorRequirements.minPlatformViews;
+
   const showCreatorWiseTrustScoreColumn =
     isAdminView && isVideoContestFormat && contestMinTrustScore !== null;
+  const showCreatorWiseTrustNumberColumn =
+    isAdminView && isVideoContestFormat && contestMinTrustNumber !== null;
+  const showCreatorWiseBestQualityColumn =
+    isAdminView && isVideoContestFormat && contestMinBestQuality !== null;
+  const showCreatorWiseAvgQualityColumn =
+    isAdminView && isVideoContestFormat && contestMinAvgQuality !== null;
+  const showCreatorWisePlatformEarningsColumn =
+    isAdminView && isVideoContestFormat && contestMinPlatformEarnings !== null;
+  const showCreatorWisePlatformViewsColumn =
+    isAdminView && isVideoContestFormat && contestMinPlatformViews !== null;
+  const creatorWiseEligibilityColumnCount =
+    (showCreatorWiseTrustScoreColumn ? 1 : 0) +
+    (showCreatorWiseTrustNumberColumn ? 1 : 0) +
+    (showCreatorWiseBestQualityColumn ? 1 : 0) +
+    (showCreatorWiseAvgQualityColumn ? 1 : 0) +
+    (showCreatorWisePlatformEarningsColumn ? 1 : 0) +
+    (showCreatorWisePlatformViewsColumn ? 1 : 0);
 
   // Contest-level payout adjustment for dual_rewards granted display
   const contestPayoutAdjPct =
@@ -2321,6 +2398,11 @@ export default function ContestDetailClient({
         });
         return;
       }
+      if (isAdminView && isVideoContestFormat) {
+        setPendingVerifySubmissionIds(selectedIds);
+        setVerifyQualityDialogOpen(true);
+        return;
+      }
       setNormalViewBulkActiveAction("verify");
       try {
         await handleBulkUpdateSubmissionStatus(selectedIds, "verified");
@@ -3115,6 +3197,12 @@ export default function ContestDetailClient({
               parseTrustMetricsValue((submission as any).trust_score_metrics) ??
               parseTrustMetricsValue(submission.creator?.trust_score_metrics) ??
               null,
+            avg_quality_score:
+              submission.creator?.avg_quality_score ?? null,
+            best_quality_score:
+              submission.creator?.best_quality_score ?? null,
+            total_money_won: submission.creator?.total_money_won ?? 0,
+            total_views: submission.creator?.total_views ?? 0,
           },
           instagram_archive:
             submission.creator_instagram_archive ??
@@ -3203,6 +3291,32 @@ export default function ContestDetailClient({
           parseTrustMetricsValue((submission as any).trust_score_metrics) ??
           parseTrustMetricsValue(submission.creator?.trust_score_metrics) ??
           null;
+      }
+      if (
+        group.creator?.avg_quality_score == null &&
+        submission.creator?.avg_quality_score != null
+      ) {
+        group.creator.avg_quality_score = submission.creator.avg_quality_score;
+      }
+      if (
+        group.creator?.best_quality_score == null &&
+        submission.creator?.best_quality_score != null
+      ) {
+        group.creator.best_quality_score = submission.creator.best_quality_score;
+      }
+      if (
+        (!group.creator?.total_money_won ||
+          Number(group.creator.total_money_won) === 0) &&
+        submission.creator?.total_money_won
+      ) {
+        group.creator.total_money_won = submission.creator.total_money_won;
+      }
+      if (
+        (!group.creator?.total_views ||
+          Number(group.creator.total_views) === 0) &&
+        submission.creator?.total_views
+      ) {
+        group.creator.total_views = submission.creator.total_views;
       }
       group.submissions.push(submission);
       group.totalCount++;
@@ -5154,6 +5268,17 @@ export default function ContestDetailClient({
       reason,
     });
 
+    if (
+      newStatus === "verified" &&
+      !options?.qualityScore &&
+      isAdminView &&
+      isVideoContestFormat
+    ) {
+      setPendingVerifySubmissionIds([submissionId]);
+      setVerifyQualityDialogOpen(true);
+      return;
+    }
+
     // Check if this is a Twitter tweet - if so, use Twitter moderation endpoint (for both CPM and leaderboard)
     const submission = currentSubmissions.find((s) => s.id === submissionId);
     if ((submission as any)?.is_twitter_tweet) {
@@ -5765,6 +5890,18 @@ export default function ContestDetailClient({
     options?: { closeCreatorModalOnSuccess?: boolean; qualityScore?: 1 | 2 | 3 },
   ) => {
     if (!submissionIds || submissionIds.length === 0) return;
+
+    const verifyAction = action === "approve" || action === "verified";
+    if (
+      verifyAction &&
+      !options?.qualityScore &&
+      isAdminView &&
+      isVideoContestFormat
+    ) {
+      setPendingVerifySubmissionIds(submissionIds);
+      setVerifyQualityDialogOpen(true);
+      return;
+    }
 
     // Split into Twitter vs Non-Twitter
     const twitterIds: string[] = [];
@@ -6581,6 +6718,15 @@ export default function ContestDetailClient({
       setCloseCreatorModalAfterRejectBulk(!!closeCreatorModalOnSuccess);
       setPendingRejectionSubmissionIds(submissionIds);
       setRejectionModalOpen(true);
+      return;
+    }
+    if (
+      target === "verified" &&
+      isAdminView &&
+      isVideoContestFormat
+    ) {
+      setPendingVerifySubmissionIds(submissionIds);
+      setVerifyQualityDialogOpen(true);
       return;
     }
     const closeOpts = closeCreatorModalOnSuccess
@@ -20742,6 +20888,31 @@ export default function ContestDetailClient({
                                       Trust Score
                                     </TableHead>
                                   )}
+                                  {showCreatorWiseTrustNumberColumn && (
+                                    <TableHead className="text-center whitespace-nowrap min-w-[6.5rem]">
+                                      Trust Number
+                                    </TableHead>
+                                  )}
+                                  {showCreatorWiseBestQualityColumn && (
+                                    <TableHead className="text-center whitespace-nowrap min-w-[6.5rem]">
+                                      Best Quality
+                                    </TableHead>
+                                  )}
+                                  {showCreatorWiseAvgQualityColumn && (
+                                    <TableHead className="text-center whitespace-nowrap min-w-[6.5rem]">
+                                      Avg Quality
+                                    </TableHead>
+                                  )}
+                                  {showCreatorWisePlatformEarningsColumn && (
+                                    <TableHead className="text-center whitespace-nowrap min-w-[7rem]">
+                                      Platform Earnings
+                                    </TableHead>
+                                  )}
+                                  {showCreatorWisePlatformViewsColumn && (
+                                    <TableHead className="text-center whitespace-nowrap min-w-[7rem]">
+                                      Platform Views
+                                    </TableHead>
+                                  )}
                                   <TableHead className="text-center">
                                     Total Submissions
                                   </TableHead>
@@ -21119,10 +21290,8 @@ export default function ContestDetailClient({
                                   <TableRow>
                                     <TableCell
                                       colSpan={
-                                        13 +
-                                        (showCreatorWiseTrustScoreColumn
-                                          ? 0
-                                          : -1) +
+                                        12 +
+                                        creatorWiseEligibilityColumnCount +
                                         (isMilestoneContestType(
                                           currentContest.contest_type,
                                         )
@@ -21275,6 +21444,55 @@ export default function ContestDetailClient({
                                       const verifiedIncludingPaidForTrust =
                                         verifiedReelsForTrust +
                                         inferredPaidReelsForTrust;
+                                      const trustNumberComputed =
+                                        resolveTrustNumberForDisplay(
+                                          trustMetrics,
+                                          {
+                                            verified:
+                                              verifiedIncludingPaidForTrust,
+                                            rejected: rejectedReelsForTrust,
+                                          },
+                                        );
+                                      const requiredTrustNumber =
+                                        contestMinTrustNumber;
+                                      const hasTrustNumberThreshold =
+                                        requiredTrustNumber !== null;
+                                      const trustNumberBelowThreshold =
+                                        hasTrustNumberThreshold &&
+                                        trustNumberComputed <
+                                          requiredTrustNumber;
+                                      const creatorBestQuality =
+                                        parseCreatorMetricNumber(
+                                          group.creator?.best_quality_score,
+                                        );
+                                      const creatorAvgQuality =
+                                        parseCreatorMetricNumber(
+                                          group.creator?.avg_quality_score,
+                                        );
+                                      const creatorPlatformEarnings = Number(
+                                        group.creator?.total_money_won ?? 0,
+                                      );
+                                      const creatorPlatformViews = Number(
+                                        group.creator?.total_views ?? 0,
+                                      );
+                                      const bestQualityBelowThreshold =
+                                        contestMinBestQuality !== null &&
+                                        (creatorBestQuality === null ||
+                                          creatorBestQuality <
+                                            contestMinBestQuality);
+                                      const avgQualityBelowThreshold =
+                                        contestMinAvgQuality !== null &&
+                                        (creatorAvgQuality === null ||
+                                          creatorAvgQuality <
+                                            contestMinAvgQuality);
+                                      const platformEarningsBelowThreshold =
+                                        contestMinPlatformEarnings !== null &&
+                                        creatorPlatformEarnings <
+                                          contestMinPlatformEarnings;
+                                      const platformViewsBelowThreshold =
+                                        contestMinPlatformViews !== null &&
+                                        creatorPlatformViews <
+                                          contestMinPlatformViews;
                                       return (
                                         <TableRow key={group.creator.id}>
                                           <TableCell className="font-medium">
@@ -21322,65 +21540,248 @@ export default function ContestDetailClient({
                                           </TableCell>
                                           {showCreatorWiseTrustScoreColumn && (
                                             <TableCell className="text-center whitespace-nowrap">
-                                              <div className="flex justify-center">
-                                                <Tooltip>
-                                                  <TooltipTrigger asChild>
-                                                    <Badge
-                                                      className={cn(
-                                                        "font-semibold text-sm border whitespace-nowrap shrink-0",
-                                                        trustScoreBelowThreshold
-                                                          ? "bg-red-100 text-red-700 border-red-200"
-                                                          : "bg-green-100 text-green-700 border-green-200",
-                                                      )}
-                                                    >
-                                                      {trustScoreDisplay}
-                                                    </Badge>
-                                                  </TooltipTrigger>
-                                                  <TooltipContent>
-                                                    <div className="space-y-1 text-xs">
-                                                      {trustScoreBelowThreshold ? (
-                                                        <p>
-                                                          Below required trust
-                                                          score (
-                                                          {formatTrustScore(
-                                                            requiredTrustScore as number,
-                                                          )}
-                                                          ). Creator:{" "}
-                                                          {trustScoreDisplayShort}
-                                                        </p>
-                                                      ) : (
-                                                        <p>
-                                                          Meets required trust
-                                                          score (
-                                                          {formatTrustScore(
-                                                            requiredTrustScore as number,
-                                                          )}
-                                                          ). Creator:{" "}
-                                                          {trustScoreDisplayShort}
-                                                        </p>
-                                                      )}
+                                              <CreatorWiseEligibilityText
+                                                value={trustScoreDisplay}
+                                                belowThreshold={
+                                                  trustScoreBelowThreshold
+                                                }
+                                                isDark={isDark}
+                                                tooltip={
+                                                  <div className="space-y-1 text-xs">
+                                                    {trustScoreBelowThreshold ? (
                                                       <p>
-                                                        Total reels:{" "}
-                                                        {totalReelsForTrust}
+                                                        Below required trust
+                                                        score (
+                                                        {formatTrustScore(
+                                                          requiredTrustScore as number,
+                                                        )}
+                                                        ). Creator:{" "}
+                                                        {trustScoreDisplayShort}
                                                       </p>
+                                                    ) : (
                                                       <p>
-                                                        Verified reels:{" "}
-                                                        {
-                                                          verifiedIncludingPaidForTrust
-                                                        }
+                                                        Meets required trust
+                                                        score (
+                                                        {formatTrustScore(
+                                                          requiredTrustScore as number,
+                                                        )}
+                                                        ). Creator:{" "}
+                                                        {trustScoreDisplayShort}
                                                       </p>
+                                                    )}
+                                                    <p>
+                                                      Total reels:{" "}
+                                                      {totalReelsForTrust}
+                                                    </p>
+                                                    <p>
+                                                      Verified reels:{" "}
+                                                      {
+                                                        verifiedIncludingPaidForTrust
+                                                      }
+                                                    </p>
+                                                    <p>
+                                                      Pending reels:{" "}
+                                                      {pendingReelsForTrust}
+                                                    </p>
+                                                    <p>
+                                                      Rejected reels:{" "}
+                                                      {rejectedReelsForTrust}
+                                                    </p>
+                                                  </div>
+                                                }
+                                              />
+                                            </TableCell>
+                                          )}
+                                          {showCreatorWiseTrustNumberColumn && (
+                                            <TableCell className="text-center whitespace-nowrap">
+                                              <CreatorWiseEligibilityText
+                                                value={trustNumberComputed}
+                                                belowThreshold={
+                                                  trustNumberBelowThreshold
+                                                }
+                                                isDark={isDark}
+                                                tooltip={
+                                                  <div className="space-y-1 text-xs">
+                                                    {trustNumberBelowThreshold ? (
                                                       <p>
-                                                        Pending reels:{" "}
-                                                        {pendingReelsForTrust}
+                                                        Below required trust
+                                                        number (
+                                                        {requiredTrustNumber}
+                                                        ). Creator:{" "}
+                                                        {trustNumberComputed}
                                                       </p>
+                                                    ) : (
                                                       <p>
-                                                        Rejected reels:{" "}
-                                                        {rejectedReelsForTrust}
+                                                        Meets required trust
+                                                        number (
+                                                        {requiredTrustNumber}
+                                                        ). Creator:{" "}
+                                                        {trustNumberComputed}
                                                       </p>
-                                                    </div>
-                                                  </TooltipContent>
-                                                </Tooltip>
-                                              </div>
+                                                    )}
+                                                    <p>
+                                                      Verified reels:{" "}
+                                                      {
+                                                        verifiedIncludingPaidForTrust
+                                                      }
+                                                    </p>
+                                                    <p>
+                                                      Rejected reels:{" "}
+                                                      {rejectedReelsForTrust}
+                                                    </p>
+                                                  </div>
+                                                }
+                                              />
+                                            </TableCell>
+                                          )}
+                                          {showCreatorWiseBestQualityColumn && (
+                                            <TableCell className="text-center whitespace-nowrap">
+                                              <CreatorWiseEligibilityText
+                                                value={
+                                                  creatorBestQuality !== null
+                                                    ? `${creatorBestQuality} / 3`
+                                                    : "—"
+                                                }
+                                                belowThreshold={
+                                                  bestQualityBelowThreshold
+                                                }
+                                                isDark={isDark}
+                                                tooltip={
+                                                  <div className="space-y-1 text-xs">
+                                                    {bestQualityBelowThreshold ? (
+                                                      <p>
+                                                        Below required best
+                                                        quality (
+                                                        {contestMinBestQuality}
+                                                        ). Creator:{" "}
+                                                        {creatorBestQuality ??
+                                                          "not established"}
+                                                      </p>
+                                                    ) : (
+                                                      <p>
+                                                        Meets required best
+                                                        quality (
+                                                        {contestMinBestQuality}
+                                                        ). Creator:{" "}
+                                                        {creatorBestQuality ??
+                                                          "not established"}
+                                                      </p>
+                                                    )}
+                                                  </div>
+                                                }
+                                              />
+                                            </TableCell>
+                                          )}
+                                          {showCreatorWiseAvgQualityColumn && (
+                                            <TableCell className="text-center whitespace-nowrap">
+                                              <CreatorWiseEligibilityText
+                                                value={
+                                                  creatorAvgQuality !== null
+                                                    ? `${formatTrustScore(creatorAvgQuality)} / 3`
+                                                    : "—"
+                                                }
+                                                belowThreshold={
+                                                  avgQualityBelowThreshold
+                                                }
+                                                isDark={isDark}
+                                                tooltip={
+                                                  <div className="space-y-1 text-xs">
+                                                    {avgQualityBelowThreshold ? (
+                                                      <p>
+                                                        Below required average
+                                                        quality (
+                                                        {contestMinAvgQuality}
+                                                        ). Creator:{" "}
+                                                        {creatorAvgQuality ??
+                                                          "not established"}
+                                                      </p>
+                                                    ) : (
+                                                      <p>
+                                                        Meets required average
+                                                        quality (
+                                                        {contestMinAvgQuality}
+                                                        ). Creator:{" "}
+                                                        {creatorAvgQuality ??
+                                                          "not established"}
+                                                      </p>
+                                                    )}
+                                                  </div>
+                                                }
+                                              />
+                                            </TableCell>
+                                          )}
+                                          {showCreatorWisePlatformEarningsColumn && (
+                                            <TableCell className="text-center whitespace-nowrap">
+                                              <CreatorWiseEligibilityText
+                                                value={formatMoney(
+                                                  creatorPlatformEarnings,
+                                                )}
+                                                belowThreshold={
+                                                  platformEarningsBelowThreshold
+                                                }
+                                                isDark={isDark}
+                                                tooltip={
+                                                  <div className="space-y-1 text-xs">
+                                                    {platformEarningsBelowThreshold ? (
+                                                      <p>
+                                                        Below required platform
+                                                        earnings (
+                                                        {formatMoney(
+                                                          contestMinPlatformEarnings!,
+                                                        )}
+                                                        ). Creator:{" "}
+                                                        {formatMoney(
+                                                          creatorPlatformEarnings,
+                                                        )}
+                                                      </p>
+                                                    ) : (
+                                                      <p>
+                                                        Meets required platform
+                                                        earnings (
+                                                        {formatMoney(
+                                                          contestMinPlatformEarnings!,
+                                                        )}
+                                                        ). Creator:{" "}
+                                                        {formatMoney(
+                                                          creatorPlatformEarnings,
+                                                        )}
+                                                      </p>
+                                                    )}
+                                                  </div>
+                                                }
+                                              />
+                                            </TableCell>
+                                          )}
+                                          {showCreatorWisePlatformViewsColumn && (
+                                            <TableCell className="text-center whitespace-nowrap">
+                                              <CreatorWiseEligibilityText
+                                                value={creatorPlatformViews.toLocaleString()}
+                                                belowThreshold={
+                                                  platformViewsBelowThreshold
+                                                }
+                                                isDark={isDark}
+                                                tooltip={
+                                                  <div className="space-y-1 text-xs">
+                                                    {platformViewsBelowThreshold ? (
+                                                      <p>
+                                                        Below required platform
+                                                        views (
+                                                        {contestMinPlatformViews!.toLocaleString()}
+                                                        ). Creator:{" "}
+                                                        {creatorPlatformViews.toLocaleString()}
+                                                      </p>
+                                                    ) : (
+                                                      <p>
+                                                        Meets required platform
+                                                        views (
+                                                        {contestMinPlatformViews!.toLocaleString()}
+                                                        ). Creator:{" "}
+                                                        {creatorPlatformViews.toLocaleString()}
+                                                      </p>
+                                                    )}
+                                                  </div>
+                                                }
+                                              />
                                             </TableCell>
                                           )}
                                           <TableCell className="text-center font-semibold">
@@ -26557,33 +26958,6 @@ export default function ContestDetailClient({
         </TabContent>
       </div>
 
-      {/* Verify quality picker */}
-      <VerifyQualityDialog
-        open={verifyQualityDialogOpen}
-        onOpenChange={(open) => {
-          setVerifyQualityDialogOpen(open);
-          if (!open) setPendingVerifySubmissionIds([]);
-        }}
-        submissionCount={pendingVerifySubmissionIds.length}
-        loading={verifyQualityLoading}
-        onConfirm={async (qualityScore) => {
-          if (pendingVerifySubmissionIds.length === 0) return;
-          setVerifyQualityLoading(true);
-          try {
-            await handleBulkUpdateSubmissionStatus(
-              pendingVerifySubmissionIds,
-              "verified",
-              undefined,
-              { closeCreatorModalOnSuccess: true, qualityScore },
-            );
-            setVerifyQualityDialogOpen(false);
-            setPendingVerifySubmissionIds([]);
-          } finally {
-            setVerifyQualityLoading(false);
-          }
-        }}
-      />
-
       {/* Rejection Reason Modal */}
       <RejectionReasonModal
         isOpen={rejectionModalOpen}
@@ -27192,6 +27566,38 @@ export default function ContestDetailClient({
           onArchiveUpdated={syncInstagramArchiveForCreator}
         />
       )}
+
+      {/* Verify quality picker — rendered last so it stacks above CreatorSubmissionsModal */}
+      <VerifyQualityDialog
+        open={verifyQualityDialogOpen}
+        onOpenChange={(open) => {
+          setVerifyQualityDialogOpen(open);
+          if (!open) setPendingVerifySubmissionIds([]);
+        }}
+        submissionCount={pendingVerifySubmissionIds.length}
+        loading={verifyQualityLoading}
+        onConfirm={async (qualityScore) => {
+          if (pendingVerifySubmissionIds.length === 0) return;
+          setVerifyQualityLoading(true);
+          try {
+            await handleBulkUpdateSubmissionStatus(
+              pendingVerifySubmissionIds,
+              "verified",
+              undefined,
+              { closeCreatorModalOnSuccess: true, qualityScore },
+            );
+            setNormalViewSelectedSubmissions((prev) => {
+              const next = new Set(prev);
+              pendingVerifySubmissionIds.forEach((id) => next.delete(id));
+              return next;
+            });
+            setVerifyQualityDialogOpen(false);
+            setPendingVerifySubmissionIds([]);
+          } finally {
+            setVerifyQualityLoading(false);
+          }
+        }}
+      />
 
     </div>
   );

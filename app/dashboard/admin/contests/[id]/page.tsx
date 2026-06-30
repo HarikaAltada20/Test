@@ -16,6 +16,8 @@ import {
   isVideoContestFormat,
   resolveCreatorTrustMetrics,
 } from "@/lib/trust-score";
+import { fetchLiveQualityMetricsByCreatorIds } from "@/lib/quality-score";
+import { resolveCreatorEligibilityProfileFields } from "@/lib/creator-requirements";
 
 async function fetchTwitterTweetsAllPages(
   supabase: any,
@@ -191,7 +193,8 @@ export default async function AdminContestDetailPage({
         bonus_paid_at,
         bonus_amount,
         milestone_bonus_paid,
-        metadata
+        metadata,
+        quality_score
       `;
     type AdminContestSubmissionRow = {
       creator_id?: string | null;
@@ -468,6 +471,7 @@ export default async function AdminContestDetailPage({
     let creatorProfilesData: any[] = [];
     let usersData: any[] = [];
     let liveGlobalTrustMetricsByCreatorId: Record<string, any> = {};
+    let liveGlobalQualityMetricsByCreatorId: Record<string, any> = {};
 
     // Combine creator IDs from both submissions and Twitter tweets
     const allCreatorIds = new Set<string>();
@@ -496,7 +500,11 @@ export default async function AdminContestDetailPage({
             instagram_account,
             instagram_archive,
             twitter_account,
-            trust_score_metrics
+            trust_score_metrics,
+            avg_quality_score,
+            best_quality_score,
+            total_money_won,
+            total_views
           `
           )
           .in("id", creatorIds);
@@ -514,6 +522,8 @@ export default async function AdminContestDetailPage({
           const supabaseAdmin = createAdminClient();
           liveGlobalTrustMetricsByCreatorId =
             await fetchLiveTrustMetricsByCreatorIds(supabaseAdmin, creatorIds);
+          liveGlobalQualityMetricsByCreatorId =
+            await fetchLiveQualityMetricsByCreatorIds(supabaseAdmin, creatorIds);
         }
 
         // Fetch users for additional fallbacks
@@ -560,6 +570,30 @@ export default async function AdminContestDetailPage({
             liveGlobalTrustMetricsByCreatorId,
           )
         : null;
+
+    const getCreatorEligibilityFields = (
+      creatorProfile: any,
+      creatorId?: string | null,
+    ) => {
+      if (!isVideoContest || !creatorId) {
+        return {
+          avg_quality_score: null,
+          best_quality_score: null,
+          total_money_won: 0,
+          total_views: 0,
+        };
+      }
+      const resolved = resolveCreatorEligibilityProfileFields(
+        creatorProfile,
+        liveGlobalQualityMetricsByCreatorId[creatorId] ?? null,
+      );
+      return {
+        avg_quality_score: resolved.avgQualityScore,
+        best_quality_score: resolved.bestQualityScore,
+        total_money_won: resolved.totalPlatformEarningsCents,
+        total_views: resolved.totalViews,
+      };
+    };
 
     const calculateDurationDays = (
       start: string | null,
@@ -812,6 +846,10 @@ export default async function AdminContestDetailPage({
               creatorProfile,
               actualCreatorProfileId,
             ),
+            ...getCreatorEligibilityFields(
+              creatorProfile,
+              actualCreatorProfileId,
+            ),
           },
         };
       })
@@ -939,8 +977,13 @@ export default async function AdminContestDetailPage({
               creatorProfile,
               actualCreatorProfileId,
             ),
+            ...getCreatorEligibilityFields(
+              creatorProfile,
+              actualCreatorProfileId,
+            ),
           },
           creator_instagram_archive: creatorProfile?.instagram_archive ?? null,
+          quality_score: sub.quality_score ?? null,
         };
       })
       : [];

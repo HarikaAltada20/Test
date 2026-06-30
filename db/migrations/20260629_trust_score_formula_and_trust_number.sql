@@ -1,7 +1,6 @@
--- Trust Score %: 100 − (rejected ÷ verified × 100)
--- Trust Number: verified_reels − rejected_reels
---  per-campaign minimum trust_number on contests.
-
+-- Trust Score % = (trust_number ÷ verified_reels) × 100
+-- Trust Number = verified_reels − rejected_reels
+-- Optional per-campaign minimum trust_number on contests.
 ALTER TABLE public.contests
   ADD COLUMN IF NOT EXISTS trust_number integer NULL;
 
@@ -41,17 +40,20 @@ BEGIN
   v_trust_number := COALESCE(v_verified, 0) - COALESCE(v_rejected, 0);
 
   IF COALESCE(v_verified, 0) = 0 THEN
-    v_score := 100;
+    IF COALESCE(v_rejected, 0) > 0 THEN
+      v_score := 0;
+    ELSE
+      v_score := 100;
+    END IF;
   ELSE
     v_score := GREATEST(
       0,
       LEAST(
         100,
-        ROUND(100 - (v_rejected::numeric / v_verified::numeric) * 100)
+        ROUND((v_trust_number::numeric / v_verified::numeric) * 100)
       )
     )::integer;
   END IF;
-
   UPDATE public.creator_profiles
   SET trust_score_metrics = jsonb_build_object(
     'trust_score', v_score,
@@ -113,17 +115,20 @@ BEGIN
     v_creator_trust_number := COALESCE(v_verified, 0) - COALESCE(v_rejected, 0);
 
     IF COALESCE(v_verified, 0) = 0 THEN
-      v_creator_score := 100;
+      IF COALESCE(v_rejected, 0) > 0 THEN
+        v_creator_score := 0;
+      ELSE
+        v_creator_score := 100;
+      END IF;
     ELSE
       v_creator_score := GREATEST(
         0,
         LEAST(
           100,
-          ROUND(100 - (v_rejected::numeric / v_verified::numeric) * 100)
+          ROUND((v_creator_trust_number::numeric / v_verified::numeric) * 100)
         )
       )::integer;
-    END IF;
-  END IF;
+    END IF;  END IF;
 
   IF v_min_trust IS NOT NULL AND v_min_trust > 0
      AND v_creator_score < v_min_trust THEN

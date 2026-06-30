@@ -24,24 +24,29 @@ type SubmissionStatus = "pending" | "verified" | "rejected" | "paid";
 
 const roundToNearestInt = (value: number): number => Math.round(value);
 
-/** Trust Score % = 100 − (rejected ÷ verified × 100). No verified reels → 100. */
-export function computeTrustScore(
-  verifiedReels: number,
-  rejectedReels: number,
-): number {
-  if (verifiedReels <= 0) return 100;
-
-  const rejectedPct = (rejectedReels / verifiedReels) * 100;
-  const rawScore = 100 - rejectedPct;
-  return Math.max(0, Math.min(100, roundToNearestInt(rawScore)));
-}
-
-/** Net track record: verified reels minus rejected reels. */
+/** Trust Number = verified reels − rejected reels. */
 export function computeTrustNumber(
   verifiedReels: number,
   rejectedReels: number,
 ): number {
   return verifiedReels - rejectedReels;
+}
+
+/** Trust Score % = (trust number ÷ verified reels) × 100. No verified reels → 100 if no rejections, else 0. */
+export function computeTrustScore(
+  verifiedReels: number,
+  rejectedReels: number,
+): number {
+  const verified = Math.max(0, verifiedReels);
+  const rejected = Math.max(0, rejectedReels);
+  const trustNumber = computeTrustNumber(verified, rejected);
+
+  if (verified <= 0) {
+    return rejected > 0 ? 0 : 100;
+  }
+
+  const rawScore = (trustNumber / verified) * 100;
+  return Math.max(0, Math.min(100, roundToNearestInt(rawScore)));
 }
 
 export function buildTrustScoreMetricsFromCounts(input: {
