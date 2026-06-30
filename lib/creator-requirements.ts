@@ -137,6 +137,99 @@ export type RequirementFailure = {
   message: string;
 };
 
+export type RequirementCheckItem = {
+  code: string;
+  label: string;
+  requiredLabel: string;
+  yoursLabel: string;
+  passed: boolean;
+};
+
+export function buildRequirementChecklist(input: {
+  requirements: ParsedContestRequirements;
+  snapshot: CreatorRequirementsSnapshot;
+}): RequirementCheckItem[] {
+  const { requirements: req, snapshot } = input;
+  const items: RequirementCheckItem[] = [];
+
+  if (req.minTrustScorePct !== null) {
+    items.push({
+      code: "trust_score_too_low",
+      label: "Trust score",
+      requiredLabel: `${req.minTrustScorePct}%`,
+      yoursLabel: `${snapshot.trustScorePct}%`,
+      passed: snapshot.trustScorePct >= req.minTrustScorePct,
+    });
+  }
+
+  if (req.minTrustNumber !== null) {
+    items.push({
+      code: "trust_number_too_low",
+      label: "Trust number",
+      requiredLabel: `${req.minTrustNumber}`,
+      yoursLabel: `${snapshot.trustNumber}`,
+      passed: snapshot.trustNumber >= req.minTrustNumber,
+    });
+  }
+
+  if (req.minBestQuality !== null) {
+    const yours =
+      snapshot.bestQualityScore !== null
+        ? `${snapshot.bestQualityScore}/3`
+        : "Not established";
+    items.push({
+      code: "best_quality_too_low",
+      label: "Best quality score",
+      requiredLabel: `${req.minBestQuality}/3`,
+      yoursLabel: yours,
+      passed:
+        snapshot.bestQualityScore !== null &&
+        snapshot.bestQualityScore >= req.minBestQuality,
+    });
+  }
+
+  if (req.minAvgQuality !== null) {
+    const yours =
+      snapshot.avgQualityScore !== null
+        ? `${snapshot.avgQualityScore}/3`
+        : "Not established";
+    items.push({
+      code: "avg_quality_too_low",
+      label: "Average quality score",
+      requiredLabel: `${req.minAvgQuality}/3`,
+      yoursLabel: yours,
+      passed:
+        snapshot.avgQualityScore !== null &&
+        snapshot.avgQualityScore >= req.minAvgQuality,
+    });
+  }
+
+  if (req.minPlatformEarningsCents !== null) {
+    const requiredDollars = (req.minPlatformEarningsCents / 100).toFixed(2);
+    const yoursDollars = (snapshot.totalPlatformEarningsCents / 100).toFixed(2);
+    items.push({
+      code: "platform_earnings_too_low",
+      label: "Platform earnings",
+      requiredLabel: `$${requiredDollars}`,
+      yoursLabel: `$${yoursDollars}`,
+      passed:
+        snapshot.totalPlatformEarningsCents >= req.minPlatformEarningsCents,
+    });
+  }
+
+  if (req.minPlatformViews !== null) {
+    items.push({
+      code: "platform_views_too_low",
+      label: "Platform views",
+      requiredLabel: req.minPlatformViews.toLocaleString(),
+      yoursLabel: snapshot.totalViews.toLocaleString(),
+      passed: snapshot.totalViews >= req.minPlatformViews,
+    });
+  }
+
+  return items;
+}
+
 export function evaluateCreatorRequirements(input: {
   requirements: ParsedContestRequirements;
   snapshot: CreatorRequirementsSnapshot;
@@ -308,7 +401,16 @@ export async function assertCreatorMeetsContestRequirements(
   supabase: any,
   contestId: string,
   creatorId: string,
-): Promise<{ ok: true } | { ok: false; error: string; status: number; code?: string }> {
+): Promise<
+  | { ok: true }
+  | {
+      ok: false;
+      error: string;
+      status: number;
+      code?: string;
+      failures: RequirementFailure[];
+    }
+> {
   const { data: contest, error: contestError } = await supabase
     .from("contests")
     .select(
@@ -322,6 +424,7 @@ export async function assertCreatorMeetsContestRequirements(
       ok: false,
       error: contestError?.message || "Contest not found",
       status: 404,
+      failures: [],
     };
   }
 
@@ -345,6 +448,7 @@ export async function assertCreatorMeetsContestRequirements(
         ok: false,
         error: failures[0].message,
         code: failures[0].code,
+        failures,
         status: 403,
       };
     }
@@ -352,7 +456,7 @@ export async function assertCreatorMeetsContestRequirements(
   } catch (err: unknown) {
     const message =
       err instanceof Error ? err.message : "Failed to verify creator requirements";
-    return { ok: false, error: message, status: 500 };
+    return { ok: false, error: message, status: 500, failures: [] };
   }
 }
 
@@ -360,7 +464,7 @@ export function getRequirementsBlockedMessage(
   failures: RequirementFailure[],
 ): string | null {
   if (failures.length === 0) return null;
-  return failures.map((f) => f.message).join(" ");
+  return failures.map((f) => f.message).join("\n");
 }
 
 export async function recomputeCreatorProfileMetrics(

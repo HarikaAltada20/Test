@@ -63,17 +63,17 @@ import {
   isMilestoneContestType,
 } from "@/lib/contest-type";
 import {
-  getContestMinTrustNumberForGate,
-  getContestMinTrustScoreForGate,
-  getTrustNumberSubmissionBlockedMessage,
-  getTrustSubmissionBlockedMessage,
-  isCreatorTrustNumberSubmissionBlocked,
-  isCreatorTrustSubmissionBlocked,
-} from "@/lib/trust-score";
-import {
   countPendingLeaderboardSubmissions,
   renderLeaderboardStatusBadge,
 } from "@/lib/status-badges";
+import {
+  buildRequirementBadgeLabels,
+  hasAnyContestCreatorRequirement,
+} from "@/lib/creator-requirements";
+import {
+  CreatorContestRequirementsGate,
+} from "@/components/CreatorContestRequirementsGate";
+import { useCreatorContestEligibility } from "@/hooks/useCreatorContestEligibility";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
@@ -276,6 +276,14 @@ export function ContestClientPage({
   user: UserResponse["data"]["user"] | null;
 }) {
   const [contest, setContest] = useState<any>(null);
+  const {
+    items: requirementItems,
+    failingItems,
+    isBlocked: isRequirementsGateBlocked,
+    hasRequirements: hasCreatorRequirements,
+    loading: requirementsLoading,
+    refresh: refreshRequirements,
+  } = useCreatorContestEligibility(contestId, contest);
   const [existingSubmission, setExistingSubmission] = useState<any>(null);
   const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
   const [lastUpdated, setLastUpdated] = useState<string | null>(null);
@@ -291,12 +299,6 @@ export function ContestClientPage({
   const [submissionCount, setSubmissionCount] = useState(0);
   const [maxSubmissions, setMaxSubmissions] = useState(1);
   const [joinCampaignLoading, setJoinCampaignLoading] = useState(false);
-  const [creatorTrustScore, setCreatorTrustScore] = useState<number | null>(null);
-  const [creatorTrustScoreLoaded, setCreatorTrustScoreLoaded] = useState(false);
-  const [creatorTrustScoreLoading, setCreatorTrustScoreLoading] = useState(false);
-  const [creatorTrustNumber, setCreatorTrustNumber] = useState<number | null>(null);
-  const [creatorTrustNumberLoaded, setCreatorTrustNumberLoaded] = useState(false);
-  const [creatorTrustNumberLoading, setCreatorTrustNumberLoading] = useState(false);
   const isMountedRef = useRef(true);
   const [hasJoinedTwitterCampaign, setHasJoinedTwitterCampaign] =
     useState(false);
@@ -2552,187 +2554,18 @@ export function ContestClientPage({
     loadTwitterCampaignState();
   }, [contestId, isTwitterTextImageContest, user]);
 
-  const contestTrustGateMinScore = contest
-    ? getContestMinTrustScoreForGate(contest)
-    : null;
-  const contestTrustGateMinNumber = contest
-    ? getContestMinTrustNumberForGate(contest)
-    : null;
-  const isOnContestDetailPage =
-    pathname === `/dashboard/opportunities/${contestId}`;
-
   useEffect(() => {
-    if (!isOnContestDetailPage || !user?.id || !contest) return;
+    if (!justSubmitted || !user?.id || !hasCreatorRequirements) return;
+    void refreshRequirements();
+  }, [justSubmitted, user?.id, hasCreatorRequirements, refreshRequirements]);
 
-    if (
-      contestTrustGateMinScore === null &&
-      contestTrustGateMinNumber === null
-    ) {
-      setCreatorTrustScore(null);
-      setCreatorTrustScoreLoaded(true);
-      setCreatorTrustScoreLoading(false);
-      setCreatorTrustNumber(null);
-      setCreatorTrustNumberLoaded(true);
-      setCreatorTrustNumberLoading(false);
-      return;
-    }
-
-    let cancelled = false;
-
-    const loadCreatorTrustMetrics = async () => {
-      setCreatorTrustScoreLoading(contestTrustGateMinScore !== null);
-      setCreatorTrustScoreLoaded(contestTrustGateMinScore === null);
-      setCreatorTrustNumberLoading(contestTrustGateMinNumber !== null);
-      setCreatorTrustNumberLoaded(contestTrustGateMinNumber === null);
-      try {
-        const trustRes = await fetch("/api/creators/trust-score");
-        if (cancelled) return;
-        if (trustRes.ok) {
-          const trustData = await trustRes.json();
-          if (contestTrustGateMinScore !== null) {
-            setCreatorTrustScore(
-              typeof trustData?.trust_score === "number"
-                ? trustData.trust_score
-                : null,
-            );
-            setCreatorTrustScoreLoaded(true);
-          }
-          if (contestTrustGateMinNumber !== null) {
-            setCreatorTrustNumber(
-              typeof trustData?.trust_number === "number"
-                ? trustData.trust_number
-                : null,
-            );
-            setCreatorTrustNumberLoaded(true);
-          }
-        } else {
-          if (contestTrustGateMinScore !== null) {
-            setCreatorTrustScore(null);
-            setCreatorTrustScoreLoaded(false);
-          }
-          if (contestTrustGateMinNumber !== null) {
-            setCreatorTrustNumber(null);
-            setCreatorTrustNumberLoaded(false);
-          }
-        }
-      } catch (trustError) {
-        if (cancelled) return;
-        console.warn("Failed to load creator trust metrics:", trustError);
-        if (contestTrustGateMinScore !== null) {
-          setCreatorTrustScore(null);
-          setCreatorTrustScoreLoaded(false);
-        }
-        if (contestTrustGateMinNumber !== null) {
-          setCreatorTrustNumber(null);
-          setCreatorTrustNumberLoaded(false);
-        }
-      } finally {
-        if (!cancelled) {
-          setCreatorTrustScoreLoading(false);
-          setCreatorTrustNumberLoading(false);
-        }
-      }
-    };
-
-    void loadCreatorTrustMetrics();
-    return () => {
-      cancelled = true;
-    };
-  }, [
-    contestId,
-    user?.id,
-    contestTrustGateMinScore,
-    contestTrustGateMinNumber,
-    isOnContestDetailPage,
-  ]);
-
-  useEffect(() => {
-    if (!justSubmitted || !user?.id) return;
-
-    const refreshTrustAfterSubmit = async () => {
-      setCreatorTrustScoreLoading(contestTrustGateMinScore !== null);
-      setCreatorTrustScoreLoaded(contestTrustGateMinScore === null);
-      setCreatorTrustNumberLoading(contestTrustGateMinNumber !== null);
-      setCreatorTrustNumberLoaded(contestTrustGateMinNumber === null);
-      try {
-        await fetch("/api/creators/trust-score", { method: "PATCH" });
-        const trustRes = await fetch("/api/creators/trust-score");
-        if (trustRes.ok) {
-          const trustData = await trustRes.json();
-          if (contestTrustGateMinScore !== null) {
-            setCreatorTrustScore(
-              typeof trustData?.trust_score === "number"
-                ? trustData.trust_score
-                : null,
-            );
-            setCreatorTrustScoreLoaded(true);
-          }
-          if (contestTrustGateMinNumber !== null) {
-            setCreatorTrustNumber(
-              typeof trustData?.trust_number === "number"
-                ? trustData.trust_number
-                : null,
-            );
-            setCreatorTrustNumberLoaded(true);
-          }
-        }
-      } catch (trustError) {
-        console.warn("Failed to refresh trust metrics after submit:", trustError);
-      } finally {
-        setCreatorTrustScoreLoading(false);
-        setCreatorTrustNumberLoading(false);
-      }
-    };
-
-    void refreshTrustAfterSubmit();
-  }, [
-    justSubmitted,
-    user?.id,
-    contestTrustGateMinScore,
-    contestTrustGateMinNumber,
-  ]);
-
-  const isTrustGateEnabled =
-    contestTrustGateMinScore !== null || contestTrustGateMinNumber !== null;
-  const isTrustScoreBlocked =
-    !!user &&
-    isCreatorTrustSubmissionBlocked({
-      minScore: contestTrustGateMinScore,
-      creatorScore: creatorTrustScore,
-      scoreLoaded: creatorTrustScoreLoaded,
-      scoreLoading: creatorTrustScoreLoading,
-    });
-  const isTrustNumberBlocked =
-    !!user &&
-    isCreatorTrustNumberSubmissionBlocked({
-      minTrustNumber: contestTrustGateMinNumber,
-      creatorTrustNumber,
-      trustNumberLoaded: creatorTrustNumberLoaded,
-      trustNumberLoading: creatorTrustNumberLoading,
-    });
-  const isTrustBlocked = isTrustScoreBlocked || isTrustNumberBlocked;
-  const trustScoreMessage =
-    isTrustScoreBlocked && contestTrustGateMinScore !== null
-      ? getTrustSubmissionBlockedMessage({
-          minScore: contestTrustGateMinScore,
-          creatorScore: creatorTrustScore,
-          scoreLoading: creatorTrustScoreLoading,
-          scoreLoaded: creatorTrustScoreLoaded,
-        })
-      : null;
-  const trustNumberMessage =
-    isTrustNumberBlocked && contestTrustGateMinNumber !== null
-      ? getTrustNumberSubmissionBlockedMessage({
-          minTrustNumber: contestTrustGateMinNumber,
-          creatorTrustNumber,
-          trustNumberLoading: creatorTrustNumberLoading,
-          trustNumberLoaded: creatorTrustNumberLoaded,
-        })
-      : null;
-  const trustGateMessage = trustScoreMessage || trustNumberMessage;
+  const isRequirementsBlocked = !!user && isRequirementsGateBlocked;
+  const requirementBadgeLabels = contest
+    ? buildRequirementBadgeLabels(contest)
+    : [];
 
   const handleSubmitContent = async (button: SubmitEntryButton) => {
-    if (isTrustBlocked) return;
+    if (isRequirementsBlocked) return;
     await trackSubmitEntryClick(contestId, button);
     router.push(`/dashboard/opportunities/${contestId}/submit`);
   };
@@ -3115,7 +2948,7 @@ export function ContestClientPage({
                     }
                     disabled={
                       contest.status?.toLowerCase() !== "active" ||
-                      isTrustBlocked ||
+                      isRequirementsBlocked ||
                       joinCampaignLoading ||
                       (hasSubmitted &&
                         !(
@@ -3134,7 +2967,7 @@ export function ContestClientPage({
                     className={cn(
                       "w-full lg:min-w-[220px] text-base font-bold py-4 px-8 h-auto rounded-2xl shadow-xl transition-all duration-300",
                       contest.status?.toLowerCase() === "active" &&
-                        !isTrustBlocked &&
+                        !isRequirementsBlocked &&
                         !joinCampaignLoading &&
                         !(
                           hasSubmitted &&
@@ -3158,9 +2991,7 @@ export function ContestClientPage({
                         : contest.status?.toLowerCase() === "ended" ||
                             contest.status?.toLowerCase() === "completed"
                           ? "Contest Ended"
-                          : isTrustBlocked
-                            ? "Trust Requirements Not Met"
-                            : hasSubmitted &&
+                          : hasSubmitted &&
                                 submissionCount > 0 &&
                                 contest?.multiple_submissions_enabled &&
                                 submissionCount < maxSubmissions
@@ -3307,41 +3138,37 @@ export function ContestClientPage({
                     onClick={() => handleSubmitContent("2")}
                     disabled={
                       contest.status?.toLowerCase() !== "active" ||
-                      isTrustBlocked
+                      isRequirementsBlocked
                     }
                     className={`relative overflow-hidden text-lg font-bold py-4 px-8 h-auto rounded-2xl shadow-xl transition-all duration-500 ease-out transform ${
                       contest.status?.toLowerCase() === "active"
-                        ? "bg-[#4A00BE] text-white border-0 hover:shadow-2xl hover:scale-105"
+                        ? isRequirementsBlocked
+                          ? "bg-[#4A00BE] text-white border-0 opacity-60 cursor-not-allowed"
+                          : "bg-[#4A00BE] text-white border-0 hover:shadow-2xl hover:scale-105"
                         : "bg-gradient-to-r from-slate-300 to-slate-400 dark:from-slate-600 dark:to-slate-700 text-slate-500 dark:text-slate-400 cursor-not-allowed"
                     }`}
                   >
                     <span className="relative z-10">
                       {contest.status?.toLowerCase() === "active"
-                        ? isTrustBlocked
-                          ? "Trust Requirements Not Met"
-                          : `Submit More Videos (${
-                              maxSubmissions - submissionCount
-                            } remaining)`
+                        ? `Submit More Videos (${
+                            maxSubmissions - submissionCount
+                          } remaining)`
                         : "Contest Not Active"}
                     </span>
-                    {contest.status?.toLowerCase() === "active" && (
+                    {contest.status?.toLowerCase() === "active" &&
+                      !isRequirementsBlocked && (
                       <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent transform -skew-x-12 -translate-x-full group-hover:translate-x-full transition-transform duration-1000 ease-out"></div>
                     )}
                   </Button>
-                  {trustGateMessage && (
-                    <Alert
-                      variant="default"
-                      className="mt-4 max-w-xl mx-auto text-left rounded-2xl border border-[#7F39EC] bg-[#D9C0FF26] shadow-sm"
-                    >
-                      <AlertDescription
-                        className={cn(
-                          "text-md leading-relaxed",
-                          isDark ? "text-gray-200" : "text-[#4A00BE]",
-                        )}
-                      >
-                        {trustGateMessage}
-                      </AlertDescription>
-                    </Alert>
+                  {user && hasCreatorRequirements && (
+                    <div className="mt-4 max-w-xl mx-auto text-left">
+                      <CreatorContestRequirementsGate
+                        items={requirementItems}
+                        loading={requirementsLoading}
+                        isDark={isDark}
+                        className="mb-0"
+                      />
+                    </div>
                   )}
                 </div>
               ) : (
@@ -3417,7 +3244,7 @@ export function ContestClientPage({
                     }
                     disabled={
                       contest.status?.toLowerCase() !== "active" ||
-                      isTrustBlocked ||
+                      isRequirementsBlocked ||
                       joinCampaignLoading ||
                       (isTwitterTextImageContest && hasJoinedTwitterCampaign) ||
                       (!!user &&
@@ -3428,12 +3255,15 @@ export function ContestClientPage({
                     }
                     className={`relative overflow-hidden text-lg font-bold py-4  px-8 h-auto rounded-2xl shadow-xl transition-all duration-500 ease-out transform ${
                       contest.status?.toLowerCase() === "active"
-                        ? "bg-[#4A00BE] text-white border-0 hover:shadow-2xl"
+                        ? isRequirementsBlocked
+                          ? "bg-[#4A00BE] text-white border-0 opacity-60 cursor-not-allowed"
+                          : "bg-[#4A00BE] text-white border-0 hover:shadow-2xl"
                         : "bg-gradient-to-r from-slate-300 to-slate-400 dark:from-slate-600 dark:to-slate-700 text-slate-500 dark:text-slate-400 cursor-not-allowed"
                     }`}
                   >
                     {/* Animated shine effect for active button */}
-                    {contest.status?.toLowerCase() === "active" && (
+                    {contest.status?.toLowerCase() === "active" &&
+                      !isRequirementsBlocked && (
                       <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent transform -skew-x-12 -translate-x-full group-hover:translate-x-full transition-transform duration-1000"></div>
                     )}
 
@@ -3465,27 +3295,23 @@ export function ContestClientPage({
                                 : "Submit Your Entry!"}
                             </span>
                           </div>
-                          {contest.status?.toLowerCase() === "active" && (
+                          {contest.status?.toLowerCase() === "active" &&
+                      !isRequirementsBlocked && (
                             <div className="w-2 h-2 bg-green-300 rounded-full animate-pulse ml-1"></div>
                           )}
                         </>
                       )}
                     </span>
                   </Button>
-                  {trustGateMessage && (
-                    <Alert
-                      variant="default"
-                      className="mt-4 max-w-xl mx-auto text-left rounded-2xl border border-[#7F39EC] bg-[#D9C0FF26] shadow-sm"
-                    >
-                      <AlertDescription
-                        className={cn(
-                          "text-sm leading-relaxed",
-                          isDark ? "text-gray-200" : "text-[#4A00BE]",
-                        )}
-                      >
-                        {trustGateMessage}
-                      </AlertDescription>
-                    </Alert>
+                  {user && hasCreatorRequirements && (
+                    <div className="mt-4 max-w-xl mx-auto text-left">
+                      <CreatorContestRequirementsGate
+                        items={requirementItems}
+                        loading={requirementsLoading}
+                        isDark={isDark}
+                        className="mb-0"
+                      />
+                    </div>
                   )}
 
                   {user &&
@@ -5847,9 +5673,10 @@ export function ContestClientPage({
                       </div>
                     </div>
 
-                    {/* Trust requirements */}
-                    {contestTrustGateMinScore !== null && (
+                    {/* Creator requirements */}
+                    {requirementBadgeLabels.map((label) => (
                       <div
+                        key={label}
                         className={cn(
                           "rounded-xl p-4 border shadow-sm",
                           isDark
@@ -5875,7 +5702,7 @@ export function ContestClientPage({
                                 isDark ? "text-slate-300" : "text-slate-600",
                               )}
                             >
-                               Trust Score 
+                              Minimum required
                             </p>
                             <p
                               className={cn(
@@ -5883,53 +5710,12 @@ export function ContestClientPage({
                                 isDark ? "text-slate-100" : "text-slate-900",
                               )}
                             >
-                              {contestTrustGateMinScore}%
+                              {label}
                             </p>
                           </div>
                         </div>
                       </div>
-                    )}
-                    {contestTrustGateMinNumber !== null && (
-                      <div
-                        className={cn(
-                          "rounded-xl p-4 border shadow-sm",
-                          isDark
-                            ? "border-blue-400/50"
-                            : "bg-white border-blue-200 dark:border-blue-700/30",
-                        )}
-                      >
-                        <div className="flex items-center gap-3">
-                          <div
-                            className={cn(
-                              "p-3 rounded-full",
-                              isDark
-                                ? "bg-blue-500/30 text-blue-400"
-                                : "bg-blue-100 dark:bg-blue-900/30 text-blue-600",
-                            )}
-                          >
-                            <Star className="h-5 w-5" />
-                          </div>
-                          <div className="flex-1">
-                            <p
-                              className={cn(
-                                "text-xs font-medium uppercase tracking-wide",
-                                isDark ? "text-slate-300" : "text-slate-600",
-                              )}
-                            >
-                              Minimum Trust Number
-                            </p>
-                            <p
-                              className={cn(
-                                "text-lg font-bold",
-                                isDark ? "text-slate-100" : "text-slate-900",
-                              )}
-                            >
-                              {contestTrustGateMinNumber}
-                            </p>
-                          </div>
-                        </div>
-                      </div>
-                    )}
+                    ))}
 
                     {/* Campaign Type Card - Only for Twitter campaigns */}
                     {(() => {

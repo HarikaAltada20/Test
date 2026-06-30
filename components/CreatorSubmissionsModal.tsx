@@ -41,6 +41,7 @@ import {
   BarChart2,
   CircleHelp,
   AlertTriangle,
+  Star,
 } from "lucide-react";
 import {
   Select,
@@ -77,7 +78,9 @@ import {
 } from "@/lib/bulk-payment-toast";
 import { buildFlatFeeBonusExpectedCentsBySubmissionId } from "@/lib/twitter-cpm-bonus-expected";
 import { parseQualityScore } from "@/lib/quality-score";
+import type { QualityScore } from "@/lib/quality-score";
 import { formatQualityScoreDisplay } from "@/lib/creator-profile-stats";
+import { VerifyQualityDialog } from "@/components/VerifyQualityDialog";
 import { YouTubeAnalyticsPanel } from "@/components/youtube/YouTubeAnalyticsPanel";
 import {
   formatMetadataTimestamp,
@@ -213,6 +216,14 @@ interface CreatorSubmissionsModalProps {
   bonusCapSubmissions?: Submission[];
   /** True while parent runs bulk/single verify API after paid-reversal confirm (Creator modal stays open). */
   parentBulkActionLoading?: boolean;
+  /** Called after a submission quality score is saved (updates parent list + creator aggregates). */
+  onQualityScoreUpdated?: (payload: {
+    submissionId: string;
+    qualityScore: number;
+    creatorId: string;
+    avgQualityScore: number | null;
+    bestQualityScore: number | null;
+  }) => void;
 }
 
 export function CreatorSubmissionsModal({
@@ -236,6 +247,7 @@ export function CreatorSubmissionsModal({
   canSeeDemographics = false,
   bonusCapSubmissions,
   parentBulkActionLoading = false,
+  onQualityScoreUpdated,
 }: CreatorSubmissionsModalProps) {
   const [selectedSubmissions, setSelectedSubmissions] = useState<Set<string>>(
     new Set(),
@@ -273,6 +285,10 @@ export function CreatorSubmissionsModal({
   >(null);
   const [rejectionDetailsModalSubmission, setRejectionDetailsModalSubmission] =
     useState<{ id: string; metadata: any } | null>(null);
+  const [qualityEditSubmissionIds, setQualityEditSubmissionIds] = useState<
+    string[]
+  >([]);
+  const [qualityEditLoading, setQualityEditLoading] = useState(false);
 
   // Read mode from data attribute
   useEffect(() => {
@@ -404,6 +420,32 @@ export function CreatorSubmissionsModal({
   const handleBulkAction = async (action: "verify" | "reject" | "pending") => {
     const selectedIds = Array.from(selectedSubmissions);
     if (action === "verify") {
+      const selectedSubs = submissions.filter((s) =>
+        selectedIds.includes(s.id),
+      );
+      const isVideoContest = contest?.contest_format !== "text_image";
+      const allAlreadyModerated =
+        isVideoContest &&
+        selectedSubs.length > 0 &&
+        selectedSubs.every((s) => {
+          const isTwitterTweet = s.is_twitter_tweet === true;
+          const rawStatus =
+            (isTwitterTweet ? s.moderation_status || s.status : s.status) ||
+            "pending";
+          const st = String(rawStatus).toLowerCase();
+          if (isTwitterTweet) {
+            if (st === "paid") return true;
+            if (st === "approved" || st === "verified") return true;
+            return false;
+          }
+          return st === "verified" || st === "paid";
+        });
+
+      if (allAlreadyModerated) {
+        setQualityEditSubmissionIds(selectedIds);
+        return;
+      }
+
       setBulkVerifyLoading(true);
       try {
         await onVerify(selectedIds);
@@ -1135,6 +1177,65 @@ export function CreatorSubmissionsModal({
   const isYouTubeContest =
     contest?.platform?.toLowerCase().includes("youtube") ?? false;
   const isVideoContest = contest?.contest_format !== "text_image";
+  const canEditQualityScore = isVideoContest;
+  const qualityEditFirstSubmission = qualityEditSubmissionIds[0]
+    ? submissions.find((s) => s.id === qualityEditSubmissionIds[0]) ?? null
+    : null;
+  const qualityEditInitialScore: QualityScore =
+    parseQualityScore(qualityEditFirstSubmission?.quality_score) ?? 1;
+
+  const handleSaveQualityScore = async (qualityScore: QualityScore) => {
+    if (qualityEditSubmissionIds.length === 0) return;
+    setQualityEditLoading(true);
+    try {
+      for (const submissionId of qualityEditSubmissionIds) {
+        const submission =
+          submissions.find((s) => s.id === submissionId) ?? null;
+        const res = await fetch(
+          `/api/admin/submissions/${submissionId}/quality-score`,
+          {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ qualityScore }),
+          },
+        );
+        const data = await res.json();
+        if (!res.ok) {
+          throw new Error(data.error || "Failed to update quality score");
+        }
+
+        onQualityScoreUpdated?.({
+          submissionId,
+          qualityScore,
+          creatorId: String(
+            data.creatorId || submission?.creator_id || "",
+          ),
+          avgQualityScore: data.creatorQuality?.avg_quality_score ?? null,
+          bestQualityScore: data.creatorQuality?.best_quality_score ?? null,
+        });
+      }
+
+      toast({
+        title:
+          qualityEditSubmissionIds.length > 1
+            ? "Quality scores updated"
+            : "Quality score updated",
+        description: `Saved as ${qualityScore}/3.`,
+        variant: "success",
+      });
+      setQualityEditSubmissionIds([]);
+      setSelectedSubmissions(new Set());
+    } catch (error: unknown) {
+      toast({
+        title: "Could not update quality score",
+        description:
+          error instanceof Error ? error.message : "Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setQualityEditLoading(false);
+    }
+  };
   const ytVisibleColumnsEffective =
     ytVisibleColumns && ytVisibleColumns.length > 0
       ? ytVisibleColumns
@@ -4639,6 +4740,29 @@ export function CreatorSubmissionsModal({
                                     </>
                                   )}
 
+                                {canEditQualityScore &&
+                                  !isTwitterTweet &&
+                                  (normalizedStatus === "verified" ||
+                                    normalizedStatus === "paid") && (
+                                    <>
+                                      <DropdownMenuSeparator />
+                                      <DropdownMenuItem
+                                        onClick={() =>
+                                          setQualityEditSubmissionIds([
+                                            submission.id,
+                                          ])
+                                        }
+                                      >
+                                        <Star className="h-4 w-4 mr-2" />
+                                        {parseQualityScore(
+                                          submission.quality_score,
+                                        ) !== null
+                                          ? "Edit quality score"
+                                          : "Set quality score"}
+                                      </DropdownMenuItem>
+                                    </>
+                                  )}
+
                                 {submission.content_link && (
                                   <>
                                     <DropdownMenuSeparator />
@@ -4812,6 +4936,20 @@ export function CreatorSubmissionsModal({
             })()}
         </DialogContent>
       </Dialog>
+
+      <VerifyQualityDialog
+        open={qualityEditSubmissionIds.length > 0}
+        onOpenChange={(open) => {
+          if (!open && !qualityEditLoading) {
+            setQualityEditSubmissionIds([]);
+          }
+        }}
+        variant="edit"
+        submissionCount={qualityEditSubmissionIds.length}
+        initialQuality={qualityEditInitialScore}
+        onConfirm={handleSaveQualityScore}
+        loading={qualityEditLoading}
+      />
     </>
   );
 }

@@ -30,12 +30,20 @@ const VERIFY_BUTTON_LABELS: Record<QualityScore, string> = {
   3: "Verify — Exceptional (3)",
 };
 
+const EDIT_BUTTON_LABELS: Record<QualityScore, string> = {
+  1: "Save — Acceptable (1)",
+  2: "Save — Strong (2)",
+  3: "Save — Exceptional (3)",
+};
+
 type VerifyQualityDialogProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   submissionCount?: number;
   onConfirm: (qualityScore: QualityScore) => void;
   loading?: boolean;
+  variant?: "verify" | "edit";
+  initialQuality?: QualityScore;
 };
 
 export function VerifyQualityDialog({
@@ -44,14 +52,18 @@ export function VerifyQualityDialog({
   submissionCount = 1,
   onConfirm,
   loading = false,
+  variant = "verify",
+  initialQuality = 1,
 }: VerifyQualityDialogProps) {
   const [selectedQuality, setSelectedQuality] = useState<QualityScore>(1);
+  const isEdit = variant === "edit";
+  const buttonLabels = isEdit ? EDIT_BUTTON_LABELS : VERIFY_BUTTON_LABELS;
 
   useEffect(() => {
     if (open) {
-      setSelectedQuality(1);
+      setSelectedQuality(initialQuality);
     }
-  }, [open]);
+  }, [open, initialQuality]);
 
   const handleVerify = () => {
     if (loading) return;
@@ -75,10 +87,16 @@ export function VerifyQualityDialog({
         >
         <DialogHeader>
           <DialogTitle>
-            Verify submission{submissionCount > 1 ? "s" : ""}
+            {isEdit
+              ? "Update quality score"
+              : `Verify submission${submissionCount > 1 ? "s" : ""}`}
           </DialogTitle>
           <DialogDescription>
-            Select a quality score (1–3), then click Verify to confirm.
+            {isEdit
+              ? submissionCount > 1
+                ? `Choose a quality score (1–3), then click Save to update ${submissionCount} submissions.`
+                : "Choose a quality score (1–3), then click Save to update this submission."
+              : "Select a quality score (1–3), then click Verify to confirm."}
           </DialogDescription>
         </DialogHeader>
         <div
@@ -129,7 +147,11 @@ export function VerifyQualityDialog({
             onClick={handleVerify}
             disabled={loading}
           >
-            {loading ? "Verifying…" : VERIFY_BUTTON_LABELS[selectedQuality]}
+            {loading
+              ? isEdit
+                ? "Saving…"
+                : "Verifying…"
+              : buttonLabels[selectedQuality]}
           </Button>
           <Button
             type="button"

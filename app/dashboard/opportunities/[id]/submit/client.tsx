@@ -49,14 +49,11 @@ import {
   getContestSubmitReturnPath,
   getSettingsUrlWithReturnTo,
 } from "@/lib/oauth-return-to";
+import { getRequirementsBlockedMessage, type RequirementFailure } from "@/lib/creator-requirements";
 import {
-  getContestMinTrustNumberForGate,
-  getContestMinTrustScoreForGate,
-  getTrustNumberSubmissionBlockedMessage,
-  getTrustSubmissionBlockedMessage,
-  isCreatorTrustNumberSubmissionBlocked,
-  isCreatorTrustSubmissionBlocked,
-} from "@/lib/trust-score";
+  CreatorContestRequirementsGate,
+} from "@/components/CreatorContestRequirementsGate";
+import { useCreatorContestEligibility } from "@/hooks/useCreatorContestEligibility";
 
 function formatSubmissionInsertError(error: {
   message?: string;
@@ -104,8 +101,9 @@ function throwIfBatchInsertErrors(
 async function refreshTrustMetricsAfterSubmit() {
   try {
     await fetch("/api/creators/trust-score", { method: "PATCH" });
+    await fetch("/api/creators/stats", { method: "PATCH" });
   } catch (error) {
-    console.warn("Failed to refresh trust metrics after submit:", error);
+    console.warn("Failed to refresh creator metrics after submit:", error);
   }
 }
 
@@ -361,12 +359,15 @@ export default function SubmitContentPage({
   const [isFetchingInstagramMedia, setIsFetchingInstagramMedia] =
     useState(false);
   const [contest, setContest] = useState<any>(null); // Store full contest data including contest_type
-  const [creatorTrustScore, setCreatorTrustScore] = useState<number | null>(null);
-  const [creatorTrustScoreLoaded, setCreatorTrustScoreLoaded] = useState(false);
-  const [creatorTrustScoreLoading, setCreatorTrustScoreLoading] = useState(false);
-  const [creatorTrustNumber, setCreatorTrustNumber] = useState<number | null>(null);
-  const [creatorTrustNumberLoaded, setCreatorTrustNumberLoaded] = useState(false);
-  const [creatorTrustNumberLoading, setCreatorTrustNumberLoading] = useState(false);
+
+  const {
+    items: requirementItems,
+    failures: requirementFailures,
+    isBlocked: isRequirementsBlocked,
+    hasRequirements,
+    loading: requirementsLoading,
+    refresh: refreshRequirements,
+  } = useCreatorContestEligibility(contestId, contest);
 
   const { toast } = useToast();
 
@@ -391,48 +392,7 @@ export default function SubmitContentPage({
   );
   const totalTiktokPages = Math.ceil(userTiktokVideos.length / ITEMS_PER_PAGE);
 
-  const contestMinTrustScore = contest
-    ? getContestMinTrustScoreForGate(contest)
-    : null;
-  const contestMinTrustNumber = contest
-    ? getContestMinTrustNumberForGate(contest)
-    : null;
-  const isTrustGateEnabled =
-    contestMinTrustScore !== null || contestMinTrustNumber !== null;
-  const isTrustScoreBlocked = isCreatorTrustSubmissionBlocked({
-    minScore: contestMinTrustScore,
-    creatorScore: creatorTrustScore,
-    scoreLoaded: creatorTrustScoreLoaded,
-    scoreLoading: creatorTrustScoreLoading,
-  });
-  const isTrustNumberBlocked = isCreatorTrustNumberSubmissionBlocked({
-    minTrustNumber: contestMinTrustNumber,
-    creatorTrustNumber,
-    trustNumberLoaded: creatorTrustNumberLoaded,
-    trustNumberLoading: creatorTrustNumberLoading,
-  });
-  const isTrustBlocked = isTrustScoreBlocked || isTrustNumberBlocked;
-  const trustScoreWarning =
-    isTrustScoreBlocked && contestMinTrustScore !== null
-      ? getTrustSubmissionBlockedMessage({
-          minScore: contestMinTrustScore,
-          creatorScore: creatorTrustScore,
-          scoreLoading: creatorTrustScoreLoading,
-          scoreLoaded: creatorTrustScoreLoaded,
-        })
-      : null;
-  const trustNumberWarning =
-    isTrustNumberBlocked && contestMinTrustNumber !== null
-      ? getTrustNumberSubmissionBlockedMessage({
-          minTrustNumber: contestMinTrustNumber,
-          creatorTrustNumber,
-          trustNumberLoading: creatorTrustNumberLoading,
-          trustNumberLoaded: creatorTrustNumberLoaded,
-        })
-      : null;
-  const trustGateWarning = trustScoreWarning || trustNumberWarning;
-
-  // Helper function for 2-hour validation
+  // Read mode from data attribute
   const isContentTooOld = (publishedAt: string): boolean => {
     const windowAgo = dayjs().subtract(
       SUBMISSION_WINDOW_VALUE,
@@ -1212,8 +1172,8 @@ export default function SubmitContentPage({
       const { data: contestData, error: contestError } = await supabase
         .from("contests")
         .select(
-          "id, title, platform, contest_type, contest_format, multiple_submissions_enabled, max_submissions_per_creator, content_type, bonus_details, contest_based_details, trust_score, trust_number",
-        ) // Include new feature fields
+          "id, title, platform, contest_type, contest_format, multiple_submissions_enabled, max_submissions_per_creator, content_type, bonus_details, contest_based_details, trust_score, trust_number, min_avg_quality_score, min_best_quality_score, min_platform_earnings, min_platform_views",
+        )
         .eq("id", contestId)
         .single();
 
@@ -1232,66 +1192,6 @@ export default function SubmitContentPage({
 
       // Store full contest data
       setContest(contestData);
-
-      const minTrustScore = getContestMinTrustScoreForGate(contestData);
-      const minTrustNumber = getContestMinTrustNumberForGate(contestData);
-      if (minTrustScore === null && minTrustNumber === null) {
-        setCreatorTrustScore(null);
-        setCreatorTrustScoreLoaded(true);
-        setCreatorTrustScoreLoading(false);
-        setCreatorTrustNumber(null);
-        setCreatorTrustNumberLoaded(true);
-        setCreatorTrustNumberLoading(false);
-      } else {
-        setCreatorTrustScoreLoading(minTrustScore !== null);
-        setCreatorTrustScoreLoaded(minTrustScore === null);
-        setCreatorTrustNumberLoading(minTrustNumber !== null);
-        setCreatorTrustNumberLoaded(minTrustNumber === null);
-        try {
-          const trustRes = await fetch("/api/creators/trust-score");
-          if (trustRes.ok) {
-            const trustData = await trustRes.json();
-            if (minTrustScore !== null) {
-              setCreatorTrustScore(
-                typeof trustData?.trust_score === "number"
-                  ? trustData.trust_score
-                  : null,
-              );
-              setCreatorTrustScoreLoaded(true);
-            }
-            if (minTrustNumber !== null) {
-              setCreatorTrustNumber(
-                typeof trustData?.trust_number === "number"
-                  ? trustData.trust_number
-                  : null,
-              );
-              setCreatorTrustNumberLoaded(true);
-            }
-          } else {
-            if (minTrustScore !== null) {
-              setCreatorTrustScore(null);
-              setCreatorTrustScoreLoaded(false);
-            }
-            if (minTrustNumber !== null) {
-              setCreatorTrustNumber(null);
-              setCreatorTrustNumberLoaded(false);
-            }
-          }
-        } catch (trustError) {
-          console.warn("Failed to fetch trust metrics:", trustError);
-          if (minTrustScore !== null) {
-            setCreatorTrustScore(null);
-            setCreatorTrustScoreLoaded(false);
-          }
-          if (minTrustNumber !== null) {
-            setCreatorTrustNumber(null);
-            setCreatorTrustNumberLoaded(false);
-          }
-        } finally {
-          setCreatorTrustScoreLoading(false);
-          setCreatorTrustNumberLoading(false);
-        }
-      }
 
       // Fetch existing submissions for progress tracking
       const { data: existingSubmissions, error: existingSubsErr } =
@@ -2702,28 +2602,37 @@ export default function SubmitContentPage({
       return;
     }
 
-    if (isTrustBlocked) {
-      setError(trustGateWarning || "Trust requirements not met to submit.");
+    if (isRequirementsBlocked) {
+      const blockedMessage =
+        getRequirementsBlockedMessage(requirementFailures) ||
+        "Campaign requirements not met to submit.";
+      setError(blockedMessage);
       toast({
-        title: "Trust requirements not met",
-        description: trustGateWarning || "Trust requirements not met to submit.",
+        title: "Campaign requirements not met",
+        description: blockedMessage,
         variant: "destructive",
       });
       return;
     }
 
-    if (isTrustGateEnabled) {
+    if (hasRequirements) {
       try {
-        const trustCheckRes = await fetch("/api/creators/trust-score", {
+        const requirementsCheckRes = await fetch("/api/creators/stats", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ contestId }),
         });
-        if (!trustCheckRes.ok) {
-          const trustCheckBody = await trustCheckRes.json().catch(() => ({}));
+        if (!requirementsCheckRes.ok) {
+          const checkBody = await requirementsCheckRes.json().catch(() => ({}));
+          const apiFailures = Array.isArray(
+            (checkBody as { failures?: RequirementFailure[] }).failures,
+          )
+            ? (checkBody as { failures: RequirementFailure[] }).failures
+            : [];
           const msg =
-            (trustCheckBody as { error?: string })?.error ||
-            "Trust score requirement not met.";
+            getRequirementsBlockedMessage(apiFailures) ||
+            (checkBody as { error?: string })?.error ||
+            "Campaign requirements not met.";
           setError(msg);
           toast({
             title: "Cannot submit",
@@ -2733,9 +2642,7 @@ export default function SubmitContentPage({
           return;
         }
       } catch {
-        const msg =
-          trustGateWarning ||
-          "Unable to verify trust requirements. Please try again.";
+        const msg = "Unable to verify campaign requirements. Please try again.";
         setError(msg);
         toast({
           title: "Cannot submit",
@@ -2798,6 +2705,7 @@ export default function SubmitContentPage({
       } catch { }
 
       await refreshTrustMetricsAfterSubmit();
+      await refreshRequirements();
 
       // Success - This toast will be overridden by the specific messages in handleMultipleSubmissions
       // For single submissions, show this message
@@ -3240,20 +3148,12 @@ export default function SubmitContentPage({
               <AlertDescription>{message}</AlertDescription>
             </Alert>
           )}
-          {trustGateWarning && (
-            <Alert
-              variant="default"
-              className="mb-4 rounded-xl border border-[#7F39EC] bg-[#D9C0FF26]"
-            >
-              <AlertDescription
-                className={cn(
-                  "text-sm leading-relaxed",
-                  isDark ? "text-gray-200" : "text-[#4A00BE]",
-                )}
-              >
-                {trustGateWarning}
-              </AlertDescription>
-            </Alert>
+          {hasRequirements && (
+            <CreatorContestRequirementsGate
+              items={requirementItems}
+              loading={requirementsLoading}
+              isDark={isDark}
+            />
           )}
 
           {/* Submit and Cancel Buttons - Moved to top */}
@@ -3284,7 +3184,7 @@ export default function SubmitContentPage({
                 type="button"
                 onClick={handleSubmit}
                 disabled={
-                  isTrustBlocked ||
+                  isRequirementsBlocked ||
                   isLoading ||
                   isFetchingVideo ||
                   isFetchingInstagramMedia ||
@@ -3306,12 +3206,16 @@ export default function SubmitContentPage({
                       !tiktokVideoPreview &&
                       !selectedTiktokVideo))
                 }
-                className="w-full sm:w-auto"
+                className={cn(
+                  "w-full sm:w-auto",
+                  isRequirementsBlocked &&
+                    "bg-[#4A00BE] text-white opacity-60 hover:bg-[#4A00BE]",
+                )}
               >
                 {isLoading ? (
                   <RefreshCw className="animate-spin mr-2 h-4 w-4" />
                 ) : null}
-                {isTrustBlocked ? "Trust Requirements Not Met" : "Submit Content"}
+                Submit Content
               </Button>
             </div>
           </div>
