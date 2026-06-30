@@ -114,14 +114,26 @@ export default async function AdminContestDetailPage({
       payout_adjustment_percentage: number | null;
       payout_adjustment_mode: string | null;
       trust_score: number | null;
+      trust_number: number | null;
+      min_best_quality_score: number | null;
+      min_avg_quality_score: number | null;
+      min_platform_earnings: number | null;
+      min_platform_views: number | null;
     } = {
       payout_adjustment_percentage: null,
       payout_adjustment_mode: null,
       trust_score: null,
+      trust_number: null,
+      min_best_quality_score: null,
+      min_avg_quality_score: null,
+      min_platform_earnings: null,
+      min_platform_views: null,
     };
     const { data: payoutRow } = await supabase
       .from("contests")
-      .select("payout_adjustment_percentage, payout_adjustment_mode, trust_score")
+      .select(
+        "payout_adjustment_percentage, payout_adjustment_mode, trust_score, trust_number, min_best_quality_score, min_avg_quality_score, min_platform_earnings, min_platform_views",
+      )
       .eq("id", contestId)
       .maybeSingle();
     if (payoutRow) {
@@ -129,6 +141,11 @@ export default async function AdminContestDetailPage({
         payout_adjustment_percentage: payoutRow.payout_adjustment_percentage ?? null,
         payout_adjustment_mode: payoutRow.payout_adjustment_mode ?? null,
         trust_score: payoutRow.trust_score ?? null,
+        trust_number: payoutRow.trust_number ?? null,
+        min_best_quality_score: payoutRow.min_best_quality_score ?? null,
+        min_avg_quality_score: payoutRow.min_avg_quality_score ?? null,
+        min_platform_earnings: payoutRow.min_platform_earnings ?? null,
+        min_platform_views: payoutRow.min_platform_views ?? null,
       };
     }
 
@@ -606,7 +623,32 @@ export default async function AdminContestDetailPage({
       // Payout adjustment (admin) – from contests table so they fill on refresh
       payout_adjustment_percentage: contestSettings.payout_adjustment_percentage,
       payout_adjustment_mode: contestSettings.payout_adjustment_mode,
-      trust_score: isVideoContest ? contestSettings.trust_score : null,
+      trust_score: isVideoContest
+        ? (contestSettings.trust_score ?? contestData.trust_score ?? null)
+        : null,
+      trust_number: isVideoContest
+        ? (contestSettings.trust_number ?? contestData.trust_number ?? null)
+        : null,
+      min_best_quality_score: isVideoContest
+        ? (contestSettings.min_best_quality_score ??
+          contestData.min_best_quality_score ??
+          null)
+        : null,
+      min_avg_quality_score: isVideoContest
+        ? (contestSettings.min_avg_quality_score ??
+          contestData.min_avg_quality_score ??
+          null)
+        : null,
+      min_platform_earnings: isVideoContest
+        ? (contestSettings.min_platform_earnings ??
+          contestData.min_platform_earnings ??
+          null)
+        : null,
+      min_platform_views: isVideoContest
+        ? (contestSettings.min_platform_views ??
+          contestData.min_platform_views ??
+          null)
+        : null,
     };
 
     // Transform Twitter tweets into submission-like format for display

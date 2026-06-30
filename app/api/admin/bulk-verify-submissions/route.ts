@@ -4,7 +4,7 @@ import { createAdminClient } from "@/utils/supabase/admin";
 import { createClient } from "@/utils/supabase/server";
 import { verifyAdminAccess } from "@/utils/admin-auth";
 import { applyBulkDualRewardsWalletReversals } from "@/lib/dual-rewards-bulk-reversal";
-import { recomputeTrustForCreatorIds } from "@/lib/trust-score";
+import { recomputeCreatorProfileMetricsForIds } from "@/lib/creator-requirements";
 
 const PAYMENT_BULK_ACTIONS = new Set([
   "paid",
@@ -143,7 +143,7 @@ async function invokeVerifyWithRetries(
 
 export async function POST(request: Request) {
   try {
-    const { submissionIds, action, reason, paymentDetails } =
+    const { submissionIds, action, reason, paymentDetails, qualityScore } =
       await request.json();
 
     if (!Array.isArray(submissionIds)) {
@@ -255,6 +255,7 @@ export async function POST(request: Request) {
                 action,
                 reason,
                 paymentDetails,
+                qualityScore: action === "verified" ? (qualityScore ?? 1) : undefined,
                 skipWalletDebit: skipWalletDebitIds.has(String(id)),
               }),
             });
@@ -315,7 +316,7 @@ export async function POST(request: Request) {
       const creatorIds = (submissionRows || [])
         .map((row) => row.creator_id)
         .filter((id): id is string => typeof id === "string" && id.length > 0);
-      await recomputeTrustForCreatorIds(supabaseAdmin, creatorIds);
+      await recomputeCreatorProfileMetricsForIds(supabaseAdmin, creatorIds);
     }
 
     return NextResponse.json({

@@ -240,6 +240,69 @@ const extractRegionsAndCountries = (
   return { regions, countries };
 };
 
+const parseStoredOptionalNumber = (value: unknown): number | null => {
+  if (value === null || value === undefined || value === "") return null;
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
+};
+
+type CreatorRequirementFormState = {
+  trustScoreEnabled: boolean;
+  contestTrustScore: number | "";
+  trustNumberEnabled: boolean;
+  contestTrustNumber: number | "";
+  bestQualityEnabled: boolean;
+  contestMinBestQuality: number | "";
+  avgQualityEnabled: boolean;
+  contestMinAvgQuality: number | "";
+  minEarningsEnabled: boolean;
+  contestMinEarnings: number | "";
+  minPlatformViewsEnabled: boolean;
+  contestMinPlatformViews: number | "";
+};
+
+function buildCreatorRequirementFields(
+  contestFormat: string | null | undefined,
+  state: CreatorRequirementFormState,
+) {
+  if (!isVideoContestFormat(contestFormat)) {
+    return {
+      trust_score: null,
+      trust_number: null,
+      min_best_quality_score: null,
+      min_avg_quality_score: null,
+      min_platform_earnings: null,
+      min_platform_views: null,
+    };
+  }
+  return {
+    trust_score:
+      state.trustScoreEnabled && state.contestTrustScore !== ""
+        ? Number(state.contestTrustScore)
+        : null,
+    trust_number:
+      state.trustNumberEnabled && state.contestTrustNumber !== ""
+        ? Number(state.contestTrustNumber)
+        : null,
+    min_best_quality_score:
+      state.bestQualityEnabled && state.contestMinBestQuality !== ""
+        ? Number(state.contestMinBestQuality)
+        : null,
+    min_avg_quality_score:
+      state.avgQualityEnabled && state.contestMinAvgQuality !== ""
+        ? Number(state.contestMinAvgQuality)
+        : null,
+    min_platform_earnings:
+      state.minEarningsEnabled && state.contestMinEarnings !== ""
+        ? Math.round(Number(state.contestMinEarnings) * 100)
+        : null,
+    min_platform_views:
+      state.minPlatformViewsEnabled && state.contestMinPlatformViews !== ""
+        ? Number(state.contestMinPlatformViews)
+        : null,
+  };
+}
+
 type ResolvedContestType = "leaderboard" | "cpm" | "milestone" | "dual_rewards";
 
 function resolveContestType(data: {
@@ -374,6 +437,10 @@ type ContestData = {
   max_submissions_per_creator?: number;
   trust_score?: number | null;
   trust_number?: number | null;
+  min_best_quality_score?: number | null;
+  min_avg_quality_score?: number | null;
+  min_platform_earnings?: number | null;
+  min_platform_views?: number | null;
   content_type?: "ugc" | "clipping" | "other" | null;
   contest_format?: string | null; // Text/image vs video campaign format
   bonus_details?: { description_html?: string; description_json?: any } | null;
@@ -647,6 +714,20 @@ export default function EditContestPage({
   const [contestTrustScore, setContestTrustScore] = useState<number | "">("");
   const [trustNumberEnabled, setTrustNumberEnabled] = useState(false);
   const [contestTrustNumber, setContestTrustNumber] = useState<number | "">("");
+  const [bestQualityEnabled, setBestQualityEnabled] = useState(false);
+  const [contestMinBestQuality, setContestMinBestQuality] = useState<
+    number | ""
+  >("");
+  const [avgQualityEnabled, setAvgQualityEnabled] = useState(false);
+  const [contestMinAvgQuality, setContestMinAvgQuality] = useState<number | "">(
+    "",
+  );
+  const [minEarningsEnabled, setMinEarningsEnabled] = useState(false);
+  const [contestMinEarnings, setContestMinEarnings] = useState<number | "">("");
+  const [minPlatformViewsEnabled, setMinPlatformViewsEnabled] = useState(false);
+  const [contestMinPlatformViews, setContestMinPlatformViews] = useState<
+    number | ""
+  >("");
   const [multipleSubmissionsEnabled, setMultipleSubmissionsEnabled] =
     useState(false);
   const [maxSubmissionsPerCreator, setMaxSubmissionsPerCreator] =
@@ -1487,19 +1568,61 @@ export default function EditContestPage({
               data.multiple_submissions_enabled || false,
             );
             setMaxSubmissionsPerCreator(data.max_submissions_per_creator || 1);
-            if (typeof data.trust_score === "number") {
+            const trustScore = parseStoredOptionalNumber(data.trust_score);
+            if (trustScore !== null) {
               setTrustScoreEnabled(true);
-              setContestTrustScore(data.trust_score);
+              setContestTrustScore(trustScore);
             } else {
               setTrustScoreEnabled(false);
               setContestTrustScore("");
             }
-            if (typeof data.trust_number === "number") {
+            const trustNumber = parseStoredOptionalNumber(data.trust_number);
+            if (trustNumber !== null) {
               setTrustNumberEnabled(true);
-              setContestTrustNumber(data.trust_number);
+              setContestTrustNumber(trustNumber);
             } else {
               setTrustNumberEnabled(false);
               setContestTrustNumber("");
+            }
+            const minBestQuality = parseStoredOptionalNumber(
+              data.min_best_quality_score,
+            );
+            if (minBestQuality !== null) {
+              setBestQualityEnabled(true);
+              setContestMinBestQuality(minBestQuality);
+            } else {
+              setBestQualityEnabled(false);
+              setContestMinBestQuality("");
+            }
+            const minAvgQuality = parseStoredOptionalNumber(
+              data.min_avg_quality_score,
+            );
+            if (minAvgQuality !== null) {
+              setAvgQualityEnabled(true);
+              setContestMinAvgQuality(minAvgQuality);
+            } else {
+              setAvgQualityEnabled(false);
+              setContestMinAvgQuality("");
+            }
+            const minPlatformEarnings = parseStoredOptionalNumber(
+              data.min_platform_earnings,
+            );
+            if (minPlatformEarnings !== null) {
+              setMinEarningsEnabled(true);
+              setContestMinEarnings(minPlatformEarnings / 100);
+            } else {
+              setMinEarningsEnabled(false);
+              setContestMinEarnings("");
+            }
+            const minPlatformViews = parseStoredOptionalNumber(
+              data.min_platform_views,
+            );
+            if (minPlatformViews !== null) {
+              setMinPlatformViewsEnabled(true);
+              setContestMinPlatformViews(minPlatformViews);
+            } else {
+              setMinPlatformViewsEnabled(false);
+              setContestMinPlatformViews("");
             }
             setContentType(data.content_type || "other");
             setCategory(data.category || "technology");
@@ -3399,18 +3522,23 @@ export default function EditContestPage({
       updatePayload.max_submissions_per_creator = multipleSubmissionsEnabled
         ? maxSubmissionsPerCreator
         : 1;
-      updatePayload.trust_score =
-        isVideoContestFormat(contest?.contest_format) &&
-        trustScoreEnabled &&
-        contestTrustScore !== ""
-          ? Number(contestTrustScore)
-          : null;
-      updatePayload.trust_number =
-        isVideoContestFormat(contest?.contest_format) &&
-        trustNumberEnabled &&
-        contestTrustNumber !== ""
-          ? Number(contestTrustNumber)
-          : null;
+      Object.assign(
+        updatePayload,
+        buildCreatorRequirementFields(contest?.contest_format, {
+          trustScoreEnabled,
+          contestTrustScore,
+          trustNumberEnabled,
+          contestTrustNumber,
+          bestQualityEnabled,
+          contestMinBestQuality,
+          avgQualityEnabled,
+          contestMinAvgQuality,
+          minEarningsEnabled,
+          contestMinEarnings,
+          minPlatformViewsEnabled,
+          contestMinPlatformViews,
+        }),
+      );
       updatePayload.content_type = contentType || null;
       updatePayload.category = category || null;
 
@@ -4259,7 +4387,8 @@ export default function EditContestPage({
       contestType === "dual_rewards"
     ) {
       const budgetCents = Math.round(
-        parseFloat((totalBudgetOverride ?? totalBudget.toString()) || "0") * 100,
+        parseFloat((totalBudgetOverride ?? totalBudget.toString()) || "0") *
+          100,
       );
       if (contestType === "dual_rewards") {
         return getChargeableBudgetCents({
@@ -4294,8 +4423,7 @@ export default function EditContestPage({
     totalBudgetOverride?: string,
   ) => {
     const paidBaseline = getPaidPrizePoolBaseline();
-    const baseline =
-      paidBaseline > 0 ? paidBaseline : originalBudget;
+    const baseline = paidBaseline > 0 ? paidBaseline : originalBudget;
     const currentChargeable = getCurrentChargeableBudgetCents(
       amountsOverride,
       totalBudgetOverride,
@@ -4436,7 +4564,9 @@ export default function EditContestPage({
         const poolCents = Math.round(parseFloat(totalBudget.toString()) * 100);
         const cpmContestDetails: Record<string, unknown> = {
           cpm_rate_usd: parseFloat(cpmRate.toString()),
-          ...(contestType !== "dual_rewards" ? { total_budget: poolCents } : {}),
+          ...(contestType !== "dual_rewards"
+            ? { total_budget: poolCents }
+            : {}),
           budget_spent:
             contest?.contest_based_details?.cpm_contest?.budget_spent ?? 0,
           terms_conditions: termsConditions,
@@ -4509,7 +4639,10 @@ export default function EditContestPage({
   };
 
   // Helper function to submit campaign for approval with retries
-  const submitForApproval = async (retries = 5, delay = 2000): Promise<boolean> => {
+  const submitForApproval = async (
+    retries = 5,
+    delay = 2000,
+  ): Promise<boolean> => {
     for (let attempt = 1; attempt <= retries; attempt++) {
       try {
         console.log(
@@ -5151,8 +5284,7 @@ export default function EditContestPage({
                               10,
                             ),
                             payout_cents: Math.round(
-                              parseFloat(String(row.payout_dollars || 0)) *
-                                100,
+                              parseFloat(String(row.payout_dollars || 0)) * 100,
                             ),
                             winner_limit:
                               row.winner_limit === ""
@@ -5167,30 +5299,30 @@ export default function EditContestPage({
                     };
                   })()
                 : (() => {
-                  const pool = Math.round(
-                    parseFloat(totalBudget.toString()) * 100,
-                  );
-                  const cpmContestDetails: any = {
-                    cpm_rate_usd: parseFloat(cpmRate.toString()),
-                    total_budget: pool,
-                    terms_conditions: termsConditions,
-                  };
+                    const pool = Math.round(
+                      parseFloat(totalBudget.toString()) * 100,
+                    );
+                    const cpmContestDetails: any = {
+                      cpm_rate_usd: parseFloat(cpmRate.toString()),
+                      total_budget: pool,
+                      terms_conditions: termsConditions,
+                    };
 
-                  // Only include min_views and max_views for non-Twitter CPM campaigns
-                  if (!isTwitterCpmForPayment) {
-                    cpmContestDetails.min_views = minViews
-                      ? parseInt(minViews.toString())
-                      : null;
-                    cpmContestDetails.max_views = maxViews
-                      ? parseInt(maxViews.toString())
-                      : null;
-                  }
+                    // Only include min_views and max_views for non-Twitter CPM campaigns
+                    if (!isTwitterCpmForPayment) {
+                      cpmContestDetails.min_views = minViews
+                        ? parseInt(minViews.toString())
+                        : null;
+                      cpmContestDetails.max_views = maxViews
+                        ? parseInt(maxViews.toString())
+                        : null;
+                    }
 
-                  // Note: CPM Points Configuration multipliers are saved in twitter_campaign.points_config
-                  // (not in cpm_contest.points_config)
+                    // Note: CPM Points Configuration multipliers are saved in twitter_campaign.points_config
+                    // (not in cpm_contest.points_config)
 
-                  return { cpm_contest: cpmContestDetails };
-                })();
+                    return { cpm_contest: cpmContestDetails };
+                  })();
 
         // Add Twitter campaign config to contest_based_details
         // raid: target a specific tweet and do like, comment, retweet, and quote repost around that tweet
@@ -5541,18 +5673,20 @@ export default function EditContestPage({
           max_submissions_per_creator: multipleSubmissionsEnabled
             ? maxSubmissionsPerCreator
             : 1,
-          trust_score:
-            isVideoContestFormat(contest?.contest_format) &&
-            trustScoreEnabled &&
-            contestTrustScore !== ""
-              ? Number(contestTrustScore)
-              : null,
-          trust_number:
-            isVideoContestFormat(contest?.contest_format) &&
-            trustNumberEnabled &&
-            contestTrustNumber !== ""
-              ? Number(contestTrustNumber)
-              : null,
+          ...buildCreatorRequirementFields(contest?.contest_format, {
+            trustScoreEnabled,
+            contestTrustScore,
+            trustNumberEnabled,
+            contestTrustNumber,
+            bestQualityEnabled,
+            contestMinBestQuality,
+            avgQualityEnabled,
+            contestMinAvgQuality,
+            minEarningsEnabled,
+            contestMinEarnings,
+            minPlatformViewsEnabled,
+            contestMinPlatformViews,
+          }),
           content_type: contentType || null,
           category: category || null,
           moderation_status: "draft", // Save as draft after successful payment
@@ -5672,8 +5806,7 @@ export default function EditContestPage({
                               10,
                             ),
                             payout_cents: Math.round(
-                              parseFloat(String(row.payout_dollars || 0)) *
-                                100,
+                              parseFloat(String(row.payout_dollars || 0)) * 100,
                             ),
                             winner_limit:
                               row.winner_limit === ""
@@ -5688,160 +5821,160 @@ export default function EditContestPage({
                     };
                   })()
                 : (() => {
-                  const pool = Math.round(
-                    parseFloat(totalBudget.toString()) * 100,
-                  );
-                  const cpmContestDetails: any = {
-                    cpm_rate_usd: parseFloat(cpmRate.toString()),
-                    total_budget: pool,
-                    terms_conditions: termsConditions,
-                  };
-
-                  // Only include min_views and max_views for non-Twitter CPM campaigns
-                  if (!isTwitterCpmForDraft) {
-                    cpmContestDetails.min_views = minViews
-                      ? parseInt(minViews.toString())
-                      : null;
-                    cpmContestDetails.max_views = maxViews
-                      ? parseInt(maxViews.toString())
-                      : null;
-                  }
-
-                  // Add CPM Points Configuration (for Twitter CPM campaigns only)
-                  if (
-                    contestType === "cpm" &&
-                    platform?.toLowerCase() === "twitter"
-                  ) {
-                    // Helper function to check if a multiplier value is valid (not blank/empty/NaN)
-                    const isValidMultiplierValue = (
-                      value: number | string,
-                    ): boolean => {
-                      if (value === null || value === undefined) return false;
-                      const strValue = value.toString().trim();
-                      if (strValue === "" || strValue === null) return false;
-                      const numValue = parseFloat(strValue);
-                      return !isNaN(numValue);
+                    const pool = Math.round(
+                      parseFloat(totalBudget.toString()) * 100,
+                    );
+                    const cpmContestDetails: any = {
+                      cpm_rate_usd: parseFloat(cpmRate.toString()),
+                      total_budget: pool,
+                      terms_conditions: termsConditions,
                     };
 
-                    // Helper function to get multiplier value or undefined if invalid
-                    const getMultiplierValue = (
-                      value: number | string,
-                    ): number | undefined => {
-                      if (!isValidMultiplierValue(value)) return undefined;
-                      return parseFloat(value.toString().trim());
-                    };
-
-                    // Build points_config - only include fields with valid (non-blank) values
-                    const pointsConfig: any = {};
-
-                    if (showCommentMultipliers) {
-                      const commentLikes = getMultiplierValue(
-                        cpmPointsConfig.comment_likes_multiplier,
-                      );
-                      const commentReplies = getMultiplierValue(
-                        cpmPointsConfig.comment_replies_multiplier,
-                      );
-                      const commentImpressions = getMultiplierValue(
-                        cpmPointsConfig.comment_impressions_multiplier,
-                      );
-                      const commentRetweets = getMultiplierValue(
-                        cpmPointsConfig.comment_retweets_multiplier,
-                      );
-                      const commentQuoteReposts = getMultiplierValue(
-                        cpmPointsConfig.comment_quote_reposts_multiplier,
-                      );
-
-                      if (commentLikes !== undefined)
-                        pointsConfig.comment_likes_multiplier = commentLikes;
-                      if (commentReplies !== undefined)
-                        pointsConfig.comment_replies_multiplier =
-                          commentReplies;
-                      if (commentImpressions !== undefined)
-                        pointsConfig.comment_impressions_multiplier =
-                          commentImpressions;
-                      if (commentRetweets !== undefined)
-                        pointsConfig.comment_retweets_multiplier =
-                          commentRetweets;
-                      if (commentQuoteReposts !== undefined)
-                        pointsConfig.comment_quote_reposts_multiplier =
-                          commentQuoteReposts;
+                    // Only include min_views and max_views for non-Twitter CPM campaigns
+                    if (!isTwitterCpmForDraft) {
+                      cpmContestDetails.min_views = minViews
+                        ? parseInt(minViews.toString())
+                        : null;
+                      cpmContestDetails.max_views = maxViews
+                        ? parseInt(maxViews.toString())
+                        : null;
                     }
 
-                    if (showRetweetMultipliers) {
-                      const retweetLikes = getMultiplierValue(
-                        cpmPointsConfig.retweet_likes_multiplier,
-                      );
-                      const retweetReplies = getMultiplierValue(
-                        cpmPointsConfig.retweet_replies_multiplier,
-                      );
-                      const retweetImpressions = getMultiplierValue(
-                        cpmPointsConfig.retweet_impressions_multiplier,
-                      );
-                      const retweetRetweets = getMultiplierValue(
-                        cpmPointsConfig.retweet_retweets_multiplier,
-                      );
-                      const retweetQuoteReposts = getMultiplierValue(
-                        cpmPointsConfig.retweet_quote_reposts_multiplier,
-                      );
+                    // Add CPM Points Configuration (for Twitter CPM campaigns only)
+                    if (
+                      contestType === "cpm" &&
+                      platform?.toLowerCase() === "twitter"
+                    ) {
+                      // Helper function to check if a multiplier value is valid (not blank/empty/NaN)
+                      const isValidMultiplierValue = (
+                        value: number | string,
+                      ): boolean => {
+                        if (value === null || value === undefined) return false;
+                        const strValue = value.toString().trim();
+                        if (strValue === "" || strValue === null) return false;
+                        const numValue = parseFloat(strValue);
+                        return !isNaN(numValue);
+                      };
 
-                      if (retweetLikes !== undefined)
-                        pointsConfig.retweet_likes_multiplier = retweetLikes;
-                      if (retweetReplies !== undefined)
-                        pointsConfig.retweet_replies_multiplier =
-                          retweetReplies;
-                      if (retweetImpressions !== undefined)
-                        pointsConfig.retweet_impressions_multiplier =
-                          retweetImpressions;
-                      if (retweetRetweets !== undefined)
-                        pointsConfig.retweet_retweets_multiplier =
-                          retweetRetweets;
-                      if (retweetQuoteReposts !== undefined)
-                        pointsConfig.retweet_quote_reposts_multiplier =
-                          retweetQuoteReposts;
+                      // Helper function to get multiplier value or undefined if invalid
+                      const getMultiplierValue = (
+                        value: number | string,
+                      ): number | undefined => {
+                        if (!isValidMultiplierValue(value)) return undefined;
+                        return parseFloat(value.toString().trim());
+                      };
+
+                      // Build points_config - only include fields with valid (non-blank) values
+                      const pointsConfig: any = {};
+
+                      if (showCommentMultipliers) {
+                        const commentLikes = getMultiplierValue(
+                          cpmPointsConfig.comment_likes_multiplier,
+                        );
+                        const commentReplies = getMultiplierValue(
+                          cpmPointsConfig.comment_replies_multiplier,
+                        );
+                        const commentImpressions = getMultiplierValue(
+                          cpmPointsConfig.comment_impressions_multiplier,
+                        );
+                        const commentRetweets = getMultiplierValue(
+                          cpmPointsConfig.comment_retweets_multiplier,
+                        );
+                        const commentQuoteReposts = getMultiplierValue(
+                          cpmPointsConfig.comment_quote_reposts_multiplier,
+                        );
+
+                        if (commentLikes !== undefined)
+                          pointsConfig.comment_likes_multiplier = commentLikes;
+                        if (commentReplies !== undefined)
+                          pointsConfig.comment_replies_multiplier =
+                            commentReplies;
+                        if (commentImpressions !== undefined)
+                          pointsConfig.comment_impressions_multiplier =
+                            commentImpressions;
+                        if (commentRetweets !== undefined)
+                          pointsConfig.comment_retweets_multiplier =
+                            commentRetweets;
+                        if (commentQuoteReposts !== undefined)
+                          pointsConfig.comment_quote_reposts_multiplier =
+                            commentQuoteReposts;
+                      }
+
+                      if (showRetweetMultipliers) {
+                        const retweetLikes = getMultiplierValue(
+                          cpmPointsConfig.retweet_likes_multiplier,
+                        );
+                        const retweetReplies = getMultiplierValue(
+                          cpmPointsConfig.retweet_replies_multiplier,
+                        );
+                        const retweetImpressions = getMultiplierValue(
+                          cpmPointsConfig.retweet_impressions_multiplier,
+                        );
+                        const retweetRetweets = getMultiplierValue(
+                          cpmPointsConfig.retweet_retweets_multiplier,
+                        );
+                        const retweetQuoteReposts = getMultiplierValue(
+                          cpmPointsConfig.retweet_quote_reposts_multiplier,
+                        );
+
+                        if (retweetLikes !== undefined)
+                          pointsConfig.retweet_likes_multiplier = retweetLikes;
+                        if (retweetReplies !== undefined)
+                          pointsConfig.retweet_replies_multiplier =
+                            retweetReplies;
+                        if (retweetImpressions !== undefined)
+                          pointsConfig.retweet_impressions_multiplier =
+                            retweetImpressions;
+                        if (retweetRetweets !== undefined)
+                          pointsConfig.retweet_retweets_multiplier =
+                            retweetRetweets;
+                        if (retweetQuoteReposts !== undefined)
+                          pointsConfig.retweet_quote_reposts_multiplier =
+                            retweetQuoteReposts;
+                      }
+
+                      if (showQuoteRepostMultipliers) {
+                        const quoteRepostLikes = getMultiplierValue(
+                          cpmPointsConfig.quote_repost_likes_multiplier,
+                        );
+                        const quoteRepostReplies = getMultiplierValue(
+                          cpmPointsConfig.quote_repost_replies_multiplier,
+                        );
+                        const quoteRepostImpressions = getMultiplierValue(
+                          cpmPointsConfig.quote_repost_impressions_multiplier,
+                        );
+                        const quoteRepostRetweets = getMultiplierValue(
+                          cpmPointsConfig.quote_repost_retweets_multiplier,
+                        );
+                        const quoteRepostQuoteReposts = getMultiplierValue(
+                          cpmPointsConfig.quote_repost_quote_reposts_multiplier,
+                        );
+
+                        if (quoteRepostLikes !== undefined)
+                          pointsConfig.quote_repost_likes_multiplier =
+                            quoteRepostLikes;
+                        if (quoteRepostReplies !== undefined)
+                          pointsConfig.quote_repost_replies_multiplier =
+                            quoteRepostReplies;
+                        if (quoteRepostImpressions !== undefined)
+                          pointsConfig.quote_repost_impressions_multiplier =
+                            quoteRepostImpressions;
+                        if (quoteRepostRetweets !== undefined)
+                          pointsConfig.quote_repost_retweets_multiplier =
+                            quoteRepostRetweets;
+                        if (quoteRepostQuoteReposts !== undefined)
+                          pointsConfig.quote_repost_quote_reposts_multiplier =
+                            quoteRepostQuoteReposts;
+                      }
+
+                      // Only set points_config if there are valid values
+                      if (Object.keys(pointsConfig).length > 0) {
+                        cpmContestDetails.points_config = pointsConfig;
+                      }
                     }
 
-                    if (showQuoteRepostMultipliers) {
-                      const quoteRepostLikes = getMultiplierValue(
-                        cpmPointsConfig.quote_repost_likes_multiplier,
-                      );
-                      const quoteRepostReplies = getMultiplierValue(
-                        cpmPointsConfig.quote_repost_replies_multiplier,
-                      );
-                      const quoteRepostImpressions = getMultiplierValue(
-                        cpmPointsConfig.quote_repost_impressions_multiplier,
-                      );
-                      const quoteRepostRetweets = getMultiplierValue(
-                        cpmPointsConfig.quote_repost_retweets_multiplier,
-                      );
-                      const quoteRepostQuoteReposts = getMultiplierValue(
-                        cpmPointsConfig.quote_repost_quote_reposts_multiplier,
-                      );
-
-                      if (quoteRepostLikes !== undefined)
-                        pointsConfig.quote_repost_likes_multiplier =
-                          quoteRepostLikes;
-                      if (quoteRepostReplies !== undefined)
-                        pointsConfig.quote_repost_replies_multiplier =
-                          quoteRepostReplies;
-                      if (quoteRepostImpressions !== undefined)
-                        pointsConfig.quote_repost_impressions_multiplier =
-                          quoteRepostImpressions;
-                      if (quoteRepostRetweets !== undefined)
-                        pointsConfig.quote_repost_retweets_multiplier =
-                          quoteRepostRetweets;
-                      if (quoteRepostQuoteReposts !== undefined)
-                        pointsConfig.quote_repost_quote_reposts_multiplier =
-                          quoteRepostQuoteReposts;
-                    }
-
-                    // Only set points_config if there are valid values
-                    if (Object.keys(pointsConfig).length > 0) {
-                      cpmContestDetails.points_config = pointsConfig;
-                    }
-                  }
-
-                  return { cpm_contest: cpmContestDetails };
-                })();
+                    return { cpm_contest: cpmContestDetails };
+                  })();
 
         // Add Twitter campaign config to contest_based_details
         // raid: target a specific tweet and do like, comment, retweet, and quote repost around that tweet
@@ -6191,18 +6324,20 @@ export default function EditContestPage({
           max_submissions_per_creator: multipleSubmissionsEnabled
             ? maxSubmissionsPerCreator
             : 1,
-          trust_score:
-            isVideoContestFormat(contest?.contest_format) &&
-            trustScoreEnabled &&
-            contestTrustScore !== ""
-              ? Number(contestTrustScore)
-              : null,
-          trust_number:
-            isVideoContestFormat(contest?.contest_format) &&
-            trustNumberEnabled &&
-            contestTrustNumber !== ""
-              ? Number(contestTrustNumber)
-              : null,
+          ...buildCreatorRequirementFields(contest?.contest_format, {
+            trustScoreEnabled,
+            contestTrustScore,
+            trustNumberEnabled,
+            contestTrustNumber,
+            bestQualityEnabled,
+            contestMinBestQuality,
+            avgQualityEnabled,
+            contestMinAvgQuality,
+            minEarningsEnabled,
+            contestMinEarnings,
+            minPlatformViewsEnabled,
+            contestMinPlatformViews,
+          }),
           content_type: contentType || null,
           category: category || null,
           moderation_status: "draft", // Save as draft after successful payment
@@ -6589,7 +6724,8 @@ export default function EditContestPage({
     }
     // Check if payment/refund processing is required (always vs paid baseline, not stale state)
     const paid = isContestPaid();
-    const { difference: prizePoolDifference } = syncBudgetChangeFromPaidBaseline();
+    const { difference: prizePoolDifference } =
+      syncBudgetChangeFromPaidBaseline();
     const hasBudgetDelta = Math.abs(prizePoolDifference) > 0;
     const needsPayment = !paid || (hasBudgetDelta && prizePoolDifference > 0);
     const needsRefund = paid && hasBudgetDelta && prizePoolDifference < 0;
@@ -7567,7 +7703,9 @@ export default function EditContestPage({
           : 0;
         const cpmDetails: any = {
           cpm_rate_usd: parsedCpmRate || 0,
-          ...(contestType !== "dual_rewards" ? { total_budget: poolCents } : {}),
+          ...(contestType !== "dual_rewards"
+            ? { total_budget: poolCents }
+            : {}),
           budget_spent:
             contest?.contest_based_details?.cpm_contest?.budget_spent || 0,
           terms_conditions: (termsConditions || "").trim(),
@@ -7903,18 +8041,23 @@ export default function EditContestPage({
       updatePayload.max_submissions_per_creator = multipleSubmissionsEnabled
         ? maxSubmissionsPerCreator
         : 1;
-      updatePayload.trust_score =
-        isVideoContestFormat(contest?.contest_format) &&
-        trustScoreEnabled &&
-        contestTrustScore !== ""
-          ? Number(contestTrustScore)
-          : null;
-      updatePayload.trust_number =
-        isVideoContestFormat(contest?.contest_format) &&
-        trustNumberEnabled &&
-        contestTrustNumber !== ""
-          ? Number(contestTrustNumber)
-          : null;
+      Object.assign(
+        updatePayload,
+        buildCreatorRequirementFields(contest?.contest_format, {
+          trustScoreEnabled,
+          contestTrustScore,
+          trustNumberEnabled,
+          contestTrustNumber,
+          bestQualityEnabled,
+          contestMinBestQuality,
+          avgQualityEnabled,
+          contestMinAvgQuality,
+          minEarningsEnabled,
+          contestMinEarnings,
+          minPlatformViewsEnabled,
+          contestMinPlatformViews,
+        }),
+      );
       updatePayload.content_type = contentType || null;
       updatePayload.category = category || null;
 
@@ -8455,48 +8598,49 @@ export default function EditContestPage({
                 <Label className="text-xl font-semibold">Campaign Format</Label>
                 <div className="flex flex-col sm:flex-row gap-2 pt-2">
                   {contestType !== "dual_rewards" && (
-                  <Button
-                    type="button"
-                    variant={
-                      contest?.contest_format === "text_image"
-                        ? "default"
-                        : "outline"
-                    }
-                    className={cn(
-                      "flex-1 justify-center",
-                      contest?.contest_format === "text_image" &&
-                        "bg-[#7F39EC] text-white",
-                    )}
-                    onClick={async () => {
-                      // Auto-switch platform if needed (like create client)
-                      const updates: any = { contest_format: "text_image" };
-                      if (contestType === "milestone") {
-                        // Milestone is video-based; switch to CPM for text/image contests.
-                        updates.contest_type = "cpm";
-                        setContestType("cpm");
+                    <Button
+                      type="button"
+                      variant={
+                        contest?.contest_format === "text_image"
+                          ? "default"
+                          : "outline"
                       }
-                      const textImagePlatforms = getTextImagePlatforms();
-                      const currentPlatformConfig = getPlatformConfig(platform);
+                      className={cn(
+                        "flex-1 justify-center",
+                        contest?.contest_format === "text_image" &&
+                          "bg-[#7F39EC] text-white",
+                      )}
+                      onClick={async () => {
+                        // Auto-switch platform if needed (like create client)
+                        const updates: any = { contest_format: "text_image" };
+                        if (contestType === "milestone") {
+                          // Milestone is video-based; switch to CPM for text/image contests.
+                          updates.contest_type = "cpm";
+                          setContestType("cpm");
+                        }
+                        const textImagePlatforms = getTextImagePlatforms();
+                        const currentPlatformConfig =
+                          getPlatformConfig(platform);
 
-                      // If current platform doesn't support text_image, switch to first available
-                      if (!platformSupportsFormat(platform, "text_image")) {
-                        const defaultPlatform =
-                          textImagePlatforms[0]?.id || "twitter";
-                        updates.platform = defaultPlatform;
-                        setPlatform(defaultPlatform);
-                      }
-                      // Update campaign format (and platform if changed) in database
-                      await supabase
-                        .from("contests")
-                        .update(updates)
-                        .eq("id", contestId)
-                        .eq("advertiser_id", user?.id);
-                      // Force refresh to update UI
-                      refreshContestData();
-                    }}
-                  >
-                    Text/Image Campaign
-                  </Button>
+                        // If current platform doesn't support text_image, switch to first available
+                        if (!platformSupportsFormat(platform, "text_image")) {
+                          const defaultPlatform =
+                            textImagePlatforms[0]?.id || "twitter";
+                          updates.platform = defaultPlatform;
+                          setPlatform(defaultPlatform);
+                        }
+                        // Update campaign format (and platform if changed) in database
+                        await supabase
+                          .from("contests")
+                          .update(updates)
+                          .eq("id", contestId)
+                          .eq("advertiser_id", user?.id);
+                        // Force refresh to update UI
+                        refreshContestData();
+                      }}
+                    >
+                      Text/Image Campaign
+                    </Button>
                   )}
                   <Button
                     type="button"
@@ -11656,8 +11800,9 @@ export default function EditContestPage({
                       placeholder="Maximum amount reserved for this campaign"
                     />
                     <p className="text-xs text-muted-foreground">
-                      This is the pool you fund upfront (similar to a CPM budget).
-                      Payouts are drawn from it as creators hit milestones.
+                      This is the pool you fund upfront (similar to a CPM
+                      budget). Payouts are drawn from it as creators hit
+                      milestones.
                     </p>
                   </div>
                 )}
@@ -12580,9 +12725,9 @@ export default function EditContestPage({
                     )}
                   >
                     <AlertDescription>
-                      Twitter CPM campaigns use the <strong>Points Model</strong>
-                      . Payout is calculated based on total points earned and
-                      the CPM rate per 1,000 points.
+                      Twitter CPM campaigns use the{" "}
+                      <strong>Points Model</strong>. Payout is calculated based
+                      on total points earned and the CPM rate per 1,000 points.
                     </AlertDescription>
                   </Alert>
                 ) : (
@@ -12831,139 +12976,378 @@ export default function EditContestPage({
               </div> */}
 
               {isVideoContestFormat(contest?.contest_format) && (
-              <div
-                className={cn(
-                  "space-y-3 rounded-xl border p-4",
-                  isDark
-                    ? "border-slate-700 bg-slate-900/40"
-                    : "border-slate-200 bg-slate-50",
-                )}
-              >
-                <div className="flex items-start gap-3">
-                  <Checkbox
-                    id="trust-score-enabled"
-                    checked={trustScoreEnabled}
-                    onCheckedChange={(checked) => {
-                      setTrustScoreEnabled(checked as boolean);
-                      if (!checked) {
-                        setContestTrustScore("");
-                      } else if (contestTrustScore === "") {
-                        setContestTrustScore(70);
-                      }
-                    }}
-                    className="mt-0.5 h-5 w-5 shrink-0 data-[state=checked]:bg-[#7F39EC] data-[state=checked]:border-[#7F39EC] data-[state=checked]:text-white"
-                  />
-                  <div className="min-w-0 flex-1">
-                    <Label
-                      htmlFor="trust-score-enabled"
-                      className="text-base font-semibold cursor-pointer"
-                    >
-                      Trust Score %
-                    </Label>
-                    <p className="text-sm text-muted-foreground mt-1">
-                      Require a minimum trust score (0–100). Score = 100 −
-                      (rejected ÷ verified × 100). Verified = approved or paid
-                      submissions.
-                    </p>
-                  </div>
-                </div>
-
-                {trustScoreEnabled && (
-                  <div
-                    className={cn(
-                      "space-y-2 pt-3 border-t",
-                      isDark ? "border-slate-700" : "border-slate-200",
-                    )}
-                  >
-                    <Label htmlFor="trust-score-input">Minimum Trust Score %</Label>
-                    <Input
-                      id="trust-score-input"
-                      type="number"
-                      min="0"
-                      max="100"
-                      value={contestTrustScore}
-                      onChange={(e) => {
-                        const raw = e.target.value;
-                        if (raw === "") {
+                <div
+                  className={cn(
+                    "space-y-3 rounded-xl border p-4",
+                    isDark
+                      ? "border-slate-700 bg-slate-900/40"
+                      : "border-slate-200 bg-slate-50",
+                  )}
+                >
+                  <div className="flex items-start gap-3">
+                    <Checkbox
+                      id="trust-score-enabled"
+                      checked={trustScoreEnabled}
+                      onCheckedChange={(checked) => {
+                        setTrustScoreEnabled(checked as boolean);
+                        if (!checked) {
                           setContestTrustScore("");
-                          return;
-                        }
-                        const value = Number.parseInt(raw, 10);
-                        if (!Number.isNaN(value) && value >= 0 && value <= 100) {
-                          setContestTrustScore(value);
+                        } else if (contestTrustScore === "") {
+                          setContestTrustScore(70);
                         }
                       }}
-                      className={cn(
-                        isDark
-                          ? "bg-purple-900/20 border border-gray-600 text-white"
-                          : "bg-white text-black",
-                      )}
-                      placeholder="Enter minimum trust score (0–100)"
+                      className="mt-0.5 h-5 w-5 shrink-0 data-[state=checked]:bg-[#7F39EC] data-[state=checked]:border-[#7F39EC] data-[state=checked]:text-white"
                     />
+                    <div className="min-w-0 flex-1">
+                      <Label
+                        htmlFor="trust-score-enabled"
+                        className="text-base font-semibold cursor-pointer"
+                      >
+                        Trust Score
+                      </Label>
+                      <p className="text-sm text-muted-foreground mt-1">
+                        Enable trust score requirements to allow only reliable
+                        creators to participate. Trust scores may decrease for
+                        rejected, low-quality, or policy-violating submissions.
+                        Creators below the required score cannot submit to this
+                        campaign.
+                      </p>
+                    </div>
                   </div>
-                )}
 
-                <div className="flex items-start gap-3 pt-3 border-t">
-                  <Checkbox
-                    id="trust-number-enabled"
-                    checked={trustNumberEnabled}
-                    onCheckedChange={(checked) => {
-                      setTrustNumberEnabled(checked as boolean);
-                      if (!checked) {
-                        setContestTrustNumber("");
-                      } else if (contestTrustNumber === "") {
-                        setContestTrustNumber(5);
-                      }
-                    }}
-                    className="mt-0.5 h-5 w-5 shrink-0 data-[state=checked]:bg-[#7F39EC] data-[state=checked]:border-[#7F39EC] data-[state=checked]:text-white"
-                  />
-                  <div className="min-w-0 flex-1">
-                    <Label
-                      htmlFor="trust-number-enabled"
-                      className="text-base font-semibold cursor-pointer"
+                  {trustScoreEnabled && (
+                    <div
+                      className={cn(
+                        "space-y-2 pt-3 border-t",
+                        isDark ? "border-slate-700" : "border-slate-200",
+                      )}
                     >
-                      Trust Number
-                    </Label>
-                    <p className="text-sm text-muted-foreground mt-1">
-                      Require a minimum trust number (net track record).
-                      Trust Number = verified reels − rejected reels.
-                    </p>
-                  </div>
-                </div>
+                      {/* <Label htmlFor="trust-score-input">Minimum Trust Score %</Label> */}
+                      <Input
+                        id="trust-score-input"
+                        type="number"
+                        min="0"
+                        max="100"
+                        value={contestTrustScore}
+                        onChange={(e) => {
+                          const raw = e.target.value;
+                          if (raw === "") {
+                            setContestTrustScore("");
+                            return;
+                          }
+                          const value = Number.parseInt(raw, 10);
+                          if (
+                            !Number.isNaN(value) &&
+                            value >= 0 &&
+                            value <= 100
+                          ) {
+                            setContestTrustScore(value);
+                          }
+                        }}
+                        className={cn(
+                          isDark
+                            ? "bg-purple-900/20 border border-gray-600 text-white"
+                            : "bg-white text-black",
+                        )}
+                        placeholder="Enter minimum trust score (0–100)"
+                      />
+                    </div>
+                  )}
 
-                {trustNumberEnabled && (
-                  <div
+                  <div className="flex items-start gap-3 pt-3 border-t">
+                    <Checkbox
+                      id="trust-number-enabled"
+                      checked={trustNumberEnabled}
+                      onCheckedChange={(checked) => {
+                        setTrustNumberEnabled(checked as boolean);
+                        if (!checked) {
+                          setContestTrustNumber("");
+                        } else if (contestTrustNumber === "") {
+                          setContestTrustNumber(5);
+                        }
+                      }}
+                      className="mt-0.5 h-5 w-5 shrink-0 data-[state=checked]:bg-[#7F39EC] data-[state=checked]:border-[#7F39EC] data-[state=checked]:text-white"
+                    />
+                    <div className="min-w-0 flex-1">
+                      <Label
+                        htmlFor="trust-number-enabled"
+                        className="text-base font-semibold cursor-pointer"
+                      >
+                        Trust Number
+                      </Label>
+                      <p className="text-sm text-muted-foreground mt-1">
+                        Enable trust number requirements to allow only creators
+                        with a strong track record to participate. Creators
+                        below the required number cannot submit to this
+                        campaign.
+                      </p>
+                    </div>
+                  </div>
+
+                  {trustNumberEnabled && (
+                    <div
+                      className={cn(
+                        "space-y-2 pt-3 border-t",
+                        isDark ? "border-slate-700" : "border-slate-200",
+                      )}
+                    >
+                      <Label htmlFor="trust-number-input">
+                        Minimum Trust Number
+                      </Label>
+                      <Input
+                        id="trust-number-input"
+                        type="number"
+                        value={contestTrustNumber}
+                        onChange={(e) => {
+                          const raw = e.target.value;
+                          if (raw === "") {
+                            setContestTrustNumber("");
+                            return;
+                          }
+                          const value = Number.parseInt(raw, 10);
+                          if (!Number.isNaN(value)) {
+                            setContestTrustNumber(value);
+                          }
+                        }}
+                        className={cn(
+                          isDark
+                            ? "bg-purple-900/20 border border-gray-600 text-white"
+                            : "bg-white text-black",
+                        )}
+                        placeholder="Enter minimum trust number"
+                      />
+                    </div>
+                  )}
+
+                  <p
                     className={cn(
-                      "space-y-2 pt-3 border-t",
+                      "text-sm font-semibold pt-3 border-t",
                       isDark ? "border-slate-700" : "border-slate-200",
                     )}
                   >
-                    <Label htmlFor="trust-number-input">Minimum Trust Number</Label>
-                    <Input
-                      id="trust-number-input"
-                      type="number"
-                      value={contestTrustNumber}
-                      onChange={(e) => {
-                        const raw = e.target.value;
-                        if (raw === "") {
-                          setContestTrustNumber("");
-                          return;
-                        }
-                        const value = Number.parseInt(raw, 10);
-                        if (!Number.isNaN(value)) {
-                          setContestTrustNumber(value);
-                        }
+                    Quality & platform minimums
+                  </p>
+
+                  <div className="flex items-start gap-3 pt-3 border-t">
+                    <Checkbox
+                      id="best-quality-enabled"
+                      checked={bestQualityEnabled}
+                      onCheckedChange={(checked) => {
+                        setBestQualityEnabled(Boolean(checked));
+                        if (!checked) setContestMinBestQuality("");
+                        else if (contestMinBestQuality === "")
+                          setContestMinBestQuality(2);
                       }}
-                      className={cn(
-                        isDark
-                          ? "bg-purple-900/20 border border-gray-600 text-white"
-                          : "bg-white text-black",
-                      )}
-                      placeholder="Enter minimum trust number"
+                      className="mt-0.5 h-5 w-5 shrink-0 data-[state=checked]:bg-[#7F39EC] data-[state=checked]:border-[#7F39EC] data-[state=checked]:text-white"
                     />
+                    <div className="min-w-0 flex-1">
+                      <Label
+                        htmlFor="best-quality-enabled"
+                        className="text-base font-semibold cursor-pointer"
+                      >
+                        Min Best Quality
+                      </Label>
+                      <p className="text-sm text-muted-foreground mt-1">
+                        Creator&apos;s best verified reel quality (1–3) must
+                        meet this minimum.
+                      </p>
+                    </div>
                   </div>
-                )}
-              </div>
+                  {bestQualityEnabled && (
+                    <div
+                      className={cn(
+                        "space-y-2 pt-3 border-t",
+                        isDark ? "border-slate-700" : "border-slate-200",
+                      )}
+                    >
+                      <Label htmlFor="best-quality-input">
+                        Minimum Best Quality
+                      </Label>
+                      <Input
+                        id="best-quality-input"
+                        type="number"
+                        min={1}
+                        max={3}
+                        value={contestMinBestQuality}
+                        onChange={(e) => {
+                          const v = parseInt(e.target.value, 10);
+                          if (!Number.isNaN(v) && v >= 1 && v <= 3)
+                            setContestMinBestQuality(v);
+                        }}
+                        placeholder="1–3"
+                        className={cn(
+                          isDark
+                            ? "bg-purple-900/20 border border-gray-600 text-white"
+                            : "bg-white text-black",
+                        )}
+                      />
+                    </div>
+                  )}
+
+                  <div className="flex items-start gap-3 pt-3 border-t">
+                    <Checkbox
+                      id="avg-quality-enabled"
+                      checked={avgQualityEnabled}
+                      onCheckedChange={(checked) => {
+                        setAvgQualityEnabled(Boolean(checked));
+                        if (!checked) setContestMinAvgQuality("");
+                        else if (contestMinAvgQuality === "")
+                          setContestMinAvgQuality(1.5);
+                      }}
+                      className="mt-0.5 h-5 w-5 shrink-0 data-[state=checked]:bg-[#7F39EC] data-[state=checked]:border-[#7F39EC] data-[state=checked]:text-white"
+                    />
+                    <div className="min-w-0 flex-1">
+                      <Label
+                        htmlFor="avg-quality-enabled"
+                        className="text-base font-semibold cursor-pointer"
+                      >
+                        Min Avg Quality
+                      </Label>
+                      <p className="text-sm text-muted-foreground mt-1">
+                        Creator&apos;s average quality across verified reels.
+                      </p>
+                    </div>
+                  </div>
+                  {avgQualityEnabled && (
+                    <div
+                      className={cn(
+                        "space-y-2 pt-3 border-t",
+                        isDark ? "border-slate-700" : "border-slate-200",
+                      )}
+                    >
+                      <Label htmlFor="avg-quality-input">
+                        Minimum Avg Quality
+                      </Label>
+                      <Input
+                        id="avg-quality-input"
+                        type="number"
+                        min={1}
+                        max={3}
+                        step={0.1}
+                        value={contestMinAvgQuality}
+                        onChange={(e) => {
+                          const v = parseFloat(e.target.value);
+                          if (!Number.isNaN(v) && v >= 1 && v <= 3)
+                            setContestMinAvgQuality(v);
+                        }}
+                        placeholder="1.0–3.0"
+                        className={cn(
+                          isDark
+                            ? "bg-purple-900/20 border border-gray-600 text-white"
+                            : "bg-white text-black",
+                        )}
+                      />
+                    </div>
+                  )}
+
+                  <div className="flex items-start gap-3 pt-3 border-t">
+                    <Checkbox
+                      id="min-earnings-enabled"
+                      checked={minEarningsEnabled}
+                      onCheckedChange={(checked) => {
+                        setMinEarningsEnabled(Boolean(checked));
+                        if (!checked) setContestMinEarnings("");
+                        else if (contestMinEarnings === "")
+                          setContestMinEarnings(50);
+                      }}
+                      className="mt-0.5 h-5 w-5 shrink-0 data-[state=checked]:bg-[#7F39EC] data-[state=checked]:border-[#7F39EC] data-[state=checked]:text-white"
+                    />
+                    <div className="min-w-0 flex-1">
+                      <Label
+                        htmlFor="min-earnings-enabled"
+                        className="text-base font-semibold cursor-pointer"
+                      >
+                        Min Platform Earnings
+                      </Label>
+                      <p className="text-sm text-muted-foreground mt-1">
+                        Lifetime cash earned on platform (USD).
+                      </p>
+                    </div>
+                  </div>
+                  {minEarningsEnabled && (
+                    <div
+                      className={cn(
+                        "space-y-2 pt-3 border-t",
+                        isDark ? "border-slate-700" : "border-slate-200",
+                      )}
+                    >
+                      <Label htmlFor="min-earnings-input">
+                        Minimum Earnings (USD)
+                      </Label>
+                      <Input
+                        id="min-earnings-input"
+                        type="number"
+                        min={0}
+                        value={contestMinEarnings}
+                        onChange={(e) => {
+                          const v = parseFloat(e.target.value);
+                          if (!Number.isNaN(v) && v >= 0)
+                            setContestMinEarnings(v);
+                        }}
+                        placeholder="USD"
+                        className={cn(
+                          isDark
+                            ? "bg-purple-900/20 border border-gray-600 text-white"
+                            : "bg-white text-black",
+                        )}
+                      />
+                    </div>
+                  )}
+
+                  <div className="flex items-start gap-3 pt-3 border-t">
+                    <Checkbox
+                      id="min-platform-views-enabled"
+                      checked={minPlatformViewsEnabled}
+                      onCheckedChange={(checked) => {
+                        setMinPlatformViewsEnabled(Boolean(checked));
+                        if (!checked) setContestMinPlatformViews("");
+                        else if (contestMinPlatformViews === "")
+                          setContestMinPlatformViews(10000);
+                      }}
+                      className="mt-0.5 h-5 w-5 shrink-0 data-[state=checked]:bg-[#7F39EC] data-[state=checked]:border-[#7F39EC] data-[state=checked]:text-white"
+                    />
+                    <div className="min-w-0 flex-1">
+                      <Label
+                        htmlFor="min-platform-views-enabled"
+                        className="text-base font-semibold cursor-pointer"
+                      >
+                        Min Platform Views
+                      </Label>
+                      <p className="text-sm text-muted-foreground mt-1">
+                        Minimum total views credited on the platform.
+                      </p>
+                    </div>
+                  </div>
+                  {minPlatformViewsEnabled && (
+                    <div
+                      className={cn(
+                        "space-y-2 pt-3 border-t",
+                        isDark ? "border-slate-700" : "border-slate-200",
+                      )}
+                    >
+                      <Label htmlFor="min-platform-views-input">
+                        Minimum Platform Views
+                      </Label>
+                      <Input
+                        id="min-platform-views-input"
+                        type="number"
+                        min={0}
+                        value={contestMinPlatformViews}
+                        onChange={(e) => {
+                          const v = parseInt(e.target.value, 10);
+                          if (!Number.isNaN(v) && v >= 0)
+                            setContestMinPlatformViews(v);
+                        }}
+                        placeholder="Minimum views"
+                        className={cn(
+                          isDark
+                            ? "bg-purple-900/20 border border-gray-600 text-white"
+                            : "bg-white text-black",
+                        )}
+                      />
+                    </div>
+                  )}
+                </div>
               )}
 
               {/* Multiple Submissions Toggle */}
@@ -13172,290 +13556,295 @@ export default function EditContestPage({
                         Creator earning opportunities
                       </h4>
                       <p className="text-sm text-muted-foreground mt-1">
-                        Motivate creators with bonuses beyond the main prize pool
-                        or CPM rate.
+                        Motivate creators with bonuses beyond the main prize
+                        pool or CPM rate.
                       </p>
                     </div>
 
-                  {contestType !== "milestone" && (
-                    <>
-                      {contestType !== "dual_rewards" && (
-                        <>
-                          {/* Flat Fee Bonus — hidden for dual (CPM + milestone pools only) */}
-                          <div
-                            className={cn(
-                              "space-y-3 rounded-xl border p-4",
-                              isDark
-                                ? "border-emerald-900/50 bg-emerald-950/30"
-                                : "border-emerald-200 bg-gradient-to-r from-emerald-50 to-green-50",
-                            )}
-                          >
-                            <div className="flex items-center gap-2">
-                              <span className="text-xl" aria-hidden="true">
-                                🎁
-                              </span>
-                              <Label
-                                htmlFor="flat-fee-bonus"
-                                className="text-base font-semibold"
-                              >
-                                Flat Fee Bonus (Per Verified Submission)
-                              </Label>
-                            </div>
-                            <Input
-                              id="flat-fee-bonus"
-                              type="number"
-                              step="0.01"
-                              min="0"
-                              value={flatFeeBonus}
+                    {contestType !== "milestone" && (
+                      <>
+                        {contestType !== "dual_rewards" && (
+                          <>
+                            {/* Flat Fee Bonus — hidden for dual (CPM + milestone pools only) */}
+                            <div
                               className={cn(
+                                "space-y-3 rounded-xl border p-4",
                                 isDark
-                                  ? "bg-slate-900/60 border-slate-600 text-white"
-                                  : "bg-white border-slate-200",
+                                  ? "border-emerald-900/50 bg-emerald-950/30"
+                                  : "border-emerald-200 bg-gradient-to-r from-emerald-50 to-green-50",
                               )}
-                              onChange={(e) => setFlatFeeBonus(e.target.value)}
-                              placeholder="e.g., 10.00"
-                            />
-                            <p className="text-sm text-muted-foreground">
-                              Optional guaranteed payment for each verified
-                              submission, regardless of views or ranking. Paid
-                              after the contest ends.
-                            </p>
-                            {flatFeeBonus &&
+                            >
+                              <div className="flex items-center gap-2">
+                                <span className="text-xl" aria-hidden="true">
+                                  🎁
+                                </span>
+                                <Label
+                                  htmlFor="flat-fee-bonus"
+                                  className="text-base font-semibold"
+                                >
+                                  Flat Fee Bonus (Per Verified Submission)
+                                </Label>
+                              </div>
+                              <Input
+                                id="flat-fee-bonus"
+                                type="number"
+                                step="0.01"
+                                min="0"
+                                value={flatFeeBonus}
+                                className={cn(
+                                  isDark
+                                    ? "bg-slate-900/60 border-slate-600 text-white"
+                                    : "bg-white border-slate-200",
+                                )}
+                                onChange={(e) =>
+                                  setFlatFeeBonus(e.target.value)
+                                }
+                                placeholder="e.g., 10.00"
+                              />
+                              <p className="text-sm text-muted-foreground">
+                                Optional guaranteed payment for each verified
+                                submission, regardless of views or ranking. Paid
+                                after the contest ends.
+                              </p>
+                              {flatFeeBonus &&
+                                parseFloat(flatFeeBonus.toString()) > 0 && (
+                                  <div
+                                    className={cn(
+                                      "rounded-lg border px-3 py-2 text-sm",
+                                      isDark
+                                        ? "border-[#7F39EC]/40 bg-[#7F39EC]/10 text-white"
+                                        : "border-[#7F39EC]/30 bg-[#7F39EC]/5 text-gray-800",
+                                    )}
+                                  >
+                                    Creators will earn{" "}
+                                    <strong>
+                                      $
+                                      {parseFloat(
+                                        flatFeeBonus.toString(),
+                                      ).toFixed(2)}
+                                    </strong>{" "}
+                                    for each verified submission.
+                                  </div>
+                                )}
+                            </div>
+                            {/* Flat Fee Bonus Cap (Only for CPM campaigns) */}
+                            {contestType === "cpm" &&
+                              flatFeeBonus &&
                               parseFloat(flatFeeBonus.toString()) > 0 && (
                                 <div
                                   className={cn(
-                                    "rounded-lg border px-3 py-2 text-sm",
+                                    "space-y-2 rounded-xl border p-4",
                                     isDark
-                                      ? "border-[#7F39EC]/40 bg-[#7F39EC]/10 text-white"
-                                      : "border-[#7F39EC]/30 bg-[#7F39EC]/5 text-gray-800",
+                                      ? "border-slate-700 bg-slate-900/40"
+                                      : "border-slate-200 bg-slate-50",
                                   )}
                                 >
-                                  Creators will earn{" "}
-                                  <strong>
-                                    $
-                                    {parseFloat(flatFeeBonus.toString()).toFixed(
-                                      2,
+                                  <Label htmlFor="flat-fee-bonus-cap">
+                                    Flat Fee Bonus Cap{" "}
+                                    <span className="text-red-500">*</span>
+                                  </Label>
+                                  <Input
+                                    id="flat-fee-bonus-cap"
+                                    type="number"
+                                    step="0.01"
+                                    min="0"
+                                    required
+                                    value={flatFeeBonusCap}
+                                    className={cn(
+                                      isDark
+                                        ? "bg-[#180438] border border-gray-600 text-white"
+                                        : "bg-white text-black",
                                     )}
-                                  </strong>{" "}
-                                  for each verified submission.
+                                    onChange={(e) =>
+                                      setFlatFeeBonusCap(e.target.value)
+                                    }
+                                    placeholder="e.g., 20.00"
+                                  />
+                                  <p className="text-xs text-muted-foreground">
+                                    💰 Maximum total flat fee bonus to
+                                    distribute across all creators. Once this
+                                    cap is reached, no more flat fee bonuses
+                                    will be given. Must not exceed Total Budget.
+                                  </p>
                                 </div>
                               )}
-                          </div>
-                          {/* Flat Fee Bonus Cap (Only for CPM campaigns) */}
-                          {contestType === "cpm" &&
-                            flatFeeBonus &&
-                            parseFloat(flatFeeBonus.toString()) > 0 && (
-                              <div
-                                className={cn(
-                                  "space-y-2 rounded-xl border p-4",
-                                  isDark
-                                    ? "border-slate-700 bg-slate-900/40"
-                                    : "border-slate-200 bg-slate-50",
-                                )}
-                              >
-                                <Label htmlFor="flat-fee-bonus-cap">
-                                  Flat Fee Bonus Cap{" "}
-                                  <span className="text-red-500">*</span>
-                                </Label>
-                                <Input
-                                  id="flat-fee-bonus-cap"
-                                  type="number"
-                                  step="0.01"
-                                  min="0"
-                                  required
-                                  value={flatFeeBonusCap}
-                                  className={cn(
-                                    isDark
-                                      ? "bg-[#180438] border border-gray-600 text-white"
-                                      : "bg-white text-black",
-                                  )}
-                                  onChange={(e) =>
-                                    setFlatFeeBonusCap(e.target.value)
-                                  }
-                                  placeholder="e.g., 20.00"
-                                />
-                                <p className="text-xs text-muted-foreground">
-                                  💰 Maximum total flat fee bonus to distribute
-                                  across all creators. Once this cap is reached,
-                                  no more flat fee bonuses will be given. Must
-                                  not exceed Total Budget.
-                                </p>
-                              </div>
-                            )}
-                        </>
-                      )}
-
-                      {/* Total Budget for Bonuses (Only for Leaderboard campaigns with flat fee bonus) */}
-                      {contestType === "leaderboard" &&
-                        flatFeeBonus &&
-                        parseFloat(flatFeeBonus.toString()) > 0 && (
-                          <div
-                            className={cn(
-                              "space-y-2 rounded-xl border p-4",
-                              isDark
-                                ? "border-slate-700 bg-slate-900/40"
-                                : "border-slate-200 bg-slate-50",
-                            )}
-                          >
-                            <Label htmlFor="total-budget">
-                              Total Budget for Bonuses{" "}
-                              <span className="text-red-500">*</span>
-                            </Label>
-                            <Input
-                              id="total-budget"
-                              type="number"
-                              step="0.01"
-                              min="0"
-                              required
-                              value={totalBudget}
-                              onChange={(e) => setTotalBudget(e.target.value)}
-                              placeholder="e.g., 500.00"
-                              className={cn(
-                                isDark
-                                  ? "bg-[#180438] border border-gray-600 text-white"
-                                  : "bg-white text-black",
-                              )}
-                            />
-                            <p className="text-xs text-muted-foreground">
-                              Required: Set a budget limit for flat fee bonuses.
-                              This budget is required when Flat Fee Bonus is
-                              enabled.
-                              <br />
-                              <strong>Prize Pool:</strong>{" "}
-                              {formatCurrencyFromCents(totalPrizePool)} (for
-                              rankings)
-                              <br />
-                              <strong>Total Budget:</strong>{" "}
-                              {totalBudget
-                                ? `$${parseFloat(totalBudget.toString()).toFixed(2)}`
-                                : "No limit"}{" "}
-                              (for bonuses & extras)
-                            </p>
-                          </div>
+                          </>
                         )}
-                    </>
-                  )}
 
-                  {/* Bonus Section Toggle & Editor */}
-                  <div
-                    className={cn(
-                      "space-y-3 rounded-xl border p-4",
-                      isDark
-                        ? "border-[#7F39EC]/30 bg-[#7F39EC]/10"
-                        : "border-[#7F39EC]/25 bg-[#7F39EC]/5",
-                    )}
-                  >
-                    <div className="flex items-start gap-3">
-                      <Checkbox
-                        id="bonus-enabled"
-                        checked={bonusEnabled}
-                        onCheckedChange={(checked) =>
-                          setBonusEnabled(checked === true)
-                        }
-                        className="mt-0.5 h-5 w-5 shrink-0 data-[state=checked]:bg-[#7F39EC] data-[state=checked]:border-[#7F39EC] data-[state=checked]:text-white"
-                      />
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-2">
-                          <span className="text-xl" aria-hidden="true">
-                            🏆
-                          </span>
-                          <Label
-                            htmlFor="bonus-enabled"
-                            className="text-base font-semibold cursor-pointer"
-                          >
-                            Additional Bonus Opportunities
-                          </Label>
-                        </div>
-                        <p className="text-sm text-muted-foreground mt-1">
-                          Describe other bonuses (top creator rewards, affiliate
-                          links, special bonuses). Handled manually by you.
-                        </p>
-                      </div>
-                    </div>
-
-                    {bonusEnabled && (
-                      <div
-                        className={cn(
-                          "space-y-3 pt-3 border-t",
-                          isDark ? "border-[#7F39EC]/20" : "border-[#7F39EC]/15",
-                        )}
-                      >
-                        <div className="flex items-center justify-between">
-                          <Label>Bonus Details</Label>
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            onClick={() => {
-                              if (
-                                !showBonusPreview &&
-                                bonusRichTextEditorRef.current
-                              ) {
-                                const { html, json } =
-                                  bonusRichTextEditorRef.current.getContent();
-                                setBonusHtml(html);
-                                setBonusJson(json);
-                              }
-                              setShowBonusPreview(!showBonusPreview);
-                            }}
-                            className={cn(
-                              "text-sm font-semibold",
-                              isDark
-                                ? "bg-[#7F39EC] text-white"
-                                : "border border-[#4A00BE] text-[#4A00BE]",
-                            )}
-                          >
-                            {showBonusPreview ? "Edit" : "Preview"}
-                          </Button>
-                        </div>
-                        {showBonusPreview ? (
-                          <div
-                            className={cn(
-                              "prose max-w-none p-4 border rounded-lg min-h-[200px]",
-                              isDark
-                                ? "bg-[#180438] border-gray-700 prose-invert prose-headings:text-white prose-p:text-white prose-strong:text-white prose-em:text-white prose-code:text-white"
-                                : "bg-white border-gray-200",
-                            )}
-                          >
+                        {/* Total Budget for Bonuses (Only for Leaderboard campaigns with flat fee bonus) */}
+                        {contestType === "leaderboard" &&
+                          flatFeeBonus &&
+                          parseFloat(flatFeeBonus.toString()) > 0 && (
                             <div
-                              dangerouslySetInnerHTML={{ __html: bonusHtml }}
-                            />
+                              className={cn(
+                                "space-y-2 rounded-xl border p-4",
+                                isDark
+                                  ? "border-slate-700 bg-slate-900/40"
+                                  : "border-slate-200 bg-slate-50",
+                              )}
+                            >
+                              <Label htmlFor="total-budget">
+                                Total Budget for Bonuses{" "}
+                                <span className="text-red-500">*</span>
+                              </Label>
+                              <Input
+                                id="total-budget"
+                                type="number"
+                                step="0.01"
+                                min="0"
+                                required
+                                value={totalBudget}
+                                onChange={(e) => setTotalBudget(e.target.value)}
+                                placeholder="e.g., 500.00"
+                                className={cn(
+                                  isDark
+                                    ? "bg-[#180438] border border-gray-600 text-white"
+                                    : "bg-white text-black",
+                                )}
+                              />
+                              <p className="text-xs text-muted-foreground">
+                                Required: Set a budget limit for flat fee
+                                bonuses. This budget is required when Flat Fee
+                                Bonus is enabled.
+                                <br />
+                                <strong>Prize Pool:</strong>{" "}
+                                {formatCurrencyFromCents(totalPrizePool)} (for
+                                rankings)
+                                <br />
+                                <strong>Total Budget:</strong>{" "}
+                                {totalBudget
+                                  ? `$${parseFloat(totalBudget.toString()).toFixed(2)}`
+                                  : "No limit"}{" "}
+                                (for bonuses & extras)
+                              </p>
+                            </div>
+                          )}
+                      </>
+                    )}
+
+                    {/* Bonus Section Toggle & Editor */}
+                    <div
+                      className={cn(
+                        "space-y-3 rounded-xl border p-4",
+                        isDark
+                          ? "border-[#7F39EC]/30 bg-[#7F39EC]/10"
+                          : "border-[#7F39EC]/25 bg-[#7F39EC]/5",
+                      )}
+                    >
+                      <div className="flex items-start gap-3">
+                        <Checkbox
+                          id="bonus-enabled"
+                          checked={bonusEnabled}
+                          onCheckedChange={(checked) =>
+                            setBonusEnabled(checked === true)
+                          }
+                          className="mt-0.5 h-5 w-5 shrink-0 data-[state=checked]:bg-[#7F39EC] data-[state=checked]:border-[#7F39EC] data-[state=checked]:text-white"
+                        />
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-2">
+                            <span className="text-xl" aria-hidden="true">
+                              🏆
+                            </span>
+                            <Label
+                              htmlFor="bonus-enabled"
+                              className="text-base font-semibold cursor-pointer"
+                            >
+                              Additional Bonus Opportunities
+                            </Label>
                           </div>
-                        ) : (
-                          <div
-                            className={cn(
-                              "rounded-lg border",
-                              isDark
-                                ? "bg-gray-900 border-gray-700"
-                                : "bg-white border-gray-200",
-                            )}
-                          >
-                            <NovelEditor
-                              value={bonusHtml}
-                              isDark={isDark}
-                              placeholder="Example: 🏆 Top 3 Creators Bonus: Extra $100 for most creative submissions! 💰 Affiliate Program: Earn 10% commission on referrals. 🎯 Milestone Bonus: $50 for reaching 100k views."
-                              height="250px"
-                              ref={bonusRichTextEditorRef}
-                              onChange={(html: string, json: any) => {
-                                setBonusHtml(html);
-                                setBonusJson(json);
-                              }}
-                            />
-                          </div>
-                        )}
-                        <p
+                          <p className="text-sm text-muted-foreground mt-1">
+                            Describe other bonuses (top creator rewards,
+                            affiliate links, special bonuses). Handled manually
+                            by you.
+                          </p>
+                        </div>
+                      </div>
+
+                      {bonusEnabled && (
+                        <div
                           className={cn(
-                            "text-xs",
-                            isDark ? "text-gray-400" : "text-gray-600",
+                            "space-y-3 pt-3 border-t",
+                            isDark
+                              ? "border-[#7F39EC]/20"
+                              : "border-[#7F39EC]/15",
                           )}
                         >
-                          ℹ️ These bonuses are visible to creators but handled
-                          manually by you. Use formatting and emojis to make it
-                          engaging!
-                        </p>
-                      </div>
-                    )}
-                  </div>
+                          <div className="flex items-center justify-between">
+                            <Label>Bonus Details</Label>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={() => {
+                                if (
+                                  !showBonusPreview &&
+                                  bonusRichTextEditorRef.current
+                                ) {
+                                  const { html, json } =
+                                    bonusRichTextEditorRef.current.getContent();
+                                  setBonusHtml(html);
+                                  setBonusJson(json);
+                                }
+                                setShowBonusPreview(!showBonusPreview);
+                              }}
+                              className={cn(
+                                "text-sm font-semibold",
+                                isDark
+                                  ? "bg-[#7F39EC] text-white"
+                                  : "border border-[#4A00BE] text-[#4A00BE]",
+                              )}
+                            >
+                              {showBonusPreview ? "Edit" : "Preview"}
+                            </Button>
+                          </div>
+                          {showBonusPreview ? (
+                            <div
+                              className={cn(
+                                "prose max-w-none p-4 border rounded-lg min-h-[200px]",
+                                isDark
+                                  ? "bg-[#180438] border-gray-700 prose-invert prose-headings:text-white prose-p:text-white prose-strong:text-white prose-em:text-white prose-code:text-white"
+                                  : "bg-white border-gray-200",
+                              )}
+                            >
+                              <div
+                                dangerouslySetInnerHTML={{ __html: bonusHtml }}
+                              />
+                            </div>
+                          ) : (
+                            <div
+                              className={cn(
+                                "rounded-lg border",
+                                isDark
+                                  ? "bg-gray-900 border-gray-700"
+                                  : "bg-white border-gray-200",
+                              )}
+                            >
+                              <NovelEditor
+                                value={bonusHtml}
+                                isDark={isDark}
+                                placeholder="Example: 🏆 Top 3 Creators Bonus: Extra $100 for most creative submissions! 💰 Affiliate Program: Earn 10% commission on referrals. 🎯 Milestone Bonus: $50 for reaching 100k views."
+                                height="250px"
+                                ref={bonusRichTextEditorRef}
+                                onChange={(html: string, json: any) => {
+                                  setBonusHtml(html);
+                                  setBonusJson(json);
+                                }}
+                              />
+                            </div>
+                          )}
+                          <p
+                            className={cn(
+                              "text-xs",
+                              isDark ? "text-gray-400" : "text-gray-600",
+                            )}
+                          >
+                            ℹ️ These bonuses are visible to creators but handled
+                            manually by you. Use formatting and emojis to make
+                            it engaging!
+                          </p>
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </>
               )}
@@ -13786,8 +14175,8 @@ export default function EditContestPage({
                   <span className="font-semibold tabular-nums">
                     {formatCurrencyFromCents(refundDetails.prizePoolDecrease)}
                   </span>
-                  . You&apos;ll receive that amount plus commission back to
-                  your wallet.
+                  . You&apos;ll receive that amount plus commission back to your
+                  wallet.
                 </p>
               </div>
 
@@ -13810,7 +14199,9 @@ export default function EditContestPage({
 
                 <div className="space-y-2 text-sm">
                   <div className="flex justify-between gap-3">
-                    <span className={isDark ? "text-gray-400" : "text-gray-600"}>
+                    <span
+                      className={isDark ? "text-gray-400" : "text-gray-600"}
+                    >
                       Prize pool reduction
                     </span>
                     <span
@@ -13823,7 +14214,9 @@ export default function EditContestPage({
                     </span>
                   </div>
                   <div className="flex justify-between gap-3">
-                    <span className={isDark ? "text-gray-400" : "text-gray-600"}>
+                    <span
+                      className={isDark ? "text-gray-400" : "text-gray-600"}
+                    >
                       Commission refund ({refundDetails.commissionPercentage}%)
                     </span>
                     <span
@@ -14003,68 +14396,66 @@ export default function EditContestPage({
           }
         >
           <ContestPaymentSelection
-                contestAmount={
-                  budgetChanged && budgetDifference > 0
-                    ? budgetDifference / 100 // Prize pool increase amount in dollars
-                    : contestType === "leaderboard"
-                      ? (() => {
-                          // For leaderboard campaigns, charge prize pool + total budget (if flat fee bonus is enabled)
-                          const prizePoolDollars =
-                            winnerAmounts.reduce(
-                              (sum, amount) => sum + (amount || 0),
-                              0,
-                            ) / 100;
-                          const flatFeeBonusEnabled =
-                            flatFeeBonus &&
-                            parseFloat(flatFeeBonus.toString()) > 0;
-                          const totalBudgetDollars =
-                            flatFeeBonusEnabled &&
-                            totalBudget &&
-                            parseFloat(totalBudget.toString()) > 0
-                              ? parseFloat(totalBudget.toString())
-                              : 0;
-                          return prizePoolDollars + totalBudgetDollars;
-                        })()
-                      : parseFloat(totalBudget.toString()) || 0
-                } // Budget is already in dollars
-                prizePoolAmount={
-                  budgetChanged && budgetDifference > 0
-                    ? budgetDifference / 100
-                    : contestType === "leaderboard"
-                      ? winnerAmounts.reduce(
+            contestAmount={
+              budgetChanged && budgetDifference > 0
+                ? budgetDifference / 100 // Prize pool increase amount in dollars
+                : contestType === "leaderboard"
+                  ? (() => {
+                      // For leaderboard campaigns, charge prize pool + total budget (if flat fee bonus is enabled)
+                      const prizePoolDollars =
+                        winnerAmounts.reduce(
                           (sum, amount) => sum + (amount || 0),
                           0,
-                        ) / 100
-                      : undefined
-                }
-                bonusBudgetAmount={
-                  budgetChanged && budgetDifference > 0
-                    ? 0
-                    : contestType === "leaderboard"
-                      ? (() => {
-                          const flatFeeBonusEnabled =
-                            flatFeeBonus &&
-                            parseFloat(flatFeeBonus.toString()) > 0;
-                          const totalBudgetDollars =
-                            flatFeeBonusEnabled &&
-                            totalBudget &&
-                            parseFloat(totalBudget.toString()) > 0
-                              ? parseFloat(totalBudget.toString())
-                              : 0;
-                          return totalBudgetDollars || undefined;
-                        })()
-                      : undefined
-                }
-                contestTitle={title || "Untitled Campaign"}
-                contestId={contestId}
-                returnPath={`/dashboard/contests/${contestId}/edit`}
-                commissionPercentage={
-                  contestCommissionRate !== null
-                    ? contestCommissionRate
-                    : (getPlanFeatures(userPlan).commissionPercentage ?? 0)
-                }
-                isAdminPayAsBrand={isAdmin}
-                targetAdvertiserId={contest?.advertiser_id}
+                        ) / 100;
+                      const flatFeeBonusEnabled =
+                        flatFeeBonus && parseFloat(flatFeeBonus.toString()) > 0;
+                      const totalBudgetDollars =
+                        flatFeeBonusEnabled &&
+                        totalBudget &&
+                        parseFloat(totalBudget.toString()) > 0
+                          ? parseFloat(totalBudget.toString())
+                          : 0;
+                      return prizePoolDollars + totalBudgetDollars;
+                    })()
+                  : parseFloat(totalBudget.toString()) || 0
+            } // Budget is already in dollars
+            prizePoolAmount={
+              budgetChanged && budgetDifference > 0
+                ? budgetDifference / 100
+                : contestType === "leaderboard"
+                  ? winnerAmounts.reduce(
+                      (sum, amount) => sum + (amount || 0),
+                      0,
+                    ) / 100
+                  : undefined
+            }
+            bonusBudgetAmount={
+              budgetChanged && budgetDifference > 0
+                ? 0
+                : contestType === "leaderboard"
+                  ? (() => {
+                      const flatFeeBonusEnabled =
+                        flatFeeBonus && parseFloat(flatFeeBonus.toString()) > 0;
+                      const totalBudgetDollars =
+                        flatFeeBonusEnabled &&
+                        totalBudget &&
+                        parseFloat(totalBudget.toString()) > 0
+                          ? parseFloat(totalBudget.toString())
+                          : 0;
+                      return totalBudgetDollars || undefined;
+                    })()
+                  : undefined
+            }
+            contestTitle={title || "Untitled Campaign"}
+            contestId={contestId}
+            returnPath={`/dashboard/contests/${contestId}/edit`}
+            commissionPercentage={
+              contestCommissionRate !== null
+                ? contestCommissionRate
+                : (getPlanFeatures(userPlan).commissionPercentage ?? 0)
+            }
+            isAdminPayAsBrand={isAdmin}
+            targetAdvertiserId={contest?.advertiser_id}
             onPaymentSuccess={handlePaymentSuccess}
             onPaymentError={handlePaymentError}
             disabled={isSubmitting}

@@ -27,6 +27,7 @@ import {
 // import { type Submission } from "@/types/submission";
 
 import { DeleteContestButton } from "@/components/delete-contest-button";
+import { VerifyQualityDialog } from "@/components/VerifyQualityDialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -117,6 +118,10 @@ import {
   buildFlatFeeBonusExpectedCentsBySubmissionId,
   getFlatFeeBonusCentsFromContest,
 } from "@/lib/twitter-cpm-bonus-expected";
+import {
+  hasAnyContestCreatorRequirement,
+  parseContestCreatorRequirements,
+} from "@/lib/creator-requirements";
 import {
   selectionIncludesPaidRow,
   submissionIsPaidRow,
@@ -294,6 +299,61 @@ function formatTrustScoreWithMax(score: number, max = 100): string {
   return `${formatTrustScore(score)}\u00A0/\u00A0${max}`;
 }
 
+function EligibilityRequirementCard({
+  icon: Icon,
+  label,
+  value,
+  description,
+  isDark,
+}: {
+  icon: React.ComponentType<{ className?: string }>;
+  label: string;
+  value: React.ReactNode;
+  description: string;
+  isDark: boolean;
+}) {
+  return (
+    <div
+      className={cn(
+        "border rounded-xl transition-all duration-300",
+        isDark ? "border-gray-600" : "border-gray-300",
+      )}
+    >
+      <CardContent className="p-4">
+        <div className="flex items-start gap-4">
+          <div
+            className={cn(
+              "w-10 h-10 flex items-center justify-center rounded-full shrink-0",
+              isDark ? "bg-[#FFFFFF42] text-white" : "bg-purple-100 text-[#4A00BE]",
+            )}
+          >
+            <Icon className="h-5 w-5" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p
+              className={cn(
+                "text-md font-medium tracking-wide",
+                isDark ? "text-white" : "text-black",
+              )}
+            >
+              {label}
+            </p>
+            <p
+              className={cn(
+                "text-lg md:text-xl font-bold mt-1",
+                isDark ? "text-white" : "text-black",
+              )}
+            >
+              {value}
+            </p>
+            <p className="text-sm text-muted-foreground mt-1">{description}</p>
+          </div>
+        </div>
+      </CardContent>
+    </div>
+  );
+}
+
 function parseTrustMetricsValue(raw: unknown): Record<string, unknown> | null {
   if (raw && typeof raw === "object") {
     return raw as Record<string, unknown>;
@@ -429,6 +489,10 @@ interface Contest {
   trust_score?: number | null;
   /** Optional campaign minimum trust number (verified − rejected). NULL = no requirement. */
   trust_number?: number | null;
+  min_best_quality_score?: number | null;
+  min_avg_quality_score?: number | null;
+  min_platform_earnings?: number | null;
+  min_platform_views?: number | null;
 }
 
 interface Submission {
@@ -1216,30 +1280,93 @@ export default function ContestDetailClient({
   const isVideoContestFormat =
     currentContest?.contest_format !== "text_image";
 
+  const parsedCreatorRequirements = useMemo(
+    () => parseContestCreatorRequirements(currentContest),
+    [currentContest],
+  );
+
   /** Campaign minimum trust score (video campaigns only). */
-  const contestMinTrustScore = useMemo(() => {
-    if (!isVideoContestFormat) return null;
-    const raw = currentContest.trust_score;
-    if (raw === null || raw === undefined) return null;
-    const value = Number(raw);
-    if (!Number.isFinite(value) || value <= 0) return null;
-    return value;
-  }, [currentContest.trust_score, isVideoContestFormat]);
+  const contestMinTrustScore = parsedCreatorRequirements.minTrustScorePct;
 
-  const contestMinTrustNumber = useMemo(() => {
-    if (!isVideoContestFormat) return null;
-    const raw = currentContest.trust_number;
-    if (raw === null || raw === undefined) return null;
-    const value = Number(raw);
-    if (!Number.isFinite(value)) return null;
-    return value;
-  }, [currentContest.trust_number, isVideoContestFormat]);
+  const contestMinTrustNumber = parsedCreatorRequirements.minTrustNumber;
 
-  /** Contest minimum trust score card on overview; shown when brand set a threshold. */
-  const showContestTrustScoreRequiredCard =
-    isVideoContestFormat && contestMinTrustScore !== null;
-  const showContestTrustNumberRequiredCard =
-    isVideoContestFormat && contestMinTrustNumber !== null;
+  const showCreatorEligibilitySection =
+    isVideoContestFormat &&
+    hasAnyContestCreatorRequirement(currentContest);
+
+  const eligibilityDisplayItems = useMemo(() => {
+    const req = parsedCreatorRequirements;
+    const items: Array<{
+      key: string;
+      label: string;
+      value: React.ReactNode;
+      description: string;
+      icon: React.ComponentType<{ className?: string }>;
+    }> = [];
+
+    if (req.minTrustScorePct !== null) {
+      items.push({
+        key: "trust-score",
+        label: "Min Trust Score %",
+        value: formatTrustScoreWithMax(req.minTrustScorePct),
+        description:
+          "Creators need at least this reliability score to submit.",
+        icon: CheckCheck,
+      });
+    }
+    if (req.minTrustNumber !== null) {
+      items.push({
+        key: "trust-number",
+        label: "Min Trust Number",
+        value: req.minTrustNumber,
+        description:
+          "Creators must have at least this many trusted (verified) reels to submit.",
+        icon: CheckCheck,
+      });
+    }
+    if (req.minBestQuality !== null) {
+      items.push({
+        key: "best-quality",
+        label: "Min Best Quality",
+        value: `${req.minBestQuality} / 3`,
+        description:
+          "Creators must have reached at least this best content quality rating.",
+        icon: Star,
+      });
+    }
+    if (req.minAvgQuality !== null) {
+      items.push({
+        key: "avg-quality",
+        label: "Min Avg Quality",
+        value: `${formatTrustScore(req.minAvgQuality)} / 3`,
+        description:
+          "Creators must maintain at least this average content quality rating.",
+        icon: Star,
+      });
+    }
+    if (req.minPlatformEarningsCents !== null) {
+      items.push({
+        key: "platform-earnings",
+        label: "Min Platform Earnings",
+        value: formatMoney(req.minPlatformEarningsCents),
+        description:
+          "Creators must have earned at least this much on the platform.",
+        icon: DollarSign,
+      });
+    }
+    if (req.minPlatformViews !== null) {
+      items.push({
+        key: "platform-views",
+        label: "Min Platform Views",
+        value: req.minPlatformViews.toLocaleString(),
+        description:
+          "Creators must have at least this many credited views on the platform.",
+        icon: Eye,
+      });
+    }
+
+    return items;
+  }, [parsedCreatorRequirements]);
 
   /** Per-creator trust score in creator-wise table — admin only, video campaigns with a trust requirement. */
   const showCreatorWiseTrustScoreColumn =
@@ -1677,6 +1804,11 @@ export default function ContestDetailClient({
   const [rejectionModalOpen, setRejectionModalOpen] = useState(false);
   const [pendingRejectionSubmissionIds, setPendingRejectionSubmissionIds] =
     useState<string[]>([]);
+  const [verifyQualityDialogOpen, setVerifyQualityDialogOpen] = useState(false);
+  const [pendingVerifySubmissionIds, setPendingVerifySubmissionIds] = useState<
+    string[]
+  >([]);
+  const [verifyQualityLoading, setVerifyQualityLoading] = useState(false);
 
   // Twitter rejection modal state
   const [twitterRejectionModalOpen, setTwitterRejectionModalOpen] =
@@ -5010,7 +5142,11 @@ export default function ContestDetailClient({
       isCustom?: boolean;
       customRemarks?: string;
     },
-    options?: { skipReload?: boolean; closeCreatorModalOnSuccess?: boolean },
+    options?: {
+      skipReload?: boolean;
+      closeCreatorModalOnSuccess?: boolean;
+      qualityScore?: 1 | 2 | 3;
+    },
   ) => {
     console.log("🚀 Starting submission status update:", {
       submissionId,
@@ -5244,6 +5380,7 @@ export default function ContestDetailClient({
           action: newStatus,
           reason: reason || null,
           paymentDetails: paymentDetails || null,
+          qualityScore: options?.qualityScore ?? (newStatus === "verified" ? 1 : undefined),
         }),
       });
 
@@ -5625,7 +5762,7 @@ export default function ContestDetailClient({
     submissionIds: string[],
     action: "approve" | "verified" | "reject" | "rejected" | "pending" | "paid",
     reason?: string,
-    options?: { closeCreatorModalOnSuccess?: boolean },
+    options?: { closeCreatorModalOnSuccess?: boolean; qualityScore?: 1 | 2 | 3 },
   ) => {
     if (!submissionIds || submissionIds.length === 0) return;
 
@@ -5668,6 +5805,7 @@ export default function ContestDetailClient({
               submissionIds: normalIds,
               action: normalAction,
               reason,
+              qualityScore: options?.qualityScore ?? (normalAction === "verified" ? 1 : undefined),
             }),
           }).then((res) => res.json()),
         );
@@ -10520,15 +10658,12 @@ export default function ContestDetailClient({
                   )}
                 </div>
 
-                {/* Contest Info Cards */}
-                <div
-                  className={cn(
-                    "grid grid-cols-1 gap-4",
-                    showContestTrustScoreRequiredCard
-                      ? "md:grid-cols-3"
-                      : "md:grid-cols-2",
-                  )}
-                >
+                {/* Contest Details */}
+                <div className="space-y-3">
+                  <h3 className="font-semibold text-lg text-foreground">
+                    Contest Details
+                  </h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {/* Platform Card */}
                   <div
                     className={cn(
@@ -10610,71 +10745,7 @@ export default function ContestDetailClient({
                       </div>
                     </CardContent>
                   </div>
-
-                  {showContestTrustScoreRequiredCard && (
-                    <div
-                      className={cn(
-                        "border rounded-xl transition-all duration-300",
-                        isDark ? "border-gray-600" : "border-gray-300",
-                      )}
-                    >
-                      <CardContent className="p-4">
-                        <div className="flex items-center gap-3">
-                          <div
-                            className={cn(
-                              "w-10 h-10 flex items-center justify-center rounded-full ",
-                              isDark
-                                ? "bg-[#FFFFFF42] text-white"
-                                : "bg-purple-100 text-[#4A00BE]",
-                            )}
-                          >
-                            <CheckCheck className="h-5 w-5" />
-                          </div>
-                          <div className="flex-1">
-                            <p className="text-sm font-medium tracking-wide">
-                              Trust Score %
-                            </p>
-                            <p className="text-lg font-bold">
-                              {formatTrustScoreWithMax(contestMinTrustScore!)}
-                            </p>
-                          </div>
-                        </div>
-                      </CardContent>
-                    </div>
-                  )}
-
-                  {showContestTrustNumberRequiredCard && (
-                    <div
-                      className={cn(
-                        "border rounded-xl transition-all duration-300",
-                        isDark ? "border-gray-600" : "border-gray-300",
-                      )}
-                    >
-                      <CardContent className="p-4">
-                        <div className="flex items-center gap-3">
-                          <div
-                            className={cn(
-                              "w-10 h-10 flex items-center justify-center rounded-full ",
-                              isDark
-                                ? "bg-[#FFFFFF42] text-white"
-                                : "bg-purple-100 text-[#4A00BE]",
-                            )}
-                          >
-                            <CheckCheck className="h-5 w-5" />
-                          </div>
-                          <div className="flex-1">
-                            <p className="text-sm font-medium tracking-wide">
-                              Trust Number
-                            </p>
-                            <p className="text-lg font-bold">
-                              {contestMinTrustNumber}
-                            </p>
-                          </div>
-                        </div>
-                      </CardContent>
-                    </div>
-                  )}
-                </div>
+                  </div>
 
                 {/* Date & Time Cards */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -10740,6 +10811,30 @@ export default function ContestDetailClient({
                     </CardContent>
                   </div>
                 </div>
+                </div>
+
+                {showCreatorEligibilitySection && (
+                  <div className="space-y-3">
+                    <h3 className="font-semibold text-lg text-foreground">
+                      Creator Eligibility
+                    </h3>
+                    <p className="text-sm text-muted-foreground">
+                      Minimum creator requirements to submit to this campaign.
+                    </p>
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                      {eligibilityDisplayItems.map((item) => (
+                        <EligibilityRequirementCard
+                          key={item.key}
+                          icon={item.icon}
+                          label={item.label}
+                          value={item.value}
+                          description={item.description}
+                          isDark={isDark}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                )}
 
                 {/* Regions Card */}
                 {currentContest.region &&
@@ -26462,6 +26557,33 @@ export default function ContestDetailClient({
         </TabContent>
       </div>
 
+      {/* Verify quality picker */}
+      <VerifyQualityDialog
+        open={verifyQualityDialogOpen}
+        onOpenChange={(open) => {
+          setVerifyQualityDialogOpen(open);
+          if (!open) setPendingVerifySubmissionIds([]);
+        }}
+        submissionCount={pendingVerifySubmissionIds.length}
+        loading={verifyQualityLoading}
+        onConfirm={async (qualityScore) => {
+          if (pendingVerifySubmissionIds.length === 0) return;
+          setVerifyQualityLoading(true);
+          try {
+            await handleBulkUpdateSubmissionStatus(
+              pendingVerifySubmissionIds,
+              "verified",
+              undefined,
+              { closeCreatorModalOnSuccess: true, qualityScore },
+            );
+            setVerifyQualityDialogOpen(false);
+            setPendingVerifySubmissionIds([]);
+          } finally {
+            setVerifyQualityLoading(false);
+          }
+        }}
+      />
+
       {/* Rejection Reason Modal */}
       <RejectionReasonModal
         isOpen={rejectionModalOpen}
@@ -26978,9 +27100,8 @@ export default function ContestDetailClient({
               });
               return;
             }
-            await handleBulkUpdateSubmissionStatus(ids, "verified", undefined, {
-              closeCreatorModalOnSuccess: true,
-            });
+            setPendingVerifySubmissionIds(ids);
+            setVerifyQualityDialogOpen(true);
           }}
           onReject={(ids: string[]) => {
             if (ids.length === 0) return;

@@ -72,6 +72,18 @@ function formatSubmissionInsertError(error: {
   if (msg.includes("trust_number_too_low")) {
     return "Trust number too low to submit to this campaign.";
   }
+  if (msg.includes("best_quality_too_low")) {
+    return "Best quality too low to submit to this campaign.";
+  }
+  if (msg.includes("avg_quality_too_low")) {
+    return "Average quality too low to submit to this campaign.";
+  }
+  if (msg.includes("platform_earnings_too_low")) {
+    return "Platform earnings too low to submit to this campaign.";
+  }
+  if (msg.includes("platform_views_too_low")) {
+    return "Platform views too low to submit to this campaign.";
+  }
   return msg || "Failed to submit content";
 }
 

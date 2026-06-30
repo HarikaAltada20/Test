@@ -41,7 +41,7 @@ import {
   buildDualRewardsPayoutPersistValue,
   splitDualReversalRefundFromPayout,
 } from "@/lib/dual-rewards-payout";
-import { recomputeCreatorTrustMetrics } from "@/lib/trust-score";
+import { recomputeCreatorProfileMetrics } from "@/lib/creator-requirements";
 import {
   checkDualRewardsPoolBudgetForPayment,
   computeDualRewardsSubmissionReversalDue,
@@ -72,7 +72,7 @@ export async function POST(request: Request) {
       cpm_refunded_cents?: number;
       milestone_refunded_cents?: number;
     } | null = null;
-    const { submissionId, action, reason, paymentDetails, skipWalletDebit } =
+    const { submissionId, action, reason, paymentDetails, skipWalletDebit, qualityScore } =
       await request.json();
 
     if (!submissionId || !action) {
@@ -354,6 +354,13 @@ export async function POST(request: Request) {
     } else if (action === "verified" || action === "pending") {
       // Clear metadata for verified/pending (dual_rewards_payout cleared after wallet reversal)
       updateData.metadata = null;
+    }
+
+    if (action === "verified") {
+      const { normalizeVerifyQualityScore } = await import("@/lib/quality-score");
+      updateData.quality_score = normalizeVerifyQualityScore(qualityScore);
+    } else if (action === "rejected" || action === "pending") {
+      updateData.quality_score = null;
     }
 
     // Use admin client to bypass RLS for the update operation
@@ -1894,16 +1901,10 @@ export async function POST(request: Request) {
       .eq("id", submissionId)
       .single();
 
-    const trustRecompute = await recomputeCreatorTrustMetrics(
+    await recomputeCreatorProfileMetrics(
       supabaseAdmin,
       submissionFull.creator_id,
     );
-    if (!trustRecompute.ok) {
-      console.error(
-        "[verify-submission] Failed to recompute trust metrics:",
-        trustRecompute.error,
-      );
-    }
 
     let message = `Submission ${action} successfully${
       action === "rejected" ? ` with reason: ${reason}` : ""

@@ -5875,7 +5875,7 @@ export function ContestClientPage({
                                 isDark ? "text-slate-300" : "text-slate-600",
                               )}
                             >
-                              Minimum Trust Score %
+                               Trust Score 
                             </p>
                             <p
                               className={cn(

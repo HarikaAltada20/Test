@@ -112,6 +112,12 @@ import CreatorParticipationOnboardingModal, {
 import { PageLoadingSpinner } from "@/components/loading/LoadingSpinner";
 import Link from "next/link";
 import { PaginationControls } from "@/components/ui/pagination-controls";
+import {
+  buildRequirementBadgeLabels,
+  isCreatorEligibleForContest,
+  parseContestCreatorRequirements,
+  type CreatorRequirementsSnapshot,
+} from "@/lib/creator-requirements";
 
 import {
   isCountryInContestRegions,
@@ -350,6 +356,9 @@ export default function OpportunitiesPage({
   const [limit, setLimit] = useState<number>(9);
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
   const [filtersHydrated, setFiltersHydrated] = useState(false);
+  const [eligibleOnlyFilter, setEligibleOnlyFilter] = useState(false);
+  const [creatorRequirementsSnapshot, setCreatorRequirementsSnapshot] =
+    useState<CreatorRequirementsSnapshot | null>(null);
   /** List layout is only available at lg+ (1024px); below that we force grid. */
   const [layoutAllowsListView, setLayoutAllowsListView] = useState(false);
 
@@ -365,6 +374,38 @@ export default function OpportunitiesPage({
     setLimit(stored.limit);
     setFiltersHydrated(true);
   }, []);
+
+  useEffect(() => {
+    if (!user?.id) {
+      setCreatorRequirementsSnapshot(null);
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      try {
+        const res = await fetch("/api/creators/stats");
+        if (!res.ok || cancelled) return;
+        const data = await res.json();
+        if (cancelled) return;
+        setCreatorRequirementsSnapshot({
+          trustScorePct: data.trustScorePct ?? data.trust_metrics?.trust_score ?? 100,
+          trustNumber: data.trustNumber ?? data.trust_metrics?.trust_number ?? 0,
+          avgQualityScore: data.avgQualityScore ?? data.quality_metrics?.avg_quality_score ?? null,
+          bestQualityScore: data.bestQualityScore ?? data.quality_metrics?.best_quality_score ?? null,
+          totalPlatformEarningsCents: Number(data.totalPlatformEarningsCents ?? 0),
+          totalViews: Number(data.totalViews ?? 0),
+          verifiedReels: data.verifiedReels ?? data.trust_metrics?.verified_reels ?? 0,
+          rejectedReels: data.rejectedReels ?? data.trust_metrics?.rejected_reels ?? 0,
+          pendingReels: data.pendingReels ?? data.trust_metrics?.pending_reels ?? 0,
+        });
+      } catch {
+        if (!cancelled) setCreatorRequirementsSnapshot(null);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.id]);
 
   useEffect(() => {
     if (!filtersHydrated) return;
@@ -1553,6 +1594,15 @@ export default function OpportunitiesPage({
       }
     });
 
+    if (eligibleOnlyFilter && creatorRequirementsSnapshot) {
+      contestsToDisplay = contestsToDisplay.filter((contest) =>
+        isCreatorEligibleForContest({
+          requirements: parseContestCreatorRequirements(contest),
+          snapshot: creatorRequirementsSnapshot,
+        }),
+      );
+    }
+
     setDisplayedContests(contestsToDisplay);
   }, [
     availableContests,
@@ -1566,12 +1616,14 @@ export default function OpportunitiesPage({
     creatorInterests,
     userCountry,
     mediaType,
+    eligibleOnlyFilter,
+    creatorRequirementsSnapshot,
   ]);
 
   // Reset to first page whenever filters or sort change
   useEffect(() => {
     setPage(1);
-  }, [statusFilter, platformFilter, typeFilter, sortOption, searchQuery]);
+  }, [statusFilter, platformFilter, typeFilter, sortOption, searchQuery, eligibleOnlyFilter]);
 
   const total = displayedContests.length;
   const totalPages = Math.max(1, Math.ceil(total / limit));
@@ -1823,6 +1875,20 @@ export default function OpportunitiesPage({
                 }
                 return null;
               })()}
+              {buildRequirementBadgeLabels(contest).slice(0, 2).map((label) => (
+                <Badge
+                  key={label}
+                  variant="outline"
+                  className={cn(
+                    "text-xs px-2 py-0.5 font-medium",
+                    isDark
+                      ? "bg-amber-900/20 text-amber-200 border-amber-700/50"
+                      : "bg-amber-50 text-amber-800 border-amber-200",
+                  )}
+                >
+                  Requires {label}
+                </Badge>
+              ))}
               {/* Content Type Badge - Don't show for Twitter text_image contests (we show campaign_type badge instead) */}
               {(() => {
                 const isTwitterTextImage =
@@ -2469,6 +2535,14 @@ export default function OpportunitiesPage({
                 )}
               />
             </div>
+            <Button
+              type="button"
+              variant={eligibleOnlyFilter ? "default" : "outline"}
+              className="h-11 shrink-0 rounded-xl"
+              onClick={() => setEligibleOnlyFilter((v) => !v)}
+            >
+              Eligible for me
+            </Button>
             {searchQuery.trim() !== "" && (
               <Button
                 type="button"
