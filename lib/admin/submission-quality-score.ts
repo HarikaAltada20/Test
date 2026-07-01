@@ -8,6 +8,11 @@ import {
 export type CreatorQualitySnapshot = {
   avg_quality_score: number | null;
   best_quality_score: number | null;
+  quality_score_counts: {
+    score1: number;
+    score2: number;
+    score3: number;
+  };
 };
 
 export async function recomputeCreatorQualitySnapshots(
@@ -24,6 +29,7 @@ export async function recomputeCreatorQualitySnapshots(
         snapshots[creatorId] = {
           avg_quality_score: result.metrics.avg_quality_score,
           best_quality_score: result.metrics.best_quality_score,
+          quality_score_counts: result.metrics.quality_score_counts,
         };
       }
     }),

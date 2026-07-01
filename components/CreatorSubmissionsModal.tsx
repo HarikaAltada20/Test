@@ -184,6 +184,11 @@ interface CreatorSubmissionsModalProps {
     creatorId: string;
     avgQualityScore: number | null;
     bestQualityScore: number | null;
+    qualityScoreCounts?: {
+      score1: number;
+      score2: number;
+      score3: number;
+    };
   }) => void;
 }
 
@@ -1165,7 +1170,15 @@ export function CreatorSubmissionsModal({
       const creatorQualityByCreatorId = (data.creatorQualityByCreatorId ||
         {}) as Record<
         string,
-        { avg_quality_score: number | null; best_quality_score: number | null }
+        {
+          avg_quality_score: number | null;
+          best_quality_score: number | null;
+          quality_score_counts?: {
+            score1: number;
+            score2: number;
+            score3: number;
+          };
+        }
       >;
 
       for (const updated of data.submissions || []) {
@@ -1177,6 +1190,7 @@ export function CreatorSubmissionsModal({
           creatorId,
           avgQualityScore: creatorQuality?.avg_quality_score ?? null,
           bestQualityScore: creatorQuality?.best_quality_score ?? null,
+          qualityScoreCounts: creatorQuality?.quality_score_counts,
         });
       }
 

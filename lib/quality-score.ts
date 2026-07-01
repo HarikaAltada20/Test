@@ -2,10 +2,17 @@ export type QualityScore = 1 | 2 | 3;
 
 export const CREATOR_DEFAULT_QUALITY_SCORE: QualityScore = 1;
 
+export type QualityScoreCounts = {
+  score1: number;
+  score2: number;
+  score3: number;
+};
+
 export type CreatorQualityMetrics = {
   avg_quality_score: number | null;
   best_quality_score: number | null;
   scored_verified_reels: number;
+  quality_score_counts: QualityScoreCounts;
 };
 
 function parseStoredQualityNumber(value: unknown): number | null {
@@ -37,6 +44,7 @@ export function resolveCreatorQualityMetrics(input: {
       best_quality_score: storedBest,
       scored_verified_reels:
         storedAvg !== null || storedBest !== null ? verifiedReels : 0,
+      quality_score_counts: { score1: 0, score2: 0, score3: 0 },
     };
   }
 
@@ -45,6 +53,7 @@ export function resolveCreatorQualityMetrics(input: {
       avg_quality_score: null,
       best_quality_score: null,
       scored_verified_reels: 0,
+      quality_score_counts: { score1: 0, score2: 0, score3: 0 },
     };
   }
 
@@ -52,6 +61,7 @@ export function resolveCreatorQualityMetrics(input: {
     avg_quality_score: CREATOR_DEFAULT_QUALITY_SCORE,
     best_quality_score: CREATOR_DEFAULT_QUALITY_SCORE,
     scored_verified_reels: 0,
+    quality_score_counts: { score1: 0, score2: 0, score3: 0 },
   };
 }
 
@@ -59,6 +69,17 @@ export function parseQualityScore(value: unknown): QualityScore | null {
   const n = Number(value);
   if (!Number.isFinite(n) || n < 1 || n > 3) return null;
   return Math.round(n) as QualityScore;
+}
+
+export function countQualityScoresFromScores(scores: number[]): QualityScoreCounts {
+  const counts: QualityScoreCounts = { score1: 0, score2: 0, score3: 0 };
+  for (const raw of scores) {
+    const score = parseQualityScore(raw);
+    if (score === 1) counts.score1 += 1;
+    else if (score === 2) counts.score2 += 1;
+    else if (score === 3) counts.score3 += 1;
+  }
+  return counts;
 }
 
 export function normalizeVerifyQualityScore(value: unknown): QualityScore {
@@ -76,6 +97,7 @@ export function computeQualityMetricsFromScores(
       avg_quality_score: null,
       best_quality_score: null,
       scored_verified_reels: 0,
+      quality_score_counts: { score1: 0, score2: 0, score3: 0 },
     };
   }
   const sum = valid.reduce((acc, s) => acc + s, 0);
@@ -83,6 +105,7 @@ export function computeQualityMetricsFromScores(
     avg_quality_score: Math.round((sum / valid.length) * 100) / 100,
     best_quality_score: Math.max(...valid),
     scored_verified_reels: valid.length,
+    quality_score_counts: countQualityScoresFromScores(valid),
   };
 }
 

@@ -402,6 +402,40 @@ function parseCreatorMetricNumber(value: unknown): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
+function CreatorQualityScoreBreakdownTooltip({
+  breakdown,
+  requirementLabel,
+  belowThreshold,
+  requirementValue,
+  creatorValue,
+}: {
+  breakdown: { score1: number; score2: number; score3: number };
+  requirementLabel: string;
+  belowThreshold: boolean;
+  requirementValue: number;
+  creatorValue: number | null;
+}) {
+  const total = breakdown.score1 + breakdown.score2 + breakdown.score3;
+  const creatorDisplay =
+    creatorValue !== null ? String(creatorValue) : "—";
+
+  return (
+    <div className="space-y-1 text-xs">
+      <p className="font-medium">Quality Score</p>
+      <p>Score 3: {breakdown.score3} submission{breakdown.score3 === 1 ? "" : "s"}</p>
+      <p>Score 2: {breakdown.score2} submission{breakdown.score2 === 1 ? "" : "s"}</p>
+      <p>Score 1: {breakdown.score1} submission{breakdown.score1 === 1 ? "" : "s"}</p>
+      {total === 0 && (
+        <p className="text-muted-foreground">No scored verified submissions yet</p>
+      )}
+      <p className="pt-1 border-t border-border/50">
+        {belowThreshold ? "Below" : "Meets"} required {requirementLabel} (
+        {requirementValue}). Creator: {creatorDisplay}
+      </p>
+    </div>
+  );
+}
+
 function parseTrustMetricsValue(raw: unknown): Record<string, unknown> | null {
   if (raw && typeof raw === "object") {
     return raw as Record<string, unknown>;
@@ -2429,7 +2463,15 @@ export default function ContestDetailClient({
     const creatorQualityByCreatorId = (data.creatorQualityByCreatorId ||
       {}) as Record<
       string,
-      { avg_quality_score: number | null; best_quality_score: number | null }
+      {
+        avg_quality_score: number | null;
+        best_quality_score: number | null;
+        quality_score_counts?: {
+          score1: number;
+          score2: number;
+          score3: number;
+        };
+      }
     >;
 
     setCurrentSubmissions((prev) =>
@@ -2453,6 +2495,13 @@ export default function ContestDetailClient({
                     creatorQuality.best_quality_score ??
                     existingCreator.best_quality_score ??
                     null,
+                  quality_score_counts:
+                    creatorQuality.quality_score_counts ??
+                    existingCreator.quality_score_counts ?? {
+                      score1: 0,
+                      score2: 0,
+                      score3: 0,
+                    },
                 }
               : existingCreator,
           };
@@ -2471,6 +2520,13 @@ export default function ContestDetailClient({
                 creatorQuality.best_quality_score ??
                 existingCreator.best_quality_score ??
                 null,
+              quality_score_counts:
+                creatorQuality.quality_score_counts ??
+                existingCreator.quality_score_counts ?? {
+                  score1: 0,
+                  score2: 0,
+                  score3: 0,
+                },
             },
           };
         }
@@ -3339,6 +3395,12 @@ export default function ContestDetailClient({
               submission.creator?.avg_quality_score ?? null,
             best_quality_score:
               submission.creator?.best_quality_score ?? null,
+            quality_score_counts:
+              submission.creator?.quality_score_counts ?? {
+                score1: 0,
+                score2: 0,
+                score3: 0,
+              },
             total_money_won: submission.creator?.total_money_won ?? 0,
             total_views: submission.creator?.total_views ?? 0,
           },
@@ -3441,6 +3503,23 @@ export default function ContestDetailClient({
         submission.creator?.best_quality_score != null
       ) {
         group.creator.best_quality_score = submission.creator.best_quality_score;
+      }
+      const existingCounts = group.creator?.quality_score_counts;
+      const existingCountsTotal =
+        (existingCounts?.score1 ?? 0) +
+        (existingCounts?.score2 ?? 0) +
+        (existingCounts?.score3 ?? 0);
+      const submissionCounts = submission.creator?.quality_score_counts;
+      const submissionCountsTotal =
+        (submissionCounts?.score1 ?? 0) +
+        (submissionCounts?.score2 ?? 0) +
+        (submissionCounts?.score3 ?? 0);
+      if (
+        submissionCounts &&
+        submissionCountsTotal > 0 &&
+        existingCountsTotal === 0
+      ) {
+        group.creator.quality_score_counts = submissionCounts;
       }
       if (
         (!group.creator?.total_money_won ||
@@ -21668,6 +21747,12 @@ export default function ContestDetailClient({
                                         contestMinPlatformViews !== null &&
                                         creatorPlatformViews <
                                           contestMinPlatformViews;
+                                      const creatorQualityScoreBreakdown =
+                                        group.creator?.quality_score_counts ?? {
+                                          score1: 0,
+                                          score2: 0,
+                                          score3: 0,
+                                        };
                                       return (
                                         <TableRow key={group.creator.id}>
                                           <TableCell className="font-medium">
@@ -21822,27 +21907,21 @@ export default function ContestDetailClient({
                                                 }
                                                 isDark={isDark}
                                                 tooltip={
-                                                  <div className="space-y-1 text-xs">
-                                                    {bestQualityBelowThreshold ? (
-                                                      <p>
-                                                        Below required best
-                                                        quality (
-                                                        {contestMinBestQuality}
-                                                        ). Creator:{" "}
-                                                        {creatorBestQuality ??
-                                                          "not established"}
-                                                      </p>
-                                                    ) : (
-                                                      <p>
-                                                        Meets required best
-                                                        quality (
-                                                        {contestMinBestQuality}
-                                                        ). Creator:{" "}
-                                                        {creatorBestQuality ??
-                                                          "not established"}
-                                                      </p>
-                                                    )}
-                                                  </div>
+                                                  <CreatorQualityScoreBreakdownTooltip
+                                                    breakdown={
+                                                      creatorQualityScoreBreakdown
+                                                    }
+                                                    requirementLabel="best quality"
+                                                    belowThreshold={
+                                                      bestQualityBelowThreshold
+                                                    }
+                                                    requirementValue={
+                                                      contestMinBestQuality!
+                                                    }
+                                                    creatorValue={
+                                                      creatorBestQuality
+                                                    }
+                                                  />
                                                 }
                                               />
                                             </TableCell>
@@ -21860,27 +21939,21 @@ export default function ContestDetailClient({
                                                 }
                                                 isDark={isDark}
                                                 tooltip={
-                                                  <div className="space-y-1 text-xs">
-                                                    {avgQualityBelowThreshold ? (
-                                                      <p>
-                                                        Below required average
-                                                        quality (
-                                                        {contestMinAvgQuality}
-                                                        ). Creator:{" "}
-                                                        {creatorAvgQuality ??
-                                                          "not established"}
-                                                      </p>
-                                                    ) : (
-                                                      <p>
-                                                        Meets required average
-                                                        quality (
-                                                        {contestMinAvgQuality}
-                                                        ). Creator:{" "}
-                                                        {creatorAvgQuality ??
-                                                          "not established"}
-                                                      </p>
-                                                    )}
-                                                  </div>
+                                                  <CreatorQualityScoreBreakdownTooltip
+                                                    breakdown={
+                                                      creatorQualityScoreBreakdown
+                                                    }
+                                                    requirementLabel="average quality"
+                                                    belowThreshold={
+                                                      avgQualityBelowThreshold
+                                                    }
+                                                    requirementValue={
+                                                      contestMinAvgQuality!
+                                                    }
+                                                    creatorValue={
+                                                      creatorAvgQuality
+                                                    }
+                                                  />
                                                 }
                                               />
                                             </TableCell>
@@ -27739,6 +27812,7 @@ export default function ContestDetailClient({
             creatorId,
             avgQualityScore,
             bestQualityScore,
+            qualityScoreCounts,
           }) => {
             setCurrentSubmissions((prev) =>
               prev.map((sub) => {
@@ -27755,6 +27829,13 @@ export default function ContestDetailClient({
                         avgQualityScore ?? existingCreator.avg_quality_score ?? null,
                       best_quality_score:
                         bestQualityScore ?? existingCreator.best_quality_score ?? null,
+                      quality_score_counts:
+                        qualityScoreCounts ??
+                        existingCreator.quality_score_counts ?? {
+                          score1: 0,
+                          score2: 0,
+                          score3: 0,
+                        },
                     },
                   };
                 }

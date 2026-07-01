@@ -542,17 +542,24 @@ export default async function ContestDetailPage({
         best_quality_score: null,
         total_money_won: 0,
         total_views: 0,
+        quality_score_counts: { score1: 0, score2: 0, score3: 0 },
       };
     }
     const resolved = resolveCreatorEligibilityProfileFields(
       creatorProfile,
       liveGlobalQualityMetricsByCreatorId[creatorId] ?? null,
     );
+    const liveQuality = liveGlobalQualityMetricsByCreatorId[creatorId];
     return {
       avg_quality_score: resolved.avgQualityScore,
       best_quality_score: resolved.bestQualityScore,
       total_money_won: resolved.totalPlatformEarningsCents,
       total_views: resolved.totalViews,
+      quality_score_counts: liveQuality?.quality_score_counts ?? {
+        score1: 0,
+        score2: 0,
+        score3: 0,
+      },
     };
   };
 

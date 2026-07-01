@@ -152,8 +152,10 @@ export function CreatorStatsCard({
             </div>
 
             <p className="text-xs text-muted-foreground">
-              Trust Score % = (Trust Number ÷ Verified Reels) × 100. Trust Number =
-              Verified Reels − Rejected Reels. Quality is out of 3 — new creators default to 1/3 until verified.
+              Brands set eligibility minimums per campaign—trust score, trust number,
+              quality, earnings, and views. The stats above are your platform totals.
+              You can join a campaign when your numbers meet or exceed every requirement
+              that brand has set.
             </p>
           </>
         )}
