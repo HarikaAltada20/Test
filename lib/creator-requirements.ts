@@ -545,19 +545,29 @@ export function getRequirementsBlockedMessage(
 export async function recomputeCreatorProfileMetrics(
   supabase: any,
   creatorId: string,
-): Promise<void> {
+): Promise<{ ok: true } | { ok: false; errors: string[] }> {
   const { recomputeCreatorTrustMetrics } = await import("@/lib/trust-score");
   const { recomputeCreatorQualityMetrics } = await import("@/lib/quality-score");
 
   const trustResult = await recomputeCreatorTrustMetrics(supabase, creatorId);
   const qualityResult = await recomputeCreatorQualityMetrics(supabase, creatorId);
 
+  const errors: string[] = [];
   if (!trustResult.ok) {
-    console.error(`[creator-metrics] trust recompute failed for ${creatorId}:`, trustResult.error);
+    const message = `[creator-metrics] trust recompute failed for ${creatorId}: ${trustResult.error}`;
+    console.error(message);
+    errors.push(trustResult.error);
   }
   if (!qualityResult.ok) {
-    console.error(`[creator-metrics] quality recompute failed for ${creatorId}:`, qualityResult.error);
+    const message = `[creator-metrics] quality recompute failed for ${creatorId}: ${qualityResult.error}`;
+    console.error(message);
+    errors.push(qualityResult.error);
   }
+
+  if (errors.length > 0) {
+    return { ok: false, errors };
+  }
+  return { ok: true };
 }
 
 export async function recomputeCreatorProfileMetricsForIds(

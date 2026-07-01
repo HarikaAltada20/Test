@@ -1902,10 +1902,16 @@ export async function POST(request: Request) {
       .single();
 
     if (!skipMetricsRecompute) {
-      await recomputeCreatorProfileMetrics(
+      const metricsResult = await recomputeCreatorProfileMetrics(
         supabaseAdmin,
         submissionFull.creator_id,
       );
+      if (!metricsResult.ok) {
+        console.error(
+          "[verify-submission] Failed to recompute creator profile metrics:",
+          metricsResult.errors.join("; "),
+        );
+      }
     }
 
     let message = `Submission ${action} successfully${

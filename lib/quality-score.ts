@@ -86,6 +86,44 @@ export function normalizeVerifyQualityScore(value: unknown): QualityScore {
   return parseQualityScore(value) ?? 1;
 }
 
+export type PersistableQualityProfileValues = {
+  avg_quality_score: number | null;
+  best_quality_score: number | null;
+};
+
+/** Values written to creator_profiles — mirrors sync_creator_quality_metrics (SQL). */
+export function computePersistableQualityProfileValues(input: {
+  verifiedReels: number;
+  rejectedReels: number;
+  scoredQualityScores: number[];
+}): PersistableQualityProfileValues {
+  const verifiedReels = Math.max(0, Number(input.verifiedReels) || 0);
+  const rejectedReels = Math.max(0, Number(input.rejectedReels) || 0);
+  const scores = input.scoredQualityScores.filter(
+    (s) => Number.isFinite(s) && s >= 1 && s <= 3,
+  );
+
+  if (verifiedReels > 0) {
+    if (scores.length === 0) {
+      return { avg_quality_score: null, best_quality_score: null };
+    }
+    const sum = scores.reduce((acc, s) => acc + s, 0);
+    return {
+      avg_quality_score: Math.round((sum / scores.length) * 100) / 100,
+      best_quality_score: Math.max(...scores),
+    };
+  }
+
+  if (rejectedReels > 0) {
+    return { avg_quality_score: null, best_quality_score: null };
+  }
+
+  return {
+    avg_quality_score: CREATOR_DEFAULT_QUALITY_SCORE,
+    best_quality_score: CREATOR_DEFAULT_QUALITY_SCORE,
+  };
+}
+
 export function computeQualityMetricsFromScores(
   scores: number[],
 ): CreatorQualityMetrics {
@@ -107,6 +145,37 @@ export function computeQualityMetricsFromScores(
     scored_verified_reels: valid.length,
     quality_score_counts: countQualityScoresFromScores(valid),
   };
+}
+
+type SubmissionQualityRow = {
+  status?: string | null;
+  quality_score?: number | null;
+};
+
+/** Aggregate submission rows into verified/rejected counts and scored quality values. */
+export function aggregateSubmissionQualityRows(rows: SubmissionQualityRow[]): {
+  verifiedReels: number;
+  rejectedReels: number;
+  scoredQualityScores: number[];
+} {
+  let verifiedReels = 0;
+  let rejectedReels = 0;
+  const scoredQualityScores: number[] = [];
+
+  for (const row of rows) {
+    const status = String(row.status || "").toLowerCase();
+    if (status === "verified" || status === "paid") {
+      verifiedReels += 1;
+      const score = Number(row.quality_score);
+      if (Number.isFinite(score) && score >= 1 && score <= 3) {
+        scoredQualityScores.push(score);
+      }
+    } else if (status === "rejected") {
+      rejectedReels += 1;
+    }
+  }
+
+  return { verifiedReels, rejectedReels, scoredQualityScores };
 }
 
 export async function getCreatorQualityMetricsLive(
@@ -174,12 +243,41 @@ export async function recomputeCreatorQualityMetrics(
   creatorId: string,
 ): Promise<{ ok: true; metrics: CreatorQualityMetrics } | { ok: false; error: string }> {
   try {
-    const metrics = await getCreatorQualityMetricsLive(supabase, creatorId);
+    const { data: rows, error: rowsError } = await supabase
+      .from("submissions")
+      .select("status, quality_score")
+      .eq("creator_id", creatorId);
+
+    if (rowsError) {
+      return {
+        ok: false,
+        error: rowsError.message || "Failed to load submissions for quality recompute",
+      };
+    }
+
+    const { verifiedReels, rejectedReels, scoredQualityScores } =
+      aggregateSubmissionQualityRows(rows || []);
+    const persistable = computePersistableQualityProfileValues({
+      verifiedReels,
+      rejectedReels,
+      scoredQualityScores,
+    });
+
+    const metrics =
+      verifiedReels > 0 && scoredQualityScores.length > 0
+        ? computeQualityMetricsFromScores(scoredQualityScores)
+        : resolveCreatorQualityMetrics({
+            verifiedReels,
+            rejectedReels,
+            avgQualityScore: persistable.avg_quality_score,
+            bestQualityScore: persistable.best_quality_score,
+          });
+
     const { error: updateError } = await supabase
       .from("creator_profiles")
       .update({
-        avg_quality_score: metrics.avg_quality_score,
-        best_quality_score: metrics.best_quality_score,
+        avg_quality_score: persistable.avg_quality_score,
+        best_quality_score: persistable.best_quality_score,
       })
       .eq("id", creatorId);
 

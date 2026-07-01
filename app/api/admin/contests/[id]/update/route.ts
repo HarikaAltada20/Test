@@ -137,14 +137,90 @@ export async function POST(
           { status: 400 },
         );
       }
+      updateData.trust_number = trustNumber;
+    }
+
+    if (
+      updateData.min_best_quality_score !== undefined &&
+      updateData.min_best_quality_score != null
+    ) {
+      const minBest = Number(updateData.min_best_quality_score);
+      if (
+        !Number.isInteger(minBest) ||
+        minBest < 1 ||
+        minBest > 3
+      ) {
+        return NextResponse.json(
+          { error: "min_best_quality_score must be an integer between 1 and 3, or null" },
+          { status: 400 },
+        );
+      }
+      updateData.min_best_quality_score = minBest;
+    }
+
+    if (
+      updateData.min_avg_quality_score !== undefined &&
+      updateData.min_avg_quality_score != null
+    ) {
+      const minAvg = Number(updateData.min_avg_quality_score);
+      if (!Number.isFinite(minAvg) || minAvg < 1 || minAvg > 3) {
+        return NextResponse.json(
+          { error: "min_avg_quality_score must be between 1 and 3, or null" },
+          { status: 400 },
+        );
+      }
+      updateData.min_avg_quality_score = minAvg;
+    }
+
+    if (
+      updateData.min_platform_earnings !== undefined &&
+      updateData.min_platform_earnings != null
+    ) {
+      const minEarnings =
+        typeof updateData.min_platform_earnings === "number"
+          ? updateData.min_platform_earnings
+          : parseInt(String(updateData.min_platform_earnings), 10);
+      if (!Number.isInteger(minEarnings) || minEarnings <= 0) {
+        return NextResponse.json(
+          { error: "min_platform_earnings must be a positive integer (cents), or null" },
+          { status: 400 },
+        );
+      }
+      updateData.min_platform_earnings = minEarnings;
+    }
+
+    if (
+      updateData.min_platform_views !== undefined &&
+      updateData.min_platform_views != null
+    ) {
+      const minViews =
+        typeof updateData.min_platform_views === "number"
+          ? updateData.min_platform_views
+          : parseInt(String(updateData.min_platform_views), 10);
+      if (!Number.isInteger(minViews) || minViews <= 0) {
+        return NextResponse.json(
+          { error: "min_platform_views must be a positive integer, or null" },
+          { status: 400 },
+        );
+      }
+      updateData.min_platform_views = minViews;
     }
 
     const admin = createAdminClient();
 
-    if (
+    const hasCreatorRequirementUpdate =
       (updateData.trust_score !== undefined && updateData.trust_score != null) ||
-      (updateData.trust_number !== undefined && updateData.trust_number != null)
-    ) {
+      (updateData.trust_number !== undefined && updateData.trust_number != null) ||
+      (updateData.min_avg_quality_score !== undefined &&
+        updateData.min_avg_quality_score != null) ||
+      (updateData.min_best_quality_score !== undefined &&
+        updateData.min_best_quality_score != null) ||
+      (updateData.min_platform_earnings !== undefined &&
+        updateData.min_platform_earnings != null) ||
+      (updateData.min_platform_views !== undefined &&
+        updateData.min_platform_views != null);
+
+    if (hasCreatorRequirementUpdate) {
       const { data: contestRow } = await admin
         .from("contests")
         .select("contest_format")
@@ -155,7 +231,7 @@ export async function POST(
         return NextResponse.json(
           {
             error:
-              "trust_score and trust_number are only supported for video campaigns (contest_format video)",
+              "Creator requirement fields are only supported for video campaigns (contest_format video)",
           },
           { status: 400 },
         );

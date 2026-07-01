@@ -163,7 +163,13 @@ export async function PATCH() {
       return NextResponse.json({ error: "Authentication required" }, { status: 401 });
     }
 
-    await recomputeCreatorProfileMetrics(supabase, user.id);
+    const recomputeResult = await recomputeCreatorProfileMetrics(supabase, user.id);
+    if (!recomputeResult.ok) {
+      return NextResponse.json(
+        { error: recomputeResult.errors.join("; ") },
+        { status: 500 },
+      );
+    }
     const snapshot = await getCreatorRequirementsSnapshot(supabase, user.id);
 
     return NextResponse.json(snapshot);

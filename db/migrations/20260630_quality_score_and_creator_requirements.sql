@@ -262,6 +262,36 @@ BEGIN
     END IF;
   END IF;
 
+  IF v_min_avg_quality IS NOT NULL OR v_min_best_quality IS NOT NULL THEN
+    IF v_creator_avg_quality IS NULL OR v_creator_best_quality IS NULL THEN
+      IF v_verified IS NULL OR v_rejected IS NULL THEN
+        SELECT
+          COUNT(*) FILTER (WHERE s.status IN ('verified', 'paid'))::integer,
+          COUNT(*) FILTER (WHERE s.status = 'rejected')::integer
+        INTO v_verified, v_rejected
+        FROM public.submissions s
+        WHERE s.creator_id = NEW.creator_id;
+      END IF;
+
+      IF COALESCE(v_verified, 0) > 0 THEN
+        SELECT
+          ROUND(AVG(s.quality_score)::numeric, 2),
+          MAX(s.quality_score)::integer
+        INTO v_creator_avg_quality, v_creator_best_quality
+        FROM public.submissions s
+        WHERE s.creator_id = NEW.creator_id
+          AND s.status IN ('verified', 'paid')
+          AND s.quality_score IS NOT NULL;
+      ELSIF COALESCE(v_rejected, 0) > 0 THEN
+        v_creator_avg_quality := NULL;
+        v_creator_best_quality := NULL;
+      ELSE
+        v_creator_avg_quality := 1;
+        v_creator_best_quality := 1;
+      END IF;
+    END IF;
+  END IF;
+
   IF v_min_trust IS NOT NULL AND v_min_trust > 0 AND v_creator_score < v_min_trust THEN
     RAISE EXCEPTION
       'trust_score_too_low: Creator trust score (%) is below campaign minimum (%)',
@@ -315,6 +345,25 @@ CREATE TRIGGER submissions_enforce_creator_requirements
   BEFORE INSERT ON public.submissions
   FOR EACH ROW
   EXECUTE FUNCTION public.enforce_submission_creator_requirements();
+
+CREATE OR REPLACE FUNCTION public.init_creator_profile_metrics()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+BEGIN
+  PERFORM public.sync_creator_trust_score_metrics(NEW.id);
+  RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS creator_profiles_init_metrics ON public.creator_profiles;
+
+CREATE TRIGGER creator_profiles_init_metrics
+  AFTER INSERT ON public.creator_profiles
+  FOR EACH ROW
+  EXECUTE FUNCTION public.init_creator_profile_metrics();
 
 -- Backfill: existing verified/paid submissions default to quality 1.
 UPDATE public.submissions
