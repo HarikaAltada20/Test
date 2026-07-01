@@ -390,7 +390,27 @@ export function CreatorSubmissionsModal({
         selectedIds.includes(s.id),
       );
       const isVideoContest = contest?.contest_format !== "text_image";
-      const allAlreadyModerated =
+      const hasPaidSelected = selectedSubs.some((s) => {
+        const isTwitterTweet = s.is_twitter_tweet === true;
+        const rawStatus =
+          (isTwitterTweet ? s.moderation_status || s.status : s.status) ||
+          "pending";
+        const st = String(rawStatus).toLowerCase();
+        return st === "paid" || s.paid === true;
+      });
+
+      if (hasPaidSelected) {
+        setBulkVerifyLoading(true);
+        try {
+          await onVerify(selectedIds);
+          setSelectedSubmissions(new Set());
+        } finally {
+          setBulkVerifyLoading(false);
+        }
+        return;
+      }
+
+      const allAlreadyVerifiedOnly =
         isVideoContest &&
         selectedSubs.length > 0 &&
         selectedSubs.every((s) => {
@@ -400,14 +420,12 @@ export function CreatorSubmissionsModal({
             "pending";
           const st = String(rawStatus).toLowerCase();
           if (isTwitterTweet) {
-            if (st === "paid") return true;
-            if (st === "approved" || st === "verified") return true;
-            return false;
+            return st === "approved" || st === "verified";
           }
-          return st === "verified" || st === "paid";
+          return st === "verified" && s.paid !== true;
         });
 
-      if (allAlreadyModerated) {
+      if (allAlreadyVerifiedOnly) {
         setQualityEditSubmissionIds(selectedIds);
         return;
       }

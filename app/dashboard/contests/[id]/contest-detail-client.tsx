@@ -2416,10 +2416,15 @@ export default function ContestDetailClient({
   const partitionSubmissionsForVerify = (ids: string[]) => {
     const toVerify: string[] = [];
     const toUpdateQualityOnly: string[] = [];
+    const paidToRevert: string[] = [];
     for (const id of ids) {
       const sub = currentSubmissions.find((s) => s.id === id);
       if (!sub) {
         toVerify.push(id);
+        continue;
+      }
+      if (submissionIsPaidRow(sub)) {
+        paidToRevert.push(id);
         continue;
       }
       const isTwitter = (sub as any).is_twitter_tweet === true;
@@ -2428,18 +2433,15 @@ export default function ContestDetailClient({
           ? (sub as any).moderation_status || sub.status || ""
           : sub.status || "",
       ).toLowerCase();
-      const isPaid = rawStatus === "paid" || sub.paid === true;
       const isVerified =
-        rawStatus === "verified" ||
-        rawStatus === "approved" ||
-        isPaid;
+        rawStatus === "verified" || rawStatus === "approved";
       if (isVerified) {
         toUpdateQualityOnly.push(id);
       } else {
         toVerify.push(id);
       }
     }
-    return { toVerify, toUpdateQualityOnly };
+    return { toVerify, toUpdateQualityOnly, paidToRevert };
   };
 
   const applyQualityScoreUpdates = async (
@@ -2548,9 +2550,12 @@ export default function ContestDetailClient({
 
   const openVerifyQualityDialog = (ids: string[]) => {
     setPendingVerifySubmissionIds(ids);
-    const { toVerify, toUpdateQualityOnly } = partitionSubmissionsForVerify(ids);
+    const { toVerify, toUpdateQualityOnly, paidToRevert } =
+      partitionSubmissionsForVerify(ids);
     const allAlreadyModerated =
-      toVerify.length === 0 && toUpdateQualityOnly.length > 0;
+      toVerify.length === 0 &&
+      paidToRevert.length === 0 &&
+      toUpdateQualityOnly.length > 0;
     setVerifyQualityDialogVariant(allAlreadyModerated ? "edit" : "verify");
     setVerifyQualityDialogOpen(true);
   };
@@ -2575,13 +2580,12 @@ export default function ContestDetailClient({
     if (selectedIds.length === 0) return;
 
     if (action === "verify") {
-      const { toVerify, toUpdateQualityOnly } =
+      const { toVerify, toUpdateQualityOnly, paidToRevert } =
         partitionSubmissionsForVerify(selectedIds);
 
       if (
         currentContest.post_contest_status !== "payouts_processed" &&
-        toVerify.length > 0 &&
-        selectionIncludesPaidRow(currentSubmissions, toVerify)
+        paidToRevert.length > 0
       ) {
         setConfirmReversal({
           submissionIds: selectedIds,
@@ -2589,7 +2593,12 @@ export default function ContestDetailClient({
         });
         return;
       }
-      if (isVideoContestFormat && toUpdateQualityOnly.length > 0) {
+
+      if (
+        isVideoContestFormat &&
+        toUpdateQualityOnly.length > 0 &&
+        toVerify.length === 0
+      ) {
         openVerifyQualityDialog(selectedIds);
         return;
       }
@@ -5477,6 +5486,8 @@ export default function ContestDetailClient({
       skipReload?: boolean;
       closeCreatorModalOnSuccess?: boolean;
       qualityScore?: 1 | 2 | 3;
+      /** After paid-reversal confirm — run verify API without quality score modal */
+      skipQualityPrompt?: boolean;
     },
   ) => {
     console.log("🚀 Starting submission status update:", {
@@ -5485,10 +5496,27 @@ export default function ContestDetailClient({
       reason,
     });
 
-    if (newStatus === "verified" && isVideoContestFormat) {
-      const { toVerify, toUpdateQualityOnly } =
+    if (newStatus === "verified" && isVideoContestFormat && !options?.skipQualityPrompt) {
+      const { toVerify, toUpdateQualityOnly, paidToRevert } =
         partitionSubmissionsForVerify([submissionId]);
-      if (toUpdateQualityOnly.length > 0 && toVerify.length === 0) {
+
+      if (
+        paidToRevert.length > 0 &&
+        currentContest.post_contest_status !== "payouts_processed" &&
+        !options?.qualityScore
+      ) {
+        setConfirmReversal({
+          submissionIds: [submissionId],
+          target: "verified",
+        });
+        return;
+      }
+
+      if (
+        toUpdateQualityOnly.length > 0 &&
+        toVerify.length === 0 &&
+        paidToRevert.length === 0
+      ) {
         if (!options?.qualityScore) {
           openVerifyQualityDialog([submissionId]);
           return;
@@ -5815,11 +5843,15 @@ export default function ContestDetailClient({
         switch (status) {
           case "verified":
             return {
-              title: "✅ Submission Verified",
+              title: options?.skipQualityPrompt
+                ? "✅ Payment Reversed"
+                : "✅ Submission Verified",
               description:
-                isVideoContestFormat && options?.qualityScore != null
-                  ? `Content verified with quality score ${options.qualityScore}/3.`
-                  : "Content has been verified and is now eligible for rewards",
+                options?.skipQualityPrompt
+                  ? "Submission moved to Verified."
+                  : isVideoContestFormat && options?.qualityScore != null
+                    ? `Content verified with quality score ${options.qualityScore}/3.`
+                    : "Content has been verified and is now eligible for rewards",
               variant: "success" as const,
             };
           case "rejected":
@@ -6122,12 +6154,22 @@ export default function ContestDetailClient({
     submissionIds: string[],
     action: "approve" | "verified" | "reject" | "rejected" | "pending" | "paid",
     reason?: string,
-    options?: { closeCreatorModalOnSuccess?: boolean; qualityScore?: 1 | 2 | 3 },
+    options?: {
+      closeCreatorModalOnSuccess?: boolean;
+      qualityScore?: 1 | 2 | 3;
+      /** After paid-reversal confirm — run verify API without quality score modal */
+      skipQualityPrompt?: boolean;
+    },
   ) => {
     if (!submissionIds || submissionIds.length === 0) return;
 
     const verifyAction = action === "approve" || action === "verified";
-    if (verifyAction && !options?.qualityScore && isVideoContestFormat) {
+    if (
+      verifyAction &&
+      !options?.qualityScore &&
+      !options?.skipQualityPrompt &&
+      isVideoContestFormat
+    ) {
       openVerifyQualityDialog(submissionIds);
       return;
     }
@@ -6372,13 +6414,17 @@ export default function ContestDetailClient({
       const isDualRefundContest = isDualRewardsContestType(
         currentContest?.contest_type,
       );
+      const hasRefundReversal =
+        normalRefundTotalCents > 0 || twitterRefundTotal > 0;
 
       if (finalSucceededCount > 0) {
         let bulkDescription = `Successfully ${actionText} ${finalSucceededCount} submission(s).`;
         if (
           (action === "verified" || action === "approve") &&
           isVideoContestFormat &&
-          options?.qualityScore != null
+          options?.qualityScore != null &&
+          !options?.skipQualityPrompt &&
+          !hasRefundReversal
         ) {
           bulkDescription += ` Quality score set to ${options.qualityScore}/3.`;
         }
@@ -6951,6 +6997,17 @@ export default function ContestDetailClient({
     }
   };
 
+  const resolveReversalVerifyQualityScore = (
+    submissionIds: string[],
+  ): QualityScore => {
+    for (const id of submissionIds) {
+      const sub = currentSubmissions.find((s) => s.id === id);
+      const parsed = parseQualityScore(sub?.quality_score);
+      if (parsed !== null) return parsed;
+    }
+    return 1;
+  };
+
   const handleConfirmReversal = async () => {
     if (!confirmReversal) return;
     const {
@@ -6966,13 +7023,17 @@ export default function ContestDetailClient({
       setRejectionModalOpen(true);
       return;
     }
-    if (target === "verified" && isVideoContestFormat) {
-      openVerifyQualityDialog(submissionIds);
-      return;
-    }
     const closeOpts = closeCreatorModalOnSuccess
       ? { closeCreatorModalOnSuccess: true }
       : undefined;
+    const statusUpdateOpts =
+      target === "verified"
+        ? {
+            ...closeOpts,
+            skipQualityPrompt: true,
+            qualityScore: resolveReversalVerifyQualityScore(submissionIds),
+          }
+        : closeOpts;
     if (closeCreatorModalOnSuccess) {
       setCreatorModalParentBulkLoading(true);
     } else {
@@ -6991,14 +7052,14 @@ export default function ContestDetailClient({
           target,
           undefined,
           undefined,
-          closeOpts,
+          statusUpdateOpts,
         );
       } else {
         await handleBulkUpdateSubmissionStatus(
           submissionIds,
           target,
           undefined,
-          closeOpts,
+          statusUpdateOpts,
         );
       }
     } finally {
@@ -20747,7 +20808,7 @@ export default function ContestDetailClient({
                                             {submission.status !== "verified" &&
                                               currentContest.post_contest_status !==
                                                 "payouts_processed" &&
-                                              (submission.status === "paid" ? (
+                                              (submissionIsPaidRow(submission) ? (
                                                 <DropdownMenuItem
                                                   disabled={isLoading}
                                                   onClick={() =>
@@ -27711,13 +27772,12 @@ export default function ContestDetailClient({
               : undefined
           }
           onVerify={async (ids: string[]) => {
-            const { toVerify, toUpdateQualityOnly } =
+            const { toVerify, toUpdateQualityOnly, paidToRevert } =
               partitionSubmissionsForVerify(ids);
 
             if (
               currentContest.post_contest_status !== "payouts_processed" &&
-              toVerify.length > 0 &&
-              selectionIncludesPaidRow(currentSubmissions, toVerify)
+              paidToRevert.length > 0
             ) {
               setConfirmReversal({
                 submissionIds: ids,
@@ -27726,7 +27786,12 @@ export default function ContestDetailClient({
               });
               return;
             }
-            if (isVideoContestFormat && toUpdateQualityOnly.length > 0) {
+
+            if (
+              isVideoContestFormat &&
+              toUpdateQualityOnly.length > 0 &&
+              toVerify.length === 0
+            ) {
               openVerifyQualityDialog(ids);
               return;
             }
@@ -27886,20 +27951,24 @@ export default function ContestDetailClient({
           if (pendingVerifySubmissionIds.length === 0) return;
           setVerifyQualityLoading(true);
           try {
-            const { toVerify, toUpdateQualityOnly } =
+            const { toVerify, toUpdateQualityOnly, paidToRevert } =
               partitionSubmissionsForVerify(pendingVerifySubmissionIds);
 
             if (toUpdateQualityOnly.length > 0) {
               await applyQualityScoreUpdates(
                 toUpdateQualityOnly,
                 qualityScore,
-                { silent: toVerify.length > 0 },
+                {
+                  silent:
+                    toVerify.length > 0 || paidToRevert.length > 0,
+                },
               );
             }
 
-            if (toVerify.length > 0) {
+            const idsNeedingVerifyApi = [...toVerify, ...paidToRevert];
+            if (idsNeedingVerifyApi.length > 0) {
               await handleBulkUpdateSubmissionStatus(
-                toVerify,
+                idsNeedingVerifyApi,
                 "verified",
                 undefined,
                 { closeCreatorModalOnSuccess: true, qualityScore },
