@@ -1865,6 +1865,152 @@ export default function ProfilePage({
           isDark={isDark}
         />
       )}
+      {creatorProfile && (
+        <div
+          className={cn(
+            "rounded-2xl shadow-lg px-2 pb-5",
+            isDark ? "bg-[#180438]" : "bg-white"
+          )}
+        >
+          <CardHeader className="mb-3">
+            <CardTitle
+              className={cn(
+                "text-xl font-semibold",
+                isDark ? "text-white" : "text-[#7F39EC]"
+              )}
+            >
+              Creator Profile
+            </CardTitle>
+            <CardDescription className="text-md">
+              Your creator statistics
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-2 gap-x-8 gap-y-12">
+              <div className="relative w-full">
+                <label
+                  htmlFor="floating"
+                  className={cn(
+                    "absolute font-medium left-3 top-0 -translate-y-1/2 bg-white px-1 text-[14px]",
+                    isDark
+                      ? "bg-[#180438] text-[#8A8A8A]"
+                      : "bg-white text-gray-500"
+                  )}
+                >
+                  Campaigns Participated
+                </label>
+                <div
+                  className={cn(
+                    "p-4 min-w-0 peer block w-full rounded-lg border px-3 pt-5 pb-2",
+                    isDark
+                      ? "text-[#8A8A8A] border-[#8A8A8A]"
+                      : "border border-gray-300 text-gray-500"
+                  )}
+                >
+                  <p
+                    className={cn(
+                      "text-base text-[15px] text-muted-foreground truncate min-w-0",
+                      isDark ? "text-[#8A8A8A]" : "text-gray-500"
+                    )}
+                  >
+                    {creatorProfile.total_contests_participated}
+                  </p>
+                </div>
+              </div>
+              <div className="relative w-full">
+                <label
+                  htmlFor="floating"
+                  className={cn(
+                    "absolute font-medium left-3 top-0 -translate-y-1/2 bg-white px-1 text-[14px]",
+                    isDark
+                      ? "bg-[#180438] text-[#8A8A8A]"
+                      : "bg-white text-gray-500"
+                  )}
+                >
+                  Campaigns Won
+                </label>
+                <div
+                  className={cn(
+                    "p-4 min-w-0 peer block w-full rounded-lg border px-3 pt-5 pb-2",
+                    isDark
+                      ? "text-[#8A8A8A] border-[#8A8A8A]"
+                      : "border border-gray-300 text-gray-500"
+                  )}
+                >
+                  <p
+                    className={cn(
+                      "text-base text-[15px] text-muted-foreground truncate min-w-0",
+                      isDark ? "text-[#8A8A8A]" : "text-gray-500"
+                    )}
+                  >
+                    {creatorProfile.total_contests_won}
+                  </p>
+                </div>
+              </div>
+              <div className="relative w-full">
+                <label
+                  htmlFor="floating"
+                  className={cn(
+                    "absolute font-medium left-3 top-0 -translate-y-1/2 bg-white px-1 text-[14px]",
+                    isDark
+                      ? "bg-[#180438] text-[#8A8A8A]"
+                      : "bg-white text-gray-500"
+                  )}
+                >
+                  Total Money Won
+                </label>
+                <div
+                  className={cn(
+                    "p-4 min-w-0 peer block w-full rounded-lg border px-3 pt-5 pb-2",
+                    isDark
+                      ? "text-[#8A8A8A] border-[#8A8A8A]"
+                      : "border border-gray-300 text-gray-500"
+                  )}
+                >
+                  <p
+                    className={cn(
+                      "text-base text-[15px] text-muted-foreground truncate min-w-0",
+                      isDark ? "text-[#8A8A8A]" : "text-gray-500"
+                    )}
+                  >
+                    {formatMoney(creatorProfile.total_money_won)}
+                  </p>
+                </div>
+              </div>
+              <div className="relative w-full">
+                <label
+                  htmlFor="floating"
+                  className={cn(
+                    "absolute font-medium left-3 top-0 -translate-y-1/2 bg-white px-1 text-[14px]",
+                    isDark
+                      ? "bg-[#180438] text-[#8A8A8A]"
+                      : "bg-white text-gray-500"
+                  )}
+                >
+                  Withdrawable Balance
+                </label>
+                <div
+                  className={cn(
+                    "p-4 min-w-0 peer block w-full rounded-lg border px-3 pt-5 pb-2",
+                    isDark
+                      ? "text-[#8A8A8A] border-[#8A8A8A]"
+                      : "border border-gray-300 text-gray-500"
+                  )}
+                >
+                  <p
+                    className={cn(
+                      "text-base text-[15px] text-muted-foreground truncate min-w-0",
+                      isDark ? "text-[#8A8A8A]" : "text-gray-500"
+                    )}
+                  >
+                    {formatMoney(creatorProfile.withdrawable_balance)}
+                  </p>
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </div>
+      )}
       <div>
         <div
           className={cn(
@@ -3798,193 +3944,6 @@ export default function ProfilePage({
           </div>
         </CardContent>
       </div>
-
-      {creatorProfile && (
-        <div
-          className={cn(
-            "rounded-2xl shadow-lg px-2 pb-5",
-            isDark ? "bg-[#180438]" : "bg-white"
-          )}
-        >
-          <CardHeader className="mb-3">
-            <CardTitle
-              className={cn(
-                "text-xl font-semibold",
-                isDark ? "text-white" : "text-[#7F39EC]"
-              )}
-            >
-              Creator Profile
-            </CardTitle>
-            <CardDescription className="text-md">
-              Your creator statistics
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-6">
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-2 gap-x-8 gap-y-12">
-              <div className="relative w-full">
-                <label
-                  htmlFor="floating"
-                  className={cn(
-                    "absolute font-medium left-3 top-0 -translate-y-1/2 bg-white px-1 text-[14px]",
-                    isDark
-                      ? "bg-[#180438] text-[#8A8A8A]"
-                      : "bg-white text-gray-500"
-                  )}
-                >
-                  Campaigns Participated
-                </label>
-                <div
-                  className={cn(
-                    "p-4 min-w-0 peer block w-full rounded-lg border px-3 pt-5 pb-2",
-                    isDark
-                      ? "text-[#8A8A8A] border-[#8A8A8A]"
-                      : "border border-gray-300 text-gray-500"
-                  )}
-                >
-                  <p
-                    className={cn(
-                      "text-base text-[15px] text-muted-foreground truncate min-w-0",
-                      isDark ? "text-[#8A8A8A]" : "text-gray-500"
-                    )}
-                  >
-                    {creatorProfile.total_contests_participated}
-                  </p>
-                </div>
-              </div>
-              {/* <div className="space-y-3 min-w-0">
-                <Label className="text-sm font-semibold text-foreground">
-                  Contests Participated
-                </Label>
-                <div className="p-4 bg-background border border-border rounded-lg min-w-0">
-                  <p className="text-lg font-semibold text-blue-600 dark:text-blue-400">
-                    {creatorProfile.total_contests_participated}
-                  </p>
-                </div>
-              </div> */}
-              <div className="relative w-full">
-                <label
-                  htmlFor="floating"
-                  className={cn(
-                    "absolute font-medium left-3 top-0 -translate-y-1/2 bg-white px-1 text-[14px]",
-                    isDark
-                      ? "bg-[#180438] text-[#8A8A8A]"
-                      : "bg-white text-gray-500"
-                  )}
-                >
-                  Campaigns Won
-                </label>
-                <div
-                  className={cn(
-                    "p-4 min-w-0 peer block w-full rounded-lg border px-3 pt-5 pb-2",
-                    isDark
-                      ? "text-[#8A8A8A] border-[#8A8A8A]"
-                      : "border border-gray-300 text-gray-500"
-                  )}
-                >
-                  <p
-                    className={cn(
-                      "text-base text-[15px] text-muted-foreground truncate min-w-0",
-                      isDark ? "text-[#8A8A8A]" : "text-gray-500"
-                    )}
-                  >
-                    {creatorProfile.total_contests_won}
-                  </p>
-                </div>
-              </div>
-              {/* <div className="space-y-3 min-w-0">
-                <Label className="text-sm font-semibold text-foreground">
-                  Contests Won
-                </Label>
-                <div className="p-4 bg-background border border-border rounded-lg min-w-0">
-                  <p className="text-lg font-semibold text-green-600 dark:text-green-400">
-                    {creatorProfile.total_contests_won}
-                  </p>
-                </div>
-              </div> */}
-              <div className="relative w-full">
-                <label
-                  htmlFor="floating"
-                  className={cn(
-                    "absolute font-medium left-3 top-0 -translate-y-1/2 bg-white px-1 text-[14px]",
-                    isDark
-                      ? "bg-[#180438] text-[#8A8A8A]"
-                      : "bg-white text-gray-500"
-                  )}
-                >
-                  Total Money Won
-                </label>
-                <div
-                  className={cn(
-                    "p-4 min-w-0 peer block w-full rounded-lg border px-3 pt-5 pb-2",
-                    isDark
-                      ? "text-[#8A8A8A] border-[#8A8A8A]"
-                      : "border border-gray-300 text-gray-500"
-                  )}
-                >
-                  <p
-                    className={cn(
-                      "text-base text-[15px] text-muted-foreground truncate min-w-0",
-                      isDark ? "text-[#8A8A8A]" : "text-gray-500"
-                    )}
-                  >
-                    {formatMoney(creatorProfile.total_money_won)}
-                  </p>
-                </div>
-              </div>
-              {/* <div className="space-y-3 min-w-0">
-                <Label className="text-sm font-semibold text-foreground">
-                  Total Money Won
-                </Label>
-                <div className="p-4 bg-background border border-border rounded-lg min-w-0">
-                  <p className="text-lg font-semibold text-emerald-600 dark:text-emerald-400">
-                    {formatMoney(creatorProfile.total_money_won)}
-                  </p>
-                </div>
-              </div> */}
-              <div className="relative w-full">
-                <label
-                  htmlFor="floating"
-                  className={cn(
-                    "absolute font-medium left-3 top-0 -translate-y-1/2 bg-white px-1 text-[14px]",
-                    isDark
-                      ? "bg-[#180438] text-[#8A8A8A]"
-                      : "bg-white text-gray-500"
-                  )}
-                >
-                  Withdrawable Balance
-                </label>
-                <div
-                  className={cn(
-                    "p-4 min-w-0 peer block w-full rounded-lg border px-3 pt-5 pb-2",
-                    isDark
-                      ? "text-[#8A8A8A] border-[#8A8A8A]"
-                      : "border border-gray-300 text-gray-500"
-                  )}
-                >
-                  <p
-                    className={cn(
-                      "text-base text-[15px] text-muted-foreground truncate min-w-0",
-                      isDark ? "text-[#8A8A8A]" : "text-gray-500"
-                    )}
-                  >
-                    {formatMoney(creatorProfile.withdrawable_balance)}
-                  </p>
-                </div>
-              </div>
-              {/* <div className="space-y-3 min-w-0">
-                <Label className="text-sm font-semibold text-foreground">
-                  Withdrawable Balance
-                </Label>
-                <div className="p-4 bg-background border border-border rounded-lg min-w-0">
-                  <p className="text-lg font-semibold text-green-600 dark:text-green-400">
-                    {formatMoney(creatorProfile.withdrawable_balance)}
-                  </p>
-                </div>
-              </div> */}
-            </div>
-          </CardContent>
-        </div>
-      )}
 
       {advertiserProfile && (
         <div

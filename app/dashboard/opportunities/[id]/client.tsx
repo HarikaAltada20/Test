@@ -4064,21 +4064,13 @@ export function ContestClientPage({
                     : "border-b bg-white border border-slate-200",
                 )}
               >
-                <div className="container mx-auto px-4 py-3">
-                  <div
-                    className="flex space-x-4 overflow-x-auto"
-                    style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
-                  >
-                    <style jsx>{`
-                      div::-webkit-scrollbar {
-                        display: none;
-                      }
-                    `}</style>
+                <div className="container mx-auto min-w-0 px-4 py-3">
+                  <div className="flex w-full min-w-0 gap-4 overflow-x-auto pb-1">
                     {visibleSections.map((section) => (
                         <button
                           key={section.id}
                           onClick={() => scrollToSection(section.id)}
-                          className={`px-4 py-2 rounded-lg text-[13px] font-medium whitespace-nowrap transition-all duration-200 ${
+                          className={`flex-shrink-0 px-4 py-2 rounded-lg text-[13px] font-medium whitespace-nowrap transition-all duration-200 ${
                             activeSection === section.id
                               ? isDark
                                 ? "bg-blue-900/30 text-blue-300 border-b-2 border-blue-500"

@@ -151,7 +151,7 @@ export function CreatorStatsCard({
               </div>
             </div>
 
-            <p className="text-xs text-muted-foreground">
+            <p className="text-sm text-muted-foreground">
               Brands set eligibility minimums per campaign—trust score, trust number,
               quality, earnings, and views. The stats above are your platform totals.
               You can join a campaign when your numbers meet or exceed every requirement
