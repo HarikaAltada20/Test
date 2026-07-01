@@ -28,6 +28,7 @@ import {
 
 import { DeleteContestButton } from "@/components/delete-contest-button";
 import { VerifyQualityDialog } from "@/components/VerifyQualityDialog";
+import { SubmissionQualityScoreCell } from "@/components/SubmissionQualityScoreCell";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -2026,6 +2027,9 @@ export default function ContestDetailClient({
       currentContest?.platform?.toLowerCase() === "x") &&
     currentContest?.contest_format === "text_image";
 
+  const showNormalViewQualityScoreColumn =
+    isVideoContestFormat && !isTwitterTextImageContest;
+
   // Default sort: points for Twitter/X text campaigns, views for other platforms
   useEffect(() => {
     if (!currentContest?.id) return;
@@ -2409,42 +2413,71 @@ export default function ContestDetailClient({
     qualityScore: QualityScore,
     options?: { silent?: boolean },
   ) => {
-    for (const submissionId of submissionIds) {
-      const res = await fetch(
-        `/api/admin/submissions/${submissionId}/quality-score`,
-        {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ qualityScore }),
-        },
-      );
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.error || "Failed to update quality score");
-      }
-      const creatorId = String(data.creatorId || "");
-      const avgQuality = data.creatorQuality?.avg_quality_score ?? null;
-      const bestQuality = data.creatorQuality?.best_quality_score ?? null;
-      setCurrentSubmissions((prev) =>
-        prev.map((sub) => {
-          if (sub.id === submissionId) {
-            return { ...sub, quality_score: qualityScore };
-          }
-          if (sub.creator_id === creatorId && creatorId) {
-            const existingCreator = (sub as any).creator || {};
-            return {
-              ...sub,
-              creator: {
-                ...existingCreator,
-                avg_quality_score: avgQuality ?? existingCreator.avg_quality_score ?? null,
-                best_quality_score: bestQuality ?? existingCreator.best_quality_score ?? null,
-              },
-            };
-          }
-          return sub;
-        }),
-      );
+    const res = await fetch("/api/admin/submissions/bulk-quality-score", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ submissionIds, qualityScore }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      throw new Error(data.error || "Failed to update quality score");
     }
+
+    const updatedIdSet = new Set(
+      (data.submissions || []).map((sub: { id: string }) => sub.id),
+    );
+    const creatorQualityByCreatorId = (data.creatorQualityByCreatorId ||
+      {}) as Record<
+      string,
+      { avg_quality_score: number | null; best_quality_score: number | null }
+    >;
+
+    setCurrentSubmissions((prev) =>
+      prev.map((sub) => {
+        const creatorQuality = sub.creator_id
+          ? creatorQualityByCreatorId[sub.creator_id]
+          : undefined;
+        if (updatedIdSet.has(sub.id)) {
+          const existingCreator = (sub as any).creator || {};
+          return {
+            ...sub,
+            quality_score: qualityScore,
+            creator: creatorQuality
+              ? {
+                  ...existingCreator,
+                  avg_quality_score:
+                    creatorQuality.avg_quality_score ??
+                    existingCreator.avg_quality_score ??
+                    null,
+                  best_quality_score:
+                    creatorQuality.best_quality_score ??
+                    existingCreator.best_quality_score ??
+                    null,
+                }
+              : existingCreator,
+          };
+        }
+        if (creatorQuality && sub.creator_id) {
+          const existingCreator = (sub as any).creator || {};
+          return {
+            ...sub,
+            creator: {
+              ...existingCreator,
+              avg_quality_score:
+                creatorQuality.avg_quality_score ??
+                existingCreator.avg_quality_score ??
+                null,
+              best_quality_score:
+                creatorQuality.best_quality_score ??
+                existingCreator.best_quality_score ??
+                null,
+            },
+          };
+        }
+        return sub;
+      }),
+    );
+
     if (!options?.silent) {
       toast({
         title:
@@ -17503,6 +17536,11 @@ export default function ContestDetailClient({
                                     )}
                                 </>
                               ) : null}
+                              {showNormalViewQualityScoreColumn && (
+                                <TableHead className="text-center whitespace-nowrap">
+                                  Quality Score
+                                </TableHead>
+                              )}
                               {(currentContest.platform
                                 ?.toLowerCase()
                                 .includes("youtube")
@@ -20416,6 +20454,14 @@ export default function ContestDetailClient({
                                         )}
                                     </>
                                   ) : null}
+                                  {showNormalViewQualityScoreColumn && (
+                                    <TableCell className="text-center">
+                                      <SubmissionQualityScoreCell
+                                        qualityScore={submission.quality_score}
+                                        isDark={isDark}
+                                      />
+                                    </TableCell>
+                                  )}
                                   {(currentContest.platform
                                     ?.toLowerCase()
                                     .includes("youtube")
@@ -21034,12 +21080,12 @@ export default function ContestDetailClient({
                                   )}
                                   {showCreatorWisePlatformEarningsColumn && (
                                     <TableHead className="text-center whitespace-nowrap min-w-[7rem]">
-                                      Platform Earnings
+                                      Total Earnings
                                     </TableHead>
                                   )}
                                   {showCreatorWisePlatformViewsColumn && (
                                     <TableHead className="text-center whitespace-nowrap min-w-[7rem]">
-                                      Platform Views
+                                     Total Views
                                     </TableHead>
                                   )}
                                   <TableHead className="text-center">

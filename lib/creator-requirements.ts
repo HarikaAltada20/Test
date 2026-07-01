@@ -5,6 +5,7 @@ import {
   isVideoContestFormat,
   parseStoredCreatorTrustMetrics,
 } from "@/lib/trust-score";
+import { formatQualityScoreDisplay } from "@/lib/creator-profile-stats";
 import {
   getCreatorQualityMetricsLive,
   resolveCreatorQualityMetrics,
@@ -132,6 +133,86 @@ export function buildRequirementBadgeLabels(
   return badges;
 }
 
+export type ContestEligibilityDisplayItem = {
+  key: string;
+  label: string;
+  value: string;
+  description: string;
+};
+
+function formatQualityThreshold(value: number): string {
+  const rounded = Math.round(value * 100) / 100;
+  const formatted = Number.isInteger(rounded)
+    ? String(rounded)
+    : rounded.toFixed(2).replace(/\.?0+$/, "");
+  return `${formatted} / 3`;
+}
+
+/** Creator-facing eligibility cards for campaign detail pages. */
+export function buildContestEligibilityDisplayItems(
+  contest: ContestCreatorRequirements,
+): ContestEligibilityDisplayItem[] {
+  const req = parseContestCreatorRequirements(contest);
+  const items: ContestEligibilityDisplayItem[] = [];
+
+  if (req.minTrustScorePct !== null) {
+    items.push({
+      key: "trust-score",
+      label: "Trust score",
+      value: `${req.minTrustScorePct}/100`,
+      description:
+        "Your reliability score from verified and rejected submissions. A higher score means more of your work has been approved.",
+    });
+  }
+  if (req.minTrustNumber !== null) {
+    items.push({
+      key: "trust-number",
+      label: "Trust number",
+      value: `${req.minTrustNumber}`,
+      description:
+        "Verified submissions minus rejected ones. This number grows when more of your content is approved.",
+    });
+  }
+  if (req.minBestQuality !== null) {
+    items.push({
+      key: "best-quality",
+      label: "Best quality score",
+      value: formatQualityThreshold(req.minBestQuality),
+      description:
+        "Your highest content quality rating (1–3) from verified submissions. The brand requires at least this level.",
+    });
+  }
+  if (req.minAvgQuality !== null) {
+    items.push({
+      key: "avg-quality",
+      label: "Average quality score",
+      value: formatQualityThreshold(req.minAvgQuality),
+      description:
+        "Your average quality across verified submissions. Consistent quality helps you qualify for selective campaigns.",
+    });
+  }
+  if (req.minPlatformEarningsCents !== null) {
+    items.push({
+      key: "platform-earnings",
+      label: "Platform earnings",
+      value: `$${(req.minPlatformEarningsCents / 100).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`,
+      description:
+        "Total earnings you have received on the platform from past campaigns and payouts.",
+    });
+  }
+  if (req.minPlatformViews !== null) {
+    items.push({
+      key: "platform-views",
+      label: "Platform views",
+      value: `${req.minPlatformViews.toLocaleString()}`,
+      description:
+        "Total views credited to your submissions across all campaigns on the platform.",
+    });
+  }
+
+  return items;
+}
+
 export type RequirementFailure = {
   code: string;
   message: string;
@@ -173,10 +254,7 @@ export function buildRequirementChecklist(input: {
   }
 
   if (req.minBestQuality !== null) {
-    const yours =
-      snapshot.bestQualityScore !== null
-        ? `${snapshot.bestQualityScore}/3`
-        : "Not established";
+    const yours = formatQualityScoreDisplay(snapshot.bestQualityScore);
     items.push({
       code: "best_quality_too_low",
       label: "Best quality score",
@@ -189,10 +267,7 @@ export function buildRequirementChecklist(input: {
   }
 
   if (req.minAvgQuality !== null) {
-    const yours =
-      snapshot.avgQualityScore !== null
-        ? `${snapshot.avgQualityScore}/3`
-        : "Not established";
+    const yours = formatQualityScoreDisplay(snapshot.avgQualityScore);
     items.push({
       code: "avg_quality_too_low",
       label: "Average quality score",
@@ -264,7 +339,7 @@ export function evaluateCreatorRequirements(input: {
     ) {
       failures.push({
         code: "best_quality_too_low",
-        message: `Best quality too low. Yours is ${snapshot.bestQualityScore ?? "not established"}; this campaign requires at least ${req.minBestQuality}.`,
+        message: `Best quality too low. Yours is ${formatQualityScoreDisplay(snapshot.bestQualityScore)}; this campaign requires at least ${req.minBestQuality}/3.`,
       });
     }
   }
@@ -276,7 +351,7 @@ export function evaluateCreatorRequirements(input: {
     ) {
       failures.push({
         code: "avg_quality_too_low",
-        message: `Average quality too low. Yours is ${snapshot.avgQualityScore ?? "not established"}; this campaign requires at least ${req.minAvgQuality}.`,
+        message: `Average quality too low. Yours is ${formatQualityScoreDisplay(snapshot.avgQualityScore)}; this campaign requires at least ${req.minAvgQuality}/3.`,
       });
     }
   }

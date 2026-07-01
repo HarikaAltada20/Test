@@ -2,8 +2,10 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/utils/supabase/server";
 import { createAdminClient } from "@/utils/supabase/admin";
 import { verifyAdminAccess } from "@/utils/admin-auth";
-import { parseQualityScore } from "@/lib/quality-score";
-import { recomputeCreatorProfileMetrics } from "@/lib/creator-requirements";
+import {
+  parseQualityScoreBody,
+  updateSubmissionQualityScores,
+} from "@/lib/admin/submission-quality-score";
 
 type RouteContext = { params: Promise<{ submissionId: string }> };
 
@@ -11,7 +13,7 @@ async function assertCanManageSubmission(
   supabase: Awaited<ReturnType<typeof createClient>>,
   submissionId: string,
 ): Promise<
-  | { ok: true; creatorId: string }
+  | { ok: true }
   | { ok: false; response: NextResponse }
 > {
   const { isAdmin, error: adminError, user: adminUser } = await verifyAdminAccess();
@@ -57,7 +59,7 @@ async function assertCanManageSubmission(
 
     const { data: submission, error: submissionError } = await supabase
       .from("submissions")
-      .select("creator_id, contest_id, contests!inner(advertiser_id)")
+      .select("id, contests!inner(advertiser_id)")
       .eq("id", submissionId)
       .single();
 
@@ -71,7 +73,10 @@ async function assertCanManageSubmission(
       };
     }
 
-    if ((submission as { contests: { advertiser_id: string } }).contests.advertiser_id !== authUser.id) {
+    if (
+      (submission as { contests: { advertiser_id: string } }).contests
+        .advertiser_id !== authUser.id
+    ) {
       return {
         ok: false,
         response: NextResponse.json(
@@ -81,10 +86,7 @@ async function assertCanManageSubmission(
       };
     }
 
-    return {
-      ok: true,
-      creatorId: String(submission.creator_id),
-    };
+    return { ok: true };
   }
 
   if (!adminUser?.id) {
@@ -99,11 +101,11 @@ async function assertCanManageSubmission(
 
   const { data: submission, error: submissionError } = await supabase
     .from("submissions")
-    .select("creator_id")
+    .select("id")
     .eq("id", submissionId)
     .single();
 
-  if (submissionError || !submission?.creator_id) {
+  if (submissionError || !submission) {
     return {
       ok: false,
       response: NextResponse.json(
@@ -113,7 +115,7 @@ async function assertCanManageSubmission(
     };
   }
 
-  return { ok: true, creatorId: String(submission.creator_id) };
+  return { ok: true };
 }
 
 export async function PATCH(request: Request, context: RouteContext) {
@@ -129,7 +131,7 @@ export async function PATCH(request: Request, context: RouteContext) {
     }
 
     const body = await request.json();
-    const qualityScore = parseQualityScore(body?.qualityScore);
+    const qualityScore = parseQualityScoreBody(body?.qualityScore);
     if (qualityScore === null) {
       return NextResponse.json(
         { error: "qualityScore must be 1, 2, or 3" },
@@ -143,61 +145,32 @@ export async function PATCH(request: Request, context: RouteContext) {
     }
 
     const supabaseAdmin = createAdminClient();
-    const { data: existing, error: existingError } = await supabaseAdmin
-      .from("submissions")
-      .select("id, status, creator_id, quality_score")
-      .eq("id", submissionId)
-      .single();
+    const result = await updateSubmissionQualityScores(
+      supabaseAdmin,
+      [submissionId],
+      qualityScore,
+    );
 
-    if (existingError || !existing) {
+    if (!result.ok) {
       return NextResponse.json(
-        { error: "Submission not found" },
-        { status: 404 },
+        { error: result.error },
+        { status: result.status },
       );
     }
 
-    const status = String(existing.status || "").toLowerCase();
-    if (status !== "verified" && status !== "paid") {
-      return NextResponse.json(
-        {
-          error:
-            "Quality score can only be updated for verified or paid submissions",
-        },
-        { status: 400 },
-      );
-    }
-
-    const { data: updatedSubmission, error: updateError } = await supabaseAdmin
-      .from("submissions")
-      .update({ quality_score: qualityScore })
-      .eq("id", submissionId)
-      .select("id, status, quality_score, creator_id")
-      .single();
-
-    if (updateError || !updatedSubmission) {
-      return NextResponse.json(
-        { error: updateError?.message || "Failed to update quality score" },
-        { status: 500 },
-      );
-    }
-
-    const creatorId = String(updatedSubmission.creator_id || access.creatorId);
-    await recomputeCreatorProfileMetrics(supabaseAdmin, creatorId);
-
-    const { data: creatorProfile } = await supabaseAdmin
-      .from("creator_profiles")
-      .select("avg_quality_score, best_quality_score")
-      .eq("id", creatorId)
-      .maybeSingle();
+    const updatedSubmission = result.updatedSubmissions[0];
+    const creatorId = updatedSubmission.creator_id;
+    const creatorQuality =
+      result.creatorQualityByCreatorId[creatorId] ?? {
+        avg_quality_score: null,
+        best_quality_score: null,
+      };
 
     return NextResponse.json({
       success: true,
       submission: updatedSubmission,
       creatorId,
-      creatorQuality: {
-        avg_quality_score: creatorProfile?.avg_quality_score ?? null,
-        best_quality_score: creatorProfile?.best_quality_score ?? null,
-      },
+      creatorQuality,
     });
   } catch (error: unknown) {
     const message =

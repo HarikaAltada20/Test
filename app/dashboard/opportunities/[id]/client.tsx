@@ -66,10 +66,7 @@ import {
   countPendingLeaderboardSubmissions,
   renderLeaderboardStatusBadge,
 } from "@/lib/status-badges";
-import {
-  buildRequirementBadgeLabels,
-  hasAnyContestCreatorRequirement,
-} from "@/lib/creator-requirements";
+import { CreatorEligibilitySection } from "@/components/CreatorEligibilitySection";
 import {
   CreatorContestRequirementsGate,
 } from "@/components/CreatorContestRequirementsGate";
@@ -151,7 +148,7 @@ const getTabs = (platform?: string | null): TabConfig[] => {
 type SectionConfig = {
   id: string;
   label: string;
-  conditional?: "leaderboard" | "inspiration-links" | "tracking-links";
+  conditional?: "leaderboard" | "inspiration-links" | "tracking-links" | "creator-eligibility";
 };
 
 const BASE_SECTIONS: SectionConfig[] = [
@@ -162,6 +159,11 @@ const BASE_SECTIONS: SectionConfig[] = [
     conditional: "leaderboard",
   },
   { id: "contest-details", label: "Contest Details" },
+  {
+    id: "creator-eligibility",
+    label: "Creator Eligibility",
+    conditional: "creator-eligibility",
+  },
   { id: "content-requirements", label: "Content Requirements" },
   { id: "participation-guidelines", label: "Participation Guidelines" },
   { id: "resources-tools", label: "Resources & Tools" },
@@ -746,9 +748,12 @@ export function ContestClientPage({
       if (section.conditional === "tracking-links") {
         return hasTrackingLinks;
       }
+      if (section.conditional === "creator-eligibility") {
+        return hasCreatorRequirements;
+      }
       return true;
     });
-  }, [contest?.contest_type, hasInspirationLinks, hasTrackingLinks]);
+  }, [contest?.contest_type, hasInspirationLinks, hasTrackingLinks, hasCreatorRequirements]);
 
   // Read mode from data attribute
   useEffect(() => {
@@ -2560,9 +2565,6 @@ export function ContestClientPage({
   }, [justSubmitted, user?.id, hasCreatorRequirements, refreshRequirements]);
 
   const isRequirementsBlocked = !!user && isRequirementsGateBlocked;
-  const requirementBadgeLabels = contest
-    ? buildRequirementBadgeLabels(contest)
-    : [];
 
   const handleSubmitContent = async (button: SubmitEntryButton) => {
     if (isRequirementsBlocked) return;
@@ -5673,50 +5675,6 @@ export function ContestClientPage({
                       </div>
                     </div>
 
-                    {/* Creator requirements */}
-                    {requirementBadgeLabels.map((label) => (
-                      <div
-                        key={label}
-                        className={cn(
-                          "rounded-xl p-4 border shadow-sm",
-                          isDark
-                            ? "border-blue-400/50"
-                            : "bg-white border-blue-200 dark:border-blue-700/30",
-                        )}
-                      >
-                        <div className="flex items-center gap-3">
-                          <div
-                            className={cn(
-                              "p-3 rounded-full",
-                              isDark
-                                ? "bg-blue-500/30 text-blue-400"
-                                : "bg-blue-100 dark:bg-blue-900/30 text-blue-600",
-                            )}
-                          >
-                            <Star className="h-5 w-5" />
-                          </div>
-                          <div className="flex-1">
-                            <p
-                              className={cn(
-                                "text-xs font-medium uppercase tracking-wide",
-                                isDark ? "text-slate-300" : "text-slate-600",
-                              )}
-                            >
-                              Minimum required
-                            </p>
-                            <p
-                              className={cn(
-                                "text-lg font-bold",
-                                isDark ? "text-slate-100" : "text-slate-900",
-                              )}
-                            >
-                              {label}
-                            </p>
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-
                     {/* Campaign Type Card - Only for Twitter campaigns */}
                     {(() => {
                       const isTwitterTextImage =
@@ -5997,6 +5955,17 @@ export function ContestClientPage({
                       ) : null;
                     })()}
                 </div>
+
+                {contest && (
+                  <CreatorEligibilitySection
+                    contest={contest}
+                    isDark={isDark}
+                    className="mt-8"
+                    sectionRef={(el) => {
+                      sectionRefs.current["creator-eligibility"] = el;
+                    }}
+                  />
+                )}
 
                 {/* 3. CONTENT REQUIREMENTS - Brief and Content Type */}
                 <div

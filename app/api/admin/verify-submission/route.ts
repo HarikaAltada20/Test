@@ -72,7 +72,7 @@ export async function POST(request: Request) {
       cpm_refunded_cents?: number;
       milestone_refunded_cents?: number;
     } | null = null;
-    const { submissionId, action, reason, paymentDetails, skipWalletDebit, qualityScore } =
+    const { submissionId, action, reason, paymentDetails, skipWalletDebit, skipMetricsRecompute, qualityScore } =
       await request.json();
 
     if (!submissionId || !action) {
@@ -1901,10 +1901,12 @@ export async function POST(request: Request) {
       .eq("id", submissionId)
       .single();
 
-    await recomputeCreatorProfileMetrics(
-      supabaseAdmin,
-      submissionFull.creator_id,
-    );
+    if (!skipMetricsRecompute) {
+      await recomputeCreatorProfileMetrics(
+        supabaseAdmin,
+        submissionFull.creator_id,
+      );
+    }
 
     let message = `Submission ${action} successfully${
       action === "rejected" ? ` with reason: ${reason}` : ""

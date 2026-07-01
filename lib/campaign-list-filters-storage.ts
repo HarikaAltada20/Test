@@ -69,6 +69,8 @@ export const OPPORTUNITIES_PLATFORM_FILTER_OPTIONS = [
   "tiktok",
 ] as const;
 
+export const OPPORTUNITIES_ELIGIBILITY_FILTER_OPTIONS = ["all", "eligible"] as const;
+
 export const OPPORTUNITIES_MEDIA_TYPE_OPTIONS = ["all", "text", "media"] as const;
 
 export const VIEW_MODE_OPTIONS = ["grid", "list"] as const;
@@ -83,6 +85,8 @@ export type BrandPostPhaseFilterOption =
   (typeof BRAND_POST_PHASE_FILTER_OPTIONS)[number];
 export type OpportunitiesPlatformFilterOption =
   (typeof OPPORTUNITIES_PLATFORM_FILTER_OPTIONS)[number];
+export type OpportunitiesEligibilityFilterOption =
+  (typeof OPPORTUNITIES_ELIGIBILITY_FILTER_OPTIONS)[number];
 export type OpportunitiesMediaTypeOption = (typeof OPPORTUNITIES_MEDIA_TYPE_OPTIONS)[number];
 export type ViewModeOption = (typeof VIEW_MODE_OPTIONS)[number];
 export type PageSizeOption = (typeof PAGE_SIZE_OPTIONS)[number];
@@ -99,6 +103,7 @@ export type ContestListFilters = {
 
 export type OpportunitiesListFilters = {
   mediaType: OpportunitiesMediaTypeOption;
+  eligibilityFilter: OpportunitiesEligibilityFilterOption;
   platformFilter: OpportunitiesPlatformFilterOption;
   typeFilter: ContestTypeFilterOption;
   sortOption: OpportunitiesSortOption;
@@ -118,6 +123,7 @@ export const DEFAULT_CONTEST_LIST_FILTERS: ContestListFilters = {
 
 export const DEFAULT_OPPORTUNITIES_LIST_FILTERS: OpportunitiesListFilters = {
   mediaType: "all",
+  eligibilityFilter: "all",
   platformFilter: "all",
   typeFilter: "all",
   sortOption: "relevance_desc",
@@ -225,6 +231,12 @@ export function readStoredOpportunitiesListFilters(
       mediaType: isOneOf(parsed.mediaType, OPPORTUNITIES_MEDIA_TYPE_OPTIONS)
         ? parsed.mediaType
         : defaults.mediaType,
+      eligibilityFilter: isOneOf(
+        parsed.eligibilityFilter,
+        OPPORTUNITIES_ELIGIBILITY_FILTER_OPTIONS,
+      )
+        ? parsed.eligibilityFilter
+        : defaults.eligibilityFilter,
       platformFilter: isOneOf(
         parsed.platformFilter,
         OPPORTUNITIES_PLATFORM_FILTER_OPTIONS,

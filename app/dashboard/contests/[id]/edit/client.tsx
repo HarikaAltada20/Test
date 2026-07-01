@@ -13170,7 +13170,12 @@ export default function EditContestPage({
                         max={3}
                         value={contestMinBestQuality}
                         onChange={(e) => {
-                          const v = parseInt(e.target.value, 10);
+                          const raw = e.target.value;
+                          if (raw === "") {
+                            setContestMinBestQuality("");
+                            return;
+                          }
+                          const v = parseInt(raw, 10);
                           if (!Number.isNaN(v) && v >= 1 && v <= 3)
                             setContestMinBestQuality(v);
                         }}
@@ -13226,7 +13231,12 @@ export default function EditContestPage({
                         step={0.1}
                         value={contestMinAvgQuality}
                         onChange={(e) => {
-                          const v = parseFloat(e.target.value);
+                          const raw = e.target.value;
+                          if (raw === "") {
+                            setContestMinAvgQuality("");
+                            return;
+                          }
+                          const v = parseFloat(raw);
                           if (!Number.isNaN(v) && v >= 1 && v <= 3)
                             setContestMinAvgQuality(v);
                         }}
@@ -13260,7 +13270,7 @@ export default function EditContestPage({
                         Min Platform Earnings
                       </Label>
                       <p className="text-sm text-muted-foreground mt-1">
-                        Lifetime cash earned on platform (USD).
+                        Total earned on the platform from past campaigns and payouts (USD).
                       </p>
                     </div>
                   </div>

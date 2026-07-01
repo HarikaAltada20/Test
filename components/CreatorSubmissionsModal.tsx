@@ -79,7 +79,7 @@ import {
 import { buildFlatFeeBonusExpectedCentsBySubmissionId } from "@/lib/twitter-cpm-bonus-expected";
 import { parseQualityScore } from "@/lib/quality-score";
 import type { QualityScore } from "@/lib/quality-score";
-import { formatQualityScoreDisplay } from "@/lib/creator-profile-stats";
+import { SubmissionQualityScoreCell } from "@/components/SubmissionQualityScoreCell";
 import { VerifyQualityDialog } from "@/components/VerifyQualityDialog";
 import { YouTubeAnalyticsPanel } from "@/components/youtube/YouTubeAnalyticsPanel";
 import {
@@ -141,45 +141,6 @@ function effectiveSubmissionViewsForSort(sub: Submission): number {
     return effectiveTikTokSubmissionViews(sub);
   }
   return Number(sub.views ?? 0);
-}
-
-function qualityScoreBadgeClass(score: number): string {
-  if (score >= 3) return "bg-green-100 text-green-700 border-green-300";
-  if (score >= 2) return "bg-amber-100 text-amber-700 border-amber-300";
-  return "bg-orange-100 text-orange-700 border-orange-300";
-}
-
-function SubmissionQualityScoreCell({
-  submission,
-  isDark,
-}: {
-  submission: Submission;
-  isDark: boolean;
-}) {
-  const parsed = parseQualityScore(submission.quality_score);
-  if (parsed === null) {
-    return (
-      <span
-        className={cn(
-          "text-xs",
-          isDark ? "text-slate-500" : "text-slate-400",
-        )}
-      >
-        —
-      </span>
-    );
-  }
-
-  return (
-    <span
-      className={cn(
-        "inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold border",
-        qualityScoreBadgeClass(parsed),
-      )}
-    >
-      {formatQualityScoreDisplay(parsed)}
-    </span>
-  );
 }
 
 interface CreatorSubmissionsModalProps {
@@ -1188,30 +1149,34 @@ export function CreatorSubmissionsModal({
     if (qualityEditSubmissionIds.length === 0) return;
     setQualityEditLoading(true);
     try {
-      for (const submissionId of qualityEditSubmissionIds) {
-        const submission =
-          submissions.find((s) => s.id === submissionId) ?? null;
-        const res = await fetch(
-          `/api/admin/submissions/${submissionId}/quality-score`,
-          {
-            method: "PATCH",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ qualityScore }),
-          },
-        );
-        const data = await res.json();
-        if (!res.ok) {
-          throw new Error(data.error || "Failed to update quality score");
-        }
-
-        onQualityScoreUpdated?.({
-          submissionId,
+      const res = await fetch("/api/admin/submissions/bulk-quality-score", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          submissionIds: qualityEditSubmissionIds,
           qualityScore,
-          creatorId: String(
-            data.creatorId || submission?.creator_id || "",
-          ),
-          avgQualityScore: data.creatorQuality?.avg_quality_score ?? null,
-          bestQualityScore: data.creatorQuality?.best_quality_score ?? null,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to update quality score");
+      }
+
+      const creatorQualityByCreatorId = (data.creatorQualityByCreatorId ||
+        {}) as Record<
+        string,
+        { avg_quality_score: number | null; best_quality_score: number | null }
+      >;
+
+      for (const updated of data.submissions || []) {
+        const creatorId = String(updated.creator_id || "");
+        const creatorQuality = creatorQualityByCreatorId[creatorId];
+        onQualityScoreUpdated?.({
+          submissionId: String(updated.id),
+          qualityScore,
+          creatorId,
+          avgQualityScore: creatorQuality?.avg_quality_score ?? null,
+          bestQualityScore: creatorQuality?.best_quality_score ?? null,
         });
       }
 
@@ -4095,7 +4060,7 @@ export function CreatorSubmissionsModal({
                                   {isVideoContest && (
                                     <TableCell className="text-center">
                                       <SubmissionQualityScoreCell
-                                        submission={submission}
+                                        qualityScore={submission.quality_score}
                                         isDark={isDark}
                                       />
                                     </TableCell>

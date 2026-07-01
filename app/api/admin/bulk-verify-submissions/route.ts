@@ -257,6 +257,7 @@ export async function POST(request: Request) {
                 paymentDetails,
                 qualityScore: action === "verified" ? (qualityScore ?? 1) : undefined,
                 skipWalletDebit: skipWalletDebitIds.has(String(id)),
+                skipMetricsRecompute: true,
               }),
             });
 
@@ -300,13 +301,14 @@ export async function POST(request: Request) {
       });
     }
 
-    const TRUST_RECOMPUTE_ACTIONS = new Set([
+    const METRICS_RECOMPUTE_ACTIONS = new Set([
       "verified",
       "rejected",
+      "pending",
       "approve",
       "reject",
     ]);
-    if (results.length > 0 && TRUST_RECOMPUTE_ACTIONS.has(action)) {
+    if (results.length > 0 && METRICS_RECOMPUTE_ACTIONS.has(action)) {
       const supabaseAdmin = createAdminClient();
       const processedIds = results.map((r) => r.id);
       const { data: submissionRows } = await supabaseAdmin
