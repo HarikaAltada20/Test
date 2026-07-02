@@ -71,7 +71,7 @@ export async function POST(request: Request) {
       cpm_refunded_cents?: number;
       milestone_refunded_cents?: number;
     } | null = null;
-    const { submissionId, action, reason, paymentDetails, skipWalletDebit, qualityScore } =
+    const { submissionId, action, reason, paymentDetails, skipWalletDebit, qualityScore, skipMetricsRecompute } =
       await request.json();
 
     if (!submissionId || !action) {
@@ -356,8 +356,15 @@ export async function POST(request: Request) {
     }
 
     if (action === "verified") {
-      const { normalizeVerifyQualityScore } = await import("@/lib/quality-score");
-      updateData.quality_score = normalizeVerifyQualityScore(qualityScore);
+      const { requireVerifyQualityScore } = await import("@/lib/quality-score");
+      const parsedQualityScore = requireVerifyQualityScore(qualityScore);
+      if (parsedQualityScore === null) {
+        return NextResponse.json(
+          { error: "qualityScore must be 1, 2, or 3 when verifying a submission" },
+          { status: 400 },
+        );
+      }
+      updateData.quality_score = parsedQualityScore;
     } else if (action === "rejected" || action === "pending") {
       updateData.quality_score = null;
     }
@@ -1900,8 +1907,33 @@ export async function POST(request: Request) {
       .eq("id", submissionId)
       .single();
 
-    // Creator trust/quality caches are updated incrementally by the DB trigger
-    // (apply_submission_metrics_change) on submission status/quality changes.
+    // Creator trust/quality caches are updated by the DB trigger on status/quality
+    // changes. Recompute as a safety net if triggers are missing or counters drift.
+    const METRICS_RECOMPUTE_ACTIONS = new Set([
+      "verified",
+      "rejected",
+      "pending",
+      "paid",
+    ]);
+    if (
+      latestSubmission?.creator_id &&
+      METRICS_RECOMPUTE_ACTIONS.has(action) &&
+      skipMetricsRecompute !== true
+    ) {
+      const { recomputeCreatorProfileMetrics } = await import(
+        "@/lib/creator-requirements"
+      );
+      const recomputeResult = await recomputeCreatorProfileMetrics(
+        supabaseAdmin,
+        latestSubmission.creator_id,
+      );
+      if (!recomputeResult.ok) {
+        console.error(
+          "[verify-submission] creator metrics recompute failed:",
+          recomputeResult.errors.join("; "),
+        );
+      }
+    }
 
     let message = `Submission ${action} successfully${
       action === "rejected" ? ` with reason: ${reason}` : ""

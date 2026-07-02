@@ -93,8 +93,13 @@ export function parseQualityScoreCounts(value: unknown): QualityScoreCounts {
   };
 }
 
-export function normalizeVerifyQualityScore(value: unknown): QualityScore {
-  return parseQualityScore(value) ?? 1;
+export function requireVerifyQualityScore(value: unknown): QualityScore | null {
+  return parseQualityScore(value);
+}
+
+/** @deprecated Use requireVerifyQualityScore — verify actions must pass an explicit score. */
+export function normalizeVerifyQualityScore(value: unknown): QualityScore | null {
+  return requireVerifyQualityScore(value);
 }
 
 export type PersistableQualityProfileValues = {

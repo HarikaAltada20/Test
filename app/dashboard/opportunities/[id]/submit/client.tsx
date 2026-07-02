@@ -67,7 +67,7 @@ function formatSubmissionInsertError(error: {
     return "Trust % too low to submit to this campaign.";
   }
   if (msg.includes("trust_number_too_low")) {
-    return "Trust Score too low to submit to this campaign.";
+    return "Trust Number too low to submit to this campaign.";
   }
   if (msg.includes("best_quality_too_low")) {
     return "Best quality too low to submit to this campaign.";

@@ -365,10 +365,6 @@ CREATE TRIGGER creator_profiles_init_metrics
   FOR EACH ROW
   EXECUTE FUNCTION public.init_creator_profile_metrics();
 
--- Historical verified/paid submissions keep quality_score NULL until explicitly
--- scored at verify time or via admin quality-score APIs. Quality gates only
--- consider submissions with a quality_score assigned.
-
 -- Recompute creator trust + quality caches in batches (progress via NOTICE).
 DO $$
 DECLARE
@@ -412,11 +408,8 @@ BEGIN
   RAISE NOTICE 'creator metrics backfill: complete (% profiles)', v_total;
 END $$;
 
--- Recreate contests_with_status so new contest columns are exposed to the app.
--- DROP required: CREATE OR REPLACE cannot insert columns mid-list (Postgres matches by position).
-DROP VIEW IF EXISTS public.contests_with_status;
-
-CREATE VIEW public.contests_with_status
+-- Extend contests_with_status (append new columns only — avoids DROP downtime).
+CREATE OR REPLACE VIEW public.contests_with_status
 WITH (security_invoker = on) AS
 SELECT
   contests.id,

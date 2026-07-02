@@ -4,6 +4,7 @@ import {
   isVideoContestFormat,
   parseStoredCreatorTrustMetrics,
 } from "@/lib/trust-score";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import {
   formatQualityScoreDisplay,
   formatTrustScoreDisplay,
@@ -154,9 +155,9 @@ export function buildRequirementBadgeItems(
   if (req.minTrustNumber !== null) {
     badges.push({
       key: "trust-number",
-      shortLabel: "Trust Score",
+      shortLabel: "Trust Number",
       valueLabel: `${req.minTrustNumber}`,
-      fullLabel: `Trust Score ${req.minTrustNumber} required`,
+      fullLabel: `Trust Number ${req.minTrustNumber} required`,
     });
   }
   if (req.minBestQuality !== null) {
@@ -244,7 +245,7 @@ export function buildContestEligibilityDisplayItems(
   if (req.minTrustNumber !== null) {
     items.push({
       key: "trust-number",
-      label: "Trust Score",
+      label: "Trust Number",
       value: `${req.minTrustNumber}`,
       description:
         "Verified submissions minus rejected ones. This number grows when more of your content is approved.",
@@ -323,7 +324,7 @@ export function buildRequirementChecklist(input: {
   if (req.minTrustNumber !== null) {
     items.push({
       code: "trust_number_too_low",
-      label: "Trust Score",
+      label: "Trust Number",
       requiredLabel: `${req.minTrustNumber}`,
       yoursLabel: `${snapshot.trustNumber}`,
       passed: snapshot.trustNumber >= req.minTrustNumber,
@@ -405,7 +406,7 @@ export function evaluateCreatorRequirements(input: {
   ) {
     failures.push({
       code: "trust_number_too_low",
-      message: `Trust Score too low. Yours is ${snapshot.trustNumber}; this campaign requires at least ${req.minTrustNumber}.`,
+      message: `Trust Number too low. Yours is ${snapshot.trustNumber}; this campaign requires at least ${req.minTrustNumber}.`,
     });
   }
 
@@ -540,7 +541,7 @@ export function buildCreatorRequirementsSnapshotFromProfile(
 }
 
 export async function getCreatorRequirementsSnapshot(
-  supabase: any,
+  supabase: SupabaseClient,
   creatorId: string,
 ): Promise<CreatorRequirementsSnapshot> {
   const { data: profile, error } = await supabase
@@ -559,7 +560,7 @@ export async function getCreatorRequirementsSnapshot(
 }
 
 export async function assertCreatorMeetsContestRequirements(
-  supabase: any,
+  supabase: SupabaseClient,
   contestId: string,
   creatorId: string,
 ): Promise<
@@ -631,7 +632,7 @@ export function getRequirementsBlockedMessage(
 }
 
 export async function recomputeCreatorProfileMetrics(
-  supabase: any,
+  supabase: SupabaseClient,
   creatorId: string,
 ): Promise<{ ok: true } | { ok: false; errors: string[] }> {
   const { recomputeCreatorTrustMetrics } = await import("@/lib/trust-score");
@@ -663,7 +664,7 @@ export async function recomputeCreatorProfileMetrics(
 }
 
 export async function recomputeCreatorProfileMetricsForIds(
-  supabase: any,
+  supabase: SupabaseClient,
   creatorIds: string[],
 ): Promise<void> {
   const uniqueIds = [...new Set(creatorIds.filter(Boolean))];

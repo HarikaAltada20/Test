@@ -1,6 +1,6 @@
 # Creator Qualitative Score
 
-**Status:** Planned (not built yet) · **Updated:** June 28, 2026
+**Status:** Implemented · **Updated:** July 2, 2026
 
 ---
 

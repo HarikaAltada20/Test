@@ -58,7 +58,7 @@ export function TrustScoreCard({
       )}
     >
       <CardHeader className="pb-2">
-        <CardTitle className="text-xl">Trust Score</CardTitle>
+        <CardTitle className="text-xl">Trust metrics</CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
         {loading ? (
@@ -70,7 +70,7 @@ export function TrustScoreCard({
         ) : (
           <>
             <div className={cn("text-4xl font-bold", toneClass)}>
-              {formatTrustScoreDisplay(score)}
+              Trust %: {formatTrustScoreDisplay(score)}
             </div>
             <div
               className={cn(
@@ -78,7 +78,7 @@ export function TrustScoreCard({
                 isDark ? "text-slate-200" : "text-slate-700",
               )}
             >
-              Trust Score: {metrics?.trust_number ?? 0}
+              Trust Number: {metrics?.trust_number ?? 0}
             </div>
 
             <div className="overflow-x-auto">
@@ -116,9 +116,9 @@ export function TrustScoreCard({
             </div>
 
             <p className="text-xs text-muted-foreground">
-              Brands set trust % and trust score minimums on each campaign.
-              The numbers above are your platform totals—check a campaign&apos;s
-              eligibility section to see whether you meet what that brand requires.
+              Trust % is your approval rate on verified reels. Trust Number is
+              verified minus rejected reels. Brands may set minimums for either
+              on each campaign—check eligibility on a campaign before you submit.
             </p>
           </>
         )}

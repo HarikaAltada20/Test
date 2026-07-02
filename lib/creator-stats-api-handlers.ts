@@ -63,6 +63,14 @@ export async function checkContestRequirementsResponse(
   userId: string,
   contestId: string,
 ) {
+  const recomputeResult = await recomputeCreatorProfileMetrics(supabase, userId);
+  if (!recomputeResult.ok) {
+    return NextResponse.json(
+      { error: recomputeResult.errors.join("; ") },
+      { status: 500 },
+    );
+  }
+
   const result = await assertCreatorMeetsContestRequirements(
     supabase,
     contestId,
@@ -88,6 +96,14 @@ export async function evaluateContestEligibilityResponse(
   userId: string,
   contestId: string,
 ) {
+  const recomputeResult = await recomputeCreatorProfileMetrics(supabase, userId);
+  if (!recomputeResult.ok) {
+    return NextResponse.json(
+      { error: recomputeResult.errors.join("; ") },
+      { status: 500 },
+    );
+  }
+
   const { data: contest, error: contestError } = await supabase
     .from("contests")
     .select(

@@ -1,4 +1,6 @@
--- Trust Score % = (trust_number ÷ verified_reels) × 100
+# Campaign optimization migrations (20260629–20260703)
+#
+# Run in strict filename order. See docs/CAMPAIGN_OPTIMIZATION_DEPLOY.md.
 -- Trust Number = verified_reels − rejected_reels
 -- Optional per-campaign minimum trust_number on contests.
 ALTER TABLE public.contests

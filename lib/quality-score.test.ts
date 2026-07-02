@@ -3,8 +3,24 @@ import assert from "node:assert/strict";
 import {
   aggregateSubmissionQualityRows,
   computePersistableQualityProfileValues,
+  requireVerifyQualityScore,
   resolveCreatorQualityMetrics,
 } from "./quality-score";
+
+describe("requireVerifyQualityScore", () => {
+  it("returns null when score is missing or invalid", () => {
+    assert.equal(requireVerifyQualityScore(undefined), null);
+    assert.equal(requireVerifyQualityScore(null), null);
+    assert.equal(requireVerifyQualityScore(0), null);
+    assert.equal(requireVerifyQualityScore(4), null);
+  });
+
+  it("accepts scores 1 through 3", () => {
+    assert.equal(requireVerifyQualityScore(1), 1);
+    assert.equal(requireVerifyQualityScore("2"), 2);
+    assert.equal(requireVerifyQualityScore(3), 3);
+  });
+});
 
 describe("computePersistableQualityProfileValues", () => {
   it("defaults to 1/1 for new creators with no verified or rejected reels", () => {
