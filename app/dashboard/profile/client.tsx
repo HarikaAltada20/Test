@@ -1947,66 +1947,6 @@ export default function ProfilePage({
                   </p>
                 </div>
               </div>
-              <div className="relative w-full">
-                <label
-                  htmlFor="floating"
-                  className={cn(
-                    "absolute font-medium left-3 top-0 -translate-y-1/2 bg-white px-1 text-[14px]",
-                    isDark
-                      ? "bg-[#180438] text-[#8A8A8A]"
-                      : "bg-white text-gray-500"
-                  )}
-                >
-                  Total Money Won
-                </label>
-                <div
-                  className={cn(
-                    "p-4 min-w-0 peer block w-full rounded-lg border px-3 pt-5 pb-2",
-                    isDark
-                      ? "text-[#8A8A8A] border-[#8A8A8A]"
-                      : "border border-gray-300 text-gray-500"
-                  )}
-                >
-                  <p
-                    className={cn(
-                      "text-base text-[15px] text-muted-foreground truncate min-w-0",
-                      isDark ? "text-[#8A8A8A]" : "text-gray-500"
-                    )}
-                  >
-                    {formatMoney(creatorProfile.total_money_won)}
-                  </p>
-                </div>
-              </div>
-              <div className="relative w-full">
-                <label
-                  htmlFor="floating"
-                  className={cn(
-                    "absolute font-medium left-3 top-0 -translate-y-1/2 bg-white px-1 text-[14px]",
-                    isDark
-                      ? "bg-[#180438] text-[#8A8A8A]"
-                      : "bg-white text-gray-500"
-                  )}
-                >
-                  Withdrawable Balance
-                </label>
-                <div
-                  className={cn(
-                    "p-4 min-w-0 peer block w-full rounded-lg border px-3 pt-5 pb-2",
-                    isDark
-                      ? "text-[#8A8A8A] border-[#8A8A8A]"
-                      : "border border-gray-300 text-gray-500"
-                  )}
-                >
-                  <p
-                    className={cn(
-                      "text-base text-[15px] text-muted-foreground truncate min-w-0",
-                      isDark ? "text-[#8A8A8A]" : "text-gray-500"
-                    )}
-                  >
-                    {formatMoney(creatorProfile.withdrawable_balance)}
-                  </p>
-                </div>
-              </div>
             </div>
           </CardContent>
         </div>

@@ -10744,7 +10744,7 @@ export default function CreateContestPage({
                         htmlFor="trustScoreRequirement"
                         className="text-base font-semibold"
                       >
-                        Trust Score
+                        Trust %
                       </Label>
                       <p
                         className={cn(
@@ -10752,10 +10752,10 @@ export default function CreateContestPage({
                           isDark ? "text-gray-300" : "text-gray-600",
                         )}
                       >
-                        Enable trust score requirements to allow only reliable
-                        creators to participate. Trust scores may decrease for
+                        Enable trust % requirements to allow only reliable
+                        creators to participate. Trust % may decrease for
                         rejected, low-quality, or policy-violating submissions.
-                        Creators below the required score cannot submit to this
+                        Creators below the required Trust % cannot submit to this
                         campaign.
                       </p>
                     </div>
@@ -10781,35 +10781,57 @@ export default function CreateContestPage({
 
                   {trustScoreEnabled && (
                     <div className="space-y-2 pt-2 border-t">
-                      {/* <Label htmlFor="trustScoreInput">Trust Score</Label> */}
-                      <Input
-                        id="trustScoreInput"
-                        type="number"
-                        min="0"
-                        max="100"
-                        value={contestTrustScore}
-                        onChange={(e) => {
-                          const raw = e.target.value;
-                          if (raw === "") {
-                            setContestTrustScore("");
-                            return;
-                          }
-                          const value = parseInt(raw, 10);
-                          if (
-                            !Number.isNaN(value) &&
-                            value >= 0 &&
-                            value <= 100
-                          ) {
-                            setContestTrustScore(value);
-                          }
-                        }}
-                        className={cn(
-                          isDark
-                            ? "bg-[#C9A7FF26] border border-gray-400 text-white"
-                            : "bg-white text-black",
-                        )}
-                        placeholder="Enter minimum trust score (0–100)"
-                      />
+                      <Label htmlFor="trustScoreInput">Minimum Trust %</Label>
+                      <div className="relative max-w-xs">
+                        <Input
+                          id="trustScoreInput"
+                          type="number"
+                          min="0"
+                          max="100"
+                          value={contestTrustScore}
+                          onChange={(e) => {
+                            const raw = e.target.value;
+                            if (raw === "") {
+                              setContestTrustScore("");
+                              return;
+                            }
+                            const value = parseInt(raw, 10);
+                            if (
+                              !Number.isNaN(value) &&
+                              value >= 0 &&
+                              value <= 100
+                            ) {
+                              setContestTrustScore(value);
+                            }
+                          }}
+                          className={cn(
+                            "pr-10",
+                            isDark
+                              ? "bg-[#C9A7FF26] border border-gray-400 text-white"
+                              : "bg-white text-black",
+                          )}
+                          placeholder="0–100"
+                        />
+                        <span
+                          className={cn(
+                            "pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-sm font-medium",
+                            isDark ? "text-gray-300" : "text-muted-foreground",
+                          )}
+                          aria-hidden
+                        >
+                          %
+                        </span>
+                      </div>
+                      {contestTrustScore !== "" && (
+                        <p
+                          className={cn(
+                            "text-sm",
+                            isDark ? "text-gray-300" : "text-muted-foreground",
+                          )}
+                        >
+                          Creators need at least {contestTrustScore}% to submit.
+                        </p>
+                      )}
                     </div>
                   )}
 
@@ -10819,7 +10841,7 @@ export default function CreateContestPage({
                         htmlFor="trustNumberRequirement"
                         className="text-base font-semibold"
                       >
-                        Trust Number
+                        Trust Score
                       </Label>
                       <p
                         className={cn(
@@ -10827,9 +10849,9 @@ export default function CreateContestPage({
                           isDark ? "text-gray-300" : "text-gray-600",
                         )}
                       >
-                        Enable trust number requirements to allow only creators
+                        Enable trust score requirements to allow only creators
                         with a strong track record to participate. Creators
-                        below the required number cannot submit to this
+                        below the required score cannot submit to this
                         campaign.
                       </p>
                     </div>
@@ -10856,7 +10878,7 @@ export default function CreateContestPage({
                   {trustNumberEnabled && (
                     <div className="space-y-2 pt-2 border-t">
                       <Label htmlFor="trustNumberInput">
-                        Minimum Trust Number
+                        Minimum Trust Score
                       </Label>
                       <Input
                         id="trustNumberInput"
@@ -10878,7 +10900,7 @@ export default function CreateContestPage({
                             ? "bg-[#C9A7FF26] border border-gray-400 text-white"
                             : "bg-white text-black",
                         )}
-                        placeholder="Enter minimum trust number"
+                        placeholder="Enter minimum trust score"
                       />
                     </div>
                   )}
@@ -11017,7 +11039,8 @@ export default function CreateContestPage({
                           isDark ? "text-gray-300" : "text-gray-600",
                         )}
                       >
-                        Total earned on the platform from past campaigns and payouts (USD).
+                        Total earned on the platform from past campaigns and
+                        payouts (USD).
                       </p>
                     </div>
                     <Checkbox

@@ -1,5 +1,6 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
+import { formatTrustScoreDisplay } from "@/lib/creator-profile-stats";
 import type { TrustScoreMetrics } from "@/lib/trust-score";
 import { CheckCircle2, Clock3, ListChecks, XCircle } from "lucide-react";
 
@@ -68,14 +69,16 @@ export function TrustScoreCard({
           </div>
         ) : (
           <>
-            <div className={cn("text-4xl font-bold", toneClass)}>{score}%</div>
+            <div className={cn("text-4xl font-bold", toneClass)}>
+              {formatTrustScoreDisplay(score)}
+            </div>
             <div
               className={cn(
                 "text-lg font-semibold",
                 isDark ? "text-slate-200" : "text-slate-700",
               )}
             >
-              Trust Number: {metrics?.trust_number ?? 0}
+              Trust Score: {metrics?.trust_number ?? 0}
             </div>
 
             <div className="overflow-x-auto">
@@ -113,7 +116,7 @@ export function TrustScoreCard({
             </div>
 
             <p className="text-xs text-muted-foreground">
-              Brands set trust score and trust number minimums on each campaign.
+              Brands set trust % and trust score minimums on each campaign.
               The numbers above are your platform totals—check a campaign&apos;s
               eligibility section to see whether you meet what that brand requires.
             </p>

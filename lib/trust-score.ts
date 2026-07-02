@@ -384,12 +384,12 @@ export function getTrustNumberSubmissionBlockedMessage(input: {
   trustNumberLoaded: boolean;
 }): string {
   if (input.trustNumberLoading) {
-    return `Loading trust number… This campaign requires at least ${input.minTrustNumber}.`;
+    return `Loading Trust Score… This campaign requires at least ${input.minTrustNumber}.`;
   }
   if (!input.trustNumberLoaded || input.creatorTrustNumber === null) {
-    return `Unable to verify your trust number. This campaign requires at least ${input.minTrustNumber}. Please refresh or try again later.`;
+    return `Unable to verify your Trust Score. This campaign requires at least ${input.minTrustNumber}. Please refresh or try again later.`;
   }
-  return `Trust number too low to submit. Your trust number is ${input.creatorTrustNumber}. This campaign requires at least ${input.minTrustNumber}. You can still view this campaign and your existing submissions. Submit new content after your trust number reaches ${input.minTrustNumber} or higher.`;
+  return `Trust Score too low to submit. Your Trust Score is ${input.creatorTrustNumber}. This campaign requires at least ${input.minTrustNumber}. You can still view this campaign and your existing submissions. Submit new content after your Trust Score reaches ${input.minTrustNumber} or higher.`;
 }
 
 /** Live metrics from all submissions (matches DB enforce_submission_trust_score). */
@@ -464,7 +464,7 @@ export async function assertCreatorMeetsContestTrustRequirement(
     if (minTrustNumber !== null && metrics.trust_number < minTrustNumber) {
       return {
         ok: false,
-        error: `Trust number too low to submit. Your trust number is ${metrics.trust_number}. This campaign requires at least ${minTrustNumber}.`,
+        error: `Trust Score too low to submit. Your Trust Score is ${metrics.trust_number}. This campaign requires at least ${minTrustNumber}.`,
         status: 403,
       };
     }

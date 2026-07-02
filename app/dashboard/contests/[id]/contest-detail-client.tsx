@@ -123,6 +123,10 @@ import {
   hasAnyContestCreatorRequirement,
   parseContestCreatorRequirements,
 } from "@/lib/creator-requirements";
+import {
+  formatTrustScoreDisplay,
+  formatTrustScoreMinimum,
+} from "@/lib/creator-profile-stats";
 import { computeTrustScore } from "@/lib/trust-score";
 import {
   parseQualityScore,
@@ -293,16 +297,11 @@ const YT_CORE_COLUMN_IDS = [
 // Column ids that require "Show Traffic Sources" (hidden in customize modal when brand doesn't have access)
 const YT_TRAFFIC_COLUMN_IDS = ["top_traffic_source"];
 
-function formatTrustScore(score: number): string {
+function formatDecimalMetric(score: number): string {
   const rounded = Math.round(score * 10) / 10;
   return Number.isInteger(rounded)
     ? String(Math.round(rounded))
     : rounded.toFixed(1);
-}
-
-function formatTrustScoreWithMax(score: number, max = 100): string {
-  // Non-breaking spaces keep "100 / 100" on one line in narrow table cells.
-  return `${formatTrustScore(score)}\u00A0/\u00A0${max}`;
 }
 
 function EligibilityRequirementCard({
@@ -1400,8 +1399,8 @@ export default function ContestDetailClient({
     if (req.minTrustScorePct !== null) {
       items.push({
         key: "trust-score",
-        label: "Min Trust Score %",
-        value: formatTrustScoreWithMax(req.minTrustScorePct),
+        label: "Trust %",
+        value: formatTrustScoreMinimum(req.minTrustScorePct),
         description:
           "Creators need at least this reliability score to submit.",
         icon: CheckCheck,
@@ -1410,7 +1409,7 @@ export default function ContestDetailClient({
     if (req.minTrustNumber !== null) {
       items.push({
         key: "trust-number",
-        label: "Min Trust Number",
+        label: "Trust Score",
         value: req.minTrustNumber,
         description:
           "Creators must have at least this many trusted (verified) reels to submit.",
@@ -1420,7 +1419,7 @@ export default function ContestDetailClient({
     if (req.minBestQuality !== null) {
       items.push({
         key: "best-quality",
-        label: "Min Best Quality",
+        label: "Best Quality",
         value: `${req.minBestQuality} / 3`,
         description:
           "Creators must have reached at least this best content quality rating.",
@@ -1430,8 +1429,8 @@ export default function ContestDetailClient({
     if (req.minAvgQuality !== null) {
       items.push({
         key: "avg-quality",
-        label: "Min Avg Quality",
-        value: `${formatTrustScore(req.minAvgQuality)} / 3`,
+        label: "Avg Quality",
+        value: `${formatDecimalMetric(req.minAvgQuality)} / 3`,
         description:
           "Creators must maintain at least this average content quality rating.",
         icon: Star,
@@ -1440,7 +1439,7 @@ export default function ContestDetailClient({
     if (req.minPlatformEarningsCents !== null) {
       items.push({
         key: "platform-earnings",
-        label: "Min Platform Earnings",
+        label: "Platform Earnings",
         value: formatMoney(req.minPlatformEarningsCents),
         description:
           "Creators must have earned at least this much on the platform.",
@@ -1450,7 +1449,7 @@ export default function ContestDetailClient({
     if (req.minPlatformViews !== null) {
       items.push({
         key: "platform-views",
-        label: "Min Platform Views",
+        label: "Platform Views",
         value: req.minPlatformViews.toLocaleString(),
         description:
           "Creators must have at least this many credited views on the platform.",
@@ -21200,12 +21199,12 @@ export default function ContestDetailClient({
                                   <TableHead>Creator</TableHead>
                                   {showCreatorWiseTrustScoreColumn && (
                                     <TableHead className="text-center whitespace-nowrap min-w-[6.5rem]">
-                                      Trust Score
+                                      Trust %
                                     </TableHead>
                                   )}
                                   {showCreatorWiseTrustNumberColumn && (
                                     <TableHead className="text-center whitespace-nowrap min-w-[6.5rem]">
-                                      Trust Number
+                                      Trust Score
                                     </TableHead>
                                   )}
                                   {showCreatorWiseBestQualityColumn && (
@@ -21737,11 +21736,9 @@ export default function ContestDetailClient({
                                           },
                                         );
                                       const trustScoreDisplay =
-                                        formatTrustScoreWithMax(
-                                          trustScoreComputed,
-                                        );
+                                        formatTrustScoreDisplay(trustScoreComputed);
                                       const trustScoreDisplayShort =
-                                        formatTrustScore(trustScoreComputed);
+                                        formatTrustScoreDisplay(trustScoreComputed);
                                       const requiredTrustScore =
                                         contestMinTrustScore;
                                       const hasTrustThreshold =
@@ -21871,9 +21868,9 @@ export default function ContestDetailClient({
                                                   <div className="space-y-1 text-xs">
                                                     {trustScoreBelowThreshold ? (
                                                       <p>
-                                                        Below required trust
-                                                        score (
-                                                        {formatTrustScore(
+                                                        Below required Trust %
+                                                        (
+                                                        {formatTrustScoreMinimum(
                                                           requiredTrustScore as number,
                                                         )}
                                                         ). Creator:{" "}
@@ -21881,9 +21878,9 @@ export default function ContestDetailClient({
                                                       </p>
                                                     ) : (
                                                       <p>
-                                                        Meets required trust
-                                                        score (
-                                                        {formatTrustScore(
+                                                        Meets required Trust %
+                                                        (
+                                                        {formatTrustScoreMinimum(
                                                           requiredTrustScore as number,
                                                         )}
                                                         ). Creator:{" "}
@@ -21925,16 +21922,16 @@ export default function ContestDetailClient({
                                                   <div className="space-y-1 text-xs">
                                                     {trustNumberBelowThreshold ? (
                                                       <p>
-                                                        Below required trust
-                                                        number (
+                                                        Below required Trust
+                                                        Score (
                                                         {requiredTrustNumber}
                                                         ). Creator:{" "}
                                                         {trustNumberComputed}
                                                       </p>
                                                     ) : (
                                                       <p>
-                                                        Meets required trust
-                                                        number (
+                                                        Meets required Trust
+                                                        Score (
                                                         {requiredTrustNumber}
                                                         ). Creator:{" "}
                                                         {trustNumberComputed}
@@ -21992,7 +21989,7 @@ export default function ContestDetailClient({
                                               <CreatorWiseEligibilityText
                                                 value={
                                                   creatorAvgQuality !== null
-                                                    ? `${formatTrustScore(creatorAvgQuality)} / 3`
+                                                    ? `${formatDecimalMetric(creatorAvgQuality)} / 3`
                                                     : "—"
                                                 }
                                                 belowThreshold={

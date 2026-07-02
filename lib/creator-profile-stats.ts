@@ -56,11 +56,31 @@ export function getCreatorStatsFromProfile(
   };
 }
 
-export function formatTrustScoreDisplay(score: number): string {
-  return `${Math.round(score)}/100`;
+/** Trust score out of 100, e.g. "85/100". */
+export function formatTrustScoreOutOf100(score: number, max = 100): string {
+  const rounded = Math.round(score);
+  return `${rounded}/${max}`;
 }
 
-export function formatQualityScoreDisplay(score: number | null | undefined): string {
+/** Trust score as a percentage suffix, e.g. "85%". */
+export function formatTrustScorePct(score: number): string {
+  const rounded = Math.round(score);
+  return `${rounded}%`;
+}
+
+/** Creator profile and eligibility displays. */
+export function formatTrustScoreDisplay(score: number): string {
+  return formatTrustScoreOutOf100(score);
+}
+
+/** Minimum trust score requirement for campaigns, e.g. "70/100". */
+export function formatTrustScoreMinimum(score: number): string {
+  return formatTrustScoreOutOf100(score);
+}
+
+export function formatQualityScoreDisplay(
+  score: number | null | undefined,
+): string {
   if (score === null || score === undefined || !Number.isFinite(score)) {
     return "—";
   }

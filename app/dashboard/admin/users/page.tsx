@@ -78,6 +78,7 @@ import {
 } from "@/lib/subscription-utils-client";
 import REGIONS_AND_COUNTRIES_DATA from "@/data/regions-and-countries.json";
 import { getCreatorTrustScoreFromMetrics } from "@/lib/trust-score";
+import { formatTrustScorePct } from "@/lib/creator-profile-stats";
 import { SupportChatToggle } from "@/components/admin/SupportChatToggle";
 
 const UsersMap = dynamic(
@@ -5054,7 +5055,7 @@ export default function AdminUsersPage() {
                               )}
                               {isColumnVisible("trust_score") && (
                                 <TableCell className="whitespace-nowrap border-r">
-                                  {getCreatorTrustScoreForRow(r)}
+                                  {formatTrustScorePct(getCreatorTrustScoreForRow(r))}
                                 </TableCell>
                               )}
                               {isColumnVisible("date_of_birth") && (

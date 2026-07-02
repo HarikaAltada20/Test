@@ -5,7 +5,11 @@ import {
   isVideoContestFormat,
   parseStoredCreatorTrustMetrics,
 } from "@/lib/trust-score";
-import { formatQualityScoreDisplay } from "@/lib/creator-profile-stats";
+import {
+  formatQualityScoreDisplay,
+  formatTrustScoreDisplay,
+  formatTrustScoreMinimum,
+} from "@/lib/creator-profile-stats";
 import {
   getCreatorQualityMetricsLive,
   resolveCreatorQualityMetrics,
@@ -73,7 +77,9 @@ export function parseContestCreatorRequirements(
 
   const minBestRaw = parseOptionalPositiveInt(contest.min_best_quality_score);
   const minBestQuality =
-    minBestRaw !== null && minBestRaw >= 1 && minBestRaw <= 3 ? minBestRaw : null;
+    minBestRaw !== null && minBestRaw >= 1 && minBestRaw <= 3
+      ? minBestRaw
+      : null;
 
   const minAvgRaw = parseOptionalNumber(contest.min_avg_quality_score);
   const minAvgQuality =
@@ -113,10 +119,10 @@ export function buildRequirementBadgeLabels(
   const req = parseContestCreatorRequirements(contest);
   const badges: string[] = [];
   if (req.minTrustScorePct !== null) {
-    badges.push(`Trust ${req.minTrustScorePct}%+`);
+    badges.push(`Trust % ${formatTrustScoreMinimum(req.minTrustScorePct)}`);
   }
   if (req.minTrustNumber !== null) {
-    badges.push(`Trust #${req.minTrustNumber}+`);
+    badges.push(`Trust Score ${req.minTrustNumber}+`);
   }
   if (req.minBestQuality !== null) {
     badges.push(`Best quality ${req.minBestQuality}+`);
@@ -125,7 +131,9 @@ export function buildRequirementBadgeLabels(
     badges.push(`Avg quality ${req.minAvgQuality}+`);
   }
   if (req.minPlatformEarningsCents !== null) {
-    badges.push(`Earnings $${(req.minPlatformEarningsCents / 100).toFixed(0)}+`);
+    badges.push(
+      `Earnings $${(req.minPlatformEarningsCents / 100).toFixed(0)}+`,
+    );
   }
   if (req.minPlatformViews !== null) {
     badges.push(`Views ${req.minPlatformViews.toLocaleString()}+`);
@@ -158,8 +166,8 @@ export function buildContestEligibilityDisplayItems(
   if (req.minTrustScorePct !== null) {
     items.push({
       key: "trust-score",
-      label: "Trust score",
-      value: `${req.minTrustScorePct}/100`,
+      label: "Trust %",
+      value: formatTrustScoreMinimum(req.minTrustScorePct),
       description:
         "Your reliability score from verified and rejected submissions. A higher score means more of your work has been approved.",
     });
@@ -167,7 +175,7 @@ export function buildContestEligibilityDisplayItems(
   if (req.minTrustNumber !== null) {
     items.push({
       key: "trust-number",
-      label: "Trust number",
+      label: "Trust Score",
       value: `${req.minTrustNumber}`,
       description:
         "Verified submissions minus rejected ones. This number grows when more of your content is approved.",
@@ -236,9 +244,9 @@ export function buildRequirementChecklist(input: {
   if (req.minTrustScorePct !== null) {
     items.push({
       code: "trust_score_too_low",
-      label: "Trust score",
-      requiredLabel: `${req.minTrustScorePct}%`,
-      yoursLabel: `${snapshot.trustScorePct}%`,
+      label: "Trust %",
+      requiredLabel: formatTrustScoreMinimum(req.minTrustScorePct),
+      yoursLabel: formatTrustScoreDisplay(snapshot.trustScorePct),
       passed: snapshot.trustScorePct >= req.minTrustScorePct,
     });
   }
@@ -246,7 +254,7 @@ export function buildRequirementChecklist(input: {
   if (req.minTrustNumber !== null) {
     items.push({
       code: "trust_number_too_low",
-      label: "Trust number",
+      label: "Trust Score",
       requiredLabel: `${req.minTrustNumber}`,
       yoursLabel: `${snapshot.trustNumber}`,
       passed: snapshot.trustNumber >= req.minTrustNumber,
@@ -318,7 +326,7 @@ export function evaluateCreatorRequirements(input: {
   ) {
     failures.push({
       code: "trust_score_too_low",
-      message: `Trust score too low. Yours is ${snapshot.trustScorePct}%; this campaign requires at least ${req.minTrustScorePct}%.`,
+      message: `Trust % too low. Yours is ${formatTrustScoreDisplay(snapshot.trustScorePct)}; this campaign requires at least ${formatTrustScoreMinimum(req.minTrustScorePct)}.`,
     });
   }
 
@@ -328,7 +336,7 @@ export function evaluateCreatorRequirements(input: {
   ) {
     failures.push({
       code: "trust_number_too_low",
-      message: `Trust number too low. Yours is ${snapshot.trustNumber}; this campaign requires at least ${req.minTrustNumber}.`,
+      message: `Trust Score too low. Yours is ${snapshot.trustNumber}; this campaign requires at least ${req.minTrustNumber}.`,
     });
   }
 
@@ -387,14 +395,16 @@ export function isCreatorEligibleForContest(input: {
 }
 
 export function resolveCreatorEligibilityProfileFields(
-  creatorProfile: {
-    trust_score_metrics?: unknown;
-    avg_quality_score?: unknown;
-    best_quality_score?: unknown;
-    total_money_won?: unknown;
-    total_views?: unknown;
-  } | null
-  | undefined,
+  creatorProfile:
+    | {
+        trust_score_metrics?: unknown;
+        avg_quality_score?: unknown;
+        best_quality_score?: unknown;
+        total_money_won?: unknown;
+        total_views?: unknown;
+      }
+    | null
+    | undefined,
   liveQuality?: CreatorQualityMetrics | null,
 ): Pick<
   CreatorRequirementsSnapshot,
@@ -409,12 +419,18 @@ export function resolveCreatorEligibilityProfileFields(
   const verifiedReels = storedTrust?.verified_reels ?? 0;
   const rejectedReels = storedTrust?.rejected_reels ?? 0;
 
-  const profileAvg = parseStoredQualityNumber(creatorProfile?.avg_quality_score);
-  const profileBest = parseStoredQualityNumber(creatorProfile?.best_quality_score);
+  const profileAvg = parseStoredQualityNumber(
+    creatorProfile?.avg_quality_score,
+  );
+  const profileBest = parseStoredQualityNumber(
+    creatorProfile?.best_quality_score,
+  );
   const rawAvg =
-    profileAvg !== null ? profileAvg : liveQuality?.avg_quality_score ?? null;
+    profileAvg !== null ? profileAvg : (liveQuality?.avg_quality_score ?? null);
   const rawBest =
-    profileBest !== null ? profileBest : liveQuality?.best_quality_score ?? null;
+    profileBest !== null
+      ? profileBest
+      : (liveQuality?.best_quality_score ?? null);
 
   const resolved = resolveCreatorQualityMetrics({
     verifiedReels,
@@ -446,7 +462,9 @@ export async function getCreatorRequirementsSnapshot(
     getCreatorQualityMetricsLive(supabase, creatorId),
     supabase
       .from("creator_profiles")
-      .select("total_money_won, total_views, avg_quality_score, best_quality_score")
+      .select(
+        "total_money_won, total_views, avg_quality_score, best_quality_score",
+      )
       .eq("id", creatorId)
       .maybeSingle(),
   ]);
@@ -455,8 +473,10 @@ export async function getCreatorRequirementsSnapshot(
   const resolvedQuality = resolveCreatorQualityMetrics({
     verifiedReels: trustMetrics.verified_reels,
     rejectedReels: trustMetrics.rejected_reels,
-    avgQualityScore: profile?.avg_quality_score ?? qualityMetrics.avg_quality_score,
-    bestQualityScore: profile?.best_quality_score ?? qualityMetrics.best_quality_score,
+    avgQualityScore:
+      profile?.avg_quality_score ?? qualityMetrics.avg_quality_score,
+    bestQualityScore:
+      profile?.best_quality_score ?? qualityMetrics.best_quality_score,
   });
 
   return {
@@ -530,7 +550,9 @@ export async function assertCreatorMeetsContestRequirements(
     return { ok: true };
   } catch (err: unknown) {
     const message =
-      err instanceof Error ? err.message : "Failed to verify creator requirements";
+      err instanceof Error
+        ? err.message
+        : "Failed to verify creator requirements";
     return { ok: false, error: message, status: 500, failures: [] };
   }
 }
@@ -547,10 +569,14 @@ export async function recomputeCreatorProfileMetrics(
   creatorId: string,
 ): Promise<{ ok: true } | { ok: false; errors: string[] }> {
   const { recomputeCreatorTrustMetrics } = await import("@/lib/trust-score");
-  const { recomputeCreatorQualityMetrics } = await import("@/lib/quality-score");
+  const { recomputeCreatorQualityMetrics } =
+    await import("@/lib/quality-score");
 
   const trustResult = await recomputeCreatorTrustMetrics(supabase, creatorId);
-  const qualityResult = await recomputeCreatorQualityMetrics(supabase, creatorId);
+  const qualityResult = await recomputeCreatorQualityMetrics(
+    supabase,
+    creatorId,
+  );
 
   const errors: string[] = [];
   if (!trustResult.ok) {
@@ -576,6 +602,8 @@ export async function recomputeCreatorProfileMetricsForIds(
 ): Promise<void> {
   const uniqueIds = [...new Set(creatorIds.filter(Boolean))];
   await Promise.all(
-    uniqueIds.map((creatorId) => recomputeCreatorProfileMetrics(supabase, creatorId)),
+    uniqueIds.map((creatorId) =>
+      recomputeCreatorProfileMetrics(supabase, creatorId),
+    ),
   );
 }
