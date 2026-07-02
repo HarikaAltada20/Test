@@ -16,6 +16,7 @@ export function useCreatorContestEligibility(
   contest: ContestCreatorRequirements | null | undefined,
 ) {
   const [loading, setLoading] = useState(true);
+  const [fetchFailed, setFetchFailed] = useState(false);
   const [items, setItems] = useState<RequirementCheckItem[]>([]);
   const [failures, setFailures] = useState<RequirementFailure[]>([]);
   const [snapshot, setSnapshot] = useState<CreatorRequirementsSnapshot | null>(
@@ -30,11 +31,13 @@ export function useCreatorContestEligibility(
       setItems([]);
       setFailures([]);
       setSnapshot(null);
+      setFetchFailed(false);
       setLoading(false);
       return;
     }
 
     setLoading(true);
+    setFetchFailed(false);
     try {
       const res = await fetch("/api/creators/stats", {
         method: "PUT",
@@ -42,6 +45,7 @@ export function useCreatorContestEligibility(
         body: JSON.stringify({ contestId }),
       });
       if (!res.ok) {
+        setFetchFailed(true);
         setItems([]);
         setFailures([]);
         setSnapshot(null);
@@ -55,6 +59,7 @@ export function useCreatorContestEligibility(
       setFailures((data.failures as RequirementFailure[]) ?? []);
       setItems(buildRequirementChecklist({ requirements, snapshot: snap }));
     } catch {
+      setFetchFailed(true);
       setItems([]);
       setFailures([]);
       setSnapshot(null);
@@ -69,10 +74,11 @@ export function useCreatorContestEligibility(
 
   const failingItems = items.filter((item) => !item.passed);
   const isBlocked =
-    hasRequirements && (loading || failingItems.length > 0);
+    hasRequirements && (loading || fetchFailed || failingItems.length > 0);
 
   return {
     loading,
+    fetchFailed,
     hasRequirements,
     items,
     failures,

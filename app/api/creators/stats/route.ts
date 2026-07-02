@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/utils/supabase/server";
 import {
   assertCreatorMeetsContestRequirements,
+  buildCreatorRequirementsSnapshotFromProfile,
   getCreatorRequirementsSnapshot,
   parseContestCreatorRequirements,
   evaluateCreatorRequirements,
@@ -37,19 +38,22 @@ export async function GET() {
     }
 
     const stats = getCreatorStatsFromProfile(profile);
+    const snapshot = buildCreatorRequirementsSnapshotFromProfile(profile);
 
     return NextResponse.json({
-      trustScorePct: stats.trustMetrics.trust_score,
-      trustNumber: stats.trustMetrics.trust_number,
-      avgQualityScore: stats.qualityMetrics.avg_quality_score,
-      bestQualityScore: stats.qualityMetrics.best_quality_score,
-      totalPlatformEarningsCents: stats.totalEarningsCents,
-      totalViews: stats.totalViews,
-      verifiedReels: stats.trustMetrics.verified_reels,
-      rejectedReels: stats.trustMetrics.rejected_reels,
-      pendingReels: stats.trustMetrics.pending_reels,
+      ...snapshot,
+      totalPlatformEarningsCents: snapshot.totalPlatformEarningsCents,
+      trustScorePct: snapshot.trustScorePct,
+      trustNumber: snapshot.trustNumber,
+      avgQualityScore: snapshot.avgQualityScore,
+      bestQualityScore: snapshot.bestQualityScore,
+      totalViews: snapshot.totalViews,
+      verifiedReels: snapshot.verifiedReels,
+      rejectedReels: snapshot.rejectedReels,
+      pendingReels: snapshot.pendingReels,
       trust_metrics: stats.trustMetrics,
       quality_metrics: stats.qualityMetrics,
+      snapshot,
     });
   } catch (error: unknown) {
     const message =

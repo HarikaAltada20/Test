@@ -82,6 +82,17 @@ export function countQualityScoresFromScores(scores: number[]): QualityScoreCoun
   return counts;
 }
 
+export function parseQualityScoreCounts(value: unknown): QualityScoreCounts {
+  const empty: QualityScoreCounts = { score1: 0, score2: 0, score3: 0 };
+  if (!value || typeof value !== "object") return empty;
+  const parsed = value as Record<string, unknown>;
+  return {
+    score1: Math.max(0, Number(parsed.score1) || 0),
+    score2: Math.max(0, Number(parsed.score2) || 0),
+    score3: Math.max(0, Number(parsed.score3) || 0),
+  };
+}
+
 export function normalizeVerifyQualityScore(value: unknown): QualityScore {
   return parseQualityScore(value) ?? 1;
 }
@@ -273,11 +284,23 @@ export async function recomputeCreatorQualityMetrics(
             bestQualityScore: persistable.best_quality_score,
           });
 
+    const tierCounts =
+      verifiedReels > 0 && scoredQualityScores.length > 0
+        ? countQualityScoresFromScores(scoredQualityScores)
+        : { score1: 0, score2: 0, score3: 0 };
+    const qualitySum =
+      verifiedReels > 0 && scoredQualityScores.length > 0
+        ? scoredQualityScores.reduce((acc, score) => acc + score, 0)
+        : 0;
+
     const { error: updateError } = await supabase
       .from("creator_profiles")
       .update({
         avg_quality_score: persistable.avg_quality_score,
         best_quality_score: persistable.best_quality_score,
+        quality_score_sum: qualitySum,
+        scored_verified_count: scoredQualityScores.length,
+        quality_score_counts: tierCounts,
       })
       .eq("id", creatorId);
 

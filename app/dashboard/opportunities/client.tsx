@@ -241,9 +241,12 @@ function filterContestsByEligibility(
   eligibilityFilter: EligibilityFilterType,
   snapshot: CreatorRequirementsSnapshot | null,
   userId: string | undefined,
+  statsReady: boolean,
 ): any[] {
   if (eligibilityFilter !== "eligible") return contests;
-  if (!snapshot) return userId ? [] : contests;
+  if (!userId) return contests;
+  // Fail-closed until cached stats are loaded successfully.
+  if (!statsReady || !snapshot) return [];
   return contests.filter((contest) =>
     isCreatorEligibleForContest({
       requirements: parseContestCreatorRequirements(contest),
@@ -342,6 +345,7 @@ export default function OpportunitiesPage({
     useState<EligibilityFilterType>("all");
   const [creatorRequirementsSnapshot, setCreatorRequirementsSnapshot] =
     useState<CreatorRequirementsSnapshot | null>(null);
+  const [creatorStatsReady, setCreatorStatsReady] = useState(false);
   /** List layout is only available at lg+ (1024px); below that we force grid. */
   const [layoutAllowsListView, setLayoutAllowsListView] = useState(false);
 
@@ -362,28 +366,55 @@ export default function OpportunitiesPage({
   useEffect(() => {
     if (!user?.id) {
       setCreatorRequirementsSnapshot(null);
+      setCreatorStatsReady(false);
       return;
     }
     let cancelled = false;
     void (async () => {
+      setCreatorStatsReady(false);
       try {
         const res = await fetch("/api/creators/stats");
-        if (!res.ok || cancelled) return;
+        if (cancelled) return;
+        if (!res.ok) {
+          setCreatorRequirementsSnapshot(null);
+          setCreatorStatsReady(false);
+          return;
+        }
         const data = await res.json();
         if (cancelled) return;
-        setCreatorRequirementsSnapshot({
-          trustScorePct: data.trustScorePct ?? data.trust_metrics?.trust_score ?? 100,
-          trustNumber: data.trustNumber ?? data.trust_metrics?.trust_number ?? 0,
-          avgQualityScore: data.avgQualityScore ?? data.quality_metrics?.avg_quality_score ?? null,
-          bestQualityScore: data.bestQualityScore ?? data.quality_metrics?.best_quality_score ?? null,
-          totalPlatformEarningsCents: Number(data.totalPlatformEarningsCents ?? 0),
-          totalViews: Number(data.totalViews ?? 0),
-          verifiedReels: data.verifiedReels ?? data.trust_metrics?.verified_reels ?? 0,
-          rejectedReels: data.rejectedReels ?? data.trust_metrics?.rejected_reels ?? 0,
-          pendingReels: data.pendingReels ?? data.trust_metrics?.pending_reels ?? 0,
-        });
+        const snapshot =
+          data.snapshot ??
+          ({
+            trustScorePct:
+              data.trustScorePct ?? data.trust_metrics?.trust_score ?? 100,
+            trustNumber:
+              data.trustNumber ?? data.trust_metrics?.trust_number ?? 0,
+            avgQualityScore:
+              data.avgQualityScore ??
+              data.quality_metrics?.avg_quality_score ??
+              null,
+            bestQualityScore:
+              data.bestQualityScore ??
+              data.quality_metrics?.best_quality_score ??
+              null,
+            totalPlatformEarningsCents: Number(
+              data.totalPlatformEarningsCents ?? 0,
+            ),
+            totalViews: Number(data.totalViews ?? 0),
+            verifiedReels:
+              data.verifiedReels ?? data.trust_metrics?.verified_reels ?? 0,
+            rejectedReels:
+              data.rejectedReels ?? data.trust_metrics?.rejected_reels ?? 0,
+            pendingReels:
+              data.pendingReels ?? data.trust_metrics?.pending_reels ?? 0,
+          } satisfies CreatorRequirementsSnapshot);
+        setCreatorRequirementsSnapshot(snapshot);
+        setCreatorStatsReady(true);
       } catch {
-        if (!cancelled) setCreatorRequirementsSnapshot(null);
+        if (!cancelled) {
+          setCreatorRequirementsSnapshot(null);
+          setCreatorStatsReady(false);
+        }
       }
     })();
     return () => {
@@ -398,12 +429,14 @@ export default function OpportunitiesPage({
       eligibilityFilter,
       creatorRequirementsSnapshot,
       user?.id,
+      creatorStatsReady,
     );
   }, [
     availableContests,
     mediaType,
     eligibilityFilter,
     creatorRequirementsSnapshot,
+    creatorStatsReady,
     user?.id,
   ]);
 
@@ -1636,6 +1669,7 @@ export default function OpportunitiesPage({
         eligibilityFilter,
         creatorRequirementsSnapshot,
         user?.id,
+        creatorStatsReady,
       );
     }
 
@@ -1654,6 +1688,7 @@ export default function OpportunitiesPage({
     mediaType,
     eligibilityFilter,
     creatorRequirementsSnapshot,
+    creatorStatsReady,
     user?.id,
   ]);
 

@@ -284,6 +284,7 @@ export function ContestClientPage({
     isBlocked: isRequirementsGateBlocked,
     hasRequirements: hasCreatorRequirements,
     loading: requirementsLoading,
+    fetchFailed: requirementsFetchFailed,
     refresh: refreshRequirements,
   } = useCreatorContestEligibility(contestId, contest);
   const [existingSubmission, setExistingSubmission] = useState<any>(null);
@@ -3167,6 +3168,7 @@ export function ContestClientPage({
                       <CreatorContestRequirementsGate
                         items={requirementItems}
                         loading={requirementsLoading}
+                        fetchFailed={requirementsFetchFailed}
                         isDark={isDark}
                         className="mb-0"
                       />
@@ -3310,6 +3312,7 @@ export function ContestClientPage({
                       <CreatorContestRequirementsGate
                         items={requirementItems}
                         loading={requirementsLoading}
+                        fetchFailed={requirementsFetchFailed}
                         isDark={isDark}
                         className="mb-0"
                       />

@@ -1,7 +1,6 @@
 import {
   getContestMinTrustNumberForGate,
   getContestMinTrustScoreForGate,
-  getCreatorTrustMetricsLive,
   isVideoContestFormat,
   parseStoredCreatorTrustMetrics,
 } from "@/lib/trust-score";
@@ -9,9 +8,10 @@ import {
   formatQualityScoreDisplay,
   formatTrustScoreDisplay,
   formatTrustScoreMinimum,
+  getCreatorStatsFromProfile,
+  type CreatorProfileStatsSource,
 } from "@/lib/creator-profile-stats";
 import {
-  getCreatorQualityMetricsLive,
   resolveCreatorQualityMetrics,
   type CreatorQualityMetrics,
 } from "@/lib/quality-score";
@@ -522,43 +522,40 @@ function parseStoredQualityNumber(value: unknown): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
+export function buildCreatorRequirementsSnapshotFromProfile(
+  profile: CreatorProfileStatsSource | null | undefined,
+): CreatorRequirementsSnapshot {
+  const stats = getCreatorStatsFromProfile(profile);
+  return {
+    trustScorePct: stats.trustMetrics.trust_score,
+    trustNumber: stats.trustMetrics.trust_number,
+    avgQualityScore: stats.qualityMetrics.avg_quality_score,
+    bestQualityScore: stats.qualityMetrics.best_quality_score,
+    totalPlatformEarningsCents: stats.totalEarningsCents,
+    totalViews: stats.totalViews,
+    verifiedReels: stats.trustMetrics.verified_reels,
+    rejectedReels: stats.trustMetrics.rejected_reels,
+    pendingReels: stats.trustMetrics.pending_reels,
+  };
+}
+
 export async function getCreatorRequirementsSnapshot(
   supabase: any,
   creatorId: string,
 ): Promise<CreatorRequirementsSnapshot> {
-  const [trustMetrics, qualityMetrics, profileRow] = await Promise.all([
-    getCreatorTrustMetricsLive(supabase, creatorId),
-    getCreatorQualityMetricsLive(supabase, creatorId),
-    supabase
-      .from("creator_profiles")
-      .select(
-        "total_money_won, total_views, avg_quality_score, best_quality_score",
-      )
-      .eq("id", creatorId)
-      .maybeSingle(),
-  ]);
+  const { data: profile, error } = await supabase
+    .from("creator_profiles")
+    .select(
+      "trust_score_metrics, avg_quality_score, best_quality_score, total_money_won, total_views",
+    )
+    .eq("id", creatorId)
+    .maybeSingle();
 
-  const profile = profileRow?.data;
-  const resolvedQuality = resolveCreatorQualityMetrics({
-    verifiedReels: trustMetrics.verified_reels,
-    rejectedReels: trustMetrics.rejected_reels,
-    avgQualityScore:
-      profile?.avg_quality_score ?? qualityMetrics.avg_quality_score,
-    bestQualityScore:
-      profile?.best_quality_score ?? qualityMetrics.best_quality_score,
-  });
+  if (error) {
+    throw new Error(error.message || "Failed to load creator profile");
+  }
 
-  return {
-    trustScorePct: trustMetrics.trust_score,
-    trustNumber: trustMetrics.trust_number,
-    avgQualityScore: resolvedQuality.avg_quality_score,
-    bestQualityScore: resolvedQuality.best_quality_score,
-    totalPlatformEarningsCents: Number(profile?.total_money_won ?? 0),
-    totalViews: Number(profile?.total_views ?? 0),
-    verifiedReels: trustMetrics.verified_reels,
-    rejectedReels: trustMetrics.rejected_reels,
-    pendingReels: trustMetrics.pending_reels,
-  };
+  return buildCreatorRequirementsSnapshotFromProfile(profile);
 }
 
 export async function assertCreatorMeetsContestRequirements(

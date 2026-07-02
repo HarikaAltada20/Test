@@ -366,6 +366,7 @@ export default function SubmitContentPage({
     isBlocked: isRequirementsBlocked,
     hasRequirements,
     loading: requirementsLoading,
+    fetchFailed: requirementsFetchFailed,
     refresh: refreshRequirements,
   } = useCreatorContestEligibility(contestId, contest);
 
@@ -3152,6 +3153,7 @@ export default function SubmitContentPage({
             <CreatorContestRequirementsGate
               items={requirementItems}
               loading={requirementsLoading}
+              fetchFailed={requirementsFetchFailed}
               isDark={isDark}
             />
           )}

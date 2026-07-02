@@ -8,6 +8,7 @@ import type { RequirementCheckItem } from "@/lib/creator-requirements";
 type CreatorContestRequirementsGateProps = {
   items: RequirementCheckItem[];
   loading?: boolean;
+  fetchFailed?: boolean;
   isDark?: boolean;
   className?: string;
 };
@@ -15,9 +16,26 @@ type CreatorContestRequirementsGateProps = {
 export function CreatorContestRequirementsGate({
   items,
   loading = false,
+  fetchFailed = false,
   isDark = false,
   className,
 }: CreatorContestRequirementsGateProps) {
+  if (fetchFailed) {
+    return (
+      <Alert
+        variant="destructive"
+        className={cn("mb-4 rounded-xl", className)}
+      >
+        <AlertCircle className="h-4 w-4" />
+        <AlertTitle>Unable to verify requirements</AlertTitle>
+        <AlertDescription>
+          We could not load your eligibility for this campaign. Please refresh
+          the page or try again later before submitting.
+        </AlertDescription>
+      </Alert>
+    );
+  }
+
   if (items.length === 0 && !loading) return null;
 
   const failing = items.filter((item) => !item.passed);

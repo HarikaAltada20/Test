@@ -41,7 +41,6 @@ import {
   buildDualRewardsPayoutPersistValue,
   splitDualReversalRefundFromPayout,
 } from "@/lib/dual-rewards-payout";
-import { recomputeCreatorProfileMetrics } from "@/lib/creator-requirements";
 import {
   checkDualRewardsPoolBudgetForPayment,
   computeDualRewardsSubmissionReversalDue,
@@ -72,7 +71,7 @@ export async function POST(request: Request) {
       cpm_refunded_cents?: number;
       milestone_refunded_cents?: number;
     } | null = null;
-    const { submissionId, action, reason, paymentDetails, skipWalletDebit, skipMetricsRecompute, qualityScore } =
+    const { submissionId, action, reason, paymentDetails, skipWalletDebit, qualityScore } =
       await request.json();
 
     if (!submissionId || !action) {
@@ -1901,18 +1900,8 @@ export async function POST(request: Request) {
       .eq("id", submissionId)
       .single();
 
-    if (!skipMetricsRecompute) {
-      const metricsResult = await recomputeCreatorProfileMetrics(
-        supabaseAdmin,
-        submissionFull.creator_id,
-      );
-      if (!metricsResult.ok) {
-        console.error(
-          "[verify-submission] Failed to recompute creator profile metrics:",
-          metricsResult.errors.join("; "),
-        );
-      }
-    }
+    // Creator trust/quality caches are updated incrementally by the DB trigger
+    // (apply_submission_metrics_change) on submission status/quality changes.
 
     let message = `Submission ${action} successfully${
       action === "rejected" ? ` with reason: ${reason}` : ""

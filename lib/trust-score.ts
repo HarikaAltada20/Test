@@ -510,19 +510,21 @@ export async function recomputeCreatorTrustMetrics(
 
   const metrics = getTrustMetricsFromStatuses((rows || []).map((row: any) => row.status));
 
+  const trustUpdate: Record<string, unknown> = {
+    trust_score_metrics: {
+      trust_score: metrics.trust_score,
+      trust_number: metrics.trust_number,
+      total_reels: metrics.total_reels,
+      verified_reels: metrics.verified_reels,
+      rejected_reels: metrics.rejected_reels,
+      pending_reels: metrics.pending_reels,
+      updated_at: new Date().toISOString(),
+    } as PersistedTrustMetrics,
+  };
+
   const { error: updateError } = await supabase
     .from("creator_profiles")
-    .update({
-      trust_score_metrics: {
-        trust_score: metrics.trust_score,
-        trust_number: metrics.trust_number,
-        total_reels: metrics.total_reels,
-        verified_reels: metrics.verified_reels,
-        rejected_reels: metrics.rejected_reels,
-        pending_reels: metrics.pending_reels,
-        updated_at: new Date().toISOString(),
-      } as PersistedTrustMetrics,
-    })
+    .update(trustUpdate)
     .eq("id", creatorId);
 
   if (updateError) {
@@ -530,6 +532,12 @@ export async function recomputeCreatorTrustMetrics(
       ok: false,
       error: updateError.message || "Failed to persist trust metrics",
     };
+  }
+
+  const { recomputeCreatorQualityMetrics } = await import("@/lib/quality-score");
+  const qualityResult = await recomputeCreatorQualityMetrics(supabase, creatorId);
+  if (!qualityResult.ok) {
+    return { ok: false, error: qualityResult.error };
   }
 
   return { ok: true, metrics };
