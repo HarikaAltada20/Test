@@ -365,19 +365,51 @@ CREATE TRIGGER creator_profiles_init_metrics
   FOR EACH ROW
   EXECUTE FUNCTION public.init_creator_profile_metrics();
 
--- Backfill: existing verified/paid submissions default to quality 1.
-UPDATE public.submissions
-SET quality_score = 1
-WHERE status IN ('verified', 'paid')
-  AND quality_score IS NULL;
+-- Historical verified/paid submissions keep quality_score NULL until explicitly
+-- scored at verify time or via admin quality-score APIs. Quality gates only
+-- consider submissions with a quality_score assigned.
 
--- Recompute all creator trust + quality caches.
+-- Recompute creator trust + quality caches in batches (progress via NOTICE).
 DO $$
-DECLARE r record;
+DECLARE
+  v_last_id uuid := '00000000-0000-0000-0000-000000000000'::uuid;
+  v_batch_size constant integer := 500;
+  v_batch_ids uuid[];
+  v_batch_len integer;
+  v_total integer := 0;
+  v_profile_count integer;
+  v_profile_id uuid;
 BEGIN
-  FOR r IN SELECT id FROM public.creator_profiles LOOP
-    PERFORM public.sync_creator_trust_score_metrics(r.id);
+  SELECT COUNT(*)::integer INTO v_profile_count FROM public.creator_profiles;
+  RAISE NOTICE 'creator metrics backfill: starting for % profiles (batch size %)',
+    v_profile_count, v_batch_size;
+
+  LOOP
+    SELECT ARRAY_AGG(batch.id ORDER BY batch.id)
+    INTO v_batch_ids
+    FROM (
+      SELECT cp.id
+      FROM public.creator_profiles cp
+      WHERE cp.id > v_last_id
+      ORDER BY cp.id
+      LIMIT v_batch_size
+    ) batch;
+
+    v_batch_len := COALESCE(array_length(v_batch_ids, 1), 0);
+    EXIT WHEN v_batch_len = 0;
+
+    FOREACH v_profile_id IN ARRAY v_batch_ids
+    LOOP
+      PERFORM public.sync_creator_trust_score_metrics(v_profile_id);
+    END LOOP;
+
+    v_last_id := v_batch_ids[v_batch_len];
+    v_total := v_total + v_batch_len;
+    RAISE NOTICE 'creator metrics backfill: processed % / % profiles',
+      v_total, v_profile_count;
   END LOOP;
+
+  RAISE NOTICE 'creator metrics backfill: complete (% profiles)', v_total;
 END $$;
 
 -- Recreate contests_with_status so new contest columns are exposed to the app.

@@ -481,11 +481,29 @@ CREATE TRIGGER submissions_sync_trust_metrics
   FOR EACH ROW
   EXECUTE FUNCTION public.trg_sync_creator_trust_after_submission();
 
--- One-time backfill of incremental counters from live submission data.
-DO $$
-DECLARE r record;
-BEGIN
-  FOR r IN SELECT id FROM public.creator_profiles LOOP
-    PERFORM public.sync_creator_trust_score_metrics(r.id);
-  END LOOP;
-END $$;
+-- Backfill incremental quality counters from submissions (set-based; avoids
+-- re-running full per-profile sync already done in 20260630).
+WITH scored AS (
+  SELECT
+    s.creator_id,
+    COALESCE(SUM(s.quality_score), 0)::numeric(12, 2) AS quality_sum,
+    COUNT(*)::integer AS scored_count,
+    COUNT(*) FILTER (WHERE s.quality_score = 1)::integer AS score1,
+    COUNT(*) FILTER (WHERE s.quality_score = 2)::integer AS score2,
+    COUNT(*) FILTER (WHERE s.quality_score = 3)::integer AS score3
+  FROM public.submissions s
+  WHERE s.status IN ('verified', 'paid')
+    AND s.quality_score IS NOT NULL
+  GROUP BY s.creator_id
+)
+UPDATE public.creator_profiles cp
+SET
+  quality_score_sum = scored.quality_sum,
+  scored_verified_count = scored.scored_count,
+  quality_score_counts = jsonb_build_object(
+    'score1', scored.score1,
+    'score2', scored.score2,
+    'score3', scored.score3
+  )
+FROM scored
+WHERE cp.id = scored.creator_id;

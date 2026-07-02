@@ -373,7 +373,7 @@ export default function OpportunitiesPage({
     void (async () => {
       setCreatorStatsReady(false);
       try {
-        const res = await fetch("/api/creators/stats");
+        const res = await fetch("/api/creators/stats?fresh=1");
         if (cancelled) return;
         if (!res.ok) {
           setCreatorRequirementsSnapshot(null);

@@ -3,6 +3,11 @@ import { verifyAdminAccess } from "@/utils/admin-auth";
 import { createAdminClient } from "@/utils/supabase/admin";
 import { syncContestToMetrics } from "@/lib/twitter-metrics-sync";
 import { isVideoContestFormat } from "@/lib/trust-score";
+import {
+  hasNormalizedCreatorRequirement,
+  validateCreatorRequirementFields,
+  type CreatorRequirementFieldInput,
+} from "@/lib/contest-creator-requirements-validation";
 
 export async function POST(
   request: Request,
@@ -113,112 +118,48 @@ export async function POST(
       }
     }
 
-    if (updateData.trust_score !== undefined && updateData.trust_score != null) {
-      const trustNum =
-        typeof updateData.trust_score === "number"
-          ? updateData.trust_score
-          : parseInt(String(updateData.trust_score), 10);
-      if (Number.isNaN(trustNum) || trustNum < 0 || trustNum > 100) {
-        return NextResponse.json(
-          { error: "trust_score must be between 0 and 100, or null" },
-          { status: 400 },
-        );
-      }
+    const requirementInput: CreatorRequirementFieldInput = {};
+    if (updateData.trust_score !== undefined) {
+      requirementInput.trust_score = updateData.trust_score;
+    }
+    if (updateData.trust_number !== undefined) {
+      requirementInput.trust_number = updateData.trust_number;
+    }
+    if (updateData.min_best_quality_score !== undefined) {
+      requirementInput.min_best_quality_score = updateData.min_best_quality_score;
+    }
+    if (updateData.min_avg_quality_score !== undefined) {
+      requirementInput.min_avg_quality_score = updateData.min_avg_quality_score;
+    }
+    if (updateData.min_platform_earnings !== undefined) {
+      requirementInput.min_platform_earnings = updateData.min_platform_earnings;
+    }
+    if (updateData.min_platform_views !== undefined) {
+      requirementInput.min_platform_views = updateData.min_platform_views;
     }
 
-    if (updateData.trust_number !== undefined && updateData.trust_number != null) {
-      const trustNumber =
-        typeof updateData.trust_number === "number"
-          ? updateData.trust_number
-          : parseInt(String(updateData.trust_number), 10);
-      if (Number.isNaN(trustNumber)) {
+    if (Object.keys(requirementInput).length > 0) {
+      const requirementValidation =
+        validateCreatorRequirementFields(requirementInput);
+      if (!requirementValidation.ok) {
         return NextResponse.json(
-          { error: "trust_number must be a valid integer, or null" },
+          { error: requirementValidation.error },
           { status: 400 },
         );
       }
-      updateData.trust_number = trustNumber;
-    }
-
-    if (
-      updateData.min_best_quality_score !== undefined &&
-      updateData.min_best_quality_score != null
-    ) {
-      const minBest = Number(updateData.min_best_quality_score);
-      if (
-        !Number.isInteger(minBest) ||
-        minBest < 1 ||
-        minBest > 3
-      ) {
-        return NextResponse.json(
-          { error: "min_best_quality_score must be an integer between 1 and 3, or null" },
-          { status: 400 },
-        );
-      }
-      updateData.min_best_quality_score = minBest;
-    }
-
-    if (
-      updateData.min_avg_quality_score !== undefined &&
-      updateData.min_avg_quality_score != null
-    ) {
-      const minAvg = Number(updateData.min_avg_quality_score);
-      if (!Number.isFinite(minAvg) || minAvg < 1 || minAvg > 3) {
-        return NextResponse.json(
-          { error: "min_avg_quality_score must be between 1 and 3, or null" },
-          { status: 400 },
-        );
-      }
-      updateData.min_avg_quality_score = minAvg;
-    }
-
-    if (
-      updateData.min_platform_earnings !== undefined &&
-      updateData.min_platform_earnings != null
-    ) {
-      const minEarnings =
-        typeof updateData.min_platform_earnings === "number"
-          ? updateData.min_platform_earnings
-          : parseInt(String(updateData.min_platform_earnings), 10);
-      if (!Number.isInteger(minEarnings) || minEarnings <= 0) {
-        return NextResponse.json(
-          { error: "min_platform_earnings must be a positive integer (cents), or null" },
-          { status: 400 },
-        );
-      }
-      updateData.min_platform_earnings = minEarnings;
-    }
-
-    if (
-      updateData.min_platform_views !== undefined &&
-      updateData.min_platform_views != null
-    ) {
-      const minViews =
-        typeof updateData.min_platform_views === "number"
-          ? updateData.min_platform_views
-          : parseInt(String(updateData.min_platform_views), 10);
-      if (!Number.isInteger(minViews) || minViews <= 0) {
-        return NextResponse.json(
-          { error: "min_platform_views must be a positive integer, or null" },
-          { status: 400 },
-        );
-      }
-      updateData.min_platform_views = minViews;
+      Object.assign(updateData, requirementValidation.values);
     }
 
     const admin = createAdminClient();
 
-    const hasCreatorRequirementUpdate =
-      (updateData.trust_score !== undefined && updateData.trust_score != null) ||
-      (updateData.trust_number !== undefined && updateData.trust_number != null) ||
-      (updateData.min_avg_quality_score !== undefined &&
-        updateData.min_avg_quality_score != null) ||
-      (updateData.min_best_quality_score !== undefined &&
-        updateData.min_best_quality_score != null) ||
-      (updateData.min_platform_earnings !== undefined &&
-        updateData.min_platform_earnings != null) ||
-      (updateData.min_platform_views !== undefined &&
-        updateData.min_platform_views != null);
+    const hasCreatorRequirementUpdate = hasNormalizedCreatorRequirement({
+      trust_score: updateData.trust_score,
+      trust_number: updateData.trust_number,
+      min_avg_quality_score: updateData.min_avg_quality_score,
+      min_best_quality_score: updateData.min_best_quality_score,
+      min_platform_earnings: updateData.min_platform_earnings,
+      min_platform_views: updateData.min_platform_views,
+    });
 
     if (hasCreatorRequirementUpdate) {
       const { data: contestRow } = await admin

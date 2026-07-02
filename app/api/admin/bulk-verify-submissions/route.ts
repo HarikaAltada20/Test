@@ -256,7 +256,6 @@ export async function POST(request: Request) {
                 paymentDetails,
                 qualityScore: action === "verified" ? (qualityScore ?? 1) : undefined,
                 skipWalletDebit: skipWalletDebitIds.has(String(id)),
-                skipMetricsRecompute: true,
               }),
             });
 

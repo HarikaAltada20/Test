@@ -100,7 +100,6 @@ function throwIfBatchInsertErrors(
 /** Refresh persisted creator_profiles.trust_score_metrics after a new submission. */
 async function refreshTrustMetricsAfterSubmit() {
   try {
-    await fetch("/api/creators/trust-score", { method: "PATCH" });
     await fetch("/api/creators/stats", { method: "PATCH" });
   } catch (error) {
     console.warn("Failed to refresh creator metrics after submit:", error);
