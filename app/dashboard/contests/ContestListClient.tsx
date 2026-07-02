@@ -99,6 +99,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { ContestRequirementBadges } from "@/components/ContestRequirementBadges";
 
 // Define the type for a campaign
 type Contest = {
@@ -173,6 +174,12 @@ type Contest = {
   bonus_details?: any;
   // Text/image vs video campaign format (for display filtering)
   contest_format?: string | null;
+  trust_score?: number | null;
+  trust_number?: number | null;
+  min_avg_quality_score?: number | null;
+  min_best_quality_score?: number | null;
+  min_platform_earnings?: number | null;
+  min_platform_views?: number | null;
   // Twitter participants data (should be populated from twitter_campaign_metrics)
   twitter_participants_count?: number | null;
   twitter_max_participants?: number | null;
@@ -1656,6 +1663,11 @@ export function ContestListClient({
                 </Badge>
               )}
               {renderAdminSubmissionBadges(contest, "compact")}
+              <ContestRequirementBadges
+                contest={contest}
+                isDark={isDark}
+                size="compact"
+              />
             </div>
           </CardHeader>
           <CardContent className="p-4 pt-1 flex-grow flex flex-col justify-between">
@@ -2076,7 +2088,7 @@ export function ContestListClient({
               </h3>
             </div>
 
-            <div className="flex items-center gap-2 mb-3">
+            <div className="flex flex-wrap items-center gap-2 mb-3">
               <Badge
                 variant="outline"
                 className="text-sm  bg-[#7F39EC] text-white py-1 capitalize"
@@ -2089,6 +2101,11 @@ export function ContestListClient({
               >
                 {getContestTypeLabel(contest.contest_type)}
               </Badge>
+              <ContestRequirementBadges
+                contest={contest}
+                isDark={isDark}
+                size="compact"
+              />
             </div>
 
             <div
@@ -2465,6 +2482,11 @@ export function ContestListClient({
                   </Badge>
                 )}
                 {renderAdminSubmissionBadges(contest, "default")}
+                <ContestRequirementBadges
+                  contest={contest}
+                  isDark={isDark}
+                  size="default"
+                />
               </div>
             </CardHeader>
             <CardContent className="p-0 pt-2 flex-1">
@@ -2903,7 +2925,7 @@ export function ContestListClient({
             </h3>
           </div>
 
-          <div className="flex items-center gap-2 mb-3">
+          <div className="flex flex-wrap items-center gap-2 mb-3">
             <Badge
               variant="outline"
               className="text-sm bg-[#7F39EC] text-white py-1 capitalize"
@@ -2916,6 +2938,11 @@ export function ContestListClient({
             >
               {getContestTypeLabel(contest.contest_type)}
             </Badge>
+            <ContestRequirementBadges
+              contest={contest}
+              isDark={isDark}
+              size="compact"
+            />
           </div>
 
           <div

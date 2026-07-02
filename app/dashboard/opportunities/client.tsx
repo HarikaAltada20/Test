@@ -113,8 +113,8 @@ import CreatorParticipationOnboardingModal, {
 import { PageLoadingSpinner } from "@/components/loading/LoadingSpinner";
 import Link from "next/link";
 import { PaginationControls } from "@/components/ui/pagination-controls";
+import { ContestRequirementBadges } from "@/components/ContestRequirementBadges";
 import {
-  buildRequirementBadgeLabels,
   isCreatorEligibleForContest,
   parseContestCreatorRequirements,
   type CreatorRequirementsSnapshot,
@@ -1913,20 +1913,6 @@ export default function OpportunitiesPage({
                 }
                 return null;
               })()}
-              {buildRequirementBadgeLabels(contest).slice(0, 2).map((label) => (
-                <Badge
-                  key={label}
-                  variant="outline"
-                  className={cn(
-                    "text-xs px-2 py-0.5 font-medium",
-                    isDark
-                      ? "bg-amber-900/20 text-amber-200 border-amber-700/50"
-                      : "bg-amber-50 text-amber-800 border-amber-200",
-                  )}
-                >
-                  Requires {label}
-                </Badge>
-              ))}
               {/* Content Type Badge - Don't show for Twitter text_image contests (we show campaign_type badge instead) */}
               {(() => {
                 const isTwitterTextImage =
@@ -1993,6 +1979,13 @@ export default function OpportunitiesPage({
                   Bonus Available
                 </Badge>
               )}
+              <ContestRequirementBadges
+                contest={contest}
+                snapshot={creatorRequirementsSnapshot}
+                isDark={isDark}
+                size="default"
+                showEligibility
+              />
             </div>
           </CardHeader>
           <CardContent className="p-0 pt-2 flex-1">
@@ -3165,6 +3158,13 @@ export default function OpportunitiesPage({
                             Bonus Available
                           </Badge>
                         )}
+                        <ContestRequirementBadges
+                          contest={contest}
+                          snapshot={creatorRequirementsSnapshot}
+                          isDark={isDark}
+                          size="compact"
+                          showEligibility
+                        />
                       </div>
 
                       <div className="flex items-center">

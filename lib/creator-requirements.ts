@@ -113,32 +113,101 @@ export function hasAnyContestCreatorRequirement(
   );
 }
 
+export type RequirementBadgeItem = {
+  key: string;
+  shortLabel: string;
+  valueLabel: string;
+  fullLabel: string;
+};
+
+function formatRequirementViews(value: number): string {
+  if (value >= 1_000_000) {
+    const millions = value / 1_000_000;
+    return millions >= 10
+      ? `${Math.round(millions)}M`
+      : `${millions.toFixed(1).replace(/\.0$/, "")}M`;
+  }
+  if (value >= 1_000) {
+    const thousands = value / 1_000;
+    return thousands >= 10
+      ? `${Math.round(thousands)}K`
+      : `${thousands.toFixed(1).replace(/\.0$/, "")}K`;
+  }
+  return value.toLocaleString();
+}
+
+export function buildRequirementBadgeItems(
+  contest: ContestCreatorRequirements,
+): RequirementBadgeItem[] {
+  const req = parseContestCreatorRequirements(contest);
+  const badges: RequirementBadgeItem[] = [];
+
+  if (req.minTrustScorePct !== null) {
+    const valueLabel = formatTrustScoreMinimum(req.minTrustScorePct);
+    badges.push({
+      key: "trust-pct",
+      shortLabel: "Trust %",
+      valueLabel,
+      fullLabel: `Trust % ${valueLabel} required`,
+    });
+  }
+  if (req.minTrustNumber !== null) {
+    badges.push({
+      key: "trust-number",
+      shortLabel: "Trust Score",
+      valueLabel: `${req.minTrustNumber}`,
+      fullLabel: `Trust Score ${req.minTrustNumber} required`,
+    });
+  }
+  if (req.minBestQuality !== null) {
+    badges.push({
+      key: "best-quality",
+      shortLabel: "Best Quality",
+      valueLabel: `${req.minBestQuality}`,
+      fullLabel: `Best quality ${req.minBestQuality} required`,
+    });
+  }
+  if (req.minAvgQuality !== null) {
+    const rounded = Math.round(req.minAvgQuality * 100) / 100;
+    const formatted = Number.isInteger(rounded)
+      ? String(rounded)
+      : rounded.toFixed(2).replace(/\.?0+$/, "");
+    badges.push({
+      key: "avg-quality",
+      shortLabel: "Average Quality",
+      valueLabel: formatted,
+      fullLabel: `Average quality ${formatted} required`,
+    });
+  }
+  if (req.minPlatformEarningsCents !== null) {
+    const dollars = req.minPlatformEarningsCents / 100;
+    const valueLabel = `$${dollars >= 1000 ? Math.round(dollars).toLocaleString() : dollars.toFixed(0)}`;
+    badges.push({
+      key: "platform-earnings",
+      shortLabel: "Earn",
+      valueLabel,
+      fullLabel: `Platform earnings ${valueLabel} required`,
+    });
+  }
+  if (req.minPlatformViews !== null) {
+    const valueLabel = formatRequirementViews(req.minPlatformViews);
+    badges.push({
+      key: "platform-views",
+      shortLabel: "Views",
+      valueLabel,
+      fullLabel: `Platform views ${req.minPlatformViews.toLocaleString()} required`,
+    });
+  }
+
+  return badges;
+}
+
 export function buildRequirementBadgeLabels(
   contest: ContestCreatorRequirements,
 ): string[] {
-  const req = parseContestCreatorRequirements(contest);
-  const badges: string[] = [];
-  if (req.minTrustScorePct !== null) {
-    badges.push(`Trust % ${formatTrustScoreMinimum(req.minTrustScorePct)}`);
-  }
-  if (req.minTrustNumber !== null) {
-    badges.push(`Trust Score ${req.minTrustNumber}+`);
-  }
-  if (req.minBestQuality !== null) {
-    badges.push(`Best quality ${req.minBestQuality}+`);
-  }
-  if (req.minAvgQuality !== null) {
-    badges.push(`Avg quality ${req.minAvgQuality}+`);
-  }
-  if (req.minPlatformEarningsCents !== null) {
-    badges.push(
-      `Earnings $${(req.minPlatformEarningsCents / 100).toFixed(0)}+`,
-    );
-  }
-  if (req.minPlatformViews !== null) {
-    badges.push(`Views ${req.minPlatformViews.toLocaleString()}+`);
-  }
-  return badges;
+  return buildRequirementBadgeItems(contest).map(
+    (item) => `${item.shortLabel} ${item.valueLabel}`,
+  );
 }
 
 export type ContestEligibilityDisplayItem = {

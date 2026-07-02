@@ -2522,7 +2522,8 @@ function DashboardContent({
                                           : "text-white"
                                       )}
                                     >
-                                      Edit Profile
+                                     
+                                     Profile
                                     </div>
                                   </div>
                                   <ChevronRight
