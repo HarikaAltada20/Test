@@ -4,6 +4,25 @@ Deploy **database migrations and application code in the same release window**. 
 
 **Do not deploy app code before migrations finish, or run migrations without deploying app immediately after.** Partial deploy leaves verify flows without quality-score enforcement and profile metrics without incremental triggers.
 
+## Atomic deploy (required)
+
+Treat migrations + app as **one release**. Do not leave production in a mixed state.
+
+| Step | Action | If skipped |
+| ---- | ------ | ---------- |
+| 1 | Run migrations 1→7 to completion on the target environment | App crashes or verify/gate logic is inconsistent |
+| 2 | Deploy app **immediately** after migrations succeed | Verify API may 400; triggers/columns missing |
+| 3 | Run smoke tests below before routing traffic | Gate drift or broken verify flows go unnoticed |
+
+**Never:** deploy app first, run migrations later, or pause between migration 7 and app deploy.
+
+Gate rules are enforced in **two places** that must stay aligned:
+
+- **App:** `lib/creator-requirements.ts` (`evaluateCreatorRequirements`)
+- **DB:** `public.enforce_submission_creator_requirements()` (migrations 6–7)
+
+After changing gate semantics, update both and run `lib/creator-requirements.test.ts` plus a gated submit smoke test.
+
 ## Required migration order
 
 Run in filename order (do not skip or reorder):
@@ -18,26 +37,35 @@ Run in filename order (do not skip or reorder):
 | 6   | `20260704_backfilled_quality_and_contest_gates.sql`            | Backfilled-quality gate rules + contest requirement validation on write    |
 | 7   | `20260705_explicit_quality_metrics_only.sql`                   | Explicit-only quality aggregates + verified quality_score DB enforcement   |
 
-## Breaking API changes
+## Verify API: `qualityScore`
 
-After this release, **verify actions require `qualityScore` (1–3)** in the request body:
+For `action: "verified"` on:
 
-- `POST /api/admin/verify-submission` — `action: "verified"`
-- `POST /api/admin/bulk-verify-submissions` — `action: "verified"`
+- `POST /api/admin/verify-submission`
+- `POST /api/admin/bulk-verify-submissions`
 
-Scripts, integrations, or Postman collections must send `qualityScore` or verification returns **400**.
+| `qualityScore` in body | Behavior |
+| ---------------------- | -------- |
+| `1`, `2`, or `3`       | Used as-is |
+| Omitted / `null` / `""` | **Defaults to `1`** (backward-compatible for scripts) |
+| Any other value        | **400** — must be 1, 2, or 3 |
+
+The admin UI always prompts for an explicit score via `VerifyQualityDialog`. Scripts may omit `qualityScore` and get the default.
 
 Trust/quality profile updates after verify are handled by DB triggers (`submissions_sync_trust_metrics`). Do not rely on app-side recompute during deploy; ensure migration 4+ is applied before traffic hits the new app.
 
 ## Deploy steps
 
-1. **Staging:** run migrations 1→7, then deploy app.
+1. **Staging:** run migrations 1→7, then deploy app in the same window.
 2. **Smoke test:**
    - Verify/reject a submission → creator trust + quality update on profile
+   - Verify without `qualityScore` in API body → succeeds with score `1`
    - Submit to a gated campaign → UI gate, `POST /api/creators/stats`, and DB trigger agree
-   - Bulk verify requires explicit `qualityScore` (1–3)
+   - Bulk verify with explicit `qualityScore` (1–3)
+   - PATCH quality score on verified submission → response `creatorQuality` matches live submissions
    - Legacy creator with only backfilled scores → quality gates skipped until first explicit verify score
    - Creator with explicit scores → avg/best excludes backfilled rows only
+   - Re-check eligibility after another admin verify/reject (submit error mentions refresh if DB gate fires)
 3. **Production:** run migrations 1→7, then deploy app immediately after.
 4. **Post-deploy:** sample creators for trust % changes; monitor submission insert errors.
 

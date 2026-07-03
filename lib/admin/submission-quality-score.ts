@@ -1,7 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {
+  getCreatorQualityMetricsLive,
   parseQualityScore,
-  parseQualityScoreCounts,
   type QualityScore,
 } from "@/lib/quality-score";
 
@@ -15,42 +15,23 @@ export type CreatorQualitySnapshot = {
   };
 };
 
-export async function fetchCreatorQualitySnapshots(
+async function fetchCreatorQualitySnapshotsLive(
   supabaseAdmin: SupabaseClient,
   creatorIds: string[],
 ): Promise<Record<string, CreatorQualitySnapshot>> {
   const uniqueIds = [...new Set(creatorIds.filter(Boolean))];
-  if (uniqueIds.length === 0) return {};
-
-  const { data: rows, error } = await supabaseAdmin
-    .from("creator_profiles")
-    .select("id, avg_quality_score, best_quality_score, quality_score_counts")
-    .in("id", uniqueIds);
-
-  if (error) {
-    console.error(
-      "[submission-quality-score] Failed to load creator quality snapshots:",
-      error,
-    );
-    return {};
-  }
-
   const snapshots: Record<string, CreatorQualitySnapshot> = {};
-  (rows || []).forEach((row) => {
-    const creatorId = String(row.id || "");
-    if (!creatorId) return;
-    snapshots[creatorId] = {
-      avg_quality_score:
-        row.avg_quality_score === null || row.avg_quality_score === undefined
-          ? null
-          : Number(row.avg_quality_score),
-      best_quality_score:
-        row.best_quality_score === null || row.best_quality_score === undefined
-          ? null
-          : Number(row.best_quality_score),
-      quality_score_counts: parseQualityScoreCounts(row.quality_score_counts),
-    };
-  });
+
+  await Promise.all(
+    uniqueIds.map(async (creatorId) => {
+      const metrics = await getCreatorQualityMetricsLive(supabaseAdmin, creatorId);
+      snapshots[creatorId] = {
+        avg_quality_score: metrics.avg_quality_score,
+        best_quality_score: metrics.best_quality_score,
+        quality_score_counts: metrics.quality_score_counts,
+      };
+    }),
+  );
 
   return snapshots;
 }
@@ -124,7 +105,7 @@ export async function updateSubmissionQualityScores(
   const creatorIds = updatedRows
     .map((row) => String(row.creator_id || ""))
     .filter(Boolean);
-  const creatorQualityByCreatorId = await fetchCreatorQualitySnapshots(
+  const creatorQualityByCreatorId = await fetchCreatorQualitySnapshotsLive(
     supabaseAdmin,
     creatorIds,
   );

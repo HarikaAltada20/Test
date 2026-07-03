@@ -152,17 +152,20 @@ export async function POST(request: Request) {
       );
     }
 
+    let resolvedBulkQualityScore: 1 | 2 | 3 | undefined;
     if (action === "verified") {
-      const { requireVerifyQualityScore } = await import("@/lib/quality-score");
-      if (requireVerifyQualityScore(qualityScore) === null) {
+      const { resolveVerifyQualityScore } = await import("@/lib/quality-score");
+      const parsed = resolveVerifyQualityScore(qualityScore);
+      if (parsed === null) {
         return NextResponse.json(
           {
             error:
-              "qualityScore must be 1, 2, or 3 when bulk verifying submissions",
+              "qualityScore must be 1, 2, or 3 when bulk verifying submissions (omit to default to 1)",
           },
           { status: 400 },
         );
       }
+      resolvedBulkQualityScore = parsed;
     }
 
     const { isAdmin, error: adminError } = await verifyAdminAccess();
@@ -267,7 +270,8 @@ export async function POST(request: Request) {
                 action,
                 reason,
                 paymentDetails,
-                qualityScore: action === "verified" ? qualityScore : undefined,
+                qualityScore:
+                  action === "verified" ? resolvedBulkQualityScore : undefined,
                 skipWalletDebit: skipWalletDebitIds.has(String(id)),
               }),
             });

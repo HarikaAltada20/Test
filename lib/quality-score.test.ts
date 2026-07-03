@@ -4,6 +4,7 @@ import {
   aggregateSubmissionQualityRows,
   computePersistableQualityProfileValues,
   requireVerifyQualityScore,
+  resolveVerifyQualityScore,
   resolveCreatorQualityMetrics,
 } from "./quality-score";
 
@@ -19,6 +20,25 @@ describe("requireVerifyQualityScore", () => {
     assert.equal(requireVerifyQualityScore(1), 1);
     assert.equal(requireVerifyQualityScore("2"), 2);
     assert.equal(requireVerifyQualityScore(3), 3);
+  });
+});
+
+describe("resolveVerifyQualityScore", () => {
+  it("defaults missing values to 1 for backward-compatible verify calls", () => {
+    assert.equal(resolveVerifyQualityScore(undefined), 1);
+    assert.equal(resolveVerifyQualityScore(null), 1);
+    assert.equal(resolveVerifyQualityScore(""), 1);
+  });
+
+  it("accepts scores 1 through 3", () => {
+    assert.equal(resolveVerifyQualityScore(2), 2);
+    assert.equal(resolveVerifyQualityScore("3"), 3);
+  });
+
+  it("returns null for invalid explicit values", () => {
+    assert.equal(resolveVerifyQualityScore(0), null);
+    assert.equal(resolveVerifyQualityScore(4), null);
+    assert.equal(resolveVerifyQualityScore("high"), null);
   });
 });
 

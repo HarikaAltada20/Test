@@ -63,23 +63,25 @@ function formatSubmissionInsertError(error: {
     return "This video has already been submitted to this campaign.";
   }
   const msg = error?.message || "";
+  const refreshHint =
+    " Refresh the page — your eligibility may have changed since you started submitting.";
   if (msg.includes("trust_score_too_low")) {
-    return "Trust % too low to submit to this campaign.";
+    return `Trust % too low to submit to this campaign.${refreshHint}`;
   }
   if (msg.includes("trust_number_too_low")) {
-    return "Trust Number too low to submit to this campaign.";
+    return `Trust Number too low to submit to this campaign.${refreshHint}`;
   }
   if (msg.includes("best_quality_too_low")) {
-    return "Best quality too low to submit to this campaign.";
+    return `Best quality too low to submit to this campaign.${refreshHint}`;
   }
   if (msg.includes("avg_quality_too_low")) {
-    return "Average quality too low to submit to this campaign.";
+    return `Average quality too low to submit to this campaign.${refreshHint}`;
   }
   if (msg.includes("platform_earnings_too_low")) {
-    return "Platform earnings too low to submit to this campaign.";
+    return `Platform earnings too low to submit to this campaign.${refreshHint}`;
   }
   if (msg.includes("platform_views_too_low")) {
-    return "Platform views too low to submit to this campaign.";
+    return `Platform views too low to submit to this campaign.${refreshHint}`;
   }
   return msg || "Failed to submit content";
 }

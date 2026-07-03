@@ -19,6 +19,12 @@ import {
   type CreatorQualityMetrics,
 } from "@/lib/quality-score";
 
+/**
+ * Creator contest gate rules for the app layer.
+ * DB enforcement mirror: `public.enforce_submission_creator_requirements()` (see migrations).
+ * Keep evaluateCreatorRequirements in sync when changing gate semantics.
+ */
+
 export type ContestCreatorRequirements = {
   contest_format?: string | null;
   trust_score?: unknown;

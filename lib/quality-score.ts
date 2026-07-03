@@ -97,9 +97,23 @@ export function requireVerifyQualityScore(value: unknown): QualityScore | null {
   return parseQualityScore(value);
 }
 
-/** @deprecated Use requireVerifyQualityScore — verify actions must pass an explicit score. */
+/**
+ * Resolve quality score for verify actions.
+ * Missing/empty values default to 1 for backward-compatible scripts and integrations.
+ * Invalid values (e.g. 0, 4) return null.
+ */
+export function resolveVerifyQualityScore(value: unknown): QualityScore | null {
+  const parsed = parseQualityScore(value);
+  if (parsed !== null) return parsed;
+  if (value === undefined || value === null || value === "") {
+    return CREATOR_DEFAULT_QUALITY_SCORE;
+  }
+  return null;
+}
+
+/** @deprecated Use resolveVerifyQualityScore or requireVerifyQualityScore. */
 export function normalizeVerifyQualityScore(value: unknown): QualityScore | null {
-  return requireVerifyQualityScore(value);
+  return resolveVerifyQualityScore(value);
 }
 
 export type PersistableQualityProfileValues = {
@@ -238,11 +252,9 @@ export async function fetchLiveQualityMetricsByCreatorIds(
     .eq("quality_score_backfilled", false);
 
   if (error) {
-    console.error(
-      "[quality-score] Failed to fetch submissions for live quality metrics:",
-      error,
+    throw new Error(
+      error.message || "Failed to fetch submissions for live quality metrics",
     );
-    return {};
   }
 
   const scoresByCreator: Record<string, number[]> = {};

@@ -356,11 +356,14 @@ export async function POST(request: Request) {
     }
 
     if (action === "verified") {
-      const { requireVerifyQualityScore } = await import("@/lib/quality-score");
-      const parsedQualityScore = requireVerifyQualityScore(qualityScore);
+      const { resolveVerifyQualityScore } = await import("@/lib/quality-score");
+      const parsedQualityScore = resolveVerifyQualityScore(qualityScore);
       if (parsedQualityScore === null) {
         return NextResponse.json(
-          { error: "qualityScore must be 1, 2, or 3 when verifying a submission" },
+          {
+            error:
+              "qualityScore must be 1, 2, or 3 when verifying a submission (omit to default to 1)",
+          },
           { status: 400 },
         );
       }
