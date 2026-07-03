@@ -269,7 +269,6 @@ export async function POST(request: Request) {
                 paymentDetails,
                 qualityScore: action === "verified" ? qualityScore : undefined,
                 skipWalletDebit: skipWalletDebitIds.has(String(id)),
-                skipMetricsRecompute: true,
               }),
             });
 
@@ -311,30 +310,6 @@ export async function POST(request: Request) {
           });
         }
       });
-    }
-
-    const METRICS_RECOMPUTE_ACTIONS = new Set([
-      "verified",
-      "rejected",
-      "pending",
-      "paid",
-    ]);
-    if (results.length > 0 && METRICS_RECOMPUTE_ACTIONS.has(action)) {
-      const supabaseAdmin = createAdminClient();
-      const processedIds = results.map((r) => r.id);
-      const { data: submissionRows } = await supabaseAdmin
-        .from("submissions")
-        .select("creator_id")
-        .in("id", processedIds);
-      const creatorIds = (submissionRows || [])
-        .map((row) => row.creator_id)
-        .filter((id): id is string => typeof id === "string" && id.length > 0);
-      if (creatorIds.length > 0) {
-        const { recomputeCreatorProfileMetricsForIds } = await import(
-          "@/lib/creator-requirements"
-        );
-        await recomputeCreatorProfileMetricsForIds(supabaseAdmin, creatorIds);
-      }
     }
 
     return NextResponse.json({

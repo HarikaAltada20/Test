@@ -18,6 +18,7 @@ const baseSnapshot = {
   verifiedReels: 5,
   rejectedReels: 0,
   pendingReels: 0,
+  hasExplicitQualityScores: true,
 };
 
 describe("parseContestCreatorRequirements", () => {
@@ -100,6 +101,24 @@ describe("evaluateCreatorRequirements", () => {
     assert.equal(failures.length, 1);
     assert.equal(failures[0].code, "best_quality_too_low");
   });
+
+  it("skips quality gates when creator only has migration-backfilled scores", () => {
+    const requirements = parseContestCreatorRequirements({
+      contest_format: "video",
+      min_best_quality_score: 3,
+      min_avg_quality_score: 2.5,
+    });
+    const failures = evaluateCreatorRequirements({
+      requirements,
+      snapshot: {
+        ...baseSnapshot,
+        avgQualityScore: 1,
+        bestQualityScore: 1,
+        hasExplicitQualityScores: false,
+      },
+    });
+    assert.deepEqual(failures, []);
+  });
 });
 
 describe("buildCreatorRequirementsSnapshotFromProfile", () => {
@@ -117,12 +136,14 @@ describe("buildCreatorRequirementsSnapshotFromProfile", () => {
       best_quality_score: 3,
       total_money_won: 12_500,
       total_views: 80_000,
+      has_explicit_quality_scores: true,
     });
 
     assert.equal(snapshot.trustScorePct, 80);
     assert.equal(snapshot.trustNumber, 4);
     assert.equal(snapshot.avgQualityScore, 2);
     assert.equal(snapshot.bestQualityScore, 3);
+    assert.equal(snapshot.hasExplicitQualityScores, true);
     assert.equal(snapshot.totalPlatformEarningsCents, 12_500);
     assert.equal(snapshot.totalViews, 80_000);
     assert.equal(snapshot.verifiedReels, 5);

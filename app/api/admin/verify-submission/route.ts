@@ -71,7 +71,7 @@ export async function POST(request: Request) {
       cpm_refunded_cents?: number;
       milestone_refunded_cents?: number;
     } | null = null;
-    const { submissionId, action, reason, paymentDetails, skipWalletDebit, qualityScore, skipMetricsRecompute } =
+    const { submissionId, action, reason, paymentDetails, skipWalletDebit, qualityScore } =
       await request.json();
 
     if (!submissionId || !action) {
@@ -365,8 +365,10 @@ export async function POST(request: Request) {
         );
       }
       updateData.quality_score = parsedQualityScore;
+      updateData.quality_score_backfilled = false;
     } else if (action === "rejected" || action === "pending") {
       updateData.quality_score = null;
+      updateData.quality_score_backfilled = false;
     }
 
     // Use admin client to bypass RLS for the update operation
@@ -1906,34 +1908,6 @@ export async function POST(request: Request) {
       )
       .eq("id", submissionId)
       .single();
-
-    // Creator trust/quality caches are updated by the DB trigger on status/quality
-    // changes. Recompute as a safety net if triggers are missing or counters drift.
-    const METRICS_RECOMPUTE_ACTIONS = new Set([
-      "verified",
-      "rejected",
-      "pending",
-      "paid",
-    ]);
-    if (
-      latestSubmission?.creator_id &&
-      METRICS_RECOMPUTE_ACTIONS.has(action) &&
-      skipMetricsRecompute !== true
-    ) {
-      const { recomputeCreatorProfileMetrics } = await import(
-        "@/lib/creator-requirements"
-      );
-      const recomputeResult = await recomputeCreatorProfileMetrics(
-        supabaseAdmin,
-        latestSubmission.creator_id,
-      );
-      if (!recomputeResult.ok) {
-        console.error(
-          "[verify-submission] creator metrics recompute failed:",
-          recomputeResult.errors.join("; "),
-        );
-      }
-    }
 
     let message = `Submission ${action} successfully${
       action === "rejected" ? ` with reason: ${reason}` : ""

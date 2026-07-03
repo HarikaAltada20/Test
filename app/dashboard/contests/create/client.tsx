@@ -51,6 +51,7 @@ import {
   isMilestoneContestType,
 } from "@/lib/contest-type";
 import { isVideoContestFormat } from "@/lib/trust-score";
+import { sanitizeContestCreatorRequirementPayload } from "@/lib/contest-creator-requirements-validation";
 import { formatCurrencyFromCents } from "@/lib/currency-utils";
 import {
   shouldSkipBeforeUnload,
@@ -3666,6 +3667,28 @@ export default function CreateContestPage({
             : null,
         // Note: flat_fee_bonus is now stored in contest_based_details (in cents)
       };
+
+      const requirementSanitized = sanitizeContestCreatorRequirementPayload({
+        contest_format: contestFormat,
+        fields: {
+          trust_score: contestData.trust_score,
+          trust_number: contestData.trust_number,
+          min_best_quality_score: contestData.min_best_quality_score,
+          min_avg_quality_score: contestData.min_avg_quality_score,
+          min_platform_earnings: contestData.min_platform_earnings,
+          min_platform_views: contestData.min_platform_views,
+        },
+      });
+      if (!requirementSanitized.ok) {
+        toast({
+          title: "Invalid creator requirements",
+          description: requirementSanitized.error,
+          variant: "destructive",
+        });
+        setIsLoading(false);
+        return;
+      }
+      Object.assign(contestData, requirementSanitized.values);
 
       let responseData, responseError;
       console.log("=== Database operation decision ===");

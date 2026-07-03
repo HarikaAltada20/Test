@@ -46,6 +46,8 @@ export type CreatorRequirementsSnapshot = {
   verifiedReels: number;
   rejectedReels: number;
   pendingReels: number;
+  /** False when all verified quality scores are migration backfills — quality gates are skipped. */
+  hasExplicitQualityScores: boolean;
 };
 
 function parseOptionalPositiveInt(value: unknown): number | null {
@@ -331,7 +333,7 @@ export function buildRequirementChecklist(input: {
     });
   }
 
-  if (req.minBestQuality !== null) {
+  if (req.minBestQuality !== null && snapshot.hasExplicitQualityScores) {
     const yours = formatQualityScoreDisplay(snapshot.bestQualityScore);
     items.push({
       code: "best_quality_too_low",
@@ -344,7 +346,7 @@ export function buildRequirementChecklist(input: {
     });
   }
 
-  if (req.minAvgQuality !== null) {
+  if (req.minAvgQuality !== null && snapshot.hasExplicitQualityScores) {
     const yours = formatQualityScoreDisplay(snapshot.avgQualityScore);
     items.push({
       code: "avg_quality_too_low",
@@ -410,7 +412,7 @@ export function evaluateCreatorRequirements(input: {
     });
   }
 
-  if (req.minBestQuality !== null) {
+  if (req.minBestQuality !== null && snapshot.hasExplicitQualityScores) {
     if (
       snapshot.bestQualityScore === null ||
       snapshot.bestQualityScore < req.minBestQuality
@@ -422,7 +424,7 @@ export function evaluateCreatorRequirements(input: {
     }
   }
 
-  if (req.minAvgQuality !== null) {
+  if (req.minAvgQuality !== null && snapshot.hasExplicitQualityScores) {
     if (
       snapshot.avgQualityScore === null ||
       snapshot.avgQualityScore < req.minAvgQuality
@@ -537,6 +539,7 @@ export function buildCreatorRequirementsSnapshotFromProfile(
     verifiedReels: stats.trustMetrics.verified_reels,
     rejectedReels: stats.trustMetrics.rejected_reels,
     pendingReels: stats.trustMetrics.pending_reels,
+    hasExplicitQualityScores: profile?.has_explicit_quality_scores === true,
   };
 }
 
@@ -547,7 +550,7 @@ export async function getCreatorRequirementsSnapshot(
   const { data: profile, error } = await supabase
     .from("creator_profiles")
     .select(
-      "trust_score_metrics, avg_quality_score, best_quality_score, total_money_won, total_views",
+      "trust_score_metrics, avg_quality_score, best_quality_score, total_money_won, total_views, has_explicit_quality_scores",
     )
     .eq("id", creatorId)
     .maybeSingle();

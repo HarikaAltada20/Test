@@ -137,6 +137,7 @@ import {
   isMilestoneContestType,
 } from "@/lib/contest-type";
 import { isVideoContestFormat } from "@/lib/trust-score";
+import { sanitizeContestCreatorRequirementPayload } from "@/lib/contest-creator-requirements-validation";
 
 // Dynamically import the Novel editor
 const NovelEditor = dynamic(() => import("@/components/novel-editor"), {
@@ -265,17 +266,7 @@ function buildCreatorRequirementFields(
   contestFormat: string | null | undefined,
   state: CreatorRequirementFormState,
 ) {
-  if (!isVideoContestFormat(contestFormat)) {
-    return {
-      trust_score: null,
-      trust_number: null,
-      min_best_quality_score: null,
-      min_avg_quality_score: null,
-      min_platform_earnings: null,
-      min_platform_views: null,
-    };
-  }
-  return {
+  const fields = {
     trust_score:
       state.trustScoreEnabled && state.contestTrustScore !== ""
         ? Number(state.contestTrustScore)
@@ -301,6 +292,15 @@ function buildCreatorRequirementFields(
         ? Number(state.contestMinPlatformViews)
         : null,
   };
+
+  const sanitized = sanitizeContestCreatorRequirementPayload({
+    contest_format: contestFormat,
+    fields,
+  });
+  if (!sanitized.ok) {
+    throw new Error(sanitized.error);
+  }
+  return sanitized.values;
 }
 
 type ResolvedContestType = "leaderboard" | "cpm" | "milestone" | "dual_rewards";

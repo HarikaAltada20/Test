@@ -29,7 +29,7 @@ export async function loadCreatorStatsResponse(
   const { data: profile, error: profileError } = await supabase
     .from("creator_profiles")
     .select(
-      "trust_score_metrics, avg_quality_score, best_quality_score, total_money_won, total_views",
+      "trust_score_metrics, avg_quality_score, best_quality_score, total_money_won, total_views, has_explicit_quality_scores",
     )
     .eq("id", userId)
     .maybeSingle();
@@ -63,14 +63,6 @@ export async function checkContestRequirementsResponse(
   userId: string,
   contestId: string,
 ) {
-  const recomputeResult = await recomputeCreatorProfileMetrics(supabase, userId);
-  if (!recomputeResult.ok) {
-    return NextResponse.json(
-      { error: recomputeResult.errors.join("; ") },
-      { status: 500 },
-    );
-  }
-
   const result = await assertCreatorMeetsContestRequirements(
     supabase,
     contestId,
@@ -96,14 +88,6 @@ export async function evaluateContestEligibilityResponse(
   userId: string,
   contestId: string,
 ) {
-  const recomputeResult = await recomputeCreatorProfileMetrics(supabase, userId);
-  if (!recomputeResult.ok) {
-    return NextResponse.json(
-      { error: recomputeResult.errors.join("; ") },
-      { status: 500 },
-    );
-  }
-
   const { data: contest, error: contestError } = await supabase
     .from("contests")
     .select(

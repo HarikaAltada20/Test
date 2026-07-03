@@ -12,6 +12,7 @@ export type CreatorProfileStatsSource = {
   best_quality_score?: unknown;
   total_money_won?: unknown;
   total_views?: unknown;
+  has_explicit_quality_scores?: unknown;
 };
 
 export type CreatorProfileStats = {

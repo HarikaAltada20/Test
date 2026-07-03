@@ -1,3 +1,5 @@
+import { isVideoContestFormat } from "@/lib/trust-score";
+
 export type CreatorRequirementFieldInput = {
   trust_score?: unknown;
   trust_number?: unknown;
@@ -15,6 +17,28 @@ export type NormalizedCreatorRequirementFields = {
   min_platform_earnings?: number | null;
   min_platform_views?: number | null;
 };
+
+export function sanitizeContestCreatorRequirementPayload(input: {
+  contest_format?: string | null;
+  fields: CreatorRequirementFieldInput;
+}):
+  | { ok: true; values: NormalizedCreatorRequirementFields }
+  | { ok: false; error: string } {
+  if (!isVideoContestFormat(input.contest_format)) {
+    return {
+      ok: true,
+      values: {
+        trust_score: null,
+        trust_number: null,
+        min_avg_quality_score: null,
+        min_best_quality_score: null,
+        min_platform_earnings: null,
+        min_platform_views: null,
+      },
+    };
+  }
+  return validateCreatorRequirementFields(input.fields);
+}
 
 export function validateCreatorRequirementFields(
   fields: CreatorRequirementFieldInput,

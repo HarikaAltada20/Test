@@ -415,6 +415,10 @@ export default function OpportunitiesPage({
               data.rejectedReels ?? data.trust_metrics?.rejected_reels ?? 0,
             pendingReels:
               data.pendingReels ?? data.trust_metrics?.pending_reels ?? 0,
+            hasExplicitQualityScores:
+              data.hasExplicitQualityScores ??
+              data.snapshot?.hasExplicitQualityScores ??
+              false,
           } satisfies CreatorRequirementsSnapshot);
         setCreatorRequirementsSnapshot(snapshot);
         setCreatorStatsReady(true);

@@ -1,10 +1,22 @@
 -- Backfill historical quality scores + metrics reconciliation helpers.
 -- Run after 20260702_incremental_creator_metrics.sql.
 
--- Default historical verified/paid submissions to 1/3 so existing creators are not
--- blocked by quality gates before admins re-score individually.
+ALTER TABLE public.submissions
+  ADD COLUMN IF NOT EXISTS quality_score_backfilled boolean NOT NULL DEFAULT false;
+
+COMMENT ON COLUMN public.submissions.quality_score_backfilled IS
+  'True when quality_score was set by migration backfill. Quality campaign gates are skipped until a score is assigned at verify.';
+
+ALTER TABLE public.creator_profiles
+  ADD COLUMN IF NOT EXISTS has_explicit_quality_scores boolean NOT NULL DEFAULT false;
+
+COMMENT ON COLUMN public.creator_profiles.has_explicit_quality_scores IS
+  'True when the creator has at least one verified/paid submission scored at verify (not migration backfill).';
+
+-- Default historical verified/paid submissions to 1/3 for profile aggregates.
+-- Mark as backfilled so quality gates do not block creators until re-scored at verify.
 UPDATE public.submissions
-SET quality_score = 1
+SET quality_score = 1, quality_score_backfilled = true
 WHERE status IN ('verified', 'paid')
   AND quality_score IS NULL;
 

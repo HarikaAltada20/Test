@@ -109,7 +109,7 @@ export async function updateSubmissionQualityScores(
 
   const { data: updatedRows, error: updateError } = await supabaseAdmin
     .from("submissions")
-    .update({ quality_score: qualityScore })
+    .update({ quality_score: qualityScore, quality_score_backfilled: false })
     .in("id", uniqueIds)
     .select("id, status, quality_score, creator_id");
 

@@ -6,22 +6,23 @@ Deploy **database migrations and application code in the same release window**. 
 
 Run in filename order (do not skip or reorder):
 
-| # | Migration | Purpose |
-|---|-----------|---------|
-| 1 | `20260629_trust_score_formula_and_trust_number.sql` | New trust formula + `contests.trust_number` |
-| 2 | `20260630_quality_score_and_creator_requirements.sql` | Quality scores, creator gates, `contests_with_status` view |
-| 3 | `20260701_creator_quality_gate_consistency.sql` | Live fallback in submission gate trigger |
-| 4 | `20260702_incremental_creator_metrics.sql` | O(1) incremental trust/quality counters |
-| 5 | `20260703_backfill_quality_scores_and_reconcile.sql` | Historical quality backfill + reconciliation helpers |
+| #   | Migration                                                      | Purpose                                                                    |
+| --- | -------------------------------------------------------------- | -------------------------------------------------------------------------- |
+| 1   | `20260629_trust_score_formula_and_trust_number.sql`            | New trust formula + `contests.trust_number`                                |
+| 2   | `20260630_quality_score_and_creator_requirements.sql`          | Quality scores, creator gates, `contests_with_status` view                 |
+| 3   | `20260701_creator_quality_gate_consistency.sql`                | Live fallback in submission gate trigger                                   |
+| 4   | `20260702_incremental_creator_metrics.sql`                     | O(1) incremental trust/quality counters                                    |
+| 5   | `20260703_backfill_quality_scores_and_reconcile.sql`           | Historical quality backfill + reconciliation helpers                       |
+| 6   | `20260704_backfilled_quality_and_contest_gates.sql` | Backfilled-quality gate rules + contest requirement validation on write |
 
 ## Deploy steps
 
-1. **Staging:** run migrations 1→5, then deploy app.
+1. **Staging:** run migrations 1→6, then deploy app.
 2. **Smoke test:**
    - Verify/reject a submission → creator trust + quality update on profile
    - Submit to a gated campaign → UI gate, `POST /api/creators/stats`, and DB trigger agree
    - Bulk verify requires explicit `qualityScore` (1–3)
-3. **Production:** run migrations 1→5, then deploy app immediately after.
+3. **Production:** run migrations 1→6, then deploy app immediately after.
 4. **Post-deploy:** sample creators for trust % changes; monitor submission insert errors.
 
 ## Ops: metrics reconciliation
