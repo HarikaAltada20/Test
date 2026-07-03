@@ -5755,7 +5755,7 @@ export default function ContestDetailClient({
           action: newStatus,
           reason: reason || null,
           paymentDetails: paymentDetails || null,
-          qualityScore: options?.qualityScore ?? (newStatus === "verified" ? 1 : undefined),
+          qualityScore: options?.qualityScore,
         }),
       });
 
@@ -6212,7 +6212,7 @@ export default function ContestDetailClient({
               submissionIds: normalIds,
               action: normalAction,
               reason,
-              qualityScore: options?.qualityScore ?? (normalAction === "verified" ? 1 : undefined),
+              qualityScore: options?.qualityScore,
             }),
           }).then((res) => res.json()),
         );

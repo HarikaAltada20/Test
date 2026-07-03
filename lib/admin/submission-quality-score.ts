@@ -1,6 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {
-  getCreatorQualityMetricsLive,
+  fetchLiveQualityMetricsByCreatorIds,
   parseQualityScore,
   type QualityScore,
 } from "@/lib/quality-score";
@@ -20,18 +20,24 @@ async function fetchCreatorQualitySnapshotsLive(
   creatorIds: string[],
 ): Promise<Record<string, CreatorQualitySnapshot>> {
   const uniqueIds = [...new Set(creatorIds.filter(Boolean))];
-  const snapshots: Record<string, CreatorQualitySnapshot> = {};
-
-  await Promise.all(
-    uniqueIds.map(async (creatorId) => {
-      const metrics = await getCreatorQualityMetricsLive(supabaseAdmin, creatorId);
-      snapshots[creatorId] = {
-        avg_quality_score: metrics.avg_quality_score,
-        best_quality_score: metrics.best_quality_score,
-        quality_score_counts: metrics.quality_score_counts,
-      };
-    }),
+  const liveByCreatorId = await fetchLiveQualityMetricsByCreatorIds(
+    supabaseAdmin,
+    uniqueIds,
   );
+
+  const snapshots: Record<string, CreatorQualitySnapshot> = {};
+  for (const creatorId of uniqueIds) {
+    const metrics = liveByCreatorId[creatorId];
+    snapshots[creatorId] = {
+      avg_quality_score: metrics?.avg_quality_score ?? null,
+      best_quality_score: metrics?.best_quality_score ?? null,
+      quality_score_counts: metrics?.quality_score_counts ?? {
+        score1: 0,
+        score2: 0,
+        score3: 0,
+      },
+    };
+  }
 
   return snapshots;
 }

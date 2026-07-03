@@ -301,15 +301,27 @@ export function buildContestEligibilityDisplayItems(
   return items;
 }
 
-export type RequirementFailure = {
-  code: string;
-  message: string;
-};
+/**
+ * Quality gates apply when the creator has explicit verify-time scores, or when they
+ * have no verified reels yet (new creator default 1/1). Skipped only for legacy
+ * creators whose verified scores are migration backfills (verified > 0, no explicit).
+ */
+export function shouldApplyQualityGates(
+  snapshot: Pick<
+    CreatorRequirementsSnapshot,
+    "hasExplicitQualityScores" | "verifiedReels"
+  >,
+): boolean {
+  if (snapshot.hasExplicitQualityScores) return true;
+  if (snapshot.verifiedReels > 0) return false;
+  return true;
+}
 
 /**
  * App-layer gate failure codes from evaluateCreatorRequirements.
  * Must stay aligned with SQL RAISE EXCEPTION prefixes in
- * public.enforce_submission_creator_requirements() (migrations 6–7).
+ * public.enforce_submission_creator_requirements() (migrations 6–8).
+ * Quality gate application: shouldApplyQualityGates().
  */
 export const CREATOR_REQUIREMENT_FAILURE_CODES = [
   "trust_score_too_low",
@@ -358,7 +370,7 @@ export function buildRequirementChecklist(input: {
     });
   }
 
-  if (req.minBestQuality !== null && snapshot.hasExplicitQualityScores) {
+  if (req.minBestQuality !== null && shouldApplyQualityGates(snapshot)) {
     const yours = formatQualityScoreDisplay(snapshot.bestQualityScore);
     items.push({
       code: "best_quality_too_low",
@@ -371,7 +383,7 @@ export function buildRequirementChecklist(input: {
     });
   }
 
-  if (req.minAvgQuality !== null && snapshot.hasExplicitQualityScores) {
+  if (req.minAvgQuality !== null && shouldApplyQualityGates(snapshot)) {
     const yours = formatQualityScoreDisplay(snapshot.avgQualityScore);
     items.push({
       code: "avg_quality_too_low",
@@ -437,7 +449,7 @@ export function evaluateCreatorRequirements(input: {
     });
   }
 
-  if (req.minBestQuality !== null && snapshot.hasExplicitQualityScores) {
+  if (req.minBestQuality !== null && shouldApplyQualityGates(snapshot)) {
     if (
       snapshot.bestQualityScore === null ||
       snapshot.bestQualityScore < req.minBestQuality
@@ -449,7 +461,7 @@ export function evaluateCreatorRequirements(input: {
     }
   }
 
-  if (req.minAvgQuality !== null && snapshot.hasExplicitQualityScores) {
+  if (req.minAvgQuality !== null && shouldApplyQualityGates(snapshot)) {
     if (
       snapshot.avgQualityScore === null ||
       snapshot.avgQualityScore < req.minAvgQuality
@@ -571,6 +583,7 @@ export function buildCreatorRequirementsSnapshotFromProfile(
 export async function getCreatorRequirementsSnapshot(
   supabase: SupabaseClient,
   creatorId: string,
+  options?: { forGateCheck?: boolean },
 ): Promise<CreatorRequirementsSnapshot> {
   const { data: profile, error } = await supabase
     .from("creator_profiles")
@@ -587,7 +600,14 @@ export async function getCreatorRequirementsSnapshot(
   const snapshot = buildCreatorRequirementsSnapshotFromProfile(profile);
   const storedTrust = parseStoredCreatorTrustMetrics(profile?.trust_score_metrics);
 
-  if (
+  if (options?.forGateCheck) {
+    const liveTrust = await getCreatorTrustMetricsLive(supabase, creatorId);
+    snapshot.trustScorePct = liveTrust.trust_score;
+    snapshot.trustNumber = liveTrust.trust_number;
+    snapshot.verifiedReels = liveTrust.verified_reels;
+    snapshot.rejectedReels = liveTrust.rejected_reels;
+    snapshot.pendingReels = liveTrust.pending_reels;
+  } else if (
     storedTrust?.trust_score == null ||
     storedTrust?.trust_number == null ||
     !Number.isFinite(storedTrust.trust_score) ||
@@ -601,10 +621,15 @@ export async function getCreatorRequirementsSnapshot(
     snapshot.pendingReels = liveTrust.pending_reels;
   }
 
-  if (profile?.has_explicit_quality_scores === true) {
-    const liveQuality = await getCreatorQualityMetricsLive(supabase, creatorId);
-    snapshot.avgQualityScore = liveQuality.avg_quality_score;
-    snapshot.bestQualityScore = liveQuality.best_quality_score;
+  if (
+    profile?.has_explicit_quality_scores === true ||
+    (options?.forGateCheck && shouldApplyQualityGates(snapshot))
+  ) {
+    if (snapshot.hasExplicitQualityScores) {
+      const liveQuality = await getCreatorQualityMetricsLive(supabase, creatorId);
+      snapshot.avgQualityScore = liveQuality.avg_quality_score;
+      snapshot.bestQualityScore = liveQuality.best_quality_score;
+    }
   }
 
   return snapshot;
@@ -654,7 +679,9 @@ export async function assertCreatorMeetsContestRequirements(
   }
 
   try {
-    const snapshot = await getCreatorRequirementsSnapshot(supabase, creatorId);
+    const snapshot = await getCreatorRequirementsSnapshot(supabase, creatorId, {
+      forGateCheck: true,
+    });
     const failures = evaluateCreatorRequirements({ requirements, snapshot });
     if (failures.length > 0) {
       return {

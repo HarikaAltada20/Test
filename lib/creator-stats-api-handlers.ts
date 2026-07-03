@@ -101,7 +101,9 @@ export async function evaluateContestEligibilityResponse(
   }
 
   const requirements = parseContestCreatorRequirements(contest);
-  const snapshot = await getCreatorRequirementsSnapshot(supabase, userId);
+  const snapshot = await getCreatorRequirementsSnapshot(supabase, userId, {
+    forGateCheck: true,
+  });
   const failures = evaluateCreatorRequirements({ requirements, snapshot });
 
   return NextResponse.json({

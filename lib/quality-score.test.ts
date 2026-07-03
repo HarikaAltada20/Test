@@ -5,7 +5,7 @@ import {
   computePersistableQualityProfileValues,
   requireVerifyQualityScore,
   resolveVerifyQualityScore,
-  resolveVerifyQualityScoreWithMeta,
+  isVerifyQualityScoreOmitted,
   resolveCreatorQualityMetrics,
 } from "./quality-score";
 
@@ -13,6 +13,7 @@ describe("requireVerifyQualityScore", () => {
   it("returns null when score is missing or invalid", () => {
     assert.equal(requireVerifyQualityScore(undefined), null);
     assert.equal(requireVerifyQualityScore(null), null);
+    assert.equal(requireVerifyQualityScore(""), null);
     assert.equal(requireVerifyQualityScore(0), null);
     assert.equal(requireVerifyQualityScore(4), null);
   });
@@ -25,37 +26,24 @@ describe("requireVerifyQualityScore", () => {
 });
 
 describe("resolveVerifyQualityScore", () => {
-  it("defaults missing values to 1 for backward-compatible verify calls", () => {
-    assert.equal(resolveVerifyQualityScore(undefined), 1);
-    assert.equal(resolveVerifyQualityScore(null), 1);
-    assert.equal(resolveVerifyQualityScore(""), 1);
+  it("requires an explicit score (no server default)", () => {
+    assert.equal(resolveVerifyQualityScore(undefined), null);
+    assert.equal(resolveVerifyQualityScore(null), null);
+    assert.equal(resolveVerifyQualityScore(""), null);
   });
 
   it("accepts scores 1 through 3", () => {
     assert.equal(resolveVerifyQualityScore(2), 2);
     assert.equal(resolveVerifyQualityScore("3"), 3);
   });
-
-  it("returns null for invalid explicit values", () => {
-    assert.equal(resolveVerifyQualityScore(0), null);
-    assert.equal(resolveVerifyQualityScore(4), null);
-    assert.equal(resolveVerifyQualityScore("high"), null);
-  });
 });
 
-describe("resolveVerifyQualityScoreWithMeta", () => {
-  it("marks omitted values as defaulted", () => {
-    assert.deepEqual(resolveVerifyQualityScoreWithMeta(undefined), {
-      score: 1,
-      defaulted: true,
-    });
-  });
-
-  it("does not mark explicit scores as defaulted", () => {
-    assert.deepEqual(resolveVerifyQualityScoreWithMeta(2), {
-      score: 2,
-      defaulted: false,
-    });
+describe("isVerifyQualityScoreOmitted", () => {
+  it("detects missing body values", () => {
+    assert.equal(isVerifyQualityScoreOmitted(undefined), true);
+    assert.equal(isVerifyQualityScoreOmitted(null), true);
+    assert.equal(isVerifyQualityScoreOmitted(""), true);
+    assert.equal(isVerifyQualityScoreOmitted(1), false);
   });
 });
 

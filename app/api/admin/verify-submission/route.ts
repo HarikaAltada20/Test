@@ -71,7 +71,6 @@ export async function POST(request: Request) {
       cpm_refunded_cents?: number;
       milestone_refunded_cents?: number;
     } | null = null;
-    let qualityScoreDefaulted = false;
     const { submissionId, action, reason, paymentDetails, skipWalletDebit, qualityScore } =
       await request.json();
 
@@ -357,26 +356,18 @@ export async function POST(request: Request) {
     }
 
     if (action === "verified") {
-      const { resolveVerifyQualityScoreWithMeta } = await import(
-        "@/lib/quality-score"
-      );
-      const resolvedQuality = resolveVerifyQualityScoreWithMeta(qualityScore);
-      if (resolvedQuality === null) {
+      const { requireVerifyQualityScore } = await import("@/lib/quality-score");
+      const parsedQualityScore = requireVerifyQualityScore(qualityScore);
+      if (parsedQualityScore === null) {
         return NextResponse.json(
           {
             error:
-              "qualityScore must be 1, 2, or 3 when verifying a submission (omit to default to 1)",
+              "qualityScore is required and must be 1, 2, or 3 when verifying a submission",
           },
           { status: 400 },
         );
       }
-      if (resolvedQuality.defaulted) {
-        qualityScoreDefaulted = true;
-        console.warn(
-          "[verify-submission] qualityScore omitted — defaulting to 1. Pass an explicit 1–3 score.",
-        );
-      }
-      updateData.quality_score = resolvedQuality.score;
+      updateData.quality_score = parsedQualityScore;
       updateData.quality_score_backfilled = false;
     } else if (action === "rejected" || action === "pending") {
       updateData.quality_score = null;
@@ -1939,7 +1930,6 @@ export async function POST(request: Request) {
       success: true,
       submission: latestSubmission || updatedSubmission,
       message,
-      ...(qualityScoreDefaulted ? { qualityScoreDefaulted: true } : {}),
       ...(paidStatusReversalSummary
         ? { refund_summary: paidStatusReversalSummary }
         : {}),

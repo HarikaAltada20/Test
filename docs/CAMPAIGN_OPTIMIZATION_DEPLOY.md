@@ -10,7 +10,7 @@ Treat migrations + app as **one release**. Do not leave production in a mixed st
 
 | Step | Action | If skipped |
 | ---- | ------ | ---------- |
-| 1 | Run migrations 1→7 to completion on the target environment | App crashes or verify/gate logic is inconsistent |
+| 1 | Run migrations 1→8 to completion on the target environment | App crashes or verify/gate logic is inconsistent |
 | 2 | Deploy app **immediately** after migrations succeed | Verify API may 400; triggers/columns missing |
 | 3 | Run smoke tests below before routing traffic | Gate drift or broken verify flows go unnoticed |
 
@@ -36,6 +36,7 @@ Run in filename order (do not skip or reorder):
 | 5   | `20260703_backfill_quality_scores_and_reconcile.sql`           | Historical quality backfill + reconciliation helpers                       |
 | 6   | `20260704_backfilled_quality_and_contest_gates.sql`            | Backfilled-quality gate rules + contest requirement validation on write    |
 | 7   | `20260705_explicit_quality_metrics_only.sql`                   | Explicit-only quality aggregates + verified quality_score DB enforcement   |
+| 8   | `20260706_quality_gates_new_creators.sql`                    | Quality gates for new creators (default 1/1); skip backfill-only legacy    |
 
 Migration 7 rebuilds avg/best quality and `has_explicit_quality_scores` with **set-based SQL** (no per-creator loop). Still plan a short maintenance window on large databases for migrations 5–7 backfills.
 
@@ -49,26 +50,26 @@ For `action: "verified"` on:
 | `qualityScore` in body | Behavior |
 | ---------------------- | -------- |
 | `1`, `2`, or `3`       | Used as-is |
-| Omitted / `null` / `""` | **Defaults to `1`** (backward-compatible for scripts). Response includes `qualityScoreDefaulted: true` and server logs a warning. |
+| Omitted / `null` / `""` | **400** — explicit score required |
 | Any other value        | **400** — must be 1, 2, or 3 |
 
-The admin UI always prompts for an explicit score via `VerifyQualityDialog`. Scripts may omit `qualityScore` and get the default; prefer passing an explicit score in integrations.
+The admin UI prompts via `VerifyQualityDialog` before verify. Scripts and integrations **must** send `qualityScore`; there is no server-side default.
 
 Trust/quality profile updates after verify are handled by DB triggers (`submissions_sync_trust_metrics`). Do not rely on app-side recompute during deploy; ensure migration 4+ is applied before traffic hits the new app.
 
 ## Deploy steps
 
-1. **Staging:** run migrations 1→7, then deploy app in the same window.
+1. **Staging:** run migrations 1→8, then deploy app in the same window.
 2. **Smoke test:**
    - Verify/reject a submission → creator trust + quality update on profile
-   - Verify without `qualityScore` in API body → succeeds with score `1`
+   - Verify without `qualityScore` in API body → **400**
    - Submit to a gated campaign → UI gate, `POST /api/creators/stats`, and DB trigger agree
    - Bulk verify with explicit `qualityScore` (1–3)
    - PATCH quality score on verified submission → response `creatorQuality` matches live submissions
    - Legacy creator with only backfilled scores → quality gates skipped until first explicit verify score
    - Creator with explicit scores → avg/best excludes backfilled rows only
    - Re-check eligibility after another admin verify/reject (submit error mentions refresh if DB gate fires)
-3. **Production:** run migrations 1→7, then deploy app immediately after.
+3. **Production:** run migrations 1→8, then deploy app immediately after.
 4. **Post-deploy:** sample creators for trust % changes; monitor submission insert errors.
 
 ## Ops: metrics reconciliation

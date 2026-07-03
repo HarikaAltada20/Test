@@ -6,6 +6,7 @@ import {
   isCreatorEligibleForContest,
   parseContestCreatorRequirements,
   buildCreatorRequirementsSnapshotFromProfile,
+  shouldApplyQualityGates,
 } from "./creator-requirements";
 import { getCreatorStatsFromProfile } from "./creator-profile-stats";
 
@@ -97,6 +98,7 @@ describe("evaluateCreatorRequirements", () => {
         bestQualityScore: 1,
         verifiedReels: 0,
         rejectedReels: 0,
+        hasExplicitQualityScores: false,
       },
     });
     assert.equal(failures.length, 1);
@@ -109,14 +111,17 @@ describe("evaluateCreatorRequirements", () => {
       min_best_quality_score: 3,
       min_avg_quality_score: 2.5,
     });
+    const backfilledSnapshot = {
+      ...baseSnapshot,
+      avgQualityScore: 1,
+      bestQualityScore: 1,
+      verifiedReels: 5,
+      hasExplicitQualityScores: false,
+    };
+    assert.equal(shouldApplyQualityGates(backfilledSnapshot), false);
     const failures = evaluateCreatorRequirements({
       requirements,
-      snapshot: {
-        ...baseSnapshot,
-        avgQualityScore: 1,
-        bestQualityScore: 1,
-        hasExplicitQualityScores: false,
-      },
+      snapshot: backfilledSnapshot,
     });
     assert.deepEqual(failures, []);
   });

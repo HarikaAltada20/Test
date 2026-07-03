@@ -101,34 +101,14 @@ export function isVerifyQualityScoreOmitted(value: unknown): boolean {
   return value === undefined || value === null || value === "";
 }
 
-export type ResolvedVerifyQualityScore = {
-  score: QualityScore;
-  defaulted: boolean;
-};
-
-/**
- * Resolve quality score for verify actions.
- * Missing/empty values default to 1 for backward-compatible scripts and integrations.
- * Invalid values (e.g. 0, 4) return null.
- */
-export function resolveVerifyQualityScoreWithMeta(
-  value: unknown,
-): ResolvedVerifyQualityScore | null {
-  const parsed = parseQualityScore(value);
-  if (parsed !== null) return { score: parsed, defaulted: false };
-  if (isVerifyQualityScoreOmitted(value)) {
-    return { score: CREATOR_DEFAULT_QUALITY_SCORE, defaulted: true };
-  }
-  return null;
-}
-
+/** @deprecated Use requireVerifyQualityScore — verify requires an explicit 1–3 score. */
 export function resolveVerifyQualityScore(value: unknown): QualityScore | null {
-  return resolveVerifyQualityScoreWithMeta(value)?.score ?? null;
+  return requireVerifyQualityScore(value);
 }
 
-/** @deprecated Use resolveVerifyQualityScore or requireVerifyQualityScore. */
+/** @deprecated Use requireVerifyQualityScore — verify requires an explicit 1–3 score. */
 export function normalizeVerifyQualityScore(value: unknown): QualityScore | null {
-  return resolveVerifyQualityScore(value);
+  return requireVerifyQualityScore(value);
 }
 
 export type PersistableQualityProfileValues = {
