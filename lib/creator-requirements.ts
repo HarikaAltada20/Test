@@ -165,7 +165,7 @@ export function buildRequirementBadgeItems(
   if (req.minTrustNumber !== null) {
     badges.push({
       key: "trust-number",
-      shortLabel: "Trust Number",
+      shortLabel: "Trust Score",
       valueLabel: `${req.minTrustNumber}`,
       fullLabel: `Trust Number ${req.minTrustNumber} required`,
     });
@@ -255,7 +255,7 @@ export function buildContestEligibilityDisplayItems(
   if (req.minTrustNumber !== null) {
     items.push({
       key: "trust-number",
-      label: "Trust Number",
+      label: "Trust Score",
       value: `${req.minTrustNumber}`,
       description:
         "Verified submissions minus rejected ones. This number grows when more of your content is approved.",
@@ -335,6 +335,11 @@ export const CREATOR_REQUIREMENT_FAILURE_CODES = [
 export type CreatorRequirementFailureCode =
   (typeof CREATOR_REQUIREMENT_FAILURE_CODES)[number];
 
+export type RequirementFailure = {
+  code: CreatorRequirementFailureCode;
+  message: string;
+};
+
 export type RequirementCheckItem = {
   code: string;
   label: string;
@@ -363,7 +368,7 @@ export function buildRequirementChecklist(input: {
   if (req.minTrustNumber !== null) {
     items.push({
       code: "trust_number_too_low",
-      label: "Trust Number",
+      label: "Trust Score",
       requiredLabel: `${req.minTrustNumber}`,
       yoursLabel: `${snapshot.trustNumber}`,
       passed: snapshot.trustNumber >= req.minTrustNumber,

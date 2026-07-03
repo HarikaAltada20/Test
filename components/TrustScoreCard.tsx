@@ -78,7 +78,7 @@ export function TrustScoreCard({
                 isDark ? "text-slate-200" : "text-slate-700",
               )}
             >
-              Trust Number: {metrics?.trust_number ?? 0}
+              Trust Score: {metrics?.trust_number ?? 0}
             </div>
 
             <div className="overflow-x-auto">
