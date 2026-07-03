@@ -1,6 +1,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import {
+  CREATOR_REQUIREMENT_FAILURE_CODES,
   evaluateCreatorRequirements,
   isCreatorEligibleForContest,
   parseContestCreatorRequirements,
@@ -189,5 +190,60 @@ describe("buildCreatorRequirementsSnapshotFromProfile", () => {
     assert.equal(snapshot.trustNumber, stats.trustMetrics.trust_number);
     assert.equal(snapshot.avgQualityScore, stats.qualityMetrics.avg_quality_score);
     assert.equal(snapshot.bestQualityScore, stats.qualityMetrics.best_quality_score);
+  });
+});
+
+describe("CREATOR_REQUIREMENT_FAILURE_CODES", () => {
+  it("matches codes emitted by evaluateCreatorRequirements", () => {
+    const scenarios: Array<{
+      contest: Parameters<typeof parseContestCreatorRequirements>[0];
+      snapshot: typeof baseSnapshot;
+      expectedCode: (typeof CREATOR_REQUIREMENT_FAILURE_CODES)[number];
+    }> = [
+      {
+        contest: { contest_format: "video", trust_score: 90 },
+        snapshot: { ...baseSnapshot, trustScorePct: 50 },
+        expectedCode: "trust_score_too_low",
+      },
+      {
+        contest: { contest_format: "video", trust_number: 10 },
+        snapshot: { ...baseSnapshot, trustNumber: 2 },
+        expectedCode: "trust_number_too_low",
+      },
+      {
+        contest: { contest_format: "video", min_best_quality_score: 3 },
+        snapshot: { ...baseSnapshot, bestQualityScore: 2 },
+        expectedCode: "best_quality_too_low",
+      },
+      {
+        contest: { contest_format: "video", min_avg_quality_score: 2.5 },
+        snapshot: { ...baseSnapshot, avgQualityScore: 1.5 },
+        expectedCode: "avg_quality_too_low",
+      },
+      {
+        contest: { contest_format: "video", min_platform_earnings: 50_000 },
+        snapshot: { ...baseSnapshot, totalPlatformEarningsCents: 1_000 },
+        expectedCode: "platform_earnings_too_low",
+      },
+      {
+        contest: { contest_format: "video", min_platform_views: 100_000 },
+        snapshot: { ...baseSnapshot, totalViews: 1_000 },
+        expectedCode: "platform_views_too_low",
+      },
+    ];
+
+    for (const { contest, snapshot, expectedCode } of scenarios) {
+      const failures = evaluateCreatorRequirements({
+        requirements: parseContestCreatorRequirements(contest),
+        snapshot,
+      });
+      assert.equal(failures.length, 1, `expected one failure for ${expectedCode}`);
+      assert.equal(failures[0]?.code, expectedCode);
+      assert.ok(
+        CREATOR_REQUIREMENT_FAILURE_CODES.includes(
+          failures[0]?.code as (typeof CREATOR_REQUIREMENT_FAILURE_CODES)[number],
+        ),
+      );
+    }
   });
 });

@@ -543,20 +543,61 @@ WHERE NOT EXISTS (
     AND s.quality_score_backfilled = false
 );
 
-DO $$
-DECLARE
-  v_creator_id uuid;
-BEGIN
-  FOR v_creator_id IN
-    SELECT DISTINCT s.creator_id
-    FROM public.submissions s
-    WHERE s.creator_id IS NOT NULL
-  LOOP
-    PERFORM public.sync_creator_quality_metrics(v_creator_id);
-    PERFORM public.sync_creator_explicit_quality_flag(v_creator_id);
-  END LOOP;
-END $$;
+-- Refresh avg/best and explicit-quality flag in bulk (set-based; avoids per-creator loop).
+WITH creator_counts AS (
+  SELECT
+    s.creator_id,
+    COUNT(*) FILTER (WHERE s.status IN ('verified', 'paid'))::integer AS verified,
+    COUNT(*) FILTER (WHERE s.status = 'rejected')::integer AS rejected
+  FROM public.submissions s
+  WHERE s.creator_id IS NOT NULL
+  GROUP BY s.creator_id
+),
+explicit_quality AS (
+  SELECT
+    s.creator_id,
+    ROUND(AVG(s.quality_score)::numeric, 2) AS avg_quality,
+    CASE
+      WHEN COUNT(*) FILTER (WHERE s.quality_score = 3) > 0 THEN 3
+      WHEN COUNT(*) FILTER (WHERE s.quality_score = 2) > 0 THEN 2
+      WHEN COUNT(*) FILTER (WHERE s.quality_score = 1) > 0 THEN 1
+      ELSE NULL
+    END AS best_quality
+  FROM public.submissions s
+  WHERE s.creator_id IS NOT NULL
+    AND s.status IN ('verified', 'paid')
+    AND s.quality_score IS NOT NULL
+    AND s.quality_score_backfilled = false
+  GROUP BY s.creator_id
+)
+UPDATE public.creator_profiles cp
+SET
+  avg_quality_score = CASE
+    WHEN COALESCE(cc.verified, 0) > 0 THEN eq.avg_quality
+    WHEN COALESCE(cc.rejected, 0) > 0 THEN NULL
+    ELSE 1
+  END,
+  best_quality_score = CASE
+    WHEN COALESCE(cc.verified, 0) > 0 THEN eq.best_quality
+    WHEN COALESCE(cc.rejected, 0) > 0 THEN NULL
+    ELSE 1
+  END
+FROM creator_counts cc
+LEFT JOIN explicit_quality eq ON eq.creator_id = cc.creator_id
+WHERE cp.id = cc.creator_id;
 
+UPDATE public.creator_profiles cp
+SET has_explicit_quality_scores = EXISTS (
+  SELECT 1
+  FROM public.submissions s
+  WHERE s.creator_id = cp.id
+    AND s.status IN ('verified', 'paid')
+    AND s.quality_score IS NOT NULL
+    AND s.quality_score_backfilled = false
+);
+
+-- Gate semantics mirror lib/creator-requirements.ts (evaluateCreatorRequirements).
+-- RAISE EXCEPTION prefixes must match CREATOR_REQUIREMENT_FAILURE_CODES in that file.
 CREATE OR REPLACE FUNCTION public.enforce_submission_creator_requirements()
 RETURNS TRIGGER
 LANGUAGE plpgsql

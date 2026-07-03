@@ -153,10 +153,13 @@ export async function POST(request: Request) {
     }
 
     let resolvedBulkQualityScore: 1 | 2 | 3 | undefined;
+    let bulkQualityScoreDefaulted = false;
     if (action === "verified") {
-      const { resolveVerifyQualityScore } = await import("@/lib/quality-score");
-      const parsed = resolveVerifyQualityScore(qualityScore);
-      if (parsed === null) {
+      const { resolveVerifyQualityScoreWithMeta } = await import(
+        "@/lib/quality-score"
+      );
+      const resolved = resolveVerifyQualityScoreWithMeta(qualityScore);
+      if (resolved === null) {
         return NextResponse.json(
           {
             error:
@@ -165,7 +168,13 @@ export async function POST(request: Request) {
           { status: 400 },
         );
       }
-      resolvedBulkQualityScore = parsed;
+      if (resolved.defaulted) {
+        console.warn(
+          "[bulk-verify-submissions] qualityScore omitted — defaulting to 1. Pass an explicit 1–3 score.",
+        );
+        bulkQualityScoreDefaulted = true;
+      }
+      resolvedBulkQualityScore = resolved.score;
     }
 
     const { isAdmin, error: adminError } = await verifyAdminAccess();
@@ -322,6 +331,7 @@ export async function POST(request: Request) {
       failed: errors.length,
       results,
       errors,
+      ...(bulkQualityScoreDefaulted ? { qualityScoreDefaulted: true } : {}),
     });
   } catch (error: unknown) {
     console.error("[bulk-verify-submissions] Error:", error);

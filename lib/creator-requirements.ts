@@ -306,6 +306,23 @@ export type RequirementFailure = {
   message: string;
 };
 
+/**
+ * App-layer gate failure codes from evaluateCreatorRequirements.
+ * Must stay aligned with SQL RAISE EXCEPTION prefixes in
+ * public.enforce_submission_creator_requirements() (migrations 6–7).
+ */
+export const CREATOR_REQUIREMENT_FAILURE_CODES = [
+  "trust_score_too_low",
+  "trust_number_too_low",
+  "best_quality_too_low",
+  "avg_quality_too_low",
+  "platform_earnings_too_low",
+  "platform_views_too_low",
+] as const;
+
+export type CreatorRequirementFailureCode =
+  (typeof CREATOR_REQUIREMENT_FAILURE_CODES)[number];
+
 export type RequirementCheckItem = {
   code: string;
   label: string;

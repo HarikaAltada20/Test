@@ -5,6 +5,7 @@ import {
   computePersistableQualityProfileValues,
   requireVerifyQualityScore,
   resolveVerifyQualityScore,
+  resolveVerifyQualityScoreWithMeta,
   resolveCreatorQualityMetrics,
 } from "./quality-score";
 
@@ -39,6 +40,22 @@ describe("resolveVerifyQualityScore", () => {
     assert.equal(resolveVerifyQualityScore(0), null);
     assert.equal(resolveVerifyQualityScore(4), null);
     assert.equal(resolveVerifyQualityScore("high"), null);
+  });
+});
+
+describe("resolveVerifyQualityScoreWithMeta", () => {
+  it("marks omitted values as defaulted", () => {
+    assert.deepEqual(resolveVerifyQualityScoreWithMeta(undefined), {
+      score: 1,
+      defaulted: true,
+    });
+  });
+
+  it("does not mark explicit scores as defaulted", () => {
+    assert.deepEqual(resolveVerifyQualityScoreWithMeta(2), {
+      score: 2,
+      defaulted: false,
+    });
   });
 });
 

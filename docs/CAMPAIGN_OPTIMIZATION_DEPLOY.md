@@ -37,6 +37,8 @@ Run in filename order (do not skip or reorder):
 | 6   | `20260704_backfilled_quality_and_contest_gates.sql`            | Backfilled-quality gate rules + contest requirement validation on write    |
 | 7   | `20260705_explicit_quality_metrics_only.sql`                   | Explicit-only quality aggregates + verified quality_score DB enforcement   |
 
+Migration 7 rebuilds avg/best quality and `has_explicit_quality_scores` with **set-based SQL** (no per-creator loop). Still plan a short maintenance window on large databases for migrations 5–7 backfills.
+
 ## Verify API: `qualityScore`
 
 For `action: "verified"` on:
@@ -47,10 +49,10 @@ For `action: "verified"` on:
 | `qualityScore` in body | Behavior |
 | ---------------------- | -------- |
 | `1`, `2`, or `3`       | Used as-is |
-| Omitted / `null` / `""` | **Defaults to `1`** (backward-compatible for scripts) |
+| Omitted / `null` / `""` | **Defaults to `1`** (backward-compatible for scripts). Response includes `qualityScoreDefaulted: true` and server logs a warning. |
 | Any other value        | **400** — must be 1, 2, or 3 |
 
-The admin UI always prompts for an explicit score via `VerifyQualityDialog`. Scripts may omit `qualityScore` and get the default.
+The admin UI always prompts for an explicit score via `VerifyQualityDialog`. Scripts may omit `qualityScore` and get the default; prefer passing an explicit score in integrations.
 
 Trust/quality profile updates after verify are handled by DB triggers (`submissions_sync_trust_metrics`). Do not rely on app-side recompute during deploy; ensure migration 4+ is applied before traffic hits the new app.
 

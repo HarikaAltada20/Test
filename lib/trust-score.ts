@@ -228,11 +228,9 @@ export async function fetchLiveTrustMetricsByCreatorIds(
     .in("creator_id", creatorIds);
 
   if (error) {
-    console.error(
-      "[trust-score] Failed to fetch submissions for live trust metrics:",
-      error,
+    throw new Error(
+      error.message || "Failed to fetch submissions for live trust metrics",
     );
-    return {};
   }
 
   const countsByCreator: Record<

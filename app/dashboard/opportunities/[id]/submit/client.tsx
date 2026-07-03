@@ -99,6 +99,39 @@ function throwIfBatchInsertErrors(
   );
 }
 
+/** Server-side pre-submit gate (mirrors DB trigger; call immediately before insert). */
+async function assertContestRequirementsForSubmit(
+  contestId: string,
+): Promise<{ ok: true } | { ok: false; message: string }> {
+  try {
+    const requirementsCheckRes = await fetch("/api/creators/stats", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ contestId }),
+    });
+    if (requirementsCheckRes.ok) {
+      return { ok: true };
+    }
+
+    const checkBody = await requirementsCheckRes.json().catch(() => ({}));
+    const apiFailures = Array.isArray(
+      (checkBody as { failures?: RequirementFailure[] }).failures,
+    )
+      ? (checkBody as { failures: RequirementFailure[] }).failures
+      : [];
+    const message =
+      getRequirementsBlockedMessage(apiFailures) ||
+      (checkBody as { error?: string })?.error ||
+      "Campaign requirements not met.";
+    return { ok: false, message };
+  } catch {
+    return {
+      ok: false,
+      message: "Unable to verify campaign requirements. Please try again.",
+    };
+  }
+}
+
 /** Refresh persisted creator_profiles.trust_score_metrics after a new submission. */
 async function refreshTrustMetricsAfterSubmit() {
   try {
@@ -2618,37 +2651,12 @@ export default function SubmitContentPage({
     }
 
     if (hasRequirements) {
-      try {
-        const requirementsCheckRes = await fetch("/api/creators/stats", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ contestId }),
-        });
-        if (!requirementsCheckRes.ok) {
-          const checkBody = await requirementsCheckRes.json().catch(() => ({}));
-          const apiFailures = Array.isArray(
-            (checkBody as { failures?: RequirementFailure[] }).failures,
-          )
-            ? (checkBody as { failures: RequirementFailure[] }).failures
-            : [];
-          const msg =
-            getRequirementsBlockedMessage(apiFailures) ||
-            (checkBody as { error?: string })?.error ||
-            "Campaign requirements not met.";
-          setError(msg);
-          toast({
-            title: "Cannot submit",
-            description: msg,
-            variant: "destructive",
-          });
-          return;
-        }
-      } catch {
-        const msg = "Unable to verify campaign requirements. Please try again.";
-        setError(msg);
+      const requirementsResult = await assertContestRequirementsForSubmit(contestId);
+      if (!requirementsResult.ok) {
+        setError(requirementsResult.message);
         toast({
           title: "Cannot submit",
-          description: msg,
+          description: requirementsResult.message,
           variant: "destructive",
         });
         return;
@@ -2665,6 +2673,14 @@ export default function SubmitContentPage({
     setMessage(null);
 
     try {
+      if (hasRequirements) {
+        const finalRequirementsResult =
+          await assertContestRequirementsForSubmit(contestId);
+        if (!finalRequirementsResult.ok) {
+          throw new Error(finalRequirementsResult.message);
+        }
+      }
+
       const isMultipleMode = contest?.multiple_submissions_enabled;
       const allYoutubeVideos = [...selectedVideosFromTabs, ...selectedVideos];
       const allInstagramReels = [...selectedReelsFromTabs, ...selectedReels];
