@@ -70,6 +70,17 @@ describe("computeSubmissionMetricsDelta", () => {
     assert.equal(delta.total_reels, 1);
     assert.equal(delta.pending_reels, 1);
   });
+
+  it("ignores backfilled quality on verified submissions", () => {
+    const delta = submissionMetricsContribution({
+      status: "verified",
+      quality_score: 1,
+      quality_score_backfilled: true,
+    });
+    assert.equal(delta.verified_reels, 1);
+    assert.equal(delta.quality_score_sum, 0);
+    assert.equal(delta.scored_verified_count, 0);
+  });
 });
 
 describe("buildCreatorProfileMetricsFromCounters", () => {

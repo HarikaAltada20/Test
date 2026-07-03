@@ -119,6 +119,23 @@ describe("evaluateCreatorRequirements", () => {
     });
     assert.deepEqual(failures, []);
   });
+
+  it("applies quality gates using explicit-only scores once flag is set", () => {
+    const requirements = parseContestCreatorRequirements({
+      contest_format: "video",
+      min_best_quality_score: 3,
+    });
+    const failures = evaluateCreatorRequirements({
+      requirements,
+      snapshot: {
+        ...baseSnapshot,
+        avgQualityScore: 1.06,
+        bestQualityScore: 3,
+        hasExplicitQualityScores: true,
+      },
+    });
+    assert.deepEqual(failures, []);
+  });
 });
 
 describe("buildCreatorRequirementsSnapshotFromProfile", () => {

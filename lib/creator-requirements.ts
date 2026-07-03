@@ -3,6 +3,7 @@ import {
   getContestMinTrustScoreForGate,
   isVideoContestFormat,
   parseStoredCreatorTrustMetrics,
+  getCreatorTrustMetricsLive,
 } from "@/lib/trust-score";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {
@@ -14,6 +15,7 @@ import {
 } from "@/lib/creator-profile-stats";
 import {
   resolveCreatorQualityMetrics,
+  getCreatorQualityMetricsLive,
   type CreatorQualityMetrics,
 } from "@/lib/quality-score";
 
@@ -559,7 +561,30 @@ export async function getCreatorRequirementsSnapshot(
     throw new Error(error.message || "Failed to load creator profile");
   }
 
-  return buildCreatorRequirementsSnapshotFromProfile(profile);
+  const snapshot = buildCreatorRequirementsSnapshotFromProfile(profile);
+  const storedTrust = parseStoredCreatorTrustMetrics(profile?.trust_score_metrics);
+
+  if (
+    storedTrust?.trust_score == null ||
+    storedTrust?.trust_number == null ||
+    !Number.isFinite(storedTrust.trust_score) ||
+    !Number.isFinite(storedTrust.trust_number)
+  ) {
+    const liveTrust = await getCreatorTrustMetricsLive(supabase, creatorId);
+    snapshot.trustScorePct = liveTrust.trust_score;
+    snapshot.trustNumber = liveTrust.trust_number;
+    snapshot.verifiedReels = liveTrust.verified_reels;
+    snapshot.rejectedReels = liveTrust.rejected_reels;
+    snapshot.pendingReels = liveTrust.pending_reels;
+  }
+
+  if (profile?.has_explicit_quality_scores === true) {
+    const liveQuality = await getCreatorQualityMetricsLive(supabase, creatorId);
+    snapshot.avgQualityScore = liveQuality.avg_quality_score;
+    snapshot.bestQualityScore = liveQuality.best_quality_score;
+  }
+
+  return snapshot;
 }
 
 export async function assertCreatorMeetsContestRequirements(

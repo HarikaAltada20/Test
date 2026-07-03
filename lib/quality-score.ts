@@ -166,7 +166,12 @@ export function computeQualityMetricsFromScores(
 type SubmissionQualityRow = {
   status?: string | null;
   quality_score?: number | null;
+  quality_score_backfilled?: boolean | null;
 };
+
+function isExplicitQualitySubmission(row: SubmissionQualityRow): boolean {
+  return row.quality_score_backfilled !== true;
+}
 
 /** Aggregate submission rows into verified/rejected counts and scored quality values. */
 export function aggregateSubmissionQualityRows(rows: SubmissionQualityRow[]): {
@@ -182,6 +187,9 @@ export function aggregateSubmissionQualityRows(rows: SubmissionQualityRow[]): {
     const status = String(row.status || "").toLowerCase();
     if (status === "verified" || status === "paid") {
       verifiedReels += 1;
+      if (!isExplicitQualitySubmission(row)) {
+        continue;
+      }
       const score = Number(row.quality_score);
       if (Number.isFinite(score) && score >= 1 && score <= 3) {
         scoredQualityScores.push(score);
@@ -200,10 +208,11 @@ export async function getCreatorQualityMetricsLive(
 ): Promise<CreatorQualityMetrics> {
   const { data: rows, error } = await supabase
     .from("submissions")
-    .select("quality_score")
+    .select("quality_score, quality_score_backfilled")
     .eq("creator_id", creatorId)
     .in("status", ["verified", "paid"])
-    .not("quality_score", "is", null);
+    .not("quality_score", "is", null)
+    .eq("quality_score_backfilled", false);
 
   if (error) {
     throw new Error(error.message || "Failed to load quality scores");
@@ -222,10 +231,11 @@ export async function fetchLiveQualityMetricsByCreatorIds(
 
   const { data: rows, error } = await supabaseAdmin
     .from("submissions")
-    .select("creator_id, quality_score")
+    .select("creator_id, quality_score, quality_score_backfilled")
     .in("creator_id", creatorIds)
     .in("status", ["verified", "paid"])
-    .not("quality_score", "is", null);
+    .not("quality_score", "is", null)
+    .eq("quality_score_backfilled", false);
 
   if (error) {
     console.error(
@@ -261,7 +271,7 @@ export async function recomputeCreatorQualityMetrics(
   try {
     const { data: rows, error: rowsError } = await supabase
       .from("submissions")
-      .select("status, quality_score")
+      .select("status, quality_score, quality_score_backfilled")
       .eq("creator_id", creatorId);
 
     if (rowsError) {

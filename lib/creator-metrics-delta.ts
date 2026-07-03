@@ -18,6 +18,8 @@ export type CreatorMetricsDelta = {
 export type SubmissionMetricsSnapshot = {
   status: string | null | undefined;
   quality_score: number | null | undefined;
+  /** When true, quality_score is excluded from creator aggregates (migration backfill). */
+  quality_score_backfilled?: boolean | null;
 };
 
 export type CreatorMetricsCounters = {
@@ -86,6 +88,9 @@ export function submissionMetricsContribution(
 
   if (isVerifiedStatus(status)) {
     delta.verified_reels = 1;
+    if (state.quality_score_backfilled === true) {
+      return delta;
+    }
     const score = parseQualityScore(state.quality_score);
     if (score !== null) {
       delta.quality_score_sum = score;

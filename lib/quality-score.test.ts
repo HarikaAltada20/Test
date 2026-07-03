@@ -97,4 +97,19 @@ describe("aggregateSubmissionQualityRows", () => {
       },
     );
   });
+
+  it("excludes migration-backfilled scores from aggregates", () => {
+    assert.deepEqual(
+      aggregateSubmissionQualityRows([
+        { status: "verified", quality_score: 1, quality_score_backfilled: true },
+        { status: "verified", quality_score: 1, quality_score_backfilled: true },
+        { status: "verified", quality_score: 3, quality_score_backfilled: false },
+      ]),
+      {
+        verifiedReels: 3,
+        rejectedReels: 0,
+        scoredQualityScores: [3],
+      },
+    );
+  });
 });
