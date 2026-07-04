@@ -423,8 +423,11 @@ BEGIN
   RAISE NOTICE 'creator metrics backfill: complete (% profiles)', v_total;
 END $$;
 
--- Extend contests_with_status (append new columns only — avoids DROP downtime).
-CREATE OR REPLACE VIEW public.contests_with_status
+-- Recreate contests_with_status: preserve production column order (contest_format
+-- before payout_adjustment_*), then append trust + quality gate columns.
+DROP VIEW IF EXISTS public.contests_with_status;
+
+CREATE VIEW public.contests_with_status
 WITH (security_invoker = on) AS
 SELECT
   contests.id,
@@ -476,11 +479,11 @@ SELECT
   contests.subcategories,
   contests.interests,
   contests.region,
+  contests.contest_format,
   contests.payout_adjustment_percentage,
   contests.payout_adjustment_mode,
   contests.trust_score,
   contests.trust_number,
-  contests.contest_format,
   contests.min_avg_quality_score,
   contests.min_best_quality_score,
   contests.min_platform_earnings,
