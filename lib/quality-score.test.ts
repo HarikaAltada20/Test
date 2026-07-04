@@ -138,14 +138,11 @@ describe("aggregateSubmissionQualityRows", () => {
     );
   });
 
-  it("excludes migration-backfilled scores from aggregates", () => {
+  it("excludes legacy unscored and migration-placeholder rows from aggregates", () => {
     assert.deepEqual(
       aggregateSubmissionQualityRows([
-        {
-          status: "verified",
-          quality_score: 1,
-          quality_score_backfilled: true,
-        },
+        { status: "verified", quality_score: null },
+        { status: "paid", quality_score: null },
         {
           status: "verified",
           quality_score: 1,
@@ -158,7 +155,7 @@ describe("aggregateSubmissionQualityRows", () => {
         },
       ]),
       {
-        verifiedReels: 3,
+        verifiedReels: 4,
         rejectedReels: 0,
         scoredQualityScores: [3],
       },

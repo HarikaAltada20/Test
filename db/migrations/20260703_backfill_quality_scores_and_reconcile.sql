@@ -1,65 +1,20 @@
--- Backfill historical quality scores + metrics reconciliation helpers.
+-- Quality score columns + metrics reconciliation helpers.
 -- Run after 20260702_incremental_creator_metrics.sql.
+--
+-- Historical verified/paid submissions keep quality_score NULL (feature did not exist).
+-- Scores are assigned only on new verifies via the admin API.
 
 ALTER TABLE public.submissions
   ADD COLUMN IF NOT EXISTS quality_score_backfilled boolean NOT NULL DEFAULT false;
 
 COMMENT ON COLUMN public.submissions.quality_score_backfilled IS
-  'True when quality_score was set by migration backfill. Quality campaign gates are skipped until a score is assigned at verify.';
+  'Reserved for legacy migration placeholders. New verifies set false when quality_score is assigned.';
 
 ALTER TABLE public.creator_profiles
   ADD COLUMN IF NOT EXISTS has_explicit_quality_scores boolean NOT NULL DEFAULT false;
 
 COMMENT ON COLUMN public.creator_profiles.has_explicit_quality_scores IS
-  'True when the creator has at least one verified/paid submission scored at verify (not migration backfill).';
-
--- Default historical verified/paid submissions to 1/3 for profile aggregates.
--- Mark as backfilled so quality gates do not block creators until re-scored at verify.
-UPDATE public.submissions
-SET quality_score = 1, quality_score_backfilled = true
-WHERE status IN ('verified', 'paid')
-  AND quality_score IS NULL;
-
--- Rebuild incremental quality counters after backfill.
-WITH scored AS (
-  SELECT
-    s.creator_id,
-    COALESCE(SUM(s.quality_score), 0)::numeric(12, 2) AS quality_sum,
-    COUNT(*)::integer AS scored_count,
-    COUNT(*) FILTER (WHERE s.quality_score = 1)::integer AS score1,
-    COUNT(*) FILTER (WHERE s.quality_score = 2)::integer AS score2,
-    COUNT(*) FILTER (WHERE s.quality_score = 3)::integer AS score3
-  FROM public.submissions s
-  WHERE s.status IN ('verified', 'paid')
-    AND s.quality_score IS NOT NULL
-  GROUP BY s.creator_id
-)
-UPDATE public.creator_profiles cp
-SET
-  quality_score_sum = COALESCE(scored.quality_sum, 0),
-  scored_verified_count = COALESCE(scored.scored_count, 0),
-  quality_score_counts = jsonb_build_object(
-    'score1', COALESCE(scored.score1, 0),
-    'score2', COALESCE(scored.score2, 0),
-    'score3', COALESCE(scored.score3, 0)
-  )
-FROM scored
-WHERE cp.id = scored.creator_id;
-
--- Refresh avg/best quality for creators with backfilled submissions.
-DO $$
-DECLARE
-  v_creator_id uuid;
-BEGIN
-  FOR v_creator_id IN
-    SELECT DISTINCT s.creator_id
-    FROM public.submissions s
-    WHERE s.status IN ('verified', 'paid')
-      AND s.quality_score IS NOT NULL
-  LOOP
-    PERFORM public.sync_creator_quality_metrics(v_creator_id);
-  END LOOP;
-END $$;
+  'True when the creator has at least one verified/paid submission with an admin-assigned quality_score.';
 
 CREATE OR REPLACE FUNCTION public.reconcile_creator_profile_metrics(p_creator_id uuid)
 RETURNS boolean
@@ -99,7 +54,8 @@ BEGIN
   FROM public.submissions s
   WHERE s.creator_id = p_creator_id
     AND s.status IN ('verified', 'paid')
-    AND s.quality_score IS NOT NULL;
+    AND s.quality_score IS NOT NULL
+    AND NOT COALESCE(s.quality_score_backfilled, false);
 
   SELECT
     COALESCE(cp.quality_score_sum, 0),

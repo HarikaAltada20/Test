@@ -194,7 +194,9 @@ type SubmissionQualityRow = {
 };
 
 function isExplicitQualitySubmission(row: SubmissionQualityRow): boolean {
-  return row.quality_score_backfilled !== true;
+  if (row.quality_score_backfilled === true) return false;
+  const score = Number(row.quality_score);
+  return Number.isFinite(score) && score >= 1 && score <= 3;
 }
 
 /** Aggregate submission rows into verified/rejected counts and scored quality values. */
@@ -235,17 +237,19 @@ export async function getCreatorQualityMetricsLive(
     .select("quality_score, quality_score_backfilled")
     .eq("creator_id", creatorId)
     .in("status", ["verified", "paid"])
-    .not("quality_score", "is", null)
-    .eq("quality_score_backfilled", false);
+    .not("quality_score", "is", null);
 
   if (error) {
     throw new Error(error.message || "Failed to load quality scores");
   }
 
   return computeQualityMetricsFromScores(
-    (rows || []).map((row: { quality_score: number }) =>
-      Number(row.quality_score),
-    ),
+    (rows || [])
+      .filter(
+        (row: { quality_score_backfilled?: boolean | null }) =>
+          row.quality_score_backfilled !== true,
+      )
+      .map((row: { quality_score: number }) => Number(row.quality_score)),
   );
 }
 
@@ -260,8 +264,7 @@ export async function fetchLiveQualityMetricsByCreatorIds(
     .select("creator_id, quality_score, quality_score_backfilled")
     .in("creator_id", creatorIds)
     .in("status", ["verified", "paid"])
-    .not("quality_score", "is", null)
-    .eq("quality_score_backfilled", false);
+    .not("quality_score", "is", null);
 
   if (error) {
     throw new Error(
@@ -271,10 +274,15 @@ export async function fetchLiveQualityMetricsByCreatorIds(
 
   const scoresByCreator: Record<string, number[]> = {};
   (rows || []).forEach(
-    (row: { creator_id?: string; quality_score?: number }) => {
+    (row: {
+      creator_id?: string;
+      quality_score?: number;
+      quality_score_backfilled?: boolean | null;
+    }) => {
       const creatorId =
         typeof row?.creator_id === "string" ? row.creator_id.trim() : "";
       if (!creatorId) return;
+      if (row.quality_score_backfilled === true) return;
       const score = Number(row.quality_score);
       if (!Number.isFinite(score)) return;
       if (!scoresByCreator[creatorId]) scoresByCreator[creatorId] = [];

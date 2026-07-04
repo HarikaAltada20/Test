@@ -346,9 +346,9 @@ export function buildContestEligibilityDisplayItems(
 }
 
 /**
- * Quality gates apply when the creator has explicit verify-time scores, or when they
- * have no verified reels yet (new creator default 1/1). Skipped only for legacy
- * creators whose verified scores are migration backfills (verified > 0, no explicit).
+ * Quality gates apply when the creator has admin-assigned quality scores, or when they
+ * have no verified reels yet (new creator default 1/1). Skipped for legacy creators
+ * with verified/paid submissions that predate quality scoring (verified > 0, no score).
  */
 export function shouldApplyQualityGates(
   snapshot: Pick<

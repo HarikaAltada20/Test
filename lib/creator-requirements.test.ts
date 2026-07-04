@@ -121,7 +121,7 @@ describe("evaluateCreatorRequirements", () => {
     assert.equal(failures[0].code, "best_quality_too_low");
   });
 
-  it("skips quality gates when creator only has migration-backfilled scores", () => {
+  it("skips quality gates when creator only has legacy unscored verified submissions", () => {
     const requirements = parseContestCreatorRequirements({
       contest_format: "video",
       min_best_quality_score: 3,

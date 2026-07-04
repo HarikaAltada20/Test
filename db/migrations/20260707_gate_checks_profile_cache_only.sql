@@ -1,6 +1,105 @@
 -- Gate checks use cached creator_profiles metrics (O(1) per submit).
 -- Mirrors lib/creator-requirements.ts getCreatorRequirementsSnapshot().
 -- Live submission scans removed; trust/quality counters are maintained by triggers.
+--
+-- Also clears any placeholder quality=1 backfill from an older migration 5 revision.
+
+UPDATE public.submissions
+SET quality_score = NULL, quality_score_backfilled = false
+WHERE quality_score_backfilled = true;
+
+-- Rebuild explicit-only quality caches after clearing placeholders.
+WITH scored AS (
+  SELECT
+    s.creator_id,
+    COALESCE(SUM(s.quality_score), 0)::numeric(12, 2) AS quality_sum,
+    COUNT(*)::integer AS scored_count,
+    COUNT(*) FILTER (WHERE s.quality_score = 1)::integer AS score1,
+    COUNT(*) FILTER (WHERE s.quality_score = 2)::integer AS score2,
+    COUNT(*) FILTER (WHERE s.quality_score = 3)::integer AS score3
+  FROM public.submissions s
+  WHERE s.status IN ('verified', 'paid')
+    AND s.quality_score IS NOT NULL
+    AND NOT COALESCE(s.quality_score_backfilled, false)
+  GROUP BY s.creator_id
+)
+UPDATE public.creator_profiles cp
+SET
+  quality_score_sum = COALESCE(scored.quality_sum, 0),
+  scored_verified_count = COALESCE(scored.scored_count, 0),
+  quality_score_counts = jsonb_build_object(
+    'score1', COALESCE(scored.score1, 0),
+    'score2', COALESCE(scored.score2, 0),
+    'score3', COALESCE(scored.score3, 0)
+  )
+FROM scored
+WHERE cp.id = scored.creator_id;
+
+UPDATE public.creator_profiles cp
+SET
+  quality_score_sum = 0,
+  scored_verified_count = 0,
+  quality_score_counts = jsonb_build_object('score1', 0, 'score2', 0, 'score3', 0)
+WHERE NOT EXISTS (
+  SELECT 1
+  FROM public.submissions s
+  WHERE s.creator_id = cp.id
+    AND s.status IN ('verified', 'paid')
+    AND s.quality_score IS NOT NULL
+    AND NOT COALESCE(s.quality_score_backfilled, false)
+);
+
+WITH creator_counts AS (
+  SELECT
+    s.creator_id,
+    COUNT(*) FILTER (WHERE s.status IN ('verified', 'paid'))::integer AS verified,
+    COUNT(*) FILTER (WHERE s.status = 'rejected')::integer AS rejected
+  FROM public.submissions s
+  WHERE s.creator_id IS NOT NULL
+  GROUP BY s.creator_id
+),
+explicit_quality AS (
+  SELECT
+    s.creator_id,
+    ROUND(AVG(s.quality_score)::numeric, 2) AS avg_quality,
+    CASE
+      WHEN COUNT(*) FILTER (WHERE s.quality_score = 3) > 0 THEN 3
+      WHEN COUNT(*) FILTER (WHERE s.quality_score = 2) > 0 THEN 2
+      WHEN COUNT(*) FILTER (WHERE s.quality_score = 1) > 0 THEN 1
+      ELSE NULL
+    END AS best_quality
+  FROM public.submissions s
+  WHERE s.creator_id IS NOT NULL
+    AND s.status IN ('verified', 'paid')
+    AND s.quality_score IS NOT NULL
+    AND NOT COALESCE(s.quality_score_backfilled, false)
+  GROUP BY s.creator_id
+)
+UPDATE public.creator_profiles cp
+SET
+  avg_quality_score = CASE
+    WHEN COALESCE(cc.verified, 0) > 0 THEN eq.avg_quality
+    WHEN COALESCE(cc.rejected, 0) > 0 THEN NULL
+    ELSE 1
+  END,
+  best_quality_score = CASE
+    WHEN COALESCE(cc.verified, 0) > 0 THEN eq.best_quality
+    WHEN COALESCE(cc.rejected, 0) > 0 THEN NULL
+    ELSE 1
+  END
+FROM creator_counts cc
+LEFT JOIN explicit_quality eq ON eq.creator_id = cc.creator_id
+WHERE cp.id = cc.creator_id;
+
+UPDATE public.creator_profiles cp
+SET has_explicit_quality_scores = EXISTS (
+  SELECT 1
+  FROM public.submissions s
+  WHERE s.creator_id = cp.id
+    AND s.status IN ('verified', 'paid')
+    AND s.quality_score IS NOT NULL
+    AND NOT COALESCE(s.quality_score_backfilled, false)
+);
 
 CREATE OR REPLACE FUNCTION public.enforce_submission_creator_requirements()
 RETURNS TRIGGER

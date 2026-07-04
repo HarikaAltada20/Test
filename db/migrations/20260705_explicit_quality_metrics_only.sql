@@ -1,9 +1,9 @@
--- Explicit-only quality aggregates + verified quality enforcement.
+-- Explicit-only quality aggregates + verify-time quality enforcement.
 -- Run after 20260704_backfilled_quality_and_contest_gates.sql.
 --
--- 1. Incremental quality counters track only verify-time scores (not migration backfill).
--- 2. Gate trigger always evaluates explicit-only avg/best when quality gates apply.
--- 3. Verified/paid submissions must carry quality_score (API + direct writes).
+-- 1. Incremental quality counters track only admin-assigned scores (quality_score NOT NULL).
+-- 2. Gate trigger uses cached profile metrics for quality when gates apply.
+-- 3. quality_score required when newly verifying; legacy verified/paid rows may stay NULL.
 
 CREATE OR REPLACE FUNCTION public._submission_quality_contribution(
   p_status text,
@@ -304,7 +304,7 @@ BEGIN
     WHERE s.creator_id = p_creator_id
       AND s.status IN ('verified', 'paid')
       AND s.quality_score IS NOT NULL
-      AND s.quality_score_backfilled = false;
+      AND NOT COALESCE(s.quality_score_backfilled, false);
 
     IF COALESCE(v_scored, 0) > 0 THEN
       v_avg := ROUND(v_sum / v_scored, 2);
@@ -380,7 +380,7 @@ BEGIN
   WHERE s.creator_id = p_creator_id
     AND s.status IN ('verified', 'paid')
     AND s.quality_score IS NOT NULL
-    AND s.quality_score_backfilled = false;
+    AND NOT COALESCE(s.quality_score_backfilled, false);
 
   SELECT
     COALESCE(cp.quality_score_sum, 0),
@@ -514,7 +514,7 @@ WITH scored AS (
   FROM public.submissions s
   WHERE s.status IN ('verified', 'paid')
     AND s.quality_score IS NOT NULL
-    AND s.quality_score_backfilled = false
+    AND NOT COALESCE(s.quality_score_backfilled, false)
   GROUP BY s.creator_id
 )
 UPDATE public.creator_profiles cp
@@ -540,7 +540,7 @@ WHERE NOT EXISTS (
   WHERE s.creator_id = cp.id
     AND s.status IN ('verified', 'paid')
     AND s.quality_score IS NOT NULL
-    AND s.quality_score_backfilled = false
+    AND NOT COALESCE(s.quality_score_backfilled, false)
 );
 
 -- Refresh avg/best and explicit-quality flag in bulk (set-based; avoids per-creator loop).
@@ -567,7 +567,7 @@ explicit_quality AS (
   WHERE s.creator_id IS NOT NULL
     AND s.status IN ('verified', 'paid')
     AND s.quality_score IS NOT NULL
-    AND s.quality_score_backfilled = false
+    AND NOT COALESCE(s.quality_score_backfilled, false)
   GROUP BY s.creator_id
 )
 UPDATE public.creator_profiles cp
@@ -593,7 +593,7 @@ SET has_explicit_quality_scores = EXISTS (
   WHERE s.creator_id = cp.id
     AND s.status IN ('verified', 'paid')
     AND s.quality_score IS NOT NULL
-    AND s.quality_score_backfilled = false
+    AND NOT COALESCE(s.quality_score_backfilled, false)
 );
 
 -- Gate semantics mirror lib/creator-requirements.ts (evaluateCreatorRequirements).
@@ -717,7 +717,7 @@ BEGIN
       WHERE s.creator_id = NEW.creator_id
         AND s.status IN ('verified', 'paid')
         AND s.quality_score IS NOT NULL
-        AND s.quality_score_backfilled = false;
+        AND NOT COALESCE(s.quality_score_backfilled, false);
     ELSIF COALESCE(v_rejected, 0) > 0 THEN
       v_creator_avg_quality := NULL;
       v_creator_best_quality := NULL;
@@ -777,11 +777,27 @@ CREATE OR REPLACE FUNCTION public.enforce_verified_submission_quality_score()
 RETURNS TRIGGER
 LANGUAGE plpgsql
 AS $$
+DECLARE
+  v_new_verified boolean;
+  v_old_verified boolean;
 BEGIN
-  IF public._submission_status_bucket(NEW.status::text) = 'verified' THEN
+  v_new_verified := public._submission_status_bucket(NEW.status::text) = 'verified';
+
+  IF NOT v_new_verified THEN
+    RETURN NEW;
+  END IF;
+
+  IF TG_OP = 'INSERT' THEN
+    v_old_verified := false;
+  ELSE
+    v_old_verified := public._submission_status_bucket(OLD.status::text) = 'verified';
+  END IF;
+
+  -- Require score only when entering verified/paid (new verify). Legacy rows may keep NULL.
+  IF NOT v_old_verified THEN
     IF NEW.quality_score IS NULL OR NEW.quality_score < 1 OR NEW.quality_score > 3 THEN
       RAISE EXCEPTION
-        'verified_submission_requires_quality_score: verified/paid submissions require quality_score between 1 and 3'
+        'verified_submission_requires_quality_score: verified/paid submissions require quality_score between 1 and 3 when verified'
         USING ERRCODE = 'check_violation';
     END IF;
   END IF;

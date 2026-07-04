@@ -137,7 +137,7 @@ BEGIN
       WHERE s.creator_id = NEW.creator_id
         AND s.status IN ('verified', 'paid')
         AND s.quality_score IS NOT NULL
-        AND s.quality_score_backfilled = false;
+        AND NOT COALESCE(s.quality_score_backfilled, false);
     ELSIF COALESCE(v_rejected, 0) > 0 THEN
       v_creator_avg_quality := NULL;
       v_creator_best_quality := NULL;

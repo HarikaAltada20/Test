@@ -33,13 +33,17 @@ Run in filename order (do not skip or reorder):
 | 2   | `20260630_quality_score_and_creator_requirements.sql`          | Quality scores, creator gates, `contests_with_status` view                 |
 | 3   | `20260701_creator_quality_gate_consistency.sql`                | Live fallback in submission gate trigger                                   |
 | 4   | `20260702_incremental_creator_metrics.sql`                     | O(1) incremental trust/quality counters                                    |
-| 5   | `20260703_backfill_quality_scores_and_reconcile.sql`           | Historical quality backfill + reconciliation helpers                       |
+| 5   | `20260703_backfill_quality_scores_and_reconcile.sql`           | Quality columns + reconciliation helpers (legacy verified rows stay NULL)  |
 | 6   | `20260704_backfilled_quality_and_contest_gates.sql`            | Backfilled-quality gate rules + contest requirement validation on write    |
 | 7   | `20260705_explicit_quality_metrics_only.sql`                   | Explicit-only quality aggregates + verified quality_score DB enforcement   |
 | 8   | `20260706_quality_gates_new_creators.sql`                    | Quality gates for new creators (default 1/1); skip backfill-only legacy    |
-| 9   | `20260707_gate_checks_profile_cache_only.sql`                | Submit gates use cached profile metrics (O(1)); no submission table scans  |
+| 9   | `20260707_gate_checks_profile_cache_only.sql`                | Submit gates use cached profile metrics; clears any old placeholder scores |
 
-Migration 7 rebuilds avg/best quality and `has_explicit_quality_scores` with **set-based SQL** (no per-creator loop). Still plan a short maintenance window on large databases for migrations 5–7 backfills.
+Migration 7 rebuilds avg/best quality and `has_explicit_quality_scores` with **set-based SQL** (no per-creator loop). Plan a short maintenance window on large databases for migrations 5–7 if needed.
+
+## Legacy quality scores
+
+Historical verified/paid submissions **keep `quality_score = NULL`** (the feature did not exist). Only **new verifies** assign 1/2/3 via the admin UI/API. Profile sum/avg/best count **only scored submissions**. Quality gates are skipped until a creator has at least one admin-assigned score.
 
 ## Verify API: `qualityScore`
 
@@ -67,7 +71,7 @@ Trust/quality profile updates after verify are handled by DB triggers (`submissi
    - Submit to a gated campaign → UI gate, `POST /api/creators/stats`, and DB trigger agree
    - Bulk verify with explicit `qualityScore` (1–3)
    - PATCH quality score on verified submission → response `creatorQuality` matches live submissions
-   - Legacy creator with only backfilled scores → quality gates skipped until first explicit verify score
+   - Legacy creator with unscored verified submissions → quality gates skipped until first verify score
    - Creator with explicit scores → avg/best excludes backfilled rows only
    - Re-check eligibility after another admin verify/reject (submit error mentions refresh if DB gate fires)
 3. **Production:** run migrations 1→9, then deploy app immediately after.

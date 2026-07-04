@@ -88,11 +88,8 @@ export function submissionMetricsContribution(
 
   if (isVerifiedStatus(status)) {
     delta.verified_reels = 1;
-    if (state.quality_score_backfilled === true) {
-      return delta;
-    }
     const score = parseQualityScore(state.quality_score);
-    if (score !== null) {
+    if (score !== null && state.quality_score_backfilled !== true) {
       delta.quality_score_sum = score;
       delta.scored_verified_count = 1;
       if (score === 1) delta.quality_score_counts.score1 = 1;

@@ -1,8 +1,8 @@
--- Backfilled-quality gate rules + server-side contest requirement validation.
+-- Creator quality gate rules + server-side contest requirement validation.
 -- Run after 20260703_backfill_quality_scores_and_reconcile.sql.
 --
--- 1. Tracks whether a creator has verify-time quality scores (not migration backfill).
--- 2. Skips min avg/best quality campaign gates until at least one explicit score exists.
+-- 1. Tracks whether a creator has admin-assigned quality scores on verified/paid rows.
+-- 2. Skips min avg/best quality campaign gates until at least one scored submission exists.
 -- 3. Validates contest creator-requirement fields on insert/update (including brand direct writes).
 
 CREATE OR REPLACE FUNCTION public.sync_creator_explicit_quality_flag(p_creator_id uuid)
@@ -24,7 +24,7 @@ BEGIN
     WHERE s.creator_id = p_creator_id
       AND s.status IN ('verified', 'paid')
       AND s.quality_score IS NOT NULL
-      AND s.quality_score_backfilled = false
+      AND NOT COALESCE(s.quality_score_backfilled, false)
   )
   INTO v_has_explicit;
 
@@ -351,7 +351,7 @@ BEGIN
         WHERE s.creator_id = NEW.creator_id
           AND s.status IN ('verified', 'paid')
           AND s.quality_score IS NOT NULL
-          AND s.quality_score_backfilled = false;
+          AND NOT COALESCE(s.quality_score_backfilled, false);
       ELSIF COALESCE(v_rejected, 0) > 0 THEN
         v_creator_avg_quality := NULL;
         v_creator_best_quality := NULL;
@@ -460,7 +460,7 @@ CREATE TRIGGER contests_validate_creator_requirements
   FOR EACH ROW
   EXECUTE FUNCTION public.validate_contest_creator_requirements();
 
--- Backfill explicit-quality flag for all creators (historical scores are backfilled).
+-- Initialize explicit-quality flag (legacy verified rows have NULL quality_score).
 UPDATE public.creator_profiles
 SET has_explicit_quality_scores = false;
 

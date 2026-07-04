@@ -71,15 +71,22 @@ describe("computeSubmissionMetricsDelta", () => {
     assert.equal(delta.pending_reels, 1);
   });
 
-  it("ignores backfilled quality on verified submissions", () => {
-    const delta = submissionMetricsContribution({
+  it("ignores legacy unscored and placeholder quality on verified submissions", () => {
+    const unscored = submissionMetricsContribution({
+      status: "verified",
+      quality_score: null,
+    });
+    assert.equal(unscored.verified_reels, 1);
+    assert.equal(unscored.quality_score_sum, 0);
+
+    const placeholder = submissionMetricsContribution({
       status: "verified",
       quality_score: 1,
       quality_score_backfilled: true,
     });
-    assert.equal(delta.verified_reels, 1);
-    assert.equal(delta.quality_score_sum, 0);
-    assert.equal(delta.scored_verified_count, 0);
+    assert.equal(placeholder.verified_reels, 1);
+    assert.equal(placeholder.quality_score_sum, 0);
+    assert.equal(placeholder.scored_verified_count, 0);
   });
 });
 
