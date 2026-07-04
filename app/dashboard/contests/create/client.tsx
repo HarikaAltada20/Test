@@ -51,8 +51,12 @@ import {
   isMilestoneContestType,
 } from "@/lib/contest-type";
 import { isVideoContestFormat } from "@/lib/trust-score";
+import { sanitizeContestCreatorRequirementPayload } from "@/lib/contest-creator-requirements-validation";
 import { formatCurrencyFromCents } from "@/lib/currency-utils";
-import { shouldSkipBeforeUnload, consumeCreateFlowReturnStep } from "@/lib/before-unload-utils";
+import {
+  shouldSkipBeforeUnload,
+  consumeCreateFlowReturnStep,
+} from "@/lib/before-unload-utils";
 import { reconcileLeaderboardPrizeAmounts } from "@/lib/contest-prize-utils";
 import { toast } from "@/hooks/use-toast"; // Added import
 import dynamic from "next/dynamic";
@@ -162,8 +166,7 @@ type MilestoneFormRow = {
 function createEmptyMilestoneRow(): MilestoneFormRow {
   return {
     id:
-      typeof crypto !== "undefined" &&
-      typeof crypto.randomUUID === "function"
+      typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
         ? crypto.randomUUID()
         : `m-${Date.now()}-${Math.floor(Math.random() * 1e6)}`,
     target_views: "",
@@ -439,6 +442,22 @@ export default function CreateContestPage({
   // New features state (2025-10-01)
   const [trustScoreEnabled, setTrustScoreEnabled] = useState(false);
   const [contestTrustScore, setContestTrustScore] = useState<number | "">("");
+  const [trustNumberEnabled, setTrustNumberEnabled] = useState(false);
+  const [contestTrustNumber, setContestTrustNumber] = useState<number | "">("");
+  const [bestQualityEnabled, setBestQualityEnabled] = useState(false);
+  const [contestMinBestQuality, setContestMinBestQuality] = useState<
+    number | ""
+  >("");
+  const [avgQualityEnabled, setAvgQualityEnabled] = useState(false);
+  const [contestMinAvgQuality, setContestMinAvgQuality] = useState<number | "">(
+    "",
+  );
+  const [minQualityEnabled, setMinQualityEnabled] = useState(false);
+  const [contestMinQuality, setContestMinQuality] = useState<number | "">("");
+  const [minEarningsEnabled, setMinEarningsEnabled] = useState(false);
+  const [contestMinEarnings, setContestMinEarnings] = useState<number | "">("");
+  const [minViewsEnabled, setMinViewsEnabled] = useState(false);
+  const [contestMinViews, setContestMinViews] = useState<number | "">("");
   const [multipleSubmissionsEnabled, setMultipleSubmissionsEnabled] =
     useState(false);
   const [maxSubmissionsPerCreator, setMaxSubmissionsPerCreator] =
@@ -604,9 +623,10 @@ export default function CreateContestPage({
   const [userPlan, setUserPlan] = useState<string | null>(
     initialBrandPlanProductId ?? null,
   );
-  const [brandSubscriptionInfo, setBrandSubscriptionInfo] = useState<
-    Record<string, unknown> | null
-  >(initialBrandSubscriptionInfo ?? null);
+  const [brandSubscriptionInfo, setBrandSubscriptionInfo] = useState<Record<
+    string,
+    unknown
+  > | null>(initialBrandSubscriptionInfo ?? null);
   const [totalPrizePool, setTotalPrizePool] = useState<number>(
     DEFAULT_TOTAL_PRIZE_POOL,
   ); // Default total prize pool
@@ -841,7 +861,11 @@ export default function CreateContestPage({
       const prevPayout = parseMilestonePayout(rows[i - 1].payout_dollars);
       const currentPayout = parseMilestonePayout(rows[i].payout_dollars);
 
-      if (!isNaN(currentViews) && !isNaN(prevViews) && currentViews <= prevViews) {
+      if (
+        !isNaN(currentViews) &&
+        !isNaN(prevViews) &&
+        currentViews <= prevViews
+      ) {
         return `Milestone ${i + 1}: target views must be higher than milestone ${i}.`;
       }
 
@@ -900,7 +924,8 @@ export default function CreateContestPage({
       lastMilestoneSequenceToastRef.current = null;
       return;
     }
-    if (lastMilestoneSequenceToastRef.current === milestoneSequenceError) return;
+    if (lastMilestoneSequenceToastRef.current === milestoneSequenceError)
+      return;
     toast({
       title: "Invalid Milestone Sequence",
       description: milestoneSequenceError,
@@ -1177,81 +1202,82 @@ export default function CreateContestPage({
       const draftPayload = {
         advertiserId: effectiveAdvertiserId,
         title: title || "No Title - Draft",
-          brief_html: "",
-          brief_json: null,
-          rules_html: "",
-          rules_json: null,
-          inspiration_links: [],
-          resources: [],
-          thumbnail_url: null,
-          start_date: null,
-          end_date: null,
-          moderation_status: "draft",
-          contest_type: contestType || "leaderboard",
-          contest_based_details:
-            contestType === "leaderboard"
+        brief_html: "",
+        brief_json: null,
+        rules_html: "",
+        rules_json: null,
+        inspiration_links: [],
+        resources: [],
+        thumbnail_url: null,
+        start_date: null,
+        end_date: null,
+        moderation_status: "draft",
+        contest_type: contestType || "leaderboard",
+        contest_based_details:
+          contestType === "leaderboard"
+            ? {
+                leaderboard_contest: {
+                  prizes: [],
+                  total_prize: 0,
+                  winner_count: 3,
+                },
+              }
+            : contestType === "cpm"
               ? {
-                  leaderboard_contest: {
-                    prizes: [],
-                    total_prize: 0,
-                    winner_count: 3,
+                  cpm_contest: {
+                    cpm_rate_usd: 0,
+                    total_budget: 0,
+                    terms_conditions: "",
                   },
                 }
-              : contestType === "cpm"
+              : contestType === "milestone"
                 ? {
-                    cpm_contest: {
-                      cpm_rate_usd: 0,
-                      total_budget: 0,
-                      terms_conditions: "",
+                    milestone_contest: {
+                      milestones: [],
+                      total_budget_cents: 0,
                     },
                   }
-                : contestType === "milestone"
+                : contestType === "dual_rewards"
                   ? {
+                      cpm_contest: {
+                        cpm_rate_usd: 0,
+                        terms_conditions: "",
+                      },
                       milestone_contest: {
                         milestones: [],
-                        total_budget_cents: 0,
                       },
+                      total_budget_cents: 0,
                     }
-                  : contestType === "dual_rewards"
-                    ? {
-                        cpm_contest: {
-                          cpm_rate_usd: 0,
-                          terms_conditions: "",
-                        },
-                        milestone_contest: {
-                          milestones: [],
-                        },
-                        total_budget_cents: 0,
-                      }
-                    : null,
-          // Categories, subcategories, and interests
-          categories: contestCategories.length > 0 ? contestCategories : null,
-          subcategories: (() => {
-            if (!contestSubcategories || contestSubcategories.length === 0)
-              return null;
-            // Group by category and remove duplicates
-            const grouped: Record<string, string[]> = {};
-            contestSubcategories.forEach((item) => {
-              if (!grouped[item.category]) {
-                grouped[item.category] = [];
-              }
-              if (!grouped[item.category].includes(item.subcategory)) {
-                grouped[item.category].push(item.subcategory);
-              }
-            });
-            return Object.keys(grouped).length > 0 ? grouped : null;
-          })(),
-          interests:
-            contestInterests.length > 0 ? [...new Set(contestInterests)] : null,
-          // Regions and countries as JSONB
-          region: buildRegionData(selectedRegions, selectedCountries),
-          // New features (2025-10-01)
-          multiple_submissions_enabled: false,
-          max_submissions_per_creator: 1,
-          trust_score: null,
-          content_type: null,
-          bonus_details: null,
-          max_earnings_per_creator: null,
+                  : null,
+        // Categories, subcategories, and interests
+        categories: contestCategories.length > 0 ? contestCategories : null,
+        subcategories: (() => {
+          if (!contestSubcategories || contestSubcategories.length === 0)
+            return null;
+          // Group by category and remove duplicates
+          const grouped: Record<string, string[]> = {};
+          contestSubcategories.forEach((item) => {
+            if (!grouped[item.category]) {
+              grouped[item.category] = [];
+            }
+            if (!grouped[item.category].includes(item.subcategory)) {
+              grouped[item.category].push(item.subcategory);
+            }
+          });
+          return Object.keys(grouped).length > 0 ? grouped : null;
+        })(),
+        interests:
+          contestInterests.length > 0 ? [...new Set(contestInterests)] : null,
+        // Regions and countries as JSONB
+        region: buildRegionData(selectedRegions, selectedCountries),
+        // New features (2025-10-01)
+        multiple_submissions_enabled: false,
+        max_submissions_per_creator: 1,
+        trust_score: null,
+        trust_number: null,
+        content_type: null,
+        bonus_details: null,
+        max_earnings_per_creator: null,
       };
 
       if (isAdmin) {
@@ -1883,7 +1909,8 @@ export default function CreateContestPage({
         if (contestFormat !== "video") {
           return {
             isValid: false,
-            error: "Milestone campaigns are only available for video campaigns.",
+            error:
+              "Milestone campaigns are only available for video campaigns.",
           };
         }
 
@@ -1942,8 +1969,7 @@ export default function CreateContestPage({
               : parseFloat(String(row.payout_dollars));
           const payoutCents = Math.round((payoutD || 0) * 100);
           const wlRaw = row.winner_limit;
-          const winnerLimit =
-            wlRaw === "" ? null : parseInt(String(wlRaw), 10);
+          const winnerLimit = wlRaw === "" ? null : parseInt(String(wlRaw), 10);
 
           if (isNaN(tv) || tv <= 0) {
             return {
@@ -1959,10 +1985,7 @@ export default function CreateContestPage({
               )} per tier.`,
             };
           }
-          if (
-            winnerLimit !== null &&
-            (isNaN(winnerLimit) || winnerLimit < 1)
-          ) {
+          if (winnerLimit !== null && (isNaN(winnerLimit) || winnerLimit < 1)) {
             return {
               isValid: false,
               error: `Milestone ${i + 1}: winner limit must be at least 1, or leave blank for unlimited winners.`,
@@ -2522,402 +2545,403 @@ export default function CreateContestPage({
         const milestoneBudgetForSubmit = totalBudget;
 
         if (includeMilestone) {
-        const effectiveMilestoneRows = milestoneRows.filter(
-          (r) =>
-            r.target_views !== "" ||
-            r.payout_dollars !== "" ||
-            r.winner_limit !== "",
-        );
+          const effectiveMilestoneRows = milestoneRows.filter(
+            (r) =>
+              r.target_views !== "" ||
+              r.payout_dollars !== "" ||
+              r.winner_limit !== "",
+          );
 
-        const milestonesPayload: Array<{
-          order: number;
-          target_views: number;
-          payout_cents: number;
-          winner_limit: number | null;
-        }> = [];
+          const milestonesPayload: Array<{
+            order: number;
+            target_views: number;
+            payout_cents: number;
+            winner_limit: number | null;
+          }> = [];
 
-        for (let i = 0; i < effectiveMilestoneRows.length; i++) {
-          const row = effectiveMilestoneRows[i];
-          const tv =
-            row.target_views === ""
-              ? NaN
-              : parseInt(String(row.target_views), 10);
-          const payoutD =
-            row.payout_dollars === ""
-              ? NaN
-              : parseFloat(String(row.payout_dollars));
-          const payoutCents = Math.round((payoutD || 0) * 100);
-          const wlRaw = row.winner_limit;
-          const winnerLimit =
-            wlRaw === "" ? null : parseInt(String(wlRaw), 10);
+          for (let i = 0; i < effectiveMilestoneRows.length; i++) {
+            const row = effectiveMilestoneRows[i];
+            const tv =
+              row.target_views === ""
+                ? NaN
+                : parseInt(String(row.target_views), 10);
+            const payoutD =
+              row.payout_dollars === ""
+                ? NaN
+                : parseFloat(String(row.payout_dollars));
+            const payoutCents = Math.round((payoutD || 0) * 100);
+            const wlRaw = row.winner_limit;
+            const winnerLimit =
+              wlRaw === "" ? null : parseInt(String(wlRaw), 10);
 
-          if (isDraft) {
-            if (isNaN(tv) || tv <= 0) continue;
+            if (isDraft) {
+              if (isNaN(tv) || tv <= 0) continue;
+              milestonesPayload.push({
+                order: milestonesPayload.length + 1,
+                target_views: tv,
+                payout_cents: isNaN(payoutCents) ? 0 : payoutCents,
+                winner_limit:
+                  winnerLimit !== null && !isNaN(winnerLimit)
+                    ? winnerLimit
+                    : null,
+              });
+              continue;
+            }
+
+            if (isNaN(tv) || tv <= 0) {
+              setFormFeedback(
+                `Milestone ${i + 1}: enter target views (whole number > 0).`,
+              );
+              setFormFeedbackType("error");
+              setIsLoading(false);
+              setUploadProgress(null);
+              return;
+            }
+            if (isNaN(payoutD) || payoutCents < MIN_MILESTONE_PAYOUT_CENTS) {
+              setFormFeedback(
+                `Milestone ${i + 1}: payout must be at least ${formatCurrencyFromCents(
+                  MIN_MILESTONE_PAYOUT_CENTS,
+                )}.`,
+              );
+              setFormFeedbackType("error");
+              setIsLoading(false);
+              setUploadProgress(null);
+              return;
+            }
+            if (
+              winnerLimit !== null &&
+              (isNaN(winnerLimit) || winnerLimit < 1)
+            ) {
+              setFormFeedback(
+                `Milestone ${i + 1}: winner limit must be ≥ 1 or leave blank for unlimited.`,
+              );
+              setFormFeedbackType("error");
+              setIsLoading(false);
+              setUploadProgress(null);
+              return;
+            }
             milestonesPayload.push({
               order: milestonesPayload.length + 1,
               target_views: tv,
-              payout_cents: isNaN(payoutCents) ? 0 : payoutCents,
+              payout_cents: payoutCents,
               winner_limit:
                 winnerLimit !== null && !isNaN(winnerLimit)
                   ? winnerLimit
                   : null,
             });
-            continue;
           }
 
-          if (isNaN(tv) || tv <= 0) {
-            setFormFeedback(
-              `Milestone ${i + 1}: enter target views (whole number > 0).`,
-            );
-            setFormFeedbackType("error");
-            setIsLoading(false);
-            setUploadProgress(null);
-            return;
-          }
-          if (isNaN(payoutD) || payoutCents < MIN_MILESTONE_PAYOUT_CENTS) {
-            setFormFeedback(
-              `Milestone ${i + 1}: payout must be at least ${formatCurrencyFromCents(
-                MIN_MILESTONE_PAYOUT_CENTS,
-              )}.`,
-            );
-            setFormFeedbackType("error");
-            setIsLoading(false);
-            setUploadProgress(null);
-            return;
-          }
-          if (
-            winnerLimit !== null &&
-            (isNaN(winnerLimit) || winnerLimit < 1)
-          ) {
-            setFormFeedback(
-              `Milestone ${i + 1}: winner limit must be ≥ 1 or leave blank for unlimited.`,
-            );
-            setFormFeedbackType("error");
-            setIsLoading(false);
-            setUploadProgress(null);
-            return;
-          }
-          milestonesPayload.push({
-            order: milestonesPayload.length + 1,
-            target_views: tv,
-            payout_cents: payoutCents,
-            winner_limit:
-              winnerLimit !== null && !isNaN(winnerLimit)
-                ? winnerLimit
-                : null,
-          });
-        }
-
-        if (!isDraft) {
-          if (contestFormat !== "video") {
-            setFormFeedback(
-              "Milestone campaigns require the Video campaign format.",
-            );
-            setFormFeedbackType("error");
-            setIsLoading(false);
-            setUploadProgress(null);
-            return;
-          }
-          if (milestonesPayload.length === 0) {
-            setFormFeedback(
-              "Add at least one milestone with target views and payout.",
-            );
-            setFormFeedbackType("error");
-            setIsLoading(false);
-            setUploadProgress(null);
-            return;
-          }
-          for (let j = 1; j < milestonesPayload.length; j++) {
-            if (
-              milestonesPayload[j].target_views <=
-              milestonesPayload[j - 1].target_views
-            ) {
+          if (!isDraft) {
+            if (contestFormat !== "video") {
               setFormFeedback(
-                "Milestone view targets must increase at each step (e.g. 1,000 then 5,000 views).",
+                "Milestone campaigns require the Video campaign format.",
               );
               setFormFeedbackType("error");
               setIsLoading(false);
               setUploadProgress(null);
               return;
             }
-            if (
-              milestonesPayload[j].payout_cents <=
-              milestonesPayload[j - 1].payout_cents
-            ) {
-              const payoutSequenceError =
-                "Milestone payouts must increase at each step (each tier payout should be higher than the previous tier).";
-              setFormFeedback(payoutSequenceError);
+            if (milestonesPayload.length === 0) {
+              setFormFeedback(
+                "Add at least one milestone with target views and payout.",
+              );
               setFormFeedbackType("error");
-              toast({
-                title: "Invalid Milestone Sequence",
-                description: payoutSequenceError,
-                variant: "destructive",
-              });
               setIsLoading(false);
               setUploadProgress(null);
               return;
             }
+            for (let j = 1; j < milestonesPayload.length; j++) {
+              if (
+                milestonesPayload[j].target_views <=
+                milestonesPayload[j - 1].target_views
+              ) {
+                setFormFeedback(
+                  "Milestone view targets must increase at each step (e.g. 1,000 then 5,000 views).",
+                );
+                setFormFeedbackType("error");
+                setIsLoading(false);
+                setUploadProgress(null);
+                return;
+              }
+              if (
+                milestonesPayload[j].payout_cents <=
+                milestonesPayload[j - 1].payout_cents
+              ) {
+                const payoutSequenceError =
+                  "Milestone payouts must increase at each step (each tier payout should be higher than the previous tier).";
+                setFormFeedback(payoutSequenceError);
+                setFormFeedbackType("error");
+                toast({
+                  title: "Invalid Milestone Sequence",
+                  description: payoutSequenceError,
+                  variant: "destructive",
+                });
+                setIsLoading(false);
+                setUploadProgress(null);
+                return;
+              }
+            }
+            if (
+              !milestoneBudgetForSubmit ||
+              parseFloat(milestoneBudgetForSubmit.toString()) <= 0
+            ) {
+              setFormFeedback(
+                "Total campaign budget is required for milestone campaigns.",
+              );
+              setFormFeedbackType("error");
+              setIsLoading(false);
+              setUploadProgress(null);
+              return;
+            }
+            if (milestoneBonusEnabled) {
+              const vMinViewsFilled = milestoneBonusTopViewsMin !== "";
+              const vMinReelsFilled = milestoneBonusTopViewsMinReels !== "";
+              const vPayFilled = milestoneBonusTopViewsPayout !== "";
+              const rMinViewsFilled = milestoneBonusTopReelsMinViews !== "";
+              const rMinFilled = milestoneBonusTopReelsMin !== "";
+              const rPayFilled = milestoneBonusTopReelsPayout !== "";
+              const viewsTrackHasAnyField =
+                vMinViewsFilled || vMinReelsFilled || vPayFilled;
+              const reelsTrackHasAnyField =
+                rMinViewsFilled || rMinFilled || rPayFilled;
+              const viewsRequiredFilled = vMinViewsFilled && vPayFilled;
+              const reelsRequiredFilled = rMinFilled && rPayFilled;
+              if (viewsTrackHasAnyField && !viewsRequiredFilled) {
+                setFormFeedback(
+                  "Bonus (most verified views): enter minimum total views and payout, or clear the category. Minimum verified reels is optional.",
+                );
+                setFormFeedbackType("error");
+                setIsLoading(false);
+                setUploadProgress(null);
+                return;
+              }
+              if (reelsTrackHasAnyField && !reelsRequiredFilled) {
+                setFormFeedback(
+                  "Bonus (most verified reels): enter minimum verified reels and payout, or clear the category. Minimum total verified views is optional.",
+                );
+                setFormFeedbackType("error");
+                setIsLoading(false);
+                setUploadProgress(null);
+                return;
+              }
+              const viewsOk =
+                vMinViewsFilled &&
+                vPayFilled &&
+                Number(milestoneBonusTopViewsMin) > 0 &&
+                (!vMinReelsFilled ||
+                  Number(milestoneBonusTopViewsMinReels) >= 1) &&
+                Math.round(
+                  parseFloat(String(milestoneBonusTopViewsPayout)) * 100,
+                ) >= MIN_MILESTONE_PAYOUT_CENTS;
+              const reelsOk =
+                rMinFilled &&
+                rPayFilled &&
+                Number(milestoneBonusTopReelsMin) >= 1 &&
+                (!rMinViewsFilled ||
+                  Number(milestoneBonusTopReelsMinViews) > 0) &&
+                Math.round(
+                  parseFloat(String(milestoneBonusTopReelsPayout)) * 100,
+                ) >= MIN_MILESTONE_PAYOUT_CENTS;
+              if (!viewsOk && !reelsOk) {
+                setFormFeedback(
+                  "With bonus enabled, add at least one bonus category (verified views or verified reels).",
+                );
+                setFormFeedbackType("error");
+                setIsLoading(false);
+                setUploadProgress(null);
+                return;
+              }
+            }
           }
-          if (
-            !milestoneBudgetForSubmit ||
-            parseFloat(milestoneBudgetForSubmit.toString()) <= 0
-          ) {
-            setFormFeedback(
-              "Total campaign budget is required for milestone campaigns.",
-            );
-            setFormFeedbackType("error");
-            setIsLoading(false);
-            setUploadProgress(null);
-            return;
-          }
+
+          let bonusPayload: Record<string, unknown> | undefined;
           if (milestoneBonusEnabled) {
-            const vMinViewsFilled = milestoneBonusTopViewsMin !== "";
-            const vMinReelsFilled = milestoneBonusTopViewsMinReels !== "";
-            const vPayFilled = milestoneBonusTopViewsPayout !== "";
-            const rMinViewsFilled = milestoneBonusTopReelsMinViews !== "";
-            const rMinFilled = milestoneBonusTopReelsMin !== "";
-            const rPayFilled = milestoneBonusTopReelsPayout !== "";
-            const viewsTrackHasAnyField =
-              vMinViewsFilled || vMinReelsFilled || vPayFilled;
-            const reelsTrackHasAnyField =
-              rMinViewsFilled || rMinFilled || rPayFilled;
-            const viewsRequiredFilled = vMinViewsFilled && vPayFilled;
-            const reelsRequiredFilled = rMinFilled && rPayFilled;
-            if (viewsTrackHasAnyField && !viewsRequiredFilled) {
-              setFormFeedback(
-                "Bonus (most verified views): enter minimum total views and payout, or clear the category. Minimum verified reels is optional.",
-              );
-              setFormFeedbackType("error");
-              setIsLoading(false);
-              setUploadProgress(null);
-              return;
+            bonusPayload = { enabled: true };
+            if (
+              milestoneBonusTopViewsMin !== "" &&
+              milestoneBonusTopViewsPayout !== ""
+            ) {
+              const mostVerifiedViewsPayload: Record<string, unknown> = {
+                min_total_views: Number(milestoneBonusTopViewsMin),
+                payout_cents: Math.round(
+                  parseFloat(String(milestoneBonusTopViewsPayout)) * 100,
+                ),
+              };
+              if (milestoneBonusTopViewsMinReels !== "") {
+                mostVerifiedViewsPayload.min_verified_reels = Number(
+                  milestoneBonusTopViewsMinReels,
+                );
+              }
+              (bonusPayload as Record<string, unknown>).most_verified_views =
+                mostVerifiedViewsPayload;
             }
-            if (reelsTrackHasAnyField && !reelsRequiredFilled) {
-              setFormFeedback(
-                "Bonus (most verified reels): enter minimum verified reels and payout, or clear the category. Minimum total verified views is optional.",
-              );
-              setFormFeedbackType("error");
-              setIsLoading(false);
-              setUploadProgress(null);
-              return;
-            }
-            const viewsOk =
-              vMinViewsFilled &&
-              vPayFilled &&
-              Number(milestoneBonusTopViewsMin) > 0 &&
-              (!vMinReelsFilled ||
-                Number(milestoneBonusTopViewsMinReels) >= 1) &&
-              Math.round(
-                parseFloat(String(milestoneBonusTopViewsPayout)) * 100,
-              ) >= MIN_MILESTONE_PAYOUT_CENTS;
-            const reelsOk =
-              rMinFilled &&
-              rPayFilled &&
-              Number(milestoneBonusTopReelsMin) >= 1 &&
-              (!rMinViewsFilled || Number(milestoneBonusTopReelsMinViews) > 0) &&
-              Math.round(
-                parseFloat(String(milestoneBonusTopReelsPayout)) * 100,
-              ) >= MIN_MILESTONE_PAYOUT_CENTS;
-            if (!viewsOk && !reelsOk) {
-              setFormFeedback(
-                "With bonus enabled, add at least one bonus category (verified views or verified reels).",
-              );
-              setFormFeedbackType("error");
-              setIsLoading(false);
-              setUploadProgress(null);
-              return;
+            if (
+              milestoneBonusTopReelsMin !== "" &&
+              milestoneBonusTopReelsPayout !== ""
+            ) {
+              const mostVerifiedReelsPayload: Record<string, unknown> = {
+                min_verified_reels: Number(milestoneBonusTopReelsMin),
+                payout_cents: Math.round(
+                  parseFloat(String(milestoneBonusTopReelsPayout)) * 100,
+                ),
+              };
+              if (milestoneBonusTopReelsMinViews !== "") {
+                mostVerifiedReelsPayload.min_total_views = Number(
+                  milestoneBonusTopReelsMinViews,
+                );
+              }
+              (bonusPayload as Record<string, unknown>).most_verified_reels =
+                mostVerifiedReelsPayload;
             }
           }
-        }
 
-        let bonusPayload: Record<string, unknown> | undefined;
-        if (milestoneBonusEnabled) {
-          bonusPayload = { enabled: true };
-          if (
-            milestoneBonusTopViewsMin !== "" &&
-            milestoneBonusTopViewsPayout !== ""
-          ) {
-            const mostVerifiedViewsPayload: Record<string, unknown> = {
-              min_total_views: Number(milestoneBonusTopViewsMin),
-              payout_cents: Math.round(
-                parseFloat(String(milestoneBonusTopViewsPayout)) * 100,
-              ),
-            };
-            if (milestoneBonusTopViewsMinReels !== "") {
-              mostVerifiedViewsPayload.min_verified_reels = Number(
-                milestoneBonusTopViewsMinReels,
-              );
-            }
-            (bonusPayload as Record<string, unknown>).most_verified_views =
-              mostVerifiedViewsPayload;
-          }
-          if (
-            milestoneBonusTopReelsMin !== "" &&
-            milestoneBonusTopReelsPayout !== ""
-          ) {
-            const mostVerifiedReelsPayload: Record<string, unknown> = {
-              min_verified_reels: Number(milestoneBonusTopReelsMin),
-              payout_cents: Math.round(
-                parseFloat(String(milestoneBonusTopReelsPayout)) * 100,
-              ),
-            };
-            if (milestoneBonusTopReelsMinViews !== "") {
-              mostVerifiedReelsPayload.min_total_views = Number(
-                milestoneBonusTopReelsMinViews,
-              );
-            }
-            (bonusPayload as Record<string, unknown>).most_verified_reels =
-              mostVerifiedReelsPayload;
-          }
-        }
+          const totalBudgetCentsMilestone = Math.round(
+            (parseFloat(milestoneBudgetForSubmit.toString()) || 0) * 100,
+          );
 
-        const totalBudgetCentsMilestone = Math.round(
-          (parseFloat(milestoneBudgetForSubmit.toString()) || 0) * 100,
-        );
-
-        contestBasedDetails = {
-          ...contestBasedDetails,
-          milestone_contest: {
-            milestones: milestonesPayload.map((m, idx) => ({
-              ...m,
-              order: idx + 1,
-            })),
-            ...(contestType !== "dual_rewards"
+          contestBasedDetails = {
+            ...contestBasedDetails,
+            milestone_contest: {
+              milestones: milestonesPayload.map((m, idx) => ({
+                ...m,
+                order: idx + 1,
+              })),
+              ...(contestType !== "dual_rewards"
+                ? { total_budget_cents: totalBudgetCentsMilestone }
+                : {}),
+              ...(bonusPayload ? { bonus: bonusPayload } : {}),
+            },
+            ...(contestType === "dual_rewards"
               ? { total_budget_cents: totalBudgetCentsMilestone }
               : {}),
-            ...(bonusPayload ? { bonus: bonusPayload } : {}),
-          },
-          ...(contestType === "dual_rewards"
-            ? { total_budget_cents: totalBudgetCentsMilestone }
-            : {}),
-        };
+          };
         }
         if (includeCpm) {
-        if (!isDraft) {
-          if (!cpmRate || parseFloat(cpmRate.toString()) <= 0) {
-            setFormFeedback("CPM Rate must be a positive number."); // Footer feedback
-            setFormFeedbackType("error");
-            setIsLoading(false);
-            setUploadProgress(null);
-            return;
+          if (!isDraft) {
+            if (!cpmRate || parseFloat(cpmRate.toString()) <= 0) {
+              setFormFeedback("CPM Rate must be a positive number."); // Footer feedback
+              setFormFeedbackType("error");
+              setIsLoading(false);
+              setUploadProgress(null);
+              return;
+            }
+
+            const cpmRateValue = parseFloat(cpmRate.toString());
+            if (cpmRateValue < MIN_CPM_RATE) {
+              setFormFeedback(
+                `CPM Rate must be at least $${MIN_CPM_RATE} per 1000 views.`,
+              ); // Footer feedback
+              setFormFeedbackType("error");
+              setIsLoading(false);
+              setUploadProgress(null);
+              return;
+            }
+
+            if (cpmRateValue > MAX_CPM_RATE) {
+              setFormFeedback(
+                `CPM Rate cannot exceed $${MAX_CPM_RATE} per 1000 views.`,
+              ); // Footer feedback
+              setFormFeedbackType("error");
+              setIsLoading(false);
+              setUploadProgress(null);
+              return;
+            }
+
+            if (!totalBudget || parseFloat(totalBudget.toString()) <= 0) {
+              setFormFeedback(
+                "Total Budget must be a positive number for CPM campaigns.",
+              ); // Footer feedback
+              setFormFeedbackType("error");
+              setIsLoading(false);
+              setUploadProgress(null);
+              return;
+            }
+            if (!termsConditions) {
+              setFormFeedback(
+                "Terms & Conditions are required for CPM campaigns.",
+              ); // Footer feedback
+              setFormFeedbackType("error");
+              setIsLoading(false);
+              setUploadProgress(null);
+              return;
+            }
+
+            // Validate minimum views vs maximum views
+            const minViewsValue =
+              minViews && minViews.toString().trim() !== ""
+                ? parseInt(minViews.toString(), 10)
+                : null;
+            const maxViewsValue =
+              maxViews && maxViews.toString().trim() !== ""
+                ? parseInt(maxViews.toString(), 10)
+                : null;
+
+            if (
+              minViewsValue !== null &&
+              maxViewsValue !== null &&
+              minViewsValue >= maxViewsValue
+            ) {
+              setFormFeedback("Minimum views must be less than maximum views."); // Footer feedback
+              setFormFeedbackType("error");
+              setIsLoading(false);
+              setUploadProgress(null);
+              return;
+            }
+          }
+          const flatFeeBonusCents =
+            contestType !== "dual_rewards" &&
+            flatFeeBonus &&
+            parseFloat(flatFeeBonus.toString()) > 0
+              ? Math.round(parseFloat(flatFeeBonus.toString()) * 100)
+              : undefined;
+
+          const flatFeeBonusCapCents =
+            contestType !== "dual_rewards" &&
+            flatFeeBonusCap &&
+            parseFloat(flatFeeBonusCap.toString()) > 0
+              ? Math.round(parseFloat(flatFeeBonusCap.toString()) * 100)
+              : undefined;
+
+          // Check if this is a Twitter CPM contest - exclude min_views and max_views for Twitter
+          const isTwitterCpmContest =
+            platform === "twitter" &&
+            contestFormat === "text_image" &&
+            (contestType === "cpm" || contestType === "dual_rewards");
+
+          const poolCents = Math.round(
+            (parseFloat(totalBudget.toString()) || 0) * 100,
+          );
+          const cpmContestDetails: any = {
+            cpm_rate_usd: parseFloat(cpmRate.toString()) || 0,
+            ...(contestType !== "dual_rewards"
+              ? { total_budget: poolCents }
+              : {}),
+            budget_spent: 0, // Initial value
+            terms_conditions: termsConditions,
+            ...(flatFeeBonusCents && { flat_fee_bonus: flatFeeBonusCents }), // Only include if set
+            ...(flatFeeBonusCapCents && {
+              flat_fee_bonus_cap: flatFeeBonusCapCents,
+            }), // Only include if set
+            // Note: CPM Points Configuration multipliers are saved in twitter_campaign.points_config
+            // tiered_payouts: [] // Future use
+          };
+
+          // Only include min_views and max_views for non-Twitter CPM campaigns
+          if (!isTwitterCpmContest) {
+            cpmContestDetails.min_views =
+              minViews && minViews.toString().trim() !== ""
+                ? parseInt(minViews.toString(), 10)
+                : null;
+            cpmContestDetails.max_views =
+              maxViews && maxViews.toString().trim() !== ""
+                ? parseInt(maxViews.toString(), 10)
+                : null;
           }
 
-          const cpmRateValue = parseFloat(cpmRate.toString());
-          if (cpmRateValue < MIN_CPM_RATE) {
-            setFormFeedback(
-              `CPM Rate must be at least $${MIN_CPM_RATE} per 1000 views.`,
-            ); // Footer feedback
-            setFormFeedbackType("error");
-            setIsLoading(false);
-            setUploadProgress(null);
-            return;
-          }
-
-          if (cpmRateValue > MAX_CPM_RATE) {
-            setFormFeedback(
-              `CPM Rate cannot exceed $${MAX_CPM_RATE} per 1000 views.`,
-            ); // Footer feedback
-            setFormFeedbackType("error");
-            setIsLoading(false);
-            setUploadProgress(null);
-            return;
-          }
-
-          if (!totalBudget || parseFloat(totalBudget.toString()) <= 0) {
-            setFormFeedback(
-              "Total Budget must be a positive number for CPM campaigns.",
-            ); // Footer feedback
-            setFormFeedbackType("error");
-            setIsLoading(false);
-            setUploadProgress(null);
-            return;
-          }
-          if (!termsConditions) {
-            setFormFeedback(
-              "Terms & Conditions are required for CPM campaigns.",
-            ); // Footer feedback
-            setFormFeedbackType("error");
-            setIsLoading(false);
-            setUploadProgress(null);
-            return;
-          }
-
-          // Validate minimum views vs maximum views
-          const minViewsValue =
-            minViews && minViews.toString().trim() !== ""
-              ? parseInt(minViews.toString(), 10)
-              : null;
-          const maxViewsValue =
-            maxViews && maxViews.toString().trim() !== ""
-              ? parseInt(maxViews.toString(), 10)
-              : null;
-
-          if (
-            minViewsValue !== null &&
-            maxViewsValue !== null &&
-            minViewsValue >= maxViewsValue
-          ) {
-            setFormFeedback("Minimum views must be less than maximum views."); // Footer feedback
-            setFormFeedbackType("error");
-            setIsLoading(false);
-            setUploadProgress(null);
-            return;
-          }
-        }
-        const flatFeeBonusCents =
-          contestType !== "dual_rewards" &&
-          flatFeeBonus &&
-          parseFloat(flatFeeBonus.toString()) > 0
-            ? Math.round(parseFloat(flatFeeBonus.toString()) * 100)
-            : undefined;
-
-        const flatFeeBonusCapCents =
-          contestType !== "dual_rewards" &&
-          flatFeeBonusCap &&
-          parseFloat(flatFeeBonusCap.toString()) > 0
-            ? Math.round(parseFloat(flatFeeBonusCap.toString()) * 100)
-            : undefined;
-
-        // Check if this is a Twitter CPM contest - exclude min_views and max_views for Twitter
-        const isTwitterCpmContest =
-          platform === "twitter" &&
-          contestFormat === "text_image" &&
-          (contestType === "cpm" || contestType === "dual_rewards");
-
-        const poolCents = Math.round(
-          (parseFloat(totalBudget.toString()) || 0) * 100,
-        );
-        const cpmContestDetails: any = {
-          cpm_rate_usd: parseFloat(cpmRate.toString()) || 0,
-          ...(contestType !== "dual_rewards"
-            ? { total_budget: poolCents }
-            : {}),
-          budget_spent: 0, // Initial value
-          terms_conditions: termsConditions,
-          ...(flatFeeBonusCents && { flat_fee_bonus: flatFeeBonusCents }), // Only include if set
-          ...(flatFeeBonusCapCents && {
-            flat_fee_bonus_cap: flatFeeBonusCapCents,
-          }), // Only include if set
-          // Note: CPM Points Configuration multipliers are saved in twitter_campaign.points_config
-          // tiered_payouts: [] // Future use
-        };
-
-        // Only include min_views and max_views for non-Twitter CPM campaigns
-        if (!isTwitterCpmContest) {
-          cpmContestDetails.min_views =
-            minViews && minViews.toString().trim() !== ""
-              ? parseInt(minViews.toString(), 10)
-              : null;
-          cpmContestDetails.max_views =
-            maxViews && maxViews.toString().trim() !== ""
-              ? parseInt(maxViews.toString(), 10)
-              : null;
-        }
-
-        contestBasedDetails = {
-          ...contestBasedDetails,
-          cpm_contest: cpmContestDetails,
-        };
+          contestBasedDetails = {
+            ...contestBasedDetails,
+            cpm_contest: cpmContestDetails,
+          };
         }
       }
 
@@ -3600,6 +3624,42 @@ export default function CreateContestPage({
           contestTrustScore !== ""
             ? Number(contestTrustScore)
             : null,
+        trust_number:
+          isVideoContestFormat(contestFormat) &&
+          trustNumberEnabled &&
+          contestTrustNumber !== ""
+            ? Number(contestTrustNumber)
+            : null,
+        min_best_quality_score:
+          isVideoContestFormat(contestFormat) &&
+          bestQualityEnabled &&
+          contestMinBestQuality !== ""
+            ? Number(contestMinBestQuality)
+            : null,
+        min_avg_quality_score:
+          isVideoContestFormat(contestFormat) &&
+          avgQualityEnabled &&
+          contestMinAvgQuality !== ""
+            ? Number(contestMinAvgQuality)
+            : null,
+        min_quality_score:
+          isVideoContestFormat(contestFormat) &&
+          minQualityEnabled &&
+          contestMinQuality !== ""
+            ? Number(contestMinQuality)
+            : null,
+        min_platform_earnings:
+          isVideoContestFormat(contestFormat) &&
+          minEarningsEnabled &&
+          contestMinEarnings !== ""
+            ? Math.round(Number(contestMinEarnings) * 100)
+            : null,
+        min_platform_views:
+          isVideoContestFormat(contestFormat) &&
+          minViewsEnabled &&
+          contestMinViews !== ""
+            ? Number(contestMinViews)
+            : null,
         content_type: contentType || null,
         bonus_details:
           bonusEnabled && bonusHtml
@@ -3615,6 +3675,29 @@ export default function CreateContestPage({
             : null,
         // Note: flat_fee_bonus is now stored in contest_based_details (in cents)
       };
+
+      const requirementSanitized = sanitizeContestCreatorRequirementPayload({
+        contest_format: contestFormat,
+        fields: {
+          trust_score: contestData.trust_score,
+          trust_number: contestData.trust_number,
+          min_best_quality_score: contestData.min_best_quality_score,
+          min_avg_quality_score: contestData.min_avg_quality_score,
+          min_quality_score: contestData.min_quality_score,
+          min_platform_earnings: contestData.min_platform_earnings,
+          min_platform_views: contestData.min_platform_views,
+        },
+      });
+      if (!requirementSanitized.ok) {
+        toast({
+          title: "Invalid creator requirements",
+          description: requirementSanitized.error,
+          variant: "destructive",
+        });
+        setIsLoading(false);
+        return;
+      }
+      Object.assign(contestData, requirementSanitized.values);
 
       let responseData, responseError;
       console.log("=== Database operation decision ===");
@@ -5052,7 +5135,9 @@ export default function CreateContestPage({
           }
           return;
         }
-        console.warn("Admin brand plan fetch failed, using server-provided plan");
+        console.warn(
+          "Admin brand plan fetch failed, using server-provided plan",
+        );
         if (initialBrandPlanProductId) {
           setUserPlan(initialBrandPlanProductId);
           return;
@@ -5504,7 +5589,10 @@ export default function CreateContestPage({
           typeof lc.total_prize === "number" && lc.total_prize > 0
             ? lc.total_prize
             : amounts.reduce((sum: number, amount: number) => sum + amount, 0);
-        const reconciled = reconcileLeaderboardPrizeAmounts(amounts, totalPrize);
+        const reconciled = reconcileLeaderboardPrizeAmounts(
+          amounts,
+          totalPrize,
+        );
 
         setWinnerAmounts(reconciled);
         setTotalPrizePool(totalPrize);
@@ -5629,8 +5717,7 @@ export default function CreateContestPage({
     // CPM campaign details (rate, views, total budget, terms, flat fee bonus & cap)
     if (
       contestDetails.cpm_contest &&
-      (draft.contest_type === "cpm" ||
-        draft.contest_type === "dual_rewards")
+      (draft.contest_type === "cpm" || draft.contest_type === "dual_rewards")
     ) {
       const cc = contestDetails.cpm_contest;
 
@@ -7099,33 +7186,33 @@ export default function CreateContestPage({
                       {!isAdmin &&
                         (currentPlan.price === 0 ||
                           planFeatures.commissionPercentage >= 20) && (
-                        <div className="rounded-2xl py-6 px-4 mt-4 border border-gray-300">
-                          <div className="flex items-start justify-between gap-6">
-                            <div className="flex-1 min-w-0">
-                              <h5 className="text-base font-bold">
-                                {currentPlan.price === 0
-                                  ? "Ready to unlock more potential?"
-                                  : "Want better rates and more features?"}
-                              </h5>
-                              <p className="text-sm opacity-90 leading-relaxed pr-4">
-                                {currentPlan.price === 0
-                                  ? "Upgrade to reduce commission and get more winners"
-                                  : "Higher plans offer lower commission rates and more flexibility"}
-                              </p>
-                            </div>
-                            {userPlan !== PRODUCT_IDS.CHAMPION && (
-                              <div className="flex-shrink-0">
-                                <button
-                                  className="px-5 py-2 rounded-xl bg-[#4A00BE] text-white"
-                                  onClick={() => setShowUpgradeModal(true)}
-                                >
-                                  Upgrade Plan
-                                </button>
+                          <div className="rounded-2xl py-6 px-4 mt-4 border border-gray-300">
+                            <div className="flex items-start justify-between gap-6">
+                              <div className="flex-1 min-w-0">
+                                <h5 className="text-base font-bold">
+                                  {currentPlan.price === 0
+                                    ? "Ready to unlock more potential?"
+                                    : "Want better rates and more features?"}
+                                </h5>
+                                <p className="text-sm opacity-90 leading-relaxed pr-4">
+                                  {currentPlan.price === 0
+                                    ? "Upgrade to reduce commission and get more winners"
+                                    : "Higher plans offer lower commission rates and more flexibility"}
+                                </p>
                               </div>
-                            )}
+                              {userPlan !== PRODUCT_IDS.CHAMPION && (
+                                <div className="flex-shrink-0">
+                                  <button
+                                    className="px-5 py-2 rounded-xl bg-[#4A00BE] text-white"
+                                    onClick={() => setShowUpgradeModal(true)}
+                                  >
+                                    Upgrade Plan
+                                  </button>
+                                </div>
+                              )}
+                            </div>
                           </div>
-                        </div>
-                      )}
+                        )}
                     </div>
                   </div>
                 </div>
@@ -7411,1349 +7498,1397 @@ export default function CreateContestPage({
               <>
                 {(contestType === "milestone" ||
                   contestType === "dual_rewards") && (
-              <>
-                <div className="space-y-6 py-4 px-1">
-                  <h3 className="text-lg font-medium">
-                    Milestone campaign configuration
-                  </h3>
-                  <Alert
-                    className={cn(
-                      "border",
-                      isDark
-                        ? "bg-[#C9A7FF26] border-[#C9A7FF] text-white"
-                        : "bg-[#F0E7FD] border-[#4A00BE] text-purple-800",
-                    )}
-                  >
-                    <AlertDescription>
-                      <strong>Non-cumulative payouts:</strong> each creator
-                      receives only the reward for the{" "}
-                      <strong>highest</strong> milestone they reach (not the sum
-                      of all tiers below it). Each tier payout must be at least{" "}
-                      {formatCurrencyFromCents(MIN_MILESTONE_PAYOUT_CENTS)}.
-                    </AlertDescription>
-                  </Alert>
-                  <div className="space-y-4">
-                    {milestoneRows.map((row, idx) => {
-                      const winnerLimitValue =
-                        row.winner_limit === ""
-                          ? NaN
-                          : parseInt(String(row.winner_limit), 10);
-                      const payoutDollarsValue = parseFloat(
-                        String(row.payout_dollars),
-                      );
-                      const estimatedPayoutCents =
-                        !isNaN(winnerLimitValue) &&
-                        winnerLimitValue > 0 &&
-                        !isNaN(payoutDollarsValue) &&
-                        payoutDollarsValue > 0
-                          ? Math.round(payoutDollarsValue * 100 * winnerLimitValue)
-                          : null;
-
-                      return (
-                      <div
-                        key={row.id}
+                  <>
+                    <div className="space-y-6 py-4 px-1">
+                      <h3 className="text-lg font-medium">
+                        Milestone campaign configuration
+                      </h3>
+                      <Alert
                         className={cn(
-                          "grid gap-3 md:grid-cols-12 md:items-end p-4 border rounded-lg",
-                          isDark ? "border-gray-600" : "border-gray-300",
+                          "border",
+                          isDark
+                            ? "bg-[#C9A7FF26] border-[#C9A7FF] text-white"
+                            : "bg-[#F0E7FD] border-[#4A00BE] text-purple-800",
                         )}
                       >
-                        <div className="md:col-span-12">
-                          <h4 className="text-sm font-semibold">Milestone {idx + 1}</h4>
-                        </div>
-                        <div className="md:col-span-3 space-y-2">
-                          <Label>Target views</Label>
-                          <Input
-                            type="number"
-                            min={1}
-                            value={row.target_views}
-                            onChange={(e) => {
-                              const v = e.target.value;
-                              const updatedRows = milestoneRows.map((r) =>
-                                r.id === row.id
-                                  ? { ...r, target_views: v === "" ? "" : v }
-                                  : r,
-                              );
-                              setMilestoneRows(updatedRows);
-                              updateMilestoneRowsWithValidation(updatedRows);
-                            }}
-                            className={cn(
-                              isDark
-                                ? "bg-[#180438] border border-gray-600"
-                                : "",
-                            )}
-                            placeholder="e.g. 1000"
-                          />
-                        </div>
-                        <div className="md:col-span-3 space-y-2">
-                          <Label>Payout (USD)</Label>
-                          <Input
-                            type="number"
-                            min={MIN_MILESTONE_PAYOUT_CENTS / 100}
-                            step="0.01"
-                            value={row.payout_dollars}
-                            onChange={(e) => {
-                              const updatedRows = milestoneRows.map((r) =>
-                                r.id === row.id
-                                  ? { ...r, payout_dollars: e.target.value }
-                                  : r,
-                              );
-                              setMilestoneRows(updatedRows);
-                              updateMilestoneRowsWithValidation(updatedRows);
-                            }}
-                            className={cn(
-                              isDark
-                                ? "bg-[#180438] border border-gray-600"
-                                : "",
-                            )}
-                            placeholder="e.g. 5.00"
-                          />
-                        </div>
-                        <div className="md:col-span-3 space-y-2">
-                          <p className="text-xs">
-                            <span className="font-medium">
-                              Winner cap (optional):
-                            </span>{" "}
-                            <span className="text-muted-foreground">
-                              First N creators to reach this tier, or leave blank
-                              for everyone who qualifies.
-                            </span>
-                          </p>
-                          <Input
-                            type="number"
-                            min={1}
-                            value={row.winner_limit}
-                            onChange={(e) =>
-                              setMilestoneRows((prev) =>
-                                prev.map((r) =>
-                                  r.id === row.id
-                                    ? { ...r, winner_limit: e.target.value }
-                                    : r,
-                                ),
-                              )
-                            }
-                            className={cn(
-                              isDark
-                                ? "bg-[#180438] border border-gray-600"
-                                : "",
-                            )}
-                            placeholder="0"
-                          />
-                        </div>
-                        <div className="md:col-span-2 space-y-2">
-                          {estimatedPayoutCents !== null && (
-                            <>
-                              <Label>Estimated payout</Label>
-                              <div
-                                className={cn(
-                                  "h-10 rounded-md border px-3 flex items-center text-sm",
-                                  isDark
-                                    ? "bg-[#180438] border-gray-600 text-white"
-                                    : "bg-muted/40 border-input",
-                                )}
-                              >
-                                {formatCurrencyFromCents(estimatedPayoutCents)}
-                              </div>
-                            </>
-                          )}
-                        </div>
-                        <div className="md:col-span-1 flex md:justify-end">
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="icon"
-                            className="shrink-0"
-                            disabled={milestoneRows.length <= 1}
-                            onClick={() => {
-                              const updatedRows = milestoneRows.filter(
-                                (r) => r.id !== row.id,
-                              );
-                              setMilestoneRows(updatedRows);
-                              updateMilestoneRowsWithValidation(updatedRows);
-                            }}
-                            aria-label={`Remove milestone ${idx + 1}`}
-                          >
-                            <Trash className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      </div>
-                    );
-                    })}
-                    {milestoneSequenceError && (
-                      <Alert variant="destructive">
-                        <AlertDescription>{milestoneSequenceError}</AlertDescription>
+                        <AlertDescription>
+                          <strong>Non-cumulative payouts:</strong> each creator
+                          receives only the reward for the{" "}
+                          <strong>highest</strong> milestone they reach (not the
+                          sum of all tiers below it). Each tier payout must be
+                          at least{" "}
+                          {formatCurrencyFromCents(MIN_MILESTONE_PAYOUT_CENTS)}.
+                        </AlertDescription>
                       </Alert>
-                    )}
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      disabled={!canAddNextMilestone(milestoneRows)}
-                      onClick={handleAddMilestoneRow}
-                    >
-                      Add milestone
-                    </Button>
-                  </div>
-                  {contestType !== "dual_rewards" && (
-                    <div className="space-y-2">
-                      <Label htmlFor="milestoneTotalBudget">
-                        Total campaign budget (USD){" "}
-                        <span className="text-red-500">*</span>
-                      </Label>
-                      <Input
-                        id="milestoneTotalBudget"
-                        type="number"
-                        value={totalBudget}
-                        onChange={(e) => setTotalBudget(e.target.value)}
-                        min="1"
-                        step="0.01"
-                        className={cn(
-                          isDark
-                            ? "bg-[#180438] border border-gray-600 text-white"
-                            : "bg-white",
-                        )}
-                        placeholder="Maximum amount reserved for this campaign"
-                      />
-                      <p className="text-xs text-muted-foreground">
-                        This is the pool you fund upfront (similar to a CPM
-                        budget). Payouts are drawn from it as creators hit
-                        milestones.
-                      </p>
-                    </div>
-                  )}
-                  {contestType !== "dual_rewards" && (
-                    <div
-                      className={cn(
-                        "space-y-3 p-4 border rounded-lg",
-                        isDark
-                          ? "bg-blue-950/50 border-blue-800"
-                          : "bg-blue-50 border-blue-200",
-                      )}
-                    >
-                      <div className="flex items-center gap-2">
-                        <span className="text-2xl">🎯</span>
-                        <Label
-                          htmlFor="milestoneMaxEarnings"
-                          className="text-base font-semibold"
-                        >
-                          Maximum Earnings Per Creator (Optional)
-                        </Label>
-                      </div>
-                      <Input
-                        id="milestoneMaxEarnings"
-                        type="number"
-                        min="0"
-                        step="0.01"
-                        value={maxEarningsPerCreator}
-                        className={cn(
-                          isDark
-                            ? "bg-[#180438] border border-gray-600 text-white"
-                            : "bg-white text-black",
-                        )}
-                        onChange={(e) =>
-                          setMaxEarningsPerCreator(e.target.value)
-                        }
-                        placeholder="e.g., 500 for $500 max per creator"
-                      />
-                      <p className="text-sm text-muted-foreground">
-                        Set a maximum earning cap per creator for{" "}
-                        <strong>THIS CONTEST ONLY</strong>. Once reached, they
-                        can still submit but won't earn more from this campaign.
-                        This does NOT affect their earnings from other campaigns on
-                        the platform. Helps ensure fair reward distribution within
-                        this campaign.
-                      </p>
-                      {maxEarningsPerCreator &&
-                        parseFloat(maxEarningsPerCreator.toString()) > 0 && (
-                          <Alert
-                            className={cn(
-                              isDark
-                                ? "bg-blue-900/30 border-blue-900"
-                                : "bg-blue-100 border-blue-300",
-                            )}
-                          >
-                            <AlertDescription
+                      <div className="space-y-4">
+                        {milestoneRows.map((row, idx) => {
+                          const winnerLimitValue =
+                            row.winner_limit === ""
+                              ? NaN
+                              : parseInt(String(row.winner_limit), 10);
+                          const payoutDollarsValue = parseFloat(
+                            String(row.payout_dollars),
+                          );
+                          const estimatedPayoutCents =
+                            !isNaN(winnerLimitValue) &&
+                            winnerLimitValue > 0 &&
+                            !isNaN(payoutDollarsValue) &&
+                            payoutDollarsValue > 0
+                              ? Math.round(
+                                  payoutDollarsValue * 100 * winnerLimitValue,
+                                )
+                              : null;
+
+                          return (
+                            <div
+                              key={row.id}
                               className={cn(
-                                isDark ? "text-blue-200" : "text-blue-800",
+                                "grid gap-3 md:grid-cols-12 md:items-end p-4 border rounded-lg",
+                                isDark ? "border-gray-600" : "border-gray-300",
                               )}
                             >
-                              ℹ️ Each creator can earn up to{" "}
-                              <strong>
-                                $
-                                {parseFloat(
-                                  maxEarningsPerCreator.toString(),
-                                ).toFixed(2)}
-                              </strong>{" "}
-                              from this campaign.
+                              <div className="md:col-span-12">
+                                <h4 className="text-sm font-semibold">
+                                  Milestone {idx + 1}
+                                </h4>
+                              </div>
+                              <div className="md:col-span-3 space-y-2">
+                                <Label>Target views</Label>
+                                <Input
+                                  type="number"
+                                  min={1}
+                                  value={row.target_views}
+                                  onChange={(e) => {
+                                    const v = e.target.value;
+                                    const updatedRows = milestoneRows.map(
+                                      (r) =>
+                                        r.id === row.id
+                                          ? {
+                                              ...r,
+                                              target_views: v === "" ? "" : v,
+                                            }
+                                          : r,
+                                    );
+                                    setMilestoneRows(updatedRows);
+                                    updateMilestoneRowsWithValidation(
+                                      updatedRows,
+                                    );
+                                  }}
+                                  className={cn(
+                                    isDark
+                                      ? "bg-[#180438] border border-gray-600"
+                                      : "",
+                                  )}
+                                  placeholder="e.g. 1000"
+                                />
+                              </div>
+                              <div className="md:col-span-3 space-y-2">
+                                <Label>Payout (USD)</Label>
+                                <Input
+                                  type="number"
+                                  min={MIN_MILESTONE_PAYOUT_CENTS / 100}
+                                  step="0.01"
+                                  value={row.payout_dollars}
+                                  onChange={(e) => {
+                                    const updatedRows = milestoneRows.map(
+                                      (r) =>
+                                        r.id === row.id
+                                          ? {
+                                              ...r,
+                                              payout_dollars: e.target.value,
+                                            }
+                                          : r,
+                                    );
+                                    setMilestoneRows(updatedRows);
+                                    updateMilestoneRowsWithValidation(
+                                      updatedRows,
+                                    );
+                                  }}
+                                  className={cn(
+                                    isDark
+                                      ? "bg-[#180438] border border-gray-600"
+                                      : "",
+                                  )}
+                                  placeholder="e.g. 5.00"
+                                />
+                              </div>
+                              <div className="md:col-span-3 space-y-2">
+                                <p className="text-xs">
+                                  <span className="font-medium">
+                                    Winner cap (optional):
+                                  </span>{" "}
+                                  <span className="text-muted-foreground">
+                                    First N creators to reach this tier, or
+                                    leave blank for everyone who qualifies.
+                                  </span>
+                                </p>
+                                <Input
+                                  type="number"
+                                  min={1}
+                                  value={row.winner_limit}
+                                  onChange={(e) =>
+                                    setMilestoneRows((prev) =>
+                                      prev.map((r) =>
+                                        r.id === row.id
+                                          ? {
+                                              ...r,
+                                              winner_limit: e.target.value,
+                                            }
+                                          : r,
+                                      ),
+                                    )
+                                  }
+                                  className={cn(
+                                    isDark
+                                      ? "bg-[#180438] border border-gray-600"
+                                      : "",
+                                  )}
+                                  placeholder="0"
+                                />
+                              </div>
+                              <div className="md:col-span-2 space-y-2">
+                                {estimatedPayoutCents !== null && (
+                                  <>
+                                    <Label>Estimated payout</Label>
+                                    <div
+                                      className={cn(
+                                        "h-10 rounded-md border px-3 flex items-center text-sm",
+                                        isDark
+                                          ? "bg-[#180438] border-gray-600 text-white"
+                                          : "bg-muted/40 border-input",
+                                      )}
+                                    >
+                                      {formatCurrencyFromCents(
+                                        estimatedPayoutCents,
+                                      )}
+                                    </div>
+                                  </>
+                                )}
+                              </div>
+                              <div className="md:col-span-1 flex md:justify-end">
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="icon"
+                                  className="shrink-0"
+                                  disabled={milestoneRows.length <= 1}
+                                  onClick={() => {
+                                    const updatedRows = milestoneRows.filter(
+                                      (r) => r.id !== row.id,
+                                    );
+                                    setMilestoneRows(updatedRows);
+                                    updateMilestoneRowsWithValidation(
+                                      updatedRows,
+                                    );
+                                  }}
+                                  aria-label={`Remove milestone ${idx + 1}`}
+                                >
+                                  <Trash className="h-4 w-4" />
+                                </Button>
+                              </div>
+                            </div>
+                          );
+                        })}
+                        {milestoneSequenceError && (
+                          <Alert variant="destructive">
+                            <AlertDescription>
+                              {milestoneSequenceError}
                             </AlertDescription>
                           </Alert>
                         )}
-                    </div>
-                  )}
-                  <div
-                    className={cn(
-                      "space-y-4 p-4 border rounded-lg",
-                      isDark ? "border-gray-600" : "border-gray-300",
-                    )}
-                  >
-                    <div className="flex items-center gap-2">
-                      <Checkbox
-                        id="milestoneBonusToggle"
-                        checked={milestoneBonusEnabled}
-                        onCheckedChange={(c) =>
-                          setMilestoneBonusEnabled(c === true)
-                        }
-                      />
-                      <Label
-                        htmlFor="milestoneBonusToggle"
-                        className="cursor-pointer text-md font-medium"
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          disabled={!canAddNextMilestone(milestoneRows)}
+                          onClick={handleAddMilestoneRow}
+                        >
+                          Add milestone
+                        </Button>
+                      </div>
+                      {contestType !== "dual_rewards" && (
+                        <div className="space-y-2">
+                          <Label htmlFor="milestoneTotalBudget">
+                            Total campaign budget (USD){" "}
+                            <span className="text-red-500">*</span>
+                          </Label>
+                          <Input
+                            id="milestoneTotalBudget"
+                            type="number"
+                            value={totalBudget}
+                            onChange={(e) => setTotalBudget(e.target.value)}
+                            min="1"
+                            step="0.01"
+                            className={cn(
+                              isDark
+                                ? "bg-[#180438] border border-gray-600 text-white"
+                                : "bg-white",
+                            )}
+                            placeholder="Maximum amount reserved for this campaign"
+                          />
+                          <p className="text-xs text-muted-foreground">
+                            This is the pool you fund upfront (similar to a CPM
+                            budget). Payouts are drawn from it as creators hit
+                            milestones.
+                          </p>
+                        </div>
+                      )}
+                      {contestType !== "dual_rewards" && (
+                        <div
+                          className={cn(
+                            "space-y-3 p-4 border rounded-lg",
+                            isDark
+                              ? "bg-blue-950/50 border-blue-800"
+                              : "bg-blue-50 border-blue-200",
+                          )}
+                        >
+                          <div className="flex items-center gap-2">
+                            <span className="text-2xl">🎯</span>
+                            <Label
+                              htmlFor="milestoneMaxEarnings"
+                              className="text-base font-semibold"
+                            >
+                              Maximum Earnings Per Creator (Optional)
+                            </Label>
+                          </div>
+                          <Input
+                            id="milestoneMaxEarnings"
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            value={maxEarningsPerCreator}
+                            className={cn(
+                              isDark
+                                ? "bg-[#180438] border border-gray-600 text-white"
+                                : "bg-white text-black",
+                            )}
+                            onChange={(e) =>
+                              setMaxEarningsPerCreator(e.target.value)
+                            }
+                            placeholder="e.g., 500 for $500 max per creator"
+                          />
+                          <p className="text-sm text-muted-foreground">
+                            Set a maximum earning cap per creator for{" "}
+                            <strong>THIS CONTEST ONLY</strong>. Once reached,
+                            they can still submit but won't earn more from this
+                            campaign. This does NOT affect their earnings from
+                            other campaigns on the platform. Helps ensure fair
+                            reward distribution within this campaign.
+                          </p>
+                          {maxEarningsPerCreator &&
+                            parseFloat(maxEarningsPerCreator.toString()) >
+                              0 && (
+                              <Alert
+                                className={cn(
+                                  isDark
+                                    ? "bg-blue-900/30 border-blue-900"
+                                    : "bg-blue-100 border-blue-300",
+                                )}
+                              >
+                                <AlertDescription
+                                  className={cn(
+                                    isDark ? "text-blue-200" : "text-blue-800",
+                                  )}
+                                >
+                                  ℹ️ Each creator can earn up to{" "}
+                                  <strong>
+                                    $
+                                    {parseFloat(
+                                      maxEarningsPerCreator.toString(),
+                                    ).toFixed(2)}
+                                  </strong>{" "}
+                                  from this campaign.
+                                </AlertDescription>
+                              </Alert>
+                            )}
+                        </div>
+                      )}
+                      <div
+                        className={cn(
+                          "space-y-4 p-4 border rounded-lg",
+                          isDark ? "border-gray-600" : "border-gray-300",
+                        )}
                       >
-                        Creator Bonus (verified creators)
-                      </Label>
-                    </div>
-                    {milestoneBonusEnabled && (
-                      <div className="space-y-4 pl-1">
-                        <p className="text-sm text-muted-foreground">
-                          Optional extras for top performers. Configure at least
-                          one category when bonus is enabled.
-                        </p>
-                        <h4 className="text-sm font-semibold">
-                          Most Verified Views 
-                        </h4>
-                        <div className="grid gap-3 md:grid-cols-3">
-                          <div className="space-y-2">
-                            <Label>
-                             Minimum total verified views
-                            </Label>
-                            <Input
-                              type="number"
-                              min={1}
-                              value={milestoneBonusTopViewsMin}
-                              onChange={(e) =>
-                                setMilestoneBonusTopViewsMin(
-                                  e.target.value === ""
-                                    ? ""
-                                    : parseInt(e.target.value, 10),
-                                )
-                              }
-                              className={cn(
-                                isDark
-                                  ? "bg-[#180438] border border-gray-600"
-                                  : "",
-                              )}
-                              placeholder="e.g. 200000"
-                            />
-                          </div>
-                          <div className="space-y-2">
-                            <Label>
-                              Minimum verified reels
-                            </Label>
-                            <Input
-                              type="number"
-                              min={1}
-                              value={milestoneBonusTopViewsMinReels}
-                              onChange={(e) =>
-                                setMilestoneBonusTopViewsMinReels(
-                                  e.target.value === ""
-                                    ? ""
-                                    : parseInt(e.target.value, 10),
-                                )
-                              }
-                              className={cn(
-                                isDark
-                                  ? "bg-[#180438] border border-gray-600"
-                                  : "",
-                              )}
-                              placeholder="e.g. 5"
-                            />
-                          </div>
-                          <div className="space-y-2">
-                            <Label>Winner bonus (USD)</Label>
-                            <Input
-                              type="number"
-                              step="0.01"
-                              min={MIN_MILESTONE_PAYOUT_CENTS / 100}
-                              value={milestoneBonusTopViewsPayout}
-                              onChange={(e) =>
-                                setMilestoneBonusTopViewsPayout(e.target.value)
-                              }
-                              className={cn(
-                                isDark
-                                  ? "bg-[#180438] border border-gray-600"
-                                  : "",
-                              )}
-                              placeholder="e.g. 100"
-                            />
-                          </div>
+                        <div className="flex items-center gap-2">
+                          <Checkbox
+                            id="milestoneBonusToggle"
+                            checked={milestoneBonusEnabled}
+                            onCheckedChange={(c) =>
+                              setMilestoneBonusEnabled(c === true)
+                            }
+                          />
+                          <Label
+                            htmlFor="milestoneBonusToggle"
+                            className="cursor-pointer text-md font-medium"
+                          >
+                            Creator Bonus (verified creators)
+                          </Label>
                         </div>
-                        <h4 className="text-sm font-semibold">
-                          Most Verified Reels 
-                        </h4>
-                        <div className="grid gap-3 md:grid-cols-3">
-                          <div className="space-y-2">
-                            <Label>
-                              Minimum total verified views
-                            </Label>
-                            <Input
-                              type="number"
-                              min={1}
-                              value={milestoneBonusTopReelsMinViews}
-                              onChange={(e) =>
-                                setMilestoneBonusTopReelsMinViews(
-                                  e.target.value === ""
-                                    ? ""
-                                    : parseInt(e.target.value, 10),
-                                )
-                              }
-                              className={cn(
-                                isDark
-                                  ? "bg-[#180438] border border-gray-600"
-                                  : "",
-                              )}
-                              placeholder="e.g. 200000"
-                            />
+                        {milestoneBonusEnabled && (
+                          <div className="space-y-4 pl-1">
+                            <p className="text-sm text-muted-foreground">
+                              Optional extras for top performers. Configure at
+                              least one category when bonus is enabled.
+                            </p>
+                            <h4 className="text-sm font-semibold">
+                              Most Verified Views
+                            </h4>
+                            <div className="grid gap-3 md:grid-cols-3">
+                              <div className="space-y-2">
+                                <Label>Minimum total verified views</Label>
+                                <Input
+                                  type="number"
+                                  min={1}
+                                  value={milestoneBonusTopViewsMin}
+                                  onChange={(e) =>
+                                    setMilestoneBonusTopViewsMin(
+                                      e.target.value === ""
+                                        ? ""
+                                        : parseInt(e.target.value, 10),
+                                    )
+                                  }
+                                  className={cn(
+                                    isDark
+                                      ? "bg-[#180438] border border-gray-600"
+                                      : "",
+                                  )}
+                                  placeholder="e.g. 200000"
+                                />
+                              </div>
+                              <div className="space-y-2">
+                                <Label>Minimum verified reels</Label>
+                                <Input
+                                  type="number"
+                                  min={1}
+                                  value={milestoneBonusTopViewsMinReels}
+                                  onChange={(e) =>
+                                    setMilestoneBonusTopViewsMinReels(
+                                      e.target.value === ""
+                                        ? ""
+                                        : parseInt(e.target.value, 10),
+                                    )
+                                  }
+                                  className={cn(
+                                    isDark
+                                      ? "bg-[#180438] border border-gray-600"
+                                      : "",
+                                  )}
+                                  placeholder="e.g. 5"
+                                />
+                              </div>
+                              <div className="space-y-2">
+                                <Label>Winner bonus (USD)</Label>
+                                <Input
+                                  type="number"
+                                  step="0.01"
+                                  min={MIN_MILESTONE_PAYOUT_CENTS / 100}
+                                  value={milestoneBonusTopViewsPayout}
+                                  onChange={(e) =>
+                                    setMilestoneBonusTopViewsPayout(
+                                      e.target.value,
+                                    )
+                                  }
+                                  className={cn(
+                                    isDark
+                                      ? "bg-[#180438] border border-gray-600"
+                                      : "",
+                                  )}
+                                  placeholder="e.g. 100"
+                                />
+                              </div>
+                            </div>
+                            <h4 className="text-sm font-semibold">
+                              Most Verified Reels
+                            </h4>
+                            <div className="grid gap-3 md:grid-cols-3">
+                              <div className="space-y-2">
+                                <Label>Minimum total verified views</Label>
+                                <Input
+                                  type="number"
+                                  min={1}
+                                  value={milestoneBonusTopReelsMinViews}
+                                  onChange={(e) =>
+                                    setMilestoneBonusTopReelsMinViews(
+                                      e.target.value === ""
+                                        ? ""
+                                        : parseInt(e.target.value, 10),
+                                    )
+                                  }
+                                  className={cn(
+                                    isDark
+                                      ? "bg-[#180438] border border-gray-600"
+                                      : "",
+                                  )}
+                                  placeholder="e.g. 200000"
+                                />
+                              </div>
+                              <div className="space-y-2">
+                                <Label>Minimum verified reels</Label>
+                                <Input
+                                  type="number"
+                                  min={1}
+                                  value={milestoneBonusTopReelsMin}
+                                  onChange={(e) =>
+                                    setMilestoneBonusTopReelsMin(
+                                      e.target.value === ""
+                                        ? ""
+                                        : parseInt(e.target.value, 10),
+                                    )
+                                  }
+                                  className={cn(
+                                    isDark
+                                      ? "bg-[#180438] border border-gray-600"
+                                      : "",
+                                  )}
+                                  placeholder="e.g. 5"
+                                />
+                              </div>
+                              <div className="space-y-2">
+                                <Label>Winner bonus (USD)</Label>
+                                <Input
+                                  type="number"
+                                  step="0.01"
+                                  min={MIN_MILESTONE_PAYOUT_CENTS / 100}
+                                  value={milestoneBonusTopReelsPayout}
+                                  onChange={(e) =>
+                                    setMilestoneBonusTopReelsPayout(
+                                      e.target.value,
+                                    )
+                                  }
+                                  className={cn(
+                                    isDark
+                                      ? "bg-[#180438] border border-gray-600"
+                                      : "",
+                                  )}
+                                  placeholder="e.g. 50"
+                                />
+                              </div>
+                            </div>
                           </div>
-                          <div className="space-y-2">
-                            <Label>Minimum verified reels</Label>
-                            <Input
-                              type="number"
-                              min={1}
-                              value={milestoneBonusTopReelsMin}
-                              onChange={(e) =>
-                                setMilestoneBonusTopReelsMin(
-                                  e.target.value === ""
-                                    ? ""
-                                    : parseInt(e.target.value, 10),
-                                )
-                              }
-                              className={cn(
-                                isDark
-                                  ? "bg-[#180438] border border-gray-600"
-                                  : "",
-                              )}
-                              placeholder="e.g. 5"
-                            />
-                          </div>
-                          <div className="space-y-2">
-                            <Label>Winner bonus (USD)</Label>
-                            <Input
-                              type="number"
-                              step="0.01"
-                              min={MIN_MILESTONE_PAYOUT_CENTS / 100}
-                              value={milestoneBonusTopReelsPayout}
-                              onChange={(e) =>
-                                setMilestoneBonusTopReelsPayout(e.target.value)
-                              }
-                              className={cn(
-                                isDark
-                                  ? "bg-[#180438] border border-gray-600"
-                                  : "",
-                              )}
-                              placeholder="e.g. 50"
-                            />
-                          </div>
-                        </div>
+                        )}
                       </div>
-                    )}
-                  </div>
-                </div>
-                {parseFloat(totalBudget.toString() || "0") * 100 <
-                  planFeatures.minContestBudget &&
-                  (totalBudget.toString() || "0").length > 0 && (
-                    <Alert
-                      className={cn(
-                        "border",
-                        isDark
-                          ? "bg-[#C9A7FF26] border-[#C9A7FF] text-white"
-                          : "bg-[#F0E7FD] border-[#4A00BE] text-purple-700",
+                    </div>
+                    {parseFloat(totalBudget.toString() || "0") * 100 <
+                      planFeatures.minContestBudget &&
+                      (totalBudget.toString() || "0").length > 0 && (
+                        <Alert
+                          className={cn(
+                            "border",
+                            isDark
+                              ? "bg-[#C9A7FF26] border-[#C9A7FF] text-white"
+                              : "bg-[#F0E7FD] border-[#4A00BE] text-purple-700",
+                          )}
+                        >
+                          <AlertDescription>
+                            The minimum campaign budget for your{" "}
+                            {currentPlan?.name || "current"} plan is{" "}
+                            {formatCurrencyFromCents(
+                              planFeatures.minContestBudget,
+                            )}
+                            . Please increase your total budget.
+                          </AlertDescription>
+                        </Alert>
                       )}
-                    >
-                      <AlertDescription>
-                        The minimum campaign budget for your{" "}
-                        {currentPlan?.name || "current"} plan is{" "}
-                        {formatCurrencyFromCents(planFeatures.minContestBudget)}
-                        . Please increase your total budget.
-                      </AlertDescription>
-                    </Alert>
-                  )}
-              </>
+                  </>
                 )}
-                {(contestType === "cpm" ||
-                  contestType === "dual_rewards") && (
-              <>
-                <div className="space-y-6 py-4 px-1">
-                  <h3 className="text-lg font-medium">
-                    CPM Campaign Configuration
-                  </h3>
-                  <div className="space-y-2">
-                    <Label htmlFor="cpmRatePrize">
-                      {platform === "twitter" && contestFormat === "text_image"
-                        ? "CPM Rate (USD per 1000 points)"
-                        : "CPM Rate (USD)"}
-                    </Label>
-                    <Input
-                      id="cpmRatePrize"
-                      type="number"
-                      value={cpmRate}
-                      onChange={(e) => setCpmRate(e.target.value)}
-                      onBlur={(e) => {
-                        const value = e.target.value;
-                        const numValue = parseFloat(value);
-
-                        if (value && numValue < MIN_CPM_RATE) {
-                          setCpmRate(MIN_CPM_RATE.toString());
-                          toast({
-                            title: "CPM Rate Too Low",
-                            description:
-                              platform === "twitter" &&
-                              contestFormat === "text_image"
-                                ? `CPM Rate must be at least $${MIN_CPM_RATE} per 1000 points.`
-                                : `CPM Rate must be at least $${MIN_CPM_RATE} per 1000 views.`,
-                            variant: "destructive",
-                          });
-                        } else if (value && numValue > MAX_CPM_RATE) {
-                          setCpmRate(MAX_CPM_RATE.toString());
-                          toast({
-                            title: "CPM Rate Too High",
-                            description:
-                              platform === "twitter" &&
-                              contestFormat === "text_image"
-                                ? `CPM Rate cannot exceed $${MAX_CPM_RATE} per 1000 points.`
-                                : `CPM Rate cannot exceed $${MAX_CPM_RATE} per 1000 views.`,
-                            variant: "destructive",
-                          });
-                        }
-                      }}
-                      placeholder={
-                        platform === "twitter" && contestFormat === "text_image"
-                          ? "e.g., 4.00 for $4.00 per 1000 points"
-                          : "e.g., 1.50 for $1.50 per 1000 views"
-                      }
-                      className={cn(
-                        isDark
-                          ? "bg-[#180438] border border-gray-600 text-white"
-                          : "bg-white",
-                      )}
-                      min={MIN_CPM_RATE}
-                      max={MAX_CPM_RATE}
-                      step="0.01"
-                    />
-                    <p className="text-xs text-muted-foreground">
-                      {platform === "twitter" && contestFormat === "text_image"
-                        ? `Amount paid to creators per 1000 points. Points are calculated from the metric weights below. Range: $${MIN_CPM_RATE} - $${MAX_CPM_RATE} per 1000 points.`
-                        : `Amount paid to creators per 1000 views. Range: $${MIN_CPM_RATE} - $${MAX_CPM_RATE} per 1000 views.`}
-                    </p>
-                  </div>
-                  {platform === "twitter" && contestFormat === "text_image" && (
-                    <div className="space-y-3 mt-4">
-                      <h4 className="text-md font-medium">
-                        Twitter (X) CPM – Points Model
-                      </h4>
-                      <p className="text-xs text-muted-foreground">
-                        Choose which metrics count and set how many points each
-                        metric is worth. Payout is calculated from total points.
-                      </p>
-
-                      <div className="space-y-3">
-                        {contentType !== "raid" && (
-                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-center">
-                            <label className="flex items-center gap-2 text-sm">
-                              <span>Likes</span>
-                            </label>
-                            <div className="sm:col-span-2">
-                              <Input
-                                type="number"
-                                min="0"
-                                step="0.01"
-                                value={twitterPointsConfig.likesWeight}
-                                onChange={(e) =>
-                                  setTwitterPointsConfig((prev) => ({
-                                    ...prev,
-                                    likesWeight: e.target.value,
-                                  }))
-                                }
-                                placeholder="e.g., 1"
-                                className={cn(
-                                  isDark
-                                    ? "bg-[#180438] border border-gray-600 text-white"
-                                    : "bg-white",
-                                )}
-                              />
-                            </div>
-                          </div>
-                        )}
-
-                        <div className="space-y-2">
-                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-center">
-                            <label className="flex items-center gap-2 text-sm">
-                              <span>Comments / Replies</span>
-                            </label>
-                            <div className="sm:col-span-2">
-                              <Input
-                                type="number"
-                                min="0"
-                                step="0.01"
-                                value={cpmPointsConfig.comment_base_points}
-                                onChange={(e) =>
-                                  setCpmPointsConfig((prev) => ({
-                                    ...prev,
-                                    comment_base_points: e.target.value,
-                                  }))
-                                }
-                                placeholder="e.g., 1"
-                                className={cn(
-                                  isDark
-                                    ? "bg-[#180438] border border-gray-600 text-white"
-                                    : "bg-white",
-                                )}
-                              />
-                            </div>
-                          </div>
-                          <div className="flex items-center gap-2 ml-0 sm:ml-[calc(33.333%+0.75rem)]">
-                            <Checkbox
-                              id="showCommentMultipliers"
-                              checked={showCommentMultipliers}
-                              onCheckedChange={async (checked) => {
-                                setShowCommentMultipliers(checked === true);
-                                // Save to draft when checkbox is toggled
-                                await saveCpmAsDraft();
-                              }}
-                            />
-                            <Label
-                              htmlFor="showCommentMultipliers"
-                              className="text-sm cursor-pointer"
-                            >
-                              Keep all values set to 0 if you do not want to
-                              award points for comment engagement.
-                            </Label>
-                          </div>
-                          {showCommentMultipliers && (
-                            <div className="ml-0 sm:ml-[calc(33.333%+0.75rem)] mt-3 p-4 border rounded-lg space-y-3">
-                              <h5 className="text-sm font-medium">
-                                Comment Engagement Multipliers
-                              </h5>
-                              <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
-                                <div className="space-y-2">
-                                  <Label htmlFor="commentLikesMultiplier">
-                                    Likes
-                                  </Label>
-                                  <Input
-                                    id="commentLikesMultiplier"
-                                    type="number"
-                                    min="0"
-                                    step="0.001"
-                                    value={
-                                      cpmPointsConfig.comment_likes_multiplier
-                                    }
-                                    onChange={(e) =>
-                                      setCpmPointsConfig((prev) => ({
-                                        ...prev,
-                                        comment_likes_multiplier:
-                                          e.target.value,
-                                      }))
-                                    }
-                                    className={cn(
-                                      isDark
-                                        ? "bg-[#180438] border border-gray-600 text-white"
-                                        : "bg-white",
-                                    )}
-                                  />
-                                </div>
-                                <div className="space-y-2">
-                                  <Label htmlFor="commentRepliesMultiplier">
-                                    Replies
-                                  </Label>
-                                  <Input
-                                    id="commentRepliesMultiplier"
-                                    type="number"
-                                    min="0"
-                                    step="0.001"
-                                    value={
-                                      cpmPointsConfig.comment_replies_multiplier
-                                    }
-                                    onChange={(e) =>
-                                      setCpmPointsConfig((prev) => ({
-                                        ...prev,
-                                        comment_replies_multiplier:
-                                          e.target.value,
-                                      }))
-                                    }
-                                    className={cn(
-                                      isDark
-                                        ? "bg-[#180438] border border-gray-600 text-white"
-                                        : "bg-white",
-                                    )}
-                                  />
-                                </div>
-                                <div className="space-y-2">
-                                  <Label htmlFor="commentImpressionsMultiplier">
-                                    Impressions
-                                  </Label>
-                                  <Input
-                                    id="commentImpressionsMultiplier"
-                                    type="number"
-                                    min="0"
-                                    step="0.0001"
-                                    value={
-                                      cpmPointsConfig.comment_impressions_multiplier
-                                    }
-                                    onChange={(e) =>
-                                      setCpmPointsConfig((prev) => ({
-                                        ...prev,
-                                        comment_impressions_multiplier:
-                                          e.target.value,
-                                      }))
-                                    }
-                                    className={cn(
-                                      isDark
-                                        ? "bg-[#180438] border border-gray-600 text-white"
-                                        : "bg-white",
-                                    )}
-                                  />
-                                </div>
-                                <div className="space-y-2">
-                                  <Label htmlFor="commentRetweetsMultiplier">
-                                    Retweets
-                                  </Label>
-                                  <Input
-                                    id="commentRetweetsMultiplier"
-                                    type="number"
-                                    min="0"
-                                    step="0.001"
-                                    value={
-                                      cpmPointsConfig.comment_retweets_multiplier
-                                    }
-                                    onChange={(e) =>
-                                      setCpmPointsConfig((prev) => ({
-                                        ...prev,
-                                        comment_retweets_multiplier:
-                                          e.target.value,
-                                      }))
-                                    }
-                                    className={cn(
-                                      isDark
-                                        ? "bg-[#180438] border border-gray-600 text-white"
-                                        : "bg-white",
-                                    )}
-                                  />
-                                </div>
-                                <div className="space-y-2">
-                                  <Label htmlFor="commentQuoteRepostsMultiplier">
-                                    Quote Reposts
-                                  </Label>
-                                  <Input
-                                    id="commentQuoteRepostsMultiplier"
-                                    type="number"
-                                    min="0"
-                                    step="0.001"
-                                    value={
-                                      cpmPointsConfig.comment_quote_reposts_multiplier
-                                    }
-                                    onChange={(e) =>
-                                      setCpmPointsConfig((prev) => ({
-                                        ...prev,
-                                        comment_quote_reposts_multiplier:
-                                          e.target.value,
-                                      }))
-                                    }
-                                    className={cn(
-                                      isDark
-                                        ? "bg-[#180438] border border-gray-600 text-white"
-                                        : "bg-white",
-                                    )}
-                                  />
-                                </div>
-                              </div>
-                            </div>
-                          )}
-                        </div>
-
-                        <div className="space-y-2">
-                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-center">
-                            <label className="flex items-center gap-2 text-sm">
-                              <span>Retweets</span>
-                            </label>
-                            <div className="sm:col-span-2">
-                              <Input
-                                type="number"
-                                min="0"
-                                step="0.01"
-                                value={cpmPointsConfig.retweet_base_points}
-                                onChange={(e) =>
-                                  setCpmPointsConfig((prev) => ({
-                                    ...prev,
-                                    retweet_base_points: e.target.value,
-                                  }))
-                                }
-                                placeholder="e.g., 5"
-                                className={cn(
-                                  isDark
-                                    ? "bg-[#180438] border border-gray-600 text-white"
-                                    : "bg-white",
-                                )}
-                              />
-                            </div>
-                          </div>
-                          <div className="flex items-center gap-2 ml-0 sm:ml-[calc(33.333%+0.75rem)]">
-                            <Checkbox
-                              id="showRetweetMultipliers"
-                              checked={showRetweetMultipliers}
-                              onCheckedChange={async (checked) => {
-                                setShowRetweetMultipliers(checked === true);
-                                // Save to draft when checkbox is toggled
-                                await saveCpmAsDraft();
-                              }}
-                            />
-                            <Label
-                              htmlFor="showRetweetMultipliers"
-                              className="text-sm cursor-pointer"
-                            >
-                              Keep all values set to 0 if you do not want to
-                              award points for retweet engagement
-                            </Label>
-                          </div>
-                          {showRetweetMultipliers && (
-                            <div className="ml-0 sm:ml-[calc(33.333%+0.75rem)] mt-3 p-4 border rounded-lg space-y-3">
-                              <h5 className="text-sm font-medium">
-                                Retweet Engagement Multipliers
-                              </h5>
-                              <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
-                                <div className="space-y-2">
-                                  <Label htmlFor="retweetLikesMultiplier">
-                                    Likes
-                                  </Label>
-                                  <Input
-                                    id="retweetLikesMultiplier"
-                                    type="number"
-                                    min="0"
-                                    step="0.001"
-                                    value={
-                                      cpmPointsConfig.retweet_likes_multiplier
-                                    }
-                                    onChange={(e) =>
-                                      setCpmPointsConfig((prev) => ({
-                                        ...prev,
-                                        retweet_likes_multiplier:
-                                          e.target.value,
-                                      }))
-                                    }
-                                    className={cn(
-                                      isDark
-                                        ? "bg-[#180438] border border-gray-600 text-white"
-                                        : "bg-white",
-                                    )}
-                                  />
-                                </div>
-                                <div className="space-y-2">
-                                  <Label htmlFor="retweetRepliesMultiplier">
-                                    Replies
-                                  </Label>
-                                  <Input
-                                    id="retweetRepliesMultiplier"
-                                    type="number"
-                                    min="0"
-                                    step="0.001"
-                                    value={
-                                      cpmPointsConfig.retweet_replies_multiplier
-                                    }
-                                    onChange={(e) =>
-                                      setCpmPointsConfig((prev) => ({
-                                        ...prev,
-                                        retweet_replies_multiplier:
-                                          e.target.value,
-                                      }))
-                                    }
-                                    className={cn(
-                                      isDark
-                                        ? "bg-[#180438] border border-gray-600 text-white"
-                                        : "bg-white",
-                                    )}
-                                  />
-                                </div>
-                                <div className="space-y-2">
-                                  <Label htmlFor="retweetImpressionsMultiplier">
-                                    Impressions
-                                  </Label>
-                                  <Input
-                                    id="retweetImpressionsMultiplier"
-                                    type="number"
-                                    min="0"
-                                    step="0.0001"
-                                    value={
-                                      cpmPointsConfig.retweet_impressions_multiplier
-                                    }
-                                    onChange={(e) =>
-                                      setCpmPointsConfig((prev) => ({
-                                        ...prev,
-                                        retweet_impressions_multiplier:
-                                          e.target.value,
-                                      }))
-                                    }
-                                    className={cn(
-                                      isDark
-                                        ? "bg-[#180438] border border-gray-600 text-white"
-                                        : "bg-white",
-                                    )}
-                                  />
-                                </div>
-                                <div className="space-y-2">
-                                  <Label htmlFor="retweetRetweetsMultiplier">
-                                    Retweets
-                                  </Label>
-                                  <Input
-                                    id="retweetRetweetsMultiplier"
-                                    type="number"
-                                    min="0"
-                                    step="0.001"
-                                    value={
-                                      cpmPointsConfig.retweet_retweets_multiplier
-                                    }
-                                    onChange={(e) =>
-                                      setCpmPointsConfig((prev) => ({
-                                        ...prev,
-                                        retweet_retweets_multiplier:
-                                          e.target.value,
-                                      }))
-                                    }
-                                    className={cn(
-                                      isDark
-                                        ? "bg-[#180438] border border-gray-600 text-white"
-                                        : "bg-white",
-                                    )}
-                                  />
-                                </div>
-                                <div className="space-y-2">
-                                  <Label htmlFor="retweetQuoteRepostsMultiplier">
-                                    Quote Reposts
-                                  </Label>
-                                  <Input
-                                    id="retweetQuoteRepostsMultiplier"
-                                    type="number"
-                                    min="0"
-                                    step="0.001"
-                                    value={
-                                      cpmPointsConfig.retweet_quote_reposts_multiplier
-                                    }
-                                    onChange={(e) =>
-                                      setCpmPointsConfig((prev) => ({
-                                        ...prev,
-                                        retweet_quote_reposts_multiplier:
-                                          e.target.value,
-                                      }))
-                                    }
-                                    className={cn(
-                                      isDark
-                                        ? "bg-[#180438] border border-gray-600 text-white"
-                                        : "bg-white",
-                                    )}
-                                  />
-                                </div>
-                              </div>
-                            </div>
-                          )}
-                        </div>
-
-                        <div className="space-y-2">
-                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-center">
-                            <label className="flex items-center gap-2 text-sm">
-                              <span>Reposts / Quotes</span>
-                            </label>
-                            <div className="sm:col-span-2">
-                              <Input
-                                type="number"
-                                min="0"
-                                step="0.01"
-                                value={cpmPointsConfig.quote_repost_base_points}
-                                onChange={(e) =>
-                                  setCpmPointsConfig((prev) => ({
-                                    ...prev,
-                                    quote_repost_base_points: e.target.value,
-                                  }))
-                                }
-                                placeholder="e.g., 10"
-                                className={cn(
-                                  isDark
-                                    ? "bg-[#180438] border border-gray-600 text-white"
-                                    : "bg-white",
-                                )}
-                              />
-                            </div>
-                          </div>
-                          <div className="flex items-center gap-2 ml-0 sm:ml-[calc(33.333%+0.75rem)]">
-                            <Checkbox
-                              id="showQuoteRepostMultipliers"
-                              checked={showQuoteRepostMultipliers}
-                              onCheckedChange={async (checked) => {
-                                setShowQuoteRepostMultipliers(checked === true);
-                                // Save to draft when checkbox is toggled
-                                await saveCpmAsDraft();
-                              }}
-                            />
-                            <Label
-                              htmlFor="showQuoteRepostMultipliers"
-                              className="text-sm cursor-pointer"
-                            >
-                              Keep all values set to 0 if you do not want to
-                              award points for quote repost engagement.
-                            </Label>
-                          </div>
-                          {showQuoteRepostMultipliers && (
-                            <div className="ml-0 sm:ml-[calc(33.333%+0.75rem)] mt-3 p-4 border rounded-lg space-y-3">
-                              <h5 className="text-sm font-medium">
-                                Quote Repost Engagement Multipliers
-                              </h5>
-                              <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
-                                <div className="space-y-2">
-                                  <Label htmlFor="quoteRepostLikesMultiplier">
-                                    Likes
-                                  </Label>
-                                  <Input
-                                    id="quoteRepostLikesMultiplier"
-                                    type="number"
-                                    min="0"
-                                    step="0.001"
-                                    value={
-                                      cpmPointsConfig.quote_repost_likes_multiplier
-                                    }
-                                    onChange={(e) =>
-                                      setCpmPointsConfig((prev) => ({
-                                        ...prev,
-                                        quote_repost_likes_multiplier:
-                                          e.target.value,
-                                      }))
-                                    }
-                                    className={cn(
-                                      isDark
-                                        ? "bg-[#180438] border border-gray-600 text-white"
-                                        : "bg-white",
-                                    )}
-                                  />
-                                </div>
-                                <div className="space-y-2">
-                                  <Label htmlFor="quoteRepostRepliesMultiplier">
-                                    Replies
-                                  </Label>
-                                  <Input
-                                    id="quoteRepostRepliesMultiplier"
-                                    type="number"
-                                    min="0"
-                                    step="0.001"
-                                    value={
-                                      cpmPointsConfig.quote_repost_replies_multiplier
-                                    }
-                                    onChange={(e) =>
-                                      setCpmPointsConfig((prev) => ({
-                                        ...prev,
-                                        quote_repost_replies_multiplier:
-                                          e.target.value,
-                                      }))
-                                    }
-                                    className={cn(
-                                      isDark
-                                        ? "bg-[#180438] border border-gray-600 text-white"
-                                        : "bg-white",
-                                    )}
-                                  />
-                                </div>
-                                <div className="space-y-2">
-                                  <Label htmlFor="quoteRepostImpressionsMultiplier">
-                                    Impressions
-                                  </Label>
-                                  <Input
-                                    id="quoteRepostImpressionsMultiplier"
-                                    type="number"
-                                    min="0"
-                                    step="0.0001"
-                                    value={
-                                      cpmPointsConfig.quote_repost_impressions_multiplier
-                                    }
-                                    onChange={(e) =>
-                                      setCpmPointsConfig((prev) => ({
-                                        ...prev,
-                                        quote_repost_impressions_multiplier:
-                                          e.target.value,
-                                      }))
-                                    }
-                                    className={cn(
-                                      isDark
-                                        ? "bg-[#180438] border border-gray-600 text-white"
-                                        : "bg-white",
-                                    )}
-                                  />
-                                </div>
-                                <div className="space-y-2">
-                                  <Label htmlFor="quoteRepostRetweetsMultiplier">
-                                    Retweets
-                                  </Label>
-                                  <Input
-                                    id="quoteRepostRetweetsMultiplier"
-                                    type="number"
-                                    min="0"
-                                    step="0.001"
-                                    value={
-                                      cpmPointsConfig.quote_repost_retweets_multiplier
-                                    }
-                                    onChange={(e) =>
-                                      setCpmPointsConfig((prev) => ({
-                                        ...prev,
-                                        quote_repost_retweets_multiplier:
-                                          e.target.value,
-                                      }))
-                                    }
-                                    className={cn(
-                                      isDark
-                                        ? "bg-[#180438] border border-gray-600 text-white"
-                                        : "bg-white",
-                                    )}
-                                  />
-                                </div>
-                                <div className="space-y-2">
-                                  <Label htmlFor="quoteRepostQuoteRepostsMultiplier">
-                                    Quote Reposts
-                                  </Label>
-                                  <Input
-                                    id="quoteRepostQuoteRepostsMultiplier"
-                                    type="number"
-                                    min="0"
-                                    step="0.001"
-                                    value={
-                                      cpmPointsConfig.quote_repost_quote_reposts_multiplier
-                                    }
-                                    onChange={(e) =>
-                                      setCpmPointsConfig((prev) => ({
-                                        ...prev,
-                                        quote_repost_quote_reposts_multiplier:
-                                          e.target.value,
-                                      }))
-                                    }
-                                    className={cn(
-                                      isDark
-                                        ? "bg-[#180438] border border-gray-600 text-white"
-                                        : "bg-white",
-                                    )}
-                                  />
-                                </div>
-                              </div>
-                            </div>
-                          )}
-                        </div>
-
-                        {contentType !== "raid" && (
-                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-center">
-                            <label className="flex items-center gap-2 text-sm">
-                              <span>Views</span>
-                            </label>
-                            <div className="sm:col-span-2">
-                              <Input
-                                type="number"
-                                min="0"
-                                step="0.0001"
-                                value={twitterPointsConfig.impressionsWeight}
-                                onChange={(e) =>
-                                  setTwitterPointsConfig((prev) => ({
-                                    ...prev,
-                                    impressionsWeight: e.target.value,
-                                  }))
-                                }
-                                placeholder="e.g., 0.001"
-                                className={cn(
-                                  isDark
-                                    ? "bg-[#180438] border border-gray-600 text-white"
-                                    : "bg-white",
-                                )}
-                              />
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  )}
-                  {platform === "twitter" && contestFormat === "text_image" ? (
-                    <Alert
-                      className={cn(
-                        "border",
-                        isDark
-                          ? "bg-[#C9A7FF26] border-[#C9A7FF] text-white"
-                          : "bg-[#F0E7FD] border-[#4A00BE] text-purple-700",
-                      )}
-                    >
-                      <AlertDescription>
-                        Twitter CPM campaigns use the{" "}
-                        <strong>Points Model</strong>. Payout is calculated
-                        based on total points earned and the CPM rate per 1,000
-                        points.
-                      </AlertDescription>
-                    </Alert>
-                  ) : (
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {(contestType === "cpm" || contestType === "dual_rewards") && (
+                  <>
+                    <div className="space-y-6 py-4 px-1">
+                      <h3 className="text-lg font-medium">
+                        CPM Campaign Configuration
+                      </h3>
                       <div className="space-y-2">
-                        <Label htmlFor="minViewsPrize">
-                          Minimum Views (Optional)
+                        <Label htmlFor="cpmRatePrize">
+                          {platform === "twitter" &&
+                          contestFormat === "text_image"
+                            ? "CPM Rate (USD per 1000 points)"
+                            : "CPM Rate (USD)"}
                         </Label>
                         <Input
-                          id="minViewsPrize"
+                          id="cpmRatePrize"
                           type="number"
+                          value={cpmRate}
+                          onChange={(e) => setCpmRate(e.target.value)}
+                          onBlur={(e) => {
+                            const value = e.target.value;
+                            const numValue = parseFloat(value);
+
+                            if (value && numValue < MIN_CPM_RATE) {
+                              setCpmRate(MIN_CPM_RATE.toString());
+                              toast({
+                                title: "CPM Rate Too Low",
+                                description:
+                                  platform === "twitter" &&
+                                  contestFormat === "text_image"
+                                    ? `CPM Rate must be at least $${MIN_CPM_RATE} per 1000 points.`
+                                    : `CPM Rate must be at least $${MIN_CPM_RATE} per 1000 views.`,
+                                variant: "destructive",
+                              });
+                            } else if (value && numValue > MAX_CPM_RATE) {
+                              setCpmRate(MAX_CPM_RATE.toString());
+                              toast({
+                                title: "CPM Rate Too High",
+                                description:
+                                  platform === "twitter" &&
+                                  contestFormat === "text_image"
+                                    ? `CPM Rate cannot exceed $${MAX_CPM_RATE} per 1000 points.`
+                                    : `CPM Rate cannot exceed $${MAX_CPM_RATE} per 1000 views.`,
+                                variant: "destructive",
+                              });
+                            }
+                          }}
+                          placeholder={
+                            platform === "twitter" &&
+                            contestFormat === "text_image"
+                              ? "e.g., 4.00 for $4.00 per 1000 points"
+                              : "e.g., 1.50 for $1.50 per 1000 views"
+                          }
                           className={cn(
                             isDark
                               ? "bg-[#180438] border border-gray-600 text-white"
                               : "bg-white",
                           )}
-                          value={minViews}
+                          min={MIN_CPM_RATE}
+                          max={MAX_CPM_RATE}
+                          step="0.01"
+                        />
+                        <p className="text-xs text-muted-foreground">
+                          {platform === "twitter" &&
+                          contestFormat === "text_image"
+                            ? `Amount paid to creators per 1000 points. Points are calculated from the metric weights below. Range: $${MIN_CPM_RATE} - $${MAX_CPM_RATE} per 1000 points.`
+                            : `Amount paid to creators per 1000 views. Range: $${MIN_CPM_RATE} - $${MAX_CPM_RATE} per 1000 views.`}
+                        </p>
+                      </div>
+                      {platform === "twitter" &&
+                        contestFormat === "text_image" && (
+                          <div className="space-y-3 mt-4">
+                            <h4 className="text-md font-medium">
+                              Twitter (X) CPM – Points Model
+                            </h4>
+                            <p className="text-xs text-muted-foreground">
+                              Choose which metrics count and set how many points
+                              each metric is worth. Payout is calculated from
+                              total points.
+                            </p>
+
+                            <div className="space-y-3">
+                              {contentType !== "raid" && (
+                                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-center">
+                                  <label className="flex items-center gap-2 text-sm">
+                                    <span>Likes</span>
+                                  </label>
+                                  <div className="sm:col-span-2">
+                                    <Input
+                                      type="number"
+                                      min="0"
+                                      step="0.01"
+                                      value={twitterPointsConfig.likesWeight}
+                                      onChange={(e) =>
+                                        setTwitterPointsConfig((prev) => ({
+                                          ...prev,
+                                          likesWeight: e.target.value,
+                                        }))
+                                      }
+                                      placeholder="e.g., 1"
+                                      className={cn(
+                                        isDark
+                                          ? "bg-[#180438] border border-gray-600 text-white"
+                                          : "bg-white",
+                                      )}
+                                    />
+                                  </div>
+                                </div>
+                              )}
+
+                              <div className="space-y-2">
+                                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-center">
+                                  <label className="flex items-center gap-2 text-sm">
+                                    <span>Comments / Replies</span>
+                                  </label>
+                                  <div className="sm:col-span-2">
+                                    <Input
+                                      type="number"
+                                      min="0"
+                                      step="0.01"
+                                      value={
+                                        cpmPointsConfig.comment_base_points
+                                      }
+                                      onChange={(e) =>
+                                        setCpmPointsConfig((prev) => ({
+                                          ...prev,
+                                          comment_base_points: e.target.value,
+                                        }))
+                                      }
+                                      placeholder="e.g., 1"
+                                      className={cn(
+                                        isDark
+                                          ? "bg-[#180438] border border-gray-600 text-white"
+                                          : "bg-white",
+                                      )}
+                                    />
+                                  </div>
+                                </div>
+                                <div className="flex items-center gap-2 ml-0 sm:ml-[calc(33.333%+0.75rem)]">
+                                  <Checkbox
+                                    id="showCommentMultipliers"
+                                    checked={showCommentMultipliers}
+                                    onCheckedChange={async (checked) => {
+                                      setShowCommentMultipliers(
+                                        checked === true,
+                                      );
+                                      // Save to draft when checkbox is toggled
+                                      await saveCpmAsDraft();
+                                    }}
+                                  />
+                                  <Label
+                                    htmlFor="showCommentMultipliers"
+                                    className="text-sm cursor-pointer"
+                                  >
+                                    Keep all values set to 0 if you do not want
+                                    to award points for comment engagement.
+                                  </Label>
+                                </div>
+                                {showCommentMultipliers && (
+                                  <div className="ml-0 sm:ml-[calc(33.333%+0.75rem)] mt-3 p-4 border rounded-lg space-y-3">
+                                    <h5 className="text-sm font-medium">
+                                      Comment Engagement Multipliers
+                                    </h5>
+                                    <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+                                      <div className="space-y-2">
+                                        <Label htmlFor="commentLikesMultiplier">
+                                          Likes
+                                        </Label>
+                                        <Input
+                                          id="commentLikesMultiplier"
+                                          type="number"
+                                          min="0"
+                                          step="0.001"
+                                          value={
+                                            cpmPointsConfig.comment_likes_multiplier
+                                          }
+                                          onChange={(e) =>
+                                            setCpmPointsConfig((prev) => ({
+                                              ...prev,
+                                              comment_likes_multiplier:
+                                                e.target.value,
+                                            }))
+                                          }
+                                          className={cn(
+                                            isDark
+                                              ? "bg-[#180438] border border-gray-600 text-white"
+                                              : "bg-white",
+                                          )}
+                                        />
+                                      </div>
+                                      <div className="space-y-2">
+                                        <Label htmlFor="commentRepliesMultiplier">
+                                          Replies
+                                        </Label>
+                                        <Input
+                                          id="commentRepliesMultiplier"
+                                          type="number"
+                                          min="0"
+                                          step="0.001"
+                                          value={
+                                            cpmPointsConfig.comment_replies_multiplier
+                                          }
+                                          onChange={(e) =>
+                                            setCpmPointsConfig((prev) => ({
+                                              ...prev,
+                                              comment_replies_multiplier:
+                                                e.target.value,
+                                            }))
+                                          }
+                                          className={cn(
+                                            isDark
+                                              ? "bg-[#180438] border border-gray-600 text-white"
+                                              : "bg-white",
+                                          )}
+                                        />
+                                      </div>
+                                      <div className="space-y-2">
+                                        <Label htmlFor="commentImpressionsMultiplier">
+                                          Impressions
+                                        </Label>
+                                        <Input
+                                          id="commentImpressionsMultiplier"
+                                          type="number"
+                                          min="0"
+                                          step="0.0001"
+                                          value={
+                                            cpmPointsConfig.comment_impressions_multiplier
+                                          }
+                                          onChange={(e) =>
+                                            setCpmPointsConfig((prev) => ({
+                                              ...prev,
+                                              comment_impressions_multiplier:
+                                                e.target.value,
+                                            }))
+                                          }
+                                          className={cn(
+                                            isDark
+                                              ? "bg-[#180438] border border-gray-600 text-white"
+                                              : "bg-white",
+                                          )}
+                                        />
+                                      </div>
+                                      <div className="space-y-2">
+                                        <Label htmlFor="commentRetweetsMultiplier">
+                                          Retweets
+                                        </Label>
+                                        <Input
+                                          id="commentRetweetsMultiplier"
+                                          type="number"
+                                          min="0"
+                                          step="0.001"
+                                          value={
+                                            cpmPointsConfig.comment_retweets_multiplier
+                                          }
+                                          onChange={(e) =>
+                                            setCpmPointsConfig((prev) => ({
+                                              ...prev,
+                                              comment_retweets_multiplier:
+                                                e.target.value,
+                                            }))
+                                          }
+                                          className={cn(
+                                            isDark
+                                              ? "bg-[#180438] border border-gray-600 text-white"
+                                              : "bg-white",
+                                          )}
+                                        />
+                                      </div>
+                                      <div className="space-y-2">
+                                        <Label htmlFor="commentQuoteRepostsMultiplier">
+                                          Quote Reposts
+                                        </Label>
+                                        <Input
+                                          id="commentQuoteRepostsMultiplier"
+                                          type="number"
+                                          min="0"
+                                          step="0.001"
+                                          value={
+                                            cpmPointsConfig.comment_quote_reposts_multiplier
+                                          }
+                                          onChange={(e) =>
+                                            setCpmPointsConfig((prev) => ({
+                                              ...prev,
+                                              comment_quote_reposts_multiplier:
+                                                e.target.value,
+                                            }))
+                                          }
+                                          className={cn(
+                                            isDark
+                                              ? "bg-[#180438] border border-gray-600 text-white"
+                                              : "bg-white",
+                                          )}
+                                        />
+                                      </div>
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+
+                              <div className="space-y-2">
+                                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-center">
+                                  <label className="flex items-center gap-2 text-sm">
+                                    <span>Retweets</span>
+                                  </label>
+                                  <div className="sm:col-span-2">
+                                    <Input
+                                      type="number"
+                                      min="0"
+                                      step="0.01"
+                                      value={
+                                        cpmPointsConfig.retweet_base_points
+                                      }
+                                      onChange={(e) =>
+                                        setCpmPointsConfig((prev) => ({
+                                          ...prev,
+                                          retweet_base_points: e.target.value,
+                                        }))
+                                      }
+                                      placeholder="e.g., 5"
+                                      className={cn(
+                                        isDark
+                                          ? "bg-[#180438] border border-gray-600 text-white"
+                                          : "bg-white",
+                                      )}
+                                    />
+                                  </div>
+                                </div>
+                                <div className="flex items-center gap-2 ml-0 sm:ml-[calc(33.333%+0.75rem)]">
+                                  <Checkbox
+                                    id="showRetweetMultipliers"
+                                    checked={showRetweetMultipliers}
+                                    onCheckedChange={async (checked) => {
+                                      setShowRetweetMultipliers(
+                                        checked === true,
+                                      );
+                                      // Save to draft when checkbox is toggled
+                                      await saveCpmAsDraft();
+                                    }}
+                                  />
+                                  <Label
+                                    htmlFor="showRetweetMultipliers"
+                                    className="text-sm cursor-pointer"
+                                  >
+                                    Keep all values set to 0 if you do not want
+                                    to award points for retweet engagement
+                                  </Label>
+                                </div>
+                                {showRetweetMultipliers && (
+                                  <div className="ml-0 sm:ml-[calc(33.333%+0.75rem)] mt-3 p-4 border rounded-lg space-y-3">
+                                    <h5 className="text-sm font-medium">
+                                      Retweet Engagement Multipliers
+                                    </h5>
+                                    <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+                                      <div className="space-y-2">
+                                        <Label htmlFor="retweetLikesMultiplier">
+                                          Likes
+                                        </Label>
+                                        <Input
+                                          id="retweetLikesMultiplier"
+                                          type="number"
+                                          min="0"
+                                          step="0.001"
+                                          value={
+                                            cpmPointsConfig.retweet_likes_multiplier
+                                          }
+                                          onChange={(e) =>
+                                            setCpmPointsConfig((prev) => ({
+                                              ...prev,
+                                              retweet_likes_multiplier:
+                                                e.target.value,
+                                            }))
+                                          }
+                                          className={cn(
+                                            isDark
+                                              ? "bg-[#180438] border border-gray-600 text-white"
+                                              : "bg-white",
+                                          )}
+                                        />
+                                      </div>
+                                      <div className="space-y-2">
+                                        <Label htmlFor="retweetRepliesMultiplier">
+                                          Replies
+                                        </Label>
+                                        <Input
+                                          id="retweetRepliesMultiplier"
+                                          type="number"
+                                          min="0"
+                                          step="0.001"
+                                          value={
+                                            cpmPointsConfig.retweet_replies_multiplier
+                                          }
+                                          onChange={(e) =>
+                                            setCpmPointsConfig((prev) => ({
+                                              ...prev,
+                                              retweet_replies_multiplier:
+                                                e.target.value,
+                                            }))
+                                          }
+                                          className={cn(
+                                            isDark
+                                              ? "bg-[#180438] border border-gray-600 text-white"
+                                              : "bg-white",
+                                          )}
+                                        />
+                                      </div>
+                                      <div className="space-y-2">
+                                        <Label htmlFor="retweetImpressionsMultiplier">
+                                          Impressions
+                                        </Label>
+                                        <Input
+                                          id="retweetImpressionsMultiplier"
+                                          type="number"
+                                          min="0"
+                                          step="0.0001"
+                                          value={
+                                            cpmPointsConfig.retweet_impressions_multiplier
+                                          }
+                                          onChange={(e) =>
+                                            setCpmPointsConfig((prev) => ({
+                                              ...prev,
+                                              retweet_impressions_multiplier:
+                                                e.target.value,
+                                            }))
+                                          }
+                                          className={cn(
+                                            isDark
+                                              ? "bg-[#180438] border border-gray-600 text-white"
+                                              : "bg-white",
+                                          )}
+                                        />
+                                      </div>
+                                      <div className="space-y-2">
+                                        <Label htmlFor="retweetRetweetsMultiplier">
+                                          Retweets
+                                        </Label>
+                                        <Input
+                                          id="retweetRetweetsMultiplier"
+                                          type="number"
+                                          min="0"
+                                          step="0.001"
+                                          value={
+                                            cpmPointsConfig.retweet_retweets_multiplier
+                                          }
+                                          onChange={(e) =>
+                                            setCpmPointsConfig((prev) => ({
+                                              ...prev,
+                                              retweet_retweets_multiplier:
+                                                e.target.value,
+                                            }))
+                                          }
+                                          className={cn(
+                                            isDark
+                                              ? "bg-[#180438] border border-gray-600 text-white"
+                                              : "bg-white",
+                                          )}
+                                        />
+                                      </div>
+                                      <div className="space-y-2">
+                                        <Label htmlFor="retweetQuoteRepostsMultiplier">
+                                          Quote Reposts
+                                        </Label>
+                                        <Input
+                                          id="retweetQuoteRepostsMultiplier"
+                                          type="number"
+                                          min="0"
+                                          step="0.001"
+                                          value={
+                                            cpmPointsConfig.retweet_quote_reposts_multiplier
+                                          }
+                                          onChange={(e) =>
+                                            setCpmPointsConfig((prev) => ({
+                                              ...prev,
+                                              retweet_quote_reposts_multiplier:
+                                                e.target.value,
+                                            }))
+                                          }
+                                          className={cn(
+                                            isDark
+                                              ? "bg-[#180438] border border-gray-600 text-white"
+                                              : "bg-white",
+                                          )}
+                                        />
+                                      </div>
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+
+                              <div className="space-y-2">
+                                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-center">
+                                  <label className="flex items-center gap-2 text-sm">
+                                    <span>Reposts / Quotes</span>
+                                  </label>
+                                  <div className="sm:col-span-2">
+                                    <Input
+                                      type="number"
+                                      min="0"
+                                      step="0.01"
+                                      value={
+                                        cpmPointsConfig.quote_repost_base_points
+                                      }
+                                      onChange={(e) =>
+                                        setCpmPointsConfig((prev) => ({
+                                          ...prev,
+                                          quote_repost_base_points:
+                                            e.target.value,
+                                        }))
+                                      }
+                                      placeholder="e.g., 10"
+                                      className={cn(
+                                        isDark
+                                          ? "bg-[#180438] border border-gray-600 text-white"
+                                          : "bg-white",
+                                      )}
+                                    />
+                                  </div>
+                                </div>
+                                <div className="flex items-center gap-2 ml-0 sm:ml-[calc(33.333%+0.75rem)]">
+                                  <Checkbox
+                                    id="showQuoteRepostMultipliers"
+                                    checked={showQuoteRepostMultipliers}
+                                    onCheckedChange={async (checked) => {
+                                      setShowQuoteRepostMultipliers(
+                                        checked === true,
+                                      );
+                                      // Save to draft when checkbox is toggled
+                                      await saveCpmAsDraft();
+                                    }}
+                                  />
+                                  <Label
+                                    htmlFor="showQuoteRepostMultipliers"
+                                    className="text-sm cursor-pointer"
+                                  >
+                                    Keep all values set to 0 if you do not want
+                                    to award points for quote repost engagement.
+                                  </Label>
+                                </div>
+                                {showQuoteRepostMultipliers && (
+                                  <div className="ml-0 sm:ml-[calc(33.333%+0.75rem)] mt-3 p-4 border rounded-lg space-y-3">
+                                    <h5 className="text-sm font-medium">
+                                      Quote Repost Engagement Multipliers
+                                    </h5>
+                                    <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+                                      <div className="space-y-2">
+                                        <Label htmlFor="quoteRepostLikesMultiplier">
+                                          Likes
+                                        </Label>
+                                        <Input
+                                          id="quoteRepostLikesMultiplier"
+                                          type="number"
+                                          min="0"
+                                          step="0.001"
+                                          value={
+                                            cpmPointsConfig.quote_repost_likes_multiplier
+                                          }
+                                          onChange={(e) =>
+                                            setCpmPointsConfig((prev) => ({
+                                              ...prev,
+                                              quote_repost_likes_multiplier:
+                                                e.target.value,
+                                            }))
+                                          }
+                                          className={cn(
+                                            isDark
+                                              ? "bg-[#180438] border border-gray-600 text-white"
+                                              : "bg-white",
+                                          )}
+                                        />
+                                      </div>
+                                      <div className="space-y-2">
+                                        <Label htmlFor="quoteRepostRepliesMultiplier">
+                                          Replies
+                                        </Label>
+                                        <Input
+                                          id="quoteRepostRepliesMultiplier"
+                                          type="number"
+                                          min="0"
+                                          step="0.001"
+                                          value={
+                                            cpmPointsConfig.quote_repost_replies_multiplier
+                                          }
+                                          onChange={(e) =>
+                                            setCpmPointsConfig((prev) => ({
+                                              ...prev,
+                                              quote_repost_replies_multiplier:
+                                                e.target.value,
+                                            }))
+                                          }
+                                          className={cn(
+                                            isDark
+                                              ? "bg-[#180438] border border-gray-600 text-white"
+                                              : "bg-white",
+                                          )}
+                                        />
+                                      </div>
+                                      <div className="space-y-2">
+                                        <Label htmlFor="quoteRepostImpressionsMultiplier">
+                                          Impressions
+                                        </Label>
+                                        <Input
+                                          id="quoteRepostImpressionsMultiplier"
+                                          type="number"
+                                          min="0"
+                                          step="0.0001"
+                                          value={
+                                            cpmPointsConfig.quote_repost_impressions_multiplier
+                                          }
+                                          onChange={(e) =>
+                                            setCpmPointsConfig((prev) => ({
+                                              ...prev,
+                                              quote_repost_impressions_multiplier:
+                                                e.target.value,
+                                            }))
+                                          }
+                                          className={cn(
+                                            isDark
+                                              ? "bg-[#180438] border border-gray-600 text-white"
+                                              : "bg-white",
+                                          )}
+                                        />
+                                      </div>
+                                      <div className="space-y-2">
+                                        <Label htmlFor="quoteRepostRetweetsMultiplier">
+                                          Retweets
+                                        </Label>
+                                        <Input
+                                          id="quoteRepostRetweetsMultiplier"
+                                          type="number"
+                                          min="0"
+                                          step="0.001"
+                                          value={
+                                            cpmPointsConfig.quote_repost_retweets_multiplier
+                                          }
+                                          onChange={(e) =>
+                                            setCpmPointsConfig((prev) => ({
+                                              ...prev,
+                                              quote_repost_retweets_multiplier:
+                                                e.target.value,
+                                            }))
+                                          }
+                                          className={cn(
+                                            isDark
+                                              ? "bg-[#180438] border border-gray-600 text-white"
+                                              : "bg-white",
+                                          )}
+                                        />
+                                      </div>
+                                      <div className="space-y-2">
+                                        <Label htmlFor="quoteRepostQuoteRepostsMultiplier">
+                                          Quote Reposts
+                                        </Label>
+                                        <Input
+                                          id="quoteRepostQuoteRepostsMultiplier"
+                                          type="number"
+                                          min="0"
+                                          step="0.001"
+                                          value={
+                                            cpmPointsConfig.quote_repost_quote_reposts_multiplier
+                                          }
+                                          onChange={(e) =>
+                                            setCpmPointsConfig((prev) => ({
+                                              ...prev,
+                                              quote_repost_quote_reposts_multiplier:
+                                                e.target.value,
+                                            }))
+                                          }
+                                          className={cn(
+                                            isDark
+                                              ? "bg-[#180438] border border-gray-600 text-white"
+                                              : "bg-white",
+                                          )}
+                                        />
+                                      </div>
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+
+                              {contentType !== "raid" && (
+                                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-center">
+                                  <label className="flex items-center gap-2 text-sm">
+                                    <span>Views</span>
+                                  </label>
+                                  <div className="sm:col-span-2">
+                                    <Input
+                                      type="number"
+                                      min="0"
+                                      step="0.0001"
+                                      value={
+                                        twitterPointsConfig.impressionsWeight
+                                      }
+                                      onChange={(e) =>
+                                        setTwitterPointsConfig((prev) => ({
+                                          ...prev,
+                                          impressionsWeight: e.target.value,
+                                        }))
+                                      }
+                                      placeholder="e.g., 0.001"
+                                      className={cn(
+                                        isDark
+                                          ? "bg-[#180438] border border-gray-600 text-white"
+                                          : "bg-white",
+                                      )}
+                                    />
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        )}
+                      {platform === "twitter" &&
+                      contestFormat === "text_image" ? (
+                        <Alert
+                          className={cn(
+                            "border",
+                            isDark
+                              ? "bg-[#C9A7FF26] border-[#C9A7FF] text-white"
+                              : "bg-[#F0E7FD] border-[#4A00BE] text-purple-700",
+                          )}
+                        >
+                          <AlertDescription>
+                            Twitter CPM campaigns use the{" "}
+                            <strong>Points Model</strong>. Payout is calculated
+                            based on total points earned and the CPM rate per
+                            1,000 points.
+                          </AlertDescription>
+                        </Alert>
+                      ) : (
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div className="space-y-2">
+                            <Label htmlFor="minViewsPrize">
+                              Minimum Views (Optional)
+                            </Label>
+                            <Input
+                              id="minViewsPrize"
+                              type="number"
+                              className={cn(
+                                isDark
+                                  ? "bg-[#180438] border border-gray-600 text-white"
+                                  : "bg-white",
+                              )}
+                              value={minViews}
+                              onChange={(e) => {
+                                const value = e.target.value;
+                                setMinViews(value);
+
+                                // Real-time validation
+                                const minViewsValue =
+                                  value && value.trim() !== ""
+                                    ? parseInt(value, 10)
+                                    : null;
+                                const maxViewsValue =
+                                  maxViews && maxViews.toString().trim() !== ""
+                                    ? parseInt(maxViews.toString(), 10)
+                                    : null;
+
+                                if (
+                                  minViewsValue !== null &&
+                                  maxViewsValue !== null &&
+                                  minViewsValue >= maxViewsValue
+                                ) {
+                                  toast({
+                                    title: "Invalid View Range",
+                                    description:
+                                      "Minimum views must be less than maximum views.",
+                                    variant: "destructive",
+                                  });
+                                }
+                              }}
+                              placeholder={`e.g., ${FORM_PLACEHOLDER_SMALL_AMOUNT}`}
+                              min="0"
+                            />
+                            <p className="text-xs text-muted-foreground">
+                              Minimum views required for a submission to be
+                              eligible for payment.
+                            </p>
+                          </div>
+                          <div className="space-y-2">
+                            <Label htmlFor="maxViewsPrize">
+                              Maximum Views (Optional)
+                            </Label>
+                            <Input
+                              id="maxViewsPrize"
+                              type="number"
+                              value={maxViews}
+                              className={cn(
+                                isDark
+                                  ? "bg-[#180438] border border-gray-600 text-white"
+                                  : "bg-white",
+                              )}
+                              onChange={(e) => {
+                                const value = e.target.value;
+                                setMaxViews(value);
+
+                                // Real-time validation
+                                const maxViewsValue =
+                                  value && value.trim() !== ""
+                                    ? parseInt(value, 10)
+                                    : null;
+                                const minViewsValue =
+                                  minViews && minViews.toString().trim() !== ""
+                                    ? parseInt(minViews.toString(), 10)
+                                    : null;
+
+                                if (
+                                  minViewsValue !== null &&
+                                  maxViewsValue !== null &&
+                                  minViewsValue >= maxViewsValue
+                                ) {
+                                  toast({
+                                    title: "Invalid View Range",
+                                    description:
+                                      "Minimum views must be less than maximum views.",
+                                    variant: "destructive",
+                                  });
+                                }
+                              }}
+                              placeholder={`e.g., ${FORM_PLACEHOLDER_LARGE_AMOUNT}`}
+                              min="0"
+                            />
+                            <p className="text-xs text-muted-foreground">
+                              Maximum views for which a submission will be paid.
+                            </p>
+                          </div>
+                        </div>
+                      )}
+                      <div className="space-y-2">
+                        <Label htmlFor="totalBudgetPrize">
+                          Total Campaign Budget (USD)
+                          <span className="text-red-500">*</span>
+                        </Label>
+                        <Input
+                          id="totalBudgetPrize"
+                          type="number"
+                          required
+                          className={cn(
+                            isDark
+                              ? "bg-[#180438] border border-gray-600 text-white"
+                              : "bg-white",
+                          )}
+                          value={totalBudget} // This is a string from state, input type handles conversion
                           onChange={(e) => {
-                            const value = e.target.value;
-                            setMinViews(value);
-
-                            // Real-time validation
-                            const minViewsValue =
-                              value && value.trim() !== ""
-                                ? parseInt(value, 10)
-                                : null;
-                            const maxViewsValue =
-                              maxViews && maxViews.toString().trim() !== ""
-                                ? parseInt(maxViews.toString(), 10)
-                                : null;
-
-                            if (
-                              minViewsValue !== null &&
-                              maxViewsValue !== null &&
-                              minViewsValue >= maxViewsValue
-                            ) {
-                              toast({
-                                title: "Invalid View Range",
-                                description:
-                                  "Minimum views must be less than maximum views.",
-                                variant: "destructive",
-                              });
-                            }
+                            const newBudgetString = e.target.value;
+                            setTotalBudget(newBudgetString); // Keep as string for input
                           }}
                           placeholder={`e.g., ${FORM_PLACEHOLDER_SMALL_AMOUNT}`}
-                          min="0"
+                          min="1"
                         />
                         <p className="text-xs text-muted-foreground">
-                          Minimum views required for a submission to be eligible
-                          for payment.
+                          {contestType === "dual_rewards"
+                            ? "One funded amount: the same budget backs both per-view (CPM) payouts and milestone payouts."
+                            : "Required: The maximum total amount to be paid out for this campaign. This is the effective prize pool."}
                         </p>
                       </div>
                       <div className="space-y-2">
-                        <Label htmlFor="maxViewsPrize">
-                          Maximum Views (Optional)
+                        <Label htmlFor="termsConditionsPrize">
+                          Terms & Conditions
                         </Label>
-                        <Input
-                          id="maxViewsPrize"
-                          type="number"
-                          value={maxViews}
+                        <Textarea
+                          id="termsConditionsPrize"
+                          value={termsConditions}
+                          onChange={(e) => setTermsConditions(e.target.value)}
                           className={cn(
                             isDark
                               ? "bg-[#180438] border border-gray-600 text-white"
                               : "bg-white",
                           )}
-                          onChange={(e) => {
-                            const value = e.target.value;
-                            setMaxViews(value);
-
-                            // Real-time validation
-                            const maxViewsValue =
-                              value && value.trim() !== ""
-                                ? parseInt(value, 10)
-                                : null;
-                            const minViewsValue =
-                              minViews && minViews.toString().trim() !== ""
-                                ? parseInt(minViews.toString(), 10)
-                                : null;
-
-                            if (
-                              minViewsValue !== null &&
-                              maxViewsValue !== null &&
-                              minViewsValue >= maxViewsValue
-                            ) {
-                              toast({
-                                title: "Invalid View Range",
-                                description:
-                                  "Minimum views must be less than maximum views.",
-                                variant: "destructive",
-                              });
-                            }
-                          }}
-                          placeholder={`e.g., ${FORM_PLACEHOLDER_LARGE_AMOUNT}`}
-                          min="0"
+                          placeholder="Enter or paste your campaign terms and conditions for CPM participants. This will be shown to them before they can submit."
+                          rows={6}
                         />
                         <p className="text-xs text-muted-foreground">
-                          Maximum views for which a submission will be paid.
+                          Specific rules and agreements for CPM participants.
                         </p>
                       </div>
                     </div>
-                  )}
-                  <div className="space-y-2">
-                    <Label htmlFor="totalBudgetPrize">
-                     
-                        Total Campaign Budget (USD)
-                      <span className="text-red-500">*</span>
-                    </Label>
-                    <Input
-                      id="totalBudgetPrize"
-                      type="number"
-                      required
-                      className={cn(
-                        isDark
-                          ? "bg-[#180438] border border-gray-600 text-white"
-                          : "bg-white",
+                    {/* Min budget alert for CPM */}
+                    {/* Ensure totalBudget is treated as a number for comparison, and it has a value */}
+                    {parseFloat(totalBudget.toString() || "0") * 100 <
+                      planFeatures.minContestBudget &&
+                      (totalBudget.toString() || "0").length > 0 && (
+                        <Alert
+                          className={cn(
+                            "border",
+                            isDark
+                              ? "bg-[#C9A7FF26] border-[#C9A7FF] text-white"
+                              : "bg-[#F0E7FD] border-[#4A00BE] text-purple-700",
+                          )}
+                        >
+                          <AlertDescription>
+                            The minimum campaign budget for your{" "}
+                            {currentPlan?.name || "current"} plan is{" "}
+                            {formatCurrencyFromCents(
+                              planFeatures.minContestBudget,
+                            )}
+                            . Please increase your total budget.
+                          </AlertDescription>
+                        </Alert>
                       )}
-                      value={totalBudget} // This is a string from state, input type handles conversion
-                      onChange={(e) => {
-                        const newBudgetString = e.target.value;
-                        setTotalBudget(newBudgetString); // Keep as string for input
-                      }}
-                      placeholder={`e.g., ${FORM_PLACEHOLDER_SMALL_AMOUNT}`}
-                      min="1"
-                    />
-                    <p className="text-xs text-muted-foreground">
-                      {contestType === "dual_rewards"
-                        ? "One funded amount: the same budget backs both per-view (CPM) payouts and milestone payouts."
-                        : "Required: The maximum total amount to be paid out for this campaign. This is the effective prize pool."}
-                    </p>
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="termsConditionsPrize">
-                      Terms & Conditions
-                    </Label>
-                    <Textarea
-                      id="termsConditionsPrize"
-                      value={termsConditions}
-                      onChange={(e) => setTermsConditions(e.target.value)}
-                      className={cn(
-                        isDark
-                          ? "bg-[#180438] border border-gray-600 text-white"
-                          : "bg-white",
-                      )}
-                      placeholder="Enter or paste your campaign terms and conditions for CPM participants. This will be shown to them before they can submit."
-                      rows={6}
-                    />
-                    <p className="text-xs text-muted-foreground">
-                      Specific rules and agreements for CPM participants.
-                    </p>
-                  </div>
-                </div>
-                {/* Min budget alert for CPM */}
-                {/* Ensure totalBudget is treated as a number for comparison, and it has a value */}
-                {parseFloat(totalBudget.toString() || "0") * 100 <
-                  planFeatures.minContestBudget &&
-                  (totalBudget.toString() || "0").length > 0 && (
-                    <Alert
-                      className={cn(
-                        "border",
-                        isDark
-                          ? "bg-[#C9A7FF26] border-[#C9A7FF] text-white"
-                          : "bg-[#F0E7FD] border-[#4A00BE] text-purple-700",
-                      )}
-                    >
-                      <AlertDescription>
-                        The minimum campaign budget for your{" "}
-                        {currentPlan?.name || "current"} plan is{" "}
-                        {formatCurrencyFromCents(planFeatures.minContestBudget)}
-                        . Please increase your total budget.
-                      </AlertDescription>
-                    </Alert>
-                  )}
-              </>
+                  </>
                 )}
               </>
             )}
@@ -8761,388 +8896,399 @@ export default function CreateContestPage({
             {/* Creator earning opportunities */}
             {true && (
               <div className="space-y-6 py-6 px-0 sm:px-2 border-t-2 border-dashed mt-6">
-              <div>
-                <h3
-                  className={cn(
-                    "text-xl font-semibold mb-4",
-                    isDark ? "text-white" : "text-purple-600",
-                  )}
-                >
-                  💰 Creator Earning Opportunities
-                </h3>
-                <p className="text-sm text-muted-foreground mb-4">
-                  Motivate creators with additional earning opportunities beyond
-                  the main prize pool or CPM rate.
-                </p>
-              </div>
-
-              {contestType !== "milestone" && (
-                <>
-                  {/* Flat Fee Bonus — hidden for dual rewards (CPM + milestone pools only) */}
-                  {contestType !== "dual_rewards" && (
-                    <div
-                      className={`space-y-3 p-4 border rounded-lg ${
-                        isDark
-                          ? "bg-green-950/40 border-green-800"
-                          : "bg-gradient-to-r from-green-50 to-emerald-50 border-green-200"
-                      }`}
-                    >
-                      <div className="flex items-center gap-2">
-                        <span className="text-2xl">🎁</span>
-                        <Label
-                          htmlFor="flatFeeBonus"
-                          className="text-base font-semibold"
-                        >
-                          Flat Fee Bonus (Per Verified Submission)
-                        </Label>
-                      </div>
-                      <Input
-                        id="flatFeeBonus"
-                        type="number"
-                        min="0"
-                        step="0.01"
-                        value={flatFeeBonus}
-                        onChange={(e) => setFlatFeeBonus(e.target.value)}
-                        placeholder="e.g., 10 for $10 per submission"
-                        className={cn(
-                          isDark
-                            ? "bg-green-950/40 border border-gray-600 text-white"
-                            : "bg-white",
-                        )}
-                      />
-                      <p className="text-sm text-muted-foreground">
-                        Optional: Give creators a guaranteed payment for each
-                        verified submission, regardless of views or ranking. This
-                        bonus is paid after the campaign ends. Great for encouraging
-                        participation!
-                      </p>
-                      {flatFeeBonus &&
-                        parseFloat(flatFeeBonus.toString()) > 0 && (
-                          <Alert
-                            className={cn(
-                              "border",
-                              isDark
-                                ? "bg-[#C9A7FF26] border-[#C9A7FF] text-white"
-                                : "bg-[#F0E7FD] border-[#4A00BE] text-green-800",
-                            )}
-                          >
-                            <AlertDescription>
-                              ✓ Creators will earn{" "}
-                              <strong>
-                                ${parseFloat(flatFeeBonus.toString()).toFixed(2)}
-                              </strong>{" "}
-                              for each verified submission!
-                            </AlertDescription>
-                          </Alert>
-                        )}
-                    </div>
-                  )}
-
-              {/* Flat Fee Bonus Cap (Only for CPM campaigns with flat fee bonus) */}
-              {isCpmContestType(contestType) &&
-                contestType !== "dual_rewards" &&
-                flatFeeBonus &&
-                parseFloat(flatFeeBonus.toString()) > 0 && (
-                  <div
+                <div>
+                  <h3
                     className={cn(
-                      "space-y-3 p-4 border rounded-lg",
-                      isDark
-                        ? "bg-purple-950/40 border-purple-800"
-                        : "bg-gradient-to-r from-purple-50 to-violet-50 border-purple-200",
+                      "text-xl font-semibold mb-4",
+                      isDark ? "text-white" : "text-purple-600",
                     )}
                   >
-                    <div className="flex items-center gap-2">
-                      <span className="text-2xl">💰</span>
-                      <Label
-                        htmlFor="flatFeeBonusCap"
-                        className="text-base font-semibold"
+                    💰 Creator Earning Opportunities
+                  </h3>
+                  <p className="text-sm text-muted-foreground mb-4">
+                    Motivate creators with additional earning opportunities
+                    beyond the main prize pool or CPM rate.
+                  </p>
+                </div>
+
+                {contestType !== "milestone" && (
+                  <>
+                    {/* Flat Fee Bonus — hidden for dual rewards (CPM + milestone pools only) */}
+                    {contestType !== "dual_rewards" && (
+                      <div
+                        className={`space-y-3 p-4 border rounded-lg ${
+                          isDark
+                            ? "bg-green-950/40 border-green-800"
+                            : "bg-gradient-to-r from-green-50 to-emerald-50 border-green-200"
+                        }`}
                       >
-                        Flat Fee Bonus Cap{" "}
-                        <span className="text-red-500">*</span>
-                      </Label>
-                    </div>
-                    <Input
-                      id="flatFeeBonusCap"
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      required
-                      value={flatFeeBonusCap}
-                      onChange={(e) => setFlatFeeBonusCap(e.target.value)}
-                      placeholder="e.g., 20 for $20 total cap"
-                      className={cn(
-                        isDark
-                          ? "bg-[#180438] border border-gray-600 text-white"
-                          : "bg-white text-black",
-                      )}
-                    />
-                    <p className="text-sm text-muted-foreground">
-                      Required: Maximum total flat fee bonus to distribute
-                      across all creators. Once this cap is reached, no more
-                      flat fee bonuses will be given. Must not exceed Total
-                      Budget.
-                    </p>
-                    {flatFeeBonusCap &&
-                      parseFloat(flatFeeBonusCap.toString()) > 0 && (
-                        <Alert
+                        <div className="flex items-center gap-2">
+                          <span className="text-2xl">🎁</span>
+                          <Label
+                            htmlFor="flatFeeBonus"
+                            className="text-base font-semibold"
+                          >
+                            Flat Fee Bonus (Per Verified Submission)
+                          </Label>
+                        </div>
+                        <Input
+                          id="flatFeeBonus"
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          value={flatFeeBonus}
+                          onChange={(e) => setFlatFeeBonus(e.target.value)}
+                          placeholder="e.g., 10 for $10 per submission"
                           className={cn(
                             isDark
-                              ? "bg-purple-900/30 border-purple-900"
-                              : "bg-purple-100 border-purple-300",
+                              ? "bg-green-950/40 border border-gray-600 text-white"
+                              : "bg-white",
                           )}
-                        >
-                          <AlertDescription>
-                            ✓ Maximum flat fee bonus cap set to{" "}
-                            <strong>
-                              $
-                              {parseFloat(flatFeeBonusCap.toString()).toFixed(
-                                2,
-                              )}
-                            </strong>
-                            . Once this amount is distributed, no more flat fee
-                            bonuses will be given.
-                          </AlertDescription>
-                        </Alert>
-                      )}
-                  </div>
-                )}
-
-              {/* Total Budget for Bonuses (Only for Leaderboard campaigns with flat fee bonus) */}
-              {contestType === "leaderboard" &&
-                flatFeeBonus &&
-                parseFloat(flatFeeBonus.toString()) > 0 && (
-                  <div
-                    className={cn(
-                      "space-y-3 p-4 border rounded-lg",
-                      isDark
-                        ? "bg-blue-950/50 border-blue-800"
-                        : "bg-gradient-to-r from-blue-50 to-indigo-50 border-blue-200",
-                    )}
-                  >
-                    <div className="flex items-center gap-2">
-                      <span className="text-2xl">💰</span>
-                      <Label
-                        htmlFor="totalBudget"
-                        className="text-base font-semibold"
-                      >
-                        Total Budget for Bonuses{" "}
-                        <span className="text-red-500">*</span>
-                      </Label>
-                    </div>
-                    <Input
-                      id="totalBudget"
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      required
-                      value={totalBudget}
-                      onChange={(e) => setTotalBudget(e.target.value)}
-                      placeholder="e.g., 500 for $500 total budget"
-                      className={cn(
-                        isDark
-                          ? "bg-[#180438] border border-gray-600 text-white"
-                          : "bg-white text-black",
-                      )}
-                    />
-                    <p className="text-sm text-muted-foreground">
-                      Required: Set a budget limit for flat fee bonuses. This
-                      budget is required when Flat Fee Bonus is enabled.
-                      <br />
-                      <strong>Prize Pool:</strong>{" "}
-                      {formatCurrencyFromCents(totalPrizePool)} (for rankings)
-                      <br />
-                      <strong>Total Budget:</strong>{" "}
-                      {totalBudget
-                        ? `$${parseFloat(totalBudget.toString()).toFixed(2)}`
-                        : "No limit"}{" "}
-                      (for bonuses & extras)
-                    </p>
-                    {totalBudget && parseFloat(totalBudget.toString()) > 0 && (
-                      <Alert
-                        className={cn(
-                          isDark
-                            ? "bg-blue-900/30 border-blue-900"
-                            : "bg-blue-100 border-blue-300",
-                        )}
-                      >
-                        <AlertDescription
-                          className={cn(
-                            isDark ? "text-blue-200" : "text-blue-800",
-                          )}
-                        >
-                          ✓ Budget set to{" "}
-                          <strong>
-                            ${parseFloat(totalBudget.toString()).toFixed(2)}
-                          </strong>{" "}
-                          for bonuses and extras!
-                        </AlertDescription>
-                      </Alert>
-                    )}
-                  </div>
-                )}
-
-                  {/* Max Earnings Per Creator (dual rewards: only here, not in milestone block above) */}
-                  {(multipleSubmissionsEnabled ||
-                    contestType === "dual_rewards") && (
-                    <div
-                      className={cn(
-                        "space-y-3 p-4 border rounded-lg",
-                        isDark
-                          ? "bg-blue-950/50 border-blue-800"
-                          : "bg-blue-50 border-blue-200",
-                      )}
-                    >
-                      <div className="flex items-center gap-2">
-                        <span className="text-2xl">🎯</span>
-                        <Label
-                          htmlFor="maxEarnings"
-                          className="text-base font-semibold"
-                        >
-                          Maximum Earnings Per Creator (Optional)
-                        </Label>
-                      </div>
-                      <Input
-                        id="maxEarnings"
-                        type="number"
-                        min="0"
-                        step="0.01"
-                        value={maxEarningsPerCreator}
-                        className={cn(
-                          isDark
-                            ? "bg-[#180438] border border-gray-600 text-white"
-                            : "bg-white text-black",
-                        )}
-                        onChange={(e) =>
-                          setMaxEarningsPerCreator(e.target.value)
-                        }
-                        placeholder="e.g., 500 for $500 max per creator"
-                      />
-                      <p className="text-sm text-muted-foreground">
-                        Set a maximum earning cap per creator for{" "}
-                        <strong>THIS CONTEST ONLY</strong>. Once reached, they
-                        can still submit but won't earn more from this campaign.
-                        This does NOT affect their earnings from other contests
-                        on the platform. Helps ensure fair reward distribution
-                        within this campaign.
-                      </p>
-                      {maxEarningsPerCreator &&
-                        parseFloat(maxEarningsPerCreator.toString()) > 0 && (
-                          <Alert
-                            className={cn(
-                              isDark
-                                ? "bg-blue-900/30 border-blue-900"
-                                : "bg-blue-100 border-blue-300",
-                            )}
-                          >
-                            <AlertDescription
+                        />
+                        <p className="text-sm text-muted-foreground">
+                          Optional: Give creators a guaranteed payment for each
+                          verified submission, regardless of views or ranking.
+                          This bonus is paid after the campaign ends. Great for
+                          encouraging participation!
+                        </p>
+                        {flatFeeBonus &&
+                          parseFloat(flatFeeBonus.toString()) > 0 && (
+                            <Alert
                               className={cn(
-                                isDark ? "text-blue-200" : "text-blue-800",
+                                "border",
+                                isDark
+                                  ? "bg-[#C9A7FF26] border-[#C9A7FF] text-white"
+                                  : "bg-[#F0E7FD] border-[#4A00BE] text-green-800",
                               )}
                             >
-                              ℹ️ Each creator can earn up to{" "}
-                              <strong>
-                                $
-                                {parseFloat(
-                                  maxEarningsPerCreator.toString(),
-                                ).toFixed(2)}
-                              </strong>{" "}
-                              from this campaign.
-                            </AlertDescription>
-                          </Alert>
-                        )}
-                    </div>
-                  )}
-                </>
-              )}
+                              <AlertDescription>
+                                ✓ Creators will earn{" "}
+                                <strong>
+                                  $
+                                  {parseFloat(flatFeeBonus.toString()).toFixed(
+                                    2,
+                                  )}
+                                </strong>{" "}
+                                for each verified submission!
+                              </AlertDescription>
+                            </Alert>
+                          )}
+                      </div>
+                    )}
 
-              {/* Additional Bonus Section */}
-              <div
-                className={cn(
-                  "space-y-3 p-4 border rounded-lg",
-                  isDark
-                    ? "bg-purple-950/50 border-purple-800"
-                    : "bg-purple-50 border-purple-200",
-                )}
-              >
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <span className="text-2xl">🏆</span>
-                    <Label
-                      htmlFor="bonusToggle"
-                      className="text-base font-semibold"
-                    >
-                      Additional Bonus Opportunities
-                    </Label>
-                  </div>
-                  <Checkbox
-                    id="bonusToggle"
-                    checked={bonusEnabled}
-                    onCheckedChange={(checked) =>
-                      setBonusEnabled(checked === true)
-                    }
-                    className="h-5 w-5 data-[state=checked]:bg-purple-600 data-[state=checked]:border-purple-600 data-[state=checked]:text-white"
-                  />
-                </div>
-                <p className="text-sm text-muted-foreground">
-                  Offer additional bonuses that you'll handle manually (e.g.,
-                  top creators bonus, affiliate commissions, special rewards).
-                </p>
+                    {/* Flat Fee Bonus Cap (Only for CPM campaigns with flat fee bonus) */}
+                    {isCpmContestType(contestType) &&
+                      contestType !== "dual_rewards" &&
+                      flatFeeBonus &&
+                      parseFloat(flatFeeBonus.toString()) > 0 && (
+                        <div
+                          className={cn(
+                            "space-y-3 p-4 border rounded-lg",
+                            isDark
+                              ? "bg-purple-950/40 border-purple-800"
+                              : "bg-gradient-to-r from-purple-50 to-violet-50 border-purple-200",
+                          )}
+                        >
+                          <div className="flex items-center gap-2">
+                            <span className="text-2xl">💰</span>
+                            <Label
+                              htmlFor="flatFeeBonusCap"
+                              className="text-base font-semibold"
+                            >
+                              Flat Fee Bonus Cap{" "}
+                              <span className="text-red-500">*</span>
+                            </Label>
+                          </div>
+                          <Input
+                            id="flatFeeBonusCap"
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            required
+                            value={flatFeeBonusCap}
+                            onChange={(e) => setFlatFeeBonusCap(e.target.value)}
+                            placeholder="e.g., 20 for $20 total cap"
+                            className={cn(
+                              isDark
+                                ? "bg-[#180438] border border-gray-600 text-white"
+                                : "bg-white text-black",
+                            )}
+                          />
+                          <p className="text-sm text-muted-foreground">
+                            Required: Maximum total flat fee bonus to distribute
+                            across all creators. Once this cap is reached, no
+                            more flat fee bonuses will be given. Must not exceed
+                            Total Budget.
+                          </p>
+                          {flatFeeBonusCap &&
+                            parseFloat(flatFeeBonusCap.toString()) > 0 && (
+                              <Alert
+                                className={cn(
+                                  isDark
+                                    ? "bg-purple-900/30 border-purple-900"
+                                    : "bg-purple-100 border-purple-300",
+                                )}
+                              >
+                                <AlertDescription>
+                                  ✓ Maximum flat fee bonus cap set to{" "}
+                                  <strong>
+                                    $
+                                    {parseFloat(
+                                      flatFeeBonusCap.toString(),
+                                    ).toFixed(2)}
+                                  </strong>
+                                  . Once this amount is distributed, no more
+                                  flat fee bonuses will be given.
+                                </AlertDescription>
+                              </Alert>
+                            )}
+                        </div>
+                      )}
 
-                {bonusEnabled && (
-                  <div className="space-y-3 pt-3 border-t border-purple-300">
-                    <div className="flex items-center justify-between">
-                      <Label>Bonus Details</Label>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={toggleBonusPreview}
-                        className="text-xs"
-                      >
-                        {showBonusPreview ? "Edit" : "Preview"}
-                      </Button>
-                    </div>
+                    {/* Total Budget for Bonuses (Only for Leaderboard campaigns with flat fee bonus) */}
+                    {contestType === "leaderboard" &&
+                      flatFeeBonus &&
+                      parseFloat(flatFeeBonus.toString()) > 0 && (
+                        <div
+                          className={cn(
+                            "space-y-3 p-4 border rounded-lg",
+                            isDark
+                              ? "bg-blue-950/50 border-blue-800"
+                              : "bg-gradient-to-r from-blue-50 to-indigo-50 border-blue-200",
+                          )}
+                        >
+                          <div className="flex items-center gap-2">
+                            <span className="text-2xl">💰</span>
+                            <Label
+                              htmlFor="totalBudget"
+                              className="text-base font-semibold"
+                            >
+                              Total Budget for Bonuses{" "}
+                              <span className="text-red-500">*</span>
+                            </Label>
+                          </div>
+                          <Input
+                            id="totalBudget"
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            required
+                            value={totalBudget}
+                            onChange={(e) => setTotalBudget(e.target.value)}
+                            placeholder="e.g., 500 for $500 total budget"
+                            className={cn(
+                              isDark
+                                ? "bg-[#180438] border border-gray-600 text-white"
+                                : "bg-white text-black",
+                            )}
+                          />
+                          <p className="text-sm text-muted-foreground">
+                            Required: Set a budget limit for flat fee bonuses.
+                            This budget is required when Flat Fee Bonus is
+                            enabled.
+                            <br />
+                            <strong>Prize Pool:</strong>{" "}
+                            {formatCurrencyFromCents(totalPrizePool)} (for
+                            rankings)
+                            <br />
+                            <strong>Total Budget:</strong>{" "}
+                            {totalBudget
+                              ? `$${parseFloat(totalBudget.toString()).toFixed(2)}`
+                              : "No limit"}{" "}
+                            (for bonuses & extras)
+                          </p>
+                          {totalBudget &&
+                            parseFloat(totalBudget.toString()) > 0 && (
+                              <Alert
+                                className={cn(
+                                  isDark
+                                    ? "bg-blue-900/30 border-blue-900"
+                                    : "bg-blue-100 border-blue-300",
+                                )}
+                              >
+                                <AlertDescription
+                                  className={cn(
+                                    isDark ? "text-blue-200" : "text-blue-800",
+                                  )}
+                                >
+                                  ✓ Budget set to{" "}
+                                  <strong>
+                                    $
+                                    {parseFloat(totalBudget.toString()).toFixed(
+                                      2,
+                                    )}
+                                  </strong>{" "}
+                                  for bonuses and extras!
+                                </AlertDescription>
+                              </Alert>
+                            )}
+                        </div>
+                      )}
 
-                    {showBonusPreview ? (
+                    {/* Max Earnings Per Creator (dual rewards: only here, not in milestone block above) */}
+                    {(multipleSubmissionsEnabled ||
+                      contestType === "dual_rewards") && (
                       <div
                         className={cn(
-                          "prose max-w-none p-4 border rounded-lg min-h-[200px]",
+                          "space-y-3 p-4 border rounded-lg",
                           isDark
-                            ? "bg-[#180438] border-gray-600 text-white"
-                            : "bg-white",
+                            ? "bg-blue-950/50 border-blue-800"
+                            : "bg-blue-50 border-blue-200",
                         )}
                       >
-                        <div dangerouslySetInnerHTML={{ __html: bonusHtml }} />
+                        <div className="flex items-center gap-2">
+                          <span className="text-2xl">🎯</span>
+                          <Label
+                            htmlFor="maxEarnings"
+                            className="text-base font-semibold"
+                          >
+                            Maximum Earnings Per Creator (Optional)
+                          </Label>
+                        </div>
+                        <Input
+                          id="maxEarnings"
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          value={maxEarningsPerCreator}
+                          className={cn(
+                            isDark
+                              ? "bg-[#180438] border border-gray-600 text-white"
+                              : "bg-white text-black",
+                          )}
+                          onChange={(e) =>
+                            setMaxEarningsPerCreator(e.target.value)
+                          }
+                          placeholder="e.g., 500 for $500 max per creator"
+                        />
+                        <p className="text-sm text-muted-foreground">
+                          Set a maximum earning cap per creator for{" "}
+                          <strong>THIS CONTEST ONLY</strong>. Once reached, they
+                          can still submit but won't earn more from this
+                          campaign. This does NOT affect their earnings from
+                          other contests on the platform. Helps ensure fair
+                          reward distribution within this campaign.
+                        </p>
+                        {maxEarningsPerCreator &&
+                          parseFloat(maxEarningsPerCreator.toString()) > 0 && (
+                            <Alert
+                              className={cn(
+                                isDark
+                                  ? "bg-blue-900/30 border-blue-900"
+                                  : "bg-blue-100 border-blue-300",
+                              )}
+                            >
+                              <AlertDescription
+                                className={cn(
+                                  isDark ? "text-blue-200" : "text-blue-800",
+                                )}
+                              >
+                                ℹ️ Each creator can earn up to{" "}
+                                <strong>
+                                  $
+                                  {parseFloat(
+                                    maxEarningsPerCreator.toString(),
+                                  ).toFixed(2)}
+                                </strong>{" "}
+                                from this campaign.
+                              </AlertDescription>
+                            </Alert>
+                          )}
                       </div>
-                    ) : (
-                      <div className="bg-white rounded-lg border">
-                        <NovelEditor
-                          value={bonusHtml}
-                          isDark={isDark}
-                          enableImages={false}
-                          placeholder="Example:
+                    )}
+                  </>
+                )}
+
+                {/* Additional Bonus Section */}
+                <div
+                  className={cn(
+                    "space-y-3 p-4 border rounded-lg",
+                    isDark
+                      ? "bg-purple-950/50 border-purple-800"
+                      : "bg-purple-50 border-purple-200",
+                  )}
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="text-2xl">🏆</span>
+                      <Label
+                        htmlFor="bonusToggle"
+                        className="text-base font-semibold"
+                      >
+                        Additional Bonus Opportunities
+                      </Label>
+                    </div>
+                    <Checkbox
+                      id="bonusToggle"
+                      checked={bonusEnabled}
+                      onCheckedChange={(checked) =>
+                        setBonusEnabled(checked === true)
+                      }
+                      className="h-5 w-5 data-[state=checked]:bg-purple-600 data-[state=checked]:border-purple-600 data-[state=checked]:text-white"
+                    />
+                  </div>
+                  <p className="text-sm text-muted-foreground">
+                    Offer additional bonuses that you'll handle manually (e.g.,
+                    top creators bonus, affiliate commissions, special rewards).
+                  </p>
+
+                  {bonusEnabled && (
+                    <div className="space-y-3 pt-3 border-t border-purple-300">
+                      <div className="flex items-center justify-between">
+                        <Label>Bonus Details</Label>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={toggleBonusPreview}
+                          className="text-xs"
+                        >
+                          {showBonusPreview ? "Edit" : "Preview"}
+                        </Button>
+                      </div>
+
+                      {showBonusPreview ? (
+                        <div
+                          className={cn(
+                            "prose max-w-none p-4 border rounded-lg min-h-[200px]",
+                            isDark
+                              ? "bg-[#180438] border-gray-600 text-white"
+                              : "bg-white",
+                          )}
+                        >
+                          <div
+                            dangerouslySetInnerHTML={{ __html: bonusHtml }}
+                          />
+                        </div>
+                      ) : (
+                        <div className="bg-white rounded-lg border">
+                          <NovelEditor
+                            value={bonusHtml}
+                            isDark={isDark}
+                            enableImages={false}
+                            placeholder="Example:
 • Top 3 creators get $100 each
 • Affiliate link available: https://yoursite.com/ref - 10% commission on sales  
 • Most creative submission gets an extra $50 bonus
 • Special reward for first 10 submissions"
-                          height="250px"
-                          ref={bonusRichTextEditorRef}
-                          onChange={(html: string, json: any) => {
-                            setBonusHtml(html);
-                            setBonusJson(json);
-                          }}
-                        />
-                      </div>
-                    )}
-                    <p className="text-xs text-muted-foreground">
-                      Describe all additional bonus opportunities. These will be
-                      visible to creators and handled manually by you. Use
-                      formatting, links, and bullet points to make it clear!
-                    </p>
-                  </div>
-                )}
+                            height="250px"
+                            ref={bonusRichTextEditorRef}
+                            onChange={(html: string, json: any) => {
+                              setBonusHtml(html);
+                              setBonusJson(json);
+                            }}
+                          />
+                        </div>
+                      )}
+                      <p className="text-xs text-muted-foreground">
+                        Describe all additional bonus opportunities. These will
+                        be visible to creators and handled manually by you. Use
+                        formatting, links, and bullet points to make it clear!
+                      </p>
+                    </div>
+                  )}
+                </div>
               </div>
-            </div>
             )}
 
             <CardFooter className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4 pt-6">
@@ -9634,8 +9780,8 @@ export default function CreateContestPage({
       >
         <h2 className="text-xl font-bold mb-4">Leave Campaign Creation?</h2>
         <p className="mb-6">
-          Do you want to save this campaign as a draft or delete it? All progress
-          will be lost if you delete.
+          Do you want to save this campaign as a draft or delete it? All
+          progress will be lost if you delete.
         </p>
 
         <div className="flex justify-end gap-2">
@@ -10190,11 +10336,7 @@ export default function CreateContestPage({
                 <RadioGroup
                   value={contestType}
                   onValueChange={(
-                    value:
-                      | "leaderboard"
-                      | "cpm"
-                      | "milestone"
-                      | "dual_rewards",
+                    value: "leaderboard" | "cpm" | "milestone" | "dual_rewards",
                   ) => {
                     const planFeatures = getPlanFeatures(userPlan);
                     const hasCpmAccess =
@@ -10354,7 +10496,8 @@ export default function CreateContestPage({
                       const currentPlan = dbSubscriptionPlans.find(
                         (p) => p.id === userPlan,
                       );
-                      const isFreePlan = !currentPlan || currentPlan.price === 0;
+                      const isFreePlan =
+                        !currentPlan || currentPlan.price === 0;
                       const isDisabled = !hasCpmAccess;
 
                       return (
@@ -10390,7 +10533,9 @@ export default function CreateContestPage({
                               Milestone Campaign
                             </span>
                             <p className="text-[14px] leading-tight mt-[2px] text-muted-foreground">
-                          Creators will be rewarded upon reaching milestone based on views, according to the defined view targets and payout for each milestone.
+                              Creators will be rewarded upon reaching milestone
+                              based on views, according to the defined view
+                              targets and payout for each milestone.
                             </p>
                             {!hasCpmAccess && (
                               <div className="mt-2 flex items-center gap-2">
@@ -10429,7 +10574,8 @@ export default function CreateContestPage({
                       const currentPlan = dbSubscriptionPlans.find(
                         (p) => p.id === userPlan,
                       );
-                      const isFreePlan = !currentPlan || currentPlan.price === 0;
+                      const isFreePlan =
+                        !currentPlan || currentPlan.price === 0;
                       const isDisabled = !hasCpmAccess;
 
                       return (
@@ -10630,7 +10776,7 @@ export default function CreateContestPage({
                         htmlFor="trustScoreRequirement"
                         className="text-base font-semibold"
                       >
-                        Trust Score
+                        Trust %
                       </Label>
                       <p
                         className={cn(
@@ -10638,9 +10784,11 @@ export default function CreateContestPage({
                           isDark ? "text-gray-300" : "text-gray-600",
                         )}
                       >
-                        Enable trust score requirements to allow only reliable creators to participate.
-    Trust scores may decrease for rejected, low-quality, or policy-violating
-    submissions. Creators below the required score cannot submit to this campaign.
+                        Enable trust % requirements to allow only reliable
+                        creators to participate. Trust % may decrease for
+                        rejected, low-quality, or policy-violating submissions.
+                        Creators below the required Trust % cannot submit to this
+                        campaign.
                       </p>
                     </div>
                     <div className="flex items-center space-x-2">
@@ -10665,22 +10813,118 @@ export default function CreateContestPage({
 
                   {trustScoreEnabled && (
                     <div className="space-y-2 pt-2 border-t">
-                      <Label htmlFor="trustScoreInput">Trust Score</Label>
+                      <Label htmlFor="trustScoreInput">Minimum Trust %</Label>
+                      <div className="relative max-w-xs">
+                        <Input
+                          id="trustScoreInput"
+                          type="number"
+                          min="0"
+                          max="100"
+                          value={contestTrustScore}
+                          onChange={(e) => {
+                            const raw = e.target.value;
+                            if (raw === "") {
+                              setContestTrustScore("");
+                              return;
+                            }
+                            const value = parseInt(raw, 10);
+                            if (
+                              !Number.isNaN(value) &&
+                              value >= 0 &&
+                              value <= 100
+                            ) {
+                              setContestTrustScore(value);
+                            }
+                          }}
+                          className={cn(
+                            "pr-10",
+                            isDark
+                              ? "bg-[#C9A7FF26] border border-gray-400 text-white"
+                              : "bg-white text-black",
+                          )}
+                          placeholder="0–100"
+                        />
+                        <span
+                          className={cn(
+                            "pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-sm font-medium",
+                            isDark ? "text-gray-300" : "text-muted-foreground",
+                          )}
+                          aria-hidden
+                        >
+                          %
+                        </span>
+                      </div>
+                      {contestTrustScore !== "" && (
+                        <p
+                          className={cn(
+                            "text-sm",
+                            isDark ? "text-gray-300" : "text-muted-foreground",
+                          )}
+                        >
+                          Creators need at least {contestTrustScore}% to submit.
+                        </p>
+                      )}
+                    </div>
+                  )}
+
+                  <div className="flex items-center justify-between pt-2 border-t">
+                    <div>
+                      <Label
+                        htmlFor="trustNumberRequirement"
+                        className="text-base font-semibold"
+                      >
+                        Trust Score
+                      </Label>
+                      <p
+                        className={cn(
+                          "text-sm mt-1",
+                          isDark ? "text-gray-300" : "text-gray-600",
+                        )}
+                      >
+                        Enable trust score requirements to allow only creators
+                        with a strong track record to participate. Creators
+                        below the required score cannot submit to this
+                        campaign.
+                      </p>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <Checkbox
+                        id="trustNumberRequirement"
+                        checked={trustNumberEnabled}
+                        onCheckedChange={(checked: any) => {
+                          setTrustNumberEnabled(Boolean(checked));
+                          if (!checked) {
+                            setContestTrustNumber("");
+                          } else if (contestTrustNumber === "") {
+                            setContestTrustNumber(5);
+                          }
+                        }}
+                        className={cn(
+                          "border h-5 w-5",
+                          isDark ? "border-gray-300" : "border-gray-500",
+                        )}
+                      />
+                    </div>
+                  </div>
+
+                  {trustNumberEnabled && (
+                    <div className="space-y-2 pt-2 border-t">
+                      <Label htmlFor="trustNumberInput">
+                        Minimum Trust Score
+                      </Label>
                       <Input
-                        id="trustScoreInput"
+                        id="trustNumberInput"
                         type="number"
-                        min="0"
-                        max="100"
-                        value={contestTrustScore}
+                        value={contestTrustNumber}
                         onChange={(e) => {
                           const raw = e.target.value;
                           if (raw === "") {
-                            setContestTrustScore("");
+                            setContestTrustNumber("");
                             return;
                           }
                           const value = parseInt(raw, 10);
-                          if (!Number.isNaN(value) && value >= 0 && value <= 100) {
-                            setContestTrustScore(value);
+                          if (!Number.isNaN(value)) {
+                            setContestTrustNumber(value);
                           }
                         }}
                         className={cn(
@@ -10688,9 +10932,288 @@ export default function CreateContestPage({
                             ? "bg-[#C9A7FF26] border border-gray-400 text-white"
                             : "bg-white text-black",
                         )}
-                        placeholder="Enter trust score between 0-100"
+                        placeholder="Enter minimum trust score"
                       />
                     </div>
+                  )}
+
+                  <p className="text-sm font-semibold pt-2 border-t">
+                    Quality & platform minimums
+                  </p>
+
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <Label
+                        htmlFor="bestQualityRequirement"
+                        className="text-base font-semibold"
+                      >
+                        Min Best Quality
+                      </Label>
+                      <p
+                        className={cn(
+                          "text-sm mt-1",
+                          isDark ? "text-gray-300" : "text-gray-600",
+                        )}
+                      >
+                        Creator&apos;s best verified reel quality (1–3) must
+                        meet this minimum.
+                      </p>
+                    </div>
+                    <Checkbox
+                      id="bestQualityRequirement"
+                      checked={bestQualityEnabled}
+                      onCheckedChange={(checked: any) => {
+                        setBestQualityEnabled(Boolean(checked));
+                        if (!checked) setContestMinBestQuality("");
+                        else if (contestMinBestQuality === "")
+                          setContestMinBestQuality(2);
+                      }}
+                      className={cn(
+                        "border h-5 w-5",
+                        isDark ? "border-gray-300" : "border-gray-500",
+                      )}
+                    />
+                  </div>
+                  {bestQualityEnabled && (
+                    <Input
+                      type="number"
+                      min={1}
+                      max={3}
+                      value={contestMinBestQuality}
+                      onChange={(e) => {
+                        const raw = e.target.value;
+                        if (raw === "") {
+                          setContestMinBestQuality("");
+                          return;
+                        }
+                        const v = parseInt(raw, 10);
+                        if (!Number.isNaN(v) && v >= 1 && v <= 3)
+                          setContestMinBestQuality(v);
+                      }}
+                      placeholder="1–3"
+                      className={cn(
+                        isDark
+                          ? "bg-[#C9A7FF26] border border-gray-400 text-white"
+                          : "bg-white text-black",
+                      )}
+                    />
+                  )}
+
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <Label
+                        htmlFor="avgQualityRequirement"
+                        className="text-base font-semibold"
+                      >
+                        Min Avg Quality
+                      </Label>
+                      <p
+                        className={cn(
+                          "text-sm mt-1",
+                          isDark ? "text-gray-300" : "text-gray-600",
+                        )}
+                      >
+                        Creator&apos;s average quality across verified reels.
+                      </p>
+                    </div>
+                    <Checkbox
+                      id="avgQualityRequirement"
+                      checked={avgQualityEnabled}
+                      onCheckedChange={(checked: any) => {
+                        setAvgQualityEnabled(Boolean(checked));
+                        if (!checked) setContestMinAvgQuality("");
+                        else if (contestMinAvgQuality === "")
+                          setContestMinAvgQuality(1.5);
+                      }}
+                      className={cn(
+                        "border h-5 w-5",
+                        isDark ? "border-gray-300" : "border-gray-500",
+                      )}
+                    />
+                  </div>
+                  {avgQualityEnabled && (
+                    <Input
+                      type="number"
+                      min={1}
+                      max={3}
+                      step={0.1}
+                      value={contestMinAvgQuality}
+                      onChange={(e) => {
+                        const raw = e.target.value;
+                        if (raw === "") {
+                          setContestMinAvgQuality("");
+                          return;
+                        }
+                        const v = parseFloat(raw);
+                        if (!Number.isNaN(v) && v >= 1 && v <= 3)
+                          setContestMinAvgQuality(v);
+                      }}
+                      placeholder="1.0–3.0"
+                      className={cn(
+                        isDark
+                          ? "bg-[#C9A7FF26] border border-gray-400 text-white"
+                          : "bg-white text-black",
+                      )}
+                    />
+                  )}
+
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <Label
+                        htmlFor="minQualityRequirement"
+                        className="text-base font-semibold"
+                      >
+                         Quality Score
+                      </Label>
+                      <p
+                        className={cn(
+                          "text-sm mt-1",
+                          isDark ? "text-gray-300" : "text-gray-600",
+                        )}
+                      >
+                        Creator&apos;s total quality score (sum of all verified
+                        reel ratings, 1–3 each) must meet this minimum.
+                      </p>
+                    </div>
+                    <Checkbox
+                      id="minQualityRequirement"
+                      checked={minQualityEnabled}
+                      onCheckedChange={(checked: any) => {
+                        setMinQualityEnabled(Boolean(checked));
+                        if (!checked) setContestMinQuality("");
+                        else if (contestMinQuality === "")
+                          setContestMinQuality(3);
+                      }}
+                      className={cn(
+                        "border h-5 w-5",
+                        isDark ? "border-gray-300" : "border-gray-500",
+                      )}
+                    />
+                  </div>
+                  {minQualityEnabled && (
+                    <Input
+                      type="number"
+                      min={1}
+                      value={contestMinQuality}
+                      onChange={(e) => {
+                        const raw = e.target.value;
+                        if (raw === "") {
+                          setContestMinQuality("");
+                          return;
+                        }
+                        const v = parseInt(raw, 10);
+                        if (!Number.isNaN(v) && v >= 1)
+                          setContestMinQuality(v);
+                      }}
+                      placeholder="e.g. 5"
+                      className={cn(
+                        isDark
+                          ? "bg-[#C9A7FF26] border border-gray-400 text-white"
+                          : "bg-white text-black",
+                      )}
+                    />
+                  )}
+
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <Label
+                        htmlFor="minEarningsRequirement"
+                        className="text-base font-semibold"
+                      >
+                        Min Platform Earnings
+                      </Label>
+                      <p
+                        className={cn(
+                          "text-sm mt-1",
+                          isDark ? "text-gray-300" : "text-gray-600",
+                        )}
+                      >
+                        Total earned on the platform from past campaigns and
+                        payouts (USD).
+                      </p>
+                    </div>
+                    <Checkbox
+                      id="minEarningsRequirement"
+                      checked={minEarningsEnabled}
+                      onCheckedChange={(checked: any) => {
+                        setMinEarningsEnabled(Boolean(checked));
+                        if (!checked) setContestMinEarnings("");
+                        else if (contestMinEarnings === "")
+                          setContestMinEarnings(50);
+                      }}
+                      className={cn(
+                        "border h-5 w-5",
+                        isDark ? "border-gray-300" : "border-gray-500",
+                      )}
+                    />
+                  </div>
+                  {minEarningsEnabled && (
+                    <Input
+                      type="number"
+                      min={0}
+                      value={contestMinEarnings}
+                      onChange={(e) => {
+                        const v = parseFloat(e.target.value);
+                        if (!Number.isNaN(v) && v >= 0)
+                          setContestMinEarnings(v);
+                      }}
+                      placeholder="USD"
+                      className={cn(
+                        isDark
+                          ? "bg-[#C9A7FF26] border border-gray-400 text-white"
+                          : "bg-white text-black",
+                      )}
+                    />
+                  )}
+
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <Label
+                        htmlFor="minViewsRequirement"
+                        className="text-base font-semibold"
+                      >
+                        Min Platform Views
+                      </Label>
+                      <p
+                        className={cn(
+                          "text-sm mt-1",
+                          isDark ? "text-gray-300" : "text-gray-600",
+                        )}
+                      >
+                        Minimum total views credited on the platform.
+                      </p>
+                    </div>
+                    <Checkbox
+                      id="minViewsRequirement"
+                      checked={minViewsEnabled}
+                      onCheckedChange={(checked: any) => {
+                        setMinViewsEnabled(Boolean(checked));
+                        if (!checked) setContestMinViews("");
+                        else if (contestMinViews === "")
+                          setContestMinViews(10000);
+                      }}
+                      className={cn(
+                        "border h-5 w-5",
+                        isDark ? "border-gray-300" : "border-gray-500",
+                      )}
+                    />
+                  </div>
+                  {minViewsEnabled && (
+                    <Input
+                      type="number"
+                      min={0}
+                      value={contestMinViews}
+                      onChange={(e) => {
+                        const v = parseInt(e.target.value, 10);
+                        if (!Number.isNaN(v) && v >= 0) setContestMinViews(v);
+                      }}
+                      placeholder="Minimum views"
+                      className={cn(
+                        isDark
+                          ? "bg-[#C9A7FF26] border border-gray-400 text-white"
+                          : "bg-white text-black",
+                      )}
+                    />
                   )}
                 </div>
               )}
@@ -13577,57 +14100,51 @@ export default function CreateContestPage({
         disabled={isLoading}
       >
         <ContestPaymentSelection
-                contestAmount={
-                  contestType === "leaderboard"
-                    ? (() => {
-                        // For leaderboard campaigns, charge prize pool + total budget (if flat fee bonus is enabled)
-                        const prizePoolDollars = totalPrizePool / 100;
-                        const flatFeeBonusEnabled =
-                          flatFeeBonus &&
-                          parseFloat(flatFeeBonus.toString()) > 0;
-                        const totalBudgetDollars =
-                          flatFeeBonusEnabled &&
-                          totalBudget &&
-                          parseFloat(totalBudget.toString()) > 0
-                            ? parseFloat(totalBudget.toString())
-                            : 0;
-                        return prizePoolDollars + totalBudgetDollars;
-                      })()
-                    : parseFloat(totalBudget.toString()) || 0
-                } // Budget is already in dollars
-                prizePoolAmount={
-                  contestType === "leaderboard"
-                    ? totalPrizePool / 100
-                    : undefined
-                }
-                bonusBudgetAmount={
-                  contestType === "leaderboard"
-                    ? (() => {
-                        const flatFeeBonusEnabled =
-                          flatFeeBonus &&
-                          parseFloat(flatFeeBonus.toString()) > 0;
-                        const totalBudgetDollars =
-                          flatFeeBonusEnabled &&
-                          totalBudget &&
-                          parseFloat(totalBudget.toString()) > 0
-                            ? parseFloat(totalBudget.toString())
-                            : 0;
-                        return totalBudgetDollars || undefined;
-                      })()
-                    : undefined
-                }
-                contestTitle={title || "Untitled Campaign"}
-                contestId={draftId || undefined}
-                returnPath={
-                  isAdmin && targetAdvertiserId
-                    ? `/dashboard/admin/contests/create/wizard?advertiserId=${targetAdvertiserId}`
-                    : "/dashboard/contests/create"
-                }
-                commissionPercentage={
-                  getPlanFeatures(userPlan).commissionPercentage
-                }
-                isAdminPayAsBrand={isAdmin}
-                targetAdvertiserId={targetAdvertiserId}
+          contestAmount={
+            contestType === "leaderboard"
+              ? (() => {
+                  // For leaderboard campaigns, charge prize pool + total budget (if flat fee bonus is enabled)
+                  const prizePoolDollars = totalPrizePool / 100;
+                  const flatFeeBonusEnabled =
+                    flatFeeBonus && parseFloat(flatFeeBonus.toString()) > 0;
+                  const totalBudgetDollars =
+                    flatFeeBonusEnabled &&
+                    totalBudget &&
+                    parseFloat(totalBudget.toString()) > 0
+                      ? parseFloat(totalBudget.toString())
+                      : 0;
+                  return prizePoolDollars + totalBudgetDollars;
+                })()
+              : parseFloat(totalBudget.toString()) || 0
+          } // Budget is already in dollars
+          prizePoolAmount={
+            contestType === "leaderboard" ? totalPrizePool / 100 : undefined
+          }
+          bonusBudgetAmount={
+            contestType === "leaderboard"
+              ? (() => {
+                  const flatFeeBonusEnabled =
+                    flatFeeBonus && parseFloat(flatFeeBonus.toString()) > 0;
+                  const totalBudgetDollars =
+                    flatFeeBonusEnabled &&
+                    totalBudget &&
+                    parseFloat(totalBudget.toString()) > 0
+                      ? parseFloat(totalBudget.toString())
+                      : 0;
+                  return totalBudgetDollars || undefined;
+                })()
+              : undefined
+          }
+          contestTitle={title || "Untitled Campaign"}
+          contestId={draftId || undefined}
+          returnPath={
+            isAdmin && targetAdvertiserId
+              ? `/dashboard/admin/contests/create/wizard?advertiserId=${targetAdvertiserId}`
+              : "/dashboard/contests/create"
+          }
+          commissionPercentage={getPlanFeatures(userPlan).commissionPercentage}
+          isAdminPayAsBrand={isAdmin}
+          targetAdvertiserId={targetAdvertiserId}
           onPaymentSuccess={handlePaymentSuccess}
           onPaymentError={handlePaymentError}
           disabled={isLoading}

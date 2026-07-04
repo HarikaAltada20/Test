@@ -11,6 +11,10 @@ import {
 import { MetricsService } from "@/lib/metrics-service";
 import { SUBMISSION_STATUS } from "@/lib/constants-status";
 import { getSubmissionViewsForCrediting } from "@/lib/submission-credited-views";
+import {
+  reconcileCreatorTotalViews,
+  shouldCreditSubmissionViewsOnStatusChange,
+} from "@/lib/creator-total-views";
 import { verifyAdminAccess } from "@/utils/admin-auth";
 import {
   buildMilestoneSubmissionPayoutCentsMap,
@@ -41,7 +45,6 @@ import {
   buildDualRewardsPayoutPersistValue,
   splitDualReversalRefundFromPayout,
 } from "@/lib/dual-rewards-payout";
-import { recomputeCreatorTrustMetrics } from "@/lib/trust-score";
 import {
   checkDualRewardsPoolBudgetForPayment,
   computeDualRewardsSubmissionReversalDue,
@@ -72,7 +75,7 @@ export async function POST(request: Request) {
       cpm_refunded_cents?: number;
       milestone_refunded_cents?: number;
     } | null = null;
-    const { submissionId, action, reason, paymentDetails, skipWalletDebit } =
+    const { submissionId, action, reason, paymentDetails, skipWalletDebit, qualityScore } =
       await request.json();
 
     if (!submissionId || !action) {
@@ -356,6 +359,25 @@ export async function POST(request: Request) {
       updateData.metadata = null;
     }
 
+    if (action === "verified") {
+      const { requireVerifyQualityScore } = await import("@/lib/quality-score");
+      const parsedQualityScore = requireVerifyQualityScore(qualityScore);
+      if (parsedQualityScore === null) {
+        return NextResponse.json(
+          {
+            error:
+              "qualityScore is required and must be 1, 2, or 3 when verifying a submission",
+          },
+          { status: 400 },
+        );
+      }
+      updateData.quality_score = parsedQualityScore;
+      updateData.quality_score_backfilled = false;
+    } else if (action === "rejected" || action === "pending") {
+      updateData.quality_score = null;
+      updateData.quality_score_backfilled = false;
+    }
+
     // Use admin client to bypass RLS for the update operation
     const supabaseAdmin = createAdminClient();
 
@@ -414,14 +436,23 @@ export async function POST(request: Request) {
     // This improves scalability by avoiding O(n) recalculation on every submission status change
     // Budget will be updated on next metrics refresh (typically within 10-15 minutes)
 
-    // Snapshot views and credit creator totals when entering verified/paid (idempotent via delta)
-    if (
-      action === SUBMISSION_STATUS.verified ||
-      action === SUBMISSION_STATUS.paid
-    ) {
+    // Snapshot views and credit creator totals once when entering verified/paid.
+    const nextViewsCreditStatus =
+      action === SUBMISSION_STATUS.verified
+        ? SUBMISSION_STATUS.verified
+        : action === SUBMISSION_STATUS.paid
+          ? SUBMISSION_STATUS.paid
+          : null;
+    const shouldCreditViews =
+      nextViewsCreditStatus !== null &&
+      shouldCreditSubmissionViewsOnStatusChange(
+        submissionFull.status,
+        nextViewsCreditStatus,
+      );
+
+    if (shouldCreditViews) {
       const currentViews = getSubmissionViewsForCrediting(submissionFull);
 
-      // Upsert snapshot to current (creator_profiles.total_views is maintained by DB trigger)
       const { error: snapErr } = await supabaseAdmin
         .from("submission_views_credited")
         .upsert(
@@ -434,6 +465,15 @@ export async function POST(request: Request) {
         );
       if (snapErr) {
         console.error("Failed to snapshot credited views:", snapErr);
+      } else if (submissionFull.creator_id) {
+        try {
+          await reconcileCreatorTotalViews(String(submissionFull.creator_id));
+        } catch (reconcileErr) {
+          console.error(
+            "Failed to reconcile creator total_views after verify:",
+            reconcileErr,
+          );
+        }
       }
 
       // Persist locked views on the submission row only (contest-wide timestamp lives on contests)
@@ -466,6 +506,15 @@ export async function POST(request: Request) {
         .eq("submission_id", submissionId);
       if (uncreditErr) {
         console.error("Failed to uncredit views for submission:", uncreditErr);
+      } else if (submissionFull.creator_id) {
+        try {
+          await reconcileCreatorTotalViews(String(submissionFull.creator_id));
+        } catch (reconcileErr) {
+          console.error(
+            "Failed to reconcile creator total_views after uncredit:",
+            reconcileErr,
+          );
+        }
       }
     }
 
@@ -1889,21 +1938,10 @@ export async function POST(request: Request) {
     const { data: latestSubmission } = await supabaseAdmin
       .from("submissions")
       .select(
-        "id, status, earnings, paid, paid_at, bonus_paid, bonus_paid_at, bonus_amount, views, creator_id, created_at, contest_id, platform, other_stats, metadata, dual_rewards_payout",
+        "id, status, quality_score, earnings, paid, paid_at, bonus_paid, bonus_paid_at, bonus_amount, views, creator_id, created_at, contest_id, platform, other_stats, metadata, dual_rewards_payout",
       )
       .eq("id", submissionId)
       .single();
-
-    const trustRecompute = await recomputeCreatorTrustMetrics(
-      supabaseAdmin,
-      submissionFull.creator_id,
-    );
-    if (!trustRecompute.ok) {
-      console.error(
-        "[verify-submission] Failed to recompute trust metrics:",
-        trustRecompute.error,
-      );
-    }
 
     let message = `Submission ${action} successfully${
       action === "rejected" ? ` with reason: ${reason}` : ""

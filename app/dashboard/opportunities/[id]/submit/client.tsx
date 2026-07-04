@@ -49,11 +49,11 @@ import {
   getContestSubmitReturnPath,
   getSettingsUrlWithReturnTo,
 } from "@/lib/oauth-return-to";
+import { getRequirementsBlockedMessage, type RequirementFailure } from "@/lib/creator-requirements";
 import {
-  getContestMinTrustScoreForGate,
-  getTrustSubmissionBlockedMessage,
-  isCreatorTrustSubmissionBlocked,
-} from "@/lib/trust-score";
+  CreatorContestRequirementsGate,
+} from "@/components/CreatorContestRequirementsGate";
+import { useCreatorContestEligibility } from "@/hooks/useCreatorContestEligibility";
 
 function formatSubmissionInsertError(error: {
   message?: string;
@@ -63,8 +63,28 @@ function formatSubmissionInsertError(error: {
     return "This video has already been submitted to this campaign.";
   }
   const msg = error?.message || "";
+  const refreshHint =
+    " Refresh the page — your eligibility may have changed since you started submitting.";
   if (msg.includes("trust_score_too_low")) {
-    return "Trust score too low to submit to this campaign.";
+    return `Trust % too low to submit to this campaign.${refreshHint}`;
+  }
+  if (msg.includes("trust_number_too_low")) {
+    return `Trust Number too low to submit to this campaign.${refreshHint}`;
+  }
+  if (msg.includes("best_quality_too_low")) {
+    return `Best quality too low to submit to this campaign.${refreshHint}`;
+  }
+  if (msg.includes("min_quality_too_low")) {
+    return `Total quality score too low to submit to this campaign.${refreshHint}`;
+  }
+  if (msg.includes("avg_quality_too_low")) {
+    return `Average quality too low to submit to this campaign.${refreshHint}`;
+  }
+  if (msg.includes("platform_earnings_too_low")) {
+    return `Platform earnings too low to submit to this campaign.${refreshHint}`;
+  }
+  if (msg.includes("platform_views_too_low")) {
+    return `Platform views too low to submit to this campaign.${refreshHint}`;
   }
   return msg || "Failed to submit content";
 }
@@ -82,12 +102,45 @@ function throwIfBatchInsertErrors(
   );
 }
 
+/** Server-side pre-submit gate (mirrors DB trigger; call immediately before insert). */
+async function assertContestRequirementsForSubmit(
+  contestId: string,
+): Promise<{ ok: true } | { ok: false; message: string }> {
+  try {
+    const requirementsCheckRes = await fetch("/api/creators/stats", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ contestId }),
+    });
+    if (requirementsCheckRes.ok) {
+      return { ok: true };
+    }
+
+    const checkBody = await requirementsCheckRes.json().catch(() => ({}));
+    const apiFailures = Array.isArray(
+      (checkBody as { failures?: RequirementFailure[] }).failures,
+    )
+      ? (checkBody as { failures: RequirementFailure[] }).failures
+      : [];
+    const message =
+      getRequirementsBlockedMessage(apiFailures) ||
+      (checkBody as { error?: string })?.error ||
+      "Campaign requirements not met.";
+    return { ok: false, message };
+  } catch {
+    return {
+      ok: false,
+      message: "Unable to verify campaign requirements. Please try again.",
+    };
+  }
+}
+
 /** Refresh persisted creator_profiles.trust_score_metrics after a new submission. */
 async function refreshTrustMetricsAfterSubmit() {
   try {
-    await fetch("/api/creators/trust-score", { method: "PATCH" });
+    await fetch("/api/creators/stats", { method: "PATCH" });
   } catch (error) {
-    console.warn("Failed to refresh trust metrics after submit:", error);
+    console.warn("Failed to refresh creator metrics after submit:", error);
   }
 }
 
@@ -343,9 +396,16 @@ export default function SubmitContentPage({
   const [isFetchingInstagramMedia, setIsFetchingInstagramMedia] =
     useState(false);
   const [contest, setContest] = useState<any>(null); // Store full contest data including contest_type
-  const [creatorTrustScore, setCreatorTrustScore] = useState<number | null>(null);
-  const [creatorTrustScoreLoaded, setCreatorTrustScoreLoaded] = useState(false);
-  const [creatorTrustScoreLoading, setCreatorTrustScoreLoading] = useState(false);
+
+  const {
+    items: requirementItems,
+    failures: requirementFailures,
+    isBlocked: isRequirementsBlocked,
+    hasRequirements,
+    loading: requirementsLoading,
+    fetchFailed: requirementsFetchFailed,
+    refresh: refreshRequirements,
+  } = useCreatorContestEligibility(contestId, contest);
 
   const { toast } = useToast();
 
@@ -370,27 +430,7 @@ export default function SubmitContentPage({
   );
   const totalTiktokPages = Math.ceil(userTiktokVideos.length / ITEMS_PER_PAGE);
 
-  const contestMinTrustScore = contest
-    ? getContestMinTrustScoreForGate(contest)
-    : null;
-  const isTrustGateEnabled = contestMinTrustScore !== null;
-  const isTrustScoreBlocked = isCreatorTrustSubmissionBlocked({
-    minScore: contestMinTrustScore,
-    creatorScore: creatorTrustScore,
-    scoreLoaded: creatorTrustScoreLoaded,
-    scoreLoading: creatorTrustScoreLoading,
-  });
-  const trustScoreWarning =
-    isTrustScoreBlocked && contestMinTrustScore !== null
-      ? getTrustSubmissionBlockedMessage({
-          minScore: contestMinTrustScore,
-          creatorScore: creatorTrustScore,
-          scoreLoading: creatorTrustScoreLoading,
-          scoreLoaded: creatorTrustScoreLoaded,
-        })
-      : null;
-
-  // Helper function for 2-hour validation
+  // Read mode from data attribute
   const isContentTooOld = (publishedAt: string): boolean => {
     const windowAgo = dayjs().subtract(
       SUBMISSION_WINDOW_VALUE,
@@ -1170,8 +1210,8 @@ export default function SubmitContentPage({
       const { data: contestData, error: contestError } = await supabase
         .from("contests")
         .select(
-          "id, title, platform, contest_type, contest_format, multiple_submissions_enabled, max_submissions_per_creator, content_type, bonus_details, contest_based_details, trust_score",
-        ) // Include new feature fields
+          "id, title, platform, contest_type, contest_format, multiple_submissions_enabled, max_submissions_per_creator, content_type, bonus_details, contest_based_details, trust_score, trust_number, min_avg_quality_score, min_best_quality_score, min_quality_score, min_platform_earnings, min_platform_views",
+        )
         .eq("id", contestId)
         .single();
 
@@ -1190,37 +1230,6 @@ export default function SubmitContentPage({
 
       // Store full contest data
       setContest(contestData);
-
-      const minTrustScore = getContestMinTrustScoreForGate(contestData);
-      if (minTrustScore === null) {
-        setCreatorTrustScore(null);
-        setCreatorTrustScoreLoaded(true);
-        setCreatorTrustScoreLoading(false);
-      } else {
-        setCreatorTrustScoreLoading(true);
-        setCreatorTrustScoreLoaded(false);
-        try {
-          const trustRes = await fetch("/api/creators/trust-score");
-          if (trustRes.ok) {
-            const trustData = await trustRes.json();
-            setCreatorTrustScore(
-              typeof trustData?.trust_score === "number"
-                ? trustData.trust_score
-                : null,
-            );
-            setCreatorTrustScoreLoaded(true);
-          } else {
-            setCreatorTrustScore(null);
-            setCreatorTrustScoreLoaded(false);
-          }
-        } catch (trustError) {
-          console.warn("Failed to fetch trust score:", trustError);
-          setCreatorTrustScore(null);
-          setCreatorTrustScoreLoaded(false);
-        } finally {
-          setCreatorTrustScoreLoading(false);
-        }
-      }
 
       // Fetch existing submissions for progress tracking
       const { data: existingSubmissions, error: existingSubsErr } =
@@ -2631,44 +2640,26 @@ export default function SubmitContentPage({
       return;
     }
 
-    if (isTrustScoreBlocked) {
-      setError(trustScoreWarning || "Trust score too low to submit.");
+    if (isRequirementsBlocked) {
+      const blockedMessage =
+        getRequirementsBlockedMessage(requirementFailures) ||
+        "Campaign requirements not met to submit.";
+      setError(blockedMessage);
       toast({
-        title: "Trust score too low to submit",
-        description: trustScoreWarning || "Trust score too low to submit.",
+        title: "Campaign requirements not met",
+        description: blockedMessage,
         variant: "destructive",
       });
       return;
     }
 
-    if (isTrustGateEnabled) {
-      try {
-        const trustCheckRes = await fetch("/api/creators/trust-score", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ contestId }),
-        });
-        if (!trustCheckRes.ok) {
-          const trustCheckBody = await trustCheckRes.json().catch(() => ({}));
-          const msg =
-            (trustCheckBody as { error?: string })?.error ||
-            "Trust score requirement not met.";
-          setError(msg);
-          toast({
-            title: "Cannot submit",
-            description: msg,
-            variant: "destructive",
-          });
-          return;
-        }
-      } catch {
-        const msg =
-          trustScoreWarning ||
-          "Unable to verify trust score. Please try again.";
-        setError(msg);
+    if (hasRequirements) {
+      const requirementsResult = await assertContestRequirementsForSubmit(contestId);
+      if (!requirementsResult.ok) {
+        setError(requirementsResult.message);
         toast({
           title: "Cannot submit",
-          description: msg,
+          description: requirementsResult.message,
           variant: "destructive",
         });
         return;
@@ -2685,6 +2676,14 @@ export default function SubmitContentPage({
     setMessage(null);
 
     try {
+      if (hasRequirements) {
+        const finalRequirementsResult =
+          await assertContestRequirementsForSubmit(contestId);
+        if (!finalRequirementsResult.ok) {
+          throw new Error(finalRequirementsResult.message);
+        }
+      }
+
       const isMultipleMode = contest?.multiple_submissions_enabled;
       const allYoutubeVideos = [...selectedVideosFromTabs, ...selectedVideos];
       const allInstagramReels = [...selectedReelsFromTabs, ...selectedReels];
@@ -2727,6 +2726,7 @@ export default function SubmitContentPage({
       } catch { }
 
       await refreshTrustMetricsAfterSubmit();
+      await refreshRequirements();
 
       // Success - This toast will be overridden by the specific messages in handleMultipleSubmissions
       // For single submissions, show this message
@@ -3169,20 +3169,13 @@ export default function SubmitContentPage({
               <AlertDescription>{message}</AlertDescription>
             </Alert>
           )}
-          {trustScoreWarning && (
-            <Alert
-              variant="default"
-              className="mb-4 rounded-xl border border-[#7F39EC] bg-[#D9C0FF26]"
-            >
-              <AlertDescription
-                className={cn(
-                  "text-sm leading-relaxed",
-                  isDark ? "text-gray-200" : "text-[#4A00BE]",
-                )}
-              >
-                {trustScoreWarning}
-              </AlertDescription>
-            </Alert>
+          {hasRequirements && (
+            <CreatorContestRequirementsGate
+              items={requirementItems}
+              loading={requirementsLoading}
+              fetchFailed={requirementsFetchFailed}
+              isDark={isDark}
+            />
           )}
 
           {/* Submit and Cancel Buttons - Moved to top */}
@@ -3213,7 +3206,7 @@ export default function SubmitContentPage({
                 type="button"
                 onClick={handleSubmit}
                 disabled={
-                  isTrustScoreBlocked ||
+                  isRequirementsBlocked ||
                   isLoading ||
                   isFetchingVideo ||
                   isFetchingInstagramMedia ||
@@ -3235,12 +3228,16 @@ export default function SubmitContentPage({
                       !tiktokVideoPreview &&
                       !selectedTiktokVideo))
                 }
-                className="w-full sm:w-auto"
+                className={cn(
+                  "w-full sm:w-auto",
+                  isRequirementsBlocked &&
+                    "bg-[#4A00BE] text-white opacity-60 hover:bg-[#4A00BE]",
+                )}
               >
                 {isLoading ? (
                   <RefreshCw className="animate-spin mr-2 h-4 w-4" />
                 ) : null}
-                {isTrustScoreBlocked ? "Trust Score Too Low" : "Submit Content"}
+                Submit Content
               </Button>
             </div>
           </div>

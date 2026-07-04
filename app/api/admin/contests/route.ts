@@ -1,6 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { verifyAdminAccess } from "@/utils/admin-auth";
 import { createAdminClient } from "@/utils/supabase/admin";
+import { isVideoContestFormat } from "@/lib/trust-score";
+import {
+  hasNormalizedCreatorRequirement,
+  validateCreatorRequirementFields,
+} from "@/lib/contest-creator-requirements-validation";
 
 export async function POST(request: NextRequest) {
   try {
@@ -38,6 +43,36 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const requirementValidation = validateCreatorRequirementFields({
+      trust_score: draftFields.trust_score,
+      trust_number: draftFields.trust_number,
+      min_avg_quality_score: draftFields.min_avg_quality_score,
+      min_best_quality_score: draftFields.min_best_quality_score,
+      min_quality_score: draftFields.min_quality_score,
+      min_platform_earnings: draftFields.min_platform_earnings,
+      min_platform_views: draftFields.min_platform_views,
+    });
+    if (!requirementValidation.ok) {
+      return NextResponse.json(
+        { error: requirementValidation.error },
+        { status: 400 },
+      );
+    }
+
+    const normalizedRequirements = requirementValidation.values;
+    if (
+      hasNormalizedCreatorRequirement(normalizedRequirements) &&
+      !isVideoContestFormat(draftFields.contest_format)
+    ) {
+      return NextResponse.json(
+        {
+          error:
+            "Creator requirement fields are only supported for video campaigns (contest_format video)",
+        },
+        { status: 400 },
+      );
+    }
+
     const insertData = {
       advertiser_id: advertiserId,
       title: draftFields.title || "No Title - Draft",
@@ -70,7 +105,13 @@ export async function POST(request: NextRequest) {
       multiple_submissions_enabled:
         draftFields.multiple_submissions_enabled ?? false,
       max_submissions_per_creator: draftFields.max_submissions_per_creator ?? 1,
-      trust_score: draftFields.trust_score ?? null,
+      trust_score: normalizedRequirements.trust_score ?? null,
+      trust_number: normalizedRequirements.trust_number ?? null,
+      min_avg_quality_score: normalizedRequirements.min_avg_quality_score ?? null,
+      min_best_quality_score: normalizedRequirements.min_best_quality_score ?? null,
+      min_quality_score: normalizedRequirements.min_quality_score ?? null,
+      min_platform_earnings: normalizedRequirements.min_platform_earnings ?? null,
+      min_platform_views: normalizedRequirements.min_platform_views ?? null,
       content_type: draftFields.content_type ?? null,
       bonus_details: draftFields.bonus_details ?? null,
       max_earnings_per_creator: draftFields.max_earnings_per_creator ?? null,

@@ -18,7 +18,6 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
@@ -41,6 +40,7 @@ import {
   BarChart2,
   CircleHelp,
   AlertTriangle,
+  Star,
 } from "lucide-react";
 import {
   Select,
@@ -76,6 +76,10 @@ import {
   getBulkPaymentToastMeta,
 } from "@/lib/bulk-payment-toast";
 import { buildFlatFeeBonusExpectedCentsBySubmissionId } from "@/lib/twitter-cpm-bonus-expected";
+import { parseQualityScore } from "@/lib/quality-score";
+import type { QualityScore } from "@/lib/quality-score";
+import { SubmissionQualityScoreCell } from "@/components/SubmissionQualityScoreCell";
+import { VerifyQualityDialog } from "@/components/VerifyQualityDialog";
 import { YouTubeAnalyticsPanel } from "@/components/youtube/YouTubeAnalyticsPanel";
 import {
   formatMetadataTimestamp,
@@ -117,6 +121,7 @@ interface Submission {
   insights_status?: "ok" | "temporary_failure" | "permanent_failure" | null;
   metadata?: any;
   dual_rewards_payout?: unknown;
+  quality_score?: number | null;
 }
 
 /** TikTok Display API uses *_count; older rows may only have views/likes/comments/shares. */
@@ -171,6 +176,20 @@ interface CreatorSubmissionsModalProps {
   bonusCapSubmissions?: Submission[];
   /** True while parent runs bulk/single verify API after paid-reversal confirm (Creator modal stays open). */
   parentBulkActionLoading?: boolean;
+  /** Called after a submission quality score is saved (updates parent list + creator aggregates). */
+  onQualityScoreUpdated?: (payload: {
+    submissionId: string;
+    qualityScore: number;
+    creatorId: string;
+    avgQualityScore: number | null;
+    bestQualityScore: number | null;
+    qualityScoreSum: number | null;
+    qualityScoreCounts?: {
+      score1: number;
+      score2: number;
+      score3: number;
+    };
+  }) => void;
 }
 
 export function CreatorSubmissionsModal({
@@ -194,6 +213,7 @@ export function CreatorSubmissionsModal({
   canSeeDemographics = false,
   bonusCapSubmissions,
   parentBulkActionLoading = false,
+  onQualityScoreUpdated,
 }: CreatorSubmissionsModalProps) {
   const [selectedSubmissions, setSelectedSubmissions] = useState<Set<string>>(
     new Set(),
@@ -231,6 +251,10 @@ export function CreatorSubmissionsModal({
   >(null);
   const [rejectionDetailsModalSubmission, setRejectionDetailsModalSubmission] =
     useState<{ id: string; metadata: any } | null>(null);
+  const [qualityEditSubmissionIds, setQualityEditSubmissionIds] = useState<
+    string[]
+  >([]);
+  const [qualityEditLoading, setQualityEditLoading] = useState(false);
 
   // Read mode from data attribute
   useEffect(() => {
@@ -362,6 +386,50 @@ export function CreatorSubmissionsModal({
   const handleBulkAction = async (action: "verify" | "reject" | "pending") => {
     const selectedIds = Array.from(selectedSubmissions);
     if (action === "verify") {
+      const selectedSubs = submissions.filter((s) =>
+        selectedIds.includes(s.id),
+      );
+      const isVideoContest = contest?.contest_format !== "text_image";
+      const hasPaidSelected = selectedSubs.some((s) => {
+        const isTwitterTweet = s.is_twitter_tweet === true;
+        const rawStatus =
+          (isTwitterTweet ? s.moderation_status || s.status : s.status) ||
+          "pending";
+        const st = String(rawStatus).toLowerCase();
+        return st === "paid" || s.paid === true;
+      });
+
+      if (hasPaidSelected) {
+        setBulkVerifyLoading(true);
+        try {
+          await onVerify(selectedIds);
+          setSelectedSubmissions(new Set());
+        } finally {
+          setBulkVerifyLoading(false);
+        }
+        return;
+      }
+
+      const allAlreadyVerifiedOnly =
+        isVideoContest &&
+        selectedSubs.length > 0 &&
+        selectedSubs.every((s) => {
+          const isTwitterTweet = s.is_twitter_tweet === true;
+          const rawStatus =
+            (isTwitterTweet ? s.moderation_status || s.status : s.status) ||
+            "pending";
+          const st = String(rawStatus).toLowerCase();
+          if (isTwitterTweet) {
+            return st === "approved" || st === "verified";
+          }
+          return st === "verified" && s.paid !== true;
+        });
+
+      if (allAlreadyVerifiedOnly) {
+        setQualityEditSubmissionIds(selectedIds);
+        return;
+      }
+
       setBulkVerifyLoading(true);
       try {
         await onVerify(selectedIds);
@@ -1092,6 +1160,81 @@ export function CreatorSubmissionsModal({
 
   const isYouTubeContest =
     contest?.platform?.toLowerCase().includes("youtube") ?? false;
+  const isVideoContest = contest?.contest_format !== "text_image";
+  const canEditQualityScore = isVideoContest;
+  const qualityEditFirstSubmission = qualityEditSubmissionIds[0]
+    ? submissions.find((s) => s.id === qualityEditSubmissionIds[0]) ?? null
+    : null;
+  const qualityEditInitialScore: QualityScore =
+    parseQualityScore(qualityEditFirstSubmission?.quality_score) ?? 1;
+
+  const handleSaveQualityScore = async (qualityScore: QualityScore) => {
+    if (qualityEditSubmissionIds.length === 0) return;
+    setQualityEditLoading(true);
+    try {
+      const res = await fetch("/api/admin/submissions/bulk-quality-score", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          submissionIds: qualityEditSubmissionIds,
+          qualityScore,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to update quality score");
+      }
+
+      const creatorQualityByCreatorId = (data.creatorQualityByCreatorId ||
+        {}) as Record<
+        string,
+        {
+          avg_quality_score: number | null;
+          best_quality_score: number | null;
+          quality_score_sum: number | null;
+          quality_score_counts?: {
+            score1: number;
+            score2: number;
+            score3: number;
+          };
+        }
+      >;
+
+      for (const updated of data.submissions || []) {
+        const creatorId = String(updated.creator_id || "");
+        const creatorQuality = creatorQualityByCreatorId[creatorId];
+        onQualityScoreUpdated?.({
+          submissionId: String(updated.id),
+          qualityScore,
+          creatorId,
+          avgQualityScore: creatorQuality?.avg_quality_score ?? null,
+          bestQualityScore: creatorQuality?.best_quality_score ?? null,
+          qualityScoreSum: creatorQuality?.quality_score_sum ?? null,
+          qualityScoreCounts: creatorQuality?.quality_score_counts,
+        });
+      }
+
+      toast({
+        title:
+          qualityEditSubmissionIds.length > 1
+            ? "Quality scores updated"
+            : "Quality score updated",
+        description: `Saved as ${qualityScore}/3.`,
+        variant: "success",
+      });
+      setQualityEditSubmissionIds([]);
+      setSelectedSubmissions(new Set());
+    } catch (error: unknown) {
+      toast({
+        title: "Could not update quality score",
+        description:
+          error instanceof Error ? error.message : "Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setQualityEditLoading(false);
+    }
+  };
   const ytVisibleColumnsEffective =
     ytVisibleColumns && ytVisibleColumns.length > 0
       ? ytVisibleColumns
@@ -2385,6 +2528,16 @@ export function CreatorSubmissionsModal({
                     {/* Hide reward columns for Twitter text_image contests */}
                     {!isTwitterTextImageContest && (
                       <>
+                        {isVideoContest && (
+                          <TableHead
+                            className={cn(
+                              "text-center",
+                              isDark ? "bg-[#391A6A] " : "bg-gray-50",
+                            )}
+                          >
+                            Quality Score
+                          </TableHead>
+                        )}
                         {(!isYouTubeContest ||
                           showYtColumn("expected_reward")) && (
                           <TableHead
@@ -2636,6 +2789,7 @@ export function CreatorSubmissionsModal({
                                 ? 1
                                 : 0) + // Milestone
                               (hasFlatFeeBonus ? 2 : 0) + // Bonus Expected, Bonus Granted
+                              (isVideoContest ? 1 : 0) + // Quality Score
                               (isAdminView &&
                               (isInstagramContest ||
                                 isTikTokContest ||
@@ -3937,6 +4091,14 @@ export function CreatorSubmissionsModal({
                               {/* Expected Reward and Reward Granted (only for non-Twitter) */}
                               {!isTwitterTextImageContest && (
                                 <>
+                                  {isVideoContest && (
+                                    <TableCell className="text-center">
+                                      <SubmissionQualityScoreCell
+                                        qualityScore={submission.quality_score}
+                                        isDark={isDark}
+                                      />
+                                    </TableCell>
+                                  )}
                                   {(!isYouTubeContest ||
                                     showYtColumn("expected_reward")) && (
                                     <TableCell className="text-center font-medium">
@@ -4400,43 +4562,6 @@ export function CreatorSubmissionsModal({
                                     </>
                                   )}
 
-                                {contest?.post_contest_status !==
-                                  "payouts_processed" &&
-                                  isAdminView &&
-                                  normalizedStatus === "paid" && (
-                                    <>
-                                      <DropdownMenuSeparator />
-                                      <DropdownMenuLabel className="text-purple-500">
-                                        Change status (reverses payment)
-                                      </DropdownMenuLabel>
-                                      <DropdownMenuItem
-                                        onClick={() =>
-                                          onVerify([submission.id])
-                                        }
-                                      >
-                                        <CheckCircle className="h-4 w-4 mr-2" />
-                                        Mark as Verified
-                                      </DropdownMenuItem>
-                                      <DropdownMenuItem
-                                        onClick={() =>
-                                          onSetPending([submission.id])
-                                        }
-                                      >
-                                        <Clock className="h-4 w-4 mr-2" />
-                                        Set to Pending
-                                      </DropdownMenuItem>
-                                      <DropdownMenuItem
-                                        className="text-red-600"
-                                        onClick={() =>
-                                          onReject([submission.id])
-                                        }
-                                      >
-                                        <XCircle className="h-4 w-4 mr-2" />
-                                        Mark as Rejected
-                                      </DropdownMenuItem>
-                                    </>
-                                  )}
-
                                 {/* Payment options: verified submissions (hide for Twitter leaderboard contests) */}
                                 {contest?.post_contest_status ===
                                   "verification_complete" &&
@@ -4573,6 +4698,29 @@ export function CreatorSubmissionsModal({
                                         }
                                       >
                                         Custom Pay
+                                      </DropdownMenuItem>
+                                    </>
+                                  )}
+
+                                {canEditQualityScore &&
+                                  !isTwitterTweet &&
+                                  (normalizedStatus === "verified" ||
+                                    normalizedStatus === "paid") && (
+                                    <>
+                                      <DropdownMenuSeparator />
+                                      <DropdownMenuItem
+                                        onClick={() =>
+                                          setQualityEditSubmissionIds([
+                                            submission.id,
+                                          ])
+                                        }
+                                      >
+                                        <Star className="h-4 w-4 mr-2" />
+                                        {parseQualityScore(
+                                          submission.quality_score,
+                                        ) !== null
+                                          ? "Edit quality score"
+                                          : "Set quality score"}
                                       </DropdownMenuItem>
                                     </>
                                   )}
@@ -4750,6 +4898,20 @@ export function CreatorSubmissionsModal({
             })()}
         </DialogContent>
       </Dialog>
+
+      <VerifyQualityDialog
+        open={qualityEditSubmissionIds.length > 0}
+        onOpenChange={(open) => {
+          if (!open && !qualityEditLoading) {
+            setQualityEditSubmissionIds([]);
+          }
+        }}
+        variant="edit"
+        submissionCount={qualityEditSubmissionIds.length}
+        initialQuality={qualityEditInitialScore}
+        onConfirm={handleSaveQualityScore}
+        loading={qualityEditLoading}
+      />
     </>
   );
 }

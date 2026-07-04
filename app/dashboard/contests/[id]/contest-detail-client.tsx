@@ -27,6 +27,8 @@ import {
 // import { type Submission } from "@/types/submission";
 
 import { DeleteContestButton } from "@/components/delete-contest-button";
+import { VerifyQualityDialog } from "@/components/VerifyQualityDialog";
+import { SubmissionQualityScoreCell } from "@/components/SubmissionQualityScoreCell";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -117,6 +119,21 @@ import {
   buildFlatFeeBonusExpectedCentsBySubmissionId,
   getFlatFeeBonusCentsFromContest,
 } from "@/lib/twitter-cpm-bonus-expected";
+import {
+  buildContestEligibilityDisplayItems,
+  hasAnyContestCreatorRequirement,
+  parseContestCreatorRequirements,
+} from "@/lib/creator-requirements";
+import {
+  formatTrustScoreDisplay,
+  formatTrustScoreMinimum,
+  formatQualitySumDisplay,
+} from "@/lib/creator-profile-stats";
+import { computeTrustScore } from "@/lib/trust-score";
+import {
+  parseQualityScore,
+  type QualityScore,
+} from "@/lib/quality-score";
 import {
   selectionIncludesPaidRow,
   submissionIsPaidRow,
@@ -282,16 +299,142 @@ const YT_CORE_COLUMN_IDS = [
 // Column ids that require "Show Traffic Sources" (hidden in customize modal when brand doesn't have access)
 const YT_TRAFFIC_COLUMN_IDS = ["top_traffic_source"];
 
-function formatTrustScore(score: number): string {
+function formatDecimalMetric(score: number): string {
   const rounded = Math.round(score * 10) / 10;
   return Number.isInteger(rounded)
     ? String(Math.round(rounded))
     : rounded.toFixed(1);
 }
 
-function formatTrustScoreWithMax(score: number, max = 100): string {
-  // Non-breaking spaces keep "100 / 100" on one line in narrow table cells.
-  return `${formatTrustScore(score)}\u00A0/\u00A0${max}`;
+function EligibilityRequirementCard({
+  icon: Icon,
+  label,
+  value,
+  description,
+  isDark,
+}: {
+  icon: React.ComponentType<{ className?: string }>;
+  label: string;
+  value: React.ReactNode;
+  description: string;
+  isDark: boolean;
+}) {
+  return (
+    <div
+      className={cn(
+        "border rounded-xl transition-all duration-300",
+        isDark ? "border-gray-600" : "border-gray-300",
+      )}
+    >
+      <CardContent className="p-4">
+        <div className="flex items-start gap-4">
+          <div
+            className={cn(
+              "w-10 h-10 flex items-center justify-center rounded-full shrink-0",
+              isDark ? "bg-[#FFFFFF42] text-white" : "bg-purple-100 text-[#4A00BE]",
+            )}
+          >
+            <Icon className="h-5 w-5" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p
+              className={cn(
+                "text-md font-medium tracking-wide",
+                isDark ? "text-white" : "text-black",
+              )}
+            >
+              {label}
+            </p>
+            <p
+              className={cn(
+                "text-lg md:text-xl font-bold mt-1",
+                isDark ? "text-white" : "text-black",
+              )}
+            >
+              {value}
+            </p>
+            <p className="text-sm text-muted-foreground mt-1">{description}</p>
+          </div>
+        </div>
+      </CardContent>
+    </div>
+  );
+}
+
+function CreatorWiseEligibilityText({
+  value,
+  belowThreshold,
+  tooltip,
+  isDark,
+}: {
+  value: React.ReactNode;
+  belowThreshold: boolean;
+  tooltip: React.ReactNode;
+  isDark: boolean;
+}) {
+  return (
+    <div className="flex justify-center">
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <span
+            className={cn(
+              "font-semibold text-sm whitespace-nowrap cursor-default",
+              belowThreshold
+                ? isDark
+                  ? "text-red-400"
+                  : "text-red-600"
+                : isDark
+                  ? "text-green-400"
+                  : "text-green-600",
+            )}
+          >
+            {value}
+          </span>
+        </TooltipTrigger>
+        <TooltipContent>{tooltip}</TooltipContent>
+      </Tooltip>
+    </div>
+  );
+}
+
+function parseCreatorMetricNumber(value: unknown): number | null {
+  if (value === null || value === undefined || value === "") return null;
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
+}
+
+function CreatorQualityScoreBreakdownTooltip({
+  breakdown,
+  requirementLabel,
+  belowThreshold,
+  requirementValue,
+  creatorValue,
+}: {
+  breakdown: { score1: number; score2: number; score3: number };
+  requirementLabel: string;
+  belowThreshold: boolean;
+  requirementValue: number;
+  creatorValue: number | null;
+}) {
+  const total = breakdown.score1 + breakdown.score2 + breakdown.score3;
+  const creatorDisplay =
+    creatorValue !== null ? String(creatorValue) : "—";
+
+  return (
+    <div className="space-y-1 text-xs">
+      <p className="font-medium">Quality Score</p>
+      <p>Score 3: {breakdown.score3} submission{breakdown.score3 === 1 ? "" : "s"}</p>
+      <p>Score 2: {breakdown.score2} submission{breakdown.score2 === 1 ? "" : "s"}</p>
+      <p>Score 1: {breakdown.score1} submission{breakdown.score1 === 1 ? "" : "s"}</p>
+      {total === 0 && (
+        <p className="text-muted-foreground">No scored verified submissions yet</p>
+      )}
+      <p className="pt-1 border-t border-border/50">
+        {belowThreshold ? "Below" : "Meets"} required {requirementLabel} (
+        {requirementValue}). Creator: {creatorDisplay}
+      </p>
+    </div>
+  );
 }
 
 function parseTrustMetricsValue(raw: unknown): Record<string, unknown> | null {
@@ -356,14 +499,24 @@ function resolveTrustScoreForDisplay(
     if (Number.isFinite(parsed)) return parsed;
   }
 
-  if (fallbackCounts.total === 0) return 100;
+  return computeTrustScore(fallbackCounts.verified, fallbackCounts.rejected);
+}
 
-  return Math.max(
-    0,
-    Math.round(
-      100 - (fallbackCounts.rejected / fallbackCounts.total) * 100,
-    ),
-  );
+function resolveTrustNumberForDisplay(
+  trustMetrics: Record<string, unknown> | null,
+  fallbackCounts: { verified: number; rejected: number },
+): number {
+  const storedNumber = trustMetrics?.trust_number;
+  if (
+    storedNumber !== null &&
+    storedNumber !== undefined &&
+    storedNumber !== ""
+  ) {
+    const parsed = Number(storedNumber);
+    if (Number.isFinite(parsed)) return parsed;
+  }
+
+  return fallbackCounts.verified - fallbackCounts.rejected;
 }
 
 // --- Local Type Definitions ---
@@ -427,6 +580,13 @@ interface Contest {
   payout_adjustment_mode?: string | null;
   /** Optional campaign minimum creator trust score (0–100). NULL = no requirement. */
   trust_score?: number | null;
+  /** Optional campaign minimum trust number (verified − rejected). NULL = no requirement. */
+  trust_number?: number | null;
+  min_best_quality_score?: number | null;
+  min_avg_quality_score?: number | null;
+  min_quality_score?: number | null;
+  min_platform_earnings?: number | null;
+  min_platform_views?: number | null;
 }
 
 interface Submission {
@@ -481,6 +641,7 @@ interface Submission {
   bonus_paid?: boolean;
   bonus_paid_at?: string | null;
   bonus_amount?: number | null;
+  quality_score?: number | null;
 }
 // --- End Local Type Definitions ---
 
@@ -1214,23 +1375,72 @@ export default function ContestDetailClient({
   const isVideoContestFormat =
     currentContest?.contest_format !== "text_image";
 
+  const parsedCreatorRequirements = useMemo(
+    () => parseContestCreatorRequirements(currentContest),
+    [currentContest],
+  );
+
   /** Campaign minimum trust score (video campaigns only). */
-  const contestMinTrustScore = useMemo(() => {
-    if (!isVideoContestFormat) return null;
-    const raw = currentContest.trust_score;
-    if (raw === null || raw === undefined) return null;
-    const value = Number(raw);
-    if (!Number.isFinite(value) || value <= 0) return null;
-    return value;
-  }, [currentContest.trust_score, isVideoContestFormat]);
+  const contestMinTrustScore = parsedCreatorRequirements.minTrustScorePct;
 
-  /** Contest minimum trust score card on overview; shown when brand set a threshold. */
-  const showContestTrustScoreRequiredCard =
-    isVideoContestFormat && contestMinTrustScore !== null;
+  const contestMinTrustNumber = parsedCreatorRequirements.minTrustNumber;
 
-  /** Per-creator trust score in creator-wise table — admin only, video campaigns with a trust requirement. */
+  const showCreatorEligibilitySection =
+    isVideoContestFormat &&
+    hasAnyContestCreatorRequirement(currentContest);
+
+  const eligibilityDisplayItems = useMemo(() => {
+    const iconByKey: Record<
+      string,
+      React.ComponentType<{ className?: string }>
+    > = {
+      "trust-score": CheckCheck,
+      "trust-number": CheckCheck,
+      "best-quality": Star,
+      "min-quality": Star,
+      "avg-quality": Star,
+      "platform-earnings": DollarSign,
+      "platform-views": Eye,
+    };
+
+    return buildContestEligibilityDisplayItems(currentContest, "brand").map(
+      (item) => ({
+        ...item,
+        icon: iconByKey[item.key] ?? CheckCheck,
+      }),
+    );
+  }, [currentContest]);
+
+  /** Per-creator eligibility columns in creator-wise table — admin only, when contest sets a minimum. */
+  const contestMinBestQuality = parsedCreatorRequirements.minBestQuality;
+  const contestMinAvgQuality = parsedCreatorRequirements.minAvgQuality;
+  const contestMinQuality = parsedCreatorRequirements.minQuality;
+  const contestMinPlatformEarnings =
+    parsedCreatorRequirements.minPlatformEarningsCents;
+  const contestMinPlatformViews = parsedCreatorRequirements.minPlatformViews;
+
   const showCreatorWiseTrustScoreColumn =
     isAdminView && isVideoContestFormat && contestMinTrustScore !== null;
+  const showCreatorWiseTrustNumberColumn =
+    isAdminView && isVideoContestFormat && contestMinTrustNumber !== null;
+  const showCreatorWiseBestQualityColumn =
+    isAdminView && isVideoContestFormat && contestMinBestQuality !== null;
+  const showCreatorWiseMinQualityColumn =
+    isAdminView && isVideoContestFormat && contestMinQuality !== null;
+  const showCreatorWiseAvgQualityColumn =
+    isAdminView && isVideoContestFormat && contestMinAvgQuality !== null;
+  const showCreatorWisePlatformEarningsColumn =
+    isAdminView && isVideoContestFormat && contestMinPlatformEarnings !== null;
+  const showCreatorWisePlatformViewsColumn =
+    isAdminView && isVideoContestFormat && contestMinPlatformViews !== null;
+  const creatorWiseEligibilityColumnCount =
+    (showCreatorWiseTrustScoreColumn ? 1 : 0) +
+    (showCreatorWiseTrustNumberColumn ? 1 : 0) +
+    (showCreatorWiseBestQualityColumn ? 1 : 0) +
+    (showCreatorWiseMinQualityColumn ? 1 : 0) +
+    (showCreatorWiseAvgQualityColumn ? 1 : 0) +
+    (showCreatorWisePlatformEarningsColumn ? 1 : 0) +
+    (showCreatorWisePlatformViewsColumn ? 1 : 0);
 
   // Contest-level payout adjustment for dual_rewards granted display
   const contestPayoutAdjPct =
@@ -1664,6 +1874,14 @@ export default function ContestDetailClient({
   const [rejectionModalOpen, setRejectionModalOpen] = useState(false);
   const [pendingRejectionSubmissionIds, setPendingRejectionSubmissionIds] =
     useState<string[]>([]);
+  const [verifyQualityDialogOpen, setVerifyQualityDialogOpen] = useState(false);
+  const [verifyQualityDialogVariant, setVerifyQualityDialogVariant] = useState<
+    "verify" | "edit"
+  >("verify");
+  const [pendingVerifySubmissionIds, setPendingVerifySubmissionIds] = useState<
+    string[]
+  >([]);
+  const [verifyQualityLoading, setVerifyQualityLoading] = useState(false);
 
   // Twitter rejection modal state
   const [twitterRejectionModalOpen, setTwitterRejectionModalOpen] =
@@ -1796,6 +2014,9 @@ export default function ContestDetailClient({
     (currentContest?.platform?.toLowerCase() === "twitter" ||
       currentContest?.platform?.toLowerCase() === "x") &&
     currentContest?.contest_format === "text_image";
+
+  const showNormalViewQualityScoreColumn =
+    isVideoContestFormat && !isTwitterTextImageContest;
 
   // Default sort: points for Twitter/X text campaigns, views for other platforms
   useEffect(() => {
@@ -2146,6 +2367,153 @@ export default function ContestDetailClient({
     }
   };
 
+  const partitionSubmissionsForVerify = (ids: string[]) => {
+    const toVerify: string[] = [];
+    const toUpdateQualityOnly: string[] = [];
+    const paidToRevert: string[] = [];
+    for (const id of ids) {
+      const sub = currentSubmissions.find((s) => s.id === id);
+      if (!sub) {
+        toVerify.push(id);
+        continue;
+      }
+      if (submissionIsPaidRow(sub)) {
+        paidToRevert.push(id);
+        continue;
+      }
+      const isTwitter = (sub as any).is_twitter_tweet === true;
+      const rawStatus = String(
+        isTwitter
+          ? (sub as any).moderation_status || sub.status || ""
+          : sub.status || "",
+      ).toLowerCase();
+      const isVerified =
+        rawStatus === "verified" || rawStatus === "approved";
+      if (isVerified) {
+        toUpdateQualityOnly.push(id);
+      } else {
+        toVerify.push(id);
+      }
+    }
+    return { toVerify, toUpdateQualityOnly, paidToRevert };
+  };
+
+  const applyQualityScoreUpdates = async (
+    submissionIds: string[],
+    qualityScore: QualityScore,
+    options?: { silent?: boolean },
+  ) => {
+    const res = await fetch("/api/admin/submissions/bulk-quality-score", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ submissionIds, qualityScore }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      throw new Error(data.error || "Failed to update quality score");
+    }
+
+    const updatedIdSet = new Set(
+      (data.submissions || []).map((sub: { id: string }) => sub.id),
+    );
+    const creatorQualityByCreatorId = (data.creatorQualityByCreatorId ||
+      {}) as Record<
+      string,
+      {
+        avg_quality_score: number | null;
+        best_quality_score: number | null;
+        quality_score_counts?: {
+          score1: number;
+          score2: number;
+          score3: number;
+        };
+      }
+    >;
+
+    setCurrentSubmissions((prev) =>
+      prev.map((sub) => {
+        const creatorQuality = sub.creator_id
+          ? creatorQualityByCreatorId[sub.creator_id]
+          : undefined;
+        if (updatedIdSet.has(sub.id)) {
+          const existingCreator = (sub as any).creator || {};
+          return {
+            ...sub,
+            quality_score: qualityScore,
+            creator: creatorQuality
+              ? {
+                  ...existingCreator,
+                  avg_quality_score:
+                    creatorQuality.avg_quality_score ??
+                    existingCreator.avg_quality_score ??
+                    null,
+                  best_quality_score:
+                    creatorQuality.best_quality_score ??
+                    existingCreator.best_quality_score ??
+                    null,
+                  quality_score_counts:
+                    creatorQuality.quality_score_counts ??
+                    existingCreator.quality_score_counts ?? {
+                      score1: 0,
+                      score2: 0,
+                      score3: 0,
+                    },
+                }
+              : existingCreator,
+          };
+        }
+        if (creatorQuality && sub.creator_id) {
+          const existingCreator = (sub as any).creator || {};
+          return {
+            ...sub,
+            creator: {
+              ...existingCreator,
+              avg_quality_score:
+                creatorQuality.avg_quality_score ??
+                existingCreator.avg_quality_score ??
+                null,
+              best_quality_score:
+                creatorQuality.best_quality_score ??
+                existingCreator.best_quality_score ??
+                null,
+              quality_score_counts:
+                creatorQuality.quality_score_counts ??
+                existingCreator.quality_score_counts ?? {
+                  score1: 0,
+                  score2: 0,
+                  score3: 0,
+                },
+            },
+          };
+        }
+        return sub;
+      }),
+    );
+
+    if (!options?.silent) {
+      toast({
+        title:
+          submissionIds.length > 1
+            ? "Quality scores updated"
+            : "Quality score updated",
+        description: `Saved as ${qualityScore}/3.`,
+        variant: "success",
+      });
+    }
+  };
+
+  const openVerifyQualityDialog = (ids: string[]) => {
+    setPendingVerifySubmissionIds(ids);
+    const { toVerify, toUpdateQualityOnly, paidToRevert } =
+      partitionSubmissionsForVerify(ids);
+    const allAlreadyModerated =
+      toVerify.length === 0 &&
+      paidToRevert.length === 0 &&
+      toUpdateQualityOnly.length > 0;
+    setVerifyQualityDialogVariant(allAlreadyModerated ? "edit" : "verify");
+    setVerifyQualityDialogOpen(true);
+  };
+
   const handleNormalViewCheckboxChange = (
     submissionId: string,
     checked: boolean,
@@ -2166,14 +2534,30 @@ export default function ContestDetailClient({
     if (selectedIds.length === 0) return;
 
     if (action === "verify") {
+      const { toVerify, toUpdateQualityOnly, paidToRevert } =
+        partitionSubmissionsForVerify(selectedIds);
+
       if (
         currentContest.post_contest_status !== "payouts_processed" &&
-        selectionIncludesPaidRow(currentSubmissions, selectedIds)
+        paidToRevert.length > 0
       ) {
         setConfirmReversal({
           submissionIds: selectedIds,
           target: "verified",
         });
+        return;
+      }
+
+      if (
+        isVideoContestFormat &&
+        toUpdateQualityOnly.length > 0 &&
+        toVerify.length === 0
+      ) {
+        openVerifyQualityDialog(selectedIds);
+        return;
+      }
+      if (isVideoContestFormat && toVerify.length > 0) {
+        openVerifyQualityDialog(toVerify);
         return;
       }
       setNormalViewBulkActiveAction("verify");
@@ -2970,6 +3354,18 @@ export default function ContestDetailClient({
               parseTrustMetricsValue((submission as any).trust_score_metrics) ??
               parseTrustMetricsValue(submission.creator?.trust_score_metrics) ??
               null,
+            avg_quality_score:
+              submission.creator?.avg_quality_score ?? null,
+            best_quality_score:
+              submission.creator?.best_quality_score ?? null,
+            quality_score_counts:
+              submission.creator?.quality_score_counts ?? {
+                score1: 0,
+                score2: 0,
+                score3: 0,
+              },
+            total_money_won: submission.creator?.total_money_won ?? 0,
+            total_views: submission.creator?.total_views ?? 0,
           },
           instagram_archive:
             submission.creator_instagram_archive ??
@@ -3058,6 +3454,55 @@ export default function ContestDetailClient({
           parseTrustMetricsValue((submission as any).trust_score_metrics) ??
           parseTrustMetricsValue(submission.creator?.trust_score_metrics) ??
           null;
+      }
+      if (
+        group.creator?.avg_quality_score == null &&
+        submission.creator?.avg_quality_score != null
+      ) {
+        group.creator.avg_quality_score = submission.creator.avg_quality_score;
+      }
+      if (
+        group.creator?.best_quality_score == null &&
+        submission.creator?.best_quality_score != null
+      ) {
+        group.creator.best_quality_score = submission.creator.best_quality_score;
+      }
+      if (
+        group.creator?.quality_score_sum == null &&
+        submission.creator?.quality_score_sum != null
+      ) {
+        group.creator.quality_score_sum = submission.creator.quality_score_sum;
+      }
+      const existingCounts = group.creator?.quality_score_counts;
+      const existingCountsTotal =
+        (existingCounts?.score1 ?? 0) +
+        (existingCounts?.score2 ?? 0) +
+        (existingCounts?.score3 ?? 0);
+      const submissionCounts = submission.creator?.quality_score_counts;
+      const submissionCountsTotal =
+        (submissionCounts?.score1 ?? 0) +
+        (submissionCounts?.score2 ?? 0) +
+        (submissionCounts?.score3 ?? 0);
+      if (
+        submissionCounts &&
+        submissionCountsTotal > 0 &&
+        existingCountsTotal === 0
+      ) {
+        group.creator.quality_score_counts = submissionCounts;
+      }
+      if (
+        (!group.creator?.total_money_won ||
+          Number(group.creator.total_money_won) === 0) &&
+        submission.creator?.total_money_won
+      ) {
+        group.creator.total_money_won = submission.creator.total_money_won;
+      }
+      if (
+        (!group.creator?.total_views ||
+          Number(group.creator.total_views) === 0) &&
+        submission.creator?.total_views
+      ) {
+        group.creator.total_views = submission.creator.total_views;
       }
       group.submissions.push(submission);
       group.totalCount++;
@@ -4997,13 +5442,53 @@ export default function ContestDetailClient({
       isCustom?: boolean;
       customRemarks?: string;
     },
-    options?: { skipReload?: boolean; closeCreatorModalOnSuccess?: boolean },
+    options?: {
+      skipReload?: boolean;
+      closeCreatorModalOnSuccess?: boolean;
+      qualityScore?: 1 | 2 | 3;
+      /** After paid-reversal confirm — run verify API without quality score modal */
+      skipQualityPrompt?: boolean;
+    },
   ) => {
     console.log("🚀 Starting submission status update:", {
       submissionId,
       newStatus,
       reason,
     });
+
+    if (newStatus === "verified" && isVideoContestFormat && !options?.skipQualityPrompt) {
+      const { toVerify, toUpdateQualityOnly, paidToRevert } =
+        partitionSubmissionsForVerify([submissionId]);
+
+      if (
+        paidToRevert.length > 0 &&
+        currentContest.post_contest_status !== "payouts_processed" &&
+        !options?.qualityScore
+      ) {
+        setConfirmReversal({
+          submissionIds: [submissionId],
+          target: "verified",
+        });
+        return;
+      }
+
+      if (
+        toUpdateQualityOnly.length > 0 &&
+        toVerify.length === 0 &&
+        paidToRevert.length === 0
+      ) {
+        if (!options?.qualityScore) {
+          openVerifyQualityDialog([submissionId]);
+          return;
+        }
+        await applyQualityScoreUpdates([submissionId], options.qualityScore);
+        return;
+      }
+      if (!options?.qualityScore) {
+        openVerifyQualityDialog([submissionId]);
+        return;
+      }
+    }
 
     // Check if this is a Twitter tweet - if so, use Twitter moderation endpoint (for both CPM and leaderboard)
     const submission = currentSubmissions.find((s) => s.id === submissionId);
@@ -5231,6 +5716,7 @@ export default function ContestDetailClient({
           action: newStatus,
           reason: reason || null,
           paymentDetails: paymentDetails || null,
+          qualityScore: options?.qualityScore,
         }),
       });
 
@@ -5290,12 +5776,22 @@ export default function ContestDetailClient({
               "platform",
               "metadata",
               "dual_rewards_payout",
+              "quality_score",
             ] as const;
             for (const key of mergeKeys) {
               if (typeof upd[key] !== "undefined") {
                 (merged as any)[key] = upd[key];
               }
             }
+          }
+
+          if (
+            newStatus === "verified" &&
+            isVideoContestFormat &&
+            options?.qualityScore != null
+          ) {
+            merged.quality_score =
+              merged.quality_score ?? options.qualityScore;
           }
 
           return merged;
@@ -5307,9 +5803,15 @@ export default function ContestDetailClient({
         switch (status) {
           case "verified":
             return {
-              title: "✅ Submission Verified",
+              title: options?.skipQualityPrompt
+                ? "✅ Payment Reversed"
+                : "✅ Submission Verified",
               description:
-                "Content has been verified and is now eligible for rewards",
+                options?.skipQualityPrompt
+                  ? "Submission moved to Verified."
+                  : isVideoContestFormat && options?.qualityScore != null
+                    ? `Content verified with quality score ${options.qualityScore}/3.`
+                    : "Content has been verified and is now eligible for rewards",
               variant: "success" as const,
             };
           case "rejected":
@@ -5612,9 +6114,25 @@ export default function ContestDetailClient({
     submissionIds: string[],
     action: "approve" | "verified" | "reject" | "rejected" | "pending" | "paid",
     reason?: string,
-    options?: { closeCreatorModalOnSuccess?: boolean },
+    options?: {
+      closeCreatorModalOnSuccess?: boolean;
+      qualityScore?: 1 | 2 | 3;
+      /** After paid-reversal confirm — run verify API without quality score modal */
+      skipQualityPrompt?: boolean;
+    },
   ) => {
     if (!submissionIds || submissionIds.length === 0) return;
+
+    const verifyAction = action === "approve" || action === "verified";
+    if (
+      verifyAction &&
+      !options?.qualityScore &&
+      !options?.skipQualityPrompt &&
+      isVideoContestFormat
+    ) {
+      openVerifyQualityDialog(submissionIds);
+      return;
+    }
 
     // Split into Twitter vs Non-Twitter
     const twitterIds: string[] = [];
@@ -5655,6 +6173,7 @@ export default function ContestDetailClient({
               submissionIds: normalIds,
               action: normalAction,
               reason,
+              qualityScore: options?.qualityScore,
             }),
           }).then((res) => res.json()),
         );
@@ -5794,12 +6313,12 @@ export default function ContestDetailClient({
       }
 
       if (updatedSubmissionsMap.size > 0) {
+        const isVerifyBulk = action === "verified" || action === "approve";
         setCurrentSubmissions((prev) =>
           prev.map((sub) => {
             if (updatedSubmissionsMap.has(sub.id)) {
               const updates = updatedSubmissionsMap.get(sub.id);
-              // API returns partial rows — preserve nested creator and display fields
-              return {
+              const merged: any = {
                 ...sub,
                 ...updates,
                 creator: (updates as any)?.creator ?? (sub as any).creator,
@@ -5813,6 +6332,16 @@ export default function ContestDetailClient({
                   (updates as any)?.creator_avatar_url ??
                   (sub as any).creator_avatar_url,
               };
+              if (
+                isVerifyBulk &&
+                isVideoContestFormat &&
+                options?.qualityScore != null &&
+                normalIds.includes(sub.id)
+              ) {
+                merged.quality_score =
+                  merged.quality_score ?? options.qualityScore;
+              }
+              return merged;
             }
             return sub;
           }),
@@ -5845,9 +6374,20 @@ export default function ContestDetailClient({
       const isDualRefundContest = isDualRewardsContestType(
         currentContest?.contest_type,
       );
+      const hasRefundReversal =
+        normalRefundTotalCents > 0 || twitterRefundTotal > 0;
 
       if (finalSucceededCount > 0) {
         let bulkDescription = `Successfully ${actionText} ${finalSucceededCount} submission(s).`;
+        if (
+          (action === "verified" || action === "approve") &&
+          isVideoContestFormat &&
+          options?.qualityScore != null &&
+          !options?.skipQualityPrompt &&
+          !hasRefundReversal
+        ) {
+          bulkDescription += ` Quality score set to ${options.qualityScore}/3.`;
+        }
         if (hasError && errorMessage) {
           bulkDescription += ` ${errorMessage}`;
         }
@@ -6417,6 +6957,17 @@ export default function ContestDetailClient({
     }
   };
 
+  const resolveReversalVerifyQualityScore = (
+    submissionIds: string[],
+  ): QualityScore => {
+    for (const id of submissionIds) {
+      const sub = currentSubmissions.find((s) => s.id === id);
+      const parsed = parseQualityScore(sub?.quality_score);
+      if (parsed !== null) return parsed;
+    }
+    return 1;
+  };
+
   const handleConfirmReversal = async () => {
     if (!confirmReversal) return;
     const {
@@ -6435,6 +6986,14 @@ export default function ContestDetailClient({
     const closeOpts = closeCreatorModalOnSuccess
       ? { closeCreatorModalOnSuccess: true }
       : undefined;
+    const statusUpdateOpts =
+      target === "verified"
+        ? {
+            ...closeOpts,
+            skipQualityPrompt: true,
+            qualityScore: resolveReversalVerifyQualityScore(submissionIds),
+          }
+        : closeOpts;
     if (closeCreatorModalOnSuccess) {
       setCreatorModalParentBulkLoading(true);
     } else {
@@ -6453,14 +7012,14 @@ export default function ContestDetailClient({
           target,
           undefined,
           undefined,
-          closeOpts,
+          statusUpdateOpts,
         );
       } else {
         await handleBulkUpdateSubmissionStatus(
           submissionIds,
           target,
           undefined,
-          closeOpts,
+          statusUpdateOpts,
         );
       }
     } finally {
@@ -10507,15 +11066,12 @@ export default function ContestDetailClient({
                   )}
                 </div>
 
-                {/* Contest Info Cards */}
-                <div
-                  className={cn(
-                    "grid grid-cols-1 gap-4",
-                    showContestTrustScoreRequiredCard
-                      ? "md:grid-cols-3"
-                      : "md:grid-cols-2",
-                  )}
-                >
+                {/* Contest Details */}
+                <div className="space-y-3">
+                  <h3 className="font-semibold text-lg text-foreground">
+                    Contest Details
+                  </h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {/* Platform Card */}
                   <div
                     className={cn(
@@ -10597,39 +11153,7 @@ export default function ContestDetailClient({
                       </div>
                     </CardContent>
                   </div>
-
-                  {showContestTrustScoreRequiredCard && (
-                    <div
-                      className={cn(
-                        "border rounded-xl transition-all duration-300",
-                        isDark ? "border-gray-600" : "border-gray-300",
-                      )}
-                    >
-                      <CardContent className="p-4">
-                        <div className="flex items-center gap-3">
-                          <div
-                            className={cn(
-                              "w-10 h-10 flex items-center justify-center rounded-full ",
-                              isDark
-                                ? "bg-[#FFFFFF42] text-white"
-                                : "bg-purple-100 text-[#4A00BE]",
-                            )}
-                          >
-                            <CheckCheck className="h-5 w-5" />
-                          </div>
-                          <div className="flex-1">
-                            <p className="text-sm font-medium tracking-wide">
-                              Trust Score 
-                            </p>
-                            <p className="text-lg font-bold">
-                              {formatTrustScoreWithMax(contestMinTrustScore!)}
-                            </p>
-                          </div>
-                        </div>
-                      </CardContent>
-                    </div>
-                  )}
-                </div>
+                  </div>
 
                 {/* Date & Time Cards */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -10695,6 +11219,30 @@ export default function ContestDetailClient({
                     </CardContent>
                   </div>
                 </div>
+                </div>
+
+                {showCreatorEligibilitySection && (
+                  <div className="space-y-3">
+                    <h3 className="font-semibold text-lg text-foreground">
+                      Creator Eligibility
+                    </h3>
+                    <p className="text-sm text-muted-foreground">
+                      Minimum creator requirements to submit to this campaign.
+                    </p>
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                      {eligibilityDisplayItems.map((item) => (
+                        <EligibilityRequirementCard
+                          key={item.key}
+                          icon={item.icon}
+                          label={item.label}
+                          value={item.value}
+                          description={item.description}
+                          isDark={isDark}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                )}
 
                 {/* Regions Card */}
                 {currentContest.region &&
@@ -17088,6 +17636,11 @@ export default function ContestDetailClient({
                                     )}
                                 </>
                               ) : null}
+                              {showNormalViewQualityScoreColumn && (
+                                <TableHead className="text-center whitespace-nowrap">
+                                  Quality Score
+                                </TableHead>
+                              )}
                               {(currentContest.platform
                                 ?.toLowerCase()
                                 .includes("youtube")
@@ -20001,6 +20554,14 @@ export default function ContestDetailClient({
                                         )}
                                     </>
                                   ) : null}
+                                  {showNormalViewQualityScoreColumn && (
+                                    <TableCell className="text-center">
+                                      <SubmissionQualityScoreCell
+                                        qualityScore={submission.quality_score}
+                                        isDark={isDark}
+                                      />
+                                    </TableCell>
+                                  )}
                                   {(currentContest.platform
                                     ?.toLowerCase()
                                     .includes("youtube")
@@ -20207,7 +20768,7 @@ export default function ContestDetailClient({
                                             {submission.status !== "verified" &&
                                               currentContest.post_contest_status !==
                                                 "payouts_processed" &&
-                                              (submission.status === "paid" ? (
+                                              (submissionIsPaidRow(submission) ? (
                                                 <DropdownMenuItem
                                                   disabled={isLoading}
                                                   onClick={() =>
@@ -20599,7 +21160,37 @@ export default function ContestDetailClient({
                                   <TableHead>Creator</TableHead>
                                   {showCreatorWiseTrustScoreColumn && (
                                     <TableHead className="text-center whitespace-nowrap min-w-[6.5rem]">
+                                      Trust %
+                                    </TableHead>
+                                  )}
+                                  {showCreatorWiseTrustNumberColumn && (
+                                    <TableHead className="text-center whitespace-nowrap min-w-[6.5rem]">
                                       Trust Score
+                                    </TableHead>
+                                  )}
+                                  {showCreatorWiseBestQualityColumn && (
+                                    <TableHead className="text-center whitespace-nowrap min-w-[6.5rem]">
+                                      Best Quality
+                                    </TableHead>
+                                  )}
+                                  {showCreatorWiseMinQualityColumn && (
+                                    <TableHead className="text-center whitespace-nowrap min-w-[7rem]">
+                                      Total Quality Score
+                                    </TableHead>
+                                  )}
+                                  {showCreatorWiseAvgQualityColumn && (
+                                    <TableHead className="text-center whitespace-nowrap min-w-[6.5rem]">
+                                      Avg Quality
+                                    </TableHead>
+                                  )}
+                                  {showCreatorWisePlatformEarningsColumn && (
+                                    <TableHead className="text-center whitespace-nowrap min-w-[7rem]">
+                                      Total Earnings
+                                    </TableHead>
+                                  )}
+                                  {showCreatorWisePlatformViewsColumn && (
+                                    <TableHead className="text-center whitespace-nowrap min-w-[7rem]">
+                                     Total Views
                                     </TableHead>
                                   )}
                                   <TableHead className="text-center">
@@ -20979,10 +21570,8 @@ export default function ContestDetailClient({
                                   <TableRow>
                                     <TableCell
                                       colSpan={
-                                        13 +
-                                        (showCreatorWiseTrustScoreColumn
-                                          ? 0
-                                          : -1) +
+                                        12 +
+                                        creatorWiseEligibilityColumnCount +
                                         (isMilestoneContestType(
                                           currentContest.contest_type,
                                         )
@@ -21113,11 +21702,9 @@ export default function ContestDetailClient({
                                           },
                                         );
                                       const trustScoreDisplay =
-                                        formatTrustScoreWithMax(
-                                          trustScoreComputed,
-                                        );
+                                        formatTrustScoreDisplay(trustScoreComputed);
                                       const trustScoreDisplayShort =
-                                        formatTrustScore(trustScoreComputed);
+                                        formatTrustScoreDisplay(trustScoreComputed);
                                       const requiredTrustScore =
                                         contestMinTrustScore;
                                       const hasTrustThreshold =
@@ -21135,6 +21722,70 @@ export default function ContestDetailClient({
                                       const verifiedIncludingPaidForTrust =
                                         verifiedReelsForTrust +
                                         inferredPaidReelsForTrust;
+                                      const trustNumberComputed =
+                                        resolveTrustNumberForDisplay(
+                                          trustMetrics,
+                                          {
+                                            verified:
+                                              verifiedIncludingPaidForTrust,
+                                            rejected: rejectedReelsForTrust,
+                                          },
+                                        );
+                                      const requiredTrustNumber =
+                                        contestMinTrustNumber;
+                                      const hasTrustNumberThreshold =
+                                        requiredTrustNumber !== null;
+                                      const trustNumberBelowThreshold =
+                                        hasTrustNumberThreshold &&
+                                        trustNumberComputed <
+                                          requiredTrustNumber;
+                                      const creatorBestQuality =
+                                        parseCreatorMetricNumber(
+                                          group.creator?.best_quality_score,
+                                        );
+                                      const creatorAvgQuality =
+                                        parseCreatorMetricNumber(
+                                          group.creator?.avg_quality_score,
+                                        );
+                                      const creatorQualityScoreSum =
+                                        parseCreatorMetricNumber(
+                                          group.creator?.quality_score_sum,
+                                        );
+                                      const creatorPlatformEarnings = Number(
+                                        group.creator?.total_money_won ?? 0,
+                                      );
+                                      const creatorPlatformViews = Number(
+                                        group.creator?.total_views ?? 0,
+                                      );
+                                      const bestQualityBelowThreshold =
+                                        contestMinBestQuality !== null &&
+                                        (creatorBestQuality === null ||
+                                          creatorBestQuality <
+                                            contestMinBestQuality);
+                                      const minQualityBelowThreshold =
+                                        contestMinQuality !== null &&
+                                        (creatorQualityScoreSum === null ||
+                                          creatorQualityScoreSum <
+                                            contestMinQuality);
+                                      const avgQualityBelowThreshold =
+                                        contestMinAvgQuality !== null &&
+                                        (creatorAvgQuality === null ||
+                                          creatorAvgQuality <
+                                            contestMinAvgQuality);
+                                      const platformEarningsBelowThreshold =
+                                        contestMinPlatformEarnings !== null &&
+                                        creatorPlatformEarnings <
+                                          contestMinPlatformEarnings;
+                                      const platformViewsBelowThreshold =
+                                        contestMinPlatformViews !== null &&
+                                        creatorPlatformViews <
+                                          contestMinPlatformViews;
+                                      const creatorQualityScoreBreakdown =
+                                        group.creator?.quality_score_counts ?? {
+                                          score1: 0,
+                                          score2: 0,
+                                          score3: 0,
+                                        };
                                       return (
                                         <TableRow key={group.creator.id}>
                                           <TableCell className="font-medium">
@@ -21182,65 +21833,301 @@ export default function ContestDetailClient({
                                           </TableCell>
                                           {showCreatorWiseTrustScoreColumn && (
                                             <TableCell className="text-center whitespace-nowrap">
-                                              <div className="flex justify-center">
-                                                <Tooltip>
-                                                  <TooltipTrigger asChild>
-                                                    <Badge
-                                                      className={cn(
-                                                        "font-semibold text-sm border whitespace-nowrap shrink-0",
-                                                        trustScoreBelowThreshold
-                                                          ? "bg-red-100 text-red-700 border-red-200"
-                                                          : "bg-green-100 text-green-700 border-green-200",
+                                              <CreatorWiseEligibilityText
+                                                value={trustScoreDisplay}
+                                                belowThreshold={
+                                                  trustScoreBelowThreshold
+                                                }
+                                                isDark={isDark}
+                                                tooltip={
+                                                  <div className="space-y-1 text-xs">
+                                                    {trustScoreBelowThreshold ? (
+                                                      <p>
+                                                        Below required Trust %
+                                                        (
+                                                        {formatTrustScoreMinimum(
+                                                          requiredTrustScore as number,
+                                                        )}
+                                                        ). Creator:{" "}
+                                                        {trustScoreDisplayShort}
+                                                      </p>
+                                                    ) : (
+                                                      <p>
+                                                        Meets required Trust %
+                                                        (
+                                                        {formatTrustScoreMinimum(
+                                                          requiredTrustScore as number,
+                                                        )}
+                                                        ). Creator:{" "}
+                                                        {trustScoreDisplayShort}
+                                                      </p>
+                                                    )}
+                                                    <p>
+                                                      Total reels:{" "}
+                                                      {totalReelsForTrust}
+                                                    </p>
+                                                    <p>
+                                                      Verified reels:{" "}
+                                                      {
+                                                        verifiedIncludingPaidForTrust
+                                                      }
+                                                    </p>
+                                                    <p>
+                                                      Pending reels:{" "}
+                                                      {pendingReelsForTrust}
+                                                    </p>
+                                                    <p>
+                                                      Rejected reels:{" "}
+                                                      {rejectedReelsForTrust}
+                                                    </p>
+                                                  </div>
+                                                }
+                                              />
+                                            </TableCell>
+                                          )}
+                                          {showCreatorWiseTrustNumberColumn && (
+                                            <TableCell className="text-center whitespace-nowrap">
+                                              <CreatorWiseEligibilityText
+                                                value={trustNumberComputed}
+                                                belowThreshold={
+                                                  trustNumberBelowThreshold
+                                                }
+                                                isDark={isDark}
+                                                tooltip={
+                                                  <div className="space-y-1 text-xs">
+                                                    {trustNumberBelowThreshold ? (
+                                                      <p>
+                                                        Below required Trust
+                                                        Score (
+                                                        {requiredTrustNumber}
+                                                        ). Creator:{" "}
+                                                        {trustNumberComputed}
+                                                      </p>
+                                                    ) : (
+                                                      <p>
+                                                        Meets required Trust
+                                                        Score (
+                                                        {requiredTrustNumber}
+                                                        ). Creator:{" "}
+                                                        {trustNumberComputed}
+                                                      </p>
+                                                    )}
+                                                    <p>
+                                                      Verified reels:{" "}
+                                                      {
+                                                        verifiedIncludingPaidForTrust
+                                                      }
+                                                    </p>
+                                                    <p>
+                                                      Rejected reels:{" "}
+                                                      {rejectedReelsForTrust}
+                                                    </p>
+                                                  </div>
+                                                }
+                                              />
+                                            </TableCell>
+                                          )}
+                                          {showCreatorWiseBestQualityColumn && (
+                                            <TableCell className="text-center whitespace-nowrap">
+                                              <CreatorWiseEligibilityText
+                                                value={
+                                                  creatorBestQuality !== null
+                                                    ? `${creatorBestQuality} / 3`
+                                                    : "—"
+                                                }
+                                                belowThreshold={
+                                                  bestQualityBelowThreshold
+                                                }
+                                                isDark={isDark}
+                                                tooltip={
+                                                  <CreatorQualityScoreBreakdownTooltip
+                                                    breakdown={
+                                                      creatorQualityScoreBreakdown
+                                                    }
+                                                    requirementLabel="best quality"
+                                                    belowThreshold={
+                                                      bestQualityBelowThreshold
+                                                    }
+                                                    requirementValue={
+                                                      contestMinBestQuality!
+                                                    }
+                                                    creatorValue={
+                                                      creatorBestQuality
+                                                    }
+                                                  />
+                                                }
+                                              />
+                                            </TableCell>
+                                          )}
+                                          {showCreatorWiseMinQualityColumn && (
+                                            <TableCell className="text-center whitespace-nowrap">
+                                              <CreatorWiseEligibilityText
+                                                value={formatQualitySumDisplay(
+                                                  creatorQualityScoreSum,
+                                                )}
+                                                belowThreshold={
+                                                  minQualityBelowThreshold
+                                                }
+                                                isDark={isDark}
+                                                tooltip={
+                                                  <div className="space-y-1 text-xs">
+                                                    <p className="font-medium">
+                                                      Total Quality Score
+                                                    </p>
+                                                    <p>
+                                                      Score 3:{" "}
+                                                      {
+                                                        creatorQualityScoreBreakdown.score3
+                                                      }{" "}
+                                                      submission
+                                                      {creatorQualityScoreBreakdown.score3 ===
+                                                      1
+                                                        ? ""
+                                                        : "s"}
+                                                    </p>
+                                                    <p>
+                                                      Score 2:{" "}
+                                                      {
+                                                        creatorQualityScoreBreakdown.score2
+                                                      }{" "}
+                                                      submission
+                                                      {creatorQualityScoreBreakdown.score2 ===
+                                                      1
+                                                        ? ""
+                                                        : "s"}
+                                                    </p>
+                                                    <p>
+                                                      Score 1:{" "}
+                                                      {
+                                                        creatorQualityScoreBreakdown.score1
+                                                      }{" "}
+                                                      submission
+                                                      {creatorQualityScoreBreakdown.score1 ===
+                                                      1
+                                                        ? ""
+                                                        : "s"}
+                                                    </p>
+                                                    <p className="pt-1 border-t border-border/50">
+                                                      {minQualityBelowThreshold
+                                                        ? "Below"
+                                                        : "Meets"}{" "}
+                                                      required total quality
+                                                      score (
+                                                      {contestMinQuality!}).
+                                                      Creator:{" "}
+                                                      {formatQualitySumDisplay(
+                                                        creatorQualityScoreSum,
                                                       )}
-                                                    >
-                                                      {trustScoreDisplay}
-                                                    </Badge>
-                                                  </TooltipTrigger>
-                                                  <TooltipContent>
-                                                    <div className="space-y-1 text-xs">
-                                                      {trustScoreBelowThreshold ? (
-                                                        <p>
-                                                          Below required trust
-                                                          score (
-                                                          {formatTrustScore(
-                                                            requiredTrustScore as number,
-                                                          )}
-                                                          ). Creator:{" "}
-                                                          {trustScoreDisplayShort}
-                                                        </p>
-                                                      ) : (
-                                                        <p>
-                                                          Meets required trust
-                                                          score (
-                                                          {formatTrustScore(
-                                                            requiredTrustScore as number,
-                                                          )}
-                                                          ). Creator:{" "}
-                                                          {trustScoreDisplayShort}
-                                                        </p>
-                                                      )}
+                                                    </p>
+                                                  </div>
+                                                }
+                                              />
+                                            </TableCell>
+                                          )}
+                                          {showCreatorWiseAvgQualityColumn && (
+                                            <TableCell className="text-center whitespace-nowrap">
+                                              <CreatorWiseEligibilityText
+                                                value={
+                                                  creatorAvgQuality !== null
+                                                    ? `${formatDecimalMetric(creatorAvgQuality)} / 3`
+                                                    : "—"
+                                                }
+                                                belowThreshold={
+                                                  avgQualityBelowThreshold
+                                                }
+                                                isDark={isDark}
+                                                tooltip={
+                                                  <CreatorQualityScoreBreakdownTooltip
+                                                    breakdown={
+                                                      creatorQualityScoreBreakdown
+                                                    }
+                                                    requirementLabel="average quality"
+                                                    belowThreshold={
+                                                      avgQualityBelowThreshold
+                                                    }
+                                                    requirementValue={
+                                                      contestMinAvgQuality!
+                                                    }
+                                                    creatorValue={
+                                                      creatorAvgQuality
+                                                    }
+                                                  />
+                                                }
+                                              />
+                                            </TableCell>
+                                          )}
+                                          {showCreatorWisePlatformEarningsColumn && (
+                                            <TableCell className="text-center whitespace-nowrap">
+                                              <CreatorWiseEligibilityText
+                                                value={formatMoney(
+                                                  creatorPlatformEarnings,
+                                                )}
+                                                belowThreshold={
+                                                  platformEarningsBelowThreshold
+                                                }
+                                                isDark={isDark}
+                                                tooltip={
+                                                  <div className="space-y-1 text-xs">
+                                                    {platformEarningsBelowThreshold ? (
                                                       <p>
-                                                        Total reels:{" "}
-                                                        {totalReelsForTrust}
+                                                        Below required platform
+                                                        earnings (
+                                                        {formatMoney(
+                                                          contestMinPlatformEarnings!,
+                                                        )}
+                                                        ). Creator:{" "}
+                                                        {formatMoney(
+                                                          creatorPlatformEarnings,
+                                                        )}
                                                       </p>
+                                                    ) : (
                                                       <p>
-                                                        Verified reels:{" "}
-                                                        {
-                                                          verifiedIncludingPaidForTrust
-                                                        }
+                                                        Meets required platform
+                                                        earnings (
+                                                        {formatMoney(
+                                                          contestMinPlatformEarnings!,
+                                                        )}
+                                                        ). Creator:{" "}
+                                                        {formatMoney(
+                                                          creatorPlatformEarnings,
+                                                        )}
                                                       </p>
+                                                    )}
+                                                  </div>
+                                                }
+                                              />
+                                            </TableCell>
+                                          )}
+                                          {showCreatorWisePlatformViewsColumn && (
+                                            <TableCell className="text-center whitespace-nowrap">
+                                              <CreatorWiseEligibilityText
+                                                value={creatorPlatformViews.toLocaleString()}
+                                                belowThreshold={
+                                                  platformViewsBelowThreshold
+                                                }
+                                                isDark={isDark}
+                                                tooltip={
+                                                  <div className="space-y-1 text-xs">
+                                                    {platformViewsBelowThreshold ? (
                                                       <p>
-                                                        Pending reels:{" "}
-                                                        {pendingReelsForTrust}
+                                                        Below required platform
+                                                        views (
+                                                        {contestMinPlatformViews!.toLocaleString()}
+                                                        ). Creator:{" "}
+                                                        {creatorPlatformViews.toLocaleString()}
                                                       </p>
+                                                    ) : (
                                                       <p>
-                                                        Rejected reels:{" "}
-                                                        {rejectedReelsForTrust}
+                                                        Meets required platform
+                                                        views (
+                                                        {contestMinPlatformViews!.toLocaleString()}
+                                                        ). Creator:{" "}
+                                                        {creatorPlatformViews.toLocaleString()}
                                                       </p>
-                                                    </div>
-                                                  </TooltipContent>
-                                                </Tooltip>
-                                              </div>
+                                                    )}
+                                                  </div>
+                                                }
+                                              />
                                             </TableCell>
                                           )}
                                           <TableCell className="text-center font-semibold">
@@ -26922,15 +27809,31 @@ export default function ContestDetailClient({
               : undefined
           }
           onVerify={async (ids: string[]) => {
+            const { toVerify, toUpdateQualityOnly, paidToRevert } =
+              partitionSubmissionsForVerify(ids);
+
             if (
               currentContest.post_contest_status !== "payouts_processed" &&
-              selectionIncludesPaidRow(currentSubmissions, ids)
+              paidToRevert.length > 0
             ) {
               setConfirmReversal({
                 submissionIds: ids,
                 target: "verified",
                 closeCreatorModalOnSuccess: true,
               });
+              return;
+            }
+
+            if (
+              isVideoContestFormat &&
+              toUpdateQualityOnly.length > 0 &&
+              toVerify.length === 0
+            ) {
+              openVerifyQualityDialog(ids);
+              return;
+            }
+            if (isVideoContestFormat && toVerify.length > 0) {
+              openVerifyQualityDialog(toVerify);
               return;
             }
             await handleBulkUpdateSubmissionStatus(ids, "verified", undefined, {
@@ -27005,6 +27908,43 @@ export default function ContestDetailClient({
             >["bonusCapSubmissions"]
           }
           parentBulkActionLoading={creatorModalParentBulkLoading}
+          onQualityScoreUpdated={({
+            submissionId,
+            qualityScore,
+            creatorId,
+            avgQualityScore,
+            bestQualityScore,
+            qualityScoreCounts,
+          }) => {
+            setCurrentSubmissions((prev) =>
+              prev.map((sub) => {
+                if (sub.id === submissionId) {
+                  return { ...sub, quality_score: qualityScore };
+                }
+                if (sub.creator_id === creatorId && creatorId) {
+                  const existingCreator = (sub as any).creator || {};
+                  return {
+                    ...sub,
+                    creator: {
+                      ...existingCreator,
+                      avg_quality_score:
+                        avgQualityScore ?? existingCreator.avg_quality_score ?? null,
+                      best_quality_score:
+                        bestQualityScore ?? existingCreator.best_quality_score ?? null,
+                      quality_score_counts:
+                        qualityScoreCounts ??
+                        existingCreator.quality_score_counts ?? {
+                          score1: 0,
+                          score2: 0,
+                          score3: 0,
+                        },
+                    },
+                  };
+                }
+                return sub;
+              }),
+            );
+          }}
         />
       )}
 
@@ -27026,6 +27966,71 @@ export default function ContestDetailClient({
           onArchiveUpdated={syncInstagramArchiveForCreator}
         />
       )}
+
+      {/* Verify quality picker — rendered last so it stacks above CreatorSubmissionsModal */}
+      <VerifyQualityDialog
+        open={verifyQualityDialogOpen}
+        onOpenChange={(open) => {
+          setVerifyQualityDialogOpen(open);
+          if (!open) setPendingVerifySubmissionIds([]);
+        }}
+        variant={verifyQualityDialogVariant}
+        submissionCount={pendingVerifySubmissionIds.length}
+        initialQuality={
+          parseQualityScore(
+            currentSubmissions.find(
+              (s) => s.id === pendingVerifySubmissionIds[0],
+            )?.quality_score,
+          ) ?? 1
+        }
+        loading={verifyQualityLoading}
+        onConfirm={async (qualityScore) => {
+          if (pendingVerifySubmissionIds.length === 0) return;
+          setVerifyQualityLoading(true);
+          try {
+            const { toVerify, toUpdateQualityOnly, paidToRevert } =
+              partitionSubmissionsForVerify(pendingVerifySubmissionIds);
+
+            if (toUpdateQualityOnly.length > 0) {
+              await applyQualityScoreUpdates(
+                toUpdateQualityOnly,
+                qualityScore,
+                {
+                  silent:
+                    toVerify.length > 0 || paidToRevert.length > 0,
+                },
+              );
+            }
+
+            const idsNeedingVerifyApi = [...toVerify, ...paidToRevert];
+            if (idsNeedingVerifyApi.length > 0) {
+              await handleBulkUpdateSubmissionStatus(
+                idsNeedingVerifyApi,
+                "verified",
+                undefined,
+                { closeCreatorModalOnSuccess: true, qualityScore },
+              );
+            }
+
+            setNormalViewSelectedSubmissions((prev) => {
+              const next = new Set(prev);
+              pendingVerifySubmissionIds.forEach((id) => next.delete(id));
+              return next;
+            });
+            setVerifyQualityDialogOpen(false);
+            setPendingVerifySubmissionIds([]);
+          } catch (error: unknown) {
+            toast({
+              title: "Could not update quality score",
+              description:
+                error instanceof Error ? error.message : "Please try again.",
+              variant: "destructive",
+            });
+          } finally {
+            setVerifyQualityLoading(false);
+          }
+        }}
+      />
 
     </div>
   );

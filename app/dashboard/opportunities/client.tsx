@@ -2,6 +2,7 @@
 import {
   useCallback,
   useEffect,
+  useMemo,
   useState,
   useLayoutEffect,
   useRef,
@@ -112,6 +113,12 @@ import CreatorParticipationOnboardingModal, {
 import { PageLoadingSpinner } from "@/components/loading/LoadingSpinner";
 import Link from "next/link";
 import { PaginationControls } from "@/components/ui/pagination-controls";
+import { ContestRequirementBadges } from "@/components/ContestRequirementBadges";
+import {
+  isCreatorEligibleForContest,
+  parseContestCreatorRequirements,
+  type CreatorRequirementsSnapshot,
+} from "@/lib/creator-requirements";
 
 import {
   isCountryInContestRegions,
@@ -135,6 +142,7 @@ import {
   writeStoredOpportunitiesListFilters,
   type ContestTypeFilterOption,
   type OpportunitiesMediaTypeOption,
+  type OpportunitiesEligibilityFilterOption,
   type OpportunitiesPlatformFilterOption,
   type OpportunitiesSortOption,
   type PageSizeOption,
@@ -143,6 +151,7 @@ import {
 
 // Define types for filters and sorting
 type StatusFilterType = "all" | "live" | "upcoming" | "ended";
+type EligibilityFilterType = "all" | "eligible";
 type PlatformFilterType =
   | "all"
   | "youtube"
@@ -227,6 +236,25 @@ const getContestsByMediaType = (contests: any[], mediaType: string) => {
   });
 };
 
+function filterContestsByEligibility(
+  contests: any[],
+  eligibilityFilter: EligibilityFilterType,
+  snapshot: CreatorRequirementsSnapshot | null,
+  userId: string | undefined,
+  statsReady: boolean,
+): any[] {
+  if (eligibilityFilter !== "eligible") return contests;
+  if (!userId) return contests;
+  // Fail-closed until cached stats are loaded successfully.
+  if (!statsReady || !snapshot) return [];
+  return contests.filter((contest) =>
+    isCreatorEligibleForContest({
+      requirements: parseContestCreatorRequirements(contest),
+      snapshot,
+    }),
+  );
+}
+
 export default function OpportunitiesPage({
   user,
 }: {
@@ -276,43 +304,6 @@ export default function OpportunitiesPage({
 
   const [mediaType, setMediaType] = useState("all");
 
-  // Calculate filtered contests by media type for tab counts
-  const filteredContestsByMediaType = getContestsByMediaType(
-    availableContests,
-    mediaType,
-  );
-
-  const tabs = [
-    {
-      id: "all",
-      label: "All",
-      count: filteredContestsByMediaType.filter(
-        (c) => c.moderation_status === "published" && c.status,
-      ).length,
-    },
-    {
-      id: "live",
-      label: "Live",
-      count: filteredContestsByMediaType.filter(
-        (c) => c.moderation_status === "published" && c.status === "active",
-      ).length,
-    },
-    {
-      id: "upcoming",
-      label: "Upcoming",
-      count: filteredContestsByMediaType.filter(
-        (c) => c.moderation_status === "published" && c.status === "upcoming",
-      ).length,
-    },
-    {
-      id: "ended",
-      label: "Ended",
-      count: filteredContestsByMediaType.filter(
-        (c) => c.moderation_status === "published" && c.status === "ended",
-      ).length,
-    },
-  ];
-
   // New state variables for filters and sorting
   const [statusFilter, setStatusFilterState] = useState<StatusFilterType>(
     DEFAULT_CAMPAIGN_LIST_TAB as StatusFilterType,
@@ -350,6 +341,14 @@ export default function OpportunitiesPage({
   const [limit, setLimit] = useState<number>(9);
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
   const [filtersHydrated, setFiltersHydrated] = useState(false);
+  const [eligibilityFilter, setEligibilityFilter] =
+    useState<EligibilityFilterType>("all");
+  const [creatorRequirementsSnapshot, setCreatorRequirementsSnapshot] =
+    useState<CreatorRequirementsSnapshot | null>(null);
+  const [creatorStatsReady, setCreatorStatsReady] = useState(false);
+  const [creatorStatsLoading, setCreatorStatsLoading] = useState(false);
+  const [creatorStatsFetchFailed, setCreatorStatsFetchFailed] = useState(false);
+  const [creatorStatsRefreshNonce, setCreatorStatsRefreshNonce] = useState(0);
   /** List layout is only available at lg+ (1024px); below that we force grid. */
   const [layoutAllowsListView, setLayoutAllowsListView] = useState(false);
 
@@ -358,6 +357,7 @@ export default function OpportunitiesPage({
       OPPORTUNITIES_LIST_FILTERS_KEY,
     );
     setMediaType(stored.mediaType);
+    setEligibilityFilter(stored.eligibilityFilter);
     setPlatformFilter(stored.platformFilter);
     setTypeFilter(stored.typeFilter);
     setSortOption(stored.sortOption);
@@ -367,9 +367,136 @@ export default function OpportunitiesPage({
   }, []);
 
   useEffect(() => {
+    if (!user?.id) {
+      setCreatorRequirementsSnapshot(null);
+      setCreatorStatsReady(false);
+      setCreatorStatsLoading(false);
+      setCreatorStatsFetchFailed(false);
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      setCreatorStatsLoading(true);
+      setCreatorStatsReady(false);
+      setCreatorStatsFetchFailed(false);
+      try {
+        const res = await fetch("/api/creators/stats?fresh=1");
+        if (cancelled) return;
+        if (!res.ok) {
+          setCreatorRequirementsSnapshot(null);
+          setCreatorStatsReady(false);
+          setCreatorStatsFetchFailed(true);
+          return;
+        }
+        const data = await res.json();
+        if (cancelled) return;
+        const snapshot =
+          data.snapshot ??
+          ({
+            trustScorePct:
+              data.trustScorePct ?? data.trust_metrics?.trust_score ?? 100,
+            trustNumber:
+              data.trustNumber ?? data.trust_metrics?.trust_number ?? 0,
+            avgQualityScore:
+              data.avgQualityScore ??
+              data.quality_metrics?.avg_quality_score ??
+              null,
+            bestQualityScore:
+              data.bestQualityScore ??
+              data.quality_metrics?.best_quality_score ??
+              null,
+            totalPlatformEarningsCents: Number(
+              data.totalPlatformEarningsCents ?? 0,
+            ),
+            totalViews: Number(data.totalViews ?? 0),
+            verifiedReels:
+              data.verifiedReels ?? data.trust_metrics?.verified_reels ?? 0,
+            rejectedReels:
+              data.rejectedReels ?? data.trust_metrics?.rejected_reels ?? 0,
+            pendingReels:
+              data.pendingReels ?? data.trust_metrics?.pending_reels ?? 0,
+            hasExplicitQualityScores:
+              data.hasExplicitQualityScores ??
+              data.snapshot?.hasExplicitQualityScores ??
+              false,
+          } satisfies CreatorRequirementsSnapshot);
+        setCreatorRequirementsSnapshot(snapshot);
+        setCreatorStatsReady(true);
+        setCreatorStatsFetchFailed(false);
+      } catch {
+        if (!cancelled) {
+          setCreatorRequirementsSnapshot(null);
+          setCreatorStatsReady(false);
+          setCreatorStatsFetchFailed(true);
+        }
+      } finally {
+        if (!cancelled) {
+          setCreatorStatsLoading(false);
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.id, creatorStatsRefreshNonce]);
+
+  const contestsForTabCounts = useMemo(() => {
+    const byMedia = getContestsByMediaType(availableContests, mediaType);
+    return filterContestsByEligibility(
+      byMedia,
+      eligibilityFilter,
+      creatorRequirementsSnapshot,
+      user?.id,
+      creatorStatsReady,
+    );
+  }, [
+    availableContests,
+    mediaType,
+    eligibilityFilter,
+    creatorRequirementsSnapshot,
+    creatorStatsReady,
+    user?.id,
+  ]);
+
+  const tabs = useMemo(
+    () => [
+      {
+        id: "all",
+        label: "All",
+        count: contestsForTabCounts.filter(
+          (c) => c.moderation_status === "published" && c.status,
+        ).length,
+      },
+      {
+        id: "live",
+        label: "Live",
+        count: contestsForTabCounts.filter(
+          (c) => c.moderation_status === "published" && c.status === "active",
+        ).length,
+      },
+      {
+        id: "upcoming",
+        label: "Upcoming",
+        count: contestsForTabCounts.filter(
+          (c) => c.moderation_status === "published" && c.status === "upcoming",
+        ).length,
+      },
+      {
+        id: "ended",
+        label: "Ended",
+        count: contestsForTabCounts.filter(
+          (c) => c.moderation_status === "published" && c.status === "ended",
+        ).length,
+      },
+    ],
+    [contestsForTabCounts],
+  );
+
+  useEffect(() => {
     if (!filtersHydrated) return;
     writeStoredOpportunitiesListFilters(OPPORTUNITIES_LIST_FILTERS_KEY, {
       mediaType: mediaType as OpportunitiesMediaTypeOption,
+      eligibilityFilter: eligibilityFilter as OpportunitiesEligibilityFilterOption,
       platformFilter: platformFilter as OpportunitiesPlatformFilterOption,
       typeFilter: typeFilter as ContestTypeFilterOption,
       sortOption: sortOption as OpportunitiesSortOption,
@@ -379,6 +506,7 @@ export default function OpportunitiesPage({
   }, [
     filtersHydrated,
     mediaType,
+    eligibilityFilter,
     platformFilter,
     typeFilter,
     sortOption,
@@ -1553,6 +1681,16 @@ export default function OpportunitiesPage({
       }
     });
 
+    if (eligibilityFilter === "eligible") {
+      contestsToDisplay = filterContestsByEligibility(
+        contestsToDisplay,
+        eligibilityFilter,
+        creatorRequirementsSnapshot,
+        user?.id,
+        creatorStatsReady,
+      );
+    }
+
     setDisplayedContests(contestsToDisplay);
   }, [
     availableContests,
@@ -1566,12 +1704,16 @@ export default function OpportunitiesPage({
     creatorInterests,
     userCountry,
     mediaType,
+    eligibilityFilter,
+    creatorRequirementsSnapshot,
+    creatorStatsReady,
+    user?.id,
   ]);
 
   // Reset to first page whenever filters or sort change
   useEffect(() => {
     setPage(1);
-  }, [statusFilter, platformFilter, typeFilter, sortOption, searchQuery]);
+  }, [statusFilter, platformFilter, typeFilter, sortOption, searchQuery, eligibilityFilter]);
 
   const total = displayedContests.length;
   const totalPages = Math.max(1, Math.ceil(total / limit));
@@ -1696,6 +1838,7 @@ export default function OpportunitiesPage({
   );
   const resetFilters = () => {
     setMediaType("all");
+    setEligibilityFilter("all");
     setPlatformFilter("all");
     setTypeFilter("all");
     setSortOption("relevance_desc");
@@ -1889,6 +2032,13 @@ export default function OpportunitiesPage({
                   Bonus Available
                 </Badge>
               )}
+              <ContestRequirementBadges
+                contest={contest}
+                snapshot={creatorRequirementsSnapshot}
+                isDark={isDark}
+                size="default"
+                showEligibility
+              />
             </div>
           </CardHeader>
           <CardContent className="p-0 pt-2 flex-1">
@@ -2383,6 +2533,10 @@ export default function OpportunitiesPage({
   }
 
   const isDark = mode === "dark";
+  const isEligibilityFilterPending =
+    eligibilityFilter === "eligible" && !!user?.id && creatorStatsLoading;
+  const isEligibilityFilterFailed =
+    eligibilityFilter === "eligible" && !!user?.id && creatorStatsFetchFailed;
   const displayViewMode: "grid" | "list" = layoutAllowsListView
     ? viewMode
     : "grid";
@@ -2427,8 +2581,8 @@ export default function OpportunitiesPage({
         </div>
         {/* Search + filter toolbar */}
         <div className="flex flex-col gap-4">
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-stretch w-full min-w-0 lg:max-w-xl xl:max-w-2xl">
-            <div className="relative flex-1 min-w-0">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center w-full min-w-0 sm:gap-3">
+            <div className="relative flex-1 min-w-0 sm:max-w-md lg:max-w-xl">
               <Search
                 className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none"
                 aria-hidden
@@ -2469,6 +2623,50 @@ export default function OpportunitiesPage({
                 )}
               />
             </div>
+
+            <div
+              role="group"
+              aria-label="Campaign eligibility"
+              className={cn(
+                "flex w-full sm:w-auto shrink-0 rounded-xl border p-1 gap-1 min-h-[2.75rem] box-border",
+                isDark
+                  ? "border-gray-600 bg-[#020817]/60"
+                  : "border-gray-300 bg-gray-50/90",
+              )}
+            >
+              <button
+                type="button"
+                onClick={() => setEligibilityFilter("all")}
+                title="All campaigns"
+                className={cn(
+                  "flex-1 sm:flex-initial flex items-center justify-center px-4 py-2.5 rounded-lg text-sm font-semibold whitespace-nowrap min-h-[2.5rem] min-w-[5rem] transition-colors",
+                  eligibilityFilter === "all"
+                    ? "bg-[#7F39EC] text-white shadow-sm"
+                    : isDark
+                      ? "text-gray-300 hover:text-white hover:bg-white/10"
+                      : "text-gray-700 hover:bg-white hover:text-gray-900",
+                )}
+              >
+                All
+              </button>
+              <button
+                type="button"
+                onClick={() => setEligibilityFilter("eligible")}
+                title="Campaigns you are eligible for"
+                className={cn(
+                  "flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-lg text-sm font-semibold whitespace-nowrap min-h-[2.5rem] min-w-[6.5rem] transition-colors",
+                  eligibilityFilter === "eligible"
+                    ? "bg-[#7F39EC] text-white shadow-sm"
+                    : isDark
+                      ? "text-gray-300 hover:text-white hover:bg-white/10"
+                      : "text-gray-700 hover:bg-white hover:text-gray-900",
+                )}
+              >
+                <CheckCheck className="h-4 w-4 shrink-0 opacity-90" />
+                Eligible
+              </button>
+            </div>
+
             {searchQuery.trim() !== "" && (
               <Button
                 type="button"
@@ -2819,7 +3017,45 @@ export default function OpportunitiesPage({
       >
         {displayViewMode === "grid" ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {paginatedContests && paginatedContests.length > 0 ? (
+            {isEligibilityFilterPending ? (
+              <div className="col-span-full flex items-center justify-center py-16">
+                <PageLoadingSpinner mode={isDark ? "dark" : "light"} />
+              </div>
+            ) : isEligibilityFilterFailed ? (
+              <div className="col-span-full text-center py-12">
+                <h2
+                  className="text-xl font-medium mb-2"
+                  style={{
+                    color: isDark ? "white" : "black",
+                    transition: "none",
+                  }}
+                >
+                  Could not load eligibility
+                </h2>
+                <p
+                  className="mb-3"
+                  style={{
+                    color: isDark ? "#94a3b8" : "#64748b",
+                    transition: "none",
+                  }}
+                >
+                  We could not verify which campaigns you qualify for. Please try
+                  again.
+                </p>
+                <Button
+                  onClick={() => setCreatorStatsRefreshNonce((n) => n + 1)}
+                  className="mt-4 text-md"
+                  style={{
+                    backgroundColor: "#7F39EC",
+                    color: "white",
+                    transition: "none",
+                  }}
+                >
+                  <RotateCcw className="h-4 w-4" />
+                  Retry
+                </Button>
+              </div>
+            ) : paginatedContests && paginatedContests.length > 0 ? (
               paginatedContests.map((contest) => {
                 const dualUnifiedBudget = getDualUnifiedBudgetMeta(contest);
                 return (
@@ -3017,6 +3253,13 @@ export default function OpportunitiesPage({
                             Bonus Available
                           </Badge>
                         )}
+                        <ContestRequirementBadges
+                          contest={contest}
+                          snapshot={creatorRequirementsSnapshot}
+                          isDark={isDark}
+                          size="compact"
+                          showEligibility
+                        />
                       </div>
 
                       <div className="flex items-center">
@@ -3643,7 +3886,45 @@ export default function OpportunitiesPage({
           </div>
         ) : (
           <div className="flex flex-col gap-4">
-            {paginatedContests && paginatedContests.length > 0 ? (
+            {isEligibilityFilterPending ? (
+              <div className="col-span-full flex items-center justify-center py-16">
+                <PageLoadingSpinner mode={isDark ? "dark" : "light"} />
+              </div>
+            ) : isEligibilityFilterFailed ? (
+              <div className="col-span-full text-center py-12">
+                <h2
+                  className="text-xl font-medium mb-2"
+                  style={{
+                    color: isDark ? "white" : "black",
+                    transition: "none",
+                  }}
+                >
+                  Could not load eligibility
+                </h2>
+                <p
+                  className="mb-3"
+                  style={{
+                    color: isDark ? "#94a3b8" : "#64748b",
+                    transition: "none",
+                  }}
+                >
+                  We could not verify which campaigns you qualify for. Please try
+                  again.
+                </p>
+                <Button
+                  onClick={() => setCreatorStatsRefreshNonce((n) => n + 1)}
+                  className="mt-4 text-md"
+                  style={{
+                    backgroundColor: "#7F39EC",
+                    color: "white",
+                    transition: "none",
+                  }}
+                >
+                  <RotateCcw className="h-4 w-4" />
+                  Retry
+                </Button>
+              </div>
+            ) : paginatedContests && paginatedContests.length > 0 ? (
               paginatedContests.map((contest) =>
                 renderOpportunityListItem(contest),
               )

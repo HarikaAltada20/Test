@@ -1,0 +1,204 @@
+-- Apply quality gates to brand-new creators (default 1/1) while still skipping
+-- legacy backfill-only creators until their first explicit verify score.
+-- Mirrors lib/creator-requirements.ts shouldApplyQualityGates().
+-- min_quality_score on contests gates creator_profiles.quality_score_sum.
+
+CREATE OR REPLACE FUNCTION public.enforce_submission_creator_requirements()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_format text;
+  v_min_trust integer;
+  v_min_trust_number integer;
+  v_min_avg_quality numeric;
+  v_min_best_quality integer;
+  v_min_quality integer;
+  v_min_earnings bigint;
+  v_min_views bigint;
+  v_creator_score integer;
+  v_creator_trust_number integer;
+  v_creator_avg_quality numeric;
+  v_creator_best_quality integer;
+  v_creator_quality_sum numeric;
+  v_creator_earnings bigint;
+  v_creator_views bigint;
+  v_verified integer;
+  v_rejected integer;
+  v_has_explicit boolean;
+  v_profile_verified integer;
+  v_apply_quality_gates boolean;
+BEGIN
+  SELECT
+    c.contest_format,
+    c.trust_score,
+    c.trust_number,
+    c.min_avg_quality_score,
+    c.min_best_quality_score,
+    c.min_quality_score,
+    c.min_platform_earnings,
+    c.min_platform_views
+  INTO
+    v_format,
+    v_min_trust,
+    v_min_trust_number,
+    v_min_avg_quality,
+    v_min_best_quality,
+    v_min_quality,
+    v_min_earnings,
+    v_min_views
+  FROM public.contests c
+  WHERE c.id = NEW.contest_id;
+
+  IF COALESCE(v_format, 'video') = 'text_image' THEN
+    RETURN NEW;
+  END IF;
+
+  IF v_min_trust IS NULL AND v_min_trust_number IS NULL
+     AND v_min_avg_quality IS NULL AND v_min_best_quality IS NULL
+     AND v_min_quality IS NULL
+     AND v_min_earnings IS NULL AND v_min_views IS NULL THEN
+    RETURN NEW;
+  END IF;
+
+  SELECT
+    (cp.trust_score_metrics->>'trust_score')::integer,
+    (cp.trust_score_metrics->>'trust_number')::integer,
+    cp.avg_quality_score,
+    cp.best_quality_score,
+    COALESCE(cp.quality_score_sum, 0),
+    COALESCE(cp.total_money_won, 0)::bigint,
+    COALESCE(cp.total_views, 0)::bigint,
+    COALESCE(cp.has_explicit_quality_scores, false),
+    COALESCE((cp.trust_score_metrics->>'verified_reels')::integer, 0)
+  INTO
+    v_creator_score,
+    v_creator_trust_number,
+    v_creator_avg_quality,
+    v_creator_best_quality,
+    v_creator_quality_sum,
+    v_creator_earnings,
+    v_creator_views,
+    v_has_explicit,
+    v_profile_verified
+  FROM public.creator_profiles cp
+  WHERE cp.id = NEW.creator_id;
+
+  v_apply_quality_gates := v_has_explicit OR v_profile_verified = 0;
+
+  IF v_creator_score IS NULL OR v_creator_trust_number IS NULL THEN
+    SELECT
+      COUNT(*) FILTER (WHERE s.status IN ('verified', 'paid'))::integer,
+      COUNT(*) FILTER (WHERE s.status = 'rejected')::integer
+    INTO v_verified, v_rejected
+    FROM public.submissions s
+    WHERE s.creator_id = NEW.creator_id;
+
+    v_creator_trust_number := COALESCE(v_verified, 0) - COALESCE(v_rejected, 0);
+
+    IF COALESCE(v_verified, 0) = 0 THEN
+      IF COALESCE(v_rejected, 0) > 0 THEN
+        v_creator_score := 0;
+      ELSE
+        v_creator_score := 100;
+      END IF;
+    ELSE
+      v_creator_score := GREATEST(
+        0,
+        LEAST(
+          100,
+          ROUND((v_creator_trust_number::numeric / v_verified::numeric) * 100)
+        )
+      )::integer;
+    END IF;
+  END IF;
+
+  IF v_apply_quality_gates
+     AND (v_min_avg_quality IS NOT NULL OR v_min_best_quality IS NOT NULL
+          OR v_min_quality IS NOT NULL) THEN
+    IF v_verified IS NULL OR v_rejected IS NULL THEN
+      SELECT
+        COUNT(*) FILTER (WHERE s.status IN ('verified', 'paid'))::integer,
+        COUNT(*) FILTER (WHERE s.status = 'rejected')::integer
+      INTO v_verified, v_rejected
+      FROM public.submissions s
+      WHERE s.creator_id = NEW.creator_id;
+    END IF;
+
+    IF COALESCE(v_verified, 0) > 0 THEN
+      SELECT
+        ROUND(AVG(s.quality_score)::numeric, 2),
+        MAX(s.quality_score)::integer,
+        COALESCE(SUM(s.quality_score), 0)::integer
+      INTO v_creator_avg_quality, v_creator_best_quality, v_creator_quality_sum
+      FROM public.submissions s
+      WHERE s.creator_id = NEW.creator_id
+        AND s.status IN ('verified', 'paid')
+        AND s.quality_score IS NOT NULL
+        AND NOT COALESCE(s.quality_score_backfilled, false);
+    ELSIF COALESCE(v_rejected, 0) > 0 THEN
+      v_creator_avg_quality := NULL;
+      v_creator_best_quality := NULL;
+      v_creator_quality_sum := NULL;
+    ELSE
+      v_creator_avg_quality := 1;
+      v_creator_best_quality := 1;
+      v_creator_quality_sum := 1;
+    END IF;
+  END IF;
+
+  IF v_min_trust IS NOT NULL AND v_min_trust > 0 AND v_creator_score < v_min_trust THEN
+    RAISE EXCEPTION
+      'trust_score_too_low: Creator trust score (%) is below campaign minimum (%)',
+      v_creator_score, v_min_trust USING ERRCODE = 'check_violation';
+  END IF;
+
+  IF v_min_trust_number IS NOT NULL AND v_creator_trust_number < v_min_trust_number THEN
+    RAISE EXCEPTION
+      'trust_number_too_low: Creator trust number (%) is below campaign minimum (%)',
+      v_creator_trust_number, v_min_trust_number USING ERRCODE = 'check_violation';
+  END IF;
+
+  IF v_apply_quality_gates AND v_min_best_quality IS NOT NULL AND (
+    v_creator_best_quality IS NULL OR v_creator_best_quality < v_min_best_quality
+  ) THEN
+    RAISE EXCEPTION
+      'best_quality_too_low: Creator best quality (%) is below campaign minimum (%)',
+      COALESCE(v_creator_best_quality, 0), v_min_best_quality USING ERRCODE = 'check_violation';
+  END IF;
+
+  IF v_apply_quality_gates AND v_min_avg_quality IS NOT NULL AND (
+    v_creator_avg_quality IS NULL OR v_creator_avg_quality < v_min_avg_quality
+  ) THEN
+    RAISE EXCEPTION
+      'avg_quality_too_low: Creator average quality (%) is below campaign minimum (%)',
+      COALESCE(v_creator_avg_quality, 0), v_min_avg_quality USING ERRCODE = 'check_violation';
+  END IF;
+
+  IF v_apply_quality_gates AND v_min_quality IS NOT NULL AND (
+    v_creator_quality_sum IS NULL OR v_creator_quality_sum < v_min_quality
+  ) THEN
+    RAISE EXCEPTION
+      'min_quality_too_low: Creator total quality score (%) is below campaign minimum (%)',
+      COALESCE(v_creator_quality_sum, 0), v_min_quality USING ERRCODE = 'check_violation';
+  END IF;
+
+  IF v_min_earnings IS NOT NULL AND v_min_earnings > 0
+     AND v_creator_earnings < v_min_earnings THEN
+    RAISE EXCEPTION
+      'platform_earnings_too_low: Creator platform earnings (%) are below campaign minimum (%)',
+      v_creator_earnings, v_min_earnings USING ERRCODE = 'check_violation';
+  END IF;
+
+  IF v_min_views IS NOT NULL AND v_min_views > 0
+     AND v_creator_views < v_min_views THEN
+    RAISE EXCEPTION
+      'platform_views_too_low: Creator platform views (%) are below campaign minimum (%)',
+      v_creator_views, v_min_views USING ERRCODE = 'check_violation';
+  END IF;
+
+  RETURN NEW;
+END;
+$$;

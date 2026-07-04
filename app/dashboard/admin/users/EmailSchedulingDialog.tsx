@@ -100,14 +100,14 @@ export function EmailSchedulingDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-xl max-h-[90vh] overflow-hidden flex flex-col gap-0 p-0 bg-white">
-        <DialogHeader className="shrink-0 py-2">
+      <DialogContent className="max-w-[calc(100%-2rem)] sm:max-w-xl max-h-[90vh] overflow-y-auto p-6 bg-white gap-6">
+        <DialogHeader>
           <DialogTitle className="text-lg font-bold text-gray-900">
             Scheduling Settings{projectName ? ` — ${projectName}` : ""}
           </DialogTitle>
         </DialogHeader>
 
-        <div className="flex-1 overflow-y-auto py-5 space-y-8">
+        <div className="space-y-6">
           <section className="space-y-4">
             <h3 className="flex items-center gap-2 text-sm font-semibold text-gray-900">
               <BarChart3 className="h-4 w-4 text-purple-600" />
@@ -244,11 +244,11 @@ export function EmailSchedulingDialog({
           </section>
         </div>
 
-        <DialogFooter className="shrink-0 border-t border-gray-200 py-4">
+        <DialogFooter className="border-t border-gray-200 pt-6 flex flex-col-reverse sm:flex-row sm:justify-end gap-3 sm:gap-2">
           <Button
             type="button"
             variant="outline"
-            className="border-[#662EBD] text-[#662EBD] hover:bg-purple-50 hover:text-[#662EBD]"
+            className="w-full sm:w-auto border-[#662EBD] text-[#662EBD] hover:bg-purple-50 hover:text-[#662EBD]"
             onClick={() => onOpenChange(false)}
           >
             Cancel
@@ -257,7 +257,7 @@ export function EmailSchedulingDialog({
             type="button"
             onClick={handleSave}
             disabled={submitting}
-            className="bg-[#662EBD] hover:bg-[#5524a8] text-white"
+            className="w-full sm:w-auto bg-[#662EBD] hover:bg-[#5524a8] text-white"
           >
             {submitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
             Save Settings

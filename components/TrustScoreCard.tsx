@@ -1,5 +1,6 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
+import { formatTrustScoreDisplay } from "@/lib/creator-profile-stats";
 import type { TrustScoreMetrics } from "@/lib/trust-score";
 import { CheckCircle2, Clock3, ListChecks, XCircle } from "lucide-react";
 
@@ -57,7 +58,7 @@ export function TrustScoreCard({
       )}
     >
       <CardHeader className="pb-2">
-        <CardTitle className="text-xl">Trust Score</CardTitle>
+        <CardTitle className="text-xl">Trust metrics</CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
         {loading ? (
@@ -68,7 +69,17 @@ export function TrustScoreCard({
           </div>
         ) : (
           <>
-            <div className={cn("text-4xl font-bold", toneClass)}>{score} / 100</div>
+            <div className={cn("text-4xl font-bold", toneClass)}>
+              Trust %: {formatTrustScoreDisplay(score)}
+            </div>
+            <div
+              className={cn(
+                "text-lg font-semibold",
+                isDark ? "text-slate-200" : "text-slate-700",
+              )}
+            >
+              Trust Score: {metrics?.trust_number ?? 0}
+            </div>
 
             <div className="overflow-x-auto">
               <div className="grid min-w-[720px] grid-cols-4 gap-3">
@@ -105,8 +116,9 @@ export function TrustScoreCard({
             </div>
 
             <p className="text-xs text-muted-foreground">
-              Your score starts at 100 and goes down when submissions are rejected. Brands may
-              require a minimum score to submit to campaigns.
+              Trust % is your approval rate on verified reels. Trust Number is
+              verified minus rejected reels. Brands may set minimums for either
+              on each campaign—check eligibility on a campaign before you submit.
             </p>
           </>
         )}

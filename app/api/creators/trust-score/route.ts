@@ -1,14 +1,17 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/utils/supabase/server";
 import {
-  assertCreatorMeetsContestTrustRequirement,
-  getCreatorTrustMetricsLive,
-  getCreatorTrustScoreForUser,
-  recomputeCreatorTrustMetrics,
-} from "@/lib/trust-score";
+  loadTrustMetricsResponse,
+  checkContestRequirementsResponse,
+  refreshTrustMetricsResponse,
+} from "@/lib/creator-stats-api-handlers";
 
 export const dynamic = "force-dynamic";
 
+/**
+ * @deprecated Prefer `/api/creators/stats` for full creator metrics.
+ * This route remains for backward compatibility and delegates to shared handlers.
+ */
 export async function GET() {
   try {
     const supabase = await createClient();
@@ -21,8 +24,7 @@ export async function GET() {
       return NextResponse.json({ error: "Authentication required" }, { status: 401 });
     }
 
-    const metrics = await getCreatorTrustMetricsLive(supabase, user.id);
-    return NextResponse.json(metrics);
+    return loadTrustMetricsResponse(supabase, user.id);
   } catch (error: unknown) {
     const message =
       error instanceof Error
@@ -32,7 +34,7 @@ export async function GET() {
   }
 }
 
-/** Pre-submit trust check (mirrors DB trigger; clearer errors for UI). */
+/** Pre-submit requirements check (delegates to shared stats handler). */
 export async function POST(request: Request) {
   try {
     const supabase = await createClient();
@@ -53,26 +55,29 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "contestId is required" }, { status: 400 });
     }
 
-    const result = await assertCreatorMeetsContestTrustRequirement(
+    const result = await checkContestRequirementsResponse(
       supabase,
-      contestId,
       user.id,
+      contestId,
     );
-
-    if (!result.ok) {
-      return NextResponse.json({ error: result.error }, { status: result.status });
+    if (result.status !== 200) {
+      return result;
     }
 
-    const trustScore = await getCreatorTrustScoreForUser(supabase, user.id);
-    return NextResponse.json({ allowed: true, trust_score: trustScore });
+    const metricsResponse = await loadTrustMetricsResponse(supabase, user.id);
+    const metrics = await metricsResponse.json();
+    return NextResponse.json({
+      allowed: true,
+      trust_score: metrics.trust_score,
+    });
   } catch (error: unknown) {
     const message =
-      error instanceof Error ? error.message : "Unexpected error during trust check";
+      error instanceof Error ? error.message : "Unexpected error during requirements check";
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }
 
-/** Recompute and persist trust_score_metrics from all submissions (call after submit). */
+/** Recompute metrics (delegates to shared stats refresh). */
 export async function PATCH() {
   try {
     const supabase = await createClient();
@@ -85,12 +90,7 @@ export async function PATCH() {
       return NextResponse.json({ error: "Authentication required" }, { status: 401 });
     }
 
-    const result = await recomputeCreatorTrustMetrics(supabase, user.id);
-    if (!result.ok) {
-      return NextResponse.json({ error: result.error }, { status: 500 });
-    }
-
-    return NextResponse.json(result.metrics);
+    return refreshTrustMetricsResponse(supabase, user.id);
   } catch (error: unknown) {
     const message =
       error instanceof Error

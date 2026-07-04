@@ -4,7 +4,6 @@ import { createAdminClient } from "@/utils/supabase/admin";
 import { createClient } from "@/utils/supabase/server";
 import { verifyAdminAccess } from "@/utils/admin-auth";
 import { applyBulkDualRewardsWalletReversals } from "@/lib/dual-rewards-bulk-reversal";
-import { recomputeTrustForCreatorIds } from "@/lib/trust-score";
 
 const PAYMENT_BULK_ACTIONS = new Set([
   "paid",
@@ -143,7 +142,7 @@ async function invokeVerifyWithRetries(
 
 export async function POST(request: Request) {
   try {
-    const { submissionIds, action, reason, paymentDetails } =
+    const { submissionIds, action, reason, paymentDetails, qualityScore } =
       await request.json();
 
     if (!Array.isArray(submissionIds)) {
@@ -151,6 +150,22 @@ export async function POST(request: Request) {
         { error: "submissionIds must be an array" },
         { status: 400 },
       );
+    }
+
+    let resolvedBulkQualityScore: 1 | 2 | 3 | undefined;
+    if (action === "verified") {
+      const { requireVerifyQualityScore } = await import("@/lib/quality-score");
+      const parsed = requireVerifyQualityScore(qualityScore);
+      if (parsed === null) {
+        return NextResponse.json(
+          {
+            error:
+              "qualityScore is required and must be 1, 2, or 3 when bulk verifying submissions",
+          },
+          { status: 400 },
+        );
+      }
+      resolvedBulkQualityScore = parsed;
     }
 
     const { isAdmin, error: adminError } = await verifyAdminAccess();
@@ -255,6 +270,8 @@ export async function POST(request: Request) {
                 action,
                 reason,
                 paymentDetails,
+                qualityScore:
+                  action === "verified" ? resolvedBulkQualityScore : undefined,
                 skipWalletDebit: skipWalletDebitIds.has(String(id)),
               }),
             });
@@ -297,25 +314,6 @@ export async function POST(request: Request) {
           });
         }
       });
-    }
-
-    const TRUST_RECOMPUTE_ACTIONS = new Set([
-      "verified",
-      "rejected",
-      "approve",
-      "reject",
-    ]);
-    if (results.length > 0 && TRUST_RECOMPUTE_ACTIONS.has(action)) {
-      const supabaseAdmin = createAdminClient();
-      const processedIds = results.map((r) => r.id);
-      const { data: submissionRows } = await supabaseAdmin
-        .from("submissions")
-        .select("creator_id")
-        .in("id", processedIds);
-      const creatorIds = (submissionRows || [])
-        .map((row) => row.creator_id)
-        .filter((id): id is string => typeof id === "string" && id.length > 0);
-      await recomputeTrustForCreatorIds(supabaseAdmin, creatorIds);
     }
 
     return NextResponse.json({

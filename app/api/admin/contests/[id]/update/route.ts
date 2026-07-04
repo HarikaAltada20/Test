@@ -3,6 +3,11 @@ import { verifyAdminAccess } from "@/utils/admin-auth";
 import { createAdminClient } from "@/utils/supabase/admin";
 import { syncContestToMetrics } from "@/lib/twitter-metrics-sync";
 import { isVideoContestFormat } from "@/lib/trust-score";
+import {
+  hasNormalizedCreatorRequirement,
+  validateCreatorRequirementFields,
+  type CreatorRequirementFieldInput,
+} from "@/lib/contest-creator-requirements-validation";
 
 export async function POST(
   request: Request,
@@ -55,6 +60,12 @@ export async function POST(
       "payout_adjustment_percentage",
       "payout_adjustment_mode",
       "trust_score",
+      "trust_number",
+      "min_avg_quality_score",
+      "min_best_quality_score",
+      "min_quality_score",
+      "min_platform_earnings",
+      "min_platform_views",
       "platform",
       "contest_format",
       "subscription_info_of_user",
@@ -108,22 +119,54 @@ export async function POST(
       }
     }
 
-    if (updateData.trust_score !== undefined && updateData.trust_score != null) {
-      const trustNum =
-        typeof updateData.trust_score === "number"
-          ? updateData.trust_score
-          : parseInt(String(updateData.trust_score), 10);
-      if (Number.isNaN(trustNum) || trustNum < 0 || trustNum > 100) {
+    const requirementInput: CreatorRequirementFieldInput = {};
+    if (updateData.trust_score !== undefined) {
+      requirementInput.trust_score = updateData.trust_score;
+    }
+    if (updateData.trust_number !== undefined) {
+      requirementInput.trust_number = updateData.trust_number;
+    }
+    if (updateData.min_best_quality_score !== undefined) {
+      requirementInput.min_best_quality_score = updateData.min_best_quality_score;
+    }
+    if (updateData.min_quality_score !== undefined) {
+      requirementInput.min_quality_score = updateData.min_quality_score;
+    }
+    if (updateData.min_avg_quality_score !== undefined) {
+      requirementInput.min_avg_quality_score = updateData.min_avg_quality_score;
+    }
+    if (updateData.min_platform_earnings !== undefined) {
+      requirementInput.min_platform_earnings = updateData.min_platform_earnings;
+    }
+    if (updateData.min_platform_views !== undefined) {
+      requirementInput.min_platform_views = updateData.min_platform_views;
+    }
+
+    if (Object.keys(requirementInput).length > 0) {
+      const requirementValidation =
+        validateCreatorRequirementFields(requirementInput);
+      if (!requirementValidation.ok) {
         return NextResponse.json(
-          { error: "trust_score must be between 0 and 100, or null" },
+          { error: requirementValidation.error },
           { status: 400 },
         );
       }
+      Object.assign(updateData, requirementValidation.values);
     }
 
     const admin = createAdminClient();
 
-    if (updateData.trust_score !== undefined && updateData.trust_score != null) {
+    const hasCreatorRequirementUpdate = hasNormalizedCreatorRequirement({
+      trust_score: updateData.trust_score,
+      trust_number: updateData.trust_number,
+      min_avg_quality_score: updateData.min_avg_quality_score,
+      min_best_quality_score: updateData.min_best_quality_score,
+      min_quality_score: updateData.min_quality_score,
+      min_platform_earnings: updateData.min_platform_earnings,
+      min_platform_views: updateData.min_platform_views,
+    });
+
+    if (hasCreatorRequirementUpdate) {
       const { data: contestRow } = await admin
         .from("contests")
         .select("contest_format")
@@ -134,7 +177,7 @@ export async function POST(
         return NextResponse.json(
           {
             error:
-              "trust_score is only supported for video campaigns (contest_format video)",
+              "Creator requirement fields are only supported for video campaigns (contest_format video)",
           },
           { status: 400 },
         );

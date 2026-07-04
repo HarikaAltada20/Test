@@ -872,7 +872,7 @@ export async function POST(request: NextRequest) {
     if (paidSubmissionIds.length > 0) {
       const { data: paidRows, error: paidRowsErr } = await supabaseAdmin
         .from("submissions")
-        .select("id, views, platform, other_stats")
+        .select("id, views, creator_id, platform, other_stats")
         .in("id", paidSubmissionIds);
       if (paidRowsErr) {
         console.error(
@@ -881,7 +881,7 @@ export async function POST(request: NextRequest) {
         );
       } else {
         try {
-          await MetricsService.creditSubmissionViews(paidRows || []);
+          await MetricsService.creditSubmissionViewsForCreators(paidRows || []);
         } catch (creditErr) {
           console.error(
             "[bulk-payment] Failed to credit submission views after payout:",
