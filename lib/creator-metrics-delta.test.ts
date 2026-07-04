@@ -110,6 +110,7 @@ describe("buildCreatorProfileMetricsFromCounters", () => {
     const profile = buildCreatorProfileMetricsFromCounters(counters);
     assert.equal(profile.avg_quality_score, 2);
     assert.equal(profile.best_quality_score, 3);
+    assert.equal(profile.quality_score_sum, 4);
     assert.equal(profile.trust_score_metrics.verified_reels, 2);
     assert.equal(profile.trust_score_metrics.trust_number, 2);
     assert.equal(profile.trust_score_metrics.trust_score, 100);

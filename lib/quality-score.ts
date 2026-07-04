@@ -11,6 +11,7 @@ export type QualityScoreCounts = {
 export type CreatorQualityMetrics = {
   avg_quality_score: number | null;
   best_quality_score: number | null;
+  quality_score_sum: number | null;
   scored_verified_reels: number;
   quality_score_counts: QualityScoreCounts;
 };
@@ -32,18 +33,23 @@ export function resolveCreatorQualityMetrics(input: {
   rejectedReels: number;
   avgQualityScore?: unknown;
   bestQualityScore?: unknown;
+  qualityScoreSum?: unknown;
 }): CreatorQualityMetrics {
   const verifiedReels = Math.max(0, Number(input.verifiedReels) || 0);
   const rejectedReels = Math.max(0, Number(input.rejectedReels) || 0);
   const storedAvg = parseStoredQualityNumber(input.avgQualityScore);
   const storedBest = parseStoredQualityNumber(input.bestQualityScore);
+  const storedSum = parseStoredQualityNumber(input.qualityScoreSum);
 
   if (verifiedReels > 0) {
     return {
       avg_quality_score: storedAvg,
       best_quality_score: storedBest,
+      quality_score_sum: storedSum,
       scored_verified_reels:
-        storedAvg !== null || storedBest !== null ? verifiedReels : 0,
+        storedAvg !== null || storedBest !== null || storedSum !== null
+          ? verifiedReels
+          : 0,
       quality_score_counts: { score1: 0, score2: 0, score3: 0 },
     };
   }
@@ -52,6 +58,7 @@ export function resolveCreatorQualityMetrics(input: {
     return {
       avg_quality_score: null,
       best_quality_score: null,
+      quality_score_sum: null,
       scored_verified_reels: 0,
       quality_score_counts: { score1: 0, score2: 0, score3: 0 },
     };
@@ -60,6 +67,7 @@ export function resolveCreatorQualityMetrics(input: {
   return {
     avg_quality_score: CREATOR_DEFAULT_QUALITY_SCORE,
     best_quality_score: CREATOR_DEFAULT_QUALITY_SCORE,
+    quality_score_sum: CREATOR_DEFAULT_QUALITY_SCORE,
     scored_verified_reels: 0,
     quality_score_counts: { score1: 0, score2: 0, score3: 0 },
   };
@@ -71,7 +79,9 @@ export function parseQualityScore(value: unknown): QualityScore | null {
   return Math.round(n) as QualityScore;
 }
 
-export function countQualityScoresFromScores(scores: number[]): QualityScoreCounts {
+export function countQualityScoresFromScores(
+  scores: number[],
+): QualityScoreCounts {
   const counts: QualityScoreCounts = { score1: 0, score2: 0, score3: 0 };
   for (const raw of scores) {
     const score = parseQualityScore(raw);
@@ -107,7 +117,9 @@ export function resolveVerifyQualityScore(value: unknown): QualityScore | null {
 }
 
 /** @deprecated Use requireVerifyQualityScore — verify requires an explicit 1–3 score. */
-export function normalizeVerifyQualityScore(value: unknown): QualityScore | null {
+export function normalizeVerifyQualityScore(
+  value: unknown,
+): QualityScore | null {
   return requireVerifyQualityScore(value);
 }
 
@@ -130,7 +142,10 @@ export function computePersistableQualityProfileValues(input: {
 
   if (verifiedReels > 0) {
     if (scores.length === 0) {
-      return { avg_quality_score: null, best_quality_score: null };
+      return {
+        avg_quality_score: null,
+        best_quality_score: null,
+      };
     }
     const sum = scores.reduce((acc, s) => acc + s, 0);
     return {
@@ -152,13 +167,12 @@ export function computePersistableQualityProfileValues(input: {
 export function computeQualityMetricsFromScores(
   scores: number[],
 ): CreatorQualityMetrics {
-  const valid = scores.filter(
-    (s) => Number.isFinite(s) && s >= 1 && s <= 3,
-  );
+  const valid = scores.filter((s) => Number.isFinite(s) && s >= 1 && s <= 3);
   if (valid.length === 0) {
     return {
       avg_quality_score: null,
       best_quality_score: null,
+      quality_score_sum: null,
       scored_verified_reels: 0,
       quality_score_counts: { score1: 0, score2: 0, score3: 0 },
     };
@@ -167,6 +181,7 @@ export function computeQualityMetricsFromScores(
   return {
     avg_quality_score: Math.round((sum / valid.length) * 100) / 100,
     best_quality_score: Math.max(...valid),
+    quality_score_sum: sum,
     scored_verified_reels: valid.length,
     quality_score_counts: countQualityScoresFromScores(valid),
   };
@@ -228,7 +243,9 @@ export async function getCreatorQualityMetricsLive(
   }
 
   return computeQualityMetricsFromScores(
-    (rows || []).map((row: { quality_score: number }) => Number(row.quality_score)),
+    (rows || []).map((row: { quality_score: number }) =>
+      Number(row.quality_score),
+    ),
   );
 }
 
@@ -253,15 +270,17 @@ export async function fetchLiveQualityMetricsByCreatorIds(
   }
 
   const scoresByCreator: Record<string, number[]> = {};
-  (rows || []).forEach((row: { creator_id?: string; quality_score?: number }) => {
-    const creatorId =
-      typeof row?.creator_id === "string" ? row.creator_id.trim() : "";
-    if (!creatorId) return;
-    const score = Number(row.quality_score);
-    if (!Number.isFinite(score)) return;
-    if (!scoresByCreator[creatorId]) scoresByCreator[creatorId] = [];
-    scoresByCreator[creatorId].push(score);
-  });
+  (rows || []).forEach(
+    (row: { creator_id?: string; quality_score?: number }) => {
+      const creatorId =
+        typeof row?.creator_id === "string" ? row.creator_id.trim() : "";
+      if (!creatorId) return;
+      const score = Number(row.quality_score);
+      if (!Number.isFinite(score)) return;
+      if (!scoresByCreator[creatorId]) scoresByCreator[creatorId] = [];
+      scoresByCreator[creatorId].push(score);
+    },
+  );
 
   const liveByCreatorId: Record<string, CreatorQualityMetrics> = {};
   Object.entries(scoresByCreator).forEach(([creatorId, scores]) => {
@@ -274,7 +293,9 @@ export async function fetchLiveQualityMetricsByCreatorIds(
 export async function recomputeCreatorQualityMetrics(
   supabase: any,
   creatorId: string,
-): Promise<{ ok: true; metrics: CreatorQualityMetrics } | { ok: false; error: string }> {
+): Promise<
+  { ok: true; metrics: CreatorQualityMetrics } | { ok: false; error: string }
+> {
   try {
     const { data: rows, error: rowsError } = await supabase
       .from("submissions")
@@ -284,7 +305,9 @@ export async function recomputeCreatorQualityMetrics(
     if (rowsError) {
       return {
         ok: false,
-        error: rowsError.message || "Failed to load submissions for quality recompute",
+        error:
+          rowsError.message ||
+          "Failed to load submissions for quality recompute",
       };
     }
 
@@ -296,16 +319,6 @@ export async function recomputeCreatorQualityMetrics(
       scoredQualityScores,
     });
 
-    const metrics =
-      verifiedReels > 0 && scoredQualityScores.length > 0
-        ? computeQualityMetricsFromScores(scoredQualityScores)
-        : resolveCreatorQualityMetrics({
-            verifiedReels,
-            rejectedReels,
-            avgQualityScore: persistable.avg_quality_score,
-            bestQualityScore: persistable.best_quality_score,
-          });
-
     const tierCounts =
       verifiedReels > 0 && scoredQualityScores.length > 0
         ? countQualityScoresFromScores(scoredQualityScores)
@@ -314,6 +327,17 @@ export async function recomputeCreatorQualityMetrics(
       verifiedReels > 0 && scoredQualityScores.length > 0
         ? scoredQualityScores.reduce((acc, score) => acc + score, 0)
         : 0;
+
+    const metrics =
+      verifiedReels > 0 && scoredQualityScores.length > 0
+        ? computeQualityMetricsFromScores(scoredQualityScores)
+        : resolveCreatorQualityMetrics({
+            verifiedReels,
+            rejectedReels,
+            avgQualityScore: persistable.avg_quality_score,
+            bestQualityScore: persistable.best_quality_score,
+            qualityScoreSum: qualitySum > 0 ? qualitySum : null,
+          });
 
     const { error: updateError } = await supabase
       .from("creator_profiles")
@@ -336,7 +360,10 @@ export async function recomputeCreatorQualityMetrics(
   } catch (err: unknown) {
     return {
       ok: false,
-      error: err instanceof Error ? err.message : "Failed to recompute quality metrics",
+      error:
+        err instanceof Error
+          ? err.message
+          : "Failed to recompute quality metrics",
     };
   }
 }

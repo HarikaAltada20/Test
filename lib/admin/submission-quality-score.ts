@@ -8,6 +8,7 @@ import {
 export type CreatorQualitySnapshot = {
   avg_quality_score: number | null;
   best_quality_score: number | null;
+  quality_score_sum: number | null;
   quality_score_counts: {
     score1: number;
     score2: number;
@@ -31,6 +32,7 @@ async function fetchCreatorQualitySnapshotsLive(
     snapshots[creatorId] = {
       avg_quality_score: metrics?.avg_quality_score ?? null,
       best_quality_score: metrics?.best_quality_score ?? null,
+      quality_score_sum: metrics?.quality_score_sum ?? null,
       quality_score_counts: metrics?.quality_score_counts ?? {
         score1: 0,
         score2: 0,

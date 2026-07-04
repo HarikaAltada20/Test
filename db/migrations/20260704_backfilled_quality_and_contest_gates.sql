@@ -418,6 +418,7 @@ BEGIN
     NEW.trust_number := NULL;
     NEW.min_avg_quality_score := NULL;
     NEW.min_best_quality_score := NULL;
+    NEW.min_quality_score := NULL;
     NEW.min_platform_earnings := NULL;
     NEW.min_platform_views := NULL;
     RETURN NEW;
@@ -426,11 +427,6 @@ BEGIN
   IF NEW.trust_score IS NOT NULL
      AND (NEW.trust_score < 0 OR NEW.trust_score > 100) THEN
     RAISE EXCEPTION 'trust_score must be between 0 and 100, or null'
-      USING ERRCODE = 'check_violation';
-  END IF;
-
-  IF NEW.trust_number IS NOT NULL AND NEW.trust_number < 0 THEN
-    RAISE EXCEPTION 'trust_number must be a non-negative integer, or null'
       USING ERRCODE = 'check_violation';
   END IF;
 
@@ -457,6 +453,7 @@ CREATE TRIGGER contests_validate_creator_requirements
     trust_number,
     min_avg_quality_score,
     min_best_quality_score,
+    min_quality_score,
     min_platform_earnings,
     min_platform_views
   ON public.contests

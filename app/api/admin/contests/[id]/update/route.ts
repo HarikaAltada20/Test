@@ -63,6 +63,7 @@ export async function POST(
       "trust_number",
       "min_avg_quality_score",
       "min_best_quality_score",
+      "min_quality_score",
       "min_platform_earnings",
       "min_platform_views",
       "platform",
@@ -128,6 +129,9 @@ export async function POST(
     if (updateData.min_best_quality_score !== undefined) {
       requirementInput.min_best_quality_score = updateData.min_best_quality_score;
     }
+    if (updateData.min_quality_score !== undefined) {
+      requirementInput.min_quality_score = updateData.min_quality_score;
+    }
     if (updateData.min_avg_quality_score !== undefined) {
       requirementInput.min_avg_quality_score = updateData.min_avg_quality_score;
     }
@@ -157,6 +161,7 @@ export async function POST(
       trust_number: updateData.trust_number,
       min_avg_quality_score: updateData.min_avg_quality_score,
       min_best_quality_score: updateData.min_best_quality_score,
+      min_quality_score: updateData.min_quality_score,
       min_platform_earnings: updateData.min_platform_earnings,
       min_platform_views: updateData.min_platform_views,
     });

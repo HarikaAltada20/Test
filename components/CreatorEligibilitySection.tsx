@@ -19,6 +19,7 @@ const ELIGIBILITY_ICONS: Record<string, LucideIcon> = {
   "trust-score": CheckCheck,
   "trust-number": CheckCheck,
   "best-quality": Star,
+  "min-quality": Star,
   "avg-quality": Star,
   "platform-earnings": DollarSign,
   "platform-views": Eye,

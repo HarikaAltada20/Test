@@ -29,7 +29,7 @@ export async function loadCreatorStatsResponse(
   const { data: profile, error: profileError } = await supabase
     .from("creator_profiles")
     .select(
-      "trust_score_metrics, avg_quality_score, best_quality_score, total_money_won, total_views, has_explicit_quality_scores",
+      "trust_score_metrics, avg_quality_score, best_quality_score, quality_score_sum, total_money_won, total_views, has_explicit_quality_scores",
     )
     .eq("id", userId)
     .maybeSingle();
@@ -48,6 +48,7 @@ export async function loadCreatorStatsResponse(
     trustNumber: snapshot.trustNumber,
     avgQualityScore: snapshot.avgQualityScore,
     bestQualityScore: snapshot.bestQualityScore,
+    qualityScoreSum: snapshot.qualityScoreSum,
     totalViews: snapshot.totalViews,
     verifiedReels: snapshot.verifiedReels,
     rejectedReels: snapshot.rejectedReels,
@@ -91,7 +92,7 @@ export async function evaluateContestEligibilityResponse(
   const { data: contest, error: contestError } = await supabase
     .from("contests")
     .select(
-      "trust_score, trust_number, min_avg_quality_score, min_best_quality_score, min_platform_earnings, min_platform_views, contest_format",
+      "trust_score, trust_number, min_avg_quality_score, min_best_quality_score, min_quality_score, min_platform_earnings, min_platform_views, contest_format",
     )
     .eq("id", contestId)
     .maybeSingle();

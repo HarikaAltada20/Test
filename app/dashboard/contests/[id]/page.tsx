@@ -19,7 +19,7 @@ import {
   resolveCreatorTrustMetrics,
 } from "@/lib/trust-score";
 import { fetchLiveQualityMetricsByCreatorIds } from "@/lib/quality-score";
-import { resolveCreatorEligibilityProfileFields } from "@/lib/creator-requirements";
+import { resolveCreatorEligibilityProfileFields, getCreatorProfileQualityScoreSum } from "@/lib/creator-requirements";
 
 /** Load all matching twitter_campaign_tweets in chunks (SSR). Default 50-row cap hid tweets from UI. */
 async function fetchTwitterTweetsAllPages(
@@ -132,6 +132,7 @@ export default async function ContestDetailPage({
     trust_number: number | null;
     min_best_quality_score: number | null;
     min_avg_quality_score: number | null;
+    min_quality_score: number | null;
     min_platform_earnings: number | null;
     min_platform_views: number | null;
   } = {
@@ -141,13 +142,14 @@ export default async function ContestDetailPage({
     trust_number: null,
     min_best_quality_score: null,
     min_avg_quality_score: null,
+    min_quality_score: null,
     min_platform_earnings: null,
     min_platform_views: null,
   };
   const { data: payoutRow } = await supabase
     .from("contests")
     .select(
-      "payout_adjustment_percentage, payout_adjustment_mode, trust_score, trust_number, min_best_quality_score, min_avg_quality_score, min_platform_earnings, min_platform_views",
+      "payout_adjustment_percentage, payout_adjustment_mode, trust_score, trust_number, min_best_quality_score, min_avg_quality_score, min_quality_score, min_platform_earnings, min_platform_views",
     )
     .eq("id", contestId)
     .maybeSingle();
@@ -159,6 +161,7 @@ export default async function ContestDetailPage({
       trust_number: payoutRow.trust_number ?? null,
       min_best_quality_score: payoutRow.min_best_quality_score ?? null,
       min_avg_quality_score: payoutRow.min_avg_quality_score ?? null,
+      min_quality_score: payoutRow.min_quality_score ?? null,
       min_platform_earnings: payoutRow.min_platform_earnings ?? null,
       min_platform_views: payoutRow.min_platform_views ?? null,
     };
@@ -464,6 +467,7 @@ export default async function ContestDetailPage({
           trust_score_metrics,
           avg_quality_score,
           best_quality_score,
+          quality_score_sum,
           total_money_won,
           total_views
         `
@@ -540,6 +544,7 @@ export default async function ContestDetailPage({
       return {
         avg_quality_score: null,
         best_quality_score: null,
+        quality_score_sum: null,
         total_money_won: 0,
         total_views: 0,
         quality_score_counts: { score1: 0, score2: 0, score3: 0 },
@@ -553,6 +558,7 @@ export default async function ContestDetailPage({
     return {
       avg_quality_score: resolved.avgQualityScore,
       best_quality_score: resolved.bestQualityScore,
+      quality_score_sum: getCreatorProfileQualityScoreSum(creatorProfile),
       total_money_won: resolved.totalPlatformEarningsCents,
       total_views: resolved.totalViews,
       quality_score_counts: liveQuality?.quality_score_counts ?? {
@@ -644,6 +650,11 @@ export default async function ContestDetailPage({
     min_avg_quality_score: isVideoContest
       ? (contestSettings.min_avg_quality_score ??
         contestData.min_avg_quality_score ??
+        null)
+      : null,
+    min_quality_score: isVideoContest
+      ? (contestSettings.min_quality_score ??
+        contestData.min_quality_score ??
         null)
       : null,
     min_platform_earnings: isVideoContest

@@ -6,10 +6,17 @@ import {
   type TrustScoreMetrics,
 } from "@/lib/trust-score";
 
+function parseStoredQualityNumber(value: unknown): number | null {
+  if (value === null || value === undefined || value === "") return null;
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
+}
+
 export type CreatorProfileStatsSource = {
   trust_score_metrics?: unknown;
   avg_quality_score?: unknown;
   best_quality_score?: unknown;
+  quality_score_sum?: unknown;
   total_money_won?: unknown;
   total_views?: unknown;
   has_explicit_quality_scores?: unknown;
@@ -47,7 +54,12 @@ export function getCreatorStatsFromProfile(
     rejectedReels: trustMetrics.rejected_reels,
     avgQualityScore: profile?.avg_quality_score,
     bestQualityScore: profile?.best_quality_score,
+    qualityScoreSum: profile?.quality_score_sum,
   });
+  const profileSum = parseStoredQualityNumber(profile?.quality_score_sum);
+  if (profileSum !== null) {
+    qualityMetrics.quality_score_sum = profileSum;
+  }
 
   return {
     trustMetrics,
@@ -90,4 +102,14 @@ export function formatQualityScoreDisplay(
     ? String(rounded)
     : rounded.toFixed(2).replace(/\.?0+$/, "");
   return `${formatted}/3`;
+}
+
+/** Total sum of explicit quality scores across verified submissions. */
+export function formatQualitySumDisplay(
+  sum: number | null | undefined,
+): string {
+  if (sum === null || sum === undefined || !Number.isFinite(sum)) {
+    return "—";
+  }
+  return String(Math.round(sum));
 }

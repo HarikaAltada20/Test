@@ -2213,7 +2213,21 @@ export function ContestClientPage({
         if (contestError) throw contestError;
         if (!fetchedContestData) throw new Error("Contest not found.");
 
-        contestData = fetchedContestData;
+        const { data: requirementFields, error: requirementError } =
+          await supabase
+            .from("contests")
+            .select(
+              "trust_score, trust_number, min_avg_quality_score, min_best_quality_score, min_quality_score, min_platform_earnings, min_platform_views",
+            )
+            .eq("id", contestId)
+            .maybeSingle();
+
+        if (requirementError) throw requirementError;
+
+        contestData = {
+          ...fetchedContestData,
+          ...(requirementFields ?? {}),
+        };
 
         // Only published contests should be available to creators
         if (contestData.moderation_status !== "published") {

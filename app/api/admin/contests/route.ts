@@ -48,6 +48,7 @@ export async function POST(request: NextRequest) {
       trust_number: draftFields.trust_number,
       min_avg_quality_score: draftFields.min_avg_quality_score,
       min_best_quality_score: draftFields.min_best_quality_score,
+      min_quality_score: draftFields.min_quality_score,
       min_platform_earnings: draftFields.min_platform_earnings,
       min_platform_views: draftFields.min_platform_views,
     });
@@ -108,6 +109,7 @@ export async function POST(request: NextRequest) {
       trust_number: normalizedRequirements.trust_number ?? null,
       min_avg_quality_score: normalizedRequirements.min_avg_quality_score ?? null,
       min_best_quality_score: normalizedRequirements.min_best_quality_score ?? null,
+      min_quality_score: normalizedRequirements.min_quality_score ?? null,
       min_platform_earnings: normalizedRequirements.min_platform_earnings ?? null,
       min_platform_views: normalizedRequirements.min_platform_views ?? null,
       content_type: draftFields.content_type ?? null,

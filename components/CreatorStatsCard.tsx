@@ -4,6 +4,7 @@ import type { TrustScoreMetrics } from "@/lib/trust-score";
 import type { CreatorQualityMetrics } from "@/lib/quality-score";
 import {
   formatQualityScoreDisplay,
+  formatQualitySumDisplay,
   formatTrustScoreDisplay,
 } from "@/lib/creator-profile-stats";
 import { formatCurrencyFromCents } from "@/lib/currency-utils";
@@ -384,6 +385,13 @@ export function CreatorStatsCard({
                   value={formatQualityScoreDisplay(qualityMetrics?.avg_quality_score)}
                   icon={Star}
                   iconClass="text-[#7F39EC]"
+                  isDark={isDark}
+                />
+                <StatTile
+                  label="Total Quality Score"
+                  value={formatQualitySumDisplay(qualityMetrics?.quality_score_sum)}
+                  icon={Star}
+                  iconClass="text-orange-500"
                   isDark={isDark}
                 />
                 <StatTile

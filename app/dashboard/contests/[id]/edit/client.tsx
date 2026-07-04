@@ -256,6 +256,8 @@ type CreatorRequirementFormState = {
   contestMinBestQuality: number | "";
   avgQualityEnabled: boolean;
   contestMinAvgQuality: number | "";
+  minQualityEnabled: boolean;
+  contestMinQuality: number | "";
   minEarningsEnabled: boolean;
   contestMinEarnings: number | "";
   minPlatformViewsEnabled: boolean;
@@ -282,6 +284,10 @@ function buildCreatorRequirementFields(
     min_avg_quality_score:
       state.avgQualityEnabled && state.contestMinAvgQuality !== ""
         ? Number(state.contestMinAvgQuality)
+        : null,
+    min_quality_score:
+      state.minQualityEnabled && state.contestMinQuality !== ""
+        ? Number(state.contestMinQuality)
         : null,
     min_platform_earnings:
       state.minEarningsEnabled && state.contestMinEarnings !== ""
@@ -439,6 +445,7 @@ type ContestData = {
   trust_number?: number | null;
   min_best_quality_score?: number | null;
   min_avg_quality_score?: number | null;
+  min_quality_score?: number | null;
   min_platform_earnings?: number | null;
   min_platform_views?: number | null;
   content_type?: "ugc" | "clipping" | "other" | null;
@@ -722,6 +729,8 @@ export default function EditContestPage({
   const [contestMinAvgQuality, setContestMinAvgQuality] = useState<number | "">(
     "",
   );
+  const [minQualityEnabled, setMinQualityEnabled] = useState(false);
+  const [contestMinQuality, setContestMinQuality] = useState<number | "">("");
   const [minEarningsEnabled, setMinEarningsEnabled] = useState(false);
   const [contestMinEarnings, setContestMinEarnings] = useState<number | "">("");
   const [minPlatformViewsEnabled, setMinPlatformViewsEnabled] = useState(false);
@@ -1603,6 +1612,16 @@ export default function EditContestPage({
             } else {
               setAvgQualityEnabled(false);
               setContestMinAvgQuality("");
+            }
+            const minQuality = parseStoredOptionalNumber(
+              data.min_quality_score,
+            );
+            if (minQuality !== null) {
+              setMinQualityEnabled(true);
+              setContestMinQuality(minQuality);
+            } else {
+              setMinQualityEnabled(false);
+              setContestMinQuality("");
             }
             const minPlatformEarnings = parseStoredOptionalNumber(
               data.min_platform_earnings,
@@ -3533,6 +3552,8 @@ export default function EditContestPage({
           contestMinBestQuality,
           avgQualityEnabled,
           contestMinAvgQuality,
+          minQualityEnabled,
+          contestMinQuality,
           minEarningsEnabled,
           contestMinEarnings,
           minPlatformViewsEnabled,
@@ -5682,6 +5703,8 @@ export default function EditContestPage({
             contestMinBestQuality,
             avgQualityEnabled,
             contestMinAvgQuality,
+            minQualityEnabled,
+            contestMinQuality,
             minEarningsEnabled,
             contestMinEarnings,
             minPlatformViewsEnabled,
@@ -6333,6 +6356,8 @@ export default function EditContestPage({
             contestMinBestQuality,
             avgQualityEnabled,
             contestMinAvgQuality,
+            minQualityEnabled,
+            contestMinQuality,
             minEarningsEnabled,
             contestMinEarnings,
             minPlatformViewsEnabled,
@@ -8052,6 +8077,8 @@ export default function EditContestPage({
           contestMinBestQuality,
           avgQualityEnabled,
           contestMinAvgQuality,
+          minQualityEnabled,
+          contestMinQuality,
           minEarningsEnabled,
           contestMinEarnings,
           minPlatformViewsEnabled,
@@ -13258,6 +13285,66 @@ export default function EditContestPage({
                             setContestMinAvgQuality(v);
                         }}
                         placeholder="1.0–3.0"
+                        className={cn(
+                          isDark
+                            ? "bg-purple-900/20 border border-gray-600 text-white"
+                            : "bg-white text-black",
+                        )}
+                      />
+                    </div>
+                  )}
+
+                  <div className="flex items-start gap-3 pt-3 border-t">
+                    <Checkbox
+                      id="min-quality-enabled"
+                      checked={minQualityEnabled}
+                      onCheckedChange={(checked) => {
+                        setMinQualityEnabled(Boolean(checked));
+                        if (!checked) setContestMinQuality("");
+                        else if (contestMinQuality === "")
+                          setContestMinQuality(3);
+                      }}
+                      className="mt-0.5 h-5 w-5 shrink-0 data-[state=checked]:bg-[#7F39EC] data-[state=checked]:border-[#7F39EC] data-[state=checked]:text-white"
+                    />
+                    <div className="min-w-0 flex-1">
+                      <Label
+                        htmlFor="min-quality-enabled"
+                        className="text-base font-semibold cursor-pointer"
+                      >
+                         Quality Score
+                      </Label>
+                      <p className="text-sm text-muted-foreground mt-1">
+                        Creator&apos;s total quality score (sum of all verified
+                        reel ratings, 1–3 each) must meet this minimum.
+                      </p>
+                    </div>
+                  </div>
+                  {minQualityEnabled && (
+                    <div
+                      className={cn(
+                        "space-y-2 pt-3 border-t",
+                        isDark ? "border-slate-700" : "border-slate-200",
+                      )}
+                    >
+                      <Label htmlFor="min-quality-input">
+                        Minimum Total Quality Score
+                      </Label>
+                      <Input
+                        id="min-quality-input"
+                        type="number"
+                        min={1}
+                        value={contestMinQuality}
+                        onChange={(e) => {
+                          const raw = e.target.value;
+                          if (raw === "") {
+                            setContestMinQuality("");
+                            return;
+                          }
+                          const v = parseInt(raw, 10);
+                          if (!Number.isNaN(v) && v >= 1)
+                            setContestMinQuality(v);
+                        }}
+                        placeholder="e.g. 5"
                         className={cn(
                           isDark
                             ? "bg-purple-900/20 border border-gray-600 text-white"

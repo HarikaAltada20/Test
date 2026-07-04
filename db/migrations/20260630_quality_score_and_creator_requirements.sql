@@ -35,8 +35,12 @@ COMMENT ON COLUMN public.creator_profiles.best_quality_score IS 'Max quality_sco
 ALTER TABLE public.contests
   ADD COLUMN IF NOT EXISTS min_avg_quality_score numeric(4,2) NULL,
   ADD COLUMN IF NOT EXISTS min_best_quality_score integer NULL,
+  ADD COLUMN IF NOT EXISTS min_quality_score integer NULL,
   ADD COLUMN IF NOT EXISTS min_platform_earnings bigint NULL,
   ADD COLUMN IF NOT EXISTS min_platform_views bigint NULL;
+
+COMMENT ON COLUMN public.contests.min_quality_score IS
+  'Minimum required creator quality_score_sum for video contests, or null.';
 
 DO $$
 BEGIN
@@ -57,6 +61,17 @@ BEGIN
     ALTER TABLE public.contests
       ADD CONSTRAINT contests_min_avg_quality_score_range
       CHECK (min_avg_quality_score IS NULL OR (min_avg_quality_score >= 1 AND min_avg_quality_score <= 3));
+  END IF;
+END $$;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint WHERE conname = 'contests_min_quality_score_range'
+  ) THEN
+    ALTER TABLE public.contests
+      ADD CONSTRAINT contests_min_quality_score_range
+      CHECK (min_quality_score IS NULL OR min_quality_score > 0);
   END IF;
 END $$;
 
@@ -469,7 +484,8 @@ SELECT
   contests.min_avg_quality_score,
   contests.min_best_quality_score,
   contests.min_platform_earnings,
-  contests.min_platform_views
+  contests.min_platform_views,
+  contests.min_quality_score
 FROM public.contests;
 
 COMMENT ON VIEW public.contests_with_status IS

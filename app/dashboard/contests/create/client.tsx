@@ -452,6 +452,8 @@ export default function CreateContestPage({
   const [contestMinAvgQuality, setContestMinAvgQuality] = useState<number | "">(
     "",
   );
+  const [minQualityEnabled, setMinQualityEnabled] = useState(false);
+  const [contestMinQuality, setContestMinQuality] = useState<number | "">("");
   const [minEarningsEnabled, setMinEarningsEnabled] = useState(false);
   const [contestMinEarnings, setContestMinEarnings] = useState<number | "">("");
   const [minViewsEnabled, setMinViewsEnabled] = useState(false);
@@ -3640,6 +3642,12 @@ export default function CreateContestPage({
           contestMinAvgQuality !== ""
             ? Number(contestMinAvgQuality)
             : null,
+        min_quality_score:
+          isVideoContestFormat(contestFormat) &&
+          minQualityEnabled &&
+          contestMinQuality !== ""
+            ? Number(contestMinQuality)
+            : null,
         min_platform_earnings:
           isVideoContestFormat(contestFormat) &&
           minEarningsEnabled &&
@@ -3675,6 +3683,7 @@ export default function CreateContestPage({
           trust_number: contestData.trust_number,
           min_best_quality_score: contestData.min_best_quality_score,
           min_avg_quality_score: contestData.min_avg_quality_score,
+          min_quality_score: contestData.min_quality_score,
           min_platform_earnings: contestData.min_platform_earnings,
           min_platform_views: contestData.min_platform_views,
         },
@@ -11040,6 +11049,63 @@ export default function CreateContestPage({
                           setContestMinAvgQuality(v);
                       }}
                       placeholder="1.0–3.0"
+                      className={cn(
+                        isDark
+                          ? "bg-[#C9A7FF26] border border-gray-400 text-white"
+                          : "bg-white text-black",
+                      )}
+                    />
+                  )}
+
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <Label
+                        htmlFor="minQualityRequirement"
+                        className="text-base font-semibold"
+                      >
+                         Quality Score
+                      </Label>
+                      <p
+                        className={cn(
+                          "text-sm mt-1",
+                          isDark ? "text-gray-300" : "text-gray-600",
+                        )}
+                      >
+                        Creator&apos;s total quality score (sum of all verified
+                        reel ratings, 1–3 each) must meet this minimum.
+                      </p>
+                    </div>
+                    <Checkbox
+                      id="minQualityRequirement"
+                      checked={minQualityEnabled}
+                      onCheckedChange={(checked: any) => {
+                        setMinQualityEnabled(Boolean(checked));
+                        if (!checked) setContestMinQuality("");
+                        else if (contestMinQuality === "")
+                          setContestMinQuality(3);
+                      }}
+                      className={cn(
+                        "border h-5 w-5",
+                        isDark ? "border-gray-300" : "border-gray-500",
+                      )}
+                    />
+                  </div>
+                  {minQualityEnabled && (
+                    <Input
+                      type="number"
+                      min={1}
+                      value={contestMinQuality}
+                      onChange={(e) => {
+                        const raw = e.target.value;
+                        if (raw === "") {
+                          setContestMinQuality("");
+                          return;
+                        }
+                        const v = parseInt(raw, 10);
+                        if (!Number.isNaN(v) && v >= 1)
+                          setContestMinQuality(v);
+                      }}
+                      placeholder="e.g. 5"
                       className={cn(
                         isDark
                           ? "bg-[#C9A7FF26] border border-gray-400 text-white"

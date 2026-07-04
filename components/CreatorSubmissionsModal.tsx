@@ -18,7 +18,6 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
@@ -184,6 +183,7 @@ interface CreatorSubmissionsModalProps {
     creatorId: string;
     avgQualityScore: number | null;
     bestQualityScore: number | null;
+    qualityScoreSum: number | null;
     qualityScoreCounts?: {
       score1: number;
       score2: number;
@@ -1191,6 +1191,7 @@ export function CreatorSubmissionsModal({
         {
           avg_quality_score: number | null;
           best_quality_score: number | null;
+          quality_score_sum: number | null;
           quality_score_counts?: {
             score1: number;
             score2: number;
@@ -1208,6 +1209,7 @@ export function CreatorSubmissionsModal({
           creatorId,
           avgQualityScore: creatorQuality?.avg_quality_score ?? null,
           bestQualityScore: creatorQuality?.best_quality_score ?? null,
+          qualityScoreSum: creatorQuality?.quality_score_sum ?? null,
           qualityScoreCounts: creatorQuality?.quality_score_counts,
         });
       }
@@ -4557,43 +4559,6 @@ export function CreatorSubmissionsModal({
                                           Set Pending
                                         </DropdownMenuItem>
                                       )}
-                                    </>
-                                  )}
-
-                                {contest?.post_contest_status !==
-                                  "payouts_processed" &&
-                                  isAdminView &&
-                                  normalizedStatus === "paid" && (
-                                    <>
-                                      <DropdownMenuSeparator />
-                                      <DropdownMenuLabel className="text-purple-500">
-                                        Change status (reverses payment)
-                                      </DropdownMenuLabel>
-                                      <DropdownMenuItem
-                                        onClick={() =>
-                                          onVerify([submission.id])
-                                        }
-                                      >
-                                        <CheckCircle className="h-4 w-4 mr-2" />
-                                        Mark as Verified
-                                      </DropdownMenuItem>
-                                      <DropdownMenuItem
-                                        onClick={() =>
-                                          onSetPending([submission.id])
-                                        }
-                                      >
-                                        <Clock className="h-4 w-4 mr-2" />
-                                        Set to Pending
-                                      </DropdownMenuItem>
-                                      <DropdownMenuItem
-                                        className="text-red-600"
-                                        onClick={() =>
-                                          onReject([submission.id])
-                                        }
-                                      >
-                                        <XCircle className="h-4 w-4 mr-2" />
-                                        Mark as Rejected
-                                      </DropdownMenuItem>
                                     </>
                                   )}
 

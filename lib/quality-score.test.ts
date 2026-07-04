@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   aggregateSubmissionQualityRows,
   computePersistableQualityProfileValues,
+  computeQualityMetricsFromScores,
   requireVerifyQualityScore,
   resolveVerifyQualityScore,
   isVerifyQualityScoreOmitted,
@@ -66,7 +67,10 @@ describe("computePersistableQualityProfileValues", () => {
         rejectedReels: 2,
         scoredQualityScores: [],
       }),
-      { avg_quality_score: null, best_quality_score: null },
+      {
+        avg_quality_score: null,
+        best_quality_score: null,
+      },
     );
   });
 
@@ -88,8 +92,18 @@ describe("computePersistableQualityProfileValues", () => {
         rejectedReels: 0,
         scoredQualityScores: [],
       }),
-      { avg_quality_score: null, best_quality_score: null },
+      {
+        avg_quality_score: null,
+        best_quality_score: null,
+      },
     );
+  });
+});
+
+describe("computeQualityMetricsFromScores", () => {
+  it("includes quality_score_sum as total of explicit scores", () => {
+    const metrics = computeQualityMetricsFromScores([1, 2, 3]);
+    assert.equal(metrics.quality_score_sum, 6);
   });
 });
 
@@ -103,6 +117,7 @@ describe("resolveCreatorQualityMetrics", () => {
     });
     assert.equal(resolved.avg_quality_score, 1);
     assert.equal(resolved.best_quality_score, 1);
+    assert.equal(resolved.quality_score_sum, 1);
   });
 });
 
@@ -126,9 +141,21 @@ describe("aggregateSubmissionQualityRows", () => {
   it("excludes migration-backfilled scores from aggregates", () => {
     assert.deepEqual(
       aggregateSubmissionQualityRows([
-        { status: "verified", quality_score: 1, quality_score_backfilled: true },
-        { status: "verified", quality_score: 1, quality_score_backfilled: true },
-        { status: "verified", quality_score: 3, quality_score_backfilled: false },
+        {
+          status: "verified",
+          quality_score: 1,
+          quality_score_backfilled: true,
+        },
+        {
+          status: "verified",
+          quality_score: 1,
+          quality_score_backfilled: true,
+        },
+        {
+          status: "verified",
+          quality_score: 3,
+          quality_score_backfilled: false,
+        },
       ]),
       {
         verifiedReels: 3,

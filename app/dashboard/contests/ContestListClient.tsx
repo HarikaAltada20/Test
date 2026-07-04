@@ -178,6 +178,7 @@ type Contest = {
   trust_number?: number | null;
   min_avg_quality_score?: number | null;
   min_best_quality_score?: number | null;
+  min_quality_score?: number | null;
   min_platform_earnings?: number | null;
   min_platform_views?: number | null;
   // Twitter participants data (should be populated from twitter_campaign_metrics)

@@ -74,6 +74,9 @@ function formatSubmissionInsertError(error: {
   if (msg.includes("best_quality_too_low")) {
     return `Best quality too low to submit to this campaign.${refreshHint}`;
   }
+  if (msg.includes("min_quality_too_low")) {
+    return `Total quality score too low to submit to this campaign.${refreshHint}`;
+  }
   if (msg.includes("avg_quality_too_low")) {
     return `Average quality too low to submit to this campaign.${refreshHint}`;
   }
@@ -1207,7 +1210,7 @@ export default function SubmitContentPage({
       const { data: contestData, error: contestError } = await supabase
         .from("contests")
         .select(
-          "id, title, platform, contest_type, contest_format, multiple_submissions_enabled, max_submissions_per_creator, content_type, bonus_details, contest_based_details, trust_score, trust_number, min_avg_quality_score, min_best_quality_score, min_platform_earnings, min_platform_views",
+          "id, title, platform, contest_type, contest_format, multiple_submissions_enabled, max_submissions_per_creator, content_type, bonus_details, contest_based_details, trust_score, trust_number, min_avg_quality_score, min_best_quality_score, min_quality_score, min_platform_earnings, min_platform_views",
         )
         .eq("id", contestId)
         .single();

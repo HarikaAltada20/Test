@@ -15,6 +15,7 @@ const baseSnapshot = {
   trustNumber: 5,
   avgQualityScore: 1,
   bestQualityScore: 1,
+  qualityScoreSum: 1,
   totalPlatformEarningsCents: 10_000,
   totalViews: 50_000,
   verifiedReels: 5,
@@ -43,6 +44,7 @@ describe("parseContestCreatorRequirements", () => {
       trust_number: 3,
       min_best_quality_score: 2,
       min_avg_quality_score: 1.5,
+      min_quality_score: 5,
       min_platform_earnings: 5000,
       min_platform_views: 1000,
     });
@@ -50,6 +52,7 @@ describe("parseContestCreatorRequirements", () => {
     assert.equal(req.minTrustNumber, 3);
     assert.equal(req.minBestQuality, 2);
     assert.equal(req.minAvgQuality, 1.5);
+    assert.equal(req.minQuality, 5);
     assert.equal(req.minPlatformEarningsCents, 5000);
     assert.equal(req.minPlatformViews, 1000);
   });
@@ -70,6 +73,19 @@ describe("evaluateCreatorRequirements", () => {
       isCreatorEligibleForContest({ requirements, snapshot: baseSnapshot }),
       true,
     );
+  });
+
+  it("fails when total quality sum is below minimum", () => {
+    const requirements = parseContestCreatorRequirements({
+      contest_format: "video",
+      min_quality_score: 10,
+    });
+    const failures = evaluateCreatorRequirements({
+      requirements,
+      snapshot: { ...baseSnapshot, qualityScoreSum: 5 },
+    });
+    assert.equal(failures.length, 1);
+    assert.equal(failures[0].code, "min_quality_too_low");
   });
 
   it("fails when best quality is below minimum", () => {
@@ -219,6 +235,11 @@ describe("CREATOR_REQUIREMENT_FAILURE_CODES", () => {
         contest: { contest_format: "video", min_best_quality_score: 3 },
         snapshot: { ...baseSnapshot, bestQualityScore: 2 },
         expectedCode: "best_quality_too_low",
+      },
+      {
+        contest: { contest_format: "video", min_quality_score: 10 },
+        snapshot: { ...baseSnapshot, qualityScoreSum: 5 },
+        expectedCode: "min_quality_too_low",
       },
       {
         contest: { contest_format: "video", min_avg_quality_score: 2.5 },

@@ -120,12 +120,14 @@ import {
   getFlatFeeBonusCentsFromContest,
 } from "@/lib/twitter-cpm-bonus-expected";
 import {
+  buildContestEligibilityDisplayItems,
   hasAnyContestCreatorRequirement,
   parseContestCreatorRequirements,
 } from "@/lib/creator-requirements";
 import {
   formatTrustScoreDisplay,
   formatTrustScoreMinimum,
+  formatQualitySumDisplay,
 } from "@/lib/creator-profile-stats";
 import { computeTrustScore } from "@/lib/trust-score";
 import {
@@ -582,6 +584,7 @@ interface Contest {
   trust_number?: number | null;
   min_best_quality_score?: number | null;
   min_avg_quality_score?: number | null;
+  min_quality_score?: number | null;
   min_platform_earnings?: number | null;
   min_platform_views?: number | null;
 }
@@ -1387,82 +1390,31 @@ export default function ContestDetailClient({
     hasAnyContestCreatorRequirement(currentContest);
 
   const eligibilityDisplayItems = useMemo(() => {
-    const req = parsedCreatorRequirements;
-    const items: Array<{
-      key: string;
-      label: string;
-      value: React.ReactNode;
-      description: string;
-      icon: React.ComponentType<{ className?: string }>;
-    }> = [];
+    const iconByKey: Record<
+      string,
+      React.ComponentType<{ className?: string }>
+    > = {
+      "trust-score": CheckCheck,
+      "trust-number": CheckCheck,
+      "best-quality": Star,
+      "min-quality": Star,
+      "avg-quality": Star,
+      "platform-earnings": DollarSign,
+      "platform-views": Eye,
+    };
 
-    if (req.minTrustScorePct !== null) {
-      items.push({
-        key: "trust-score",
-        label: "Trust %",
-        value: formatTrustScoreMinimum(req.minTrustScorePct),
-        description:
-          "Creators need at least this reliability score to submit.",
-        icon: CheckCheck,
-      });
-    }
-    if (req.minTrustNumber !== null) {
-      items.push({
-        key: "trust-number",
-        label: "Trust Score",
-        value: req.minTrustNumber,
-        description:
-          "Creators must have at least this many trusted (verified) reels to submit.",
-        icon: CheckCheck,
-      });
-    }
-    if (req.minBestQuality !== null) {
-      items.push({
-        key: "best-quality",
-        label: "Best Quality",
-        value: `${req.minBestQuality} / 3`,
-        description:
-          "Creators must have reached at least this best content quality rating.",
-        icon: Star,
-      });
-    }
-    if (req.minAvgQuality !== null) {
-      items.push({
-        key: "avg-quality",
-        label: "Avg Quality",
-        value: `${formatDecimalMetric(req.minAvgQuality)} / 3`,
-        description:
-          "Creators must maintain at least this average content quality rating.",
-        icon: Star,
-      });
-    }
-    if (req.minPlatformEarningsCents !== null) {
-      items.push({
-        key: "platform-earnings",
-        label: "Platform Earnings",
-        value: formatMoney(req.minPlatformEarningsCents),
-        description:
-          "Creators must have earned at least this much on the platform.",
-        icon: DollarSign,
-      });
-    }
-    if (req.minPlatformViews !== null) {
-      items.push({
-        key: "platform-views",
-        label: "Platform Views",
-        value: req.minPlatformViews.toLocaleString(),
-        description:
-          "Creators must have at least this many credited views on the platform.",
-        icon: Eye,
-      });
-    }
-
-    return items;
-  }, [parsedCreatorRequirements]);
+    return buildContestEligibilityDisplayItems(currentContest, "brand").map(
+      (item) => ({
+        ...item,
+        icon: iconByKey[item.key] ?? CheckCheck,
+      }),
+    );
+  }, [currentContest]);
 
   /** Per-creator eligibility columns in creator-wise table — admin only, when contest sets a minimum. */
   const contestMinBestQuality = parsedCreatorRequirements.minBestQuality;
   const contestMinAvgQuality = parsedCreatorRequirements.minAvgQuality;
+  const contestMinQuality = parsedCreatorRequirements.minQuality;
   const contestMinPlatformEarnings =
     parsedCreatorRequirements.minPlatformEarningsCents;
   const contestMinPlatformViews = parsedCreatorRequirements.minPlatformViews;
@@ -1473,6 +1425,8 @@ export default function ContestDetailClient({
     isAdminView && isVideoContestFormat && contestMinTrustNumber !== null;
   const showCreatorWiseBestQualityColumn =
     isAdminView && isVideoContestFormat && contestMinBestQuality !== null;
+  const showCreatorWiseMinQualityColumn =
+    isAdminView && isVideoContestFormat && contestMinQuality !== null;
   const showCreatorWiseAvgQualityColumn =
     isAdminView && isVideoContestFormat && contestMinAvgQuality !== null;
   const showCreatorWisePlatformEarningsColumn =
@@ -1483,6 +1437,7 @@ export default function ContestDetailClient({
     (showCreatorWiseTrustScoreColumn ? 1 : 0) +
     (showCreatorWiseTrustNumberColumn ? 1 : 0) +
     (showCreatorWiseBestQualityColumn ? 1 : 0) +
+    (showCreatorWiseMinQualityColumn ? 1 : 0) +
     (showCreatorWiseAvgQualityColumn ? 1 : 0) +
     (showCreatorWisePlatformEarningsColumn ? 1 : 0) +
     (showCreatorWisePlatformViewsColumn ? 1 : 0);
@@ -3511,6 +3466,12 @@ export default function ContestDetailClient({
         submission.creator?.best_quality_score != null
       ) {
         group.creator.best_quality_score = submission.creator.best_quality_score;
+      }
+      if (
+        group.creator?.quality_score_sum == null &&
+        submission.creator?.quality_score_sum != null
+      ) {
+        group.creator.quality_score_sum = submission.creator.quality_score_sum;
       }
       const existingCounts = group.creator?.quality_score_counts;
       const existingCountsTotal =
@@ -21212,6 +21173,11 @@ export default function ContestDetailClient({
                                       Best Quality
                                     </TableHead>
                                   )}
+                                  {showCreatorWiseMinQualityColumn && (
+                                    <TableHead className="text-center whitespace-nowrap min-w-[7rem]">
+                                      Total Quality Score
+                                    </TableHead>
+                                  )}
                                   {showCreatorWiseAvgQualityColumn && (
                                     <TableHead className="text-center whitespace-nowrap min-w-[6.5rem]">
                                       Avg Quality
@@ -21781,6 +21747,10 @@ export default function ContestDetailClient({
                                         parseCreatorMetricNumber(
                                           group.creator?.avg_quality_score,
                                         );
+                                      const creatorQualityScoreSum =
+                                        parseCreatorMetricNumber(
+                                          group.creator?.quality_score_sum,
+                                        );
                                       const creatorPlatformEarnings = Number(
                                         group.creator?.total_money_won ?? 0,
                                       );
@@ -21792,6 +21762,11 @@ export default function ContestDetailClient({
                                         (creatorBestQuality === null ||
                                           creatorBestQuality <
                                             contestMinBestQuality);
+                                      const minQualityBelowThreshold =
+                                        contestMinQuality !== null &&
+                                        (creatorQualityScoreSum === null ||
+                                          creatorQualityScoreSum <
+                                            contestMinQuality);
                                       const avgQualityBelowThreshold =
                                         contestMinAvgQuality !== null &&
                                         (creatorAvgQuality === null ||
@@ -21980,6 +21955,71 @@ export default function ContestDetailClient({
                                                       creatorBestQuality
                                                     }
                                                   />
+                                                }
+                                              />
+                                            </TableCell>
+                                          )}
+                                          {showCreatorWiseMinQualityColumn && (
+                                            <TableCell className="text-center whitespace-nowrap">
+                                              <CreatorWiseEligibilityText
+                                                value={formatQualitySumDisplay(
+                                                  creatorQualityScoreSum,
+                                                )}
+                                                belowThreshold={
+                                                  minQualityBelowThreshold
+                                                }
+                                                isDark={isDark}
+                                                tooltip={
+                                                  <div className="space-y-1 text-xs">
+                                                    <p className="font-medium">
+                                                      Total Quality Score
+                                                    </p>
+                                                    <p>
+                                                      Score 3:{" "}
+                                                      {
+                                                        creatorQualityScoreBreakdown.score3
+                                                      }{" "}
+                                                      submission
+                                                      {creatorQualityScoreBreakdown.score3 ===
+                                                      1
+                                                        ? ""
+                                                        : "s"}
+                                                    </p>
+                                                    <p>
+                                                      Score 2:{" "}
+                                                      {
+                                                        creatorQualityScoreBreakdown.score2
+                                                      }{" "}
+                                                      submission
+                                                      {creatorQualityScoreBreakdown.score2 ===
+                                                      1
+                                                        ? ""
+                                                        : "s"}
+                                                    </p>
+                                                    <p>
+                                                      Score 1:{" "}
+                                                      {
+                                                        creatorQualityScoreBreakdown.score1
+                                                      }{" "}
+                                                      submission
+                                                      {creatorQualityScoreBreakdown.score1 ===
+                                                      1
+                                                        ? ""
+                                                        : "s"}
+                                                    </p>
+                                                    <p className="pt-1 border-t border-border/50">
+                                                      {minQualityBelowThreshold
+                                                        ? "Below"
+                                                        : "Meets"}{" "}
+                                                      required total quality
+                                                      score (
+                                                      {contestMinQuality!}).
+                                                      Creator:{" "}
+                                                      {formatQualitySumDisplay(
+                                                        creatorQualityScoreSum,
+                                                      )}
+                                                    </p>
+                                                  </div>
                                                 }
                                               />
                                             </TableCell>

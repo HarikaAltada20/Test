@@ -11,6 +11,10 @@ import {
 import { MetricsService } from "@/lib/metrics-service";
 import { SUBMISSION_STATUS } from "@/lib/constants-status";
 import { getSubmissionViewsForCrediting } from "@/lib/submission-credited-views";
+import {
+  reconcileCreatorTotalViews,
+  shouldCreditSubmissionViewsOnStatusChange,
+} from "@/lib/creator-total-views";
 import { verifyAdminAccess } from "@/utils/admin-auth";
 import {
   buildMilestoneSubmissionPayoutCentsMap,
@@ -432,14 +436,23 @@ export async function POST(request: Request) {
     // This improves scalability by avoiding O(n) recalculation on every submission status change
     // Budget will be updated on next metrics refresh (typically within 10-15 minutes)
 
-    // Snapshot views and credit creator totals when entering verified/paid (idempotent via delta)
-    if (
-      action === SUBMISSION_STATUS.verified ||
-      action === SUBMISSION_STATUS.paid
-    ) {
+    // Snapshot views and credit creator totals once when entering verified/paid.
+    const nextViewsCreditStatus =
+      action === SUBMISSION_STATUS.verified
+        ? SUBMISSION_STATUS.verified
+        : action === SUBMISSION_STATUS.paid
+          ? SUBMISSION_STATUS.paid
+          : null;
+    const shouldCreditViews =
+      nextViewsCreditStatus !== null &&
+      shouldCreditSubmissionViewsOnStatusChange(
+        submissionFull.status,
+        nextViewsCreditStatus,
+      );
+
+    if (shouldCreditViews) {
       const currentViews = getSubmissionViewsForCrediting(submissionFull);
 
-      // Upsert snapshot to current (creator_profiles.total_views is maintained by DB trigger)
       const { error: snapErr } = await supabaseAdmin
         .from("submission_views_credited")
         .upsert(
@@ -452,6 +465,15 @@ export async function POST(request: Request) {
         );
       if (snapErr) {
         console.error("Failed to snapshot credited views:", snapErr);
+      } else if (submissionFull.creator_id) {
+        try {
+          await reconcileCreatorTotalViews(String(submissionFull.creator_id));
+        } catch (reconcileErr) {
+          console.error(
+            "Failed to reconcile creator total_views after verify:",
+            reconcileErr,
+          );
+        }
       }
 
       // Persist locked views on the submission row only (contest-wide timestamp lives on contests)
@@ -484,6 +506,15 @@ export async function POST(request: Request) {
         .eq("submission_id", submissionId);
       if (uncreditErr) {
         console.error("Failed to uncredit views for submission:", uncreditErr);
+      } else if (submissionFull.creator_id) {
+        try {
+          await reconcileCreatorTotalViews(String(submissionFull.creator_id));
+        } catch (reconcileErr) {
+          console.error(
+            "Failed to reconcile creator total_views after uncredit:",
+            reconcileErr,
+          );
+        }
       }
     }
 

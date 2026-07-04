@@ -5,6 +5,7 @@ export type CreatorRequirementFieldInput = {
   trust_number?: unknown;
   min_avg_quality_score?: unknown;
   min_best_quality_score?: unknown;
+  min_quality_score?: unknown;
   min_platform_earnings?: unknown;
   min_platform_views?: unknown;
 };
@@ -14,6 +15,7 @@ export type NormalizedCreatorRequirementFields = {
   trust_number?: number | null;
   min_avg_quality_score?: number | null;
   min_best_quality_score?: number | null;
+  min_quality_score?: number | null;
   min_platform_earnings?: number | null;
   min_platform_views?: number | null;
 };
@@ -32,6 +34,7 @@ export function sanitizeContestCreatorRequirementPayload(input: {
         trust_number: null,
         min_avg_quality_score: null,
         min_best_quality_score: null,
+        min_quality_score: null,
         min_platform_earnings: null,
         min_platform_views: null,
       },
@@ -71,10 +74,10 @@ export function validateCreatorRequirementFields(
         typeof fields.trust_number === "number"
           ? fields.trust_number
           : parseInt(String(fields.trust_number), 10);
-      if (Number.isNaN(trustNumber) || trustNumber < 0) {
+      if (Number.isNaN(trustNumber) || !Number.isInteger(trustNumber)) {
         return {
           ok: false,
-          error: "trust_number must be a non-negative integer, or null",
+          error: "trust_number must be an integer, or null",
         };
       }
       values.trust_number = trustNumber;
@@ -97,6 +100,22 @@ export function validateCreatorRequirementFields(
         };
       }
       values.min_best_quality_score = minBest;
+    }
+  }
+
+  if (fields.min_quality_score !== undefined) {
+    if (fields.min_quality_score === null || fields.min_quality_score === "") {
+      values.min_quality_score = null;
+    } else {
+      const minQuality = Number(fields.min_quality_score);
+      if (!Number.isInteger(minQuality) || minQuality <= 0) {
+        return {
+          ok: false,
+          error:
+            "min_quality_score must be a positive integer (total quality sum), or null",
+        };
+      }
+      values.min_quality_score = minQuality;
     }
   }
 
@@ -174,6 +193,8 @@ export function hasNormalizedCreatorRequirement(
       values.min_avg_quality_score !== null) ||
     (values.min_best_quality_score !== undefined &&
       values.min_best_quality_score !== null) ||
+    (values.min_quality_score !== undefined &&
+      values.min_quality_score !== null) ||
     (values.min_platform_earnings !== undefined &&
       values.min_platform_earnings !== null) ||
     (values.min_platform_views !== undefined &&

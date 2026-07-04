@@ -1,6 +1,13 @@
 import { createAdminClient } from '@/utils/supabase/admin';
 import { SUBMISSION_STATUS } from './constants-status';
 import { getSubmissionViewsForCrediting } from './submission-credited-views';
+import {
+  deleteViewCreditsForPendingSubmissions,
+  deleteViewCreditsForRejectedSubmissions,
+  reconcileCreatorTotalViews,
+  reconcileCreatorTotalViewsForIds,
+  VERIFIED_VIEWS_CREDIT_STATUSES,
+} from './creator-total-views';
 
 export type ContestViewsSyncResult = {
   contest_id: string;
@@ -242,29 +249,50 @@ export const MetricsService = {
 
   /** Platform-wide sync of credited views → creator_profiles (admin repair). */
   async syncAllCreatorProfileViews(): Promise<AllCreatorViewsSyncResult> {
-    const supabase = createAdminClient();
-    const { data, error } = await supabase.rpc(
-      'sync_all_submission_views_credited',
-    );
-    if (error) {
-      throw new Error(
-        `Failed to sync all creator profile views: ${error.message}`,
-      );
-    }
-    const row = (data || {}) as Omit<
-      AllCreatorViewsSyncResult,
-      'platform_aware_submissions'
-    >;
+    const deletedRejectedCredits =
+      await deleteViewCreditsForRejectedSubmissions();
+    const deletedPendingCredits = await deleteViewCreditsForPendingSubmissions();
     const platformAwareSubmissions =
       await this.applyPlatformAwareViewCreditsAll();
+    await this.reconcileAllCreatorTotalViewsFromCredits();
+
     return {
-      deleted_rejected_credits: Number(row.deleted_rejected_credits) || 0,
-      upserted_or_updated: Number(row.upserted_or_updated) || 0,
+      deleted_rejected_credits:
+        deletedRejectedCredits + deletedPendingCredits,
+      upserted_or_updated: platformAwareSubmissions,
       platform_aware_submissions: platformAwareSubmissions,
     };
   },
 
-  /** Paginated platform-aware credit pass for all eligible submissions. */
+  async reconcileAllCreatorTotalViewsFromCredits(): Promise<void> {
+    const supabase = createAdminClient();
+    const pageSize = 2000;
+    let offset = 0;
+
+    while (true) {
+      const { data: subs, error } = await supabase
+        .from('submissions')
+        .select('creator_id')
+        .in('status', [...VERIFIED_VIEWS_CREDIT_STATUSES])
+        .order('creator_id', { ascending: true })
+        .range(offset, offset + pageSize - 1);
+
+      if (error) {
+        throw new Error(
+          `Failed to load creators for total_views reconciliation: ${error.message}`,
+        );
+      }
+
+      const batch = subs || [];
+      if (batch.length === 0) break;
+
+      await reconcileCreatorTotalViewsForIds(batch.map((row) => row.creator_id));
+      if (batch.length < pageSize) break;
+      offset += pageSize;
+    }
+  },
+
+  /** Paginated platform-aware credit pass for all verified/paid submissions. */
   async applyPlatformAwareViewCreditsAll(): Promise<number> {
     const supabase = createAdminClient();
     const pageSize = 2000;
@@ -274,12 +302,8 @@ export const MetricsService = {
     while (true) {
       const { data: subs, error: subsErr } = await supabase
         .from('submissions')
-        .select('id, views, status, platform, other_stats')
-        .in('status', [
-          SUBMISSION_STATUS.pending,
-          SUBMISSION_STATUS.verified,
-          SUBMISSION_STATUS.paid,
-        ])
+        .select('id, creator_id, views, status, platform, other_stats')
+        .in('status', [...VERIFIED_VIEWS_CREDIT_STATUSES])
         .order('id', { ascending: true })
         .range(offset, offset + pageSize - 1);
 
@@ -295,6 +319,7 @@ export const MetricsService = {
       await this.creditSubmissionViews(
         batch as Array<{
           id: string;
+          creator_id?: string | null;
           views?: number | null;
           platform?: string | null;
           other_stats?: unknown;
@@ -309,40 +334,50 @@ export const MetricsService = {
     return processed;
   },
 
-  /** Sync all pending/verified/paid submission views for a contest into creator_profiles (via DB RPC). */
+  /** Sync verified/paid submission views for a contest into creator_profiles. */
   async syncContestViewsToCreatorProfiles(
     contestId: string,
   ): Promise<ContestViewsSyncResult> {
+    const deletedRejectedCredits =
+      await deleteViewCreditsForRejectedSubmissions(contestId);
+    const deletedPendingCredits =
+      await deleteViewCreditsForPendingSubmissions({ contestId });
+
+    await this.applyPlatformAwareViewCreditsForContest(contestId);
+
     const supabase = createAdminClient();
-    const { data, error } = await supabase.rpc(
-      'sync_contest_submission_views_credited',
-      { p_contest_id: contestId },
-    );
-    if (error) {
+    const { data: creditedSubs, error: creditedErr } = await supabase
+      .from('submissions')
+      .select('creator_id')
+      .eq('contest_id', contestId)
+      .in('status', [...VERIFIED_VIEWS_CREDIT_STATUSES]);
+
+    if (creditedErr) {
       throw new Error(
-        `Failed to sync contest views to creator profiles: ${error.message}`,
+        `Failed to load creators for contest view reconciliation: ${creditedErr.message}`,
       );
     }
-    const row = (data || {}) as ContestViewsSyncResult;
-    await this.applyPlatformAwareViewCreditsForContest(contestId);
-    return row;
+
+    await reconcileCreatorTotalViewsForIds(
+      (creditedSubs || []).map((row) => row.creator_id),
+    );
+
+    return {
+      contest_id: contestId,
+      deleted_rejected_credits:
+        deletedRejectedCredits + deletedPendingCredits,
+      upserted_or_updated: creditedSubs?.length ?? 0,
+    };
   },
 
-  /**
-   * Second pass: upsert credits using platform-aware view counts (Instagram/TikTok other_stats).
-   * DB RPC uses submissions.views; this aligns credited snapshots with contest UI metrics.
-   */
+  /** Upsert platform-aware credits for verified/paid submissions in a contest. */
   async applyPlatformAwareViewCreditsForContest(contestId: string): Promise<void> {
     const supabase = createAdminClient();
     const { data: subs, error: subsErr } = await supabase
       .from('submissions')
-      .select('id, views, status, platform, other_stats')
+      .select('id, creator_id, views, status, platform, other_stats')
       .eq('contest_id', contestId)
-      .in('status', [
-        SUBMISSION_STATUS.pending,
-        SUBMISSION_STATUS.verified,
-        SUBMISSION_STATUS.paid,
-      ]);
+      .in('status', [...VERIFIED_VIEWS_CREDIT_STATUSES]);
     if (subsErr) {
       throw new Error(
         `Failed to load submissions for platform-aware view sync: ${subsErr.message}`,
@@ -350,10 +385,26 @@ export const MetricsService = {
     }
     await this.creditSubmissionViews((subs || []) as Array<{
       id: string;
+      creator_id?: string | null;
       views?: number | null;
       platform?: string | null;
       other_stats?: unknown;
     }>);
+  },
+
+  /** Upsert submission_views_credited and reconcile creator_profiles.total_views. */
+  async creditSubmissionViewsForCreators(
+    rows: Array<{
+      id: string;
+      creator_id?: string | null;
+      views?: number | null;
+      platform?: string | null;
+      other_stats?: unknown;
+    }>,
+  ): Promise<void> {
+    if (rows.length === 0) return;
+    await this.creditSubmissionViews(rows);
+    await reconcileCreatorTotalViewsForIds(rows.map((row) => row.creator_id));
   },
 
   /** Upsert submission_views_credited for specific submissions (bulk pay, verify). */

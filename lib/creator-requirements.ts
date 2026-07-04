@@ -8,6 +8,7 @@ import {
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {
   formatQualityScoreDisplay,
+  formatQualitySumDisplay,
   formatTrustScoreDisplay,
   formatTrustScoreMinimum,
   getCreatorStatsFromProfile,
@@ -31,6 +32,7 @@ export type ContestCreatorRequirements = {
   trust_number?: unknown;
   min_avg_quality_score?: unknown;
   min_best_quality_score?: unknown;
+  min_quality_score?: unknown;
   min_platform_earnings?: unknown;
   min_platform_views?: unknown;
 };
@@ -40,6 +42,7 @@ export type ParsedContestRequirements = {
   minTrustNumber: number | null;
   minAvgQuality: number | null;
   minBestQuality: number | null;
+  minQuality: number | null;
   minPlatformEarningsCents: number | null;
   minPlatformViews: number | null;
 };
@@ -49,6 +52,7 @@ export type CreatorRequirementsSnapshot = {
   trustNumber: number;
   avgQualityScore: number | null;
   bestQualityScore: number | null;
+  qualityScoreSum: number | null;
   totalPlatformEarningsCents: number;
   totalViews: number;
   verifiedReels: number;
@@ -81,6 +85,7 @@ export function parseContestCreatorRequirements(
       minTrustNumber: null,
       minAvgQuality: null,
       minBestQuality: null,
+      minQuality: null,
       minPlatformEarningsCents: null,
       minPlatformViews: null,
     };
@@ -91,6 +96,10 @@ export function parseContestCreatorRequirements(
     minBestRaw !== null && minBestRaw >= 1 && minBestRaw <= 3
       ? minBestRaw
       : null;
+
+  const minQualityRaw = parseOptionalPositiveInt(contest.min_quality_score);
+  const minQuality =
+    minQualityRaw !== null && minQualityRaw > 0 ? minQualityRaw : null;
 
   const minAvgRaw = parseOptionalNumber(contest.min_avg_quality_score);
   const minAvgQuality =
@@ -104,6 +113,7 @@ export function parseContestCreatorRequirements(
     minTrustNumber: getContestMinTrustNumberForGate(contest),
     minAvgQuality,
     minBestQuality,
+    minQuality,
     minPlatformEarningsCents:
       minEarnings !== null && minEarnings > 0 ? minEarnings : null,
     minPlatformViews: minViews !== null && minViews > 0 ? minViews : null,
@@ -119,6 +129,7 @@ export function hasAnyContestCreatorRequirement(
     req.minTrustNumber !== null ||
     req.minAvgQuality !== null ||
     req.minBestQuality !== null ||
+    req.minQuality !== null ||
     req.minPlatformEarningsCents !== null ||
     req.minPlatformViews !== null
   );
@@ -176,6 +187,14 @@ export function buildRequirementBadgeItems(
       shortLabel: "Best Quality",
       valueLabel: `${req.minBestQuality}`,
       fullLabel: `Best quality ${req.minBestQuality} required`,
+    });
+  }
+  if (req.minQuality !== null) {
+    badges.push({
+      key: "min-quality",
+      shortLabel: "Quality Score",
+      valueLabel: `${req.minQuality}`,
+      fullLabel: `Total quality score sum ${req.minQuality} required`,
     });
   }
   if (req.minAvgQuality !== null) {
@@ -236,20 +255,23 @@ function formatQualityThreshold(value: number): string {
   return `${formatted} / 3`;
 }
 
-/** Creator-facing eligibility cards for campaign detail pages. */
+/** Creator- or brand-facing eligibility cards for campaign detail pages. */
 export function buildContestEligibilityDisplayItems(
   contest: ContestCreatorRequirements,
+  variant: "creator" | "brand" = "creator",
 ): ContestEligibilityDisplayItem[] {
   const req = parseContestCreatorRequirements(contest);
   const items: ContestEligibilityDisplayItem[] = [];
+  const isBrand = variant === "brand";
 
   if (req.minTrustScorePct !== null) {
     items.push({
       key: "trust-score",
       label: "Trust %",
       value: formatTrustScoreMinimum(req.minTrustScorePct),
-      description:
-        "Your reliability score from verified and rejected submissions. A higher score means more of your work has been approved.",
+      description: isBrand
+        ? "Creators need at least this reliability score to submit."
+        : "Your reliability score from verified and rejected submissions. A higher score means more of your work has been approved.",
     });
   }
   if (req.minTrustNumber !== null) {
@@ -257,44 +279,65 @@ export function buildContestEligibilityDisplayItems(
       key: "trust-number",
       label: "Trust Score",
       value: `${req.minTrustNumber}`,
-      description:
-        "Verified submissions minus rejected ones. This number grows when more of your content is approved.",
+      description: isBrand
+        ? "Creators must have at least this many trusted (verified) reels to submit."
+        : "Verified submissions minus rejected ones. This number grows when more of your content is approved.",
     });
   }
   if (req.minBestQuality !== null) {
     items.push({
       key: "best-quality",
-      label: "Best quality score",
-      value: formatQualityThreshold(req.minBestQuality),
-      description:
-        "Your highest content quality rating (1–3) from verified submissions. The brand requires at least this level.",
+      label: isBrand ? "Best Quality" : "Best quality score",
+      value: isBrand
+        ? `${req.minBestQuality} / 3`
+        : formatQualityThreshold(req.minBestQuality),
+      description: isBrand
+        ? "Creators must have reached at least this best content quality rating."
+        : "Your highest content quality rating (1–3) from verified submissions. The brand requires at least this level.",
+    });
+  }
+  if (req.minQuality !== null) {
+    items.push({
+      key: "min-quality",
+      label: "Quality Score",
+      value: String(req.minQuality),
+      description: isBrand
+        ? "Creators must have at least this total quality score sum from verified submissions."
+        : "Sum of your content quality ratings (1–3 each) from verified submissions. The brand requires at least this total.",
     });
   }
   if (req.minAvgQuality !== null) {
+    const rounded = Math.round(req.minAvgQuality * 100) / 100;
+    const formatted = Number.isInteger(rounded)
+      ? String(rounded)
+      : rounded.toFixed(2).replace(/\.?0+$/, "");
     items.push({
       key: "avg-quality",
-      label: "Average quality score",
-      value: formatQualityThreshold(req.minAvgQuality),
-      description:
-        "Your average quality across verified submissions. Consistent quality helps you qualify for selective campaigns.",
+      label: isBrand ? "Avg Quality" : "Average quality score",
+      value: isBrand ? `${formatted} / 3` : formatQualityThreshold(req.minAvgQuality),
+      description: isBrand
+        ? "Creators must maintain at least this average content quality rating."
+        : "Your average quality across verified submissions. Consistent quality helps you qualify for selective campaigns.",
     });
   }
   if (req.minPlatformEarningsCents !== null) {
     items.push({
       key: "platform-earnings",
-      label: "Platform earnings",
+      label: isBrand ? "Platform Earnings" : "Platform earnings",
       value: `$${(req.minPlatformEarningsCents / 100).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`,
-      description:
-        "Total earnings you have received on the platform from past campaigns and payouts.",
+      description: isBrand
+        ? "Creators must have earned at least this much on the platform."
+        : "Total earnings you have received on the platform from past campaigns and payouts.",
     });
   }
   if (req.minPlatformViews !== null) {
     items.push({
       key: "platform-views",
-      label: "Platform views",
+      label: isBrand ? "Platform Views" : "Platform views",
       value: `${req.minPlatformViews.toLocaleString()}`,
-      description:
-        "Total views credited to your submissions across all campaigns on the platform.",
+      description: isBrand
+        ? "Creators must have at least this many credited views on the platform."
+        : "Total views credited to your submissions across all campaigns on the platform.",
     });
   }
 
@@ -327,6 +370,7 @@ export const CREATOR_REQUIREMENT_FAILURE_CODES = [
   "trust_score_too_low",
   "trust_number_too_low",
   "best_quality_too_low",
+  "min_quality_too_low",
   "avg_quality_too_low",
   "platform_earnings_too_low",
   "platform_views_too_low",
@@ -385,6 +429,19 @@ export function buildRequirementChecklist(input: {
       passed:
         snapshot.bestQualityScore !== null &&
         snapshot.bestQualityScore >= req.minBestQuality,
+    });
+  }
+
+  if (req.minQuality !== null && shouldApplyQualityGates(snapshot)) {
+    const yours = formatQualitySumDisplay(snapshot.qualityScoreSum);
+    items.push({
+      code: "min_quality_too_low",
+      label: "Total quality score",
+      requiredLabel: String(req.minQuality),
+      yoursLabel: yours,
+      passed:
+        snapshot.qualityScoreSum !== null &&
+        snapshot.qualityScoreSum >= req.minQuality,
     });
   }
 
@@ -466,6 +523,18 @@ export function evaluateCreatorRequirements(input: {
     }
   }
 
+  if (req.minQuality !== null && shouldApplyQualityGates(snapshot)) {
+    if (
+      snapshot.qualityScoreSum === null ||
+      snapshot.qualityScoreSum < req.minQuality
+    ) {
+      failures.push({
+        code: "min_quality_too_low",
+        message: `Total quality score too low. Yours is ${formatQualitySumDisplay(snapshot.qualityScoreSum)}; this campaign requires at least ${req.minQuality}.`,
+      });
+    }
+  }
+
   if (req.minAvgQuality !== null && shouldApplyQualityGates(snapshot)) {
     if (
       snapshot.avgQualityScore === null ||
@@ -514,6 +583,7 @@ export function resolveCreatorEligibilityProfileFields(
         trust_score_metrics?: unknown;
         avg_quality_score?: unknown;
         best_quality_score?: unknown;
+        quality_score_sum?: unknown;
         total_money_won?: unknown;
         total_views?: unknown;
       }
@@ -524,6 +594,7 @@ export function resolveCreatorEligibilityProfileFields(
   CreatorRequirementsSnapshot,
   | "avgQualityScore"
   | "bestQualityScore"
+  | "qualityScoreSum"
   | "totalPlatformEarningsCents"
   | "totalViews"
 > {
@@ -539,6 +610,9 @@ export function resolveCreatorEligibilityProfileFields(
   const profileBest = parseStoredQualityNumber(
     creatorProfile?.best_quality_score,
   );
+  const profileSum = parseStoredQualityNumber(
+    creatorProfile?.quality_score_sum,
+  );
   const rawAvg =
     profileAvg !== null ? profileAvg : (liveQuality?.avg_quality_score ?? null);
   const rawBest =
@@ -551,14 +625,22 @@ export function resolveCreatorEligibilityProfileFields(
     rejectedReels,
     avgQualityScore: rawAvg,
     bestQualityScore: rawBest,
+    qualityScoreSum: profileSum,
   });
 
   return {
     avgQualityScore: resolved.avg_quality_score,
     bestQualityScore: resolved.best_quality_score,
+    qualityScoreSum: profileSum,
     totalPlatformEarningsCents: Number(creatorProfile?.total_money_won ?? 0),
     totalViews: Number(creatorProfile?.total_views ?? 0),
   };
+}
+
+export function getCreatorProfileQualityScoreSum(
+  profile: { quality_score_sum?: unknown } | null | undefined,
+): number | null {
+  return parseStoredQualityNumber(profile?.quality_score_sum);
 }
 
 function parseStoredQualityNumber(value: unknown): number | null {
@@ -576,6 +658,7 @@ export function buildCreatorRequirementsSnapshotFromProfile(
     trustNumber: stats.trustMetrics.trust_number,
     avgQualityScore: stats.qualityMetrics.avg_quality_score,
     bestQualityScore: stats.qualityMetrics.best_quality_score,
+    qualityScoreSum: getCreatorProfileQualityScoreSum(profile),
     totalPlatformEarningsCents: stats.totalEarningsCents,
     totalViews: stats.totalViews,
     verifiedReels: stats.trustMetrics.verified_reels,
@@ -593,7 +676,7 @@ export async function getCreatorRequirementsSnapshot(
   const { data: profile, error } = await supabase
     .from("creator_profiles")
     .select(
-      "trust_score_metrics, avg_quality_score, best_quality_score, total_money_won, total_views, has_explicit_quality_scores",
+      "trust_score_metrics, avg_quality_score, best_quality_score, quality_score_sum, total_money_won, total_views, has_explicit_quality_scores",
     )
     .eq("id", creatorId)
     .maybeSingle();
@@ -657,7 +740,7 @@ export async function assertCreatorMeetsContestRequirements(
   const { data: contest, error: contestError } = await supabase
     .from("contests")
     .select(
-      "trust_score, trust_number, min_avg_quality_score, min_best_quality_score, min_platform_earnings, min_platform_views, contest_format",
+      "trust_score, trust_number, min_avg_quality_score, min_best_quality_score, min_quality_score, min_platform_earnings, min_platform_views, contest_format",
     )
     .eq("id", contestId)
     .maybeSingle();
@@ -677,6 +760,7 @@ export async function assertCreatorMeetsContestRequirements(
     requirements.minTrustNumber === null &&
     requirements.minAvgQuality === null &&
     requirements.minBestQuality === null &&
+    requirements.minQuality === null &&
     requirements.minPlatformEarningsCents === null &&
     requirements.minPlatformViews === null
   ) {

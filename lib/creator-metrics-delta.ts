@@ -190,15 +190,18 @@ export function applyCreatorMetricsDeltaToCounters(
     quality_score_counts: {
       score1: Math.max(
         0,
-        counters.quality_score_counts.score1 + delta.quality_score_counts.score1,
+        counters.quality_score_counts.score1 +
+          delta.quality_score_counts.score1,
       ),
       score2: Math.max(
         0,
-        counters.quality_score_counts.score2 + delta.quality_score_counts.score2,
+        counters.quality_score_counts.score2 +
+          delta.quality_score_counts.score2,
       ),
       score3: Math.max(
         0,
-        counters.quality_score_counts.score3 + delta.quality_score_counts.score3,
+        counters.quality_score_counts.score3 +
+          delta.quality_score_counts.score3,
       ),
     },
   };
