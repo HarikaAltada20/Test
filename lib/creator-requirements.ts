@@ -16,14 +16,15 @@ import {
 } from "@/lib/creator-profile-stats";
 import {
   resolveCreatorQualityMetrics,
-  getCreatorQualityMetricsLive,
   type CreatorQualityMetrics,
 } from "@/lib/quality-score";
 
 /**
  * Creator contest gate rules for the app layer.
  * DB enforcement mirror: `public.enforce_submission_creator_requirements()` (see migrations).
- * Keep evaluateCreatorRequirements in sync when changing gate semantics.
+ * Gate checks read cached `creator_profiles` metrics (O(1)); live submission scans are
+ * only used when trust cache is missing. Keep evaluateCreatorRequirements in sync when
+ * changing gate semantics.
  */
 
 export type ContestCreatorRequirements = {
@@ -668,10 +669,21 @@ export function buildCreatorRequirementsSnapshotFromProfile(
   };
 }
 
+function isStoredTrustMetricsIncomplete(
+  storedTrust: ReturnType<typeof parseStoredCreatorTrustMetrics>,
+): boolean {
+  return (
+    storedTrust?.trust_score == null ||
+    storedTrust?.trust_number == null ||
+    !Number.isFinite(storedTrust.trust_score) ||
+    !Number.isFinite(storedTrust.trust_number)
+  );
+}
+
 export async function getCreatorRequirementsSnapshot(
   supabase: SupabaseClient,
   creatorId: string,
-  options?: { forGateCheck?: boolean },
+  _options?: { forGateCheck?: boolean },
 ): Promise<CreatorRequirementsSnapshot> {
   const { data: profile, error } = await supabase
     .from("creator_profiles")
@@ -688,36 +700,13 @@ export async function getCreatorRequirementsSnapshot(
   const snapshot = buildCreatorRequirementsSnapshotFromProfile(profile);
   const storedTrust = parseStoredCreatorTrustMetrics(profile?.trust_score_metrics);
 
-  if (options?.forGateCheck) {
+  if (isStoredTrustMetricsIncomplete(storedTrust)) {
     const liveTrust = await getCreatorTrustMetricsLive(supabase, creatorId);
     snapshot.trustScorePct = liveTrust.trust_score;
     snapshot.trustNumber = liveTrust.trust_number;
     snapshot.verifiedReels = liveTrust.verified_reels;
     snapshot.rejectedReels = liveTrust.rejected_reels;
     snapshot.pendingReels = liveTrust.pending_reels;
-  } else if (
-    storedTrust?.trust_score == null ||
-    storedTrust?.trust_number == null ||
-    !Number.isFinite(storedTrust.trust_score) ||
-    !Number.isFinite(storedTrust.trust_number)
-  ) {
-    const liveTrust = await getCreatorTrustMetricsLive(supabase, creatorId);
-    snapshot.trustScorePct = liveTrust.trust_score;
-    snapshot.trustNumber = liveTrust.trust_number;
-    snapshot.verifiedReels = liveTrust.verified_reels;
-    snapshot.rejectedReels = liveTrust.rejected_reels;
-    snapshot.pendingReels = liveTrust.pending_reels;
-  }
-
-  if (
-    profile?.has_explicit_quality_scores === true ||
-    (options?.forGateCheck && shouldApplyQualityGates(snapshot))
-  ) {
-    if (snapshot.hasExplicitQualityScores) {
-      const liveQuality = await getCreatorQualityMetricsLive(supabase, creatorId);
-      snapshot.avgQualityScore = liveQuality.avg_quality_score;
-      snapshot.bestQualityScore = liveQuality.best_quality_score;
-    }
   }
 
   return snapshot;
