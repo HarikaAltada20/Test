@@ -11,7 +11,7 @@ async function assertCanManageSubmissions(
   supabase: Awaited<ReturnType<typeof createClient>>,
   submissionIds: string[],
 ): Promise<{ ok: true } | { ok: false; response: NextResponse }> {
-  const { isAdmin, error: adminError, user: adminUser } = await verifyAdminAccess();
+  const { isAdmin, user: adminUser } = await verifyAdminAccess();
 
   if (isAdmin) {
     if (!adminUser?.id) {
@@ -24,13 +24,6 @@ async function assertCanManageSubmissions(
       };
     }
     return { ok: true };
-  }
-
-  if (adminError) {
-    return {
-      ok: false,
-      response: NextResponse.json({ error: adminError }, { status: 403 }),
-    };
   }
 
   const {

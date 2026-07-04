@@ -16,16 +16,9 @@ async function assertCanManageSubmission(
   | { ok: true }
   | { ok: false; response: NextResponse }
 > {
-  const { isAdmin, error: adminError, user: adminUser } = await verifyAdminAccess();
+  const { isAdmin, user: adminUser } = await verifyAdminAccess();
 
   if (!isAdmin) {
-    if (adminError) {
-      return {
-        ok: false,
-        response: NextResponse.json({ error: adminError }, { status: 403 }),
-      };
-    }
-
     const {
       data: { user: authUser },
       error: userError,
