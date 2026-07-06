@@ -69,7 +69,6 @@ import {
 import {
   getDualPayoutScopeFromSubmission,
   getDualRemainingPayableCents,
-  getDualRewardsGrantedFromSubmission,
   parseDualRewardsPayoutJson,
 } from "@/lib/dual-rewards-payout";
 import {
@@ -553,54 +552,56 @@ export function CreatorSubmissionsModal({
           contest.platform?.toLowerCase() === "x");
       const isDual = contest.contest_type === "dual_rewards";
 
-      if (isDual && isBulkTransaction) {
-        try {
-          const response = await fetch("/api/admin/bulk-payment", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              submission_ids: sortedSubs.map((s) => s.id),
-              payment_type: type,
-              contest_id: contest.id,
-              creator_id: creator.id,
-            }),
-          });
-          const result = await response.json();
-          if (!response.ok) {
+      if (isDual) {
+        if (isBulkTransaction) {
+          try {
+            const response = await fetch("/api/admin/bulk-payment", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                submission_ids: sortedSubs.map((s) => s.id),
+                payment_type: type,
+                contest_id: contest.id,
+                creator_id: creator.id,
+              }),
+            });
+            const result = await response.json();
+            if (!response.ok) {
+              toast({
+                title: "Bulk payment failed",
+                description: result.error || "Unknown error",
+                variant: "destructive",
+              });
+              return;
+            }
+            setSelectedSubmissions(new Set());
+            const dualBulkToast = getBulkPaymentToastMeta(
+              result.data?.paid_count ?? 0,
+              result.data?.skipped_count ?? 0,
+            );
+            toast({
+              title: dualBulkToast.title,
+              description: formatDualBulkPaymentToastDescription({
+                successCount: result.data?.paid_count ?? 0,
+                skippedCount: result.data?.skipped_count ?? 0,
+                totalCpmCents: result.data?.total_cpm ?? 0,
+                totalMilestoneCents: result.data?.total_milestone ?? 0,
+              }),
+              variant: dualBulkToast.variant,
+            });
+            setTimeout(() => window.location.reload(), 700);
+          } catch (error) {
+            console.error("Dual bulk payment error:", error);
             toast({
               title: "Bulk payment failed",
-              description: result.error || "Unknown error",
+              description:
+                error instanceof Error ? error.message : "Unknown error",
               variant: "destructive",
             });
-            return;
           }
-
-          setSelectedSubmissions(new Set());
-          const { data } = result;
-          toast({
-            title: "Bulk payment successful",
-            description: formatDualBulkPaymentToastDescription({
-              successCount: data.paid_count,
-              skippedCount: data.skipped_count,
-              totalCpmCents: data.total_cpm,
-              totalMilestoneCents: data.total_milestone,
-            }),
-            variant: "payment",
-          });
-          setTimeout(() => window.location.reload(), 700);
-        } catch (error) {
-          console.error("Dual rewards bulk payment error:", error);
-          toast({
-            title: "Bulk payment failed",
-            description:
-              error instanceof Error ? error.message : "Unknown error",
-            variant: "destructive",
-          });
+          return;
         }
-        return;
-      }
 
-      if (isDual) {
         let successCount = 0;
         let skippedCount = 0;
         let totalCpmCents = 0;
@@ -3120,9 +3121,6 @@ export function CreatorSubmissionsModal({
                       const isDualPaid =
                         contest?.contest_type === "dual_rewards" &&
                         isPaidForGranted;
-                      const dualGrantedFromJson = isDualPaid
-                        ? getDualRewardsGrantedFromSubmission(submission)
-                        : null;
                       const dualScope = getDualPayoutScopeFromSubmission(
                         submission as any,
                         isPaidForGranted && grantedReward > 0
@@ -3137,16 +3135,12 @@ export function CreatorSubmissionsModal({
                       const dualPaidComponent = dualScope ?? "";
                       const totalGrantedForDual =
                         contest?.contest_type === "dual_rewards"
-                          ? dualGrantedFromJson?.totalCents ?? grantedReward
+                          ? grantedReward
                           : 0;
                       let milestoneGrantedForDual = 0;
                       let cpmGrantedForDual = 0;
                       if (contest?.contest_type === "dual_rewards") {
-                        if (dualGrantedFromJson) {
-                          cpmGrantedForDual = dualGrantedFromJson.cpmCents;
-                          milestoneGrantedForDual =
-                            dualGrantedFromJson.milestoneCents;
-                        } else if (dualPaidComponent === "milestone") {
+                        if (dualPaidComponent === "milestone") {
                           milestoneGrantedForDual = totalGrantedForDual;
                         } else if (dualPaidComponent === "cpm") {
                           cpmGrantedForDual = totalGrantedForDual;

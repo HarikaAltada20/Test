@@ -180,6 +180,52 @@ describe("computeDualRewardsSubmissionReversalDue", () => {
     assert.equal(due.bonusCents, 90);
   });
 
+  it("recognizes bulk dual-rewards refund breakdown when computing remaining due", () => {
+    const due = computeDualRewardsSubmissionReversalDue({
+      submissionRow: {
+        id: "sub-1",
+        paid: true,
+        earnings: 900,
+        bonus_paid: true,
+        bonus_amount: 90,
+        dual_rewards_payout: { cpm_cents: 900, milestone_cents: 90 },
+      },
+      submissionId: "sub-1",
+      rewardTxns: [
+        {
+          amount: 1980,
+          metadata: {
+            contest_id: "c1",
+            dual_rewards_reward: true,
+            bulk_dual_rewards_payment: true,
+            breakdown: [
+              { submission_id: "sub-1", cpm_cents: 900, milestone_cents: 90 },
+              { submission_id: "sub-2", cpm_cents: 800, milestone_cents: 190 },
+            ],
+          },
+        },
+      ],
+      refundTxns: [
+        {
+          amount: 1980,
+          remarks: reversalRemark,
+          metadata: {
+            contest_id: "c1",
+            dual_rewards_reversal: true,
+            bulk_dual_rewards_reversal: true,
+            breakdown: [
+              { submission_id: "sub-1", cpm_cents: 900, milestone_cents: 90 },
+              { submission_id: "sub-2", cpm_cents: 800, milestone_cents: 190 },
+            ],
+          },
+        },
+      ],
+      reversalRemark,
+      wasPaidBeforeReversal: true,
+    });
+    assert.equal(due.totalCents, 0);
+  });
+
   it("recognizes consolidated dual-rewards refund rows when computing remaining due", () => {
     const due = computeDualRewardsSubmissionReversalDue({
       submissionRow: {
@@ -215,70 +261,6 @@ describe("computeDualRewardsSubmissionReversalDue", () => {
             cpm_refunded_cents: 900,
             milestone_refunded_cents: 90,
             dual_rewards_reversal: true,
-          },
-        },
-      ],
-      reversalRemark,
-      wasPaidBeforeReversal: true,
-    });
-    assert.equal(due.totalCents, 0);
-    assert.equal(due.mainCents, 0);
-    assert.equal(due.bonusCents, 0);
-  });
-
-  it("recognizes bulk dual-rewards reversal refund breakdown per submission", () => {
-    const due = computeDualRewardsSubmissionReversalDue({
-      submissionRow: {
-        id: "sub-1",
-        paid: true,
-        earnings: 990,
-        bonus_paid: false,
-        dual_rewards_payout: { cpm_cents: 900, milestone_cents: 90 },
-      },
-      submissionId: "sub-1",
-      rewardTxns: [
-        {
-          amount: 1980,
-          metadata: {
-            contest_id: "c1",
-            dual_rewards_bulk_reward: true,
-            breakdown: [
-              {
-                submission_id: "sub-1",
-                cpm_amount: 900,
-                milestone_amount: 90,
-              },
-              {
-                submission_id: "sub-2",
-                cpm_amount: 900,
-                milestone_amount: 90,
-              },
-            ],
-          },
-        },
-      ],
-      refundTxns: [
-        {
-          amount: 1980,
-          remarks: reversalRemark,
-          metadata: {
-            contest_id: "c1",
-            dual_rewards_bulk_reversal: true,
-            dual_rewards_reversal: true,
-            breakdown: [
-              {
-                submission_id: "sub-1",
-                cpm_refunded_cents: 900,
-                milestone_refunded_cents: 90,
-                total_refunded_cents: 990,
-              },
-              {
-                submission_id: "sub-2",
-                cpm_refunded_cents: 900,
-                milestone_refunded_cents: 90,
-                total_refunded_cents: 990,
-              },
-            ],
           },
         },
       ],

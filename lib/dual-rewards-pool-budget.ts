@@ -133,9 +133,6 @@ export function parseConsolidatedDualReversalRefund(
   tx: MoneyTxnRow,
 ): { cpmCents: number; milestoneCents: number } | null {
   const m = tx.metadata ?? {};
-  if (m.dual_rewards_bulk_reversal === true) {
-    return null;
-  }
   if (
     m.dual_rewards_reversal !== true &&
     m.cpm_refunded_cents == null &&
@@ -185,66 +182,20 @@ export function isConsolidatedDualRewardsReward(tx: MoneyTxnRow): boolean {
   return parseConsolidatedDualRewardsReward(tx) != null;
 }
 
-function readBulkDualBreakdownComponentCents(
-  item: Record<string, unknown>,
-  key: "cpm" | "milestone",
-): number {
-  if (key === "cpm") {
-    return Math.max(
-      0,
-      Math.round(
-        Number(
-          item.cpm_amount ??
-            item.cpm_cents ??
-            item.cpm_refunded_cents ??
-            0,
-        ) || 0,
-      ),
-    );
-  }
-  return Math.max(
-    0,
-    Math.round(
-      Number(
-        item.milestone_amount ??
-          item.milestone_cents ??
-          item.milestone_refunded_cents ??
-          0,
-      ) || 0,
-    ),
-  );
-}
-
-/** Per-submission CPM/milestone from a bulk dual-rewards reward or refund row. */
-export function getBulkDualTxnBreakdownForSubmission(
-  tx: MoneyTxnRow,
+function dualRewardsLedgerBreakdownForSubmission(
+  metadata: Record<string, unknown> | null | undefined,
   submissionId: string,
 ): { cpmCents: number; milestoneCents: number } | null {
-  const m = tx.metadata ?? {};
-  const breakdown = m.breakdown;
-  if (!Array.isArray(breakdown)) return null;
-  const sid = String(submissionId);
-  for (const raw of breakdown) {
-    if (raw == null || typeof raw !== "object" || Array.isArray(raw)) {
-      continue;
-    }
-    const item = raw as Record<string, unknown>;
-    if (String(item.submission_id || "") !== sid) continue;
-    const cpmCents = readBulkDualBreakdownComponentCents(item, "cpm");
-    const milestoneCents = readBulkDualBreakdownComponentCents(item, "milestone");
-    if (cpmCents + milestoneCents > 0) {
-      return { cpmCents, milestoneCents };
-    }
-  }
-  return null;
-}
-
-export function isBulkDualRewardsReversalRefund(tx: MoneyTxnRow): boolean {
-  return tx.metadata?.dual_rewards_bulk_reversal === true;
-}
-
-export function isBulkDualRewardsReward(tx: MoneyTxnRow): boolean {
-  return tx.metadata?.dual_rewards_bulk_reward === true;
+  const m = metadata ?? {};
+  if (!Array.isArray(m.breakdown)) return null;
+  const row = (m.breakdown as Record<string, unknown>[]).find(
+    (b) => String(b.submission_id || "") === String(submissionId),
+  );
+  if (!row) return null;
+  return {
+    cpmCents: Math.max(0, Math.round(Number(row.cpm_cents) || 0)),
+    milestoneCents: Math.max(0, Math.round(Number(row.milestone_cents) || 0)),
+  };
 }
 
 export function moneyTxnBelongsToContest(params: {
@@ -276,26 +227,22 @@ export function computeSubmissionGrossWalletNetCents(
 ): number {
   const sid = String(submissionId);
   const isSubTx = (tx: MoneyTxnRow) =>
-    submissionIdFromMoneyTxnMetadata(tx.metadata) === sid;
+    submissionIdFromMoneyTxnMetadata(tx.metadata) === sid ||
+    dualRewardsLedgerBreakdownForSubmission(tx.metadata, sid) != null;
   const isReversalRefund = (tx: MoneyTxnRow) =>
     !tx.remarks || tx.remarks === reversalRemark;
+  const submissionAmount = (tx: MoneyTxnRow) => {
+    const split = dualRewardsLedgerBreakdownForSubmission(tx.metadata, sid);
+    if (split) return split.cpmCents + split.milestoneCents;
+    return Math.max(0, Number(tx.amount) || 0);
+  };
   const sum = (rows: MoneyTxnRow[]) =>
-    rows.reduce((s, tx) => s + Math.max(0, Number(tx.amount) || 0), 0);
+    rows.reduce((s, tx) => s + submissionAmount(tx), 0);
 
-  let grossRewards = sum(rewardTxns.filter(isSubTx));
-  let grossRefunds = sum(
+  const grossRewards = sum(rewardTxns.filter(isSubTx));
+  const grossRefunds = sum(
     refundTxns.filter((tx) => isSubTx(tx) && isReversalRefund(tx)),
   );
-  for (const tx of rewardTxns) {
-    if (!isBulkDualRewardsReward(tx)) continue;
-    const bulk = getBulkDualTxnBreakdownForSubmission(tx, sid);
-    if (bulk) grossRewards += bulk.cpmCents + bulk.milestoneCents;
-  }
-  for (const tx of refundTxns) {
-    if (!isReversalRefund(tx) || !isBulkDualRewardsReversalRefund(tx)) continue;
-    const bulk = getBulkDualTxnBreakdownForSubmission(tx, sid);
-    if (bulk) grossRefunds += bulk.cpmCents + bulk.milestoneCents;
-  }
   return Math.max(0, grossRewards - grossRefunds);
 }
 
@@ -397,11 +344,17 @@ export function computeDualRewardsSubmissionReversalDue(params: {
     if (!m.bonus_type && !m.payout_component) return false;
     return submissionIdFromMoneyTxnMetadata(m) === sid;
   };
+  const submissionLedgerAmount = (tx: MoneyTxnRow) => {
+    const split = dualRewardsLedgerBreakdownForSubmission(tx.metadata, sid);
+    if (split) return split.cpmCents + split.milestoneCents;
+    return Math.max(0, Number(tx.amount) || 0);
+  };
   const sumAmount = (rows: MoneyTxnRow[]) =>
-    rows.reduce((s, tx) => s + Math.max(0, Number(tx.amount) || 0), 0);
+    rows.reduce((s, tx) => s + submissionLedgerAmount(tx), 0);
 
   const isSubTx = (tx: MoneyTxnRow) =>
-    submissionIdFromMoneyTxnMetadata(tx.metadata) === sid;
+    submissionIdFromMoneyTxnMetadata(tx.metadata) === sid ||
+    dualRewardsLedgerBreakdownForSubmission(tx.metadata, sid) != null;
   const grossReversalRefundCents = sumAmount(
     refundTxns.filter((tx) => isSubTx(tx) && isReversalRefund(tx)),
   );
@@ -409,10 +362,13 @@ export function computeDualRewardsSubmissionReversalDue(params: {
   const consolidatedRefundTotals = { cpmCents: 0, milestoneCents: 0 };
   for (const tx of refundTxns) {
     if (!isReversalRefund(tx)) continue;
-    const bulkRefund = getBulkDualTxnBreakdownForSubmission(tx, sid);
-    if (bulkRefund && isBulkDualRewardsReversalRefund(tx)) {
-      consolidatedRefundTotals.cpmCents += bulkRefund.cpmCents;
-      consolidatedRefundTotals.milestoneCents += bulkRefund.milestoneCents;
+    const bulkSplit = dualRewardsLedgerBreakdownForSubmission(
+      tx.metadata,
+      sid,
+    );
+    if (bulkSplit) {
+      consolidatedRefundTotals.cpmCents += bulkSplit.cpmCents;
+      consolidatedRefundTotals.milestoneCents += bulkSplit.milestoneCents;
       continue;
     }
     if (submissionIdFromMoneyTxnMetadata(tx.metadata) !== sid) continue;
@@ -424,10 +380,13 @@ export function computeDualRewardsSubmissionReversalDue(params: {
 
   const consolidatedRewardTotals = { cpmCents: 0, milestoneCents: 0 };
   for (const tx of rewardTxns) {
-    const bulkReward = getBulkDualTxnBreakdownForSubmission(tx, sid);
-    if (bulkReward && isBulkDualRewardsReward(tx)) {
-      consolidatedRewardTotals.cpmCents += bulkReward.cpmCents;
-      consolidatedRewardTotals.milestoneCents += bulkReward.milestoneCents;
+    const bulkSplit = dualRewardsLedgerBreakdownForSubmission(
+      tx.metadata,
+      sid,
+    );
+    if (bulkSplit) {
+      consolidatedRewardTotals.cpmCents += bulkSplit.cpmCents;
+      consolidatedRewardTotals.milestoneCents += bulkSplit.milestoneCents;
       continue;
     }
     if (submissionIdFromMoneyTxnMetadata(tx.metadata) !== sid) continue;
@@ -447,7 +406,8 @@ export function computeDualRewardsSubmissionReversalDue(params: {
           (tx) =>
             isReversalRefund(tx) &&
             isMainSubmissionTx(tx) &&
-            !isConsolidatedDualReversalRefund(tx),
+            !isConsolidatedDualReversalRefund(tx) &&
+            !(tx.metadata?.bulk_dual_rewards_reversal === true),
         ),
       ),
   );
@@ -494,7 +454,8 @@ export function computeDualRewardsSubmissionReversalDue(params: {
     (tx) =>
       isReversalRefund(tx) &&
       isBonusSubmissionTx(tx) &&
-      !isConsolidatedDualReversalRefund(tx),
+      !isConsolidatedDualReversalRefund(tx) &&
+      !(tx.metadata?.bulk_dual_rewards_reversal === true),
   )) {
     const m = tx.metadata ?? {};
     const key = String(

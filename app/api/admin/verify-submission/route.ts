@@ -47,8 +47,6 @@ import {
   parseDualRewardPayoutScopeFromRemarks,
   stripDualComponentTagFromRemarks,
   buildDualRewardsPayoutPersistValue,
-  computeDualRewardsPaymentDelta,
-  dualRewardsWalletCreditFromTargetPayout,
   splitDualReversalRefundFromPayout,
 } from "@/lib/dual-rewards-payout";
 import {
@@ -1434,50 +1432,21 @@ export async function POST(request: Request) {
                 { status: 400 },
               );
             }
-            const paidBeforeCustomDual = getDualRewardsSubmissionPaidComponents({
-              id: String(submissionFull.id),
-              earnings: submissionFull.earnings,
-              paid: submissionFull.paid,
-              bonus_amount: submissionFull.bonus_amount,
-              bonus_paid: submissionFull.bonus_paid,
-              dual_rewards_payout: submissionFull.dual_rewards_payout,
-            });
-
             if (dualPayComponent === "cpm") {
               dualRewardsPayoutJson = {
-                cpm_cents: paidBeforeCustomDual.cpmCents + rewardAmount,
-                milestone_cents: paidBeforeCustomDual.milestoneCents,
+                cpm_cents: rewardAmount,
+                milestone_cents: 0,
               };
             } else if (dualPayComponent === "milestone") {
               dualRewardsPayoutJson = {
-                cpm_cents: paidBeforeCustomDual.cpmCents,
-                milestone_cents: paidBeforeCustomDual.milestoneCents + rewardAmount,
+                cpm_cents: 0,
+                milestone_cents: rewardAmount,
               };
             } else {
-              const delta = computeDualRewardsPaymentDelta({
-                component: "both",
-                cappedCpmCents: cFinal,
-                cappedMilestoneCents: mFinal,
-                paidComponents: paidBeforeCustomDual,
-              });
-              if (delta.creditTotalCents <= 0) {
-                return NextResponse.json(
-                  {
-                    error:
-                      "No payable CPM or milestone amount remains for this submission.",
-                  },
-                  { status: 400 },
-                );
-              }
-              if (Math.abs(delta.creditTotalCents - rewardAmount) > 2) {
-                return NextResponse.json(
-                  {
-                    error: `Custom payout (${rewardAmount}¢) does not match the allowed dual-rewards amount (${delta.creditTotalCents}¢).`,
-                  },
-                  { status: 400 },
-                );
-              }
-              dualRewardsPayoutJson = delta.targetPayout;
+              dualRewardsPayoutJson = {
+                cpm_cents: cFinal,
+                milestone_cents: mFinal,
+              };
             }
           }
         }
@@ -1500,17 +1469,9 @@ export async function POST(request: Request) {
             rewardAmount > 0 &&
             !dualRewardsPayoutJson
           ) {
-            const paidBeforeStandardDual = getDualRewardsSubmissionPaidComponents({
-              id: String(submissionFull.id),
-              earnings: submissionFull.earnings,
-              paid: submissionFull.paid,
-              bonus_amount: submissionFull.bonus_amount,
-              bonus_paid: submissionFull.bonus_paid,
-              dual_rewards_payout: submissionFull.dual_rewards_payout,
-            });
             dualRewardsPayoutJson = {
-              cpm_cents: paidBeforeStandardDual.cpmCents + rewardAmount,
-              milestone_cents: paidBeforeStandardDual.milestoneCents,
+              cpm_cents: rewardAmount,
+              milestone_cents: 0,
             };
           }
 
@@ -1519,23 +1480,9 @@ export async function POST(request: Request) {
             action === "mark_both_paid" &&
             pendingDualMilestoneCents > 0
           ) {
-            const paidBeforeMarkBoth = getDualRewardsSubmissionPaidComponents({
-              id: String(submissionFull.id),
-              earnings: submissionFull.earnings,
-              paid: submissionFull.paid,
-              bonus_amount: submissionFull.bonus_amount,
-              bonus_paid: submissionFull.bonus_paid,
-              dual_rewards_payout: submissionFull.dual_rewards_payout,
-            });
             dualRewardsPayoutJson = {
-              cpm_cents: Math.max(
-                paidBeforeMarkBoth.cpmCents,
-                dualRewardsPayoutJson?.cpm_cents ?? rewardAmount,
-              ),
-              milestone_cents: Math.max(
-                paidBeforeMarkBoth.milestoneCents,
-                pendingDualMilestoneCents,
-              ),
+              cpm_cents: dualRewardsPayoutJson?.cpm_cents ?? rewardAmount,
+              milestone_cents: pendingDualMilestoneCents,
             };
           }
 
@@ -1735,6 +1682,20 @@ export async function POST(request: Request) {
             !submissionFull.earnings ||
             submissionFull.earnings <= 0;
 
+          const markBothPaidBonusPersist =
+            action === "mark_both_paid" && pendingDualMilestoneCents > 0
+              ? {
+                  bonus_paid: true,
+                  bonus_paid_at: new Date().toISOString(),
+                  bonus_amount: pendingDualMilestoneCents,
+                  milestone_bonus_paid: {
+                    ...(submissionFull.milestone_bonus_paid || {}),
+                    paid_at: new Date().toISOString(),
+                    amount_cents: pendingDualMilestoneCents,
+                  },
+                }
+              : {};
+
           const dualPersist =
             contest.contest_type === "dual_rewards"
               ? {
@@ -1751,21 +1712,9 @@ export async function POST(request: Request) {
                           },
                         )
                       : null,
+                  ...markBothPaidBonusPersist,
                 }
               : {};
-
-          const dualSplitForEarnings = dualRewardsPayoutJson ?? {
-            cpm_cents: rewardAmount,
-            milestone_cents: pendingDualMilestoneCents,
-          };
-          const earningsToPersist =
-            contest.contest_type === "dual_rewards"
-              ? Math.max(
-                  0,
-                  Math.round(dualSplitForEarnings.cpm_cents) +
-                    Math.round(dualSplitForEarnings.milestone_cents),
-                ) || rewardAmount
-              : rewardAmount;
 
           let paidPersistError:
             | { message: string; code?: string; details?: unknown }
@@ -1774,7 +1723,7 @@ export async function POST(request: Request) {
             const { error } = await supabaseAdmin
               .from("submissions")
               .update({
-                earnings: earningsToPersist,
+                earnings: rewardAmount,
                 status: SUBMISSION_STATUS.paid,
                 paid: true,
                 paid_at: new Date().toISOString(),
@@ -1789,10 +1738,6 @@ export async function POST(request: Request) {
                 paid: true,
                 status: SUBMISSION_STATUS.paid,
                 paid_at: new Date().toISOString(),
-                ...(contest.contest_type === "dual_rewards" &&
-                earningsToPersist > 0
-                  ? { earnings: earningsToPersist }
-                  : {}),
                 ...dualPersist,
               })
               .eq("id", submissionId);
