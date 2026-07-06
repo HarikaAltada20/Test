@@ -89,6 +89,42 @@ function dueToRefundSummary(
   };
 }
 
+/** One money_transactions refund row per submission (CPM + milestone combined). */
+export async function logDualRewardsReversalRefund(params: {
+  creatorId: string;
+  submissionId: string;
+  contestId: string;
+  contestTitle: string;
+  cpmCents: number;
+  milestoneCents: number;
+  bulkReversal?: boolean;
+}): Promise<void> {
+  const cpmCents = Math.max(0, Math.round(params.cpmCents));
+  const milestoneCents = Math.max(0, Math.round(params.milestoneCents));
+  const totalCents = cpmCents + milestoneCents;
+  if (totalCents <= 0) return;
+
+  await logTransactionAsAdmin(
+    params.creatorId,
+    "refund",
+    totalCents,
+    "success",
+    `Reversal of contest payout - ${params.contestTitle}`,
+    {
+      remarks: REVERSAL_TRANSACTION_REMARK,
+      paymentMethod: "refund",
+      metadata: {
+        submission_id: params.submissionId,
+        contest_id: params.contestId,
+        cpm_refunded_cents: cpmCents,
+        milestone_refunded_cents: milestoneCents,
+        dual_rewards_reversal: true,
+        ...(params.bulkReversal ? { bulk_dual_rewards_reversal: true } : {}),
+      },
+    },
+  );
+}
+
 /**
  * One atomic wallet debit per creator+contest for bulk paid → verified/pending/rejected.
  * Per-submission verify calls should pass skipWalletDebit: true for returned ids.
@@ -286,45 +322,15 @@ export async function applyBulkDualRewardsWalletReversals(params: {
       const due = perSubDue.get(row.id);
       if (!due || due.totalCents <= 0) continue;
 
-      if (due.mainCents > 0) {
-        await logTransactionAsAdmin(
-          creatorId,
-          "refund",
-          due.mainCents,
-          "success",
-          `Reversal of contest reward - ${contestTitle}`,
-          {
-            remarks: REVERSAL_TRANSACTION_REMARK,
-            paymentMethod: "refund",
-            metadata: {
-              submission_id: row.id,
-              contest_id: contestId,
-              bulk_dual_rewards_reversal: true,
-            },
-          },
-        );
-      }
-      for (const bonus of due.bonusReversals) {
-        if (bonus.amount <= 0) continue;
-        await logTransactionAsAdmin(
-          creatorId,
-          "refund",
-          bonus.amount,
-          "success",
-          `Reversal of contest bonus - ${contestTitle}`,
-          {
-            remarks: REVERSAL_TRANSACTION_REMARK,
-            paymentMethod: "refund",
-            metadata: {
-              submission_id: row.id,
-              source_submission_id: row.id,
-              contest_id: contestId,
-              payout_component: bonus.bonusType,
-              bulk_dual_rewards_reversal: true,
-            },
-          },
-        );
-      }
+      await logDualRewardsReversalRefund({
+        creatorId,
+        submissionId: row.id,
+        contestId,
+        contestTitle,
+        cpmCents: due.mainCents,
+        milestoneCents: due.bonusCents,
+        bulkReversal: true,
+      });
     }
   }
 

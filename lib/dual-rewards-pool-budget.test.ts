@@ -147,6 +147,84 @@ describe("computeDualRewardsSubmissionReversalDue", () => {
     });
     assert.equal(due.totalCents, 5750);
   });
+
+  it("recognizes consolidated dual-rewards reward rows when computing reversal due", () => {
+    const due = computeDualRewardsSubmissionReversalDue({
+      submissionRow: {
+        id: "sub-1",
+        paid: true,
+        earnings: 900,
+        bonus_paid: true,
+        bonus_amount: 90,
+        dual_rewards_payout: { cpm_cents: 900, milestone_cents: 90 },
+      },
+      submissionId: "sub-1",
+      rewardTxns: [
+        {
+          amount: 990,
+          metadata: {
+            submission_id: "sub-1",
+            contest_id: "c1",
+            cpm_cents: 900,
+            milestone_cents: 90,
+            dual_rewards_reward: true,
+          },
+        },
+      ],
+      refundTxns: [],
+      reversalRemark,
+      wasPaidBeforeReversal: true,
+    });
+    assert.equal(due.totalCents, 990);
+    assert.equal(due.mainCents, 900);
+    assert.equal(due.bonusCents, 90);
+  });
+
+  it("recognizes consolidated dual-rewards refund rows when computing remaining due", () => {
+    const due = computeDualRewardsSubmissionReversalDue({
+      submissionRow: {
+        id: "sub-1",
+        paid: true,
+        earnings: 900,
+        bonus_paid: true,
+        bonus_amount: 90,
+        dual_rewards_payout: { cpm_cents: 900, milestone_cents: 90 },
+      },
+      submissionId: "sub-1",
+      rewardTxns: [
+        {
+          amount: 900,
+          metadata: { submission_id: "sub-1", contest_id: "c1" },
+        },
+        {
+          amount: 90,
+          metadata: {
+            submission_id: "sub-1",
+            contest_id: "c1",
+            payout_component: "milestone",
+          },
+        },
+      ],
+      refundTxns: [
+        {
+          amount: 990,
+          remarks: reversalRemark,
+          metadata: {
+            submission_id: "sub-1",
+            contest_id: "c1",
+            cpm_refunded_cents: 900,
+            milestone_refunded_cents: 90,
+            dual_rewards_reversal: true,
+          },
+        },
+      ],
+      reversalRemark,
+      wasPaidBeforeReversal: true,
+    });
+    assert.equal(due.totalCents, 0);
+    assert.equal(due.mainCents, 0);
+    assert.equal(due.bonusCents, 0);
+  });
 });
 
 describe("scaleDualReversalDuesToTotalCap", () => {

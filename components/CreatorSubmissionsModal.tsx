@@ -78,6 +78,12 @@ import {
 import { buildFlatFeeBonusExpectedCentsBySubmissionId } from "@/lib/twitter-cpm-bonus-expected";
 import { parseQualityScore } from "@/lib/quality-score";
 import type { QualityScore } from "@/lib/quality-score";
+import { submissionIsPaidRow } from "@/lib/paid-reversal-preview";
+import {
+  postContestStatusLocksSubmissionModeration,
+  submissionModerationUiAllowed,
+  SUBMISSION_MODERATION_LOCKED_MESSAGE,
+} from "@/lib/post-contest-moderation-lock";
 import { SubmissionQualityScoreCell } from "@/components/SubmissionQualityScoreCell";
 import { VerifyQualityDialog } from "@/components/VerifyQualityDialog";
 import { YouTubeAnalyticsPanel } from "@/components/youtube/YouTubeAnalyticsPanel";
@@ -384,6 +390,15 @@ export function CreatorSubmissionsModal({
   };
 
   const handleBulkAction = async (action: "verify" | "reject" | "pending") => {
+    if (postContestStatusLocksSubmissionModeration(contest?.post_contest_status)) {
+      toast({
+        title: "Action blocked",
+        description: SUBMISSION_MODERATION_LOCKED_MESSAGE,
+        variant: "destructive",
+      });
+      return;
+    }
+
     const selectedIds = Array.from(selectedSubmissions);
     if (action === "verify") {
       const selectedSubs = submissions.filter((s) =>
@@ -1162,6 +1177,14 @@ export function CreatorSubmissionsModal({
     contest?.platform?.toLowerCase().includes("youtube") ?? false;
   const isVideoContest = contest?.contest_format !== "text_image";
   const canEditQualityScore = isVideoContest;
+  const showBulkModerationActions = submissionModerationUiAllowed(
+    contest?.post_contest_status,
+    { forBulkBar: true },
+  );
+  const showRowModerationActions = (submission: (typeof submissions)[number]) =>
+    submissionModerationUiAllowed(contest?.post_contest_status, {
+      isPaidRow: submissionIsPaidRow(submission),
+    });
   const qualityEditFirstSubmission = qualityEditSubmissionIds[0]
     ? submissions.find((s) => s.id === qualityEditSubmissionIds[0]) ?? null
     : null;
@@ -1804,8 +1827,7 @@ export function CreatorSubmissionsModal({
                     </Button>
                   </div>
 
-                  {contest?.post_contest_status !== "verification_complete" &&
-                    contest?.post_contest_status !== "payments_processed" && (
+                  {showBulkModerationActions && (
                       <>
                         <Button
                           size="sm"
@@ -1870,7 +1892,7 @@ export function CreatorSubmissionsModal({
                     )}
 
                   {contest?.post_contest_status === "verification_complete" &&
-                    contest?.post_contest_status !== "payments_processed" &&
+                    contest?.post_contest_status !== "payouts_processed" &&
                     isAdminView &&
                     !isTwitterLeaderboardContest && (
                       <>
@@ -4521,10 +4543,7 @@ export function CreatorSubmissionsModal({
                                 </Button>
                               </DropdownMenuTrigger>
                               <DropdownMenuContent align="end">
-                                {contest?.post_contest_status !==
-                                  "verification_complete" &&
-                                  contest?.post_contest_status !==
-                                    "payments_processed" && (
+                                {showRowModerationActions(submission) && (
                                     <>
                                       {/* For Twitter tweets, check moderation_status; for others, check status */}
                                       {!isSubmissionVerified && (
@@ -4688,7 +4707,7 @@ export function CreatorSubmissionsModal({
                                 {contest?.post_contest_status ===
                                   "verification_complete" &&
                                   contest?.post_contest_status !==
-                                    "payments_processed" &&
+                                    "payouts_processed" &&
                                   isAdminView && (
                                     <>
                                       <DropdownMenuSeparator />

@@ -128,6 +128,60 @@ export function submissionIdFromMoneyTxnMetadata(
   );
 }
 
+/** One refund row for dual-rewards CPM + milestone (see logDualRewardsReversalRefund). */
+export function parseConsolidatedDualReversalRefund(
+  tx: MoneyTxnRow,
+): { cpmCents: number; milestoneCents: number } | null {
+  const m = tx.metadata ?? {};
+  if (
+    m.dual_rewards_reversal !== true &&
+    m.cpm_refunded_cents == null &&
+    m.milestone_refunded_cents == null
+  ) {
+    return null;
+  }
+  const cpmCents = Math.max(0, Math.round(Number(m.cpm_refunded_cents) || 0));
+  const milestoneCents = Math.max(
+    0,
+    Math.round(Number(m.milestone_refunded_cents) || 0),
+  );
+  if (cpmCents + milestoneCents > 0) {
+    return { cpmCents, milestoneCents };
+  }
+  const total = Math.max(0, Math.round(Number(tx.amount) || 0));
+  if (total <= 0) return null;
+  return { cpmCents: total, milestoneCents: 0 };
+}
+
+export function isConsolidatedDualReversalRefund(tx: MoneyTxnRow): boolean {
+  return parseConsolidatedDualReversalRefund(tx) != null;
+}
+
+/** One reward row for dual-rewards CPM + milestone (see creditDualRewardsSubmissionReward). */
+export function parseConsolidatedDualRewardsReward(
+  tx: MoneyTxnRow,
+): { cpmCents: number; milestoneCents: number } | null {
+  const m = tx.metadata ?? {};
+  if (m.dual_rewards_reward !== true) {
+    return null;
+  }
+  const cpmCents = Math.max(0, Math.round(Number(m.cpm_cents) || 0));
+  const milestoneCents = Math.max(
+    0,
+    Math.round(Number(m.milestone_cents) || 0),
+  );
+  if (cpmCents + milestoneCents > 0) {
+    return { cpmCents, milestoneCents };
+  }
+  const total = Math.max(0, Math.round(Number(tx.amount) || 0));
+  if (total <= 0) return null;
+  return { cpmCents: total, milestoneCents: 0 };
+}
+
+export function isConsolidatedDualRewardsReward(tx: MoneyTxnRow): boolean {
+  return parseConsolidatedDualRewardsReward(tx) != null;
+}
+
 export function moneyTxnBelongsToContest(params: {
   tx: MoneyTxnRow;
   contestId: string;
@@ -255,6 +309,7 @@ export function computeDualRewardsSubmissionReversalDue(params: {
     !tx.remarks || tx.remarks === reversalRemark;
   const isMainSubmissionTx = (tx: MoneyTxnRow) => {
     const m = tx.metadata ?? {};
+    if (m.dual_rewards_reward === true) return false;
     return (
       submissionIdFromMoneyTxnMetadata(m) === sid &&
       !m.bonus_type &&
@@ -263,25 +318,57 @@ export function computeDualRewardsSubmissionReversalDue(params: {
   };
   const isBonusSubmissionTx = (tx: MoneyTxnRow) => {
     const m = tx.metadata ?? {};
+    if (m.dual_rewards_reward === true) return false;
     if (!m.bonus_type && !m.payout_component) return false;
     return submissionIdFromMoneyTxnMetadata(m) === sid;
   };
   const sumAmount = (rows: MoneyTxnRow[]) =>
     rows.reduce((s, tx) => s + Math.max(0, Number(tx.amount) || 0), 0);
 
+  const isSubTx = (tx: MoneyTxnRow) =>
+    submissionIdFromMoneyTxnMetadata(tx.metadata) === sid;
+  const grossReversalRefundCents = sumAmount(
+    refundTxns.filter((tx) => isSubTx(tx) && isReversalRefund(tx)),
+  );
+
+  const consolidatedRefundTotals = { cpmCents: 0, milestoneCents: 0 };
+  for (const tx of refundTxns) {
+    if (!isReversalRefund(tx)) continue;
+    if (submissionIdFromMoneyTxnMetadata(tx.metadata) !== sid) continue;
+    const consolidated = parseConsolidatedDualReversalRefund(tx);
+    if (!consolidated) continue;
+    consolidatedRefundTotals.cpmCents += consolidated.cpmCents;
+    consolidatedRefundTotals.milestoneCents += consolidated.milestoneCents;
+  }
+
+  const consolidatedRewardTotals = { cpmCents: 0, milestoneCents: 0 };
+  for (const tx of rewardTxns) {
+    if (submissionIdFromMoneyTxnMetadata(tx.metadata) !== sid) continue;
+    const consolidated = parseConsolidatedDualRewardsReward(tx);
+    if (!consolidated) continue;
+    consolidatedRewardTotals.cpmCents += consolidated.cpmCents;
+    consolidatedRewardTotals.milestoneCents += consolidated.milestoneCents;
+  }
+
   const mainRewardNet = Math.max(
     0,
-    sumAmount(rewardTxns.filter(isMainSubmissionTx)) -
+    consolidatedRewardTotals.cpmCents +
+      sumAmount(rewardTxns.filter(isMainSubmissionTx)) -
+      consolidatedRefundTotals.cpmCents -
       sumAmount(
         refundTxns.filter(
-          (tx) => isReversalRefund(tx) && isMainSubmissionTx(tx),
+          (tx) =>
+            isReversalRefund(tx) &&
+            isMainSubmissionTx(tx) &&
+            !isConsolidatedDualReversalRefund(tx),
         ),
       ),
   );
   const earningsCents = Math.max(0, Number(submissionRow.earnings) || 0);
-  let mainReversalAmount = wasPaidBeforeReversal
-    ? Math.max(mainRewardNet, earningsCents)
-    : mainRewardNet;
+  let mainReversalAmount =
+    wasPaidBeforeReversal && grossReversalRefundCents <= 0
+      ? Math.max(mainRewardNet, earningsCents)
+      : mainRewardNet;
 
   const submissionWalletNet = computeSubmissionGrossWalletNetCents(
     rewardTxns,
@@ -309,14 +396,31 @@ export function computeDualRewardsSubmissionReversalDue(params: {
     );
     bonusByType.set(key, (bonusByType.get(key) || 0) + (Number(tx.amount) || 0));
   }
+  if (consolidatedRewardTotals.milestoneCents > 0) {
+    bonusByType.set(
+      "milestone",
+      (bonusByType.get("milestone") || 0) +
+        consolidatedRewardTotals.milestoneCents,
+    );
+  }
   for (const tx of refundTxns.filter(
-    (tx) => isReversalRefund(tx) && isBonusSubmissionTx(tx),
+    (tx) =>
+      isReversalRefund(tx) &&
+      isBonusSubmissionTx(tx) &&
+      !isConsolidatedDualReversalRefund(tx),
   )) {
     const m = tx.metadata ?? {};
     const key = String(
       m.bonus_type || m.payout_component || "milestone",
     );
     bonusByType.set(key, (bonusByType.get(key) || 0) - (Number(tx.amount) || 0));
+  }
+  if (consolidatedRefundTotals.milestoneCents > 0) {
+    bonusByType.set(
+      "milestone",
+      (bonusByType.get("milestone") || 0) -
+        consolidatedRefundTotals.milestoneCents,
+    );
   }
   let bonusReversals = Array.from(bonusByType.entries())
     .map(([bonusType, amount]) => ({
@@ -333,7 +437,7 @@ export function computeDualRewardsSubmissionReversalDue(params: {
     submissionRow.bonus_paid === true
       ? Math.max(0, Number(submissionRow.bonus_amount) || 0)
       : 0;
-  if (storedBonusCents > bonusReversalAmount) {
+  if (storedBonusCents > bonusReversalAmount && grossReversalRefundCents <= 0) {
     bonusReversalAmount = storedBonusCents;
     bonusReversals = [
       { bonusType: "milestone", amount: storedBonusCents },
@@ -343,8 +447,6 @@ export function computeDualRewardsSubmissionReversalDue(params: {
   const paid = getDualRewardsSubmissionPaidComponents(submissionRow);
   const paidTotal = paid.cpmCents + paid.milestoneCents;
 
-  const isSubTx = (tx: MoneyTxnRow) =>
-    submissionIdFromMoneyTxnMetadata(tx.metadata) === sid;
   const grossRewardCents = sumAmount(rewardTxns.filter(isSubTx));
 
   // Wallet ledger net (rewards − reversal refunds) is the primary due amount.
@@ -359,7 +461,11 @@ export function computeDualRewardsSubmissionReversalDue(params: {
     dualDueCents = recordedGrantCents;
   }
 
-  if (dualDueCents <= 0 && wasPaidBeforeReversal) {
+  if (
+    dualDueCents <= 0 &&
+    wasPaidBeforeReversal &&
+    grossReversalRefundCents <= 0
+  ) {
     dualDueCents = Math.min(
       paidTotal > 0 ? paidTotal : 0,
       grossRewardCents,
@@ -374,6 +480,15 @@ export function computeDualRewardsSubmissionReversalDue(params: {
   let mainCents = mainReversalAmount;
   let bonusCents = bonusReversalAmount;
   let totalCents = dualDueCents;
+
+  if (dualDueCents <= 0) {
+    return {
+      totalCents: 0,
+      mainCents: 0,
+      bonusCents: 0,
+      bonusReversals: [],
+    };
+  }
 
   if (dualDueCents > 0) {
     const split = splitDualReversalRefundFromPayout(

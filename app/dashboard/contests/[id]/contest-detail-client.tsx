@@ -139,6 +139,11 @@ import {
   submissionIsPaidRow,
   summarizePaidReversalPreview,
 } from "@/lib/paid-reversal-preview";
+import {
+  postContestStatusLocksSubmissionModeration,
+  submissionModerationUiAllowed,
+  SUBMISSION_MODERATION_LOCKED_MESSAGE,
+} from "@/lib/post-contest-moderation-lock";
 import { adjustBonusCents, parsePayoutAdjustment } from "@/lib/payout-rules";
 import { YouTubeAnalyticsPanel } from "@/components/youtube/YouTubeAnalyticsPanel";
 import { SubmissionLeaderboardExportDialog } from "@/components/submissions/SubmissionLeaderboardExportDialog";
@@ -1500,6 +1505,20 @@ export default function ContestDetailClient({
     currentContest.post_contest_status === "verification_complete" ||
     currentContest.post_contest_status === "payouts_processed";
 
+  const submissionModerationLocked = postContestStatusLocksSubmissionModeration(
+    currentContest.post_contest_status,
+  );
+
+  const assertSubmissionModerationAllowed = (): boolean => {
+    if (!submissionModerationLocked) return true;
+    toast({
+      title: "Action blocked",
+      description: SUBMISSION_MODERATION_LOCKED_MESSAGE,
+      variant: "destructive",
+    });
+    return false;
+  };
+
   // Columns shown in "Modify headers" modal: hide core/traffic options when brand doesn't have access
   const ytColumnsAvailableInModal = useMemo(() => {
     return YT_TABLE_COLUMNS.filter((col) => {
@@ -2339,21 +2358,17 @@ export default function ContestDetailClient({
     currentPage * itemsPerPage,
   );
 
-  const normalViewSelectionIncludesPaid = useMemo(() => {
-    for (const id of normalViewSelectedSubmissions) {
-      const sub = currentSubmissions.find((s) => s.id === id);
-      if (submissionIsPaidRow(sub)) {
-        return true;
-      }
-    }
-    return false;
-  }, [normalViewSelectedSubmissions, currentSubmissions]);
+  const showNormalViewBulkModeration = submissionModerationUiAllowed(
+    currentContest.post_contest_status,
+    { forBulkBar: true },
+  );
 
-  const showNormalViewBulkModeration =
-    currentContest.post_contest_status !== "payouts_processed" &&
-    (currentContest.post_contest_status !== "verification_complete" ||
-      activeStatusTab === "paid" ||
-      normalViewSelectionIncludesPaid);
+  const showSubmissionRowModeration = (
+    submission: (typeof currentSubmissions)[number],
+  ) =>
+    submissionModerationUiAllowed(currentContest.post_contest_status, {
+      isPaidRow: submissionIsPaidRow(submission),
+    });
 
   const handleNormalViewSelectAll = () => {
     const ids = sortedSubmissions.map((s) => s.id);
@@ -2534,13 +2549,12 @@ export default function ContestDetailClient({
     if (selectedIds.length === 0) return;
 
     if (action === "verify") {
+      if (!assertSubmissionModerationAllowed()) return;
+
       const { toVerify, toUpdateQualityOnly, paidToRevert } =
         partitionSubmissionsForVerify(selectedIds);
 
-      if (
-        currentContest.post_contest_status !== "payouts_processed" &&
-        paidToRevert.length > 0
-      ) {
+      if (paidToRevert.length > 0) {
         setConfirmReversal({
           submissionIds: selectedIds,
           target: "verified",
@@ -2571,11 +2585,9 @@ export default function ContestDetailClient({
     }
 
     if (action === "reject") {
+      if (!assertSubmissionModerationAllowed()) return;
       if (selectedIds.length === 0) return;
-      if (
-        currentContest.post_contest_status !== "payouts_processed" &&
-        selectionIncludesPaidRow(currentSubmissions, selectedIds)
-      ) {
+      if (selectionIncludesPaidRow(currentSubmissions, selectedIds)) {
         setConfirmReversal({
           submissionIds: selectedIds,
           target: "rejected",
@@ -2588,10 +2600,9 @@ export default function ContestDetailClient({
       return;
     }
 
-    if (
-      currentContest.post_contest_status !== "payouts_processed" &&
-      selectionIncludesPaidRow(currentSubmissions, selectedIds)
-    ) {
+    if (!assertSubmissionModerationAllowed()) return;
+
+    if (selectionIncludesPaidRow(currentSubmissions, selectedIds)) {
       setConfirmReversal({
         submissionIds: selectedIds,
         target: "pending",
@@ -5456,15 +5467,19 @@ export default function ContestDetailClient({
       reason,
     });
 
-    if (newStatus === "verified" && isVideoContestFormat && !options?.skipQualityPrompt) {
+    const isModerationStatusChange =
+      newStatus === "verified" ||
+      newStatus === "rejected" ||
+      newStatus === "pending";
+    if (isModerationStatusChange && !assertSubmissionModerationAllowed()) {
+      return;
+    }
+
+    if (newStatus === "verified" && !options?.skipQualityPrompt) {
       const { toVerify, toUpdateQualityOnly, paidToRevert } =
         partitionSubmissionsForVerify([submissionId]);
 
-      if (
-        paidToRevert.length > 0 &&
-        currentContest.post_contest_status !== "payouts_processed" &&
-        !options?.qualityScore
-      ) {
+      if (paidToRevert.length > 0 && !options?.qualityScore) {
         setConfirmReversal({
           submissionIds: [submissionId],
           target: "verified",
@@ -5472,21 +5487,23 @@ export default function ContestDetailClient({
         return;
       }
 
-      if (
-        toUpdateQualityOnly.length > 0 &&
-        toVerify.length === 0 &&
-        paidToRevert.length === 0
-      ) {
+      if (isVideoContestFormat) {
+        if (
+          toUpdateQualityOnly.length > 0 &&
+          toVerify.length === 0 &&
+          paidToRevert.length === 0
+        ) {
+          if (!options?.qualityScore) {
+            openVerifyQualityDialog([submissionId]);
+            return;
+          }
+          await applyQualityScoreUpdates([submissionId], options.qualityScore);
+          return;
+        }
         if (!options?.qualityScore) {
           openVerifyQualityDialog([submissionId]);
           return;
         }
-        await applyQualityScoreUpdates([submissionId], options.qualityScore);
-        return;
-      }
-      if (!options?.qualityScore) {
-        openVerifyQualityDialog([submissionId]);
-        return;
       }
     }
 
@@ -6123,15 +6140,31 @@ export default function ContestDetailClient({
   ) => {
     if (!submissionIds || submissionIds.length === 0) return;
 
-    const verifyAction = action === "approve" || action === "verified";
-    if (
-      verifyAction &&
-      !options?.qualityScore &&
-      !options?.skipQualityPrompt &&
-      isVideoContestFormat
-    ) {
-      openVerifyQualityDialog(submissionIds);
+    const isModerationBulkAction =
+      action === "approve" ||
+      action === "verified" ||
+      action === "reject" ||
+      action === "rejected" ||
+      action === "pending";
+    if (isModerationBulkAction && !assertSubmissionModerationAllowed()) {
       return;
+    }
+
+    const verifyAction = action === "approve" || action === "verified";
+    if (verifyAction && !options?.qualityScore && !options?.skipQualityPrompt) {
+      const { paidToRevert } = partitionSubmissionsForVerify(submissionIds);
+      if (paidToRevert.length > 0) {
+        setConfirmReversal({
+          submissionIds,
+          target: "verified",
+          closeCreatorModalOnSuccess: options?.closeCreatorModalOnSuccess,
+        });
+        return;
+      }
+      if (isVideoContestFormat) {
+        openVerifyQualityDialog(submissionIds);
+        return;
+      }
     }
 
     // Split into Twitter vs Non-Twitter
@@ -6463,6 +6496,7 @@ export default function ContestDetailClient({
   };
 
   const handleRejectSubmission = (submissionId: string) => {
+    if (!assertSubmissionModerationAllowed()) return;
     setPendingRejectionSubmissionIds([submissionId]);
     setRejectionModalOpen(true);
   };
@@ -6970,6 +7004,10 @@ export default function ContestDetailClient({
 
   const handleConfirmReversal = async () => {
     if (!confirmReversal) return;
+    if (!assertSubmissionModerationAllowed()) {
+      setConfirmReversal(null);
+      return;
+    }
     const {
       submissionIds,
       target,
@@ -8864,6 +8902,13 @@ export default function ContestDetailClient({
     action: "approve" | "reject" | "pending" | "paid",
     reason?: string,
   ) => {
+    if (
+      (action === "approve" || action === "reject" || action === "pending") &&
+      !assertSubmissionModerationAllowed()
+    ) {
+      return;
+    }
+
     setIsLoadingSubmission((prev) => ({ ...prev, [tweetId]: true }));
     try {
       const apiAction =
@@ -9088,6 +9133,10 @@ export default function ContestDetailClient({
   // Handle Twitter creator reversal confirmation
   const handleConfirmTwitterCreatorReversal = async () => {
     if (!confirmTwitterCreatorReversal) return;
+    if (!assertSubmissionModerationAllowed()) {
+      setConfirmTwitterCreatorReversal(null);
+      return;
+    }
     const { creatorId, action, needRejectionReason, creatorUsername } =
       confirmTwitterCreatorReversal;
     setConfirmTwitterCreatorReversal(null);
@@ -20700,40 +20749,48 @@ export default function ContestDetailClient({
                                         {/* Twitter-specific moderation controls */}
                                         {isTwitterTweet ? (
                                           <>
-                                            <DropdownMenuLabel className="text-purple-500">
-                                              Moderation
-                                            </DropdownMenuLabel>
-                                            <DropdownMenuSeparator />
-                                            {statusToUse !== "verified" && (
-                                              <DropdownMenuItem
-                                                disabled={isLoading}
-                                                onClick={() =>
-                                                  handleModerateTwitterTweet(
-                                                    submission.id,
-                                                    "approve",
-                                                  )
-                                                }
-                                              >
-                                                <CheckCircle2 className="h-4 w-4 mr-2" />
-                                                Verify Tweet
-                                              </DropdownMenuItem>
+                                            {showSubmissionRowModeration(
+                                              submission,
+                                            ) && (
+                                              <>
+                                                <DropdownMenuLabel className="text-purple-500">
+                                                  Moderation
+                                                </DropdownMenuLabel>
+                                                <DropdownMenuSeparator />
+                                                {statusToUse !== "verified" && (
+                                                  <DropdownMenuItem
+                                                    disabled={isLoading}
+                                                    onClick={() =>
+                                                      handleModerateTwitterTweet(
+                                                        submission.id,
+                                                        "approve",
+                                                      )
+                                                    }
+                                                  >
+                                                    <CheckCircle2 className="h-4 w-4 mr-2" />
+                                                    Verify Tweet
+                                                  </DropdownMenuItem>
+                                                )}
+                                                {statusToUse !== "rejected" && (
+                                                  <DropdownMenuItem
+                                                    disabled={isLoading}
+                                                    onClick={() => {
+                                                      setPendingRejectionSubmissionIds(
+                                                        [submission.id],
+                                                      );
+                                                      setRejectionModalOpen(
+                                                        true,
+                                                      );
+                                                    }}
+                                                    className="text-red-600"
+                                                  >
+                                                    <XCircle className="h-4 w-4 mr-2" />
+                                                    Reject Tweet
+                                                  </DropdownMenuItem>
+                                                )}
+                                                <DropdownMenuSeparator />
+                                              </>
                                             )}
-                                            {statusToUse !== "rejected" && (
-                                              <DropdownMenuItem
-                                                disabled={isLoading}
-                                                onClick={() => {
-                                                  setPendingRejectionSubmissionIds(
-                                                    [submission.id],
-                                                  );
-                                                  setRejectionModalOpen(true);
-                                                }}
-                                                className="text-red-600"
-                                              >
-                                                <XCircle className="h-4 w-4 mr-2" />
-                                                Reject Tweet
-                                              </DropdownMenuItem>
-                                            )}
-                                            <DropdownMenuSeparator />
                                             <DropdownMenuLabel className="text-purple-500">
                                               Points
                                             </DropdownMenuLabel>
@@ -20755,110 +20812,112 @@ export default function ContestDetailClient({
                                           </>
                                         ) : (
                                           <>
-                                            {/* Regular submission controls */}
-                                            {currentContest.post_contest_status !==
-                                              "payouts_processed" && (
+                                            {showSubmissionRowModeration(
+                                              submission,
+                                            ) && (
                                               <>
                                                 <DropdownMenuLabel className="text-purple-500">
                                                   Change Status
                                                 </DropdownMenuLabel>
                                                 <DropdownMenuSeparator />
+                                                {submission.status !==
+                                                  "verified" &&
+                                                  (submissionIsPaidRow(
+                                                    submission,
+                                                  ) ? (
+                                                    <DropdownMenuItem
+                                                      disabled={isLoading}
+                                                      onClick={() =>
+                                                        setConfirmReversal({
+                                                          submissionIds: [
+                                                            submission.id,
+                                                          ],
+                                                          target: "verified",
+                                                        })
+                                                      }
+                                                    >
+                                                      Mark as Verified
+                                                    </DropdownMenuItem>
+                                                  ) : (
+                                                    <DropdownMenuItem
+                                                      disabled={isLoading}
+                                                      onClick={() =>
+                                                        handleUpdateSubmissionStatus(
+                                                          submission.id,
+                                                          "verified",
+                                                        )
+                                                      }
+                                                    >
+                                                      Mark as Verified
+                                                    </DropdownMenuItem>
+                                                  ))}
+                                                {submission.status !==
+                                                  "rejected" &&
+                                                  (submission.status ===
+                                                  "paid" ? (
+                                                    <DropdownMenuItem
+                                                      disabled={isLoading}
+                                                      onClick={() =>
+                                                        setConfirmReversal({
+                                                          submissionIds: [
+                                                            submission.id,
+                                                          ],
+                                                          target: "rejected",
+                                                          needRejectionReason:
+                                                            true,
+                                                        })
+                                                      }
+                                                      className="text-red-600"
+                                                    >
+                                                      Mark as Rejected
+                                                    </DropdownMenuItem>
+                                                  ) : (
+                                                    <DropdownMenuItem
+                                                      disabled={isLoading}
+                                                      onClick={() =>
+                                                        handleRejectSubmission(
+                                                          submission.id,
+                                                        )
+                                                      }
+                                                      className="text-red-600"
+                                                    >
+                                                      Mark as Rejected
+                                                    </DropdownMenuItem>
+                                                  ))}
+                                                {submission.status !==
+                                                  "pending" &&
+                                                  (submission.status ===
+                                                  "paid" ? (
+                                                    <DropdownMenuItem
+                                                      disabled={isLoading}
+                                                      onClick={() =>
+                                                        setConfirmReversal({
+                                                          submissionIds: [
+                                                            submission.id,
+                                                          ],
+                                                          target: "pending",
+                                                        })
+                                                      }
+                                                    >
+                                                      Set to Pending
+                                                    </DropdownMenuItem>
+                                                  ) : (
+                                                    <DropdownMenuItem
+                                                      disabled={isLoading}
+                                                      onClick={() =>
+                                                        handleUpdateSubmissionStatus(
+                                                          submission.id,
+                                                          "pending",
+                                                        )
+                                                      }
+                                                    >
+                                                      Set to Pending
+                                                    </DropdownMenuItem>
+                                                  ))}
                                               </>
                                             )}
-                                            {submission.status !== "verified" &&
-                                              currentContest.post_contest_status !==
-                                                "payouts_processed" &&
-                                              (submissionIsPaidRow(submission) ? (
-                                                <DropdownMenuItem
-                                                  disabled={isLoading}
-                                                  onClick={() =>
-                                                    setConfirmReversal({
-                                                      submissionIds: [
-                                                        submission.id,
-                                                      ],
-                                                      target: "verified",
-                                                    })
-                                                  }
-                                                >
-                                                  Mark as Verified
-                                                </DropdownMenuItem>
-                                              ) : (
-                                                <DropdownMenuItem
-                                                  disabled={isLoading}
-                                                  onClick={() =>
-                                                    handleUpdateSubmissionStatus(
-                                                      submission.id,
-                                                      "verified",
-                                                    )
-                                                  }
-                                                >
-                                                  Mark as Verified
-                                                </DropdownMenuItem>
-                                              ))}
-                                            {submission.status !== "rejected" &&
-                                              currentContest.post_contest_status !==
-                                                "payouts_processed" &&
-                                              (submission.status === "paid" ? (
-                                                <DropdownMenuItem
-                                                  disabled={isLoading}
-                                                  onClick={() =>
-                                                    setConfirmReversal({
-                                                      submissionIds: [
-                                                        submission.id,
-                                                      ],
-                                                      target: "rejected",
-                                                      needRejectionReason: true,
-                                                    })
-                                                  }
-                                                  className="text-red-600"
-                                                >
-                                                  Mark as Rejected
-                                                </DropdownMenuItem>
-                                              ) : (
-                                                <DropdownMenuItem
-                                                  disabled={isLoading}
-                                                  onClick={() =>
-                                                    handleRejectSubmission(
-                                                      submission.id,
-                                                    )
-                                                  }
-                                                  className="text-red-600"
-                                                >
-                                                  Mark as Rejected
-                                                </DropdownMenuItem>
-                                              ))}
                                           </>
                                         )}
-                                        {submission.status !== "pending" &&
-                                          currentContest.post_contest_status !==
-                                            "payouts_processed" &&
-                                          (submission.status === "paid" ? (
-                                            <DropdownMenuItem
-                                              disabled={isLoading}
-                                              onClick={() =>
-                                                setConfirmReversal({
-                                                  submissionIds: [
-                                                    submission.id,
-                                                  ],
-                                                  target: "pending",
-                                                })
-                                              }
-                                            >
-                                              Set to Pending
-                                            </DropdownMenuItem>
-                                          ) : (
-                                            <DropdownMenuItem
-                                              disabled={isLoading}
-                                              onClick={() =>
-                                                handleUpdateSubmissionStatus(
-                                                  submission.id,
-                                                  "pending",
-                                                )
-                                              }
-                                            >
-                                              Set to Pending
-                                            </DropdownMenuItem>
-                                          ))}
                                         {/* Show payment options only when contest status is verification_complete */}
                                         {/* Note: For Twitter, payments are handled at creator level in creator-wise view, not here */}
                                         {!isTwitterTweet &&
@@ -23854,7 +23913,9 @@ export default function ContestDetailClient({
                                                   currentContest.contest_format ===
                                                     "text_image" &&
                                                   currentContest.contest_type ===
-                                                    "leaderboard" && (
+                                                    "leaderboard" &&
+                                                  currentContest.post_contest_status !==
+                                                    "payouts_processed" && (
                                                     <DropdownMenu>
                                                       <DropdownMenuTrigger
                                                         asChild
@@ -27812,10 +27873,7 @@ export default function ContestDetailClient({
             const { toVerify, toUpdateQualityOnly, paidToRevert } =
               partitionSubmissionsForVerify(ids);
 
-            if (
-              currentContest.post_contest_status !== "payouts_processed" &&
-              paidToRevert.length > 0
-            ) {
+            if (paidToRevert.length > 0) {
               setConfirmReversal({
                 submissionIds: ids,
                 target: "verified",
@@ -27842,10 +27900,7 @@ export default function ContestDetailClient({
           }}
           onReject={(ids: string[]) => {
             if (ids.length === 0) return;
-            if (
-              currentContest.post_contest_status !== "payouts_processed" &&
-              selectionIncludesPaidRow(currentSubmissions, ids)
-            ) {
+            if (selectionIncludesPaidRow(currentSubmissions, ids)) {
               setConfirmReversal({
                 submissionIds: ids,
                 target: "rejected",
@@ -27858,10 +27913,7 @@ export default function ContestDetailClient({
             setRejectionModalOpen(true);
           }}
           onSetPending={async (ids: string[]) => {
-            if (
-              currentContest.post_contest_status !== "payouts_processed" &&
-              selectionIncludesPaidRow(currentSubmissions, ids)
-            ) {
+            if (selectionIncludesPaidRow(currentSubmissions, ids)) {
               setConfirmReversal({
                 submissionIds: ids,
                 target: "pending",
