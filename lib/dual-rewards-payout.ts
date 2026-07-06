@@ -128,6 +128,35 @@ export function buildDualRewardsPayoutPersistValue(
   };
 }
 
+/** Row update after dual-rewards wallet credit (CPM and/or milestone). */
+export function buildDualRewardsSubmissionPayUpdatePayload(params: {
+  /** Cumulative paid CPM + milestone cents (stored in `dual_rewards_payout`). */
+  split: { cpm_cents: number; milestone_cents: number };
+  updatedBy: string;
+  customRemarks?: string | null;
+}): Record<string, unknown> {
+  const cpmCents = Math.max(0, Math.round(params.split.cpm_cents));
+  const milestoneCents = Math.max(0, Math.round(params.split.milestone_cents));
+  const totalCents = cpmCents + milestoneCents;
+  if (totalCents <= 0) {
+    return {};
+  }
+
+  return {
+    dual_rewards_payout: buildDualRewardsPayoutPersistValue(
+      { cpm_cents: cpmCents, milestone_cents: milestoneCents },
+      {
+        updatedBy: params.updatedBy,
+        customRemarks: params.customRemarks ?? null,
+      },
+    ),
+    paid: true,
+    status: "paid",
+    paid_at: new Date().toISOString(),
+    earnings: totalCents,
+  };
+}
+
 /**
  * Infer legacy scope string for getDualGrantedBreakdown / UI branching.
  * Prefers `dual_rewards_payout` JSON, then legacy text column, then metadata tag.

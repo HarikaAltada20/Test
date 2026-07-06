@@ -46,7 +46,7 @@ import { applyPayoutAdjustment } from "@/lib/payout-adjustment";
 import {
   parseDualRewardPayoutScopeFromRemarks,
   stripDualComponentTagFromRemarks,
-  buildDualRewardsPayoutPersistValue,
+  buildDualRewardsSubmissionPayUpdatePayload,
   splitDualReversalRefundFromPayout,
 } from "@/lib/dual-rewards-payout";
 import {
@@ -738,29 +738,20 @@ export async function POST(request: Request) {
               milestone_cents: paidComponents.milestoneCents + milestoneAmount,
             };
 
+            const dualMilestonePayUpdate =
+              buildDualRewardsSubmissionPayUpdatePayload({
+                split: committedMilestonePayout,
+                updatedBy: currentUserId,
+                customRemarks: paymentDetails?.customRemarks ?? null,
+              });
+
             const { data: afterBonusUpdate, error: bonusUpdateError } =
               await supabaseAdmin
                 .from("submissions")
-                .update({
-                  bonus_paid: true,
-                  bonus_paid_at: new Date().toISOString(),
-                  bonus_amount: milestoneAmount,
-                  dual_rewards_payout: buildDualRewardsPayoutPersistValue(
-                    committedMilestonePayout,
-                    {
-                      updatedBy: currentUserId,
-                      customRemarks: paymentDetails?.customRemarks ?? null,
-                    },
-                  ),
-                  milestone_bonus_paid: {
-                    ...(submissionFull.milestone_bonus_paid || {}),
-                    paid_at: new Date().toISOString(),
-                    amount_cents: milestoneAmount,
-                  },
-                })
+                .update(dualMilestonePayUpdate)
                 .eq("id", submissionId)
                 .select(
-                  "id, status, earnings, paid, paid_at, bonus_paid, bonus_paid_at, bonus_amount, milestone_bonus_paid",
+                  "id, status, earnings, paid, paid_at, bonus_paid, bonus_paid_at, bonus_amount, milestone_bonus_paid, dual_rewards_payout",
                 )
                 .single();
 
@@ -1682,44 +1673,43 @@ export async function POST(request: Request) {
             !submissionFull.earnings ||
             submissionFull.earnings <= 0;
 
-          const markBothPaidBonusPersist =
-            action === "mark_both_paid" && pendingDualMilestoneCents > 0
-              ? {
-                  bonus_paid: true,
-                  bonus_paid_at: new Date().toISOString(),
-                  bonus_amount: pendingDualMilestoneCents,
-                  milestone_bonus_paid: {
-                    ...(submissionFull.milestone_bonus_paid || {}),
-                    paid_at: new Date().toISOString(),
-                    amount_cents: pendingDualMilestoneCents,
-                  },
-                }
-              : {};
-
-          const dualPersist =
-            contest.contest_type === "dual_rewards"
-              ? {
-                  dual_rewards_payout:
-                    rewardAmount > 0 || shouldCreditDualRewardsPaid
-                      ? buildDualRewardsPayoutPersistValue(
-                          dualRewardsPayoutJson ?? {
-                            cpm_cents: rewardAmount,
-                            milestone_cents: pendingDualMilestoneCents,
-                          },
-                          {
-                            updatedBy: currentUserId,
-                            customRemarks: customRemarks ?? null,
-                          },
-                        )
-                      : null,
-                  ...markBothPaidBonusPersist,
-                }
-              : {};
-
           let paidPersistError:
             | { message: string; code?: string; details?: unknown }
             | undefined;
-          if (shouldPersistEarnings) {
+
+          if (contest.contest_type === "dual_rewards") {
+            const paidComponents = getDualRewardsSubmissionPaidComponents({
+              id: String(submissionFull.id),
+              earnings: submissionFull.earnings,
+              paid: submissionFull.paid,
+              bonus_amount: submissionFull.bonus_amount,
+              bonus_paid: submissionFull.bonus_paid,
+              dual_rewards_payout: submissionFull.dual_rewards_payout,
+            });
+            const finalSplit = {
+              cpm_cents: Math.max(
+                paidComponents.cpmCents,
+                dualRewardsSplit.cpm_cents,
+              ),
+              milestone_cents: Math.max(
+                paidComponents.milestoneCents,
+                dualRewardsSplit.milestone_cents,
+              ),
+            };
+            const dualPayUpdate = buildDualRewardsSubmissionPayUpdatePayload({
+              split: finalSplit,
+              updatedBy: currentUserId,
+              customRemarks: customRemarks ?? null,
+            });
+
+            if (Object.keys(dualPayUpdate).length > 0) {
+              const { error } = await supabaseAdmin
+                .from("submissions")
+                .update(dualPayUpdate)
+                .eq("id", submissionId);
+              paidPersistError = error ?? undefined;
+            }
+          } else if (shouldPersistEarnings) {
             const { error } = await supabaseAdmin
               .from("submissions")
               .update({
@@ -1727,7 +1717,6 @@ export async function POST(request: Request) {
                 status: SUBMISSION_STATUS.paid,
                 paid: true,
                 paid_at: new Date().toISOString(),
-                ...dualPersist,
               })
               .eq("id", submissionId);
             paidPersistError = error ?? undefined;
@@ -1738,7 +1727,6 @@ export async function POST(request: Request) {
                 paid: true,
                 status: SUBMISSION_STATUS.paid,
                 paid_at: new Date().toISOString(),
-                ...dualPersist,
               })
               .eq("id", submissionId);
             paidPersistError = error ?? undefined;

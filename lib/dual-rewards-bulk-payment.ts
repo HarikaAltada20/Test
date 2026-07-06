@@ -3,7 +3,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { countRefundsForCreatorContest } from "@/lib/contest-payout-idempotency";
 import { loadDualCreatorCapMaps } from "@/lib/dual-rewards-payout-eligibility";
 import {
-  buildDualRewardsPayoutPersistValue,
+  buildDualRewardsSubmissionPayUpdatePayload,
   getDualRemainingPayableCents,
   type DualRewardPayoutScope,
 } from "@/lib/dual-rewards-payout";
@@ -372,43 +372,31 @@ export async function executeDualRewardsBulkPayment(params: {
       milestone_cents: paidComponents.milestoneCents + item.milestone_cents,
     };
 
-    const updatePayload: Record<string, unknown> = {
-      dual_rewards_payout: buildDualRewardsPayoutPersistValue(nextPayout, {
-        updatedBy: adminUserId,
-        customRemarks: `dual_component:${component}`,
-      }),
-    };
-
-    if (item.cpm_cents > 0) {
-      updatePayload.earnings = nextPayout.cpm_cents;
-      updatePayload.paid = true;
-      updatePayload.paid_at = new Date().toISOString();
-      updatePayload.status = "paid";
+    if (item.cpm_cents > 0 && paidComponents.cpmCents > 0) {
+      updateFailures.push({
+        submission_id: item.submission_id,
+        message: "CPM portion was already paid for this submission.",
+      });
+      continue;
+    }
+    if (item.milestone_cents > 0 && paidComponents.milestoneCents > 0) {
+      updateFailures.push({
+        submission_id: item.submission_id,
+        message: "Milestone portion was already paid for this submission.",
+      });
+      continue;
     }
 
-    if (item.milestone_cents > 0) {
-      updatePayload.bonus_paid = true;
-      updatePayload.bonus_paid_at = new Date().toISOString();
-      updatePayload.bonus_amount = item.milestone_cents;
-      updatePayload.milestone_bonus_paid = {
-        paid_at: new Date().toISOString(),
-        amount_cents: item.milestone_cents,
-      };
-    }
+    const updatePayload = buildDualRewardsSubmissionPayUpdatePayload({
+      split: nextPayout,
+      updatedBy: adminUserId,
+      customRemarks: `dual_component:${component}`,
+    });
 
-    let updateQuery = supabaseAdmin
+    const { data: updatedRow, error: updateError } = await supabaseAdmin
       .from("submissions")
       .update(updatePayload)
-      .eq("id", item.submission_id);
-
-    if (item.cpm_cents > 0) {
-      updateQuery = updateQuery.neq("paid", true);
-    }
-    if (item.milestone_cents > 0) {
-      updateQuery = updateQuery.neq("bonus_paid", true);
-    }
-
-    const { data: updatedRow, error: updateError } = await updateQuery
+      .eq("id", item.submission_id)
       .select("id")
       .maybeSingle();
 
