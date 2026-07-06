@@ -97,7 +97,6 @@ export async function logDualRewardsReversalRefund(params: {
   contestTitle: string;
   cpmCents: number;
   milestoneCents: number;
-  bulkReversal?: boolean;
 }): Promise<void> {
   const cpmCents = Math.max(0, Math.round(params.cpmCents));
   const milestoneCents = Math.max(0, Math.round(params.milestoneCents));
@@ -119,7 +118,50 @@ export async function logDualRewardsReversalRefund(params: {
         cpm_refunded_cents: cpmCents,
         milestone_refunded_cents: milestoneCents,
         dual_rewards_reversal: true,
-        ...(params.bulkReversal ? { bulk_dual_rewards_reversal: true } : {}),
+      },
+    },
+  );
+}
+
+/** One refund row for bulk dual-rewards reversal (mirrors bulk payment reward row). */
+export async function logDualRewardsBulkReversalRefund(params: {
+  creatorId: string;
+  contestId: string;
+  contestTitle: string;
+  submissionCount: number;
+  totalCents: number;
+  totalCpmCents: number;
+  totalMilestoneCents: number;
+  breakdown: Array<{
+    submission_id: string;
+    cpm_refunded_cents: number;
+    milestone_refunded_cents: number;
+    total_refunded_cents: number;
+  }>;
+}): Promise<void> {
+  const totalCents = Math.max(0, Math.round(params.totalCents));
+  if (totalCents <= 0) return;
+
+  await logTransactionAsAdmin(
+    params.creatorId,
+    "refund",
+    totalCents,
+    "success",
+    `Bulk reversal for ${params.submissionCount} submissions in contest: ${params.contestTitle}`,
+    {
+      remarks: REVERSAL_TRANSACTION_REMARK,
+      paymentMethod: "refund",
+      metadata: {
+        contest_id: params.contestId,
+        submission_count: params.submissionCount,
+        cpm_refunded_cents: Math.max(0, Math.round(params.totalCpmCents)),
+        milestone_refunded_cents: Math.max(
+          0,
+          Math.round(params.totalMilestoneCents),
+        ),
+        dual_rewards_reversal: true,
+        dual_rewards_bulk_reversal: true,
+        breakdown: params.breakdown,
       },
     },
   );
@@ -318,18 +360,42 @@ export async function applyBulkDualRewardsWalletReversals(params: {
       }
     }
 
+    const reversalBreakdown: Array<{
+      submission_id: string;
+      cpm_refunded_cents: number;
+      milestone_refunded_cents: number;
+      total_refunded_cents: number;
+    }> = [];
+    let totalCpmRefunded = 0;
+    let totalMilestoneRefunded = 0;
+    let totalRefunded = 0;
+    let reversedCount = 0;
+
     for (const row of groupRows) {
       const due = perSubDue.get(row.id);
       if (!due || due.totalCents <= 0) continue;
+      reversalBreakdown.push({
+        submission_id: row.id,
+        cpm_refunded_cents: due.mainCents,
+        milestone_refunded_cents: due.bonusCents,
+        total_refunded_cents: due.totalCents,
+      });
+      totalCpmRefunded += due.mainCents;
+      totalMilestoneRefunded += due.bonusCents;
+      totalRefunded += due.totalCents;
+      reversedCount += 1;
+    }
 
-      await logDualRewardsReversalRefund({
+    if (totalRefunded > 0) {
+      await logDualRewardsBulkReversalRefund({
         creatorId,
-        submissionId: row.id,
         contestId,
         contestTitle,
-        cpmCents: due.mainCents,
-        milestoneCents: due.bonusCents,
-        bulkReversal: true,
+        submissionCount: reversedCount,
+        totalCents: totalRefunded,
+        totalCpmCents: totalCpmRefunded,
+        totalMilestoneCents: totalMilestoneRefunded,
+        breakdown: reversalBreakdown,
       });
     }
   }

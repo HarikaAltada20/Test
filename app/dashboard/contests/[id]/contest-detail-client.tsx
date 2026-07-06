@@ -113,6 +113,7 @@ import {
 import {
   getDualPayoutScopeFromSubmission,
   getDualRemainingPayableCents,
+  getDualRewardsGrantedFromSubmission,
   type DualPayoutScopeHint,
 } from "@/lib/dual-rewards-payout";
 import {
@@ -8576,6 +8577,16 @@ export default function ContestDetailClient({
     cpmExpectedCents: number,
     milestoneExpectedCents: number,
   ) {
+    const grantedFromJson = getDualRewardsGrantedFromSubmission(submission);
+    if (grantedFromJson) {
+      return {
+        totalCents: grantedFromJson.totalCents,
+        cpmCents: grantedFromJson.cpmCents,
+        milestoneCents: grantedFromJson.milestoneCents,
+        isPaid: true,
+      };
+    }
+
     /** Uncapped CPM cents for paid-total split when capped expectations are both 0.
      *  Do not read `cappedExpectedRewardBySubmissionId` here — an earlier useMemo calls
      *  this helper before that map exists. */

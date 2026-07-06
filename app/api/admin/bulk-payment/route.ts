@@ -18,6 +18,7 @@ import { countRefundsForCreatorContest } from "@/lib/contest-payout-idempotency"
 import { buildFlatFeeBonusExpectedCentsBySubmissionId } from "@/lib/twitter-cpm-bonus-expected";
 import { fetchContestSubmissionsAllPages } from "@/lib/fetch-contest-submissions";
 import { MetricsService } from "@/lib/metrics-service";
+import { processDualRewardsBulkPayment } from "@/lib/dual-rewards-bulk-payment";
 
 export async function POST(request: NextRequest) {
   const supabaseAdmin = await createClient();
@@ -130,13 +131,57 @@ export async function POST(request: NextRequest) {
     }
 
     if (contest.contest_type === "dual_rewards") {
-      return NextResponse.json(
-        {
-          error:
-            "Dual rewards contests use per-submission payout (CPM and milestone components). Use the contest submissions UI or verify-submission API instead of bulk payment.",
-        },
-        { status: 400 },
+      const requestedSubmissionIds = Array.from(
+        new Set(
+          submission_ids.map((value: unknown) => String(value)).filter(Boolean),
+        ),
+      ).sort((a, b) => a.localeCompare(b));
+      const payoutAdjustment = parsePayoutAdjustment(
+        contest.payout_adjustment_percentage,
+        contest.payout_adjustment_mode,
+        { contestType: contest.contest_type },
       );
+      const { count: contestRefundCount, errorMessage: refundCountErr } =
+        await countRefundsForCreatorContest(
+          supabaseAdmin,
+          creator_id,
+          contest_id,
+        );
+      if (refundCountErr) {
+        return NextResponse.json(
+          {
+            error:
+              "Cannot verify refund history for safe payout (idempotency). Try again or contact support.",
+            details: refundCountErr,
+          },
+          { status: 500 },
+        );
+      }
+      const operationSeed = JSON.stringify({
+        contest_id,
+        creator_id,
+        payment_type,
+        requested_submission_ids: requestedSubmissionIds,
+        payout_adjustment_percentage: payoutAdjustment.percentage,
+        payout_adjustment_mode: payoutAdjustment.mode ?? null,
+        contest_refund_count_at_payout: contestRefundCount,
+        dual_rewards_bulk: true,
+      });
+      const bulkPayIdempotencyKey = `bulk_pay_v2:${createHash("sha256")
+        .update(operationSeed)
+        .digest("hex")
+        .slice(0, 48)}`;
+
+      return processDualRewardsBulkPayment({
+        supabaseAdmin,
+        contest,
+        contestId: contest_id,
+        creatorId: creator_id,
+        submissionIds: submission_ids,
+        paymentType: payment_type,
+        bulkPayIdempotencyKey,
+        adminUserId: user.id,
+      });
     }
 
     // Filter to verified (or legacy "approved") submissions — same notion as verify-submission / UI.

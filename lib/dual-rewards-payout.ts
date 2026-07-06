@@ -180,6 +180,35 @@ export function getDualPayoutScopeFromSubmission(
   return null;
 }
 
+/** Granted CPM/milestone cents from `dual_rewards_payout` when a row is paid. */
+export function getDualRewardsGrantedFromSubmission(
+  submission: {
+    dual_rewards_payout?: unknown;
+    paid?: boolean | null;
+    status?: string | null;
+  } | null | undefined,
+): {
+  totalCents: number;
+  cpmCents: number;
+  milestoneCents: number;
+} | null {
+  if (!submission) return null;
+  const isPaid =
+    submission.paid === true ||
+    String(submission.status || "").toLowerCase() === "paid";
+  if (!isPaid) return null;
+
+  const dual = parseDualRewardsPayoutJson(submission.dual_rewards_payout);
+  if (!dual) return null;
+
+  const cpmCents = Math.max(0, Math.round(dual.cpm_cents));
+  const milestoneCents = Math.max(0, Math.round(dual.milestone_cents));
+  const totalCents = cpmCents + milestoneCents;
+  if (totalCents <= 0) return null;
+
+  return { totalCents, cpmCents, milestoneCents };
+}
+
 /** Remaining payable per component after prior dual-rewards payouts. */
 export function getDualRemainingPayableCents(
   component: DualRewardPayoutScope,
