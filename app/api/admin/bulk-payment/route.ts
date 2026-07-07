@@ -17,9 +17,7 @@ import { buildMilestoneSubmissionPayoutCentsMap } from "@/lib/milestone-contest-
 import {
   buildContestPayoutIdempotencyPayload,
   creditWithWalletShortfallRetry,
-  getContestPayoutLedgerState,
-  contestLedgerNetFromLoaded,
-  loadContestPayoutLedgerRows,
+  loadContestPayoutLedgerBundle,
 } from "@/lib/contest-payout-idempotency";
 import { executeDualRewardsBulkPayment } from "@/lib/dual-rewards-bulk-payment";
 import { buildFlatFeeBonusExpectedCentsBySubmissionId } from "@/lib/twitter-cpm-bonus-expected";
@@ -701,28 +699,27 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const {
-      state: payoutLedgerState,
-      errorMessage: ledgerGenErr,
-    } = await getContestPayoutLedgerState(
+    const ledgerBundle = await loadContestPayoutLedgerBundle(
       supabaseAdmin,
       creator_id,
       contest_id,
     );
-    if (ledgerGenErr) {
+    if ("errorMessage" in ledgerBundle) {
       console.error(
         "[bulk-payment] failed to read payout ledger for idempotency:",
-        ledgerGenErr,
+        ledgerBundle.errorMessage,
       );
       return NextResponse.json(
         {
           error:
             "Cannot verify payout ledger for safe payout (idempotency). Try again or contact support.",
-          details: ledgerGenErr,
+          details: ledgerBundle.errorMessage,
         },
         { status: 500 },
       );
     }
+    const { state: payoutLedgerState, walletNetCents: contestWalletNetBeforePay } =
+      ledgerBundle;
 
     // Build idempotency from immutable request intent rather than computed payout breakdown.
     // This keeps retries stable even if a prior attempt partially updated submission rows.
@@ -748,13 +745,6 @@ export async function POST(request: NextRequest) {
       .update(operationSeed)
       .digest("hex")
       .slice(0, 48)}`;
-
-    const ledgerRows = await loadContestPayoutLedgerRows(
-      supabaseAdmin,
-      creator_id,
-      contest_id,
-    );
-    const contestWalletNetBeforePay = contestLedgerNetFromLoaded(ledgerRows);
 
     const creditResult = await creditWithWalletShortfallRetry({
       payableCents: totalAmount,

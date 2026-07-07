@@ -112,6 +112,28 @@ describe("creditWithWalletShortfallRetry", () => {
     assert.equal(usedKeys.length, 2);
     assert.match(usedKeys[1], /ledger_r1_f1/);
   });
+
+  it("does not retry after a fresh credit satisfies the payable amount", async () => {
+    const usedKeys: string[] = [];
+    const result = await creditWithWalletShortfallRetry({
+      payableCents: 5000,
+      walletNetBeforePay: 0,
+      baseIdempotencyKey: "bulk_pay_v1:abc",
+      ledger: {
+        generation: 1,
+        fingerprint: "fp",
+        rewardCount: 1,
+        refundCount: 0,
+      },
+      credit: async (key) => {
+        usedKeys.push(key);
+        return { success: true, alreadyApplied: false, transactionId: "tx-1" };
+      },
+    });
+
+    assert.equal(result.success, true);
+    assert.equal(usedKeys.length, 1);
+  });
 });
 
 describe("getContestPayoutLedgerState fingerprint", () => {
@@ -131,7 +153,23 @@ describe("getContestPayoutLedgerState fingerprint", () => {
             this.filters = [...(this.filters || []), { column, value }];
             return api;
           },
+          contains(column: string, value: Record<string, unknown>) {
+            this.containsFilters = [
+              ...(this.containsFilters || []),
+              { column, value },
+            ];
+            return api;
+          },
+          in(column: string, values: string[]) {
+            this.inFilters = [...(this.inFilters || []), { column, values }];
+            return api;
+          },
           filters: [] as { column: string; value: string }[],
+          containsFilters: [] as {
+            column: string;
+            value: Record<string, unknown>;
+          }[],
+          inFilters: [] as { column: string; values: string[] }[],
           then(resolve: (value: { data: unknown[]; error: null }) => void) {
             if (table === "submissions") {
               resolve({ data: [{ id: "sub-1" }], error: null });

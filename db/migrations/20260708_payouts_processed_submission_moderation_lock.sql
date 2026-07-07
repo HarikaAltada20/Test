@@ -112,7 +112,9 @@ BEGIN
   v_moderation_changed :=
     OLD.moderation_status IS DISTINCT FROM NEW.moderation_status
     OR OLD.rejection_reason IS DISTINCT FROM NEW.rejection_reason
-    OR COALESCE(OLD.earnings, 0) IS DISTINCT FROM COALESCE(NEW.earnings, 0);
+    OR COALESCE(OLD.earnings, 0) IS DISTINCT FROM COALESCE(NEW.earnings, 0)
+    OR COALESCE(OLD.bonus_paid, false) IS DISTINCT FROM COALESCE(NEW.bonus_paid, false)
+    OR COALESCE(OLD.bonus_amount, 0) IS DISTINCT FROM COALESCE(NEW.bonus_amount, 0);
 
   IF NOT v_moderation_changed THEN
     RETURN NEW;

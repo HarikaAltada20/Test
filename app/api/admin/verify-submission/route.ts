@@ -47,6 +47,7 @@ import {
   parseDualRewardPayoutScopeFromRemarks,
   stripDualComponentTagFromRemarks,
   buildDualRewardsSubmissionPayUpdatePayload,
+  buildSubmissionPaidReversalUpdate,
   splitDualReversalRefundFromPayout,
 } from "@/lib/dual-rewards-payout";
 import {
@@ -62,8 +63,7 @@ import {
 } from "@/lib/dual-rewards-pool-budget";
 import {
   creditWithWalletShortfallRetry,
-  getContestPayoutLedgerState,
-  loadContestPayoutLedgerRows,
+  loadContestPayoutLedgerBundle,
 } from "@/lib/contest-payout-idempotency";
 import { creditDualRewardsSubmissionReward } from "@/lib/dual-rewards-reward-credit";
 
@@ -1494,19 +1494,21 @@ export async function POST(request: Request) {
             return true;
           };
 
-          const ledgerLoad = await loadContestPayoutLedgerRows(
+          const ledgerBundle = await loadContestPayoutLedgerBundle(
             supabaseAdmin,
             submissionFull.creator_id,
             submissionFull.contest_id,
           );
-          if ("errorMessage" in ledgerLoad && ledgerLoad.errorMessage) {
+          if ("errorMessage" in ledgerBundle) {
             return NextResponse.json(
               {
-                error: `Failed to load payout ledger: ${ledgerLoad.errorMessage}`,
+                error: `Failed to load payout ledger: ${ledgerBundle.errorMessage}`,
               },
               { status: 500 },
             );
           }
+          const ledgerLoad = ledgerBundle.loaded;
+          const contestLedgerState = ledgerBundle.state;
 
           const contestRewardRows = (ledgerLoad.rewardRows || []).filter(
             (row) =>
@@ -1549,10 +1551,6 @@ export async function POST(request: Request) {
           const dualCreditTotalCents =
             dualCreditCpmCents + dualCreditMilestoneCents;
 
-          const mainRewardInThisCycle = contestRewardRows.filter(
-            (row) => getTransactionPayoutCycle(row?.metadata) === resolvedNextCycle,
-          );
-
           const submissionWalletNetBeforePay =
             contest.contest_type === "dual_rewards"
               ? computeSubmissionGrossWalletNetCents(
@@ -1578,7 +1576,7 @@ export async function POST(request: Request) {
             dualCreditTotalCents > 0 &&
             submissionWalletNetBeforePay < dualCreditTotalCents;
 
-          if (mainRewardInThisCycle.length === 0 && needsWalletCredit) {
+          if (needsWalletCredit) {
             if (contest.contest_type === "dual_rewards") {
               const paidComponents = getDualRewardsSubmissionPaidComponents({
                 id: String(submissionFull.id),
@@ -1619,12 +1617,6 @@ export async function POST(request: Request) {
                 );
               }
             }
-
-            const { state: contestLedgerState } = await getContestPayoutLedgerState(
-              supabaseAdmin,
-              submissionFull.creator_id,
-              submissionFull.contest_id,
-            );
 
             const creditRes = await creditWithWalletShortfallRetry({
               payableCents:
@@ -2052,19 +2044,17 @@ export async function POST(request: Request) {
         console.error("Metrics update (revert paid) failed:", e);
       }
 
-      // Always clear paid/bonus state once we move away from Paid.
+      // Clear paid / ladder bonus state; preserve most-verified views/reels bonus
+      // unless those tracks were explicitly reversed above.
       await supabaseAdmin
         .from("submissions")
-        .update({
-          earnings: null,
-          paid: false,
-          paid_at: null,
-          bonus_paid: false,
-          bonus_paid_at: null,
-          bonus_amount: null,
-          milestone_bonus_paid: null,
-          dual_rewards_payout: null,
-        })
+        .update(
+          buildSubmissionPaidReversalUpdate(submissionFull, {
+            mainCents: mainReversalAmount,
+            bonusCents: bonusReversalAmount,
+            bonusReversals,
+          }),
+        )
         .eq("id", submissionId);
     }
 

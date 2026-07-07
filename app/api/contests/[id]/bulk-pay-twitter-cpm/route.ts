@@ -14,9 +14,7 @@ import { parsePayoutAdjustment } from "@/lib/payout-rules";
 import {
   buildContestPayoutIdempotencyPayload,
   creditWithWalletShortfallRetry,
-  getContestPayoutLedgerState,
-  contestLedgerNetFromLoaded,
-  loadContestPayoutLedgerRows,
+  loadContestPayoutLedgerBundle,
 } from "@/lib/contest-payout-idempotency";
 import {
   sumBonusRewards,
@@ -477,29 +475,28 @@ export async function POST(
       creditMetadata.bonus_type = "flat_fee";
     }
 
-    const {
-      state: payoutLedgerState,
-      errorMessage: ledgerGenErr,
-    } = await getContestPayoutLedgerState(
+    const ledgerBundle = await loadContestPayoutLedgerBundle(
       supabaseAdmin,
       creatorId,
       contestId,
     );
 
-    if (ledgerGenErr) {
+    if ("errorMessage" in ledgerBundle) {
       console.error(
         "[bulk-pay-twitter-cpm] failed to read payout ledger:",
-        ledgerGenErr,
+        ledgerBundle.errorMessage,
       );
       return NextResponse.json(
         {
           error:
             "Cannot verify payout ledger for safe payout (idempotency). Try again or contact support.",
-          details: ledgerGenErr,
+          details: ledgerBundle.errorMessage,
         },
         { status: 500 },
       );
     }
+    const { state: payoutLedgerState, walletNetCents: contestWalletNetBeforePay } =
+      ledgerBundle;
 
     const twitterBulkFingerprint = createHash("sha256")
       .update(
@@ -522,13 +519,6 @@ export async function POST(
       .slice(0, 48);
 
     const twitterBulkIdempotencyKey = `twitter_cpm_bulk_v2:${twitterBulkFingerprint}`;
-
-    const ledgerRows = await loadContestPayoutLedgerRows(
-      supabaseAdmin,
-      creatorId,
-      contestId,
-    );
-    const contestWalletNetBeforePay = contestLedgerNetFromLoaded(ledgerRows);
 
     const contestTitle = contest.title || "Contest";
     const bulkPaymentDescription =

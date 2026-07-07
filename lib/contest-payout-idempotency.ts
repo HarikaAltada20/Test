@@ -6,6 +6,10 @@ import {
 } from "@/lib/dual-rewards-pool-budget";
 import { REVERSAL_TRANSACTION_REMARK } from "@/lib/payment-utils";
 
+type MoneyTxnWithId = MoneyTxnRow & { id?: string };
+
+const SUBMISSION_ID_CHUNK_SIZE = 80;
+
 async function fetchContestSubmissionIds(
   supabase: SupabaseClient,
   contestId: string,
@@ -25,6 +29,24 @@ async function fetchContestSubmissionIds(
   };
 }
 
+function chunkIds(ids: string[], size: number): string[][] {
+  if (ids.length === 0) return [];
+  const chunks: string[][] = [];
+  for (let i = 0; i < ids.length; i += size) {
+    chunks.push(ids.slice(i, i + size));
+  }
+  return chunks;
+}
+
+function dedupeMoneyTxnsById(rows: MoneyTxnWithId[]): MoneyTxnWithId[] {
+  const byId = new Map<string, MoneyTxnWithId>();
+  for (const row of rows) {
+    const id = String(row.id ?? "");
+    if (id) byId.set(id, row);
+  }
+  return [...byId.values()];
+}
+
 function filterContestLedgerRows(
   rows: MoneyTxnRow[] | null | undefined,
   contestId: string,
@@ -41,6 +63,66 @@ function ledgerFingerprint(txnIds: string[]): string {
     .slice(0, 32);
 }
 
+async function fetchCreatorMoneyTxnsScopedToContest(params: {
+  supabase: SupabaseClient;
+  creatorId: string;
+  contestId: string;
+  type: "reward" | "refund";
+  submissionIds: string[];
+  select: string;
+}): Promise<{ rows: MoneyTxnWithId[]; errorMessage: string | null }> {
+  const { supabase, creatorId, contestId, type, submissionIds, select } =
+    params;
+
+  const queries: PromiseLike<{
+    data: MoneyTxnWithId[] | null;
+    error: { message: string } | null;
+  }>[] = [
+    supabase
+      .from("money_transactions")
+      .select(select)
+      .eq("user_id", creatorId)
+      .eq("type", type)
+      .contains("metadata", { contest_id: contestId }),
+  ];
+
+  for (const chunk of chunkIds(submissionIds, SUBMISSION_ID_CHUNK_SIZE)) {
+    queries.push(
+      supabase
+        .from("money_transactions")
+        .select(select)
+        .eq("user_id", creatorId)
+        .eq("type", type)
+        .in("metadata->>submission_id", chunk),
+    );
+    queries.push(
+      supabase
+        .from("money_transactions")
+        .select(select)
+        .eq("user_id", creatorId)
+        .eq("type", type)
+        .in("metadata->>source_submission_id", chunk),
+    );
+  }
+
+  const results = await Promise.all(queries);
+  const merged: MoneyTxnWithId[] = [];
+  for (const result of results) {
+    if (result.error) {
+      return { rows: [], errorMessage: result.error.message };
+    }
+    merged.push(...((result.data || []) as MoneyTxnWithId[]));
+  }
+
+  return { rows: dedupeMoneyTxnsById(merged), errorMessage: null };
+}
+
+export type ContestPayoutLedgerLoaded = {
+  rewardRows: MoneyTxnRow[];
+  refundRows: MoneyTxnRow[];
+  contestSubmissionIds: Set<string>;
+};
+
 /**
  * Contest-scoped reward + refund rows for a creator (includes bulk rows whose
  * metadata only lists `contest_id` or per-submission `breakdown` entries).
@@ -49,48 +131,47 @@ export async function loadContestPayoutLedgerRows(
   supabase: SupabaseClient,
   creatorId: string,
   contestId: string,
-): Promise<
-  | {
-      rewardRows: MoneyTxnRow[];
-      refundRows: MoneyTxnRow[];
-      contestSubmissionIds: Set<string>;
-      errorMessage?: undefined;
-    }
-  | { errorMessage: string }
-> {
+): Promise<ContestPayoutLedgerLoaded | { errorMessage: string }> {
   const { ids: contestSubmissionIds, errorMessage: subErr } =
     await fetchContestSubmissionIds(supabase, contestId);
   if (subErr) {
     return { errorMessage: subErr };
   }
 
-  const [{ data: rewardRowsAll, error: rewardErr }, { data: refundRowsAll, error: refundErr }] =
-    await Promise.all([
-      supabase
-        .from("money_transactions")
-        .select("id, amount, metadata")
-        .eq("user_id", creatorId)
-        .eq("type", "reward"),
-      supabase
-        .from("money_transactions")
-        .select("id, amount, remarks, metadata")
-        .eq("user_id", creatorId)
-        .eq("type", "refund"),
-    ]);
+  const submissionIdList = [...contestSubmissionIds];
 
-  const errorMessage = rewardErr?.message || refundErr?.message;
+  const [rewardFetch, refundFetch] = await Promise.all([
+    fetchCreatorMoneyTxnsScopedToContest({
+      supabase,
+      creatorId,
+      contestId,
+      type: "reward",
+      submissionIds: submissionIdList,
+      select: "id, amount, metadata",
+    }),
+    fetchCreatorMoneyTxnsScopedToContest({
+      supabase,
+      creatorId,
+      contestId,
+      type: "refund",
+      submissionIds: submissionIdList,
+      select: "id, amount, remarks, metadata",
+    }),
+  ]);
+
+  const errorMessage = rewardFetch.errorMessage || refundFetch.errorMessage;
   if (errorMessage) {
     return { errorMessage };
   }
 
   return {
     rewardRows: filterContestLedgerRows(
-      rewardRowsAll as MoneyTxnRow[] | null,
+      rewardFetch.rows,
       contestId,
       contestSubmissionIds,
     ),
     refundRows: filterContestLedgerRows(
-      refundRowsAll as MoneyTxnRow[] | null,
+      refundFetch.rows,
       contestId,
       contestSubmissionIds,
     ),
@@ -104,6 +185,50 @@ export type ContestPayoutLedgerState = {
   rewardCount: number;
   refundCount: number;
 };
+
+export function contestPayoutLedgerStateFromLoaded(
+  loaded: ContestPayoutLedgerLoaded,
+): ContestPayoutLedgerState {
+  const allIds = [...loaded.rewardRows, ...loaded.refundRows]
+    .map((row) => String((row as MoneyTxnWithId).id ?? ""))
+    .filter(Boolean);
+
+  return {
+    generation: allIds.length,
+    fingerprint: ledgerFingerprint(allIds),
+    rewardCount: loaded.rewardRows.length,
+    refundCount: loaded.refundRows.length,
+  };
+}
+
+/** Single fetch: ledger rows, idempotency state, and contest wallet net. */
+export async function loadContestPayoutLedgerBundle(
+  supabase: SupabaseClient,
+  creatorId: string,
+  contestId: string,
+): Promise<
+  | {
+      loaded: ContestPayoutLedgerLoaded;
+      state: ContestPayoutLedgerState;
+      walletNetCents: number;
+    }
+  | { errorMessage: string }
+> {
+  const loaded = await loadContestPayoutLedgerRows(
+    supabase,
+    creatorId,
+    contestId,
+  );
+  if ("errorMessage" in loaded) {
+    return loaded;
+  }
+
+  return {
+    loaded,
+    state: contestPayoutLedgerStateFromLoaded(loaded),
+    walletNetCents: contestLedgerNetFromLoaded(loaded),
+  };
+}
 
 /** Immutable idempotency payload shared by bulk / dual-rewards payout routes. */
 export function buildContestPayoutIdempotencyPayload(
@@ -144,25 +269,34 @@ export async function creditWithWalletShortfallRetry(params: {
     return { success: true, alreadyApplied: false };
   }
 
-  const walletNet = Math.max(0, Math.round(params.walletNetBeforePay));
+  let effectiveWalletNet = Math.max(0, Math.round(params.walletNetBeforePay));
   const maxAttempts = Math.max(1, params.maxShortfallAttempts ?? 5);
 
   let result = await params.credit(params.baseIdempotencyKey);
   if (!result.success) {
     return result;
   }
+  if (!result.alreadyApplied) {
+    effectiveWalletNet = payableCents;
+  }
 
   let attempt = 0;
   while (
     result.success &&
     result.alreadyApplied &&
-    payableCents > walletNet &&
+    payableCents > effectiveWalletNet &&
     attempt < maxAttempts
   ) {
     attempt += 1;
-    const shortfallCents = payableCents - walletNet;
+    const shortfallCents = payableCents - effectiveWalletNet;
     const bumpedKey = `${params.baseIdempotencyKey}:ledger_r${params.ledger.rewardCount}_f${params.ledger.refundCount}:shortfall_${shortfallCents}:n${attempt}`;
     result = await params.credit(bumpedKey);
+    if (!result.success) {
+      return result;
+    }
+    if (!result.alreadyApplied) {
+      effectiveWalletNet = payableCents;
+    }
   }
 
   return result;
@@ -184,16 +318,9 @@ export function sumContestLedgerNetCents(
 }
 
 export function contestLedgerNetFromLoaded(
-  loaded:
-    | {
-        rewardRows: MoneyTxnRow[];
-        refundRows: MoneyTxnRow[];
-        contestSubmissionIds: Set<string>;
-        errorMessage?: undefined;
-      }
-    | { errorMessage: string },
+  loaded: ContestPayoutLedgerLoaded | { errorMessage: string },
 ): number {
-  if ("errorMessage" in loaded && loaded.errorMessage) {
+  if ("errorMessage" in loaded) {
     return 0;
   }
   return sumContestLedgerNetCents(
@@ -211,8 +338,12 @@ export async function getContestPayoutLedgerState(
   creatorId: string,
   contestId: string,
 ): Promise<{ state: ContestPayoutLedgerState; errorMessage: string | null }> {
-  const loaded = await loadContestPayoutLedgerRows(supabase, creatorId, contestId);
-  if ("errorMessage" in loaded && loaded.errorMessage) {
+  const bundle = await loadContestPayoutLedgerBundle(
+    supabase,
+    creatorId,
+    contestId,
+  );
+  if ("errorMessage" in bundle) {
     return {
       state: {
         generation: 0,
@@ -220,25 +351,11 @@ export async function getContestPayoutLedgerState(
         rewardCount: 0,
         refundCount: 0,
       },
-      errorMessage: loaded.errorMessage,
+      errorMessage: bundle.errorMessage,
     };
   }
 
-  const rewardRows = loaded.rewardRows ?? [];
-  const refundRows = loaded.refundRows ?? [];
-  const allIds = [...rewardRows, ...refundRows].map((row) =>
-    String((row as { id?: string }).id ?? ""),
-  ).filter(Boolean);
-
-  return {
-    state: {
-      generation: allIds.length,
-      fingerprint: ledgerFingerprint(allIds),
-      rewardCount: rewardRows.length,
-      refundCount: refundRows.length,
-    },
-    errorMessage: null,
-  };
+  return { state: bundle.state, errorMessage: null };
 }
 
 /**

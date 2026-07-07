@@ -592,6 +592,93 @@ export function excludeMostVerifiedBonusFromPaidTotalCents(
   return Math.max(0, Math.round(Number(paidTotalCents) || 0) - mv.totalCents);
 }
 
+export type SubmissionPaidReversalInput = {
+  earnings?: number | null;
+  paid?: boolean | null;
+  paid_at?: string | null;
+  bonus_paid?: boolean | null;
+  bonus_paid_at?: string | null;
+  bonus_amount?: number | null;
+  milestone_bonus_paid?: MilestoneBonusPaidTrackCents | null;
+  metadata?: { milestone_bonus_paid?: MilestoneBonusPaidTrackCents } | null;
+  dual_rewards_payout?: unknown;
+};
+
+export type SubmissionReversalAmounts = {
+  mainCents: number;
+  bonusCents: number;
+  bonusReversals: { bonusType: string; amount: number }[];
+};
+
+/**
+ * Build submission row fields after paid → verified/pending/rejected reversal.
+ * Preserves most-verified views/reels bonus (`milestone_bonus_paid`) unless those
+ * tracks were explicitly reversed in `bonusReversals`.
+ */
+export function buildSubmissionPaidReversalUpdate(
+  row: SubmissionPaidReversalInput,
+  reversal: SubmissionReversalAmounts,
+): Record<string, unknown> {
+  const mvPrev = getMostVerifiedBonusPaidCentsFromSubmission(row);
+  const sumMvReversal = (track: "views" | "reels") =>
+    reversal.bonusReversals
+      .filter((b) => b.bonusType === `milestone_most_verified_${track}`)
+      .reduce((sum, b) => sum + Math.max(0, Math.round(Number(b.amount) || 0)), 0);
+
+  const mvViewsReversed = sumMvReversal("views");
+  const mvReelsReversed = sumMvReversal("reels");
+  const nextMv = {
+    views: Math.max(0, mvPrev.viewsCents - mvViewsReversed),
+    reels: Math.max(0, mvPrev.reelsCents - mvReelsReversed),
+  };
+  const nextMvTotal = nextMv.views + nextMv.reels;
+
+  const prevCpm = getCpmGrantedCentsFromSubmission(row);
+  const prevLadder = getMilestoneLadderGrantedCentsFromSubmission(row);
+
+  const mainReversal = Math.max(0, Math.round(Number(reversal.mainCents) || 0));
+  const bonusReversal = Math.max(0, Math.round(Number(reversal.bonusCents) || 0));
+
+  const cpmReversed =
+    mainReversal > 0 ? Math.min(mainReversal, prevCpm) : prevCpm;
+  const ladderReversed =
+    bonusReversal > 0 ? Math.min(bonusReversal, prevLadder) : prevLadder;
+
+  const nextCpm = Math.max(0, prevCpm - cpmReversed);
+  const nextLadder = Math.max(0, prevLadder - ladderReversed);
+  const nextBonusAmount = nextLadder + nextMvTotal;
+  const stillPaid = nextCpm > 0;
+  const stillBonusPaid = nextBonusAmount > 0;
+
+  const hadExplicitMilestoneBonusPaid =
+    (row.milestone_bonus_paid != null &&
+      typeof row.milestone_bonus_paid === "object") ||
+    (row.metadata?.milestone_bonus_paid != null &&
+      typeof row.metadata.milestone_bonus_paid === "object");
+
+  let dual_rewards_payout: Record<string, unknown> | null = null;
+  const nextMilestoneTotal = nextLadder + nextMvTotal;
+  if (nextCpm > 0 || nextMilestoneTotal > 0) {
+    dual_rewards_payout = dualRewardsPayoutForMilestoneTotal(
+      row.dual_rewards_payout,
+      nextCpm,
+      nextMilestoneTotal,
+    );
+  }
+
+  return {
+    earnings: stillPaid ? nextCpm : null,
+    paid: stillPaid,
+    paid_at: stillPaid ? row.paid_at ?? null : null,
+    bonus_paid: stillBonusPaid,
+    bonus_paid_at: stillBonusPaid ? row.bonus_paid_at ?? null : null,
+    bonus_amount: stillBonusPaid ? nextBonusAmount : null,
+    milestone_bonus_paid:
+      hadExplicitMilestoneBonusPaid || nextMvTotal > 0 ? nextMv : null,
+    dual_rewards_payout,
+  };
+}
+
 export function dualRewardsPayoutJsonToRowValue(
   j: DualRewardsPayoutJson,
 ): Record<string, unknown> {

@@ -3,7 +3,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import {
   buildContestPayoutIdempotencyPayload,
   creditWithWalletShortfallRetry,
-  getContestPayoutLedgerState,
+  loadContestPayoutLedgerBundle,
 } from "@/lib/contest-payout-idempotency";
 import { loadDualCreatorCapMaps } from "@/lib/dual-rewards-payout-eligibility";
 import {
@@ -403,17 +403,21 @@ export async function executeDualRewardsBulkPayment(params: {
     }
   }
 
-  const { state: payoutLedgerState, errorMessage: ledgerGenErr } =
-    await getContestPayoutLedgerState(supabaseAdmin, creatorId, contestId);
-  if (ledgerGenErr) {
+  const ledgerBundle = await loadContestPayoutLedgerBundle(
+    supabaseAdmin,
+    creatorId,
+    contestId,
+  );
+  if ("errorMessage" in ledgerBundle) {
     return {
       ok: false,
       status: 500,
       error:
         "Cannot verify payout ledger for safe idempotency. Try again or contact support.",
-      details: ledgerGenErr,
+      details: ledgerBundle.errorMessage,
     };
   }
+  const payoutLedgerState = ledgerBundle.state;
 
   const requestedSubmissionIds = [...submissionIds].map(String).sort();
   const operationSeed = JSON.stringify(
@@ -443,7 +447,7 @@ export async function executeDualRewardsBulkPayment(params: {
   );
 
   const creditResult =
-    totalAmount > 0
+    payableCents > 0
       ? await creditWithWalletShortfallRetry({
           payableCents,
           walletNetBeforePay,
@@ -564,13 +568,13 @@ export async function executeDualRewardsBulkPayment(params: {
     if (!creditResult.alreadyApplied) {
       const rollback = await debitCreatorWithdrawableBalance(
         creatorId,
-        totalAmount,
+        payableCents,
       );
       if (rollback.success) {
         await logTransactionAsAdmin(
           creatorId,
           "refund",
-          totalAmount,
+          payableCents,
           "success",
           `Rollback: bulk payment row update failed for ${contestTitle}`,
           {

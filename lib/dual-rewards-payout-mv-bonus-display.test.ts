@@ -1,6 +1,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import {
+  buildSubmissionPaidReversalUpdate,
   excludeMostVerifiedBonusFromPaidTotalCents,
   getCpmGrantedCentsFromSubmission,
   getMilestoneLadderGrantedCentsFromSubmission,
@@ -81,5 +82,81 @@ describe("excludeMostVerifiedBonusFromPaidTotalCents", () => {
       milestone_bonus_paid: { views: 170, reels: 0 },
     });
     assert.equal(adjusted, 8598);
+  });
+});
+
+describe("buildSubmissionPaidReversalUpdate", () => {
+  it("preserves most-verified bonus when reversing CPM-only paid submission", () => {
+    const update = buildSubmissionPaidReversalUpdate(
+      {
+        paid: true,
+        paid_at: "2026-01-01T00:00:00.000Z",
+        earnings: 7662,
+        bonus_paid: true,
+        bonus_paid_at: "2026-01-02T00:00:00.000Z",
+        bonus_amount: 11060,
+        milestone_bonus_paid: { views: 0, reels: 10000 },
+        dual_rewards_payout: { cpm_cents: 7662, milestone_cents: 11060 },
+      },
+      { mainCents: 7662, bonusCents: 0, bonusReversals: [] },
+    );
+
+    assert.equal(update.paid, false);
+    assert.equal(update.earnings, null);
+    assert.equal(update.bonus_paid, true);
+    assert.equal(update.bonus_amount, 10000);
+    assert.deepEqual(update.milestone_bonus_paid, { views: 0, reels: 10000 });
+    assert.deepEqual(update.dual_rewards_payout, {
+      cpm_cents: 0,
+      milestone_cents: 10000,
+    });
+  });
+
+  it("clears ladder bonus but keeps most-verified tracks on full submission reversal", () => {
+    const update = buildSubmissionPaidReversalUpdate(
+      {
+        paid: true,
+        earnings: 5000,
+        bonus_paid: true,
+        bonus_amount: 600,
+        milestone_bonus_paid: { views: 100, reels: 100 },
+        dual_rewards_payout: { cpm_cents: 5000, milestone_cents: 600 },
+      },
+      {
+        mainCents: 5000,
+        bonusCents: 400,
+        bonusReversals: [{ bonusType: "milestone", amount: 400 }],
+      },
+    );
+
+    assert.equal(update.paid, false);
+    assert.equal(update.bonus_paid, true);
+    assert.equal(update.bonus_amount, 200);
+    assert.deepEqual(update.milestone_bonus_paid, { views: 100, reels: 100 });
+    assert.deepEqual(update.dual_rewards_payout, {
+      cpm_cents: 0,
+      milestone_cents: 200,
+    });
+  });
+
+  it("decrements most-verified tracks when explicitly reversed", () => {
+    const update = buildSubmissionPaidReversalUpdate(
+      {
+        bonus_paid: true,
+        bonus_amount: 200,
+        milestone_bonus_paid: { views: 100, reels: 100 },
+      },
+      {
+        mainCents: 0,
+        bonusCents: 100,
+        bonusReversals: [
+          { bonusType: "milestone_most_verified_views", amount: 100 },
+        ],
+      },
+    );
+
+    assert.equal(update.bonus_paid, true);
+    assert.equal(update.bonus_amount, 100);
+    assert.deepEqual(update.milestone_bonus_paid, { views: 0, reels: 100 });
   });
 });
