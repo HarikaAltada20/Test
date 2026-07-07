@@ -4,6 +4,7 @@ import {
   computeBudgetFilledCents,
   computeBudgetPaidCents,
   getBudgetTileMode,
+  getPoolBudgetSpentCentsForDisplay,
   resolveBudgetTileMetrics,
 } from "./contest-budget-tile-metrics";
 
@@ -168,5 +169,99 @@ describe("contest-budget-tile-metrics", () => {
     assert.equal(tile!.denominatorCents, 100_000);
     assert.equal(tile!.numeratorCents, 8000);
     assert.equal(tile!.label, "Budget paid / Campaign budget");
+  });
+
+  it("dual rewards paid uses dual_rewards_payout components only", () => {
+    const contest = {
+      contest_type: "dual_rewards",
+      post_contest_status: "payouts_processed",
+      contest_based_details: {
+        total_budget_cents: 18_000,
+        cpm_contest: { cpm_rate_usd: 1, budget_spent: 18_000 },
+        milestone_contest: {
+          budget_spent: 18_000,
+          milestones: [
+            { target_views: 1000, payout_cents: 500, winner_limit: null },
+          ],
+        },
+      },
+    };
+    const submissions = [
+      {
+        id: "s1",
+        creator_id: "c1",
+        created_at: "2026-06-01T00:00:00.000Z",
+        status: "paid",
+        paid: true,
+        earnings: 17_999,
+        bonus_paid: true,
+        bonus_amount: 500,
+        views: 50_000,
+        platform: "youtube",
+        dual_rewards_payout: { cpm_cents: 16_499, milestone_cents: 1500 },
+      },
+    ];
+    assert.equal(computeBudgetPaidCents(contest, submissions), 17_999);
+  });
+
+  it("getPoolBudgetSpentCentsForDisplay prefers pool_budget_spent_cents for dual", () => {
+    const contest = {
+      contest_type: "dual_rewards",
+      post_contest_status: "payouts_processed",
+      contest_based_details: {
+        total_budget_cents: 18_000,
+        pool_budget_spent_cents: 17_999,
+        cpm_contest: { budget_spent: 18_000 },
+        milestone_contest: { budget_spent: 18_000 },
+      },
+    };
+    assert.equal(getPoolBudgetSpentCentsForDisplay(contest), 17_999);
+  });
+
+  it("getPoolBudgetSpentCentsForDisplay caps legacy nested dual sum at pool", () => {
+    const contest = {
+      contest_type: "dual_rewards",
+      post_contest_status: "in_review",
+      contest_based_details: {
+        total_budget_cents: 18_000,
+        cpm_contest: { budget_spent: 18_000, cpm_rate_usd: 1 },
+        milestone_contest: { budget_spent: 17_998 },
+      },
+    };
+    assert.equal(getPoolBudgetSpentCentsForDisplay(contest), 18_000);
+  });
+
+  it("resolveBudgetTileMetrics reports dual filled numerator above pool when overfilled", () => {
+    const contest = {
+      contest_type: "dual_rewards",
+      post_contest_status: "verification_complete",
+      max_earnings_per_creator: null,
+      contest_based_details: {
+        total_budget_cents: 10_000,
+        cpm_contest: { cpm_rate_usd: 10 },
+        milestone_contest: {
+          milestones: [
+            { target_views: 100, payout_cents: 8000, winner_limit: null },
+          ],
+        },
+      },
+    };
+    const submissions = [
+      {
+        id: "s1",
+        creator_id: "c1",
+        created_at: "2026-06-01T00:00:00.000Z",
+        status: "verified",
+        paid: false,
+        earnings: null,
+        bonus_paid: false,
+        views: 100_000,
+        platform: "youtube",
+      },
+    ];
+    const tile = resolveBudgetTileMetrics(contest, submissions);
+    assert.ok(tile);
+    assert.equal(tile!.numeratorCents, 108_000);
+    assert.equal(tile!.denominatorCents, 10_000);
   });
 });

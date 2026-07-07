@@ -66,6 +66,7 @@ import {
   isCpmContestType,
   isMilestoneContestType,
 } from "@/lib/contest-type";
+import { getPoolBudgetSpentCentsForDisplay } from "@/lib/contest-budget-tile-metrics";
 import {
   calculateLeaderboardBudgetSpent,
   Submission,
@@ -429,11 +430,13 @@ const getBudgetTrackerValues = (
   budgetSpent?: number | null,
 ) => {
   const spent = Math.max(0, budgetSpent ?? 0);
-  const clampedSpent = Math.min(spent, totalBudget);
+  const clampedSpent =
+    totalBudget > 0 ? Math.min(spent, totalBudget) : spent;
   const percentage = totalBudget > 0 ? (clampedSpent / totalBudget) * 100 : 0;
   const remaining = Math.max(totalBudget - clampedSpent, 0);
 
-  return { spent: clampedSpent, percentage, remaining };
+  // Dollar labels show actual spend (may exceed pool); bar/remaining stay capped.
+  return { spent, percentage, remaining };
 };
 
 const getContestTypeLabel = (contestType: string | null | undefined) => {
@@ -445,15 +448,12 @@ const getContestTypeLabel = (contestType: string | null | undefined) => {
   return contestType.charAt(0).toUpperCase() + contestType.slice(1);
 };
 
-/** Unified pool tracker spend: dual splits spend across CPM + milestone nested objects */
-function getPoolBudgetSpentForTrackerDisplay(contest: Contest): number {
-  const cpm =
-    contest.contest_based_details?.cpm_contest?.budget_spent ?? 0;
-  if (contest.contest_type !== "dual_rewards") return cpm;
-  const milestone =
-    contest.contest_based_details?.milestone_contest?.budget_spent ?? 0;
-  return cpm + milestone;
-}
+const getContestBudgetSpentForTracker = (contest: Contest): number =>
+  getPoolBudgetSpentCentsForDisplay({
+    contest_type: contest.contest_type,
+    post_contest_status: contest.post_contest_status,
+    contest_based_details: contest.contest_based_details,
+  });
 
 const getContestValueForSort = (contest: Contest): number => {
   if (
@@ -1866,11 +1866,9 @@ export function ContestListClient({
                   contest.contest_type,
                   contest.contest_based_details,
                 );
-                const budgetSpent =
-                  getPoolBudgetSpentForTrackerDisplay(contest);
-                const { percentage, remaining } = getBudgetTrackerValues(
+                const tracker = getBudgetTrackerValues(
                   totalBudget,
-                  budgetSpent,
+                  getContestBudgetSpentForTracker(contest),
                 );
 
                 return (
@@ -1884,7 +1882,7 @@ export function ContestListClient({
                     >
                       <span className="font-medium">Budget Tracker</span>
                       <span className="font-semibold">
-                        {formatMoney(budgetSpent)} / {formatMoney(totalBudget)}
+                        {formatMoney(tracker.spent)} / {formatMoney(totalBudget)}
                       </span>
                     </div>
                     <div
@@ -1892,11 +1890,11 @@ export function ContestListClient({
                         "relative w-full bg-slate-200 dark:bg-slate-700 rounded-full h-3 overflow-hidden",
                         isDark ? "bg-[#FFFFFF42]" : "bg-slate-200",
                       )}
-                      title={`Total Budget Spent: ${formatMoney(budgetSpent)}`}
+                      title={`Total Budget Spent: ${formatMoney(tracker.spent)}`}
                     >
                       <div
                         className="absolute h-full bg-gradient-to-r from-purple-500 to-purple-600 rounded-full transition-all duration-500 ease-out"
-                        style={{ width: `${percentage}%` }}
+                        style={{ width: `${tracker.percentage}%` }}
                       ></div>
                     </div>
                     <div
@@ -1906,8 +1904,8 @@ export function ContestListClient({
                         transition: "none",
                       }}
                     >
-                      <span>{percentage.toFixed(1)}% used</span>
-                      <span>{formatMoney(remaining)} remaining</span>
+                      <span>{tracker.percentage.toFixed(1)}% used</span>
+                      <span>{formatMoney(tracker.remaining)} remaining</span>
                     </div>
                   </div>
                 );
@@ -1987,7 +1985,7 @@ export function ContestListClient({
                 const budgetSpent =
                   contest.contest_based_details.milestone_contest.budget_spent ||
                   0;
-                const { percentage, remaining } = getBudgetTrackerValues(
+                const tracker = getBudgetTrackerValues(
                   totalBudget,
                   budgetSpent,
                 );
@@ -2003,7 +2001,7 @@ export function ContestListClient({
                     >
                       <span className="font-medium">Budget Tracker</span>
                       <span className="font-semibold">
-                        {formatMoney(budgetSpent)} /{" "}
+                        {formatMoney(tracker.spent)} /{" "}
                         {formatMoney(totalBudget)}
                       </span>
                     </div>
@@ -2012,11 +2010,11 @@ export function ContestListClient({
                         "relative w-full rounded-full h-3 overflow-hidden",
                         isDark ? "bg-[#FFFFFF42]" : "bg-slate-200",
                       )}
-                      title={`Total Budget Spent: ${formatMoney(budgetSpent)}`}
+                      title={`Total Budget Spent: ${formatMoney(tracker.spent)}`}
                     >
                       <div
                         className="absolute h-full bg-gradient-to-r from-purple-500 to-purple-600 rounded-full transition-all duration-500 ease-out"
-                        style={{ width: `${percentage}%` }}
+                        style={{ width: `${tracker.percentage}%` }}
                       ></div>
                     </div>
                     <div
@@ -2026,8 +2024,8 @@ export function ContestListClient({
                         transition: "none",
                       }}
                     >
-                      <span>{percentage.toFixed(1)}% used</span>
-                      <span>{formatMoney(remaining)} remaining</span>
+                      <span>{tracker.percentage.toFixed(1)}% used</span>
+                      <span>{formatMoney(tracker.remaining)} remaining</span>
                     </div>
                   </div>
                 );
@@ -2706,11 +2704,9 @@ export function ContestListClient({
                     contest.contest_type,
                     contest.contest_based_details,
                   );
-                  const budgetSpent =
-                    getPoolBudgetSpentForTrackerDisplay(contest);
-                  const { percentage, remaining } = getBudgetTrackerValues(
+                  const tracker = getBudgetTrackerValues(
                     totalBudget,
-                    budgetSpent,
+                    getContestBudgetSpentForTracker(contest),
                   );
 
                   return (
@@ -2724,7 +2720,7 @@ export function ContestListClient({
                       >
                         <span className="font-medium">Budget Tracker</span>
                         <span className="font-semibold">
-                          {formatMoney(budgetSpent)} /{" "}
+                          {formatMoney(tracker.spent)} /{" "}
                           {formatMoney(totalBudget)}
                         </span>
                       </div>
@@ -2736,7 +2732,7 @@ export function ContestListClient({
                       >
                         <div
                           className="absolute h-full bg-gradient-to-r from-purple-500 to-purple-600 rounded-full transition-all duration-500 ease-out"
-                          style={{ width: `${percentage}%` }}
+                          style={{ width: `${tracker.percentage}%` }}
                         ></div>
                       </div>
                       <div
@@ -2746,8 +2742,8 @@ export function ContestListClient({
                           transition: "none",
                         }}
                       >
-                        <span>{percentage.toFixed(1)}% used</span>
-                        <span>{formatMoney(remaining)} remaining</span>
+                        <span>{tracker.percentage.toFixed(1)}% used</span>
+                        <span>{formatMoney(tracker.remaining)} remaining</span>
                       </div>
                     </div>
                   );
@@ -2820,7 +2816,7 @@ export function ContestListClient({
                   const budgetSpent =
                     contest.contest_based_details.milestone_contest
                       .budget_spent || 0;
-                  const { percentage, remaining } = getBudgetTrackerValues(
+                  const tracker = getBudgetTrackerValues(
                     totalBudget,
                     budgetSpent,
                   );
@@ -2836,7 +2832,7 @@ export function ContestListClient({
                       >
                         <span className="font-medium">Budget Tracker</span>
                         <span className="font-semibold">
-                          {formatMoney(budgetSpent)} /{" "}
+                          {formatMoney(tracker.spent)} /{" "}
                           {formatMoney(totalBudget)}
                         </span>
                       </div>
@@ -2845,11 +2841,11 @@ export function ContestListClient({
                           "relative w-full rounded-full h-3 overflow-hidden",
                           isDark ? "bg-[#FFFFFF42]" : "bg-slate-200",
                         )}
-                        title={`Total Budget Spent: ${formatMoney(budgetSpent)}`}
+                        title={`Total Budget Spent: ${formatMoney(tracker.spent)}`}
                       >
                         <div
                           className="absolute h-full bg-gradient-to-r from-purple-500 to-purple-600 rounded-full transition-all duration-500 ease-out"
-                          style={{ width: `${percentage}%` }}
+                          style={{ width: `${tracker.percentage}%` }}
                         ></div>
                       </div>
                       <div
@@ -2859,8 +2855,8 @@ export function ContestListClient({
                           transition: "none",
                         }}
                       >
-                        <span>{percentage.toFixed(1)}% used</span>
-                        <span>{formatMoney(remaining)} remaining</span>
+                        <span>{tracker.percentage.toFixed(1)}% used</span>
+                        <span>{formatMoney(tracker.remaining)} remaining</span>
                       </div>
                     </div>
                   );

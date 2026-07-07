@@ -13,7 +13,17 @@ import {
   clearContestsCache,
 } from "@/lib/cache-utils";
 import { computeMilestoneContestExpectedSpendCents } from "@/lib/milestone-contest-expected-spend";
-import { isCpmContestType, isMilestoneContestType } from "@/lib/contest-type";
+import {
+  isCpmContestType,
+  isDualRewardsContestType,
+  isMilestoneContestType,
+} from "@/lib/contest-type";
+import {
+  computeBudgetFilledCents,
+  computeBudgetPaidCents,
+  getBudgetTileMode,
+  type BudgetTileSubmission,
+} from "@/lib/contest-budget-tile-metrics";
 import {
   fetchContestSubmissionsAllPages,
   fetchContestTwitterTweetsAllPages,
@@ -458,6 +468,79 @@ async function enrichContestWithCalculatedBudgets(
         "Failed to calculate milestone budget for contest",
         contest.id,
         String((milestoneSubErr as { message?: string })?.message ?? milestoneSubErr),
+      );
+    }
+  }
+
+  if (isDualRewardsContestType(contest.contest_type)) {
+    const { data: dualSubmissions, error: dualSubErr } =
+      await fetchContestSubmissionsAllPages(
+        supabase,
+        contest.id,
+        "id, creator_id, created_at, status, paid, paid_at, earnings, views, platform, other_stats, bonus_paid, bonus_amount, dual_rewards_payout",
+        {
+          statusIn: ["verified", "paid"],
+          order: { column: "created_at", ascending: true },
+        },
+      );
+
+    if (!dualSubErr) {
+      const budgetSubs: BudgetTileSubmission[] = (dualSubmissions || []).map(
+        (s: {
+          id: string;
+          creator_id: string;
+          created_at: string;
+          status?: string | null;
+          paid?: boolean | null;
+          paid_at?: string | null;
+          earnings?: number | null;
+          views?: number | null;
+          platform?: string | null;
+          other_stats?: unknown;
+          bonus_paid?: boolean | null;
+          bonus_amount?: number | null;
+          dual_rewards_payout?: unknown;
+        }) => ({
+          id: s.id,
+          creator_id: s.creator_id,
+          created_at: s.created_at,
+          status: s.status || undefined,
+          paid: s.paid ?? false,
+          paid_at: s.paid_at,
+          earnings: s.earnings,
+          views: s.views ?? 0,
+          platform: s.platform || contest.platform || undefined,
+          other_stats: s.other_stats,
+          bonus_paid: s.bonus_paid ?? false,
+          bonus_amount: s.bonus_amount ?? undefined,
+          dual_rewards_payout: s.dual_rewards_payout,
+        }),
+      );
+
+      const tileInput = {
+        contest_type: contest.contest_type,
+        post_contest_status: contest.post_contest_status,
+        max_earnings_per_creator: contest.max_earnings_per_creator,
+        contest_based_details: normalizeContestDetails(updatedContest),
+      };
+      const mode = getBudgetTileMode(contest.post_contest_status);
+      const poolSpentCents =
+        mode === "paid"
+          ? computeBudgetPaidCents(tileInput, budgetSubs)
+          : computeBudgetFilledCents(tileInput, budgetSubs);
+
+      updatedContest = {
+        ...updatedContest,
+        contest_based_details: {
+          ...normalizeContestDetails(updatedContest),
+          pool_budget_spent_cents: poolSpentCents,
+        },
+      };
+    } else {
+      console.error(
+        "Failed to calculate dual rewards pool budget for contest",
+        contest.id,
+        String((dualSubErr as { message?: string })?.message ?? dualSubErr),
       );
     }
   }

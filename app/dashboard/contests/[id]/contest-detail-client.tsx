@@ -10861,6 +10861,7 @@ export default function ContestDetailClient({
                       ? milestoneCreatorBonusPaidCentsFromMap
                       : undefined
                   }
+                  postContestStatus={currentContest.post_contest_status}
                 />
               </div>
             </div>
@@ -10927,6 +10928,7 @@ export default function ContestDetailClient({
                   }}
                   submissions={currentSubmissions as any}
                   showDetailed={true}
+                  postContestStatus={currentContest.post_contest_status}
                 />
               </div>
             </div>
@@ -11006,6 +11008,7 @@ export default function ContestDetailClient({
                   milestoneCreatorBonusPaidCents={
                     milestoneCreatorBonusPaidCentsFromMap
                   }
+                  postContestStatus={currentContest.post_contest_status}
                 />
               </div>
             </div>

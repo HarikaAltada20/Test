@@ -2,6 +2,7 @@ import {
   getPoolBudgetCentsFromDetails,
   isCpmContestType,
 } from "@/lib/contest-type";
+import { getPoolBudgetSpentCentsForDisplay } from "@/lib/contest-budget-tile-metrics";
 
 type ContestBudgetSortInput = {
   contest_type?: string | null;
@@ -69,11 +70,12 @@ export function getContestBudgetRemainingForSort(
     );
     if (total <= 0) return -1;
 
-    const spent =
-      contest.contest_type === "dual_rewards"
-        ? (details.cpm_contest?.budget_spent ?? 0) +
-          (details.milestone_contest?.budget_spent ?? 0)
-        : (details.cpm_contest?.budget_spent ?? 0);
+    const spent = getPoolBudgetSpentCentsForDisplay({
+      contest_type: contest.contest_type,
+      post_contest_status: (contest as { post_contest_status?: string | null })
+        .post_contest_status,
+      contest_based_details: details,
+    });
 
     return getRemainingFromTotalAndSpent(total, spent);
   }
@@ -124,13 +126,15 @@ export function getContestBudgetSpentForSort(
     );
     if (total <= 0) return -1;
 
-    const spent =
-      contest.contest_type === "dual_rewards"
-        ? (details.cpm_contest?.budget_spent ?? 0) +
-          (details.milestone_contest?.budget_spent ?? 0)
-        : (details.cpm_contest?.budget_spent ?? 0);
-
-    return Math.max(0, spent);
+    return Math.max(
+      0,
+      getPoolBudgetSpentCentsForDisplay({
+        contest_type: contest.contest_type,
+        post_contest_status: (contest as { post_contest_status?: string | null })
+          .post_contest_status,
+        contest_based_details: details,
+      }),
+    );
   }
 
   return -1;

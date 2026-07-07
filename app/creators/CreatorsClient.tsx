@@ -50,6 +50,7 @@ import {
   getPoolBudgetCentsFromDetails,
   isCpmContestType,
 } from "@/lib/contest-type";
+import { getPoolBudgetSpentCentsForDisplay } from "@/lib/contest-budget-tile-metrics";
 import { cn } from "@/lib/utils";
 // Placeholder for social icons image - replace with actual path if different
 import socialPair from "@/public/images/social_pair.avif";
@@ -489,23 +490,12 @@ export default function CreatorsClient({
     );
   };
 
-  // Spent budget in cents; dual rewards splits spend across CPM + milestone nested objects
-  const getContestBudgetSpentCents = (contest: any): number => {
-    const details = contest.contest_based_details;
-    if (contest.contest_type === "leaderboard") {
-      return details?.leaderboard_contest?.budget_spent || 0;
-    }
-    if (contest.contest_type === "milestone") {
-      return details?.milestone_contest?.budget_spent || 0;
-    }
-    if (contest.contest_type === "dual_rewards") {
-      return (
-        (details?.cpm_contest?.budget_spent || 0) +
-        (details?.milestone_contest?.budget_spent || 0)
-      );
-    }
-    return details?.cpm_contest?.budget_spent || 0;
-  };
+  const getContestBudgetSpentCents = (contest: any): number =>
+    getPoolBudgetSpentCentsForDisplay({
+      contest_type: contest.contest_type,
+      post_contest_status: contest.post_contest_status,
+      contest_based_details: contest.contest_based_details,
+    });
 
   // STEP 1: Most Popular contests - MUST get 4 live (active only) contests (compulsory)
   // Ensure diversity: different platforms and contest types, prioritizing highest budgets
