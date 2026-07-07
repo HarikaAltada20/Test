@@ -157,6 +157,146 @@ export function buildDualRewardsSubmissionPayUpdatePayload(params: {
   };
 }
 
+export type DualRewardsPaidComponentSnapshot = {
+  cpmCents: number;
+  milestoneCents: number;
+};
+
+type DualRewardsOptimisticFilterQuery = {
+  filter: (
+    column: string,
+    operator: string,
+    value: string,
+  ) => DualRewardsOptimisticFilterQuery;
+  is: (column: string, value: null) => DualRewardsOptimisticFilterQuery;
+  eq: (column: string, value: boolean) => DualRewardsOptimisticFilterQuery;
+  neq: (column: string, value: boolean) => DualRewardsOptimisticFilterQuery;
+};
+
+/**
+ * Compare-and-swap guards for dual-rewards submission row updates (bulk / concurrent pay).
+ * When `dual_rewards_payout` JSON exists, match current cpm/milestone cents; otherwise
+ * use legacy `paid` / `bonus_paid` flags like standard bulk payment.
+ */
+/**
+ * After a pool-budget commit, `dual_rewards_payout` in the DB already reflects
+ * `targetAfter` while the in-memory submission snapshot is still stale. Guards
+ * must compare against the committed row state, not the pre-commit snapshot.
+ */
+export function buildDualRewardsPayUpdateGuardContext(
+  snapshot: {
+    dual_rewards_payout?: unknown;
+    paid?: boolean | null;
+    bonus_paid?: boolean | null;
+  },
+  paidComponents: DualRewardsPaidComponentSnapshot,
+  targetAfter: { cpm_cents: number; milestone_cents: number },
+  poolCommitted: boolean,
+): {
+  snapshot: {
+    dual_rewards_payout?: unknown;
+    paid?: boolean | null;
+    bonus_paid?: boolean | null;
+  };
+  paidComponents: DualRewardsPaidComponentSnapshot;
+} {
+  if (!poolCommitted) {
+    return { snapshot, paidComponents };
+  }
+  const cpmCents = Math.max(0, Math.round(targetAfter.cpm_cents));
+  const milestoneCents = Math.max(0, Math.round(targetAfter.milestone_cents));
+  return {
+    snapshot: {
+      ...snapshot,
+      dual_rewards_payout: { cpm_cents: cpmCents, milestone_cents: milestoneCents },
+    },
+    paidComponents: { cpmCents, milestoneCents },
+  };
+}
+
+export function applyDualRewardsPayUpdateOptimisticGuards<
+  Q extends DualRewardsOptimisticFilterQuery,
+>(
+  query: Q,
+  snapshot: {
+    dual_rewards_payout?: unknown;
+    paid?: boolean | null;
+    bonus_paid?: boolean | null;
+  },
+  paidComponents: DualRewardsPaidComponentSnapshot,
+  paying: { cpm_cents: number; milestone_cents: number },
+): Q {
+  const dual = parseDualRewardsPayoutJson(snapshot.dual_rewards_payout);
+  if (dual) {
+    return query
+      .filter(
+        "dual_rewards_payout->>cpm_cents",
+        "eq",
+        String(paidComponents.cpmCents),
+      )
+      .filter(
+        "dual_rewards_payout->>milestone_cents",
+        "eq",
+        String(paidComponents.milestoneCents),
+      ) as Q;
+  }
+
+  let guarded = query.is("dual_rewards_payout", null);
+  if (paying.cpm_cents > 0 && paidComponents.cpmCents === 0) {
+    guarded = guarded.neq("paid", true);
+  }
+  if (paying.milestone_cents > 0 && paidComponents.milestoneCents === 0) {
+    if (paying.cpm_cents === 0) {
+      guarded = guarded.eq("paid", true);
+    }
+    guarded = guarded.neq("bonus_paid", true);
+  }
+  return guarded as Q;
+}
+
+/** Restore submission row to pre-bulk-pay component state after a rolled-back wallet credit. */
+export function buildDualRewardsBulkRollbackRevertPayload(
+  priorComponents: DualRewardsPaidComponentSnapshot,
+  item: { cpm_cents: number; milestone_cents: number },
+): Record<string, unknown> {
+  const nextCpm = Math.max(0, priorComponents.cpmCents);
+  const nextMs = Math.max(0, priorComponents.milestoneCents);
+
+  if (nextCpm === 0 && nextMs === 0) {
+    return {
+      dual_rewards_payout: null,
+      status: "verified",
+      paid: false,
+      paid_at: null,
+      earnings: null,
+      bonus_paid: false,
+      bonus_paid_at: null,
+      bonus_amount: null,
+    };
+  }
+
+  const revertPayload: Record<string, unknown> = {
+    dual_rewards_payout: buildDualRewardsPayoutPersistValue(
+      { cpm_cents: nextCpm, milestone_cents: nextMs },
+      { updatedBy: "system", customRemarks: null },
+    ),
+    earnings: nextCpm + nextMs,
+    paid: true,
+    status: "paid",
+    paid_at: new Date().toISOString(),
+  };
+  if (nextMs > 0) {
+    revertPayload.bonus_paid = true;
+    revertPayload.bonus_amount = nextMs;
+    revertPayload.bonus_paid_at = new Date().toISOString();
+  } else {
+    revertPayload.bonus_paid = false;
+    revertPayload.bonus_amount = null;
+    revertPayload.bonus_paid_at = null;
+  }
+  return revertPayload;
+}
+
 /**
  * Infer legacy scope string for getDualGrantedBreakdown / UI branching.
  * Prefers `dual_rewards_payout` JSON, then legacy text column, then metadata tag.

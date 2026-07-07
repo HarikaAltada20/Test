@@ -142,20 +142,29 @@ export async function POST(request: NextRequest) {
       });
 
       if (!dualResult.ok) {
-        return NextResponse.json(
-          { error: dualResult.error, details: dualResult.details },
-          { status: dualResult.status },
-        );
+        const errorBody: Record<string, unknown> = { error: dualResult.error };
+        if (
+          dualResult.details != null &&
+          typeof dualResult.details === "object" &&
+          !Array.isArray(dualResult.details)
+        ) {
+          Object.assign(errorBody, dualResult.details);
+        } else if (dualResult.details !== undefined) {
+          errorBody.details = dualResult.details;
+        }
+        return NextResponse.json(errorBody, { status: dualResult.status });
       }
 
       return NextResponse.json({
         success: true,
-        message: `Successfully paid ${dualResult.paidCount} submissions`,
+        message: `Successfully paid ${dualResult.appliedCount} submissions`,
         data: {
           total_amount: dualResult.totalAmount,
           total_cpm: dualResult.totalCpm,
           total_milestone: dualResult.totalMilestone,
-          paid_count: dualResult.paidCount,
+          paid_count: dualResult.appliedCount,
+          applied_count: dualResult.appliedCount,
+          requested_count: dualResult.requestedCount,
           skipped_count: dualResult.skippedCount,
           breakdown: dualResult.breakdown,
           transaction_id: dualResult.transactionId,

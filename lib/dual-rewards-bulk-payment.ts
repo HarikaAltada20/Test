@@ -3,8 +3,12 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { countRefundsForCreatorContest } from "@/lib/contest-payout-idempotency";
 import { loadDualCreatorCapMaps } from "@/lib/dual-rewards-payout-eligibility";
 import {
+  applyDualRewardsPayUpdateOptimisticGuards,
+  buildDualRewardsBulkRollbackRevertPayload,
+  buildDualRewardsPayUpdateGuardContext,
   buildDualRewardsSubmissionPayUpdatePayload,
   getDualRemainingPayableCents,
+  parseDualRewardsPayoutJson,
   type DualRewardPayoutScope,
 } from "@/lib/dual-rewards-payout";
 import {
@@ -32,6 +36,8 @@ export type DualRewardsBulkBreakdownRow = {
   submission_id: string;
   cpm_cents: number;
   milestone_cents: number;
+  /** Pool was already reserved earlier; only mark the row paid (no wallet credit). */
+  finalizeOnly?: boolean;
 };
 
 function paymentTypeToComponent(
@@ -54,6 +60,8 @@ export async function executeDualRewardsBulkPayment(params: {
   | {
       ok: true;
       paidCount: number;
+      appliedCount: number;
+      requestedCount: number;
       skippedCount: number;
       totalAmount: number;
       totalCpm: number;
@@ -206,6 +214,29 @@ export async function executeDualRewardsBulkPayment(params: {
       );
 
     if (totalRemaining <= 0) {
+      const isUnpaidRow =
+        sub.paid !== true &&
+        !["paid"].includes(String(sub.status || "").toLowerCase());
+      const reserved = parseDualRewardsPayoutJson(sub.dual_rewards_payout);
+      if (isUnpaidRow && reserved) {
+        const coversCpm =
+          component === "milestone" || reserved.cpm_cents >= cpmExpected;
+        const coversMs =
+          component === "cpm" || reserved.milestone_cents >= milestoneExpected;
+        if (
+          coversCpm &&
+          coversMs &&
+          (reserved.cpm_cents > 0 || reserved.milestone_cents > 0)
+        ) {
+          breakdown.push({
+            submission_id: String(sub.id),
+            cpm_cents: 0,
+            milestone_cents: 0,
+            finalizeOnly: true,
+          });
+          continue;
+        }
+      }
       skippedCount++;
       continue;
     }
@@ -279,19 +310,27 @@ export async function executeDualRewardsBulkPayment(params: {
     });
   }
 
-  const totalCpm = breakdown.reduce((s, r) => s + r.cpm_cents, 0);
-  const totalMilestone = breakdown.reduce((s, r) => s + r.milestone_cents, 0);
+  const totalCpm = breakdown.reduce(
+    (s, r) => s + (r.finalizeOnly ? 0 : r.cpm_cents),
+    0,
+  );
+  const totalMilestone = breakdown.reduce(
+    (s, r) => s + (r.finalizeOnly ? 0 : r.milestone_cents),
+    0,
+  );
   const totalAmount = totalCpm + totalMilestone;
-  const paidCount = breakdown.length;
+  const requestedCount = breakdown.length;
 
   if (totalAmount <= 0) {
-    return {
-      ok: false,
-      status: 400,
-      error:
-        "No dual rewards payments to process. Selected submissions may already be paid or have $0 expected.",
-      details: { skipped_count: skippedCount },
-    };
+    if (!breakdown.some((r) => r.finalizeOnly)) {
+      return {
+        ok: false,
+        status: 400,
+        error:
+          "No dual rewards payments to process. Selected submissions may already be paid or have $0 expected.",
+        details: { skipped_count: skippedCount },
+      };
+    }
   }
 
   const { count: contestRefundCount, errorMessage: refundCountErr } =
@@ -322,18 +361,25 @@ export async function executeDualRewardsBulkPayment(params: {
     .digest("hex")
     .slice(0, 48)}`;
 
-  const creditResult = await creditDualRewardsBulkPayment({
-    creatorId,
-    contestId,
-    contestTitle,
-    paidCount,
-    totalCents: totalAmount,
-    totalCpmCents: totalCpm,
-    totalMilestoneCents: totalMilestone,
-    paymentType,
-    idempotencyKey: payoutOperationKey,
-    breakdown,
-  });
+  const creditResult =
+    totalAmount > 0
+      ? await creditDualRewardsBulkPayment({
+          creatorId,
+          contestId,
+          contestTitle,
+          paidCount: requestedCount,
+          totalCents: totalAmount,
+          totalCpmCents: totalCpm,
+          totalMilestoneCents: totalMilestone,
+          paymentType,
+          idempotencyKey: payoutOperationKey,
+          breakdown,
+        })
+      : {
+          success: true as const,
+          alreadyApplied: false,
+          transactionId: undefined,
+        };
 
   if (!creditResult.success) {
     for (const prior of poolCommits) {
@@ -367,25 +413,15 @@ export async function executeDualRewardsBulkPayment(params: {
       dual_rewards_payout: sub.dual_rewards_payout,
     });
 
-    const nextPayout = {
-      cpm_cents: paidComponents.cpmCents + item.cpm_cents,
-      milestone_cents: paidComponents.milestoneCents + item.milestone_cents,
-    };
-
-    if (item.cpm_cents > 0 && paidComponents.cpmCents > 0) {
-      updateFailures.push({
-        submission_id: item.submission_id,
-        message: "CPM portion was already paid for this submission.",
-      });
-      continue;
-    }
-    if (item.milestone_cents > 0 && paidComponents.milestoneCents > 0) {
-      updateFailures.push({
-        submission_id: item.submission_id,
-        message: "Milestone portion was already paid for this submission.",
-      });
-      continue;
-    }
+    const nextPayout = item.finalizeOnly
+      ? {
+          cpm_cents: paidComponents.cpmCents,
+          milestone_cents: paidComponents.milestoneCents,
+        }
+      : {
+          cpm_cents: paidComponents.cpmCents + item.cpm_cents,
+          milestone_cents: paidComponents.milestoneCents + item.milestone_cents,
+        };
 
     const updatePayload = buildDualRewardsSubmissionPayUpdatePayload({
       split: nextPayout,
@@ -393,10 +429,34 @@ export async function executeDualRewardsBulkPayment(params: {
       customRemarks: `dual_component:${component}`,
     });
 
-    const { data: updatedRow, error: updateError } = await supabaseAdmin
+    let updateQuery = supabaseAdmin
       .from("submissions")
       .update(updatePayload)
-      .eq("id", item.submission_id)
+      .eq("id", item.submission_id);
+
+    const poolEntry = poolCommits.find(
+      (p) => p.submissionId === item.submission_id,
+    );
+    const poolCommitted =
+      !item.finalizeOnly &&
+      poolEntry?.result.ok === true &&
+      poolEntry.result.check.committed === true;
+
+    const guardContext = buildDualRewardsPayUpdateGuardContext(
+      sub,
+      paidComponents,
+      nextPayout,
+      poolCommitted,
+    );
+
+    updateQuery = applyDualRewardsPayUpdateOptimisticGuards(
+      updateQuery,
+      guardContext.snapshot,
+      guardContext.paidComponents,
+      item,
+    );
+
+    const { data: updatedRow, error: updateError } = await updateQuery
       .select("id")
       .maybeSingle();
 
@@ -412,53 +472,64 @@ export async function executeDualRewardsBulkPayment(params: {
     }
   }
 
-  if (updateFailures.length > 0 && !creditResult.alreadyApplied) {
-    const rollback = await debitCreatorWithdrawableBalance(
-      creatorId,
-      totalAmount,
-    );
-    if (rollback.success) {
-      await logTransactionAsAdmin(
+  if (updateFailures.length > 0) {
+    if (!creditResult.alreadyApplied) {
+      const rollback = await debitCreatorWithdrawableBalance(
         creatorId,
-        "refund",
         totalAmount,
-        "success",
-        `Rollback: bulk payment row update failed for ${contestTitle}`,
-        {
-          remarks: REVERSAL_TRANSACTION_REMARK,
-          paymentMethod: "refund",
-          metadata: {
-            contest_id: contestId,
-            payout_type: "bulk_dual_rewards_rollback",
-            original_reward_transaction_id: creditResult.transactionId,
-            payout_operation_key: payoutOperationKey,
-            update_failures: updateFailures,
-          },
-        },
       );
-    }
+      if (rollback.success) {
+        await logTransactionAsAdmin(
+          creatorId,
+          "refund",
+          totalAmount,
+          "success",
+          `Rollback: bulk payment row update failed for ${contestTitle}`,
+          {
+            remarks: REVERSAL_TRANSACTION_REMARK,
+            paymentMethod: "refund",
+            metadata: {
+              contest_id: contestId,
+              payout_type: "bulk_dual_rewards_rollback",
+              original_reward_transaction_id: creditResult.transactionId,
+              payout_operation_key: payoutOperationKey,
+              update_failures: updateFailures,
+            },
+          },
+        );
+      } else {
+        console.error(
+          "[dual-rewards-bulk-payment] CRITICAL: wallet rollback failed after submission update failure:",
+          rollback.error,
+        );
+      }
 
-    for (const id of appliedIds) {
-      const item = breakdown.find((b) => b.submission_id === id);
-      if (!item) continue;
-      const revertPayload: Record<string, unknown> = {
-        status: "verified",
-        paid: false,
-        paid_at: null,
-        bonus_paid: false,
-        bonus_paid_at: null,
-        bonus_amount: null,
-        dual_rewards_payout: null,
-      };
-      if (item.cpm_cents > 0) revertPayload.earnings = null;
-      await supabaseAdmin.from("submissions").update(revertPayload).eq("id", id);
-      const idx = poolCommits.findIndex((p) => p.submissionId === id);
-      if (idx >= 0) {
+      for (const id of appliedIds) {
+        const item = breakdown.find((b) => b.submission_id === id);
+        const sub = sortedSubmissions.find((s) => String(s.id) === id);
+        if (!item || !sub) continue;
+
+        const priorComponents = getDualRewardsSubmissionPaidComponents({
+          id,
+          earnings: sub.earnings,
+          paid: sub.paid,
+          bonus_amount: sub.bonus_amount,
+          bonus_paid: sub.bonus_paid,
+          dual_rewards_payout: sub.dual_rewards_payout,
+        });
+        const revertPayload = buildDualRewardsBulkRollbackRevertPayload(
+          priorComponents,
+          item,
+        );
+        await supabaseAdmin.from("submissions").update(revertPayload).eq("id", id);
+      }
+
+      for (const prior of poolCommits) {
         await rollbackDualRewardsPoolCommitIfNeeded(
           supabaseAdmin,
           contestId,
-          id,
-          poolCommits[idx].result,
+          prior.submissionId,
+          prior.result,
         );
       }
     }
@@ -466,9 +537,17 @@ export async function executeDualRewardsBulkPayment(params: {
     return {
       ok: false,
       status: 500,
-      error:
-        "Submission rows could not be marked paid. Fresh wallet credit was rolled back where possible.",
-      details: { updateFailures },
+      error: creditResult.alreadyApplied
+        ? "Payout credit was already applied earlier, but one or more submission rows still could not be reconciled. Retry or contact support."
+        : "Submission rows could not be marked paid. Fresh wallet credit was rolled back where possible; retry after resolving the listed rows.",
+      details: {
+        updateFailures,
+        transaction_id: creditResult.transactionId,
+        already_applied_idempotent: Boolean(creditResult.alreadyApplied),
+        payout_operation_key: payoutOperationKey,
+        applied_count: appliedIds.length,
+        requested_count: requestedCount,
+      },
     };
   }
 
@@ -484,9 +563,13 @@ export async function executeDualRewardsBulkPayment(params: {
     }
   }
 
+  const appliedCount = appliedIds.length;
+
   return {
     ok: true,
-    paidCount,
+    paidCount: appliedCount,
+    appliedCount,
+    requestedCount,
     skippedCount,
     totalAmount,
     totalCpm,
