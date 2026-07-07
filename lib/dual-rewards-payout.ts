@@ -442,6 +442,53 @@ export function dualRewardsPayoutForMilestoneTotal(
   };
 }
 
+export type MilestoneBonusPaidTrackCents = {
+  views?: number | null;
+  reels?: number | null;
+};
+
+/** Paid most-verified views/reels bonus cents stored on `milestone_bonus_paid`. */
+export function getMostVerifiedBonusPaidCentsFromSubmission(sub: {
+  milestone_bonus_paid?: MilestoneBonusPaidTrackCents | null;
+  metadata?: { milestone_bonus_paid?: MilestoneBonusPaidTrackCents } | null;
+}): { viewsCents: number; reelsCents: number; totalCents: number } {
+  const mbp =
+    sub?.milestone_bonus_paid ??
+    sub?.metadata?.milestone_bonus_paid;
+  if (!mbp || typeof mbp !== "object") {
+    return { viewsCents: 0, reelsCents: 0, totalCents: 0 };
+  }
+  const viewsCents = Math.max(0, Math.round(Number(mbp.views) || 0));
+  const reelsCents = Math.max(0, Math.round(Number(mbp.reels) || 0));
+  return { viewsCents, reelsCents, totalCents: viewsCents + reelsCents };
+}
+
+/**
+ * Milestone ladder cents already paid — excludes most-verified views/reels bonus
+ * (those have dedicated UI columns and must not inflate "Reward Granted (Milestone)").
+ */
+export function getMilestoneLadderGrantedCentsFromSubmission(sub: {
+  bonus_paid?: boolean | null;
+  bonus_amount?: number | null;
+  milestone_bonus_paid?: MilestoneBonusPaidTrackCents | null;
+  metadata?: { milestone_bonus_paid?: MilestoneBonusPaidTrackCents } | null;
+  dual_rewards_payout?: unknown;
+}): number {
+  const mv = getMostVerifiedBonusPaidCentsFromSubmission(sub);
+  const dual = parseDualRewardsPayoutJson(sub.dual_rewards_payout);
+  if (dual) {
+    return Math.max(0, Math.round(dual.milestone_cents) - mv.totalCents);
+  }
+  if (sub.bonus_paid === true) {
+    const bonus = Math.max(0, Math.round(Number(sub.bonus_amount) || 0));
+    if (mv.totalCents > 0) {
+      return Math.max(0, bonus - mv.totalCents);
+    }
+    return bonus;
+  }
+  return 0;
+}
+
 export function dualRewardsPayoutJsonToRowValue(
   j: DualRewardsPayoutJson,
 ): Record<string, unknown> {

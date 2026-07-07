@@ -113,6 +113,7 @@ import {
 import {
   getDualPayoutScopeFromSubmission,
   getDualRemainingPayableCents,
+  getMilestoneLadderGrantedCentsFromSubmission,
   type DualPayoutScopeHint,
 } from "@/lib/dual-rewards-payout";
 import {
@@ -8595,18 +8596,20 @@ export default function ContestDetailClient({
     const hasMainPaid =
       (submission?.status || "").toLowerCase() === "paid" ||
       submission?.paid === true;
-    const hasMilestonePaid =
-      submission?.bonus_paid === true ||
-      submission?.milestone_bonus_paid === true;
+    const ladderMilestonePaidCents =
+      getMilestoneLadderGrantedCentsFromSubmission(submission);
+    const hasMilestonePaid = ladderMilestonePaidCents > 0;
     const componentFromMetadata = getDualPaidComponent(submission, {
       paidTotalCents: storedCents,
       cpmExpectedCents: Math.round(cpmExpectedCents),
       milestoneExpectedCents: Math.round(milestoneExpectedCents),
     });
-    const milestonePaidFromDb =
-      Number(submission?.bonus_amount) ||
-      Number(submission?.milestone_bonus_paid?.amount_cents) ||
-      0;
+    const effectivePaidComponent =
+      componentFromMetadata === "milestone" &&
+      !hasMilestonePaid &&
+      !hasMainPaid
+        ? null
+        : componentFromMetadata;
 
     const combinedExpectSum =
       Math.round(cpmExpectedCents) + Math.round(milestoneExpectedCents);
@@ -8620,19 +8623,19 @@ export default function ContestDetailClient({
     // Payments via "paid" action store total in earnings, set paid=true, leave bonus_paid=false.
     // Detect the exact component paid (dual_rewards_payout JSON, else legacy metadata).
     const isPaidAsMainWithMilestoneComponent =
-      hasMainPaid && !hasMilestonePaid && componentFromMetadata === "milestone";
+      hasMainPaid &&
+      !hasMilestonePaid &&
+      effectivePaidComponent === "milestone";
     const isPaidAsBothViaMainAction =
       hasMainPaid &&
       !hasMilestonePaid &&
-      (componentFromMetadata === "both" ||
-        (componentFromMetadata == null && storedMatchesCombinedPay));
+      (effectivePaidComponent === "both" ||
+        (effectivePaidComponent == null && storedMatchesCombinedPay));
 
     const mainPaidCents =
       storedCents > 0 ? storedCents : hasMainPaid ? cpmExpectedCents : 0;
     const milestonePaidCents = hasMilestonePaid
-      ? milestonePaidFromDb > 0
-        ? milestonePaidFromDb
-        : milestoneExpectedCents
+      ? ladderMilestonePaidCents
       : isPaidAsMainWithMilestoneComponent
         ? storedCents > 0
           ? storedCents
@@ -8649,7 +8652,7 @@ export default function ContestDetailClient({
               ? "cpm"
               : hasMilestonePaid
                 ? "milestone"
-                : (componentFromMetadata ?? null);
+                : (effectivePaidComponent ?? null);
     const isPaid = hasMainPaid || hasMilestonePaid;
 
     // "Both" paid via single "paid" action: storedCents is the combined total.
@@ -8714,7 +8717,7 @@ export default function ContestDetailClient({
         (milestoneExpectedCents > 0 &&
           totalCents > 0 &&
           !partialCpmOnlyPay &&
-          componentFromMetadata !== "cpm")
+          effectivePaidComponent !== "cpm")
       ) {
         const sp = splitDualPaidTotalByExpectedWeights(
           totalCents,
