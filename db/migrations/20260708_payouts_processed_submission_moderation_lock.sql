@@ -1,5 +1,10 @@
 -- Block submission / Twitter moderation and payout field changes after contest payouts_processed.
 -- Complements API checks in verify-submission, moderate-submission, and moderate-creator.
+--
+-- DEPLOY: Run this migration and deploy app code in the same release window.
+-- See docs/CAMPAIGN_OPTIMIZATION_DEPLOY.md § "Payout moderation lock (migration 10)".
+-- App-only deploy leaves illegal DB updates possible; migration-only deploy may block
+-- legitimate admin paths until the matching app is live.
 
 CREATE OR REPLACE FUNCTION public.contest_submission_moderation_locked(p_contest_id uuid)
 RETURNS boolean

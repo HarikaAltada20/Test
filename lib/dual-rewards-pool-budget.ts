@@ -182,6 +182,39 @@ export function isConsolidatedDualRewardsReward(tx: MoneyTxnRow): boolean {
   return parseConsolidatedDualRewardsReward(tx) != null;
 }
 
+function standardBulkBreakdownRowCents(
+  row: Record<string, unknown>,
+): { cpmCents: number; milestoneCents: number } {
+  const dualCpm = row.cpm_cents;
+  const dualMilestone = row.milestone_cents;
+  if (dualCpm != null && dualMilestone != null) {
+    return {
+      cpmCents: Math.max(0, Math.round(Number(dualCpm) || 0)),
+      milestoneCents: Math.max(0, Math.round(Number(dualMilestone) || 0)),
+    };
+  }
+
+  const milestoneLadder = Math.max(
+    0,
+    Math.round(Number(row.milestone_cents ?? row.milestone_amount) || 0),
+  );
+  const bonus = Math.max(
+    0,
+    Math.round(Number(row.bonus_cents ?? row.bonus_amount) || 0),
+  );
+  if (milestoneLadder > 0) {
+    return { cpmCents: milestoneLadder, milestoneCents: bonus };
+  }
+
+  return {
+    cpmCents: Math.max(
+      0,
+      Math.round(Number(row.cpm_cents ?? row.cpm_amount) || 0),
+    ),
+    milestoneCents: bonus,
+  };
+}
+
 function dualRewardsLedgerBreakdownForSubmission(
   metadata: Record<string, unknown> | null | undefined,
   submissionId: string,
@@ -192,10 +225,7 @@ function dualRewardsLedgerBreakdownForSubmission(
     (b) => String(b.submission_id || "") === String(submissionId),
   );
   if (!row) return null;
-  return {
-    cpmCents: Math.max(0, Math.round(Number(row.cpm_cents) || 0)),
-    milestoneCents: Math.max(0, Math.round(Number(row.milestone_cents) || 0)),
-  };
+  return standardBulkBreakdownRowCents(row);
 }
 
 /** True when a reward/refund row applies to a submission (per-row or bulk breakdown). */
@@ -419,7 +449,8 @@ export function computeDualRewardsSubmissionReversalDue(params: {
             isReversalRefund(tx) &&
             isMainSubmissionTx(tx) &&
             !isConsolidatedDualReversalRefund(tx) &&
-            !(tx.metadata?.bulk_dual_rewards_reversal === true),
+            !(tx.metadata?.bulk_dual_rewards_reversal === true) &&
+            !(tx.metadata?.bulk_payment_reversal === true),
         ),
       ),
   );
@@ -467,7 +498,8 @@ export function computeDualRewardsSubmissionReversalDue(params: {
       isReversalRefund(tx) &&
       isBonusSubmissionTx(tx) &&
       !isConsolidatedDualReversalRefund(tx) &&
-      !(tx.metadata?.bulk_dual_rewards_reversal === true),
+      !(tx.metadata?.bulk_dual_rewards_reversal === true) &&
+      !(tx.metadata?.bulk_payment_reversal === true),
   )) {
     const m = tx.metadata ?? {};
     const key = String(

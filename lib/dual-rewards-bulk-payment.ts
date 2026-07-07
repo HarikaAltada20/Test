@@ -4,6 +4,7 @@ import {
   buildContestPayoutIdempotencyPayload,
   creditWithWalletShortfallRetry,
   loadContestPayoutLedgerBundle,
+  loadContestPayoutMoneyTxnsForSubmissionIds,
 } from "@/lib/contest-payout-idempotency";
 import { loadDualCreatorCapMaps } from "@/lib/dual-rewards-payout-eligibility";
 import {
@@ -18,7 +19,6 @@ import {
 import {
   checkDualRewardsPoolBudgetForPayment,
   computeSubmissionGrossWalletNetCents,
-  filterMoneyTxnsForContest,
   getDualRewardsSubmissionPaidComponents,
   rollbackDualRewardsPoolCommitIfNeeded,
   type DualPoolBudgetPaymentResult,
@@ -227,31 +227,22 @@ export async function executeDualRewardsBulkPayment(params: {
     [];
   let skippedCount = 0;
 
-  const contestSubmissionIds = new Set(
-    submissions.map((s) => String(s.id)),
-  );
-  const [{ data: rewardTxnsAll }, { data: refundTxnsAll }] = await Promise.all([
-    supabaseAdmin
-      .from("money_transactions")
-      .select("id, amount, metadata")
-      .eq("user_id", creatorId)
-      .eq("type", "reward"),
-    supabaseAdmin
-      .from("money_transactions")
-      .select("id, amount, remarks, metadata")
-      .eq("user_id", creatorId)
-      .eq("type", "refund"),
-  ]);
-  const rewardTxns = filterMoneyTxnsForContest(
-    rewardTxnsAll,
+  const batchSubmissionIds = sortedSubmissions.map((s) => String(s.id));
+  const moneyTxnLoad = await loadContestPayoutMoneyTxnsForSubmissionIds(
+    supabaseAdmin,
+    creatorId,
     contestId,
-    contestSubmissionIds,
+    batchSubmissionIds,
   );
-  const refundTxns = filterMoneyTxnsForContest(
-    refundTxnsAll,
-    contestId,
-    contestSubmissionIds,
-  );
+  if ("errorMessage" in moneyTxnLoad) {
+    return {
+      ok: false,
+      status: 500,
+      error: "Failed to load contest payout ledger for dual rewards bulk pay",
+      details: moneyTxnLoad.errorMessage,
+    };
+  }
+  const { rewardRows: rewardTxns, refundRows: refundTxns } = moneyTxnLoad;
 
   for (const sub of sortedSubmissions) {
     const cpmCappedBase =
@@ -565,6 +556,9 @@ export async function executeDualRewardsBulkPayment(params: {
   }
 
   if (updateFailures.length > 0) {
+    let walletRollbackFailed = false;
+    let walletRollbackError: string | undefined;
+
     if (!creditResult.alreadyApplied) {
       const rollback = await debitCreatorWithdrawableBalance(
         creatorId,
@@ -590,9 +584,19 @@ export async function executeDualRewardsBulkPayment(params: {
           },
         );
       } else {
+        walletRollbackFailed = true;
+        walletRollbackError = rollback.error;
         console.error(
           "[dual-rewards-bulk-payment] CRITICAL: wallet rollback failed after submission update failure:",
-          rollback.error,
+          {
+            creatorId,
+            contestId,
+            payableCents,
+            payoutOperationKey,
+            transactionId: creditResult.transactionId,
+            updateFailures,
+            error: rollback.error,
+          },
         );
       }
 
@@ -631,7 +635,9 @@ export async function executeDualRewardsBulkPayment(params: {
       status: 500,
       error: creditResult.alreadyApplied
         ? "Payout credit was already applied earlier, but one or more submission rows still could not be reconciled. Retry or contact support."
-        : "Submission rows could not be marked paid. Fresh wallet credit was rolled back where possible; retry after resolving the listed rows.",
+        : walletRollbackFailed
+          ? "Submission rows could not be marked paid and wallet rollback failed. Manual reconciliation required — see details."
+          : "Submission rows could not be marked paid. Fresh wallet credit was rolled back where possible; retry after resolving the listed rows.",
       details: {
         updateFailures,
         transaction_id: creditResult.transactionId,
@@ -639,6 +645,13 @@ export async function executeDualRewardsBulkPayment(params: {
         payout_operation_key: payoutOperationKey,
         applied_count: appliedIds.length,
         requested_count: requestedCount,
+        payable_cents: payableCents,
+        wallet_rollback_failed: walletRollbackFailed,
+        wallet_rollback_error: walletRollbackError,
+        reconciliation_hint:
+          walletRollbackFailed || creditResult.alreadyApplied
+            ? "Compare money_transactions reward/refund rows for payout_operation_key and submission dual_rewards_payout JSON."
+            : undefined,
       },
     };
   }

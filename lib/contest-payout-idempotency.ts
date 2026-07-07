@@ -8,25 +8,42 @@ import { REVERSAL_TRANSACTION_REMARK } from "@/lib/payment-utils";
 
 type MoneyTxnWithId = MoneyTxnRow & { id?: string };
 
-const SUBMISSION_ID_CHUNK_SIZE = 80;
+/** Keep PostgREST `.or(in.(…))` filters small — large UUID lists return 400 Bad Request. */
+const SUBMISSION_ID_CHUNK_SIZE = 40;
+
+/** Bounded scan for legacy rows missing contest_id / submission_id metadata keys. */
+const LEGACY_MONEY_TXN_FALLBACK_LIMIT = 250;
 
 async function fetchContestSubmissionIds(
   supabase: SupabaseClient,
   contestId: string,
 ): Promise<{ ids: Set<string>; errorMessage: string | null }> {
-  const { data, error } = await supabase
-    .from("submissions")
-    .select("id")
-    .eq("contest_id", contestId);
+  const ids = new Set<string>();
+  const pageSize = 1000;
+  let from = 0;
 
-  if (error) {
-    return { ids: new Set(), errorMessage: error.message };
+  while (true) {
+    const { data, error } = await supabase
+      .from("submissions")
+      .select("id")
+      .eq("contest_id", contestId)
+      .order("id", { ascending: true })
+      .range(from, from + pageSize - 1);
+
+    if (error) {
+      return { ids: new Set(), errorMessage: error.message };
+    }
+
+    for (const row of data || []) {
+      ids.add(String(row.id));
+    }
+    if (!data || data.length < pageSize) {
+      break;
+    }
+    from += pageSize;
   }
 
-  return {
-    ids: new Set((data || []).map((row) => String(row.id))),
-    errorMessage: null,
-  };
+  return { ids, errorMessage: null };
 }
 
 function chunkIds(ids: string[], size: number): string[][] {
@@ -63,6 +80,44 @@ function ledgerFingerprint(txnIds: string[]): string {
     .slice(0, 32);
 }
 
+function submissionOrSourceInChunkFilter(chunk: string[]): string {
+  const csv = chunk.join(",");
+  return `metadata->>submission_id.in.(${csv}),metadata->>source_submission_id.in.(${csv})`;
+}
+
+async function fetchLegacyContestMoneyTxnFallback(params: {
+  supabase: SupabaseClient;
+  creatorId: string;
+  contestId: string;
+  type: "reward" | "refund";
+  select: string;
+  contestSubmissionIds: ReadonlySet<string>;
+  existingIds: ReadonlySet<string>;
+}): Promise<{ rows: MoneyTxnWithId[]; errorMessage: string | null }> {
+  const { data, error } = await params.supabase
+    .from("money_transactions")
+    .select(params.select)
+    .eq("user_id", params.creatorId)
+    .eq("type", params.type)
+    .order("created_at", { ascending: false })
+    .limit(LEGACY_MONEY_TXN_FALLBACK_LIMIT);
+
+  if (error) {
+    return { rows: [], errorMessage: error.message };
+  }
+
+  const matched = filterContestLedgerRows(
+    data as MoneyTxnWithId[] | null,
+    params.contestId,
+    params.contestSubmissionIds,
+  ).filter((row) => {
+    const id = String((row as MoneyTxnWithId).id ?? "");
+    return id.length > 0 && !params.existingIds.has(id);
+  });
+
+  return { rows: matched as MoneyTxnWithId[], errorMessage: null };
+}
+
 async function fetchCreatorMoneyTxnsScopedToContest(params: {
   supabase: SupabaseClient;
   creatorId: string;
@@ -70,9 +125,19 @@ async function fetchCreatorMoneyTxnsScopedToContest(params: {
   type: "reward" | "refund";
   submissionIds: string[];
   select: string;
+  contestSubmissionIds: ReadonlySet<string>;
+  includeLegacyFallback?: boolean;
 }): Promise<{ rows: MoneyTxnWithId[]; errorMessage: string | null }> {
-  const { supabase, creatorId, contestId, type, submissionIds, select } =
-    params;
+  const {
+    supabase,
+    creatorId,
+    contestId,
+    type,
+    submissionIds,
+    select,
+    contestSubmissionIds,
+    includeLegacyFallback = true,
+  } = params;
 
   const queries: PromiseLike<{
     data: MoneyTxnWithId[] | null;
@@ -86,23 +151,32 @@ async function fetchCreatorMoneyTxnsScopedToContest(params: {
       .contains("metadata", { contest_id: contestId }),
   ];
 
-  for (const chunk of chunkIds(submissionIds, SUBMISSION_ID_CHUNK_SIZE)) {
-    queries.push(
-      supabase
-        .from("money_transactions")
-        .select(select)
-        .eq("user_id", creatorId)
-        .eq("type", type)
-        .in("metadata->>submission_id", chunk),
-    );
-    queries.push(
-      supabase
-        .from("money_transactions")
-        .select(select)
-        .eq("user_id", creatorId)
-        .eq("type", type)
-        .in("metadata->>source_submission_id", chunk),
-    );
+  const uniqueSubmissionIds = [
+    ...new Set(submissionIds.map(String).filter(Boolean)),
+  ];
+
+  if (uniqueSubmissionIds.length > 0) {
+    if (uniqueSubmissionIds.length <= SUBMISSION_ID_CHUNK_SIZE) {
+      queries.push(
+        supabase
+          .from("money_transactions")
+          .select(select)
+          .eq("user_id", creatorId)
+          .eq("type", type)
+          .or(submissionOrSourceInChunkFilter(uniqueSubmissionIds)),
+      );
+    } else {
+      for (const chunk of chunkIds(uniqueSubmissionIds, SUBMISSION_ID_CHUNK_SIZE)) {
+        queries.push(
+          supabase
+            .from("money_transactions")
+            .select(select)
+            .eq("user_id", creatorId)
+            .eq("type", type)
+            .or(submissionOrSourceInChunkFilter(chunk)),
+        );
+      }
+    }
   }
 
   const results = await Promise.all(queries);
@@ -114,7 +188,28 @@ async function fetchCreatorMoneyTxnsScopedToContest(params: {
     merged.push(...((result.data || []) as MoneyTxnWithId[]));
   }
 
-  return { rows: dedupeMoneyTxnsById(merged), errorMessage: null };
+  let rows = dedupeMoneyTxnsById(merged);
+
+  if (includeLegacyFallback) {
+    const existingIds = new Set(rows.map((row) => String(row.id ?? "")));
+    const legacy = await fetchLegacyContestMoneyTxnFallback({
+      supabase,
+      creatorId,
+      contestId,
+      type,
+      select,
+      contestSubmissionIds,
+      existingIds,
+    });
+    if (legacy.errorMessage) {
+      return { rows: [], errorMessage: legacy.errorMessage };
+    }
+    if (legacy.rows.length > 0) {
+      rows = dedupeMoneyTxnsById([...rows, ...legacy.rows]);
+    }
+  }
+
+  return { rows, errorMessage: null };
 }
 
 export type ContestPayoutLedgerLoaded = {
@@ -123,38 +218,53 @@ export type ContestPayoutLedgerLoaded = {
   contestSubmissionIds: Set<string>;
 };
 
-/**
- * Contest-scoped reward + refund rows for a creator (includes bulk rows whose
- * metadata only lists `contest_id` or per-submission `breakdown` entries).
- */
-export async function loadContestPayoutLedgerRows(
-  supabase: SupabaseClient,
-  creatorId: string,
-  contestId: string,
-): Promise<ContestPayoutLedgerLoaded | { errorMessage: string }> {
+async function loadContestPayoutLedgerRowsInternal(params: {
+  supabase: SupabaseClient;
+  creatorId: string;
+  contestId: string;
+  /** When set, scopes submission-id queries to this subset (e.g. bulk batch). */
+  submissionIdsScope?: string[];
+  includeLegacyFallback?: boolean;
+}): Promise<ContestPayoutLedgerLoaded | { errorMessage: string }> {
+  const {
+    supabase,
+    creatorId,
+    contestId,
+    submissionIdsScope,
+    includeLegacyFallback,
+  } = params;
+
   const { ids: contestSubmissionIds, errorMessage: subErr } =
     await fetchContestSubmissionIds(supabase, contestId);
   if (subErr) {
     return { errorMessage: subErr };
   }
 
-  const submissionIdList = [...contestSubmissionIds];
+  // Full-contest ledger: contest_id metadata + legacy fallback suffice. Per-submission
+  // `.or(in.(uuid,…))` filters blow past PostgREST limits on large contests (400+ subs).
+  const submissionIdList =
+    submissionIdsScope != null
+      ? [...new Set(submissionIdsScope.map(String).filter(Boolean))]
+      : [];
+
+  const fetchOpts = {
+    supabase,
+    creatorId,
+    contestId,
+    submissionIds: submissionIdList,
+    contestSubmissionIds,
+    includeLegacyFallback,
+  };
 
   const [rewardFetch, refundFetch] = await Promise.all([
     fetchCreatorMoneyTxnsScopedToContest({
-      supabase,
-      creatorId,
-      contestId,
+      ...fetchOpts,
       type: "reward",
-      submissionIds: submissionIdList,
       select: "id, amount, metadata",
     }),
     fetchCreatorMoneyTxnsScopedToContest({
-      supabase,
-      creatorId,
-      contestId,
+      ...fetchOpts,
       type: "refund",
-      submissionIds: submissionIdList,
       select: "id, amount, remarks, metadata",
     }),
   ]);
@@ -176,6 +286,51 @@ export async function loadContestPayoutLedgerRows(
       contestSubmissionIds,
     ),
     contestSubmissionIds,
+  };
+}
+
+/**
+ * Contest-scoped reward + refund rows for a creator (includes bulk rows whose
+ * metadata only lists `contest_id` or per-submission `breakdown` entries).
+ */
+export async function loadContestPayoutLedgerRows(
+  supabase: SupabaseClient,
+  creatorId: string,
+  contestId: string,
+): Promise<ContestPayoutLedgerLoaded | { errorMessage: string }> {
+  return loadContestPayoutLedgerRowsInternal({
+    supabase,
+    creatorId,
+    contestId,
+  });
+}
+
+/**
+ * Ledger rows scoped to specific submissions (bulk batch wallet-net) without
+ * loading every submission id in the contest.
+ */
+export async function loadContestPayoutMoneyTxnsForSubmissionIds(
+  supabase: SupabaseClient,
+  creatorId: string,
+  contestId: string,
+  submissionIds: string[],
+): Promise<
+  | { rewardRows: MoneyTxnRow[]; refundRows: MoneyTxnRow[]; errorMessage?: undefined }
+  | { errorMessage: string }
+> {
+  const loaded = await loadContestPayoutLedgerRowsInternal({
+    supabase,
+    creatorId,
+    contestId,
+    submissionIdsScope: submissionIds,
+    includeLegacyFallback: true,
+  });
+  if ("errorMessage" in loaded) {
+    return loaded;
+  }
+  return {
+    rewardRows: loaded.rewardRows,
+    refundRows: loaded.refundRows,
   };
 }
 

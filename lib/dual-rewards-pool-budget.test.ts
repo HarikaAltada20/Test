@@ -226,6 +226,113 @@ describe("computeDualRewardsSubmissionReversalDue", () => {
     assert.equal(due.totalCents, 0);
   });
 
+  it("recognizes cpm bulk payment breakdown (cpm_amount / bonus_amount)", () => {
+    const due = computeDualRewardsSubmissionReversalDue({
+      submissionRow: {
+        id: "sub-1",
+        paid: true,
+        earnings: 320,
+        bonus_paid: false,
+        bonus_amount: 0,
+      },
+      submissionId: "sub-1",
+      rewardTxns: [
+        {
+          amount: 2520,
+          metadata: {
+            contest_id: "c1",
+            breakdown: [
+              { submission_id: "sub-1", cpm_amount: 320, bonus_amount: 0 },
+              { submission_id: "sub-2", cpm_amount: 400, bonus_amount: 0 },
+            ],
+          },
+        },
+      ],
+      refundTxns: [],
+      reversalRemark,
+      wasPaidBeforeReversal: true,
+    });
+    assert.equal(due.totalCents, 320);
+    assert.equal(due.mainCents, 320);
+    assert.equal(due.bonusCents, 0);
+  });
+
+  it("recognizes milestone bulk payment breakdown (milestone_cents / bonus_cents)", () => {
+    const due = computeDualRewardsSubmissionReversalDue({
+      submissionRow: {
+        id: "sub-1",
+        paid: true,
+        earnings: 400,
+        bonus_paid: false,
+        bonus_amount: 0,
+      },
+      submissionId: "sub-1",
+      rewardTxns: [
+        {
+          amount: 2000,
+          metadata: {
+            contest_id: "c1",
+            total_milestone: 2000,
+            breakdown: [
+              { submission_id: "sub-1", milestone_cents: 400, bonus_cents: 0 },
+              { submission_id: "sub-2", milestone_cents: 1600, bonus_cents: 0 },
+            ],
+          },
+        },
+      ],
+      refundTxns: [],
+      reversalRemark,
+      wasPaidBeforeReversal: true,
+    });
+    assert.equal(due.totalCents, 400);
+    assert.equal(due.mainCents, 400);
+    assert.equal(due.bonusCents, 0);
+  });
+
+  it("recognizes milestone bulk refund breakdown when computing remaining due", () => {
+    const due = computeDualRewardsSubmissionReversalDue({
+      submissionRow: {
+        id: "sub-1",
+        paid: true,
+        earnings: 400,
+        bonus_paid: false,
+        bonus_amount: 0,
+      },
+      submissionId: "sub-1",
+      rewardTxns: [
+        {
+          amount: 2000,
+          metadata: {
+            contest_id: "c1",
+            breakdown: [
+              { submission_id: "sub-1", milestone_cents: 400, bonus_cents: 0 },
+              { submission_id: "sub-2", milestone_cents: 1600, bonus_cents: 0 },
+            ],
+          },
+        },
+      ],
+      refundTxns: [
+        {
+          amount: 2000,
+          remarks: reversalRemark,
+          metadata: {
+            contest_id: "c1",
+            bulk_payment_reversal: true,
+            milestone_refunded_cents: 2000,
+            bonus_refunded_cents: 0,
+            breakdown: [
+              { submission_id: "sub-1", milestone_cents: 400, bonus_cents: 0 },
+              { submission_id: "sub-2", milestone_cents: 1600, bonus_cents: 0 },
+            ],
+          },
+        },
+      ],
+      reversalRemark,
+      wasPaidBeforeReversal: true,
+    });
+    assert.equal(due.totalCents, 0);
+  });
+
   it("recognizes consolidated dual-rewards refund rows when computing remaining due", () => {
     const due = computeDualRewardsSubmissionReversalDue({
       submissionRow: {

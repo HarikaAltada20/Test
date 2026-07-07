@@ -362,6 +362,21 @@ export async function POST(request: NextRequest) {
     // Calculate earnings for each submission
     let runningTotal = 0;
     const breakdown: any[] = [];
+    const isMilestoneContest = contest.contest_type === "milestone";
+    const breakdownMainAmount = (item: {
+      cpm_amount?: number;
+      milestone_cents?: number;
+    }) =>
+      isMilestoneContest
+        ? Math.round(Number(item.milestone_cents) || 0)
+        : Math.round(Number(item.cpm_amount) || 0);
+    const breakdownBonusAmount = (item: {
+      bonus_amount?: number;
+      bonus_cents?: number;
+    }) =>
+      isMilestoneContest
+        ? Math.round(Number(item.bonus_cents) || 0)
+        : Math.round(Number(item.bonus_amount) || 0);
     let totalCPM = 0;
     let totalBonus = 0;
     let paidCount = 0;
@@ -585,15 +600,27 @@ export async function POST(request: NextRequest) {
           : 0;
 
       if (finalCpmAmount > 0 || finalBonusAmount > 0) {
-        breakdown.push({
-          submission_id: sub.id,
-          video_title: sub.video_title || "Untitled",
-          cpm_amount: finalCpmAmount,
-          bonus_amount: finalBonusAmount,
-          original_cpm_amount: submissionEarnings,
-          original_bonus_amount: submissionBonus,
-          created_at: sub.created_at,
-        });
+        if (isMilestoneContest) {
+          breakdown.push({
+            submission_id: sub.id,
+            video_title: sub.video_title || "Untitled",
+            milestone_cents: finalCpmAmount,
+            bonus_cents: finalBonusAmount,
+            original_milestone_cents: submissionEarnings,
+            original_bonus_cents: submissionBonus,
+            created_at: sub.created_at,
+          });
+        } else {
+          breakdown.push({
+            submission_id: sub.id,
+            video_title: sub.video_title || "Untitled",
+            cpm_amount: finalCpmAmount,
+            bonus_amount: finalBonusAmount,
+            original_cpm_amount: submissionEarnings,
+            original_bonus_amount: submissionBonus,
+            created_at: sub.created_at,
+          });
+        }
         paidCount++;
       } else {
         skippedCount++;
@@ -602,11 +629,11 @@ export async function POST(request: NextRequest) {
 
     // Use breakdown totals so credited amount matches adjusted values (not raw totalBonus)
     const totalAmount = breakdown.reduce(
-      (sum, b) => sum + b.cpm_amount + b.bonus_amount,
+      (sum, b) => sum + breakdownMainAmount(b) + breakdownBonusAmount(b),
       0,
     );
-    const totalCPMPaid = breakdown.reduce((s, b) => s + b.cpm_amount, 0);
-    const totalBonusPaid = breakdown.reduce((s, b) => s + b.bonus_amount, 0);
+    const totalMainPaid = breakdown.reduce((s, b) => s + breakdownMainAmount(b), 0);
+    const totalBonusPaid = breakdown.reduce((s, b) => s + breakdownBonusAmount(b), 0);
 
     if (totalAmount === 0) {
       const milestoneHint =
@@ -766,8 +793,15 @@ export async function POST(request: NextRequest) {
               payment_type: payment_type,
               submission_count: paidCount,
               breakdown: breakdown,
-              total_cpm: totalCPMPaid,
-              total_bonus: totalBonusPaid,
+              ...(isMilestoneContest
+                ? {
+                    total_milestone: totalMainPaid,
+                    total_bonus: totalBonusPaid,
+                  }
+                : {
+                    total_cpm: totalMainPaid,
+                    total_bonus: totalBonusPaid,
+                  }),
               cap_reached: maxEarnings ? runningTotal >= maxEarnings : false,
               bonus_reason_counts: bonusReasonCounts,
             },
@@ -785,8 +819,8 @@ export async function POST(request: NextRequest) {
     // Update all submissions with earnings and payment status
     const submissionUpdates = breakdown.map((item) => ({
       id: item.submission_id,
-      cpm_amount: item.cpm_amount,
-      bonus_amount: item.bonus_amount,
+      cpm_amount: breakdownMainAmount(item),
+      bonus_amount: breakdownBonusAmount(item),
       paid: payment_type !== "bonus" ? true : undefined,
       paid_at: payment_type !== "bonus" ? new Date().toISOString() : undefined,
       bonus_paid:
@@ -949,7 +983,9 @@ export async function POST(request: NextRequest) {
       message: `Successfully paid ${paidCount} submissions`,
       data: {
         total_amount: totalAmount,
-        total_cpm: totalCPMPaid,
+        ...(isMilestoneContest
+          ? { total_milestone: totalMainPaid }
+          : { total_cpm: totalMainPaid }),
         total_bonus: totalBonusPaid,
         paid_count: paidCount,
         skipped_count: skippedCount,

@@ -160,6 +160,19 @@ describe("getContestPayoutLedgerState fingerprint", () => {
             ];
             return api;
           },
+          or(filter: string) {
+            this.orFilters = [...(this.orFilters || []), filter];
+            return api;
+          },
+          order() {
+            return api;
+          },
+          range() {
+            return api;
+          },
+          limit() {
+            return api;
+          },
           in(column: string, values: string[]) {
             this.inFilters = [...(this.inFilters || []), { column, values }];
             return api;
@@ -169,6 +182,7 @@ describe("getContestPayoutLedgerState fingerprint", () => {
             column: string;
             value: Record<string, unknown>;
           }[],
+          orFilters: [] as string[],
           inFilters: [] as { column: string; values: string[] }[],
           then(resolve: (value: { data: unknown[]; error: null }) => void) {
             if (table === "submissions") {
