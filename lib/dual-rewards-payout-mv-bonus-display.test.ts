@@ -1,8 +1,11 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import {
+  excludeMostVerifiedBonusFromPaidTotalCents,
+  getCpmGrantedCentsFromSubmission,
   getMilestoneLadderGrantedCentsFromSubmission,
   getMostVerifiedBonusPaidCentsFromSubmission,
+  tryDualRewardGrantedBreakdownFromStoredPayout,
 } from "./dual-rewards-payout";
 
 describe("getMostVerifiedBonusPaidCentsFromSubmission", () => {
@@ -44,5 +47,39 @@ describe("getMilestoneLadderGrantedCentsFromSubmission", () => {
       milestone_bonus_paid: { views: 90, reels: 0 },
     });
     assert.equal(ladder, 185);
+  });
+});
+
+describe("getCpmGrantedCentsFromSubmission", () => {
+  it("reads cpm_cents from dual_rewards_payout JSON", () => {
+    const cpm = getCpmGrantedCentsFromSubmission({
+      dual_rewards_payout: { cpm_cents: 7662, milestone_cents: 1106 },
+    });
+    assert.equal(cpm, 7662);
+  });
+});
+
+describe("tryDualRewardGrantedBreakdownFromStoredPayout", () => {
+  it("excludes most-verified bonus from Reward Granted totals", () => {
+    const breakdown = tryDualRewardGrantedBreakdownFromStoredPayout({
+      paid: true,
+      bonus_paid: true,
+      dual_rewards_payout: { cpm_cents: 7662, milestone_cents: 1106 },
+      milestone_bonus_paid: { views: 170, reels: 0 },
+    });
+    assert.ok(breakdown);
+    assert.equal(breakdown!.cpmCents, 7662);
+    assert.equal(breakdown!.milestoneCents, 936);
+    assert.equal(breakdown!.totalCents, 8598);
+    assert.equal(breakdown!.isPaid, true);
+  });
+});
+
+describe("excludeMostVerifiedBonusFromPaidTotalCents", () => {
+  it("subtracts most-verified paid cents before legacy split", () => {
+    const adjusted = excludeMostVerifiedBonusFromPaidTotalCents(8768, {
+      milestone_bonus_paid: { views: 170, reels: 0 },
+    });
+    assert.equal(adjusted, 8598);
   });
 });

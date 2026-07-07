@@ -111,9 +111,11 @@ import {
   splitDualPaidTotalByExpectedWeights,
 } from "@/lib/dual-rewards-creator-cap";
 import {
+  excludeMostVerifiedBonusFromPaidTotalCents,
   getDualPayoutScopeFromSubmission,
   getDualRemainingPayableCents,
   getMilestoneLadderGrantedCentsFromSubmission,
+  tryDualRewardGrantedBreakdownFromStoredPayout,
   type DualPayoutScopeHint,
 } from "@/lib/dual-rewards-payout";
 import {
@@ -8592,7 +8594,14 @@ export default function ContestDetailClient({
       cpmUncappedCents: cpmUncappedForSplit,
       milestoneUncappedCents: milestoneUncappedForSplit,
     };
+    const fromStoredPayout =
+      tryDualRewardGrantedBreakdownFromStoredPayout(submission);
+    if (fromStoredPayout) {
+      return fromStoredPayout;
+    }
     const storedCents = Number(submission?.earnings) || 0;
+    const paidTotalExcludingMv = (total: number) =>
+      excludeMostVerifiedBonusFromPaidTotalCents(total, submission);
     const hasMainPaid =
       (submission?.status || "").toLowerCase() === "paid" ||
       submission?.paid === true;
@@ -8658,20 +8667,21 @@ export default function ContestDetailClient({
     // "Both" paid via single "paid" action: storedCents is the combined total.
     // Split by expected amounts so each column shows the correct part, respecting the total cap.
     if (isPaidAsBothViaMainAction) {
-      const total =
+      const totalRaw =
         storedCents > 0
           ? storedCents
           : cpmExpectedCents + milestoneExpectedCents;
+      const total = paidTotalExcludingMv(totalRaw);
 
       let cpmSplit = cpmExpectedCents;
       let milestoneSplit = milestoneExpectedCents;
 
       if (
-        storedCents > 0 &&
-        storedCents !== cpmExpectedCents + milestoneExpectedCents
+        total > 0 &&
+        total !== cpmExpectedCents + milestoneExpectedCents
       ) {
         const sp = splitDualPaidTotalByExpectedWeights(
-          storedCents,
+          total,
           cpmExpectedCents,
           milestoneExpectedCents,
           splitOpts,
@@ -8681,14 +8691,14 @@ export default function ContestDetailClient({
       }
 
       return {
-        totalCents: total,
+        totalCents: cpmSplit + milestoneSplit,
         cpmCents: cpmSplit,
         milestoneCents: milestoneSplit,
         isPaid: true,
       };
     }
 
-    const totalCents =
+    const totalCentsRaw =
       inferredComponent === "both"
         ? mainPaidCents + milestonePaidCents
         : inferredComponent === "cpm"
@@ -8698,6 +8708,7 @@ export default function ContestDetailClient({
             : storedCents > 0
               ? storedCents
               : 0;
+    const totalCents = paidTotalExcludingMv(totalCentsRaw);
     if (!isPaid && totalCents <= 0) {
       return { totalCents: 0, cpmCents: 0, milestoneCents: 0, isPaid: false };
     }
@@ -8726,7 +8737,7 @@ export default function ContestDetailClient({
           splitOpts,
         );
         return {
-          totalCents,
+          totalCents: sp.cpmCents + sp.milestoneCents,
           cpmCents: sp.cpmCents,
           milestoneCents: sp.milestoneCents,
           isPaid,
@@ -8749,13 +8760,13 @@ export default function ContestDetailClient({
     }
     if (inferredComponent === "both") {
       return {
-        totalCents,
+        totalCents: mainPaidCents + milestonePaidCents,
         cpmCents: mainPaidCents,
         milestoneCents: milestonePaidCents,
         isPaid,
       };
     }
-    const fallbackTotalCents =
+    const fallbackTotalCentsRaw =
       storedCents > 0
         ? storedCents
         : inferredComponent === "both"
@@ -8765,6 +8776,7 @@ export default function ContestDetailClient({
             : inferredComponent === "milestone"
               ? milestoneExpectedCents
               : 0;
+    const fallbackTotalCents = paidTotalExcludingMv(fallbackTotalCentsRaw);
     if (!isPaid && fallbackTotalCents <= 0) {
       return { totalCents: 0, cpmCents: 0, milestoneCents: 0, isPaid: false };
     }
@@ -8775,7 +8787,7 @@ export default function ContestDetailClient({
       splitOpts,
     );
     return {
-      totalCents: fallbackTotalCents,
+      totalCents: sp.cpmCents + sp.milestoneCents,
       cpmCents: sp.cpmCents,
       milestoneCents: sp.milestoneCents,
       isPaid,

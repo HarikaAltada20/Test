@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { countRefundsForCreatorContest } from "@/lib/contest-payout-idempotency";
+import { getContestPayoutLedgerState } from "@/lib/contest-payout-idempotency";
 import { loadDualCreatorCapMaps } from "@/lib/dual-rewards-payout-eligibility";
 import {
   applyDualRewardsPayUpdateOptimisticGuards,
@@ -13,6 +13,8 @@ import {
 } from "@/lib/dual-rewards-payout";
 import {
   checkDualRewardsPoolBudgetForPayment,
+  computeSubmissionGrossWalletNetCents,
+  filterMoneyTxnsForContest,
   getDualRewardsSubmissionPaidComponents,
   rollbackDualRewardsPoolCommitIfNeeded,
   type DualPoolBudgetPaymentResult,
@@ -46,6 +48,35 @@ function paymentTypeToComponent(
   if (paymentType === "bonus") return "milestone";
   if (paymentType === "both") return "both";
   return "cpm";
+}
+
+function breakdownPayableCents(
+  breakdown: DualRewardsBulkBreakdownRow[],
+): number {
+  return breakdown.reduce(
+    (sum, item) =>
+      item.finalizeOnly ? sum : sum + item.cpm_cents + item.milestone_cents,
+    0,
+  );
+}
+
+function breakdownWalletNetCents(
+  breakdown: DualRewardsBulkBreakdownRow[],
+  rewardTxns: Parameters<typeof computeSubmissionGrossWalletNetCents>[0],
+  refundTxns: Parameters<typeof computeSubmissionGrossWalletNetCents>[1],
+): number {
+  return breakdown.reduce((sum, item) => {
+    if (item.finalizeOnly) return sum;
+    return (
+      sum +
+      computeSubmissionGrossWalletNetCents(
+        rewardTxns,
+        refundTxns,
+        item.submission_id,
+        REVERSAL_TRANSACTION_REMARK,
+      )
+    );
+  }, 0);
 }
 
 export async function executeDualRewardsBulkPayment(params: {
@@ -192,6 +223,32 @@ export async function executeDualRewardsBulkPayment(params: {
     [];
   let skippedCount = 0;
 
+  const contestSubmissionIds = new Set(
+    submissions.map((s) => String(s.id)),
+  );
+  const [{ data: rewardTxnsAll }, { data: refundTxnsAll }] = await Promise.all([
+    supabaseAdmin
+      .from("money_transactions")
+      .select("id, amount, metadata")
+      .eq("user_id", creatorId)
+      .eq("type", "reward"),
+    supabaseAdmin
+      .from("money_transactions")
+      .select("id, amount, remarks, metadata")
+      .eq("user_id", creatorId)
+      .eq("type", "refund"),
+  ]);
+  const rewardTxns = filterMoneyTxnsForContest(
+    rewardTxnsAll,
+    contestId,
+    contestSubmissionIds,
+  );
+  const refundTxns = filterMoneyTxnsForContest(
+    refundTxnsAll,
+    contestId,
+    contestSubmissionIds,
+  );
+
   for (const sub of sortedSubmissions) {
     const cpmCappedBase =
       cpmCappedBySubmissionId.get(String(sub.id)) ??
@@ -205,12 +262,20 @@ export async function executeDualRewardsBulkPayment(params: {
       ? applyPayoutAdjustment(milestoneCappedBase, pct)
       : milestoneCappedBase;
 
+    const walletNetCents = computeSubmissionGrossWalletNetCents(
+      rewardTxns,
+      refundTxns,
+      String(sub.id),
+      REVERSAL_TRANSACTION_REMARK,
+    );
+
     const { cpmRemaining, milestoneRemaining, totalRemaining } =
       getDualRemainingPayableCents(
         component,
         cpmExpected,
         milestoneExpected,
         sub.dual_rewards_payout,
+        { walletNetCents },
       );
 
     if (totalRemaining <= 0) {
@@ -218,16 +283,17 @@ export async function executeDualRewardsBulkPayment(params: {
         sub.paid !== true &&
         !["paid"].includes(String(sub.status || "").toLowerCase());
       const reserved = parseDualRewardsPayoutJson(sub.dual_rewards_payout);
-      if (isUnpaidRow && reserved) {
+      if (
+        isUnpaidRow &&
+        reserved &&
+        walletNetCents > 0 &&
+        (reserved.cpm_cents > 0 || reserved.milestone_cents > 0)
+      ) {
         const coversCpm =
           component === "milestone" || reserved.cpm_cents >= cpmExpected;
         const coversMs =
           component === "cpm" || reserved.milestone_cents >= milestoneExpected;
-        if (
-          coversCpm &&
-          coversMs &&
-          (reserved.cpm_cents > 0 || reserved.milestone_cents > 0)
-        ) {
+        if (coversCpm && coversMs) {
           breakdown.push({
             submission_id: String(sub.id),
             cpm_cents: 0,
@@ -333,15 +399,15 @@ export async function executeDualRewardsBulkPayment(params: {
     }
   }
 
-  const { count: contestRefundCount, errorMessage: refundCountErr } =
-    await countRefundsForCreatorContest(supabaseAdmin, creatorId, contestId);
-  if (refundCountErr) {
+  const { state: payoutLedgerState, errorMessage: ledgerGenErr } =
+    await getContestPayoutLedgerState(supabaseAdmin, creatorId, contestId);
+  if (ledgerGenErr) {
     return {
       ok: false,
       status: 500,
       error:
-        "Cannot verify refund history for safe payout (idempotency). Try again or contact support.",
-      details: refundCountErr,
+        "Cannot verify payout ledger for safe idempotency. Try again or contact support.",
+      details: ledgerGenErr,
     };
   }
 
@@ -354,32 +420,54 @@ export async function executeDualRewardsBulkPayment(params: {
     requested_submission_ids: requestedSubmissionIds,
     payout_adjustment_percentage: payoutAdjustment.percentage,
     payout_adjustment_mode: payoutAdjustment.mode ?? null,
-    contest_refund_count_at_payout: contestRefundCount,
+    contest_payout_ledger_generation: payoutLedgerState.generation,
+    contest_payout_ledger_fingerprint: payoutLedgerState.fingerprint,
   });
   const payoutOperationKey = `bulk_pay_dual_v1:${createHash("sha256")
     .update(operationSeed)
     .digest("hex")
     .slice(0, 48)}`;
 
-  const creditResult =
+  const payableCents = breakdownPayableCents(breakdown);
+  const walletNetBeforePay = breakdownWalletNetCents(
+    breakdown,
+    rewardTxns,
+    refundTxns,
+  );
+
+  const runBulkCredit = (idempotencyKey: string) =>
+    creditDualRewardsBulkPayment({
+      creatorId,
+      contestId,
+      contestTitle,
+      paidCount: requestedCount,
+      totalCents: totalAmount,
+      totalCpmCents: totalCpm,
+      totalMilestoneCents: totalMilestone,
+      paymentType,
+      idempotencyKey,
+      breakdown,
+    });
+
+  let creditResult =
     totalAmount > 0
-      ? await creditDualRewardsBulkPayment({
-          creatorId,
-          contestId,
-          contestTitle,
-          paidCount: requestedCount,
-          totalCents: totalAmount,
-          totalCpmCents: totalCpm,
-          totalMilestoneCents: totalMilestone,
-          paymentType,
-          idempotencyKey: payoutOperationKey,
-          breakdown,
-        })
+      ? await runBulkCredit(payoutOperationKey)
       : {
           success: true as const,
           alreadyApplied: false,
           transactionId: undefined,
         };
+
+  if (
+    creditResult.success &&
+    creditResult.alreadyApplied &&
+    payableCents > 0 &&
+    walletNetBeforePay < payableCents
+  ) {
+    const shortfallCents = payableCents - walletNetBeforePay;
+    const bumpedKey = `${payoutOperationKey}:wallet_shortfall:${shortfallCents}`;
+    creditResult = await runBulkCredit(bumpedKey);
+  }
 
   if (!creditResult.success) {
     for (const prior of poolCommits) {

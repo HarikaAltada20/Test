@@ -14,7 +14,7 @@ import {
 } from "@/lib/payout-rules";
 import { allocateFlatFeeBonusCents } from "@/lib/bonus-allocation";
 import { buildMilestoneSubmissionPayoutCentsMap } from "@/lib/milestone-contest-expected-spend";
-import { countRefundsForCreatorContest } from "@/lib/contest-payout-idempotency";
+import { getContestPayoutLedgerState } from "@/lib/contest-payout-idempotency";
 import { executeDualRewardsBulkPayment } from "@/lib/dual-rewards-bulk-payment";
 import { buildFlatFeeBonusExpectedCentsBySubmissionId } from "@/lib/twitter-cpm-bonus-expected";
 import { fetchContestSubmissionsAllPages } from "@/lib/fetch-contest-submissions";
@@ -695,22 +695,24 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { count: contestRefundCount, errorMessage: refundCountErr } =
-      await countRefundsForCreatorContest(
-        supabaseAdmin,
-        creator_id,
-        contest_id,
-      );
-    if (refundCountErr) {
+    const {
+      state: payoutLedgerState,
+      errorMessage: ledgerGenErr,
+    } = await getContestPayoutLedgerState(
+      supabaseAdmin,
+      creator_id,
+      contest_id,
+    );
+    if (ledgerGenErr) {
       console.error(
-        "[bulk-payment] failed to count contest refunds for idempotency:",
-        refundCountErr,
+        "[bulk-payment] failed to read payout ledger for idempotency:",
+        ledgerGenErr,
       );
       return NextResponse.json(
         {
           error:
-            "Cannot verify refund history for safe payout (idempotency). Try again or contact support.",
-          details: refundCountErr,
+            "Cannot verify payout ledger for safe payout (idempotency). Try again or contact support.",
+          details: ledgerGenErr,
         },
         { status: 500 },
       );
@@ -730,7 +732,8 @@ export async function POST(request: NextRequest) {
       requested_submission_ids: requestedSubmissionIds,
       payout_adjustment_percentage: payoutAdjustment.percentage,
       payout_adjustment_mode: payoutAdjustment.mode ?? null,
-      contest_refund_count_at_payout: contestRefundCount,
+      contest_payout_ledger_generation: payoutLedgerState.generation,
+      contest_payout_ledger_fingerprint: payoutLedgerState.fingerprint,
     });
     const bulkPayIdempotencyKey = `bulk_pay_v2:${createHash("sha256")
       .update(operationSeed)

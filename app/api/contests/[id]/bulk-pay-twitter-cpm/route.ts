@@ -11,7 +11,7 @@ import {
 } from "@/lib/payment-utils";
 import { applyPayoutAdjustment } from "@/lib/payout-adjustment";
 import { parsePayoutAdjustment } from "@/lib/payout-rules";
-import { countRefundsForCreatorContest } from "@/lib/contest-payout-idempotency";
+import { getContestPayoutLedgerState } from "@/lib/contest-payout-idempotency";
 import {
   sumBonusRewards,
   sumBonusRefunds,
@@ -472,20 +472,24 @@ export async function POST(
     }
 
     const {
-      count: contestRefundCount,
-      errorMessage: refundCountErr,
-    } = await countRefundsForCreatorContest(supabaseAdmin, creatorId, contestId);
+      state: payoutLedgerState,
+      errorMessage: ledgerGenErr,
+    } = await getContestPayoutLedgerState(
+      supabaseAdmin,
+      creatorId,
+      contestId,
+    );
 
-    if (refundCountErr) {
+    if (ledgerGenErr) {
       console.error(
-        "[bulk-pay-twitter-cpm] failed to count contest refunds:",
-        refundCountErr,
+        "[bulk-pay-twitter-cpm] failed to read payout ledger:",
+        ledgerGenErr,
       );
       return NextResponse.json(
         {
           error:
-            "Cannot verify refund history for safe payout (idempotency). Try again or contact support.",
-          details: refundCountErr,
+            "Cannot verify payout ledger for safe payout (idempotency). Try again or contact support.",
+          details: ledgerGenErr,
         },
         { status: 500 },
       );
@@ -501,7 +505,8 @@ export async function POST(
           tweet_ids_sorted: [...tweetIds].sort(),
           cpm_breakdown: cpmBreakdown,
           bonus_breakdown: bonusBreakdown,
-          contest_refund_count_at_payout: contestRefundCount,
+          contest_payout_ledger_generation: payoutLedgerState.generation,
+          contest_payout_ledger_fingerprint: payoutLedgerState.fingerprint,
         }),
       )
       .digest("hex")

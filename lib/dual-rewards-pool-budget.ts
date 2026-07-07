@@ -198,6 +198,18 @@ function dualRewardsLedgerBreakdownForSubmission(
   };
 }
 
+/** True when a reward/refund row applies to a submission (per-row or bulk breakdown). */
+export function moneyTxnAppliesToSubmission(
+  tx: MoneyTxnRow,
+  submissionId: string,
+): boolean {
+  const sid = String(submissionId);
+  if (submissionIdFromMoneyTxnMetadata(tx.metadata) === sid) {
+    return true;
+  }
+  return dualRewardsLedgerBreakdownForSubmission(tx.metadata, sid) != null;
+}
+
 export function moneyTxnBelongsToContest(params: {
   tx: MoneyTxnRow;
   contestId: string;

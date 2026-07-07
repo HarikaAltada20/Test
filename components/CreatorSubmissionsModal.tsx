@@ -67,9 +67,13 @@ import {
   splitDualPaidTotalByExpectedWeights,
 } from "@/lib/dual-rewards-creator-cap";
 import {
+  excludeMostVerifiedBonusFromPaidTotalCents,
+  getCpmGrantedCentsFromSubmission,
   getDualPayoutScopeFromSubmission,
   getDualRemainingPayableCents,
+  getMilestoneLadderGrantedCentsFromSubmission,
   parseDualRewardsPayoutJson,
+  tryDualRewardGrantedBreakdownFromStoredPayout,
 } from "@/lib/dual-rewards-payout";
 import {
   formatDualBulkPaymentToastDescription,
@@ -3140,16 +3144,33 @@ export function CreatorSubmissionsModal({
                       let milestoneGrantedForDual = 0;
                       let cpmGrantedForDual = 0;
                       if (contest?.contest_type === "dual_rewards") {
-                        if (dualPaidComponent === "milestone") {
-                          milestoneGrantedForDual = totalGrantedForDual;
+                        const fromStoredPayout =
+                          tryDualRewardGrantedBreakdownFromStoredPayout(
+                            submission as any,
+                          );
+                        if (fromStoredPayout) {
+                          cpmGrantedForDual = fromStoredPayout.cpmCents;
+                          milestoneGrantedForDual =
+                            fromStoredPayout.milestoneCents;
+                        } else if (dualPaidComponent === "milestone") {
+                          milestoneGrantedForDual = getMilestoneLadderGrantedCentsFromSubmission(
+                            submission as any,
+                          );
                         } else if (dualPaidComponent === "cpm") {
-                          cpmGrantedForDual = totalGrantedForDual;
+                          cpmGrantedForDual = getCpmGrantedCentsFromSubmission(
+                            submission as any,
+                          );
                         } else if (
                           dualPaidComponent === "both" ||
                           (isDualPaid && !dualPaidComponent)
                         ) {
+                          const paidTotalExMv =
+                            excludeMostVerifiedBonusFromPaidTotalCents(
+                              totalGrantedForDual,
+                              submission as any,
+                            );
                           const sp = splitDualPaidTotalByExpectedWeights(
-                            totalGrantedForDual,
+                            paidTotalExMv,
                             adjustedCpmExpectedForDual,
                             adjustedMilestoneExpectedForDual,
                             {

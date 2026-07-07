@@ -349,20 +349,49 @@ export function getDualPayoutScopeFromSubmission(
   return null;
 }
 
+export type DualRemainingPayableOptions = {
+  /**
+   * Wallet ledger net (reward − reversal refund) for this submission. When zero
+   * after a refund, stale `dual_rewards_payout` pool reservations must not block
+   * re-pay. When positive, caps remaining so we do not double-credit.
+   */
+  walletNetCents?: number | null;
+};
+
 /** Remaining payable per component after prior dual-rewards payouts. */
 export function getDualRemainingPayableCents(
   component: DualRewardPayoutScope,
   cpmExpectedCents: number,
   milestoneExpectedCents: number,
   dualPayoutRaw: unknown,
+  options?: DualRemainingPayableOptions,
 ): {
   cpmRemaining: number;
   milestoneRemaining: number;
   totalRemaining: number;
 } {
   const prev = parseDualRewardsPayoutJson(dualPayoutRaw);
-  const prevCpm = Math.max(0, prev?.cpm_cents ?? 0);
-  const prevMs = Math.max(0, prev?.milestone_cents ?? 0);
+  let prevCpm = Math.max(0, prev?.cpm_cents ?? 0);
+  let prevMs = Math.max(0, prev?.milestone_cents ?? 0);
+
+  if (options?.walletNetCents != null) {
+    const walletNet = Math.max(0, Math.round(Number(options.walletNetCents) || 0));
+    if (walletNet <= 0) {
+      // Refunded or never credited — ignore stale pool reservation on the row.
+      prevCpm = 0;
+      prevMs = 0;
+    } else {
+      const split = splitDualReversalRefundFromPayout(
+        dualPayoutRaw,
+        walletNet,
+        prevCpm,
+        prevMs,
+      );
+      prevCpm = Math.max(prevCpm, split.cpmCents);
+      prevMs = Math.max(prevMs, split.milestoneCents);
+    }
+  }
+
   const cpmRemaining = Math.max(
     0,
     Math.round(Number(cpmExpectedCents) || 0) - prevCpm,
@@ -487,6 +516,80 @@ export function getMilestoneLadderGrantedCentsFromSubmission(sub: {
     return bonus;
   }
   return 0;
+}
+
+export type DualRewardGrantedDisplayBreakdown = {
+  totalCents: number;
+  cpmCents: number;
+  milestoneCents: number;
+  isPaid: boolean;
+};
+
+/** Paid CPM cents from `dual_rewards_payout` JSON, or legacy `earnings` when only CPM was paid. */
+export function getCpmGrantedCentsFromSubmission(sub: {
+  paid?: boolean | null;
+  status?: string | null;
+  earnings?: number | null;
+  dual_rewards_payout?: unknown;
+}): number {
+  const dual = parseDualRewardsPayoutJson(sub.dual_rewards_payout);
+  if (dual) {
+    return Math.max(0, Math.round(dual.cpm_cents));
+  }
+  const hasMainPaid =
+    String(sub.status || "").toLowerCase() === "paid" || sub.paid === true;
+  if (hasMainPaid) {
+    return Math.max(0, Math.round(Number(sub.earnings) || 0));
+  }
+  return 0;
+}
+
+/**
+ * Reward Granted column breakdown when `dual_rewards_payout` is stored.
+ * Excludes most-verified views/reels bonus (separate UI columns).
+ */
+export function tryDualRewardGrantedBreakdownFromStoredPayout(sub: {
+  paid?: boolean | null;
+  status?: string | null;
+  earnings?: number | null;
+  bonus_paid?: boolean | null;
+  dual_rewards_payout?: unknown;
+  milestone_bonus_paid?: MilestoneBonusPaidTrackCents | null;
+  metadata?: { milestone_bonus_paid?: MilestoneBonusPaidTrackCents } | null;
+}): DualRewardGrantedDisplayBreakdown | null {
+  const dual = parseDualRewardsPayoutJson(sub.dual_rewards_payout);
+  if (!dual) return null;
+  const mv = getMostVerifiedBonusPaidCentsFromSubmission(sub);
+  if (dual.cpm_cents <= 0 && dual.milestone_cents <= 0 && mv.totalCents <= 0) {
+    return null;
+  }
+  const cpmCents = getCpmGrantedCentsFromSubmission(sub);
+  const milestoneCents = getMilestoneLadderGrantedCentsFromSubmission(sub);
+  const isPaid =
+    cpmCents > 0 ||
+    milestoneCents > 0 ||
+    mv.totalCents > 0 ||
+    String(sub.status || "").toLowerCase() === "paid" ||
+    sub.paid === true ||
+    sub.bonus_paid === true;
+  return {
+    totalCents: cpmCents + milestoneCents,
+    cpmCents,
+    milestoneCents,
+    isPaid,
+  };
+}
+
+/** Remove most-verified bonus cents so legacy paid-total splits stay in CPM/milestone columns only. */
+export function excludeMostVerifiedBonusFromPaidTotalCents(
+  paidTotalCents: number,
+  sub: {
+    milestone_bonus_paid?: MilestoneBonusPaidTrackCents | null;
+    metadata?: { milestone_bonus_paid?: MilestoneBonusPaidTrackCents } | null;
+  },
+): number {
+  const mv = getMostVerifiedBonusPaidCentsFromSubmission(sub);
+  return Math.max(0, Math.round(Number(paidTotalCents) || 0) - mv.totalCents);
 }
 
 export function dualRewardsPayoutJsonToRowValue(
