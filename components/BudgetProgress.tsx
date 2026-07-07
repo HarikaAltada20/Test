@@ -2,6 +2,12 @@
 
 import { calculateMilestoneBudgetSpent } from "@/lib/contest-utils-client";
 import {
+  computeBudgetPaidCents,
+  getBudgetTileMode,
+  type BudgetTileSubmission,
+} from "@/lib/contest-budget-tile-metrics";
+import { getDualRewardsSubmissionPaidComponents } from "@/lib/dual-rewards-pool-budget";
+import {
   getPoolBudgetCentsFromDetails,
   isCpmContestType,
   isMilestoneContestType,
@@ -39,6 +45,8 @@ interface BudgetProgressProps {
   milestoneCreatorBonusPaidCents?: number | null;
   /** Per-submission expected payout cents for milestone logic */
   milestoneExpectedPayoutBySubmissionId?: Map<string, number> | null;
+  /** When payouts_processed, show paid amounts instead of expected fill */
+  postContestStatus?: string | null;
 }
 
 export function BudgetProgress({
@@ -50,6 +58,7 @@ export function BudgetProgress({
   milestoneCreatorBonusExpectedCents = null,
   milestoneCreatorBonusPaidCents = null,
   milestoneExpectedPayoutBySubmissionId = null,
+  postContestStatus = null,
 }: BudgetProgressProps) {
   const [mode, setMode] = useState<"light" | "dark">("light");
   // Get contest config outside useMemo so it's available in the component
@@ -532,31 +541,123 @@ export function BudgetProgress({
       }
     }
 
+    let finalCpmPaid = cpmPaid;
+    let finalBonusPaid = bonusPaid;
+    let finalPrizePoolSpent = prizePoolSpent;
+    let finalTotalSpent = totalSpent;
+
+    if (getBudgetTileMode(postContestStatus) === "paid") {
+      const tileInput = {
+        contest_type: contest.contest_type,
+        post_contest_status: postContestStatus,
+        contest_based_details: contest.contest_based_details,
+        max_earnings_per_creator: (contest as any).max_earnings_per_creator,
+      };
+      const subs = submissions as BudgetTileSubmission[];
+      const paidTotal = computeBudgetPaidCents(tileInput, subs);
+      finalTotalSpent =
+        totalBudget > 0 ? Math.min(paidTotal, totalBudget) : paidTotal;
+
+      if (contest.contest_type === "dual_rewards") {
+        let cpmMilestonePaid = 0;
+        let creatorBonusPaid = 0;
+        for (const s of subs) {
+          const st = String((s as any).status || "").toLowerCase();
+          const isPaidSubmission =
+            st === "paid" ||
+            Boolean((s as any).paid_at) ||
+            (s as any).paid === true;
+          if (!isPaidSubmission) continue;
+          if (twitterExcluded(s)) continue;
+
+          const paid = getDualRewardsSubmissionPaidComponents({
+            id: String((s as any).id || ""),
+            earnings: (s as any).earnings,
+            paid: (s as any).paid,
+            bonus_amount: (s as any).bonus_amount,
+            bonus_paid: (s as any).bonus_paid,
+            dual_rewards_payout: (s as any).dual_rewards_payout,
+          });
+          cpmMilestonePaid += paid.cpmCents + paid.milestoneCents;
+          if ((s as any).bonus_paid && (s as any).bonus_amount != null) {
+            creatorBonusPaid += Number((s as any).bonus_amount) || 0;
+          }
+        }
+        finalCpmPaid = cpmMilestonePaid;
+        finalBonusPaid = creatorBonusPaid;
+      } else if (contest.contest_type === "milestone") {
+        let mainPaid = 0;
+        let bonusPaidAmt = 0;
+        for (const s of subs) {
+          const st = String((s as any).status || "").toLowerCase();
+          const isPaidSubmission =
+            st === "paid" ||
+            Boolean((s as any).paid_at) ||
+            (s as any).paid === true;
+          if (!isPaidSubmission) continue;
+          if (twitterExcluded(s)) continue;
+          if ((s as any).earnings != null) {
+            mainPaid += Number((s as any).earnings) || 0;
+          }
+          if ((s as any).bonus_paid && (s as any).bonus_amount != null) {
+            bonusPaidAmt += Number((s as any).bonus_amount) || 0;
+          }
+        }
+        finalCpmPaid = mainPaid;
+        finalBonusPaid = bonusPaidAmt;
+      } else if (contest.contest_type === "leaderboard") {
+        finalPrizePoolSpent = prizePoolSpent;
+        finalBonusPaid = Math.max(0, finalTotalSpent - finalPrizePoolSpent);
+        finalCpmPaid = finalPrizePoolSpent;
+      } else {
+        let mainPaid = 0;
+        let bonusPaidAmt = 0;
+        for (const s of subs) {
+          const st = String((s as any).status || "").toLowerCase();
+          const isPaidSubmission =
+            st === "paid" ||
+            Boolean((s as any).paid_at) ||
+            (s as any).paid === true;
+          if (!isPaidSubmission) continue;
+          if (twitterExcluded(s)) continue;
+          if ((s as any).earnings != null) {
+            mainPaid += Number((s as any).earnings) || 0;
+          }
+          if ((s as any).bonus_paid && (s as any).bonus_amount != null) {
+            bonusPaidAmt += Number((s as any).bonus_amount) || 0;
+          }
+        }
+        finalCpmPaid = mainPaid;
+        finalBonusPaid = bonusPaidAmt;
+      }
+    }
+
     const cpmPercentage =
-      totalBudget > 0 ? Math.min((cpmPaid / totalBudget) * 100, 100) : 0;
+      totalBudget > 0 ? Math.min((finalCpmPaid / totalBudget) * 100, 100) : 0;
     const bonusPercentage =
       bonusBudget && bonusBudget > 0
-        ? Math.min((bonusPaid / bonusBudget) * 100, 100)
+        ? Math.min((finalBonusPaid / bonusBudget) * 100, 100)
         : 0;
-    // For display in progress bar, calculate bonus as percentage of totalBudget
     const bonusPercentageOfTotal =
-      totalBudget > 0 ? Math.min((bonusPaid / totalBudget) * 100, 100) : 0;
+      totalBudget > 0 ? Math.min((finalBonusPaid / totalBudget) * 100, 100) : 0;
     const totalPercentage =
-      totalBudget > 0 ? Math.min((totalSpent / totalBudget) * 100, 100) : 0;
+      totalBudget > 0
+        ? Math.min((finalTotalSpent / totalBudget) * 100, 100)
+        : 0;
 
     return {
-      cpmPaid,
-      bonusPaid,
+      cpmPaid: finalCpmPaid,
+      bonusPaid: finalBonusPaid,
       totalBudget,
       cpmPercentage,
       bonusPercentage,
       bonusPercentageOfTotal,
       totalPercentage,
-      prizePoolSpent,
+      prizePoolSpent: finalPrizePoolSpent,
       prizePoolTotal,
       bonusBudget,
-      bonusSpent: bonusPaid,
-      totalSpent,
+      bonusSpent: finalBonusPaid,
+      totalSpent: finalTotalSpent,
     };
   }, [
     contest,
@@ -565,6 +666,7 @@ export function BudgetProgress({
     milestoneExpectedPayoutCents,
     milestoneCreatorBonusExpectedCents,
     milestoneCreatorBonusPaidCents,
+    postContestStatus,
   ]);
 
   const formatCurrency = (cents: number) => {

@@ -54,6 +54,7 @@ import {
   isCpmContestType,
   isMilestoneContestType,
 } from "@/lib/contest-type";
+import { getPoolBudgetSpentCentsForDisplay } from "@/lib/contest-budget-tile-metrics";
 import { computeMilestoneContestExpectedSpendCents } from "@/lib/milestone-contest-expected-spend";
 import {
   fetchContestSubmissionsAllPages,
@@ -186,11 +187,13 @@ const getBudgetTrackerValues = (
   budgetSpent?: number | null,
 ) => {
   const spent = Math.max(0, budgetSpent ?? 0);
-  const clampedSpent = Math.min(spent, totalBudget);
+  const clampedSpent =
+    totalBudget > 0 ? Math.min(spent, totalBudget) : spent;
   const percentage = totalBudget > 0 ? (clampedSpent / totalBudget) * 100 : 0;
   const remaining = Math.max(totalBudget - clampedSpent, 0);
 
-  return { spent: clampedSpent, percentage, remaining };
+  // Dollar labels show actual spend (may exceed pool); bar/remaining stay capped.
+  return { spent, percentage, remaining };
 };
 
 /**
@@ -214,10 +217,13 @@ function getDualUnifiedBudgetMeta(contest: any): {
     typeof details.milestone_contest?.total_budget_cents === "number" &&
     details.milestone_contest.total_budget_cents > 0;
   if (hasNestedCpmBudget || hasNestedMilestoneBudget) return null;
-  const spent =
-    (details.cpm_contest?.budget_spent || 0) +
-    (details.milestone_contest?.budget_spent || 0);
-  return { total, spent };
+  const spentRaw = getPoolBudgetSpentCentsForDisplay({
+    contest_type: contest.contest_type,
+    post_contest_status: contest.post_contest_status,
+    contest_based_details: details,
+  });
+  const tracker = getBudgetTrackerValues(total, spentRaw);
+  return { total, spent: tracker.spent };
 }
 
 // Helper function to get contests filtered by media type
@@ -2334,10 +2340,7 @@ export default function OpportunitiesPage({
             {dualUnifiedBudget &&
               (() => {
                 const { total, spent } = dualUnifiedBudget;
-                const { percentage, remaining } = getBudgetTrackerValues(
-                  total,
-                  spent,
-                );
+                const tracker = getBudgetTrackerValues(total, spent);
                 return (
                   <div className="mt-3">
                     <div
@@ -2349,7 +2352,7 @@ export default function OpportunitiesPage({
                     >
                       <span className="font-medium">Budget Tracker</span>
                       <span className="font-semibold">
-                        {formatMoney(spent)} / {formatMoney(total)}
+                        {formatMoney(tracker.spent)} / {formatMoney(total)}
                       </span>
                     </div>
                     <div
@@ -2360,7 +2363,7 @@ export default function OpportunitiesPage({
                     >
                       <div
                         className="absolute h-full bg-gradient-to-r from-purple-500 to-purple-600 rounded-full transition-all duration-500 ease-out"
-                        style={{ width: `${Math.min(percentage, 100)}%` }}
+                        style={{ width: `${tracker.percentage}%` }}
                       ></div>
                     </div>
                     <div
@@ -2370,8 +2373,8 @@ export default function OpportunitiesPage({
                         transition: "none",
                       }}
                     >
-                      <span>{percentage.toFixed(1)}% used</span>
-                      <span>{formatMoney(remaining)} remaining</span>
+                      <span>{tracker.percentage.toFixed(1)}% used</span>
+                      <span>{formatMoney(tracker.remaining)} remaining</span>
                     </div>
                   </div>
                 );
@@ -2388,7 +2391,7 @@ export default function OpportunitiesPage({
                   contest.contest_based_details.cpm_contest.total_budget;
                 const budgetSpent =
                   contest.contest_based_details.cpm_contest.budget_spent || 0;
-                const { percentage, remaining } = getBudgetTrackerValues(
+                const tracker = getBudgetTrackerValues(
                   totalBudget,
                   budgetSpent,
                 );
@@ -2408,7 +2411,7 @@ export default function OpportunitiesPage({
                     >
                       <span className="font-medium">{trackerLabel}</span>
                       <span className="font-semibold">
-                        {formatMoney(budgetSpent)} / {formatMoney(totalBudget)}
+                        {formatMoney(tracker.spent)} / {formatMoney(totalBudget)}
                       </span>
                     </div>
                     <div
@@ -2419,7 +2422,7 @@ export default function OpportunitiesPage({
                     >
                       <div
                         className="absolute h-full bg-gradient-to-r from-purple-500 to-purple-600 rounded-full transition-all duration-500 ease-out"
-                        style={{ width: `${percentage}%` }}
+                        style={{ width: `${tracker.percentage}%` }}
                       ></div>
                     </div>
                     <div
@@ -2429,8 +2432,8 @@ export default function OpportunitiesPage({
                         transition: "none",
                       }}
                     >
-                      <span>{percentage.toFixed(1)}% used</span>
-                      <span>{formatMoney(remaining)} remaining</span>
+                      <span>{tracker.percentage.toFixed(1)}% used</span>
+                      <span>{formatMoney(tracker.remaining)} remaining</span>
                     </div>
                   </div>
                 );
@@ -2450,7 +2453,7 @@ export default function OpportunitiesPage({
                 const budgetSpent =
                   contest.contest_based_details.milestone_contest
                     .budget_spent || 0;
-                const { percentage, remaining } = getBudgetTrackerValues(
+                const tracker = getBudgetTrackerValues(
                   totalBudget,
                   budgetSpent,
                 );
@@ -2470,7 +2473,7 @@ export default function OpportunitiesPage({
                     >
                       <span className="font-medium">{trackerLabel}</span>
                       <span className="font-semibold">
-                        {formatMoney(budgetSpent)} / {formatMoney(totalBudget)}
+                        {formatMoney(tracker.spent)} / {formatMoney(totalBudget)}
                       </span>
                     </div>
                     <div
@@ -2481,7 +2484,7 @@ export default function OpportunitiesPage({
                     >
                       <div
                         className="absolute h-full bg-gradient-to-r from-purple-500 to-purple-600 rounded-full transition-all duration-500 ease-out"
-                        style={{ width: `${Math.min(percentage, 100)}%` }}
+                        style={{ width: `${Math.min(tracker.percentage, 100)}%` }}
                       ></div>
                     </div>
                     <div
@@ -2491,8 +2494,8 @@ export default function OpportunitiesPage({
                         transition: "none",
                       }}
                     >
-                      <span>{percentage.toFixed(1)}% used</span>
-                      <span>{formatMoney(remaining)} remaining</span>
+                      <span>{tracker.percentage.toFixed(1)}% used</span>
+                      <span>{formatMoney(tracker.remaining)} remaining</span>
                     </div>
                   </div>
                 );
@@ -3588,8 +3591,7 @@ export default function OpportunitiesPage({
                     {dualUnifiedBudget &&
                       (() => {
                         const { total, spent } = dualUnifiedBudget;
-                        const { percentage, remaining } =
-                          getBudgetTrackerValues(total, spent);
+                        const tracker = getBudgetTrackerValues(total, spent);
                         return (
                           <div className="mt-3 mb-3">
                             <div
@@ -3603,7 +3605,7 @@ export default function OpportunitiesPage({
                                 Budget Tracker
                               </span>
                               <span className="font-semibold">
-                                {formatMoney(spent)} / {formatMoney(total)}
+                                {formatMoney(tracker.spent)} / {formatMoney(total)}
                               </span>
                             </div>
                             <div
@@ -3612,13 +3614,13 @@ export default function OpportunitiesPage({
                                 isDark ? "bg-[#FFFFFF42]" : "bg-slate-200",
                               )}
                               title={`Total Budget Spent: ${formatMoney(
-                                spent,
+                                tracker.spent,
                               )}`}
                             >
                               <div
                                 className="absolute h-full bg-gradient-to-r from-purple-500 to-purple-600 rounded-full transition-all duration-500 ease-out"
                                 style={{
-                                  width: `${percentage}%`,
+                                  width: `${tracker.percentage}%`,
                                 }}
                               ></div>
                             </div>
@@ -3629,8 +3631,8 @@ export default function OpportunitiesPage({
                                 transition: "none",
                               }}
                             >
-                              <span>{percentage.toFixed(1)}% used</span>
-                              <span>{formatMoney(remaining)} remaining</span>
+                              <span>{tracker.percentage.toFixed(1)}% used</span>
+                              <span>{formatMoney(tracker.remaining)} remaining</span>
                             </div>
                           </div>
                         );
@@ -3651,7 +3653,7 @@ export default function OpportunitiesPage({
                         const budgetSpent =
                           contest.contest_based_details.cpm_contest
                             .budget_spent || 0;
-                        const { percentage, remaining } = getBudgetTrackerValues(
+                        const tracker = getBudgetTrackerValues(
                           totalBudget,
                           budgetSpent,
                         );
@@ -3673,7 +3675,7 @@ export default function OpportunitiesPage({
                                 {trackerLabel}
                               </span>
                               <span className="font-semibold">
-                                {formatMoney(budgetSpent)} /{" "}
+                                {formatMoney(tracker.spent)} /{" "}
                                 {formatMoney(totalBudget)}
                               </span>
                             </div>
@@ -3683,13 +3685,13 @@ export default function OpportunitiesPage({
                                 isDark ? "bg-[#FFFFFF42]" : "bg-slate-200",
                               )}
                               title={`Total Budget Spent: ${formatMoney(
-                                budgetSpent,
+                                tracker.spent,
                               )}`}
                             >
                               <div
                                 className="absolute h-full bg-gradient-to-r from-purple-500 to-purple-600 rounded-full transition-all duration-500 ease-out"
                                 style={{
-                                  width: `${percentage}%`,
+                                  width: `${tracker.percentage}%`,
                                 }}
                               ></div>
                             </div>
@@ -3700,8 +3702,8 @@ export default function OpportunitiesPage({
                                 transition: "none",
                               }}
                             >
-                              <span>{percentage.toFixed(1)}% used</span>
-                              <span>{formatMoney(remaining)} remaining</span>
+                              <span>{tracker.percentage.toFixed(1)}% used</span>
+                              <span>{formatMoney(tracker.remaining)} remaining</span>
                             </div>
                           </div>
                         );
@@ -3785,8 +3787,10 @@ export default function OpportunitiesPage({
                         const budgetSpent =
                           contest.contest_based_details.milestone_contest
                             .budget_spent || 0;
-                        const { percentage, remaining } =
-                          getBudgetTrackerValues(totalBudget, budgetSpent);
+                        const tracker = getBudgetTrackerValues(
+                          totalBudget,
+                          budgetSpent,
+                        );
                         const trackerLabel =
                           contest.contest_type === "dual_rewards"
                             ? "Milestone pool"
@@ -3805,7 +3809,7 @@ export default function OpportunitiesPage({
                                 {trackerLabel}
                               </span>
                               <span className="font-semibold">
-                                {formatMoney(budgetSpent)} /{" "}
+                                {formatMoney(tracker.spent)} /{" "}
                                 {formatMoney(totalBudget)}
                               </span>
                             </div>
@@ -3815,13 +3819,13 @@ export default function OpportunitiesPage({
                                 isDark ? "bg-[#FFFFFF42]" : "bg-slate-200",
                               )}
                               title={`Total Budget Spent: ${formatMoney(
-                                budgetSpent,
+                                tracker.spent,
                               )}`}
                             >
                               <div
                                 className="absolute h-full bg-gradient-to-r from-purple-500 to-purple-600 rounded-full transition-all duration-500 ease-out"
                                 style={{
-                                  width: `${percentage}%`,
+                                  width: `${tracker.percentage}%`,
                                 }}
                               ></div>
                             </div>
@@ -3832,8 +3836,8 @@ export default function OpportunitiesPage({
                                 transition: "none",
                               }}
                             >
-                              <span>{percentage.toFixed(1)}% used</span>
-                              <span>{formatMoney(remaining)} remaining</span>
+                              <span>{tracker.percentage.toFixed(1)}% used</span>
+                              <span>{formatMoney(tracker.remaining)} remaining</span>
                             </div>
                           </div>
                         );

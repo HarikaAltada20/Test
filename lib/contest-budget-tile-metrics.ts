@@ -4,6 +4,7 @@ import {
   isCpmContestType,
   isDualRewardsContestType,
 } from "@/lib/contest-type";
+import { getDualRewardsSubmissionPaidComponents } from "@/lib/dual-rewards-pool-budget";
 import { computeMilestoneContestExpectedSpendCents } from "@/lib/milestone-contest-expected-spend";
 import {
   calculateLeaderboardBudgetSpent,
@@ -114,6 +115,25 @@ function computeLeaderboardPrizePoolCents(
     const rank = i + 1;
     const prizeForRank = prizes.find((p) => p.position === rank);
     if (prizeForRank) total += prizeForRank.amount;
+  }
+  return total;
+}
+
+function sumDualRewardsPaidCents(submissions: BudgetTileSubmission[]): number {
+  let total = 0;
+  for (const s of submissions) {
+    if (twitterExcludedFromBudget(s)) continue;
+    if (!isPaidLike(s)) continue;
+    const paid = getDualRewardsSubmissionPaidComponents({
+      id: String(s.id || ""),
+      earnings: s.earnings,
+      paid: s.paid,
+      bonus_amount: s.bonus_amount,
+      bonus_paid: s.bonus_paid,
+      dual_rewards_payout: (s as { dual_rewards_payout?: unknown })
+        .dual_rewards_payout,
+    });
+    total += paid.cpmCents + paid.milestoneCents;
   }
   return total;
 }
@@ -280,7 +300,68 @@ export function computeBudgetPaidCents(
     return prizeCents + paidBonuses;
   }
 
+  if (isDualRewardsContestType(type)) {
+    return sumDualRewardsPaidCents(submissions);
+  }
+
   return sumPaidEarningsAndBonuses(submissions);
+}
+
+function dualRewardsStoredNestedSpendCents(
+  details: Record<string, unknown> | null | undefined,
+): number {
+  const cpm = (
+    details?.cpm_contest as { budget_spent?: number } | undefined
+  )?.budget_spent;
+  const milestone = (
+    details?.milestone_contest as { budget_spent?: number } | undefined
+  )?.budget_spent;
+  return Math.max(0, Number(cpm) || 0) + Math.max(0, Number(milestone) || 0);
+}
+
+/**
+ * Unified pool spend for budget trackers (list cards, sort, opportunities).
+ * Dual rewards: never sum nested budget_spent blindly — use enriched root field or cap.
+ */
+export function getPoolBudgetSpentCentsForDisplay(
+  contest: ContestBudgetTileInput,
+  submissions?: BudgetTileSubmission[],
+): number {
+  const type = contest.contest_type;
+  const details = contest.contest_based_details as Record<string, unknown> | null;
+
+  if (isDualRewardsContestType(type)) {
+    if (submissions && submissions.length > 0) {
+      const tile = resolveBudgetTileMetrics(contest, submissions);
+      return tile?.numeratorCents ?? 0;
+    }
+
+    const pool = getCampaignBudgetCents(contest);
+    const enriched = details?.pool_budget_spent_cents;
+    if (typeof enriched === "number" && enriched >= 0) {
+      return enriched;
+    }
+
+    const nestedSum = dualRewardsStoredNestedSpendCents(details);
+    return pool > 0 ? Math.min(nestedSum, pool) : nestedSum;
+  }
+
+  if (type === "leaderboard") {
+    const lb = details?.leaderboard_contest as { budget_spent?: number } | undefined;
+    return Math.max(0, Number(lb?.budget_spent) || 0);
+  }
+
+  if (type === "milestone") {
+    const ms = details?.milestone_contest as { budget_spent?: number } | undefined;
+    return Math.max(0, Number(ms?.budget_spent) || 0);
+  }
+
+  if (isCpmContestType(type)) {
+    const cpm = details?.cpm_contest as { budget_spent?: number } | undefined;
+    return Math.max(0, Number(cpm?.budget_spent) || 0);
+  }
+
+  return 0;
 }
 
 export function resolveBudgetTileMetrics(
@@ -291,14 +372,15 @@ export function resolveBudgetTileMetrics(
   if (denominatorCents <= 0) return null;
 
   const mode = getBudgetTileMode(contest.post_contest_status);
-  const numeratorCents =
+  let numeratorCents =
     mode === "paid"
       ? computeBudgetPaidCents(contest, submissions)
       : computeBudgetFilledCents(contest, submissions);
+  numeratorCents = Math.max(0, numeratorCents);
 
   return {
     mode,
-    numeratorCents: Math.max(0, numeratorCents),
+    numeratorCents,
     denominatorCents,
     label: getBudgetTileLabel(mode),
   };
