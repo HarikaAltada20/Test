@@ -14,7 +14,13 @@ import {
 } from "@/lib/payout-rules";
 import { allocateFlatFeeBonusCents } from "@/lib/bonus-allocation";
 import { buildMilestoneSubmissionPayoutCentsMap } from "@/lib/milestone-contest-expected-spend";
-import { getContestPayoutLedgerState } from "@/lib/contest-payout-idempotency";
+import {
+  buildContestPayoutIdempotencyPayload,
+  creditWithWalletShortfallRetry,
+  getContestPayoutLedgerState,
+  contestLedgerNetFromLoaded,
+  loadContestPayoutLedgerRows,
+} from "@/lib/contest-payout-idempotency";
 import { executeDualRewardsBulkPayment } from "@/lib/dual-rewards-bulk-payment";
 import { buildFlatFeeBonusExpectedCentsBySubmissionId } from "@/lib/twitter-cpm-bonus-expected";
 import { fetchContestSubmissionsAllPages } from "@/lib/fetch-contest-submissions";
@@ -725,42 +731,59 @@ export async function POST(request: NextRequest) {
         submission_ids.map((value: unknown) => String(value)).filter(Boolean),
       ),
     ).sort((a, b) => a.localeCompare(b));
-    const operationSeed = JSON.stringify({
-      contest_id,
-      creator_id,
-      payment_type,
-      requested_submission_ids: requestedSubmissionIds,
-      payout_adjustment_percentage: payoutAdjustment.percentage,
-      payout_adjustment_mode: payoutAdjustment.mode ?? null,
-      contest_payout_ledger_generation: payoutLedgerState.generation,
-      contest_payout_ledger_fingerprint: payoutLedgerState.fingerprint,
-    });
+    const operationSeed = JSON.stringify(
+      buildContestPayoutIdempotencyPayload(
+        {
+          contest_id,
+          creator_id,
+          payment_type,
+          requested_submission_ids: requestedSubmissionIds,
+          payout_adjustment_percentage: payoutAdjustment.percentage,
+          payout_adjustment_mode: payoutAdjustment.mode ?? null,
+        },
+        payoutLedgerState,
+      ),
+    );
     const bulkPayIdempotencyKey = `bulk_pay_v2:${createHash("sha256")
       .update(operationSeed)
       .digest("hex")
       .slice(0, 48)}`;
 
-    const creditResult = await creditCreatorWithdrawableBalance(
+    const ledgerRows = await loadContestPayoutLedgerRows(
+      supabaseAdmin,
       creator_id,
-      totalAmount,
-      `Bulk payment for ${paidCount} submissions in contest: ${
-        contest.title || "Contest"
-      }`,
-      {
-        idempotencyKey: bulkPayIdempotencyKey,
-        remarks: `Bulk payment: ${payment_type}`,
-        metadata: {
-          contest_id: contest_id,
-          payment_type: payment_type,
-          submission_count: paidCount,
-          breakdown: breakdown,
-          total_cpm: totalCPMPaid,
-          total_bonus: totalBonusPaid,
-          cap_reached: maxEarnings ? runningTotal >= maxEarnings : false,
-          bonus_reason_counts: bonusReasonCounts,
-        },
-      },
+      contest_id,
     );
+    const contestWalletNetBeforePay = contestLedgerNetFromLoaded(ledgerRows);
+
+    const creditResult = await creditWithWalletShortfallRetry({
+      payableCents: totalAmount,
+      walletNetBeforePay: contestWalletNetBeforePay,
+      baseIdempotencyKey: bulkPayIdempotencyKey,
+      ledger: payoutLedgerState,
+      credit: (idempotencyKey) =>
+        creditCreatorWithdrawableBalance(
+          creator_id,
+          totalAmount,
+          `Bulk payment for ${paidCount} submissions in contest: ${
+            contest.title || "Contest"
+          }`,
+          {
+            idempotencyKey,
+            remarks: `Bulk payment: ${payment_type}`,
+            metadata: {
+              contest_id: contest_id,
+              payment_type: payment_type,
+              submission_count: paidCount,
+              breakdown: breakdown,
+              total_cpm: totalCPMPaid,
+              total_bonus: totalBonusPaid,
+              cap_reached: maxEarnings ? runningTotal >= maxEarnings : false,
+              bonus_reason_counts: bonusReasonCounts,
+            },
+          },
+        ),
+    });
 
     if (!creditResult.success) {
       return NextResponse.json(

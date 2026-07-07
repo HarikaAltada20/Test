@@ -1,6 +1,11 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { getContestPayoutLedgerState } from "./contest-payout-idempotency";
+import { createHash } from "node:crypto";
+import {
+  buildContestPayoutIdempotencyPayload,
+  creditWithWalletShortfallRetry,
+  getContestPayoutLedgerState,
+} from "./contest-payout-idempotency";
 import { filterMoneyTxnsForContest } from "./dual-rewards-pool-budget";
 
 describe("filterMoneyTxnsForContest bulk dual-rewards rows", () => {
@@ -46,6 +51,66 @@ describe("filterMoneyTxnsForContest bulk dual-rewards rows", () => {
       contestSubmissionIds,
     );
     assert.equal(rows.length, 1);
+  });
+});
+
+describe("buildContestPayoutIdempotencyPayload pay-refund cycles", () => {
+  const base = {
+    contest_id: "c1",
+    creator_id: "u1",
+    payment_type: "both",
+    requested_submission_ids: ["sub-1"],
+  };
+
+  function keyForLedger(rewardCount: number, refundCount: number) {
+    const seed = JSON.stringify(
+      buildContestPayoutIdempotencyPayload(base, {
+        generation: rewardCount + refundCount,
+        fingerprint: `fp-${rewardCount}-${refundCount}`,
+        rewardCount,
+        refundCount,
+      }),
+    );
+    return createHash("sha256").update(seed).digest("hex").slice(0, 16);
+  }
+
+  it("produces a unique idempotency seed for each completed pay→refund cycle", () => {
+    const keys = new Set<string>();
+    for (let cycle = 0; cycle < 6; cycle += 1) {
+      keys.add(keyForLedger(cycle, cycle));
+    }
+    assert.equal(keys.size, 6);
+  });
+});
+
+describe("creditWithWalletShortfallRetry", () => {
+  it("retries with a new key when wallet still owes after alreadyApplied", async () => {
+    const usedKeys: string[] = [];
+    const ledger = {
+      generation: 2,
+      fingerprint: "fp-1-1",
+      rewardCount: 1,
+      refundCount: 1,
+    };
+
+    const result = await creditWithWalletShortfallRetry({
+      payableCents: 8597,
+      walletNetBeforePay: 0,
+      baseIdempotencyKey: "bulk_pay_dual_v1:abc",
+      ledger,
+      credit: async (key) => {
+        usedKeys.push(key);
+        if (usedKeys.length === 1) {
+          return { success: true, alreadyApplied: true };
+        }
+        return { success: true, alreadyApplied: false, transactionId: "tx-new" };
+      },
+    });
+
+    assert.equal(result.success, true);
+    assert.equal(result.alreadyApplied, false);
+    assert.equal(usedKeys.length, 2);
+    assert.match(usedKeys[1], /ledger_r1_f1/);
   });
 });
 

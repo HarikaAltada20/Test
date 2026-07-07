@@ -11,7 +11,13 @@ import {
 } from "@/lib/payment-utils";
 import { applyPayoutAdjustment } from "@/lib/payout-adjustment";
 import { parsePayoutAdjustment } from "@/lib/payout-rules";
-import { getContestPayoutLedgerState } from "@/lib/contest-payout-idempotency";
+import {
+  buildContestPayoutIdempotencyPayload,
+  creditWithWalletShortfallRetry,
+  getContestPayoutLedgerState,
+  contestLedgerNetFromLoaded,
+  loadContestPayoutLedgerRows,
+} from "@/lib/contest-payout-idempotency";
 import {
   sumBonusRewards,
   sumBonusRefunds,
@@ -497,20 +503,32 @@ export async function POST(
 
     const twitterBulkFingerprint = createHash("sha256")
       .update(
-        JSON.stringify({
-          contest_id: contestId,
-          twitter_creator_id: creatorId,
-          payment_type: paymentType,
-          total_amount: totalAmount,
-          tweet_ids_sorted: [...tweetIds].sort(),
-          cpm_breakdown: cpmBreakdown,
-          bonus_breakdown: bonusBreakdown,
-          contest_payout_ledger_generation: payoutLedgerState.generation,
-          contest_payout_ledger_fingerprint: payoutLedgerState.fingerprint,
-        }),
+        JSON.stringify(
+          buildContestPayoutIdempotencyPayload(
+            {
+              contest_id: contestId,
+              twitter_creator_id: creatorId,
+              payment_type: paymentType,
+              total_amount: totalAmount,
+              tweet_ids_sorted: [...tweetIds].sort(),
+              cpm_breakdown: cpmBreakdown,
+              bonus_breakdown: bonusBreakdown,
+            },
+            payoutLedgerState,
+          ),
+        ),
       )
       .digest("hex")
       .slice(0, 48);
+
+    const twitterBulkIdempotencyKey = `twitter_cpm_bulk_v2:${twitterBulkFingerprint}`;
+
+    const ledgerRows = await loadContestPayoutLedgerRows(
+      supabaseAdmin,
+      creatorId,
+      contestId,
+    );
+    const contestWalletNetBeforePay = contestLedgerNetFromLoaded(ledgerRows);
 
     const contestTitle = contest.title || "Contest";
     const bulkPaymentDescription =
@@ -522,16 +540,23 @@ export async function POST(
         ? `Rollback: Twitter CPM bulk payment with bonus (DB update failed) — ${contestTitle}`
         : `Rollback: Twitter CPM bulk payment (DB update failed) — ${contestTitle}`;
 
-    const creditRes = await creditCreatorWithdrawableBalance(
-      creatorId,
-      totalAmount,
-      bulkPaymentDescription,
-      {
-        idempotencyKey: `twitter_cpm_bulk_v2:${twitterBulkFingerprint}`,
-        remarks: `Twitter CPM bulk (${paymentType})`,
-        metadata: creditMetadata,
-      }
-    );
+    const creditRes = await creditWithWalletShortfallRetry({
+      payableCents: totalAmount,
+      walletNetBeforePay: contestWalletNetBeforePay,
+      baseIdempotencyKey: twitterBulkIdempotencyKey,
+      ledger: payoutLedgerState,
+      credit: (idempotencyKey) =>
+        creditCreatorWithdrawableBalance(
+          creatorId,
+          totalAmount,
+          bulkPaymentDescription,
+          {
+            idempotencyKey,
+            remarks: `Twitter CPM bulk (${paymentType})`,
+            metadata: creditMetadata,
+          },
+        ),
+    });
 
     if (!creditRes.success) {
       return NextResponse.json(

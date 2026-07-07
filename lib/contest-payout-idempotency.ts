@@ -4,6 +4,7 @@ import {
   filterMoneyTxnsForContest,
   type MoneyTxnRow,
 } from "@/lib/dual-rewards-pool-budget";
+import { REVERSAL_TRANSACTION_REMARK } from "@/lib/payment-utils";
 
 async function fetchContestSubmissionIds(
   supabase: SupabaseClient,
@@ -103,6 +104,103 @@ export type ContestPayoutLedgerState = {
   rewardCount: number;
   refundCount: number;
 };
+
+/** Immutable idempotency payload shared by bulk / dual-rewards payout routes. */
+export function buildContestPayoutIdempotencyPayload(
+  base: Record<string, unknown>,
+  ledger: ContestPayoutLedgerState,
+): Record<string, unknown> {
+  return {
+    ...base,
+    // Each completed pay→refund cycle bumps both counts. A new pay after refund
+    // always sees a fresh (rewardCount, refundCount) pair — supports unlimited cycles.
+    contest_ledger_reward_count: ledger.rewardCount,
+    contest_ledger_refund_count: ledger.refundCount,
+    contest_payout_ledger_fingerprint: ledger.fingerprint,
+  };
+}
+
+export type PayoutCreditAttemptResult = {
+  success: boolean;
+  alreadyApplied?: boolean;
+  error?: string;
+  transactionId?: string;
+};
+
+/**
+ * Credit creator wallet, retrying with fresh idempotency keys when a prior key was
+ * consumed but wallet net still shows an unpaid shortfall (pay→refund→pay loops).
+ */
+export async function creditWithWalletShortfallRetry(params: {
+  payableCents: number;
+  walletNetBeforePay: number;
+  baseIdempotencyKey: string;
+  ledger: ContestPayoutLedgerState;
+  credit: (idempotencyKey: string) => Promise<PayoutCreditAttemptResult>;
+  maxShortfallAttempts?: number;
+}): Promise<PayoutCreditAttemptResult> {
+  const payableCents = Math.max(0, Math.round(params.payableCents));
+  if (payableCents <= 0) {
+    return { success: true, alreadyApplied: false };
+  }
+
+  const walletNet = Math.max(0, Math.round(params.walletNetBeforePay));
+  const maxAttempts = Math.max(1, params.maxShortfallAttempts ?? 5);
+
+  let result = await params.credit(params.baseIdempotencyKey);
+  if (!result.success) {
+    return result;
+  }
+
+  let attempt = 0;
+  while (
+    result.success &&
+    result.alreadyApplied &&
+    payableCents > walletNet &&
+    attempt < maxAttempts
+  ) {
+    attempt += 1;
+    const shortfallCents = payableCents - walletNet;
+    const bumpedKey = `${params.baseIdempotencyKey}:ledger_r${params.ledger.rewardCount}_f${params.ledger.refundCount}:shortfall_${shortfallCents}:n${attempt}`;
+    result = await params.credit(bumpedKey);
+  }
+
+  return result;
+}
+
+/** Gross contest wallet net from ledger rows (rewards − reversal refunds). */
+export function sumContestLedgerNetCents(
+  rewardRows: MoneyTxnRow[],
+  refundRows: MoneyTxnRow[],
+): number {
+  const grossRewards = rewardRows.reduce(
+    (sum, tx) => sum + Math.max(0, Number(tx.amount) || 0),
+    0,
+  );
+  const grossRefunds = refundRows
+    .filter((tx) => !tx.remarks || tx.remarks === REVERSAL_TRANSACTION_REMARK)
+    .reduce((sum, tx) => sum + Math.max(0, Number(tx.amount) || 0), 0);
+  return Math.max(0, grossRewards - grossRefunds);
+}
+
+export function contestLedgerNetFromLoaded(
+  loaded:
+    | {
+        rewardRows: MoneyTxnRow[];
+        refundRows: MoneyTxnRow[];
+        contestSubmissionIds: Set<string>;
+        errorMessage?: undefined;
+      }
+    | { errorMessage: string },
+): number {
+  if ("errorMessage" in loaded && loaded.errorMessage) {
+    return 0;
+  }
+  return sumContestLedgerNetCents(
+    loaded.rewardRows ?? [],
+    loaded.refundRows ?? [],
+  );
+}
 
 /**
  * Ledger state for payout idempotency. Uses the same contest-matching rules as

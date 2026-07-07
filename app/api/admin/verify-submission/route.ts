@@ -60,7 +60,11 @@ import {
   scaleDualReversalDuesToTotalCap,
   type DualPoolBudgetPaymentResult,
 } from "@/lib/dual-rewards-pool-budget";
-import { loadContestPayoutLedgerRows } from "@/lib/contest-payout-idempotency";
+import {
+  creditWithWalletShortfallRetry,
+  getContestPayoutLedgerState,
+  loadContestPayoutLedgerRows,
+} from "@/lib/contest-payout-idempotency";
 import { creditDualRewardsSubmissionReward } from "@/lib/dual-rewards-reward-credit";
 
 function isDualRewardsLedgerReward(r: {
@@ -1616,76 +1620,67 @@ export async function POST(request: Request) {
               }
             }
 
-            let creditRes =
-              contest.contest_type === "dual_rewards"
-                ? await creditDualRewardsSubmissionReward({
-                    creatorId: submissionFull.creator_id,
-                    submissionId,
-                    contestId: submissionFull.contest_id,
-                    contestTitle: (contest as any)?.title || "Contest",
-                    cpmCents: dualCreditCpmCents,
-                    milestoneCents: dualCreditMilestoneCents,
-                    payoutCycle: resolvedNextCycle,
-                    idempotencyKey: contestRewardIdempotencyKey,
-                    remarks:
-                      customRemarks ||
-                      (customAmount
-                        ? "Custom payout credited to creator wallet"
-                        : "Dual rewards payout credited to creator wallet"),
-                    payoutType: customAmount ? "custom" : "standard",
-                  })
-                : await creditCreatorWithdrawableBalance(
-                    submissionFull.creator_id,
-                    rewardAmount,
-                    customAmount
-                      ? `Custom contest payment credited - ${
-                          (contest as any)?.title || "Contest"
-                        }`
-                      : `Contest reward credited - ${
-                          (contest as any)?.title || "Contest"
-                        }`,
-                    {
-                      idempotencyKey: contestRewardIdempotencyKey,
+            const { state: contestLedgerState } = await getContestPayoutLedgerState(
+              supabaseAdmin,
+              submissionFull.creator_id,
+              submissionFull.contest_id,
+            );
+
+            const creditRes = await creditWithWalletShortfallRetry({
+              payableCents:
+                contest.contest_type === "dual_rewards"
+                  ? dualCreditTotalCents
+                  : rewardAmount,
+              walletNetBeforePay:
+                contest.contest_type === "dual_rewards"
+                  ? submissionWalletNetBeforePay
+                  : 0,
+              baseIdempotencyKey: contestRewardIdempotencyKey,
+              ledger: contestLedgerState,
+              credit: (idempotencyKey) =>
+                contest.contest_type === "dual_rewards"
+                  ? creditDualRewardsSubmissionReward({
+                      creatorId: submissionFull.creator_id,
+                      submissionId,
+                      contestId: submissionFull.contest_id,
+                      contestTitle: (contest as any)?.title || "Contest",
+                      cpmCents: dualCreditCpmCents,
+                      milestoneCents: dualCreditMilestoneCents,
+                      payoutCycle: resolvedNextCycle,
+                      idempotencyKey,
                       remarks:
                         customRemarks ||
                         (customAmount
                           ? "Custom payout credited to creator wallet"
-                          : "Standard payout credited to creator wallet"),
-                      metadata: {
-                        contest_id: submissionFull.contest_id,
-                        submission_id: submissionId,
-                        payout_type: customAmount ? "custom" : "standard",
-                        payout_cycle: resolvedNextCycle,
+                          : "Dual rewards payout credited to creator wallet"),
+                      payoutType: customAmount ? "custom" : "standard",
+                    })
+                  : creditCreatorWithdrawableBalance(
+                      submissionFull.creator_id,
+                      rewardAmount,
+                      customAmount
+                        ? `Custom contest payment credited - ${
+                            (contest as any)?.title || "Contest"
+                          }`
+                        : `Contest reward credited - ${
+                            (contest as any)?.title || "Contest"
+                          }`,
+                      {
+                        idempotencyKey,
+                        remarks:
+                          customRemarks ||
+                          (customAmount
+                            ? "Custom payout credited to creator wallet"
+                            : "Standard payout credited to creator wallet"),
+                        metadata: {
+                          contest_id: submissionFull.contest_id,
+                          submission_id: submissionId,
+                          payout_type: customAmount ? "custom" : "standard",
+                          payout_cycle: resolvedNextCycle,
+                        },
                       },
-                    },
-                  );
-
-            if (
-              creditRes.success &&
-              creditRes.alreadyApplied &&
-              contest.contest_type === "dual_rewards" &&
-              dualCreditTotalCents > 0 &&
-              submissionWalletNetBeforePay < dualCreditTotalCents
-            ) {
-              const shortfallCents =
-                dualCreditTotalCents - submissionWalletNetBeforePay;
-              creditRes = await creditDualRewardsSubmissionReward({
-                creatorId: submissionFull.creator_id,
-                submissionId,
-                contestId: submissionFull.contest_id,
-                contestTitle: (contest as any)?.title || "Contest",
-                cpmCents: dualCreditCpmCents,
-                milestoneCents: dualCreditMilestoneCents,
-                payoutCycle: resolvedNextCycle,
-                idempotencyKey: `${contestRewardIdempotencyKey}:wallet_shortfall:${shortfallCents}`,
-                remarks:
-                  customRemarks ||
-                  (customAmount
-                    ? "Custom payout credited to creator wallet"
-                    : "Dual rewards payout credited to creator wallet"),
-                payoutType: customAmount ? "custom" : "standard",
-              });
-            }
+                    ),
+            });
 
             if (!creditRes.success) {
               await rollbackDualRewardsPoolCommitIfNeeded(

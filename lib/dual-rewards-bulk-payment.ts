@@ -1,6 +1,10 @@
 import { createHash } from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { getContestPayoutLedgerState } from "@/lib/contest-payout-idempotency";
+import {
+  buildContestPayoutIdempotencyPayload,
+  creditWithWalletShortfallRetry,
+  getContestPayoutLedgerState,
+} from "@/lib/contest-payout-idempotency";
 import { loadDualCreatorCapMaps } from "@/lib/dual-rewards-payout-eligibility";
 import {
   applyDualRewardsPayUpdateOptimisticGuards,
@@ -412,17 +416,20 @@ export async function executeDualRewardsBulkPayment(params: {
   }
 
   const requestedSubmissionIds = [...submissionIds].map(String).sort();
-  const operationSeed = JSON.stringify({
-    contest_id: contestId,
-    creator_id: creatorId,
-    payment_type: paymentType,
-    contest_type: "dual_rewards",
-    requested_submission_ids: requestedSubmissionIds,
-    payout_adjustment_percentage: payoutAdjustment.percentage,
-    payout_adjustment_mode: payoutAdjustment.mode ?? null,
-    contest_payout_ledger_generation: payoutLedgerState.generation,
-    contest_payout_ledger_fingerprint: payoutLedgerState.fingerprint,
-  });
+  const operationSeed = JSON.stringify(
+    buildContestPayoutIdempotencyPayload(
+      {
+        contest_id: contestId,
+        creator_id: creatorId,
+        payment_type: paymentType,
+        contest_type: "dual_rewards",
+        requested_submission_ids: requestedSubmissionIds,
+        payout_adjustment_percentage: payoutAdjustment.percentage,
+        payout_adjustment_mode: payoutAdjustment.mode ?? null,
+      },
+      payoutLedgerState,
+    ),
+  );
   const payoutOperationKey = `bulk_pay_dual_v1:${createHash("sha256")
     .update(operationSeed)
     .digest("hex")
@@ -435,39 +442,32 @@ export async function executeDualRewardsBulkPayment(params: {
     refundTxns,
   );
 
-  const runBulkCredit = (idempotencyKey: string) =>
-    creditDualRewardsBulkPayment({
-      creatorId,
-      contestId,
-      contestTitle,
-      paidCount: requestedCount,
-      totalCents: totalAmount,
-      totalCpmCents: totalCpm,
-      totalMilestoneCents: totalMilestone,
-      paymentType,
-      idempotencyKey,
-      breakdown,
-    });
-
-  let creditResult =
+  const creditResult =
     totalAmount > 0
-      ? await runBulkCredit(payoutOperationKey)
+      ? await creditWithWalletShortfallRetry({
+          payableCents,
+          walletNetBeforePay,
+          baseIdempotencyKey: payoutOperationKey,
+          ledger: payoutLedgerState,
+          credit: (idempotencyKey) =>
+            creditDualRewardsBulkPayment({
+              creatorId,
+              contestId,
+              contestTitle,
+              paidCount: requestedCount,
+              totalCents: totalAmount,
+              totalCpmCents: totalCpm,
+              totalMilestoneCents: totalMilestone,
+              paymentType,
+              idempotencyKey,
+              breakdown,
+            }),
+        })
       : {
           success: true as const,
           alreadyApplied: false,
           transactionId: undefined,
         };
-
-  if (
-    creditResult.success &&
-    creditResult.alreadyApplied &&
-    payableCents > 0 &&
-    walletNetBeforePay < payableCents
-  ) {
-    const shortfallCents = payableCents - walletNetBeforePay;
-    const bumpedKey = `${payoutOperationKey}:wallet_shortfall:${shortfallCents}`;
-    creditResult = await runBulkCredit(bumpedKey);
-  }
 
   if (!creditResult.success) {
     for (const prior of poolCommits) {
